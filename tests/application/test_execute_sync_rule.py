@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
+from pathlib import Path
 from threading import Lock, Thread
 from time import sleep
 
 import pytest
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind, RuleNotExecutable
-from calendar_sync.application.ports import CreatedProjection, ProviderChangeSet
+from calendar_sync.application.ports import (
+    CreatedProjection,
+    ProviderChangeSet,
+    RunKind,
+    UnitOfWorkFactory,
+)
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -20,10 +26,12 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     ManagedOrigin,
+    PrivacyPolicy,
     ProjectionFingerprint,
     SyncAction,
     SyncRuleId,
     SyncRuleState,
+    TransformationPolicy,
 )
 from calendar_sync.domain.services import (
     EventProjector,
@@ -31,6 +39,10 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite import (
+    SqliteUnitOfWorkFactory,
+    initialize_database,
+)
 from tests.helpers import NOW, event, rule
 
 
@@ -496,3 +508,135 @@ def test_concurrent_requests_for_the_same_rule_are_serialized() -> None:
     assert failures == []
     assert provider.max_active_source_reads == 1
     assert len(unit_of_work.state.mappings) == 1
+
+
+DETAILS = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+
+
+def _use_case(unit_of_work: UnitOfWorkFactory, provider: FakeCalendarProvider) -> ExecuteSyncRule:
+    fingerprinter = ProjectionFingerprinter()
+    return ExecuteSyncRule(
+        unit_of_work,
+        provider,
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        FixedClock(),
+    )
+
+
+def _mapped_busy_projection(provider: FakeCalendarProvider, source: CalendarEvent) -> EventMapping:
+    provider.destination = replace(
+        event("managed-destination", calendar=rule().destination, title="Busy"),
+        description="",
+        location="",
+        managed_origin=ManagedOrigin(rule().id, source.reference),
+    )
+    return EventMapping(
+        EventMappingId("mapping-1"),
+        rule().id,
+        source.reference,
+        provider.destination.reference,
+        source.revision,
+        ProjectionFingerprint("busy-fingerprint"),
+    )
+
+
+def test_policy_change_reprojects_mappings_outside_the_window_and_clears_the_flag() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    changed = replace(rule().change_policy(DETAILS), state=SyncRuleState.ENABLED)
+    unit_of_work.state.rules[rule().id] = changed
+    unit_of_work.state.cursors[rule().id] = "source-before"
+    unit_of_work.state.destination_cursors[rule().id] = "destination-before"
+    source = event()
+    provider = FakeCalendarProvider(source)
+    provider.source_changes = ()  # the source ended before the Initial Sync Window
+    mapping = _mapped_busy_projection(provider, source)
+    unit_of_work.state.mappings[(rule().id, source.reference)] = mapping
+
+    result = _use_case(unit_of_work, provider).execute(rule().id)
+
+    assert provider.requested_cursors == [None, None]
+    assert result.updated == 1
+    assert provider.destination is not None
+    assert provider.destination.title == "Private appointment"
+    assert unit_of_work.state.rules[rule().id].reprojection_required is False
+    outcome = unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)]
+    assert outcome.succeeded and outcome.full_run and outcome.updated == 1
+
+
+def test_unverifiable_source_during_reprojection_is_a_conflict_not_a_deletion() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[rule().id] = replace(
+        rule().change_policy(DETAILS), state=SyncRuleState.ENABLED
+    )
+    mapped_source = event("vanished-source")
+    provider = FakeCalendarProvider(event("unrelated"))
+    provider.source_changes = ()
+    unit_of_work.state.mappings[(rule().id, mapped_source.reference)] = _mapped_busy_projection(
+        provider, mapped_source
+    )
+
+    result = _use_case(unit_of_work, provider).execute(rule().id)
+
+    assert result.conflicts == 1
+    assert provider.deleted == 0
+    assert (rule().id, mapped_source.reference) in unit_of_work.state.mappings
+    assert unit_of_work.state.audit[-1].outcome == "blocked"
+
+
+def test_edit_during_a_run_keeps_reprojection_pending(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    with factory() as uow:
+        uow.rules.add(replace(rule().change_policy(DETAILS), state=SyncRuleState.ENABLED))
+        uow.commit()
+
+    class EditingProvider(FakeCalendarProvider):
+        edited = False
+
+        def changes(
+            self, source: CalendarEndpoint, cursor: str | None, not_ended_before: datetime
+        ) -> ProviderChangeSet:
+            if not self.edited:
+                self.edited = True
+                with factory() as concurrent:
+                    current = concurrent.rules.get(rule().id)
+                    assert current is not None
+                    concurrent.rules.save(current.change_policy(TransformationPolicy()))
+                    concurrent.commit()
+            return super().changes(source, cursor, not_ended_before)
+
+    provider = EditingProvider(event())
+    provider.source_changes = ()
+
+    _use_case(factory, provider).execute(rule().id)
+
+    with factory() as uow:
+        current = uow.rules.get(rule().id)
+    assert current is not None
+    assert current.reprojection_required is True
+    assert current.state is SyncRuleState.PAUSED
+
+
+def test_changed_rule_does_not_synchronize_until_enabled_again() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[rule().id] = rule().change_policy(DETAILS)
+
+    with pytest.raises(RuleNotExecutable):
+        _use_case(unit_of_work, FakeCalendarProvider(event())).execute(rule().id)
+    assert unit_of_work.state.outcomes == {}
+
+
+def test_failed_run_records_failure_kind_without_detail() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[rule().id] = rule()
+    provider = FakeCalendarProvider(event())
+    provider.failure = ProviderFailure(ProviderFailureKind.RATE_LIMIT, "quota for person@x")
+
+    with pytest.raises(ProviderFailure):
+        _use_case(unit_of_work, provider).execute(rule().id)
+
+    outcome = unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)]
+    assert outcome.succeeded is False
+    assert outcome.failure_kind == "rate_limit"

@@ -84,6 +84,7 @@ def build_container(settings: Settings | None = None) -> Container:
             provider,
             projector,
             ReconciliationService(fingerprinter),
+            SystemClock(),
         )
         channels: list[NotificationChannel] = []
         if resolved.incident_webhook_url:
