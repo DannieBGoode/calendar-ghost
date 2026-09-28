@@ -544,6 +544,8 @@ def create_app(container: Container | None = None) -> FastAPI:
 
         @app.get("/{full_path:path}", include_in_schema=False)
         def frontend(full_path: str) -> FileResponse:
+            if full_path == "api" or full_path.startswith("api/"):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
             requested = (static_root / full_path).resolve()
             if full_path and requested.is_file() and requested.is_relative_to(static_root):
                 return FileResponse(requested)
