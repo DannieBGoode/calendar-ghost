@@ -9,18 +9,21 @@ import pytest
 from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.ports import ProviderChangeSet
 from calendar_sync.domain.model import (
+    AllDaySyncPolicy,
     CalendarEndpoint,
     EventRef,
     EventStatus,
     ManagedOrigin,
     OccurrenceStart,
     OccurrenceState,
+    PrivacyPolicy,
     Recurrence,
     SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
     TimedInterval,
+    TransformationPolicy,
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
@@ -310,3 +313,82 @@ def test_every_occurrence_audit_entry_has_a_run_id_and_reason_but_no_content() -
         "Secret" not in repr(entry) and "Sensitive" not in repr(entry)
         for entry in factory.state.audit
     )
+
+
+def _change_policy(factory: InMemoryUnitOfWorkFactory, policy: TransformationPolicy) -> None:
+    with factory() as uow:
+        current = uow.rules.get(rule().id)
+        assert current is not None
+        uow.rules.save(current.change_policy(policy).mark_dry_run_validated().enable())
+        uow.commit()
+
+
+def test_details_to_busy_change_rewrites_the_master_and_exceptions_outside_the_window() -> None:
+    details = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+    calendars = FakeCalendars()
+    master = calendars.put(replace(series(), title="Weekly private sync"), starts=STARTS)
+    factory = enabled_rule_factory(replace(rule(), transformation=details))
+    sync_use_case(factory, calendars).execute(rule().id)
+    early = week_start(-10)
+    calendars.expansions[master.reference] = (early, *STARTS)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    calendars.expansions[destination] = (early, *STARTS)
+    old_exception = calendars.put(
+        replace(occurrence(master, -10, title="Old secret"), revision="old-r1")
+    )
+    calendars.report(old_exception)
+    sync_use_case(factory, calendars).execute(rule().id)
+    assert calendars.get_occurrence(destination, early).title == "Old secret"  # type: ignore[union-attr]
+
+    _change_policy(factory, TransformationPolicy(privacy=PrivacyPolicy.BUSY_ONLY))
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert calendars.events[destination].title == "Busy"
+    rewritten = calendars.get_occurrence(destination, early)
+    assert rewritten is not None
+    assert (rewritten.title, rewritten.description, rewritten.location) == ("Busy", "", "")
+    assert factory.state.rules[rule().id].reprojection_required is False
+    occurrence_writes = [ref for kind, ref in calendars.writes if kind == "write_occurrence"]
+    assert occurrence_writes.count(rewritten.reference.event_id.value) == 2
+
+
+def test_all_day_exclusion_deletes_all_day_series_and_cancels_all_day_exceptions() -> None:
+    calendars = FakeCalendars()
+    all_day_master = calendars.put(
+        series("all-day-series", all_day=True), starts=(STARTS[0].date(),)
+    )
+    timed_master = calendars.put(series(), starts=STARTS)
+    calendars.put(occurrence(timed_master, 1, all_day=True))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    timed_destination = factory.state.mappings[(rule().id, timed_master.reference)].destination
+    all_day_destination = factory.state.mappings[(rule().id, all_day_master.reference)].destination
+
+    _change_policy(factory, TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE))
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert all_day_destination not in calendars.events
+    assert (
+        calendars.get_occurrence(timed_destination, week_start(1)).status is EventStatus.CANCELLED
+    )  # type: ignore[union-attr]
+    assert factory.state.rules[rule().id].reprojection_required is False
+
+
+def test_unchanged_series_still_reverifies_exceptions_outside_the_window_on_policy_change() -> None:
+    calendars = FakeCalendars()
+    early = week_start(-10)
+    master = calendars.put(series(), starts=(early, *STARTS))
+    calendars.put(occurrence(master, -10, all_day=True))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    calendars.report(calendars.events[occurrence(master, -10).reference])
+    sync_use_case(factory, calendars).execute(rule().id)
+    assert calendars.get_occurrence(destination, early).is_all_day  # type: ignore[union-attr]
+
+    _change_policy(factory, TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE))
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    cancelled = calendars.get_occurrence(destination, early)
+    assert cancelled is not None and cancelled.status is EventStatus.CANCELLED
+    assert calendars.events[destination].status is EventStatus.CONFIRMED

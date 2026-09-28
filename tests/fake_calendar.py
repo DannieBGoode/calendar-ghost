@@ -93,8 +93,10 @@ class FakeCalendars:
     @staticmethod
     def _in_window(event: CalendarEvent, not_ended_before: datetime) -> bool:
         # Series masters span their expansion; exceptions and singles are filtered by end.
-        if event.recurrence is not None or not isinstance(event.time, TimedInterval):
+        if event.recurrence is not None or event.time is None:
             return True
+        if isinstance(event.time, AllDayRange):
+            return event.time.ends_before >= not_ended_before.date()
         return event.time.ends_at >= not_ended_before
 
     def get_event(self, reference: EventRef) -> CalendarEvent | None:
