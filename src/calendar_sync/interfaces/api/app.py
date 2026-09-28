@@ -14,7 +14,16 @@ from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from calendar_sync import __version__
-from calendar_sync.application.errors import DuplicateDirectionalRelationship, RuleNotExecutable
+from calendar_sync.application.errors import (
+    ApplicationError,
+    DuplicateDirectionalRelationship,
+    NotACalendarChange,
+    RemovalInterrupted,
+    RemovalRequiresProvider,
+    RuleNotExecutable,
+    RuleNotFound,
+)
+from calendar_sync.application.ports import RuleRunOutcome
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
@@ -23,6 +32,7 @@ from calendar_sync.domain.model import (
     CalendarId,
     ConnectedAccountId,
     PrivacyPolicy,
+    ProjectionHandling,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
@@ -54,9 +64,16 @@ from calendar_sync.interfaces.api.schemas import (
     GoogleConfigurationResponse,
     IncidentResponse,
     PasswordRequest,
+    ProjectionChoice,
+    RemovalResponse,
+    ReplaceRuleRequest,
+    RuleDetailResponse,
+    RuleReplacementResponse,
     RuleResponse,
+    RunOutcomeResponse,
     SessionResponse,
     SetupStatusResponse,
+    UpdateRulePolicyRequest,
 )
 
 SESSION_COOKIE = "calendar_sync_session"
@@ -395,12 +412,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         dependencies=[Depends(require_admin)],
     )
     def create_rule(request: CreateRuleRequest) -> RuleResponse:
-        try:
-            privacy = PrivacyPolicy(request.privacy_policy)
-        except ValueError as error:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown privacy policy"
-            ) from error
+        privacy = _privacy(request.privacy_policy)
         try:
             rule = SyncRule(
                 id=SyncRuleId(str(uuid.uuid4())),
@@ -535,6 +547,85 @@ def create_app(container: Container | None = None) -> FastAPI:
             uow.commit()
         return _rule_response(paused)
 
+    @app.get(
+        "/api/v1/rules/{rule_id}",
+        response_model=RuleDetailResponse,
+        dependencies=[Depends(require_admin)],
+    )
+    def rule_details(rule_id: str) -> RuleDetailResponse:
+        try:
+            details = resolved.get_sync_rule_details.execute(SyncRuleId(rule_id))
+        except RuleNotFound as error:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        return RuleDetailResponse(
+            **_rule_response(details.rule).model_dump(),
+            initial_lookback_days=details.rule.initial_lookback_days,
+            mapping_count=details.mapping_count,
+            last_sync=_outcome_response(details.last_sync),
+            last_reconciliation=_outcome_response(details.last_reconciliation),
+        )
+
+    @app.patch(
+        "/api/v1/rules/{rule_id}",
+        response_model=RuleResponse,
+        dependencies=[Depends(require_admin)],
+    )
+    def change_rule_policy(rule_id: str, request: UpdateRulePolicyRequest) -> RuleResponse:
+        privacy = _privacy(request.privacy_policy)
+        all_day = (
+            AllDaySyncPolicy.INCLUDE if request.sync_all_day_events else AllDaySyncPolicy.EXCLUDE
+        )
+        try:
+            rule = resolved.change_sync_rule_policy.execute(SyncRuleId(rule_id), privacy, all_day)
+        except RuleNotFound as error:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        except InvalidStateTransition as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        return _rule_response(rule)
+
+    @app.delete(
+        "/api/v1/rules/{rule_id}",
+        response_model=RemovalResponse,
+        dependencies=[Depends(require_admin)],
+    )
+    async def remove_rule(rule_id: str, projections: ProjectionChoice) -> RemovalResponse:
+        try:
+            result = await asyncio.to_thread(
+                resolved.remove_sync_rule.execute,
+                SyncRuleId(rule_id),
+                ProjectionHandling(projections),
+            )
+        except ApplicationError as error:
+            raise _rule_change_http_error(error) from error
+        return RemovalResponse(deleted=result.deleted, detached=result.detached)
+
+    @app.post(
+        "/api/v1/rules/{rule_id}/replace",
+        response_model=RuleReplacementResponse,
+        status_code=status.HTTP_201_CREATED,
+        dependencies=[Depends(require_admin)],
+    )
+    async def replace_rule_calendars(
+        rule_id: str, request: ReplaceRuleRequest
+    ) -> RuleReplacementResponse:
+        try:
+            replacement = await asyncio.to_thread(
+                resolved.replace_sync_rule_calendars.execute,
+                SyncRuleId(rule_id),
+                _endpoint(request.source),
+                _endpoint(request.destination),
+                ProjectionHandling(request.projections),
+            )
+        except DomainValidationError as error:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        except ApplicationError as error:
+            raise _rule_change_http_error(error) from error
+        return RuleReplacementResponse(
+            rule=_rule_response(replacement.rule),
+            deleted=replacement.removal.deleted,
+            detached=replacement.removal.detached,
+        )
+
     static_directory = Path(__file__).with_name("static")
     if static_directory.exists():
         static_root = static_directory.resolve()
@@ -584,7 +675,47 @@ def _rule_response(rule: SyncRule) -> RuleResponse:
         privacy_policy=rule.transformation.privacy.value,
         sync_all_day_events=rule.transformation.all_day is AllDaySyncPolicy.INCLUDE,
         state=rule.state.value,
+        reprojection_required=rule.reprojection_required,
     )
+
+
+def _privacy(value: str) -> PrivacyPolicy:
+    try:
+        return PrivacyPolicy(value)
+    except ValueError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown privacy policy"
+        ) from error
+
+
+def _outcome_response(outcome: RuleRunOutcome | None) -> RunOutcomeResponse | None:
+    if outcome is None:
+        return None
+    return RunOutcomeResponse(
+        completed_at=outcome.completed_at.isoformat(),
+        succeeded=outcome.succeeded,
+        full_run=outcome.full_run,
+        created=outcome.created,
+        updated=outcome.updated,
+        deleted=outcome.deleted,
+        conflicts=outcome.conflicts,
+        checked_mappings=outcome.checked_mappings,
+        drift=outcome.drift,
+        failure_kind=outcome.failure_kind,
+    )
+
+
+def _rule_change_http_error(error: ApplicationError) -> HTTPException:
+    """Map removal and replacement failures; the remaining ones need administrator action."""
+    if isinstance(error, RuleNotFound):
+        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+    if isinstance(error, RemovalRequiresProvider):
+        return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error))
+    if isinstance(error, RemovalInterrupted):
+        return HTTPException(status.HTTP_424_FAILED_DEPENDENCY, str(error))
+    if isinstance(error, NotACalendarChange):
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
+    return HTTPException(status.HTTP_409_CONFLICT, str(error))
 
 
 def _account_response(

@@ -715,7 +715,7 @@ def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path
     assert "from __future__ import annotations" not in response.text
 
 
-@pytest.mark.parametrize("path", ["/overview", "/rules", "/activity", "/settings"])
+@pytest.mark.parametrize("path", ["/overview", "/rules", "/rules/rule-1", "/activity", "/settings"])
 def test_frontend_fallback_serves_each_application_section(tmp_path: Path, path: str) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
@@ -742,3 +742,161 @@ def test_enabled_rule_can_be_paused_through_api(tmp_path: Path) -> None:
     assert paused.status_code == 200
     assert paused.json()["state"] == "paused"
     assert repeated.status_code == 409
+
+
+PASSWORD = {"password": "correct horse battery staple"}
+
+
+def _client_with_rule(tmp_path: Path, state: SyncRuleState = SyncRuleState.ENABLED) -> TestClient:
+    container = build_container(Settings(tmp_path / "test.db"))
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=state))
+        uow.commit()
+    return TestClient(create_app(container))
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("GET", "/api/v1/rules/rule-1"),
+        ("PATCH", "/api/v1/rules/rule-1"),
+        ("DELETE", "/api/v1/rules/rule-1?projections=detach"),
+        ("POST", "/api/v1/rules/rule-1/replace"),
+    ],
+)
+def test_rule_management_routes_require_an_administrator(
+    tmp_path: Path, method: str, path: str
+) -> None:
+    with _client_with_rule(tmp_path) as client:
+        assert client.request(method, path, json={}).status_code == 401
+        assert client.get("/api/v1/rules").status_code == 401
+
+
+def test_rule_details_include_policy_state_mapping_count_and_outcomes(tmp_path: Path) -> None:
+    with _client_with_rule(tmp_path) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        details = client.get("/api/v1/rules/rule-1")
+        missing = client.get("/api/v1/rules/missing")
+
+    assert details.status_code == 200
+    assert details.json()["initial_lookback_days"] == 30
+    assert details.json()["mapping_count"] == 0
+    assert details.json()["reprojection_required"] is False
+    assert details.json()["last_sync"] is None
+    assert details.json()["last_reconciliation"] is None
+    assert missing.status_code == 404
+
+
+def test_policy_edit_pauses_rule_and_blocks_enable_until_previewed(tmp_path: Path) -> None:
+    with _client_with_rule(tmp_path) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        edited = client.patch(
+            "/api/v1/rules/rule-1",
+            json={"privacy_policy": "copy_details", "sync_all_day_events": True},
+        )
+        enable = client.post("/api/v1/rules/rule-1/enable")
+        unknown = client.patch(
+            "/api/v1/rules/rule-1",
+            json={"privacy_policy": "everything", "sync_all_day_events": True},
+        )
+        missing = client.patch(
+            "/api/v1/rules/missing",
+            json={"privacy_policy": "busy_only", "sync_all_day_events": True},
+        )
+
+    assert edited.status_code == 200
+    assert edited.json()["state"] == "paused"
+    assert edited.json()["privacy_policy"] == "copy_details"
+    assert edited.json()["reprojection_required"] is True
+    assert enable.status_code == 409
+    assert unknown.status_code == 422
+    assert missing.status_code == 404
+
+
+def test_policy_edit_is_rejected_while_removal_is_incomplete(tmp_path: Path) -> None:
+    with _client_with_rule(tmp_path, SyncRuleState.DISABLED) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.patch(
+            "/api/v1/rules/rule-1",
+            json={"privacy_policy": "copy_details", "sync_all_day_events": True},
+        )
+
+    assert response.status_code == 409
+
+
+def test_rule_removal_requires_an_explicit_choice_and_detach_removes_the_rule(
+    tmp_path: Path,
+) -> None:
+    with _client_with_rule(tmp_path) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        unspecified = client.delete("/api/v1/rules/rule-1")
+        invalid = client.delete("/api/v1/rules/rule-1?projections=everything")
+        delete_without_google = client.delete("/api/v1/rules/rule-1?projections=delete")
+        detached = client.delete("/api/v1/rules/rule-1?projections=detach")
+        after = client.get("/api/v1/rules/rule-1")
+        missing = client.delete("/api/v1/rules/rule-1?projections=detach")
+
+    assert unspecified.status_code == 422
+    assert invalid.status_code == 422
+    assert delete_without_google.status_code == 503
+    assert detached.status_code == 200
+    assert detached.json() == {"deleted": 0, "detached": 0}
+    assert after.status_code == 404
+    assert missing.status_code == 404
+
+
+def test_delete_removal_is_blocked_for_a_disconnected_destination(tmp_path: Path) -> None:
+    container = replace(
+        build_container(Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())),
+        scheduler=None,
+    )
+    assert container.connected_accounts is not None
+    account = container.connected_accounts.save(
+        "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
+    )
+    container.connected_accounts.disconnect(account.id)
+    with container.unit_of_work() as uow:
+        uow.rules.add(
+            SyncRule(
+                SyncRuleId("rule-1"),
+                endpoint("personal", "personal-calendar"),
+                endpoint(account.id.value, "work-calendar"),
+                state=SyncRuleState.PAUSED,
+            )
+        )
+        uow.commit()
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        blocked = client.delete("/api/v1/rules/rule-1?projections=delete")
+        state = client.get("/api/v1/rules/rule-1").json()["state"]
+
+    assert blocked.status_code == 409
+    assert state == "paused"
+
+
+def test_replacement_creates_a_new_draft_and_rejects_invalid_calendars(tmp_path: Path) -> None:
+    unchanged = {
+        "source": {"connected_account_id": "personal-account", "calendar_id": "personal-calendar"},
+        "destination": {"connected_account_id": "work-account", "calendar_id": "work-calendar"},
+        "projections": "detach",
+    }
+    same_endpoint = {**unchanged, "destination": unchanged["source"]}
+    changed = {
+        **unchanged,
+        "destination": {"connected_account_id": "work-account", "calendar_id": "team-calendar"},
+    }
+    with _client_with_rule(tmp_path) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        rejected = client.post("/api/v1/rules/rule-1/replace", json=unchanged)
+        invalid = client.post("/api/v1/rules/rule-1/replace", json=same_endpoint)
+        replaced = client.post("/api/v1/rules/rule-1/replace", json=changed)
+        rules = client.get("/api/v1/rules").json()
+
+    assert rejected.status_code == 422
+    assert invalid.status_code == 422
+    assert replaced.status_code == 201
+    assert replaced.json()["rule"]["state"] == "draft"
+    assert replaced.json()["rule"]["destination"]["calendar_id"] == "team-calendar"
+    assert replaced.json()["detached"] == 0
+    assert [item["id"] for item in rules] == [replaced.json()["rule"]["id"]]

@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import UnitOfWorkFactory
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.reconciliation import ReconcileSyncRule
-from calendar_sync.application.rules import CreateSyncRule
+from calendar_sync.application.removal import RemoveSyncRule
+from calendar_sync.application.rules import (
+    ChangeSyncRulePolicy,
+    CreateSyncRule,
+    GetSyncRuleDetails,
+    ReplaceSyncRuleCalendars,
+)
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.domain.services import (
@@ -20,6 +27,7 @@ from calendar_sync.infrastructure.google.oauth import (
     SqliteConnectedAccountStore,
 )
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
@@ -39,6 +47,11 @@ class Container:
     settings: Settings
     unit_of_work: UnitOfWorkFactory
     create_sync_rule: CreateSyncRule
+    rule_locks: RuleLocks
+    change_sync_rule_policy: ChangeSyncRulePolicy
+    get_sync_rule_details: GetSyncRuleDetails
+    remove_sync_rule: RemoveSyncRule
+    replace_sync_rule_calendars: ReplaceSyncRuleCalendars
     admin_auth: SqliteAdminAuth
     connected_accounts: SqliteConnectedAccountStore | None
     google_oauth: GoogleOAuthService | None
@@ -58,6 +71,8 @@ def build_container(settings: Settings | None = None) -> Container:
     preview_sync_rule = None
     reconcile_sync_rule = None
     scheduler = None
+    provider: GoogleCalendarProvider | None = None
+    rule_locks = RuleLocks()
     if resolved.master_key:
         accounts = SqliteConnectedAccountStore(
             resolved.database_path, CredentialCipher(resolved.master_key)
@@ -72,6 +87,7 @@ def build_container(settings: Settings | None = None) -> Container:
             SyncDecisionService(projector, fingerprinter),
             fingerprinter,
             SystemClock(),
+            rule_locks,
         )
         preview_sync_rule = PreviewSyncRule(
             unit_of_work,
@@ -110,10 +126,19 @@ def build_container(settings: Settings | None = None) -> Container:
                 IncidentNotifier(channels) if channels else None,
             ),
         )
+    create_sync_rule = CreateSyncRule(unit_of_work)
+    remove_sync_rule = RemoveSyncRule(unit_of_work, provider, accounts, SystemClock(), rule_locks)
     return Container(
         settings=resolved,
         unit_of_work=unit_of_work,
-        create_sync_rule=CreateSyncRule(unit_of_work),
+        create_sync_rule=create_sync_rule,
+        rule_locks=rule_locks,
+        change_sync_rule_policy=ChangeSyncRulePolicy(unit_of_work, SystemClock()),
+        get_sync_rule_details=GetSyncRuleDetails(unit_of_work),
+        remove_sync_rule=remove_sync_rule,
+        replace_sync_rule_calendars=ReplaceSyncRuleCalendars(
+            unit_of_work, remove_sync_rule, create_sync_rule, UuidIdGenerator()
+        ),
         admin_auth=SqliteAdminAuth(resolved.database_path),
         connected_accounts=accounts,
         google_oauth=google_oauth,

@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+ProjectionChoice = Literal["delete", "detach"]
 
 
 class SetupStatusResponse(BaseModel):
@@ -34,6 +38,49 @@ class RuleResponse(BaseModel):
     privacy_policy: str
     sync_all_day_events: bool
     state: str
+    reprojection_required: bool
+
+
+class RunOutcomeResponse(BaseModel):
+    completed_at: str
+    succeeded: bool
+    full_run: bool
+    created: int
+    updated: int
+    deleted: int
+    conflicts: int
+    checked_mappings: int
+    drift: int
+    failure_kind: str | None
+
+
+class RuleDetailResponse(RuleResponse):
+    initial_lookback_days: int
+    mapping_count: int
+    last_sync: RunOutcomeResponse | None
+    last_reconciliation: RunOutcomeResponse | None
+
+
+class UpdateRulePolicyRequest(BaseModel):
+    privacy_policy: str
+    sync_all_day_events: bool
+
+
+class ReplaceRuleRequest(BaseModel):
+    source: CalendarEndpointPayload
+    destination: CalendarEndpointPayload
+    projections: ProjectionChoice
+
+
+class RemovalResponse(BaseModel):
+    deleted: int
+    detached: int
+
+
+class RuleReplacementResponse(BaseModel):
+    rule: RuleResponse
+    deleted: int
+    detached: int
 
 
 class DashboardResponse(BaseModel):
