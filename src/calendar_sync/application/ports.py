@@ -12,8 +12,11 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     ConnectedAccountId,
     EventMapping,
+    EventMappingId,
     EventProjection,
     EventRef,
+    OccurrenceMapping,
+    OccurrenceStart,
     SyncRule,
     SyncRuleId,
 )
@@ -70,6 +73,36 @@ class CalendarProvider(Protocol):
         self, destination: CalendarEndpoint, rule_id: SyncRuleId
     ) -> Sequence[CalendarEvent]: ...
 
+    def get_occurrence(
+        self, series: EventRef, original_start: OccurrenceStart
+    ) -> CalendarEvent | None:
+        """Resolve one occurrence of a readable series, cancelled or not.
+
+        `None` means the series answered and has no occurrence at that start. A series that cannot
+        be read raises instead, because absence can authorize cancelling a destination occurrence.
+        """
+
+    def write_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        projection: EventProjection,
+        operation_key: str,
+    ) -> CalendarEvent:
+        """Write or restore an owned destination occurrence without notifying attendees."""
+
+    def cancel_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        operation_key: str,
+    ) -> None:
+        """Cancel one owned destination occurrence; the rest of its series is unchanged."""
+
 
 class SyncRuleRepository(Protocol):
     def get(self, rule_id: SyncRuleId) -> SyncRule | None: ...
@@ -102,6 +135,18 @@ class EventMappingRepository(Protocol):
     def delete(self, mapping: EventMapping) -> None: ...
 
     def count_for_rule(self, rule_id: SyncRuleId) -> int: ...
+
+
+class OccurrenceMappingRepository(Protocol):
+    def for_series(self, series_mapping_id: EventMappingId) -> Sequence[OccurrenceMapping]: ...
+
+    def get(
+        self, series_mapping_id: EventMappingId, original_start: OccurrenceStart
+    ) -> OccurrenceMapping | None: ...
+
+    def save(self, mapping: OccurrenceMapping) -> None: ...
+
+    def delete(self, mapping: OccurrenceMapping) -> None: ...
 
 
 class SyncCursorRepository(Protocol):
@@ -159,6 +204,7 @@ class RuleRunOutcomeRepository(Protocol):
 class UnitOfWork(Protocol):
     rules: SyncRuleRepository
     mappings: EventMappingRepository
+    occurrences: OccurrenceMappingRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository

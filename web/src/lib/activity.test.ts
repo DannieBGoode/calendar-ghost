@@ -25,7 +25,12 @@ describe("activity presentation", () => {
   it("explains skipped recurring events in calendar language", () => {
     const copy = describeEntry(entry({}))
     expect(copy.summary).toBe("Skipped a recurring event")
-    expect(copy.explanation).toContain("not synced yet")
+    expect(copy.explanation).toContain("Earlier versions")
+  })
+
+  it("explains cancelled occurrences in calendar language", () => {
+    const copy = describeEntry(entry({ action: "delete", reason: "occurrence_cancelled" }))
+    expect(copy.summary).toBe("Removed one occurrence")
   })
 
   it("falls back to the recorded detail for entries without a reason code", () => {

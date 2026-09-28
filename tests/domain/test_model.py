@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
@@ -6,12 +6,22 @@ from calendar_sync.domain.errors import DomainValidationError, InvalidStateTrans
 from calendar_sync.domain.model import (
     AllDayRange,
     AllDaySyncPolicy,
+    EventId,
+    EventMappingId,
+    EventRef,
+    OccurrenceIdentity,
+    OccurrenceMapping,
+    OccurrenceMappingId,
+    OccurrenceState,
     PrivacyPolicy,
+    ProjectionFingerprint,
     SyncRule,
     SyncRuleState,
+    TimedInterval,
     TransformationPolicy,
+    occurrence_start,
 )
-from tests.helpers import endpoint, rule
+from tests.helpers import NOW, endpoint, rule
 
 
 def test_rule_can_cross_connected_accounts() -> None:
@@ -123,3 +133,59 @@ def test_removal_can_begin_from_every_state_and_is_inert(state: SyncRuleState) -
         removing.enable()
     with pytest.raises(InvalidStateTransition):
         removing.mark_dry_run_validated()
+
+
+def test_occurrence_start_normalizes_offsets_to_one_utc_instant() -> None:
+    madrid = datetime(2026, 9, 1, 10, 0, tzinfo=timezone(timedelta(hours=2)))
+    utc = datetime(2026, 9, 1, 8, 0, tzinfo=UTC)
+
+    assert occurrence_start(madrid) == occurrence_start(utc)
+    normalized = occurrence_start(madrid)
+    assert isinstance(normalized, datetime)
+    assert normalized.utcoffset() == timedelta(0)
+    assert occurrence_start(date(2026, 9, 1)) == date(2026, 9, 1)
+
+
+def test_occurrence_start_rejects_naive_times() -> None:
+    with pytest.raises(DomainValidationError):
+        occurrence_start(datetime(2026, 9, 1, 8, 0))
+
+
+def test_occurrence_identity_requires_a_normalized_start() -> None:
+    with pytest.raises(DomainValidationError):
+        OccurrenceIdentity(
+            EventId("series"), datetime(2026, 9, 1, 10, 0, tzinfo=timezone(timedelta(hours=2)))
+        )
+
+
+def test_timed_interval_rejects_a_blank_time_zone() -> None:
+    with pytest.raises(DomainValidationError):
+        TimedInterval(NOW, NOW + timedelta(hours=1), " ")
+
+
+def test_only_modified_occurrence_mappings_carry_a_fingerprint() -> None:
+    source = EventRef(rule().source, EventId("series_20260901T080000Z"))
+    destination = EventRef(rule().destination, EventId("projection_20260901T080000Z"))
+    start = datetime(2026, 9, 1, 8, 0, tzinfo=UTC)
+
+    with pytest.raises(DomainValidationError):
+        OccurrenceMapping(
+            OccurrenceMappingId("o-1"),
+            EventMappingId("m-1"),
+            start,
+            source,
+            destination,
+            OccurrenceState.MODIFIED,
+            "r-1",
+        )
+    with pytest.raises(DomainValidationError):
+        OccurrenceMapping(
+            OccurrenceMappingId("o-1"),
+            EventMappingId("m-1"),
+            start,
+            source,
+            destination,
+            OccurrenceState.CANCELLED,
+            "r-1",
+            ProjectionFingerprint("f"),
+        )

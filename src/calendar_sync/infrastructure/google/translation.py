@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from calendar_sync.domain.model import (
@@ -14,9 +14,11 @@ from calendar_sync.domain.model import (
     EventStatus,
     ManagedOrigin,
     OccurrenceIdentity,
+    OccurrenceStart,
     Recurrence,
     SyncRuleId,
     TimedInterval,
+    occurrence_start,
 )
 
 RULE_PROPERTY = "gcs_rule_id"
@@ -24,6 +26,7 @@ SOURCE_ACCOUNT_PROPERTY = "gcs_source_account_id"
 SOURCE_CALENDAR_PROPERTY = "gcs_source_calendar_id"
 SOURCE_EVENT_PROPERTY = "gcs_source_event_id"
 OPERATION_PROPERTY = "gcs_operation_key"
+ORIGINAL_START_PROPERTY = "gcs_source_original_start"
 
 
 class GoogleEventTranslationError(ValueError):
@@ -47,9 +50,9 @@ def to_domain_event(payload: Mapping[str, Any], endpoint: CalendarEndpoint) -> C
     original_start = payload.get("originalStartTime")
     occurrence = None
     if isinstance(recurring_event_id, str) and isinstance(original_start, Mapping):
-        original_value = original_start.get("dateTime") or original_start.get("date")
-        if isinstance(original_value, str):
-            occurrence = OccurrenceIdentity(EventId(recurring_event_id), original_value)
+        parsed_start = _parse_original_start(original_start)
+        if parsed_start is not None:
+            occurrence = OccurrenceIdentity(EventId(recurring_event_id), parsed_start)
     html_link = payload.get("htmlLink")
 
     return CalendarEvent(
@@ -74,6 +77,8 @@ def projection_payload(
     rule_id: SyncRuleId,
     source: EventRef,
     operation_key: str,
+    *,
+    original_start: OccurrenceStart | None = None,
 ) -> dict[str, Any]:
     start, end = _time_payload(projection)
     body: dict[str, Any] = {
@@ -92,6 +97,10 @@ def projection_payload(
             }
         },
     }
+    if original_start is not None:
+        body["extendedProperties"]["private"][ORIGINAL_START_PROPERTY] = format_occurrence_start(
+            original_start
+        )
     if projection.recurrence is not None:
         body["recurrence"] = list(projection.recurrence.lines)
     return body
@@ -121,7 +130,9 @@ def _parse_time(
     start_time = start.get("dateTime")
     end_time = end.get("dateTime")
     if isinstance(start_time, str) and isinstance(end_time, str):
-        return TimedInterval(_parse_datetime(start_time), _parse_datetime(end_time))
+        return TimedInterval(
+            _parse_datetime(start_time), _parse_datetime(end_time), _time_zone(start)
+        )
     raise GoogleEventTranslationError("Google event has incompatible start and end values")
 
 
@@ -131,10 +142,13 @@ def _time_payload(projection: EventProjection) -> tuple[dict[str, str], dict[str
             {"date": projection.time.starts_on.isoformat()},
             {"date": projection.time.ends_before.isoformat()},
         )
-    return (
-        {"dateTime": projection.time.starts_at.isoformat()},
-        {"dateTime": projection.time.ends_at.isoformat()},
-    )
+    start = {"dateTime": projection.time.starts_at.isoformat()}
+    end = {"dateTime": projection.time.ends_at.isoformat()}
+    # Google expands a series in its zone; without it, daylight-saving changes shift occurrences.
+    if projection.recurrence is not None and projection.time.time_zone is not None:
+        start["timeZone"] = projection.time.time_zone
+        end["timeZone"] = projection.time.time_zone
+    return start, end
 
 
 def _managed_origin(payload: Mapping[str, Any]) -> ManagedOrigin | None:
@@ -161,6 +175,27 @@ def _managed_origin(payload: Mapping[str, Any]) -> ManagedOrigin | None:
 
     source_endpoint = CalendarEndpoint(ConnectedAccountId(account), CalendarId(calendar))
     return ManagedOrigin(SyncRuleId(rule), EventRef(source_endpoint, EventId(event)))
+
+
+def _time_zone(value: Mapping[str, Any]) -> str | None:
+    zone = value.get("timeZone")
+    return zone if isinstance(zone, str) and zone.strip() else None
+
+
+def format_occurrence_start(value: OccurrenceStart) -> str:
+    if isinstance(value, datetime):
+        return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return value.isoformat()
+
+
+def _parse_original_start(value: Mapping[str, Any]) -> OccurrenceStart | None:
+    timed = value.get("dateTime")
+    if isinstance(timed, str):
+        return occurrence_start(_parse_datetime(timed))
+    all_day = value.get("date")
+    if isinstance(all_day, str):
+        return date.fromisoformat(all_day)
+    return None
 
 
 def _required_string(payload: Mapping[str, Any], key: str) -> str:

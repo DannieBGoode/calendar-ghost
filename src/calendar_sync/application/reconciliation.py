@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
@@ -14,10 +14,14 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
+    CalendarEvent,
     EventMapping,
+    EventMappingId,
     EventProjection,
     EventRef,
     EventStatus,
+    OccurrenceCheck,
+    OccurrenceMapping,
     ReconciliationReport,
     SyncRule,
     SyncRuleId,
@@ -44,9 +48,10 @@ class ReconcileSyncRule:
             if rule is None:
                 raise RuleNotExecutable(f"sync rule {rule_id.value} does not exist")
             mappings = uow.mappings.for_rule(rule.id)
+            recorded = {mapping.id: uow.occurrences.for_series(mapping.id) for mapping in mappings}
 
         try:
-            report = self._reconcile(rule, mappings)
+            report = self._reconcile(rule, mappings, recorded)
         except ProviderFailure as failure:
             self._record(
                 RuleRunOutcome(
@@ -77,19 +82,45 @@ class ReconcileSyncRule:
             uow.run_outcomes.record(outcome)
             uow.commit()
 
-    def _reconcile(self, rule: SyncRule, mappings: Sequence[EventMapping]) -> ReconciliationReport:
+    def _reconcile(
+        self,
+        rule: SyncRule,
+        mappings: Sequence[EventMapping],
+        recorded: Mapping[EventMappingId, Sequence[OccurrenceMapping]],
+    ) -> ReconciliationReport:
         expected: dict[EventRef, EventProjection] = {}
         for mapping in mappings:
             source = self.provider.get_event(mapping.source)
-            if (
-                source is not None
-                and source.status is EventStatus.CONFIRMED
-                and source.managed_origin is None
-                and not (
-                    source.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE
-                )
-            ):
+            if source is not None and _eligible(source, rule):
                 expected[mapping.source] = self.projector.project(source, rule)
         actual_events = self.provider.managed_events(rule.destination, rule.id)
         actual = {event.reference: event for event in actual_events}
-        return self.reconciliation.reconcile(rule, mappings, expected, actual)
+
+        checks: list[OccurrenceCheck] = []
+        for mapping in mappings:
+            if mapping.source not in expected:
+                continue  # the series' own inconsistency is already reported
+            for occurrence in recorded.get(mapping.id, ()):
+                source = self.provider.get_occurrence(mapping.source, occurrence.original_start)
+                checks.append(
+                    OccurrenceCheck(
+                        occurrence,
+                        mapping.destination,
+                        self.projector.project(source, rule)
+                        if source is not None and _eligible(source, rule)
+                        else None,
+                        # A missing destination series is already reported for its mapping.
+                        self.provider.get_occurrence(mapping.destination, occurrence.original_start)
+                        if mapping.destination in actual
+                        else None,
+                    )
+                )
+        return self.reconciliation.reconcile(rule, mappings, expected, actual, checks)
+
+
+def _eligible(source: CalendarEvent, rule: SyncRule) -> bool:
+    return (
+        source.status is EventStatus.CONFIRMED
+        and source.managed_origin is None
+        and not (source.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE)
+    )

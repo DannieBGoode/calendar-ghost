@@ -10,8 +10,13 @@ Open **Activity**, filter by the rule, and choose **Skipped** or **Blocked**. Ea
 why no Event Projection was written; choose **Show event** to see the event's title and time from Google
 and open it in Google Calendar. Common reasons:
 
-- **Skipped a recurring event**: recurring series and single-occurrence changes are not
-  synchronized in the current pre-alpha.
+- **Skipped a recurring event**: recorded by a release before recurring-event support. The next
+  run after upgrading projects the series.
+- **Skipped an occurrence**: the occurrence belongs to a series this rule does not project, such as
+  a Managed Projection or an all-day series under a timed-only rule.
+- **Blocked: the occurrence was not found in the destination series**: the destination series no
+  longer expands to the source occurrence even after repair. Run **Reconcile now**; if it persists,
+  remove the rule and create it again.
 - **Skipped an all-day event**: the rule syncs timed events only.
 - **Skipped a managed projection**: Managed Projections never become sources, which prevents loops.
 - **Blocked**: identity or ownership was ambiguous, so nothing was written. Run **Reconcile now**

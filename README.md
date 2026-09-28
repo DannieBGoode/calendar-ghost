@@ -33,7 +33,7 @@ machine and creates only the destination representation selected by each rule.
 
 | Area | Behavior |
 | --- | --- |
-| Events | Timed events, all-day events, and cancellations; recurring events are safely excluded for now |
+| Events | Timed events, all-day events, recurring series, single-occurrence changes, and cancellations |
 | Policies | Busy-only or detail-copy projection; include or exclude all-day events per rule |
 | Scheduling | Source and destination incremental polling every five minutes plus **Sync Now** |
 | Reconciliation | Daily full pass plus **Reconcile Now**, with expected-versus-actual drift reporting |

@@ -45,7 +45,7 @@ const REASONS: Record<string, ReasonCopy> = {
   recurring_unsupported: {
     summary: "Skipped a recurring event",
     explanation:
-      "Recurring events and changes to single occurrences are not synced yet. No projection was created or changed.",
+      "Earlier versions did not sync recurring events. No projection was created or changed.",
   },
   cancelled_without_projection: {
     summary: "Skipped a cancelled event",
@@ -74,6 +74,44 @@ const REASONS: Record<string, ReasonCopy> = {
     summary: "Blocked: the source event could not be confirmed",
     explanation:
       "The projection was edited, but the source event could not be read to repair it. The projection was left unchanged rather than risk deleting it.",
+  },
+  occurrence_changed: {
+    summary: "Updated one occurrence",
+    explanation: "One occurrence of a recurring event was moved or edited in the source, so its projection was updated.",
+  },
+  occurrence_cancelled: {
+    summary: "Removed one occurrence",
+    explanation: "One occurrence of a recurring event was cancelled in the source. The rest of the series is unchanged.",
+  },
+  occurrence_removed_from_series: {
+    summary: "Removed an occurrence that left its series",
+    explanation: "The source series no longer includes this occurrence, so its projection was removed.",
+  },
+  occurrence_drift_repaired: {
+    summary: "Repaired an edited occurrence",
+    explanation:
+      "One occurrence was edited or deleted directly in the destination calendar. The source is authoritative, so it was restored.",
+  },
+  occurrence_current: {
+    summary: "No change needed",
+    explanation: "The occurrence already matches the source.",
+  },
+  occurrence_already_cancelled: {
+    summary: "No change needed",
+    explanation: "The occurrence is cancelled in both calendars.",
+  },
+  occurrence_retired: {
+    summary: "Forgot an occurrence that no longer exists",
+    explanation: "The occurrence no longer exists in either calendar, so its record was removed. Nothing was written.",
+  },
+  series_not_synchronized: {
+    summary: "Skipped an occurrence",
+    explanation: "The occurrence belongs to a recurring event this rule does not sync.",
+  },
+  destination_occurrence_missing: {
+    summary: "Blocked: the occurrence was not found in the destination series",
+    explanation:
+      "The destination series has no matching occurrence, even after repairing the series. Nothing was written. Reconcile the rule to investigate.",
   },
 }
 

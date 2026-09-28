@@ -10,6 +10,11 @@ from calendar_sync.domain.model import (
     ConnectedAccountId,
     EventId,
     EventRef,
+    EventStatus,
+    ManagedOrigin,
+    OccurrenceIdentity,
+    OccurrenceStart,
+    Recurrence,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
@@ -55,4 +60,83 @@ def all_day_event() -> CalendarEvent:
         time=AllDayRange(date(2026, 8, 30), date(2026, 8, 31)),
         revision="all-day-revision",
         title="Day off",
+    )
+
+
+SERIES_START = datetime(2026, 9, 1, 8, 0, tzinfo=UTC)
+
+
+def week_start(week: int) -> datetime:
+    return SERIES_START + timedelta(weeks=week)
+
+
+def instance_id(series_id: str, start: OccurrenceStart) -> str:
+    token = (
+        start.strftime("%Y%m%dT%H%M%SZ")
+        if isinstance(start, datetime)
+        else start.strftime("%Y%m%d")
+    )
+    return f"{series_id}_{token}"
+
+
+def series(
+    event_id: str = "source-series",
+    *,
+    calendar: CalendarEndpoint | None = None,
+    revision: str = "series-revision-1",
+    title: str = "Weekly private sync",
+    all_day: bool = False,
+    managed_origin: ManagedOrigin | None = None,
+    status: EventStatus = EventStatus.CONFIRMED,
+) -> CalendarEvent:
+    time = (
+        AllDayRange(SERIES_START.date(), SERIES_START.date() + timedelta(days=1))
+        if all_day
+        else TimedInterval(SERIES_START, SERIES_START + timedelta(hours=1), "Europe/Madrid")
+    )
+    return CalendarEvent(
+        reference=EventRef(calendar or rule().source, EventId(event_id)),
+        time=None if status is EventStatus.CANCELLED else time,
+        revision=revision,
+        status=status,
+        title=title,
+        description="Sensitive description",
+        location="Sensitive location",
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;COUNT=10",)),
+        managed_origin=managed_origin,
+    )
+
+
+def occurrence(
+    parent: CalendarEvent,
+    week: int = 1,
+    *,
+    moved_by: timedelta = timedelta(0),
+    revision: str = "occurrence-revision-1",
+    title: str | None = None,
+    status: EventStatus = EventStatus.CONFIRMED,
+    all_day: bool = False,
+    managed_origin: ManagedOrigin | None = None,
+) -> CalendarEvent:
+    start = week_start(week)
+    time: TimedInterval | AllDayRange | None
+    if status is EventStatus.CANCELLED:
+        time = None
+    elif all_day:
+        time = AllDayRange(start.date(), start.date() + timedelta(days=1))
+    else:
+        time = TimedInterval(start + moved_by, start + moved_by + timedelta(hours=1))
+    return CalendarEvent(
+        reference=EventRef(
+            parent.reference.calendar,
+            EventId(instance_id(parent.reference.event_id.value, start)),
+        ),
+        time=time,
+        revision=revision,
+        status=status,
+        title="" if status is EventStatus.CANCELLED else (title or parent.title),
+        description="" if status is EventStatus.CANCELLED else parent.description,
+        location="" if status is EventStatus.CANCELLED else parent.location,
+        occurrence=OccurrenceIdentity(parent.reference.event_id, start),
+        managed_origin=managed_origin,
     )

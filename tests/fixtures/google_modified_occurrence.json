@@ -1,0 +1,10 @@
+{
+  "id": "synthetic-series-001_20260908T080000Z",
+  "etag": "synthetic-occurrence-revision-001",
+  "status": "confirmed",
+  "summary": "Synthetic weekly sync (moved)",
+  "recurringEventId": "synthetic-series-001",
+  "originalStartTime": { "dateTime": "2026-09-08T10:00:00+02:00", "timeZone": "Europe/Madrid" },
+  "start": { "dateTime": "2026-09-08T12:00:00+02:00", "timeZone": "Europe/Madrid" },
+  "end": { "dateTime": "2026-09-08T13:00:00+02:00", "timeZone": "Europe/Madrid" }
+}

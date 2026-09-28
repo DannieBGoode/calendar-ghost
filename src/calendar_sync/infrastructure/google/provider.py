@@ -14,11 +14,14 @@ from calendar_sync.domain.model import (
     EventProjection,
     EventRef,
     EventStatus,
+    ManagedOrigin,
+    OccurrenceStart,
     SyncRuleId,
 )
 from calendar_sync.infrastructure.google.translation import (
     OPERATION_PROPERTY,
     RULE_PROPERTY,
+    format_occurrence_start,
     projection_payload,
     to_domain_event,
 )
@@ -218,6 +221,135 @@ class GoogleCalendarProvider:
                 parameters["pageToken"] = page_token
         except Exception as error:
             raise _provider_failure(error) from error
+
+    def get_occurrence(
+        self, series: EventRef, original_start: OccurrenceStart
+    ) -> CalendarEvent | None:
+        try:
+            response = (
+                self._service_for(series.calendar.connected_account_id)
+                .events()
+                .instances(
+                    calendarId=series.calendar.calendar_id.value,
+                    eventId=series.event_id.value,
+                    originalStart=format_occurrence_start(original_start),
+                    showDeleted=True,
+                    maxResults=1,
+                )
+                .execute()
+            )
+        except Exception as error:
+            # A missing series proves nothing about its occurrences; only an answered lookup may
+            # report absence, because absence can authorize cancelling a destination occurrence.
+            if _status_code(error) in {404, 410}:
+                raise ProviderFailure(
+                    ProviderFailureKind.TEMPORARY,
+                    "Google series could not be read while resolving an occurrence",
+                ) from error
+            raise _provider_failure(error) from error
+        for item in response.get("items", []):
+            candidate = to_domain_event(item, series.calendar)
+            # Never trust a positional result: the instance must name the requested start.
+            if (
+                candidate.occurrence is not None
+                and candidate.occurrence.series_event_id == series.event_id
+                and candidate.occurrence.original_start == original_start
+            ):
+                return candidate
+        return None
+
+    def write_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        projection: EventProjection,
+        operation_key: str,
+    ) -> CalendarEvent:
+        instance = self._owned_occurrence(
+            destination_series, original_start, source_series, rule_id
+        )
+        if instance is None:
+            raise ProviderFailure(
+                ProviderFailureKind.PERMANENT, "Google occurrence could not be resolved"
+            )
+        body = projection_payload(
+            projection, rule_id, source_series, operation_key, original_start=original_start
+        )
+        body["status"] = "confirmed"
+        try:
+            payload = (
+                self._service_for(destination_series.calendar.connected_account_id)
+                .events()
+                .patch(
+                    calendarId=destination_series.calendar.calendar_id.value,
+                    eventId=instance.reference.event_id.value,
+                    body=body,
+                    sendUpdates="none",
+                )
+                .execute()
+            )
+            return to_domain_event(payload, destination_series.calendar)
+        except Exception as error:
+            raise _provider_failure(error) from error
+
+    def cancel_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        operation_key: str,
+    ) -> None:
+        instance = self._owned_occurrence(
+            destination_series, original_start, source_series, rule_id
+        )
+        if instance is None or instance.status is EventStatus.CANCELLED:
+            return
+        try:
+            (
+                self._service_for(destination_series.calendar.connected_account_id)
+                .events()
+                .delete(
+                    calendarId=destination_series.calendar.calendar_id.value,
+                    eventId=instance.reference.event_id.value,
+                    sendUpdates="none",
+                )
+                .execute()
+            )
+        except Exception as error:
+            if _status_code(error) not in {404, 410}:
+                raise _provider_failure(error) from error
+
+    def _owned_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+    ) -> CalendarEvent | None:
+        instance = self.get_occurrence(destination_series, original_start)
+        if instance is None:
+            return None
+        master = self.get_event(destination_series)
+        if not (
+            master is not None
+            and _owned(master.managed_origin, rule_id, source_series)
+            and (
+                instance.managed_origin is None
+                or _owned(instance.managed_origin, rule_id, source_series)
+            )
+        ):
+            raise ProviderFailure(
+                ProviderFailureKind.PERMANENT,
+                "Google occurrence does not carry compatible ownership metadata",
+            )
+        return instance
+
+
+def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:
+    return origin is not None and origin.rule_id == rule_id and origin.source == source
 
 
 def _provider_failure(error: Exception) -> ProviderFailure:
