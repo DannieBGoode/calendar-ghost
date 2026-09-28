@@ -140,13 +140,14 @@ def test_managed_projection_cannot_become_a_source() -> None:
     assert decision.reason is SyncReason.MANAGED_PROJECTION_SOURCE
 
 
-def test_recurring_event_is_skipped_until_series_mapping_is_supported() -> None:
+def test_recurring_series_is_created_as_a_series() -> None:
     source = replace(event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)))
 
     decision = decisions.decide(rule(), source, None, None)
 
-    assert decision.action is SyncAction.IGNORE
-    assert decision.reason is SyncReason.RECURRING_UNSUPPORTED
+    assert decision.action is SyncAction.CREATE
+    assert decision.projection is not None
+    assert decision.projection.recurrence == source.recurrence
 
 
 def test_cancelled_and_excluded_all_day_events_record_distinct_reasons() -> None:
