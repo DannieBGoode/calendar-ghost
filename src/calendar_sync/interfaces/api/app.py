@@ -480,25 +480,31 @@ def create_app(container: Container | None = None) -> FastAPI:
 
         The default Activity view hides these checks, including runs that made nothing else.
         """
-        conditions = ["run_id IS NOT NULL", "id > ?", _ACTIVITY_CATEGORY_SQL["unchanged"]]
-        parameters: list[object] = []
-        if rule_id is not None:
-            conditions.append("rule_id = ?")
-            parameters.append(rule_id)
         with sqlite3.connect(resolved.settings.database_path) as connection:
             newest = connection.execute(
                 "SELECT COALESCE(MAX(id), 0) FROM audit_entries"
             ).fetchone()[0]
             # Only recent history is summarized, so the scan stays bounded as history grows.
             lower = max(after, int(newest) - _NO_CHANGE_SCAN_LIMIT)
-            rows = connection.execute(
-                f"""
-                SELECT run_id, rule_id, MAX(id), MAX(occurred_at), COUNT(*) FROM audit_entries
-                WHERE {" AND ".join(conditions)}
-                GROUP BY run_id ORDER BY MAX(id) DESC LIMIT ?
-                """,
-                (lower, *parameters, _NO_CHANGE_RUN_LIMIT),
+            recent = connection.execute(
+                _recent_runs_sql(with_rule=rule_id is not None),
+                (*([rule_id] if rule_id is not None else []), lower, _NO_CHANGE_RUN_LIMIT),
             ).fetchall()
+            # Count each run whole, even where the page boundary splits it.
+            run_ids = [row[0] for row in recent]
+            placeholders = ", ".join("?" for _ in run_ids)
+            rows = (
+                connection.execute(
+                    f"""
+                    SELECT run_id, rule_id, MAX(id), MAX(occurred_at), COUNT(*) FROM audit_entries
+                    WHERE run_id IN ({placeholders}) AND {_ACTIVITY_CATEGORY_SQL["unchanged"]}
+                    GROUP BY run_id ORDER BY MAX(id) DESC
+                    """,
+                    run_ids,
+                ).fetchall()
+                if run_ids
+                else []
+            )
         return [
             NoChangeRunResponse(
                 run_id=row[0], rule_id=row[1], newest_id=row[2], occurred_at=row[3], count=row[4]
@@ -926,6 +932,23 @@ _AUDIT_ENTRY_COLUMNS = (
     "id, run_id, occurred_at, rule_id, action, outcome, reason, detail,"
     " source_event_id, destination_event_id"
 )
+
+
+def _recent_runs_sql(*, with_rule: bool) -> str:
+    """Runs with any entry newer than a bound, newest first.
+
+    Grouping by run would otherwise lead SQLite to walk the run index across the whole history
+    before applying the bound, so the scan is pinned to the entry range or the rule's range.
+    """
+    source = (
+        "audit_entries INDEXED BY audit_entries_rule_id WHERE rule_id = ? AND id > ?"
+        if with_rule
+        else "audit_entries NOT INDEXED WHERE id > ?"
+    )
+    return f"""
+        SELECT run_id FROM {source} AND run_id IS NOT NULL
+        GROUP BY run_id ORDER BY MAX(id) DESC LIMIT ?
+    """
 
 
 def _audit_entry_response(row: sqlite3.Row) -> AuditEntryResponse:
