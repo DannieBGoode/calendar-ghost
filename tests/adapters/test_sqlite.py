@@ -1,6 +1,6 @@
 import sqlite3
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
 
@@ -13,6 +13,9 @@ from calendar_sync.domain.model import (
     EventMapping,
     EventMappingId,
     EventRef,
+    OccurrenceMapping,
+    OccurrenceMappingId,
+    OccurrenceState,
     PrivacyPolicy,
     ProjectionFingerprint,
     SyncRuleId,
@@ -24,7 +27,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
-from tests.helpers import NOW, endpoint, event, rule
+from tests.helpers import NOW, endpoint, event, rule, week_start
 
 
 def test_sqlite_rule_repository_round_trip(tmp_path: Path) -> None:
@@ -147,7 +150,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         rows = connection.execute(
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
-    assert versions == [1, 2, 3, 4]
+    assert versions == [1, 2, 3, 4, 5]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -309,3 +312,105 @@ def test_memory_adapter_supports_removal_counts_and_outcomes() -> None:
     assert factory.state.rules == {}
     assert factory.state.mappings == {}
     assert factory.state.outcomes == {}
+
+
+def _series_mapping() -> EventMapping:
+    return EventMapping(
+        EventMappingId("series-mapping"),
+        rule().id,
+        EventRef(rule().source, EventId("source-series")),
+        EventRef(rule().destination, EventId("projection-1")),
+        "r-1",
+        ProjectionFingerprint("f"),
+    )
+
+
+def _occurrence(
+    start: datetime | date, state: OccurrenceState = OccurrenceState.MODIFIED
+) -> OccurrenceMapping:
+    return OccurrenceMapping(
+        OccurrenceMappingId(f"o-{start}"),
+        EventMappingId("series-mapping"),
+        start,
+        EventRef(rule().source, EventId(f"source-series_{start}")),
+        EventRef(rule().destination, EventId(f"projection-1_{start}")),
+        state,
+        "r-1",
+        ProjectionFingerprint("f") if state is OccurrenceState.MODIFIED else None,
+    )
+
+
+def test_occurrence_mappings_round_trip_timed_and_all_day_starts(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    timed = _occurrence(week_start(1))
+    all_day = _occurrence(date(2026, 9, 15), OccurrenceState.CANCELLED)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.mappings.save(_series_mapping())
+        uow.occurrences.save(timed)
+        uow.occurrences.save(all_day)
+        uow.occurrences.save(
+            replace(timed, state=OccurrenceState.CANCELLED, projection_fingerprint=None)
+        )
+        uow.commit()
+
+    with factory() as uow:
+        stored = uow.occurrences.get(EventMappingId("series-mapping"), week_start(1))
+        assert stored == replace(
+            timed, state=OccurrenceState.CANCELLED, projection_fingerprint=None
+        )
+        assert uow.occurrences.get(EventMappingId("series-mapping"), date(2026, 9, 15)) == all_day
+        assert len(uow.occurrences.for_series(EventMappingId("series-mapping"))) == 2
+
+
+def test_occurrence_mappings_cascade_with_their_series_mapping_and_rule(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.mappings.save(_series_mapping())
+        uow.occurrences.save(_occurrence(week_start(1)))
+        uow.commit()
+    with factory() as uow:
+        uow.mappings.delete(_series_mapping())
+        uow.commit()
+    with factory() as uow:
+        assert uow.occurrences.for_series(EventMappingId("series-mapping")) == ()
+        uow.mappings.save(_series_mapping())
+        uow.occurrences.save(_occurrence(week_start(1)))
+        uow.commit()
+    with factory() as uow:
+        uow.rules.remove(rule().id)
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM occurrence_mappings").fetchone()[0] == 0
+
+
+def test_migration_5_upgrades_a_version_4_installation_and_resets_cursors(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.mappings.save(_series_mapping())
+        uow.cursors.save(rule().id, "source-cursor")
+        uow.destination_cursors.save(rule().id, "destination-cursor")
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("DROP TABLE occurrence_mappings")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 5")
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with factory() as uow:
+        assert uow.cursors.get(rule().id) is None
+        assert uow.destination_cursors.get(rule().id) is None
+        assert uow.mappings.count_for_rule(rule().id) == 1
+        assert uow.occurrences.for_series(EventMappingId("series-mapping")) == ()
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+    assert versions.count(5) == 1

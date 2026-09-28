@@ -12,8 +12,11 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     ConnectedAccountId,
     EventMapping,
+    EventMappingId,
     EventProjection,
     EventRef,
+    OccurrenceMapping,
+    OccurrenceStart,
     SyncRule,
     SyncRuleId,
 )
@@ -104,6 +107,18 @@ class EventMappingRepository(Protocol):
     def count_for_rule(self, rule_id: SyncRuleId) -> int: ...
 
 
+class OccurrenceMappingRepository(Protocol):
+    def for_series(self, series_mapping_id: EventMappingId) -> Sequence[OccurrenceMapping]: ...
+
+    def get(
+        self, series_mapping_id: EventMappingId, original_start: OccurrenceStart
+    ) -> OccurrenceMapping | None: ...
+
+    def save(self, mapping: OccurrenceMapping) -> None: ...
+
+    def delete(self, mapping: OccurrenceMapping) -> None: ...
+
+
 class SyncCursorRepository(Protocol):
     def get(self, rule_id: SyncRuleId) -> str | None: ...
 
@@ -159,6 +174,7 @@ class RuleRunOutcomeRepository(Protocol):
 class UnitOfWork(Protocol):
     rules: SyncRuleRepository
     mappings: EventMappingRepository
+    occurrences: OccurrenceMappingRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository

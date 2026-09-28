@@ -9,6 +9,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
     EventMappingRepository,
+    OccurrenceMappingRepository,
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
@@ -19,7 +20,10 @@ from calendar_sync.application.ports import (
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     EventMapping,
+    EventMappingId,
     EventRef,
+    OccurrenceMapping,
+    OccurrenceStart,
     SyncRule,
     SyncRuleId,
 )
@@ -29,6 +33,9 @@ from calendar_sync.domain.model import (
 class MemoryState:
     rules: dict[SyncRuleId, SyncRule] = field(default_factory=dict)
     mappings: dict[tuple[SyncRuleId, EventRef], EventMapping] = field(default_factory=dict)
+    occurrences: dict[tuple[EventMappingId, OccurrenceStart], OccurrenceMapping] = field(
+        default_factory=dict
+    )
     cursors: dict[SyncRuleId, str] = field(default_factory=dict)
     destination_cursors: dict[SyncRuleId, str] = field(default_factory=dict)
     audit: list[AuditEntry] = field(default_factory=list)
@@ -57,6 +64,12 @@ class InMemorySyncRuleRepository:
 
     def remove(self, rule_id: SyncRuleId) -> None:
         self._state.rules.pop(rule_id, None)
+        removed = {m.id for key, m in self._state.mappings.items() if key[0] == rule_id}
+        self._state.occurrences = {
+            key: occurrence
+            for key, occurrence in self._state.occurrences.items()
+            if key[0] not in removed
+        }
         self._state.mappings = {
             key: mapping for key, mapping in self._state.mappings.items() if key[0] != rule_id
         }
@@ -107,9 +120,40 @@ class InMemoryEventMappingRepository:
 
     def delete(self, mapping: EventMapping) -> None:
         self._state.mappings.pop((mapping.rule_id, mapping.source), None)
+        self._state.occurrences = {
+            key: occurrence
+            for key, occurrence in self._state.occurrences.items()
+            if key[0] != mapping.id
+        }
 
     def count_for_rule(self, rule_id: SyncRuleId) -> int:
         return sum(1 for key in self._state.mappings if key[0] == rule_id)
+
+
+class InMemoryOccurrenceMappingRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def for_series(self, series_mapping_id: EventMappingId) -> tuple[OccurrenceMapping, ...]:
+        return tuple(
+            mapping
+            for key, mapping in self._state.occurrences.items()
+            if key[0] == series_mapping_id
+        )
+
+    def get(
+        self, series_mapping_id: EventMappingId, original_start: OccurrenceStart
+    ) -> OccurrenceMapping | None:
+        return self._state.occurrences.get((series_mapping_id, original_start))
+
+    def save(self, mapping: OccurrenceMapping) -> None:
+        # Mirror the SQLite foreign key to event_mappings.
+        if not any(m.id == mapping.series_mapping_id for m in self._state.mappings.values()):
+            raise KeyError(mapping.series_mapping_id)
+        self._state.occurrences[(mapping.series_mapping_id, mapping.original_start)] = mapping
+
+    def delete(self, mapping: OccurrenceMapping) -> None:
+        self._state.occurrences.pop((mapping.series_mapping_id, mapping.original_start), None)
 
 
 class InMemorySyncCursorRepository:
@@ -145,6 +189,7 @@ class InMemoryRuleRunOutcomeRepository:
 class InMemoryUnitOfWork:
     rules: SyncRuleRepository
     mappings: EventMappingRepository
+    occurrences: OccurrenceMappingRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
@@ -159,6 +204,7 @@ class InMemoryUnitOfWork:
         self._working = deepcopy(self._target)
         self.rules = InMemorySyncRuleRepository(self._working)
         self.mappings = InMemoryEventMappingRepository(self._working)
+        self.occurrences = InMemoryOccurrenceMappingRepository(self._working)
         self.cursors = InMemorySyncCursorRepository(self._working.cursors)
         self.destination_cursors = InMemorySyncCursorRepository(self._working.destination_cursors)
         self.audit = InMemoryAuditRepository(self._working)
@@ -177,6 +223,7 @@ class InMemoryUnitOfWork:
         assert self._working is not None
         self._target.rules = self._working.rules
         self._target.mappings = self._working.mappings
+        self._target.occurrences = self._working.occurrences
         self._target.cursors = self._working.cursors
         self._target.destination_cursors = self._working.destination_cursors
         self._target.audit = self._working.audit
