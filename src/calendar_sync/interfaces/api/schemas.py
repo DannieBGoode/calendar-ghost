@@ -45,6 +45,7 @@ class DashboardResponse(BaseModel):
 
 class GoogleConfigurationResponse(BaseModel):
     configured: bool
+    redirect_uri: str | None
 
 
 class ConnectedAccountResponse(BaseModel):

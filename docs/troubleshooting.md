@@ -24,6 +24,15 @@ confirmation. Permanent deletion removes every affected Directional Sync Rule an
 cursors, incidents, and audit activity. Existing Managed Projections are not deleted from Google
 Calendar and will no longer be managed. Unrelated accounts and rules are unchanged.
 
+## Google consent ends on "Unable to connect"
+
+The browser followed the configured redirect URI to an address that does not reach this
+installation, usually `localhost` while Calendar Sync runs on another host. No account was saved.
+To finish this attempt, replace the origin in the address bar with the one you use to open
+Calendar Sync, for example `localhost:18000` with `192.168.1.50:18000`, and load it within 10
+minutes; each callback works once. To stop it recurring, use an SSH tunnel or an HTTPS redirect
+URI as described in [Deployment](deployment.md#google-oauth-redirect-uri-on-a-lan-host).
+
 ## Google Calendar permission was not granted
 
 The OAuth callback returns to **Settings → Connected accounts** without saving an account. Choose

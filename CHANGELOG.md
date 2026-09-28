@@ -8,6 +8,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - Connected Account management with permission checks, safe disconnection, reauthorization, and permanent local deletion.
 - Stable URLs for Overview, Rules, Activity, and Settings, with account identity markers throughout rule management.
+- A warning before connecting a Google account when the browser address differs from the configured OAuth redirect URI, with LAN and Raspberry Pi redirect guidance.
 
 ### Changed
 
