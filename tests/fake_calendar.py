@@ -108,7 +108,9 @@ class FakeCalendars:
         self, series: EventRef, original_start: OccurrenceStart
     ) -> CalendarEvent | None:
         master = self.events.get(series)
-        if master is None or master.status is EventStatus.CANCELLED:
+        if master is None:
+            raise ProviderFailure(ProviderFailureKind.TEMPORARY, "series could not be read")
+        if master.status is EventStatus.CANCELLED:
             return None
         if original_start not in self.expansions.get(series, ()):
             return None

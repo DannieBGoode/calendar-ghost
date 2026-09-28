@@ -251,8 +251,10 @@ class ExecuteSyncRule:
         if source_series is None:
             self._record_unverifiable(run, series_mapping.source, destination_event.reference)
             return
-        source_occurrence = self.provider.get_occurrence(
-            series_mapping.source, identity.original_start
+        source_occurrence = (
+            None
+            if source_series.status is EventStatus.CANCELLED
+            else self.provider.get_occurrence(series_mapping.source, identity.original_start)
         )
         if source_occurrence is not None and source_occurrence.reference in run.handled:
             return

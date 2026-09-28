@@ -109,9 +109,10 @@ class ReconcileSyncRule:
                         self.projector.project(source, rule)
                         if source is not None and _eligible(source, rule)
                         else None,
-                        self.provider.get_occurrence(
-                            mapping.destination, occurrence.original_start
-                        ),
+                        # A missing destination series is already reported for its mapping.
+                        self.provider.get_occurrence(mapping.destination, occurrence.original_start)
+                        if mapping.destination in actual
+                        else None,
                     )
                 )
         return self.reconciliation.reconcile(rule, mappings, expected, actual, checks)

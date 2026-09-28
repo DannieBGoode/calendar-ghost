@@ -133,6 +133,12 @@ class PreviewSyncRule:
             action = SyncAction.DELETE if cancels else SyncAction.UPDATE
         else:
             destination_series = self.provider.get_event(series_mapping.destination)
+            destination = (
+                self.provider.get_occurrence(series_mapping.destination, start)
+                if destination_series is not None
+                and destination_series.status is EventStatus.CONFIRMED
+                else None
+            )
             action = self.decisions.decide_occurrence(
                 rule,
                 parent,
@@ -141,7 +147,7 @@ class PreviewSyncRule:
                 event,
                 uow.occurrences.get(series_mapping.id, start),
                 destination_series,
-                self.provider.get_occurrence(series_mapping.destination, start),
+                destination,
             ).action
         return PreviewItem(
             event.reference.event_id.value, title, event.is_all_day, "occurrence", action

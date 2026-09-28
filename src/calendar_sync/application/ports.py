@@ -76,7 +76,11 @@ class CalendarProvider(Protocol):
     def get_occurrence(
         self, series: EventRef, original_start: OccurrenceStart
     ) -> CalendarEvent | None:
-        """Resolve one occurrence of a series, cancelled or not; `None` if it has none there."""
+        """Resolve one occurrence of a readable series, cancelled or not.
+
+        `None` means the series answered and has no occurrence at that start. A series that cannot
+        be read raises instead, because absence can authorize cancelling a destination occurrence.
+        """
 
     def write_occurrence(
         self,

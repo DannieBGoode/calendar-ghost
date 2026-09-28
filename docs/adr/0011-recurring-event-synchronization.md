@@ -52,7 +52,9 @@ provider formatting.
 The destination occurrence is resolved through the provider by destination series identity and
 Occurrence Start. The Google adapter uses `events.instances(eventId, originalStart, showDeleted)`
 and never constructs instance identifiers. "No such occurrence" is distinct from "cancelled
-occurrence".
+occurrence", and only an answered lookup may report absence: a series that cannot be read during
+the lookup (404 or 410) is a temporary provider failure, because absence can authorize cancelling
+a destination occurrence.
 
 ### Ownership and loop prevention
 

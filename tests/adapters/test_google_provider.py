@@ -304,16 +304,24 @@ def test_get_occurrence_resolves_through_instances_and_verifies_the_start() -> N
     )
 
 
-def test_get_occurrence_returns_none_for_a_different_start_or_missing_series() -> None:
+def test_get_occurrence_returns_none_only_when_the_series_has_no_such_occurrence() -> None:
     events_api = MagicMock()
-    events_api.instances.side_effect = [
-        request_returning({"items": [_instance()]}),
-        request_raising(404),
-    ]
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
     provider = provider_with_events_api(events_api)
 
     assert provider.get_occurrence(SERIES, datetime(2026, 9, 15, 8, 0, tzinfo=UTC)) is None
-    assert provider.get_occurrence(SERIES, START) is None
+
+
+@pytest.mark.parametrize("status", [404, 410])
+def test_get_occurrence_of_an_unreadable_series_is_a_failure_not_an_absence(status: int) -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_raising(status)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.get_occurrence(SERIES, START)
+
+    assert failure.value.kind is ProviderFailureKind.TEMPORARY
 
 
 def test_write_occurrence_restores_a_cancelled_instance_without_notifications() -> None:

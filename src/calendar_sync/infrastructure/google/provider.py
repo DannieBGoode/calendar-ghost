@@ -239,8 +239,13 @@ class GoogleCalendarProvider:
                 .execute()
             )
         except Exception as error:
+            # A missing series proves nothing about its occurrences; only an answered lookup may
+            # report absence, because absence can authorize cancelling a destination occurrence.
             if _status_code(error) in {404, 410}:
-                return None
+                raise ProviderFailure(
+                    ProviderFailureKind.TEMPORARY,
+                    "Google series could not be read while resolving an occurrence",
+                ) from error
             raise _provider_failure(error) from error
         for item in response.get("items", []):
             candidate = to_domain_event(item, series.calendar)

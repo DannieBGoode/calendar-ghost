@@ -133,3 +133,25 @@ def test_reconciliation_reports_a_recorded_occurrence_deleted_in_the_destination
     ).execute(rule().id)
 
     assert [item.kind for item in report.drift] == [DriftKind.MISSING]
+
+
+def test_reconciliation_reports_a_deleted_destination_series_without_failing() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    for instance in calendars.instances_of(destination):
+        del calendars.events[instance.reference]
+    del calendars.events[destination]
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert DriftKind.MISSING in [item.kind for item in report.drift]

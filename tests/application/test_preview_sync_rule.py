@@ -16,7 +16,7 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider
-from tests.fake_calendar import FakeCalendars, enabled_rule_factory
+from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, occurrence, rule, series, week_start
 
 
@@ -86,3 +86,24 @@ def test_preview_counts_series_and_occurrence_changes_with_planned_actions() -> 
     ]
     assert calendars.writes == []
     assert factory.state.mappings == {}
+
+
+def test_preview_of_an_occurrence_whose_destination_series_was_deleted_does_not_fail() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0), week_start(1)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    for instance in calendars.instances_of(destination):
+        del calendars.events[instance.reference]
+    del calendars.events[destination]
+    with factory() as uow:
+        current = uow.rules.get(rule().id)
+        assert current is not None
+        uow.rules.save(current.pause())
+        uow.commit()
+
+    preview = _preview(factory, calendars).execute(rule().id)
+
+    assert preview.occurrence_changes == 1

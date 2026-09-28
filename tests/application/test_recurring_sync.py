@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.errors import RuleNotExecutable
+from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind, RuleNotExecutable
 from calendar_sync.application.ports import ProviderChangeSet
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -467,3 +467,36 @@ def test_exception_of_an_unreadable_unmapped_series_is_skipped_not_blocked() -> 
     assert result.conflicts == 0
     assert factory.state.audit[-1].reason == SyncReason.SERIES_NOT_SYNCHRONIZED.value
     assert calendars.writes == []
+
+
+def test_unverifiable_source_occurrence_lookup_never_cancels_the_destination() -> None:
+    calendars, factory, destination = _synced()
+    calendars.report(calendars.put(occurrence(series(), 1, moved_by=timedelta(hours=1))))
+    sync_use_case(factory, calendars).execute(rule().id)
+    edited = calendars.get_occurrence(destination, week_start(1))
+    assert edited is not None
+    calendars.report(calendars.put(replace(edited, title="Edited")))
+    cursor_before = factory.state.cursors[rule().id]
+
+    class UnreadableInstances(FakeCalendars):
+        def get_occurrence(
+            self, series: EventRef, original_start: OccurrenceStart
+        ) -> CalendarEvent | None:
+            if series.calendar == rule().source:
+                raise ProviderFailure(ProviderFailureKind.TEMPORARY, "series lookup failed")
+            return super().get_occurrence(series, original_start)
+
+    failing = UnreadableInstances(calendars.events, calendars.expansions, calendars.feeds)
+
+    with pytest.raises(ProviderFailure):
+        sync_use_case(factory, failing).execute(rule().id)
+
+    assert failing.writes == []
+    assert factory.state.cursors[rule().id] == cursor_before
+
+
+def test_fake_occurrence_lookup_of_a_missing_series_is_a_failure() -> None:
+    calendars = FakeCalendars()
+
+    with pytest.raises(ProviderFailure):
+        calendars.get_occurrence(series().reference, week_start(1))
