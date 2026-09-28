@@ -21,14 +21,14 @@ it needs to be:
 - **Ownership mismatch is a Conflict for that event, not a removal failure.** The Google adapter
   raises a distinct ownership failure when a mapped destination event exists but lacks matching
   rule and source Managed Origin metadata. Rule Removal leaves that event untouched in Google,
-  removes its Event Mapping, records a `blocked` audit entry without event content, and continues
-  with the next mapping. The result reports how many events were left for this reason. The sync
-  path keeps its current handling of the same failure.
+  removes its Event Mapping, records a blocked `removal_conflict` audit entry without event
+  content, and continues with the next mapping. The result reports how many events were left for
+  this reason. The sync path keeps its current handling of the same failure.
 - **Transient failures retry per deletion.** Temporary and rate-limited failures of one deletion
   retry up to three attempts with exponential backoff and jitter, honouring Google's `Retry-After`
-  hint bounded to 60 seconds, because the wait happens in-process under the rule lock. Only after the last attempt does removal stop as interrupted. The same stable Operation
-  Key is used for every attempt. The rule lock is held while waiting, so synchronization cannot
-  interleave with a removal in progress.
+  hint bounded to 60 seconds. Only after the last attempt does removal stop as interrupted. The
+  same stable Operation Key is used for every attempt. The rule lock is held while waiting, so
+  synchronization cannot interleave with a removal in progress; that is why the hint is bounded.
 - **Authorization failures open an Incident.** An authentication or authorization failure during
   delete-mode removal stops immediately without retrying and opens one deduplicated Incident for
   the rule. The rule stays Disabled. The administrator either reauthorizes and retries, or retries
