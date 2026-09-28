@@ -10,6 +10,9 @@ docker compose up -d --build
 
 The named volume contains SQLite state. Back it up before upgrades. Future releases run forward-only, idempotent migrations during startup so `docker compose pull && docker compose up -d` does not require wiping state.
 
+Migration 2 adds a nullable `connected_accounts.avatar_url` column for Google profile photos. Earlier
+releases ignore the column, so rolling back to the previous image works with the same database.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

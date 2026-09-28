@@ -595,6 +595,7 @@ def _account_response(
         id=account.id.value,
         display_name=account.display_name,
         email=account.email,
+        avatar_url=account.avatar_url,
         state=account.state,
         rule_count=rule_count,
     )

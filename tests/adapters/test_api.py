@@ -237,7 +237,10 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
     )
     assert container.connected_accounts is not None
     account = container.connected_accounts.save(
-        "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Personal",
+        "person@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        avatar_url="https://lh3.googleusercontent.com/a/synthetic=s96-c",
     )
     with container.unit_of_work() as uow:
         uow.rules.add(rule())
@@ -301,6 +304,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
             "id": account.id.value,
             "display_name": "Personal",
             "email": "person@example.test",
+            "avatar_url": "https://lh3.googleusercontent.com/a/synthetic=s96-c",
             "state": "connected",
             "rule_count": 4,
         }
