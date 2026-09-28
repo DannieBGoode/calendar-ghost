@@ -41,7 +41,8 @@ A mapped event whose Managed Origin metadata does not match the rule and source 
 that event only: it stays in Google untouched, its mapping is removed, a `removal_conflict` audit
 entry records it under **Blocked**, and removal continues. Temporary and rate-limited failures retry
 each deletion up to three times with exponential backoff and jitter under the same Operation Key
-before removal stops as interrupted. Authentication and authorization failures stop removal at once
+before removal stops as interrupted. Google's `Retry-After` hint, bounded to 60 seconds, replaces
+the backoff delay for removal and scheduled runs alike. Authentication and authorization failures stop removal at once
 and open one Incident for the rule, resolved when the removal completes. See
 [ADR 0012](adr/0012-rule-removal-conflicts-and-retries.md).
 

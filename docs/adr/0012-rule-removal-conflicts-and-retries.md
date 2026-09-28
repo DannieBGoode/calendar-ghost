@@ -25,8 +25,8 @@ it needs to be:
   with the next mapping. The result reports how many events were left for this reason. The sync
   path keeps its current handling of the same failure.
 - **Transient failures retry per deletion.** Temporary and rate-limited failures of one deletion
-  retry up to three attempts with exponential backoff and jitter, honouring a provider retry-after
-  hint. Only after the last attempt does removal stop as interrupted. The same stable Operation
+  retry up to three attempts with exponential backoff and jitter, honouring Google's `Retry-After`
+  hint bounded to 60 seconds, because the wait happens in-process under the rule lock. Only after the last attempt does removal stop as interrupted. The same stable Operation
   Key is used for every attempt. The rule lock is held while waiting, so synchronization cannot
   interleave with a removal in progress.
 - **Authorization failures open an Incident.** An authentication or authorization failure during
