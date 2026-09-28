@@ -3,12 +3,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
+    ConnectedAccountId,
     EventMapping,
     EventProjection,
     EventRef,
@@ -82,6 +84,9 @@ class SyncRuleRepository(Protocol):
         self, source: CalendarEndpoint, destination: CalendarEndpoint
     ) -> bool: ...
 
+    def remove(self, rule_id: SyncRuleId) -> None:
+        """Delete the rule with its mappings, cursors, and outcomes; resolve its incidents."""
+
 
 class EventMappingRepository(Protocol):
     def for_source(self, rule_id: SyncRuleId, source: EventRef) -> EventMapping | None: ...
@@ -95,6 +100,8 @@ class EventMappingRepository(Protocol):
     def save(self, mapping: EventMapping) -> None: ...
 
     def delete(self, mapping: EventMapping) -> None: ...
+
+    def count_for_rule(self, rule_id: SyncRuleId) -> int: ...
 
 
 class SyncCursorRepository(Protocol):
@@ -118,12 +125,42 @@ class AuditRepository(Protocol):
     def append(self, entry: AuditEntry) -> None: ...
 
 
+class RunKind(StrEnum):
+    SYNC = "sync"
+    RECONCILIATION = "reconciliation"
+
+
+@dataclass(frozen=True, slots=True)
+class RuleRunOutcome:
+    """The latest result of one kind of run: counts and a failure category, never content."""
+
+    rule_id: SyncRuleId
+    kind: RunKind
+    completed_at: datetime
+    succeeded: bool
+    full_run: bool = False
+    created: int = 0
+    updated: int = 0
+    deleted: int = 0
+    conflicts: int = 0
+    checked_mappings: int = 0
+    drift: int = 0
+    failure_kind: str | None = None
+
+
+class RuleRunOutcomeRepository(Protocol):
+    def record(self, outcome: RuleRunOutcome) -> None: ...
+
+    def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None: ...
+
+
 class UnitOfWork(Protocol):
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
+    run_outcomes: RuleRunOutcomeRepository
 
     def __enter__(self) -> Self: ...
 
@@ -147,3 +184,7 @@ class Clock(Protocol):
 
 class IdGenerator(Protocol):
     def new(self) -> str: ...
+
+
+class AccountAuthorizations(Protocol):
+    def is_connected(self, account_id: ConnectedAccountId) -> bool: ...

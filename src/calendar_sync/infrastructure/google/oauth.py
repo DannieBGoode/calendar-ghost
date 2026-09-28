@@ -132,6 +132,13 @@ class SqliteConnectedAccountStore:
             ).fetchall()
         return tuple(_account_from_row(row) for row in rows)
 
+    def is_connected(self, account_id: ConnectedAccountId) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT state FROM connected_accounts WHERE id = ?", (account_id.value,)
+            ).fetchone()
+        return row is not None and str(row["state"]) == "connected"
+
     def save(
         self,
         display_name: str,
