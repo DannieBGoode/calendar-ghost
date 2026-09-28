@@ -13,6 +13,9 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
     EventMappingRepository,
+    RuleRunOutcome,
+    RuleRunOutcomeRepository,
+    RunKind,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
@@ -37,6 +40,7 @@ from calendar_sync.domain.model import (
 _FORWARD_MIGRATIONS = (
     (2, "0002_account_avatar.sql"),
     (3, "0003_audit_reasons.sql"),
+    (4, "0004_rule_editing.sql"),
 )
 
 
@@ -89,8 +93,8 @@ class SqliteSyncRuleRepository:
                     id, source_account_id, source_calendar_id,
                     destination_account_id, destination_calendar_id,
                     privacy_policy, all_day_policy, busy_title,
-                    initial_lookback_days, state
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    initial_lookback_days, state, reprojection_required
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 _rule_values(rule),
             )
@@ -106,13 +110,24 @@ class SqliteSyncRuleRepository:
                 source_account_id = ?, source_calendar_id = ?,
                 destination_account_id = ?, destination_calendar_id = ?,
                 privacy_policy = ?, all_day_policy = ?, busy_title = ?,
-                initial_lookback_days = ?, state = ?
+                initial_lookback_days = ?, state = ?, reprojection_required = ?
             WHERE id = ?
             """,
             (*_rule_values(rule)[1:], rule.id.value),
         )
         if cursor.rowcount != 1:
             raise KeyError(f"sync rule {rule.id.value} does not exist")
+
+    def remove(self, rule_id: SyncRuleId) -> None:
+        now = datetime.now(UTC).isoformat()
+        self._connection.execute(
+            """
+            UPDATE incidents SET state = 'resolved', updated_at = ?, resolved_at = ?
+            WHERE rule_id = ? AND state = 'open'
+            """,
+            (now, now, rule_id.value),
+        )
+        self._connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule_id.value,))
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         row = self._connection.execute(
@@ -206,6 +221,12 @@ class SqliteEventMappingRepository:
     def delete(self, mapping: EventMapping) -> None:
         self._connection.execute("DELETE FROM event_mappings WHERE id = ?", (mapping.id.value,))
 
+    def count_for_rule(self, rule_id: SyncRuleId) -> int:
+        row = self._connection.execute(
+            "SELECT COUNT(*) FROM event_mappings WHERE rule_id = ?", (rule_id.value,)
+        ).fetchone()
+        return int(row[0])
+
 
 class SqliteSyncCursorRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
@@ -274,12 +295,75 @@ class SqliteAuditRepository:
         )
 
 
+class SqliteRuleRunOutcomeRepository:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def record(self, outcome: RuleRunOutcome) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO rule_run_outcomes (
+                rule_id, kind, completed_at, succeeded, full_run, created, updated,
+                deleted, conflicts, checked_mappings, drift, failure_kind
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(rule_id, kind) DO UPDATE SET
+                completed_at = excluded.completed_at,
+                succeeded = excluded.succeeded,
+                full_run = excluded.full_run,
+                created = excluded.created,
+                updated = excluded.updated,
+                deleted = excluded.deleted,
+                conflicts = excluded.conflicts,
+                checked_mappings = excluded.checked_mappings,
+                drift = excluded.drift,
+                failure_kind = excluded.failure_kind
+            """,
+            (
+                outcome.rule_id.value,
+                outcome.kind.value,
+                outcome.completed_at.isoformat(),
+                int(outcome.succeeded),
+                int(outcome.full_run),
+                outcome.created,
+                outcome.updated,
+                outcome.deleted,
+                outcome.conflicts,
+                outcome.checked_mappings,
+                outcome.drift,
+                outcome.failure_kind,
+            ),
+        )
+
+    def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:
+        row = self._connection.execute(
+            "SELECT * FROM rule_run_outcomes WHERE rule_id = ? AND kind = ?",
+            (rule_id.value, kind.value),
+        ).fetchone()
+        if row is None:
+            return None
+        return RuleRunOutcome(
+            rule_id=rule_id,
+            kind=kind,
+            completed_at=datetime.fromisoformat(str(row["completed_at"])),
+            succeeded=bool(row["succeeded"]),
+            full_run=bool(row["full_run"]),
+            created=int(row["created"]),
+            updated=int(row["updated"]),
+            deleted=int(row["deleted"]),
+            conflicts=int(row["conflicts"]),
+            checked_mappings=int(row["checked_mappings"]),
+            drift=int(row["drift"]),
+            failure_kind=None if row["failure_kind"] is None else str(row["failure_kind"]),
+        )
+
+
 class SqliteUnitOfWork:
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
+    run_outcomes: RuleRunOutcomeRepository
 
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
@@ -295,6 +379,7 @@ class SqliteUnitOfWork:
         self.cursors = SqliteSyncCursorRepository(connection)
         self.destination_cursors = SqliteDestinationSyncCursorRepository(connection)
         self.audit = SqliteAuditRepository(connection)
+        self.run_outcomes = SqliteRuleRunOutcomeRepository(connection)
         return self
 
     def __exit__(
@@ -335,6 +420,7 @@ def _rule_values(rule: SyncRule) -> tuple[object, ...]:
         rule.transformation.busy_title,
         rule.initial_lookback_days,
         rule.state.value,
+        int(rule.reprojection_required),
     )
 
 
@@ -356,6 +442,7 @@ def _rule_from_row(row: sqlite3.Row) -> SyncRule:
         ),
         initial_lookback_days=int(row["initial_lookback_days"]),
         state=SyncRuleState(str(row["state"])),
+        reprojection_required=bool(row["reprojection_required"]),
     )
 
 

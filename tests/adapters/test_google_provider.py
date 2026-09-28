@@ -173,3 +173,58 @@ def test_managed_event_listing_paginates() -> None:
         "managed-two",
     ]
     assert events_api.list.call_args_list[1].kwargs["pageToken"] == "page-2"
+
+
+def _managed_payload(event_id: str, source_event_id: str) -> dict[str, object]:
+    source = event(source_event_id).reference
+    return {
+        **google_event_payload(event_id),
+        "extendedProperties": {
+            "private": {
+                "gcs_rule_id": "rule-1",
+                "gcs_source_account_id": source.calendar.connected_account_id.value,
+                "gcs_source_calendar_id": source.calendar.calendar_id.value,
+                "gcs_source_event_id": source.event_id.value,
+            }
+        },
+    }
+
+
+def test_deleting_a_projection_already_cancelled_in_google_is_a_no_op() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning({"id": "managed", "status": "cancelled"})
+    provider = provider_with_events_api(events_api)
+    destination = event("managed", calendar=endpoint("work-account", "work-calendar")).reference
+
+    provider.delete_projection(
+        destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
+    )
+
+    events_api.delete.assert_not_called()
+
+
+def test_deleting_a_projection_that_google_reports_gone_is_a_no_op() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(_managed_payload("managed", "source-event"))
+    events_api.delete.return_value = request_raising(410)
+    provider = provider_with_events_api(events_api)
+    destination = event("managed", calendar=endpoint("work-account", "work-calendar")).reference
+
+    provider.delete_projection(
+        destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
+    )
+
+    events_api.delete.assert_called_once()
+
+
+def test_deleting_a_projection_owned_by_another_source_is_refused() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(_managed_payload("managed", "other-source"))
+    provider = provider_with_events_api(events_api)
+    destination = event("managed", calendar=endpoint("work-account", "work-calendar")).reference
+
+    with pytest.raises(ProviderFailure):
+        provider.delete_projection(
+            destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
+        )
+    events_api.delete.assert_not_called()

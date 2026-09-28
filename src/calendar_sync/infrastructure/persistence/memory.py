@@ -9,6 +9,9 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
     EventMappingRepository,
+    RuleRunOutcome,
+    RuleRunOutcomeRepository,
+    RunKind,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
@@ -29,6 +32,7 @@ class MemoryState:
     cursors: dict[SyncRuleId, str] = field(default_factory=dict)
     destination_cursors: dict[SyncRuleId, str] = field(default_factory=dict)
     audit: list[AuditEntry] = field(default_factory=list)
+    outcomes: dict[tuple[SyncRuleId, RunKind], RuleRunOutcome] = field(default_factory=dict)
 
 
 class InMemorySyncRuleRepository:
@@ -50,6 +54,17 @@ class InMemorySyncRuleRepository:
         if rule.id not in self._state.rules:
             raise KeyError(rule.id)
         self._state.rules[rule.id] = rule
+
+    def remove(self, rule_id: SyncRuleId) -> None:
+        self._state.rules.pop(rule_id, None)
+        self._state.mappings = {
+            key: mapping for key, mapping in self._state.mappings.items() if key[0] != rule_id
+        }
+        self._state.cursors.pop(rule_id, None)
+        self._state.destination_cursors.pop(rule_id, None)
+        self._state.outcomes = {
+            key: outcome for key, outcome in self._state.outcomes.items() if key[0] != rule_id
+        }
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         return any(
@@ -93,6 +108,9 @@ class InMemoryEventMappingRepository:
     def delete(self, mapping: EventMapping) -> None:
         self._state.mappings.pop((mapping.rule_id, mapping.source), None)
 
+    def count_for_rule(self, rule_id: SyncRuleId) -> int:
+        return sum(1 for key in self._state.mappings if key[0] == rule_id)
+
 
 class InMemorySyncCursorRepository:
     def __init__(self, cursors: dict[SyncRuleId, str]) -> None:
@@ -113,12 +131,24 @@ class InMemoryAuditRepository:
         self._state.audit.append(entry)
 
 
+class InMemoryRuleRunOutcomeRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def record(self, outcome: RuleRunOutcome) -> None:
+        self._state.outcomes[(outcome.rule_id, outcome.kind)] = outcome
+
+    def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:
+        return self._state.outcomes.get((rule_id, kind))
+
+
 class InMemoryUnitOfWork:
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
+    run_outcomes: RuleRunOutcomeRepository
 
     def __init__(self, target: MemoryState) -> None:
         self._target = target
@@ -132,6 +162,7 @@ class InMemoryUnitOfWork:
         self.cursors = InMemorySyncCursorRepository(self._working.cursors)
         self.destination_cursors = InMemorySyncCursorRepository(self._working.destination_cursors)
         self.audit = InMemoryAuditRepository(self._working)
+        self.run_outcomes = InMemoryRuleRunOutcomeRepository(self._working)
         return self
 
     def __exit__(
@@ -149,6 +180,7 @@ class InMemoryUnitOfWork:
         self._target.cursors = self._working.cursors
         self._target.destination_cursors = self._working.destination_cursors
         self._target.audit = self._working.audit
+        self._target.outcomes = self._working.outcomes
         self._committed = True
 
 

@@ -10,7 +10,12 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    ProviderFailure,
+    ProviderFailureKind,
+    RuleNotExecutable,
+)
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import SyncRule, SyncRuleState
@@ -31,9 +36,12 @@ class SqliteRuleHealth:
         database_path: Path,
         unit_of_work: UnitOfWorkFactory,
         notifier: IncidentNotifier | None = None,
+        *,
+        locks: RuleLocks | None = None,
     ) -> None:
         self._database_path = database_path
         self._unit_of_work = unit_of_work
+        self._locks = locks or RuleLocks()
         self._notifier = notifier
 
     def record_success(self, rule: SyncRule) -> None:
@@ -84,7 +92,7 @@ class SqliteRuleHealth:
     def _degrade(self, rule: SyncRule) -> None:
         if rule.state is not SyncRuleState.ENABLED:
             return
-        with self._unit_of_work() as uow:
+        with self._locks.for_writes(rule.id), self._unit_of_work() as uow:
             current = uow.rules.get(rule.id)
             if current is not None and current.state is SyncRuleState.ENABLED:
                 uow.rules.save(current.degrade())
@@ -171,6 +179,9 @@ class SyncScheduler:
             try:
                 self._execute_rule.execute(rule.id, full=full)
                 self._health.record_success(rule)
+                return True
+            except RuleNotExecutable:
+                # The rule was paused, edited, or removed after this pass listed it.
                 return True
             except ProviderFailure as failure:
                 if not failure.retryable or attempt == 2:

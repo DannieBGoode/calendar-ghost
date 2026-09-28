@@ -1,8 +1,31 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import UnitOfWorkFactory
-from calendar_sync.domain.model import SyncRule
+from calendar_sync.application.errors import (
+    ApplicationError,
+    DuplicateDirectionalRelationship,
+    NotACalendarChange,
+    RemovalInterrupted,
+    ReplacementInterrupted,
+    RuleNotFound,
+)
+from calendar_sync.application.locking import RuleLocks
+from calendar_sync.application.ports import (
+    AuditEntry,
+    Clock,
+    IdGenerator,
+    RuleRunOutcome,
+    RunKind,
+    UnitOfWorkFactory,
+)
+from calendar_sync.application.removal import RemovalResult, RemoveSyncRule
+from calendar_sync.domain.model import (
+    AllDaySyncPolicy,
+    CalendarEndpoint,
+    PrivacyPolicy,
+    ProjectionHandling,
+    SyncRule,
+    SyncRuleId,
+)
 
 
 @dataclass(slots=True)
@@ -18,3 +41,121 @@ class CreateSyncRule:
             uow.rules.add(rule)
             uow.commit()
         return rule
+
+
+@dataclass(slots=True)
+class ChangeSyncRulePolicy:
+    """Saves a Material Rule Change without writing to any calendar provider."""
+
+    unit_of_work: UnitOfWorkFactory
+    clock: Clock
+    locks: RuleLocks = field(default_factory=RuleLocks)
+
+    def execute(
+        self, rule_id: SyncRuleId, privacy: PrivacyPolicy, all_day: AllDaySyncPolicy
+    ) -> SyncRule:
+        # Waiting for any in-flight provider write means none happens under the old policy
+        # once this returns; the run's next stop check then sees the paused rule.
+        with self.locks.for_writes(rule_id), self.unit_of_work() as uow:
+            rule = uow.rules.get(rule_id)
+            if rule is None:
+                raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+            changed = rule.change_policy(
+                replace(rule.transformation, privacy=privacy, all_day=all_day)
+            )
+            if changed == rule:
+                return rule
+            uow.rules.save(changed)
+            uow.audit.append(
+                AuditEntry(
+                    occurred_at=self.clock.now(),
+                    rule_id=rule.id,
+                    action="policy_changed",
+                    outcome="completed",
+                    detail=f"privacy={privacy.value}, all_day={all_day.value}",
+                )
+            )
+            uow.commit()
+        return changed
+
+
+@dataclass(frozen=True, slots=True)
+class SyncRuleDetails:
+    rule: SyncRule
+    mapping_count: int
+    last_sync: RuleRunOutcome | None
+    last_reconciliation: RuleRunOutcome | None
+
+
+@dataclass(slots=True)
+class GetSyncRuleDetails:
+    unit_of_work: UnitOfWorkFactory
+
+    def execute(self, rule_id: SyncRuleId) -> SyncRuleDetails:
+        with self.unit_of_work() as uow:
+            rule = uow.rules.get(rule_id)
+            if rule is None:
+                raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+            return SyncRuleDetails(
+                rule=rule,
+                mapping_count=uow.mappings.count_for_rule(rule_id),
+                last_sync=uow.run_outcomes.latest(rule_id, RunKind.SYNC),
+                last_reconciliation=uow.run_outcomes.latest(rule_id, RunKind.RECONCILIATION),
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class RuleReplacement:
+    rule: SyncRule
+    removal: RemovalResult
+
+
+@dataclass(slots=True)
+class ReplaceSyncRuleCalendars:
+    """Rule Replacement: reserve a new Draft with the same policy, then remove the old rule."""
+
+    unit_of_work: UnitOfWorkFactory
+    remove_rule: RemoveSyncRule
+    create_rule: CreateSyncRule
+    ids: IdGenerator
+
+    def execute(
+        self,
+        rule_id: SyncRuleId,
+        source: CalendarEndpoint,
+        destination: CalendarEndpoint,
+        handling: ProjectionHandling,
+    ) -> RuleReplacement:
+        with self.unit_of_work() as uow:
+            current = uow.rules.get(rule_id)
+            if current is None:
+                raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+            duplicate = uow.rules.relationship_exists(source, destination)
+        if (source, destination) == (current.source, current.destination):
+            raise NotACalendarChange("the calendars are unchanged; edit the policy instead")
+        replacement = SyncRule(
+            id=SyncRuleId(self.ids.new()),
+            source=source,
+            destination=destination,
+            transformation=current.transformation,
+            initial_lookback_days=current.initial_lookback_days,
+        )
+        if duplicate:
+            raise DuplicateDirectionalRelationship(
+                "a rule already exists for this source and destination"
+            )
+        self.remove_rule.check(rule_id, handling)
+        # Creating first reserves the relationship through its uniqueness constraint, so a
+        # concurrent duplicate fails here, before anything destructive happens.
+        self.create_rule.execute(replacement)
+        try:
+            removal = self.remove_rule.execute(rule_id, handling)
+        except RemovalInterrupted as interrupted:
+            raise ReplacementInterrupted(replacement.id, interrupted) from interrupted
+        except ApplicationError:
+            # Removal did not start, so withdraw the unused draft and leave the old rule as is.
+            with self.unit_of_work() as uow:
+                uow.rules.remove(replacement.id)
+                uow.commit()
+            raise
+        return RuleReplacement(replacement, removal)

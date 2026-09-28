@@ -160,7 +160,7 @@ A side-effect-free evaluation showing eligible source events, excluded events, d
 _Avoid_: Test sync, simulation
 
 **Material Rule Change**:
-A change to a rule's calendars, transformation policy, or event eligibility that invalidates its previous preview and requires a new one.
+A change to a rule's transformation policy or event eligibility that invalidates its previous preview and requires a new one. Saving it stops synchronization immediately; after the rule is previewed and enabled again, the next run rewrites every mapped projection under the new policy. Calendars cannot change in place; that requires a Rule Replacement.
 _Avoid_: Rule edit, configuration update
 
 **Rule Topology**:
@@ -172,11 +172,15 @@ A reversible rule state that suspends synchronization while leaving its managed 
 _Avoid_: Disabled rule, stopped rule
 
 **Rule Removal**:
-Permanent removal of a rule after the administrator explicitly chooses to delete its mapped projections or keep them as detached ordinary events. Mapped projection deletion is the recommended default.
+Permanent removal of a rule after the administrator explicitly chooses to delete its mapped projections or keep them as detached ordinary events. Mapped projection deletion is the recommended default and requires an authorized destination account. A removal interrupted by a provider failure leaves the rule inert until it is retried.
 _Avoid_: Disable rule, pause rule
 
+**Rule Replacement**:
+A change of a rule's source or destination calendar, performed as a new draft rule with the same transformation policy followed by Rule Removal of the previous rule. The new draft is created first, so a duplicate relationship is rejected before anything is removed; if the removal is interrupted, the new draft remains and the previous rule's removal can be retried.
+_Avoid_: Calendar edit, rule move
+
 **Detached Event**:
-A former managed projection retained during rule removal after application ownership and its mapping are removed. It is never updated by the removed rule.
+A former managed projection retained during rule removal after its mapping is removed. It keeps the removed rule's private origin metadata, so it is never updated again and never becomes a source for a reverse rule.
 _Avoid_: Orphaned projection, preserved copy
 
 ## Reconciliation

@@ -131,6 +131,13 @@ class AllDaySyncPolicy(StrEnum):
     EXCLUDE = "exclude"
 
 
+class ProjectionHandling(StrEnum):
+    """What Rule Removal does with mapped Managed Projections."""
+
+    DELETE = "delete"
+    DETACH = "detach"
+
+
 class SyncRuleState(StrEnum):
     DRAFT = "draft"
     DRY_RUN_VALIDATED = "dry_run_validated"
@@ -192,6 +199,7 @@ class SyncRule:
     transformation: TransformationPolicy = field(default_factory=TransformationPolicy)
     initial_lookback_days: int = 30
     state: SyncRuleState = SyncRuleState.DRAFT
+    reprojection_required: bool = False
 
     def __post_init__(self) -> None:
         if self.source == self.destination:
@@ -227,7 +235,25 @@ class SyncRule:
             raise InvalidStateTransition(f"cannot degrade a rule in state {self.state}")
         return replace(self, state=SyncRuleState.DEGRADED)
 
-    def disable(self) -> Self:
+    def change_policy(self, transformation: TransformationPolicy) -> Self:
+        """Apply a Material Rule Change; the rule must pass a new Rule Preview afterwards."""
+        if self.state is SyncRuleState.DISABLED:
+            raise InvalidStateTransition("cannot change a rule while its removal is incomplete")
+        if transformation == self.transformation:
+            return self
+        if self.state in {SyncRuleState.ENABLED, SyncRuleState.PAUSED}:
+            state = SyncRuleState.PAUSED
+        elif self.state is SyncRuleState.DEGRADED:
+            state = SyncRuleState.DEGRADED
+        else:
+            state = SyncRuleState.DRAFT
+        return replace(self, transformation=transformation, state=state, reprojection_required=True)
+
+    def complete_reprojection(self) -> Self:
+        return replace(self, reprojection_required=False)
+
+    def begin_removal(self) -> Self:
+        """Disabled marks a Rule Removal that started and has not finished."""
         return replace(self, state=SyncRuleState.DISABLED)
 
 

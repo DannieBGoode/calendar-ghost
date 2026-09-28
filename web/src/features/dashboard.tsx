@@ -28,10 +28,22 @@ import { useTheme } from "@/components/theme-provider"
 import { ActivityView } from "@/features/activity"
 import { api, type ConnectedAccount } from "@/lib/api"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
-import type { AppView } from "@/lib/navigation"
+import { ruleEndpointLabel } from "@/lib/rule-endpoint"
+import { RuleDetailsView } from "@/features/rule-details"
+import { appPathForRule, isPlainLeftClick, type AppLocation, type AppView } from "@/lib/navigation"
+import { ruleStateLabel } from "@/lib/rule-change"
 import type { ThemePreference } from "@/lib/theme"
 
-export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange: (view: AppView) => void }) {
+export function Dashboard({
+  location,
+  onViewChange,
+  onOpenRule,
+}: {
+  location: AppLocation
+  onViewChange: (view: AppView) => void
+  onOpenRule: (ruleId: string) => void
+}) {
+  const view = location.view
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard })
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
   const google = useQuery({
@@ -50,7 +62,21 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
     )
   }
 
-  if (view === "rules") return <RulesView rules={rules.data} dashboard={dashboard.data} onViewChange={onViewChange} />
+  if (view === "rules" && location.ruleId !== null) {
+    return (
+      <RuleDetailsView ruleId={location.ruleId} onViewChange={onViewChange} onOpenRule={onOpenRule} />
+    )
+  }
+  if (view === "rules") {
+    return (
+      <RulesView
+        rules={rules.data}
+        dashboard={dashboard.data}
+        onViewChange={onViewChange}
+        onOpenRule={onOpenRule}
+      />
+    )
+  }
   if (view === "activity") return <ActivityView />
   if (view === "settings") {
     return (
@@ -197,10 +223,12 @@ function RulesView({
   rules,
   dashboard,
   onViewChange,
+  onOpenRule,
 }: {
   rules: Awaited<ReturnType<typeof api.rules>>
   dashboard: Awaited<ReturnType<typeof api.dashboard>>
   onViewChange: (view: AppView) => void
+  onOpenRule: (ruleId: string) => void
 }) {
   const queryClient = useQueryClient()
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
@@ -349,6 +377,12 @@ function RulesView({
                     {rule.privacy_policy === "busy_only" ? "Busy only" : "Copy details"}
                     {rule.sync_all_day_events ? ", including all-day events" : ", timed events only"}
                   </p>
+                  {rule.reprojection_required && ["draft", "paused", "degraded"].includes(rule.state) && (
+                    <p className="preview-result" role="status">
+                      Preview required. The policy changed; existing projections are rewritten on
+                      the next run after you enable the rule.
+                    </p>
+                  )}
                   {synchronizationStopped && (
                     <div className="rule-recovery-note" role="status">
                       <ShieldAlert aria-hidden="true" />
@@ -368,7 +402,7 @@ function RulesView({
                 </div>
                 <div className="rule-actions">
                   <Badge variant={rule.state === "enabled" ? "healthy" : synchronizationStopped ? "attention" : "neutral"}>
-                    {synchronizationStopped ? "Stopped" : rule.state.replaceAll("_", " ")}
+                    {synchronizationStopped ? "Stopped" : ruleStateLabel(rule.state)}
                   </Badge>
                   {disconnectedAccounts.length > 0 && synchronizationStopped ? (
                     <Button variant="outline" onClick={() => onViewChange("settings")}>
@@ -397,6 +431,19 @@ function RulesView({
                       </Button>
                     </>
                   )}
+                  <Button variant="ghost" asChild>
+                    <a
+                      href={appPathForRule(rule.id)}
+                      onClick={(event) => {
+                        if (!isPlainLeftClick(event)) return
+                        event.preventDefault()
+                        onOpenRule(rule.id)
+                      }}
+                      aria-label={`View details for the rule from ${ruleEndpointLabel(rule.source.calendar_id, sourceAccount, calendarsByAccount.get(rule.source.connected_account_id)).calendar} to ${ruleEndpointLabel(rule.destination.calendar_id, destinationAccount, calendarsByAccount.get(rule.destination.connected_account_id)).calendar}`}
+                    >
+                      View details <ArrowRight aria-hidden="true" />
+                    </a>
+                  </Button>
                 </div>
               </div>
             )

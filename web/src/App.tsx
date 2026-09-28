@@ -9,9 +9,12 @@ import { AuthScreen } from "@/features/auth-screen"
 import { Dashboard } from "@/features/dashboard"
 import { api } from "@/lib/api"
 import {
+  appLocationFromPathname,
+  appPathForLocation,
   appPathForView,
-  appViewFromPathname,
   isKnownAppPath,
+  isPlainLeftClick,
+  type AppLocation,
   type AppView,
 } from "@/lib/navigation"
 import { cn } from "@/lib/utils"
@@ -42,39 +45,51 @@ export default function App() {
   return <AuthenticatedApp />
 }
 function AuthenticatedApp() {
-  const [view, setView] = useState<AppView>(() => appViewFromPathname(window.location.pathname))
+  const [location, setLocation] = useState<AppLocation>(() =>
+    appLocationFromPathname(window.location.pathname),
+  )
+  const view = location.view
   const [mobileNav, setMobileNav] = useState(false)
   const queryClient = useQueryClient()
   const logout = useMutation({ mutationFn: api.logOut, onSuccess: () => queryClient.clear() })
 
   useEffect(() => {
     if (!isKnownAppPath(window.location.pathname)) {
-      const currentView = appViewFromPathname(window.location.pathname)
+      const current = appLocationFromPathname(window.location.pathname)
       window.history.replaceState(
         null,
         "",
-        `${appPathForView(currentView)}${window.location.search}`,
+        `${appPathForLocation(current)}${window.location.search}`,
       )
     }
     const handlePopState = () => {
-      setView(appViewFromPathname(window.location.pathname))
+      setLocation(appLocationFromPathname(window.location.pathname))
       setMobileNav(false)
     }
     window.addEventListener("popstate", handlePopState)
     return () => window.removeEventListener("popstate", handlePopState)
   }, [])
 
-  function changeView(next: AppView) {
-    const nextPath = appPathForView(next)
+  function navigate(next: AppLocation) {
+    const nextPath = appPathForLocation(next)
     if (window.location.pathname !== nextPath || window.location.search || window.location.hash) {
       window.history.pushState(null, "", nextPath)
     }
-    setView(next)
+    setLocation(next)
     setMobileNav(false)
+    window.scrollTo(0, 0)
+  }
+
+  function changeView(next: AppView) {
+    navigate({ view: next, ruleId: null })
+  }
+
+  function openRule(ruleId: string) {
+    navigate({ view: "rules", ruleId })
   }
 
   function followSectionLink(event: MouseEvent<HTMLAnchorElement>, next: AppView) {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (!isPlainLeftClick(event)) return
     event.preventDefault()
     changeView(next)
   }
@@ -97,7 +112,7 @@ function AuthenticatedApp() {
           <Button className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-label={mobileNav ? "Close navigation" : "Open navigation"}>{mobileNav ? <X /> : <Menu />}</Button>
         </div>
       </header>
-      <main className="app-main"><Dashboard view={view} onViewChange={changeView} /></main>
+      <main className="app-main"><Dashboard location={location} onViewChange={changeView} onOpenRule={openRule} /></main>
       <footer className="app-footer"><span>Local installation</span><span aria-hidden="true">·</span><a href="/api/docs">API documentation</a></footer>
     </div>
   )

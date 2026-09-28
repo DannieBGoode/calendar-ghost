@@ -22,6 +22,13 @@ once. The upgrade that moves audit entries from `/api/v1/activity` to `/api/v1/a
 removes the old path, so a page loaded before it cannot show Activity until it is reloaded. Pages
 from this release onward recognize a removed API path and ask you to reload.
 
+Migration 4 adds `sync_rules.reprojection_required` (default `0`) and the `rule_run_outcomes`
+table, which stores only timestamps, counts, and failure categories for the Rule Details view.
+Rolling back to the previous image works with the same database: it ignores the new column and
+table and leaves the flag untouched. The previous image does not rewrite existing projections after
+a policy change; upgrading again resumes the pending reprojection. Rules whose removal was
+interrupted stay inert on the previous image, which cannot finish the removal.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

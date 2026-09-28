@@ -43,7 +43,32 @@ export type Rule = {
   privacy_policy: "busy_only" | "copy_details"
   sync_all_day_events: boolean
   state: string
+  reprojection_required: boolean
 }
+export type ProjectionHandling = "delete" | "detach"
+export type RunOutcome = {
+  completed_at: string
+  succeeded: boolean
+  full_run: boolean
+  created: number
+  updated: number
+  deleted: number
+  conflicts: number
+  checked_mappings: number
+  drift: number
+  failure_kind: string | null
+}
+export type RuleDetail = Rule & {
+  initial_lookback_days: number
+  mapping_count: number
+  last_sync: RunOutcome | null
+  last_reconciliation: RunOutcome | null
+}
+export type RulePolicyPayload = {
+  privacy_policy: "busy_only" | "copy_details"
+  sync_all_day_events: boolean
+}
+export type RuleEndpointPayload = { connected_account_id: string; calendar_id: string }
 export type GoogleConfiguration = { configured: boolean; redirect_uri: string | null }
 export type ConnectedAccount = {
   id: string
@@ -137,6 +162,29 @@ export const api = {
   logOut: () => request<void>("/api/v1/session", { method: "DELETE" }),
   dashboard: () => request<Dashboard>("/api/v1/dashboard"),
   rules: () => request<Rule[]>("/api/v1/rules"),
+  rule: (ruleId: string) => request<RuleDetail>(`/api/v1/rules/${encodeURIComponent(ruleId)}`),
+  updateRulePolicy: (ruleId: string, payload: RulePolicyPayload) =>
+    request<Rule>(`/api/v1/rules/${encodeURIComponent(ruleId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  removeRule: (ruleId: string, projections: ProjectionHandling) =>
+    request<{ deleted: number; detached: number }>(
+      `/api/v1/rules/${encodeURIComponent(ruleId)}?projections=${projections}`,
+      { method: "DELETE" },
+    ),
+  replaceRuleCalendars: (
+    ruleId: string,
+    payload: {
+      source: RuleEndpointPayload
+      destination: RuleEndpointPayload
+      projections: ProjectionHandling
+    },
+  ) =>
+    request<{ rule: Rule; deleted: number; detached: number }>(
+      `/api/v1/rules/${encodeURIComponent(ruleId)}/replace`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
   googleConfiguration: () =>
     request<GoogleConfiguration>("/api/v1/google/configuration"),
   accounts: () => request<ConnectedAccount[]>("/api/v1/accounts"),

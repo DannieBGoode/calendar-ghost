@@ -18,10 +18,17 @@ from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.application.errors import (
+    ApplicationError,
     DuplicateDirectionalRelationship,
+    NotACalendarChange,
     ProviderFailure,
+    RemovalInterrupted,
+    RemovalRequiresProvider,
+    ReplacementInterrupted,
     RuleNotExecutable,
+    RuleNotFound,
 )
+from calendar_sync.application.ports import RuleRunOutcome
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
@@ -34,6 +41,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     PrivacyPolicy,
+    ProjectionHandling,
     SyncAction,
     SyncReason,
     SyncRule,
@@ -70,9 +78,16 @@ from calendar_sync.interfaces.api.schemas import (
     GoogleConfigurationResponse,
     IncidentResponse,
     PasswordRequest,
+    ProjectionChoice,
+    RemovalResponse,
+    ReplaceRuleRequest,
+    RuleDetailResponse,
+    RuleReplacementResponse,
     RuleResponse,
+    RunOutcomeResponse,
     SessionResponse,
     SetupStatusResponse,
+    UpdateRulePolicyRequest,
 )
 
 SESSION_COOKIE = "calendar_sync_session"
@@ -81,7 +96,10 @@ ActivityCategory = Literal["changed", "unchanged", "skipped", "blocked"]
 
 # Recurring exclusions were recorded as conflicts before reason codes existed; they are skips.
 _ACTIVITY_CATEGORY_SQL: dict[ActivityCategory, str] = {
-    "changed": "action IN ('create', 'update', 'delete')",
+    "changed": (
+        "action IN ('create', 'update', 'delete', 'policy_changed', 'remove_projection',"
+        " 'detach_projection', 'rule_removed')"
+    ),
     "unchanged": "action = 'ignore' AND reason = 'projection_current'",
     "skipped": (
         "((action = 'ignore' AND COALESCE(reason, '') != 'projection_current')"
@@ -291,13 +309,18 @@ def create_app(container: Container | None = None) -> FastAPI:
                 f"connected account {account_id} does not exist",
             ) from error
         with resolved.unit_of_work() as uow:
-            for rule in uow.rules.list():
-                if _rule_uses_account(rule, existing.id) and rule.state in {
+            affected = [
+                rule.id for rule in uow.rules.list() if _rule_uses_account(rule, existing.id)
+            ]
+        for rule_id in affected:
+            with resolved.rule_locks.for_writes(rule_id), resolved.unit_of_work() as uow:
+                rule = uow.rules.get(rule_id)
+                if rule is not None and rule.state in {
                     SyncRuleState.DRY_RUN_VALIDATED,
                     SyncRuleState.ENABLED,
                 }:
                     uow.rules.save(rule.degrade())
-            uow.commit()
+                    uow.commit()
         try:
             account = resolved.connected_accounts.disconnect(ConnectedAccountId(account_id))
         except ConnectedGoogleAccountNotFound as error:
@@ -430,12 +453,6 @@ def create_app(container: Container | None = None) -> FastAPI:
         dependencies=[Depends(require_admin)],
     )
     async def inspect_activity_event(entry_id: int) -> ActivityEventResponse:
-        provider = resolved.calendar_provider
-        if provider is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure Google OAuth and the installation master key before inspecting events",
-            )
         with sqlite3.connect(resolved.settings.database_path) as connection:
             row = connection.execute(
                 """
@@ -449,7 +466,17 @@ def create_app(container: Container | None = None) -> FastAPI:
         with resolved.unit_of_work() as uow:
             rule = uow.rules.get(SyncRuleId(str(row[0])))
         if rule is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")
+            # Retained history of a removed rule no longer names its calendars.
+            raise HTTPException(
+                status.HTTP_410_GONE,
+                "the rule for this activity entry was removed, so its events cannot be looked up",
+            )
+        provider = resolved.calendar_provider
+        if provider is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "configure Google OAuth and the installation master key before inspecting events",
+            )
         # Event content is read live for display only; it is never persisted or logged.
         try:
             source = await asyncio.to_thread(
@@ -495,12 +522,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         dependencies=[Depends(require_admin)],
     )
     def create_rule(request: CreateRuleRequest) -> RuleResponse:
-        try:
-            privacy = PrivacyPolicy(request.privacy_policy)
-        except ValueError as error:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown privacy policy"
-            ) from error
+        privacy = _privacy(request.privacy_policy)
         try:
             rule = SyncRule(
                 id=SyncRuleId(str(uuid.uuid4())),
@@ -533,7 +555,12 @@ def create_app(container: Container | None = None) -> FastAPI:
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "configure Google OAuth and the installation master key before synchronizing",
             )
-        result = await asyncio.to_thread(resolved.execute_sync_rule.execute, SyncRuleId(rule_id))
+        try:
+            result = await asyncio.to_thread(
+                resolved.execute_sync_rule.execute, SyncRuleId(rule_id)
+            )
+        except RuleNotExecutable as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return {
             "rule_id": result.rule_id.value,
             "created": result.created,
@@ -553,10 +580,15 @@ def create_app(container: Container | None = None) -> FastAPI:
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "configure Google OAuth and the installation master key before reconciling",
             )
-        result = await asyncio.to_thread(
-            resolved.execute_sync_rule.execute, SyncRuleId(rule_id), full=True
-        )
-        report = await asyncio.to_thread(resolved.reconcile_sync_rule.execute, SyncRuleId(rule_id))
+        try:
+            result = await asyncio.to_thread(
+                resolved.execute_sync_rule.execute, SyncRuleId(rule_id), full=True
+            )
+            report = await asyncio.to_thread(
+                resolved.reconcile_sync_rule.execute, SyncRuleId(rule_id)
+            )
+        except RuleNotExecutable as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return {
             "rule_id": result.rule_id.value,
             "created": result.created,
@@ -605,7 +637,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         dependencies=[Depends(require_admin)],
     )
     def enable_rule(rule_id: str) -> RuleResponse:
-        with resolved.unit_of_work() as uow:
+        with resolved.rule_locks.for_writes(SyncRuleId(rule_id)), resolved.unit_of_work() as uow:
             rule = uow.rules.get(SyncRuleId(rule_id))
             if rule is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")
@@ -623,7 +655,8 @@ def create_app(container: Container | None = None) -> FastAPI:
         dependencies=[Depends(require_admin)],
     )
     def pause_rule(rule_id: str) -> RuleResponse:
-        with resolved.unit_of_work() as uow:
+        # Wait for any in-flight provider write so nothing is written after Pause returns.
+        with resolved.rule_locks.for_writes(SyncRuleId(rule_id)), resolved.unit_of_work() as uow:
             rule = uow.rules.get(SyncRuleId(rule_id))
             if rule is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")
@@ -634,6 +667,85 @@ def create_app(container: Container | None = None) -> FastAPI:
             uow.rules.save(paused)
             uow.commit()
         return _rule_response(paused)
+
+    @app.get(
+        "/api/v1/rules/{rule_id}",
+        response_model=RuleDetailResponse,
+        dependencies=[Depends(require_admin)],
+    )
+    def rule_details(rule_id: str) -> RuleDetailResponse:
+        try:
+            details = resolved.get_sync_rule_details.execute(SyncRuleId(rule_id))
+        except RuleNotFound as error:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        return RuleDetailResponse(
+            **_rule_response(details.rule).model_dump(),
+            initial_lookback_days=details.rule.initial_lookback_days,
+            mapping_count=details.mapping_count,
+            last_sync=_outcome_response(details.last_sync),
+            last_reconciliation=_outcome_response(details.last_reconciliation),
+        )
+
+    @app.patch(
+        "/api/v1/rules/{rule_id}",
+        response_model=RuleResponse,
+        dependencies=[Depends(require_admin)],
+    )
+    def change_rule_policy(rule_id: str, request: UpdateRulePolicyRequest) -> RuleResponse:
+        privacy = _privacy(request.privacy_policy)
+        all_day = (
+            AllDaySyncPolicy.INCLUDE if request.sync_all_day_events else AllDaySyncPolicy.EXCLUDE
+        )
+        try:
+            rule = resolved.change_sync_rule_policy.execute(SyncRuleId(rule_id), privacy, all_day)
+        except RuleNotFound as error:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        except InvalidStateTransition as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        return _rule_response(rule)
+
+    @app.delete(
+        "/api/v1/rules/{rule_id}",
+        response_model=RemovalResponse,
+        dependencies=[Depends(require_admin)],
+    )
+    async def remove_rule(rule_id: str, projections: ProjectionChoice) -> RemovalResponse:
+        try:
+            result = await asyncio.to_thread(
+                resolved.remove_sync_rule.execute,
+                SyncRuleId(rule_id),
+                ProjectionHandling(projections),
+            )
+        except ApplicationError as error:
+            raise _rule_change_http_error(error) from error
+        return RemovalResponse(deleted=result.deleted, detached=result.detached)
+
+    @app.post(
+        "/api/v1/rules/{rule_id}/replace",
+        response_model=RuleReplacementResponse,
+        status_code=status.HTTP_201_CREATED,
+        dependencies=[Depends(require_admin)],
+    )
+    async def replace_rule_calendars(
+        rule_id: str, request: ReplaceRuleRequest
+    ) -> RuleReplacementResponse:
+        try:
+            replacement = await asyncio.to_thread(
+                resolved.replace_sync_rule_calendars.execute,
+                SyncRuleId(rule_id),
+                _endpoint(request.source),
+                _endpoint(request.destination),
+                ProjectionHandling(request.projections),
+            )
+        except DomainValidationError as error:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        except ApplicationError as error:
+            raise _rule_change_http_error(error) from error
+        return RuleReplacementResponse(
+            rule=_rule_response(replacement.rule),
+            deleted=replacement.removal.deleted,
+            detached=replacement.removal.detached,
+        )
 
     # Registered after every API route so an unknown API path is a JSON error for any method
     # instead of falling through to the web page.
@@ -767,7 +879,47 @@ def _rule_response(rule: SyncRule) -> RuleResponse:
         privacy_policy=rule.transformation.privacy.value,
         sync_all_day_events=rule.transformation.all_day is AllDaySyncPolicy.INCLUDE,
         state=rule.state.value,
+        reprojection_required=rule.reprojection_required,
     )
+
+
+def _privacy(value: str) -> PrivacyPolicy:
+    try:
+        return PrivacyPolicy(value)
+    except ValueError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown privacy policy"
+        ) from error
+
+
+def _outcome_response(outcome: RuleRunOutcome | None) -> RunOutcomeResponse | None:
+    if outcome is None:
+        return None
+    return RunOutcomeResponse(
+        completed_at=outcome.completed_at.isoformat(),
+        succeeded=outcome.succeeded,
+        full_run=outcome.full_run,
+        created=outcome.created,
+        updated=outcome.updated,
+        deleted=outcome.deleted,
+        conflicts=outcome.conflicts,
+        checked_mappings=outcome.checked_mappings,
+        drift=outcome.drift,
+        failure_kind=outcome.failure_kind,
+    )
+
+
+def _rule_change_http_error(error: ApplicationError) -> HTTPException:
+    """Map removal and replacement failures; the remaining ones need administrator action."""
+    if isinstance(error, RuleNotFound):
+        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+    if isinstance(error, RemovalRequiresProvider):
+        return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error))
+    if isinstance(error, RemovalInterrupted | ReplacementInterrupted):
+        return HTTPException(status.HTTP_424_FAILED_DEPENDENCY, str(error))
+    if isinstance(error, NotACalendarChange):
+        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
+    return HTTPException(status.HTTP_409_CONFLICT, str(error))
 
 
 def _account_response(

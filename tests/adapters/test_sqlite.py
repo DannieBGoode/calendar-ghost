@@ -1,19 +1,25 @@
 import sqlite3
+from dataclasses import replace
+from datetime import UTC, datetime
 from importlib.resources import files
 from pathlib import Path
 
 import pytest
 
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import AuditEntry
+from calendar_sync.application.ports import AuditEntry, RuleRunOutcome, RunKind
 from calendar_sync.domain.model import (
     EventId,
     EventMapping,
     EventMappingId,
     EventRef,
+    PrivacyPolicy,
     ProjectionFingerprint,
     SyncRuleId,
+    SyncRuleState,
+    TransformationPolicy,
 )
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
@@ -141,7 +147,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         rows = connection.execute(
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
-    assert versions == [1, 2, 3]
+    assert versions == [1, 2, 3, 4]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -172,3 +178,134 @@ def test_audit_entries_persist_reason_and_run(tmp_path: Path) -> None:
             "SELECT reason, run_id, source_event_id, detail FROM audit_entries"
         ).fetchone()
     assert stored == ("recurring_unsupported", "run-1", "weekly", "")
+
+
+def _mapping(event_id: str = "source-event") -> EventMapping:
+    return EventMapping(
+        EventMappingId(f"mapping-{event_id}"),
+        rule().id,
+        EventRef(rule().source, EventId(event_id)),
+        EventRef(rule().destination, EventId(f"destination-{event_id}")),
+        "revision-1",
+        ProjectionFingerprint("fingerprint"),
+    )
+
+
+def test_migration_4_upgrades_a_version_3_installation_with_rules(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("DROP TABLE rule_run_outcomes")
+        connection.execute("ALTER TABLE sync_rules DROP COLUMN reprojection_required")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 4")
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        restored = uow.rules.get(rule().id)
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+    assert restored is not None
+    assert restored.reprojection_required is False
+    assert versions.count(4) == 1
+
+
+def test_reprojection_flag_round_trips(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    changed = rule().change_policy(TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS))
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.rules.save(changed)
+        uow.commit()
+
+    with factory() as uow:
+        assert uow.rules.get(rule().id) == changed
+
+
+def test_run_outcomes_keep_the_latest_per_kind(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    first = RuleRunOutcome(
+        rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True, created=2
+    )
+    second = replace(
+        first,
+        completed_at=datetime(2026, 9, 2, tzinfo=UTC),
+        succeeded=False,
+        created=0,
+        failure_kind="rate_limit",
+    )
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.run_outcomes.record(first)
+        uow.run_outcomes.record(second)
+        uow.commit()
+
+    with factory() as uow:
+        assert uow.run_outcomes.latest(rule().id, RunKind.SYNC) == second
+        assert uow.run_outcomes.latest(rule().id, RunKind.RECONCILIATION) is None
+
+
+def test_rule_removal_cascades_resolves_incidents_and_keeps_audit(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.mappings.save(_mapping())
+        uow.cursors.save(rule().id, "cursor")
+        uow.run_outcomes.record(
+            RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
+        )
+        uow.audit.append(
+            AuditEntry(datetime(2026, 9, 1, tzinfo=UTC), rule().id, "create", "completed")
+        )
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at)
+            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'temporary', 'open', 's', 't', 't')
+            """
+        )
+
+    with factory() as uow:
+        assert uow.mappings.count_for_rule(rule().id) == 1
+        uow.rules.remove(rule().id)
+        uow.commit()
+
+    with factory() as uow:
+        assert uow.rules.get(rule().id) is None
+        assert uow.mappings.count_for_rule(rule().id) == 0
+        assert uow.cursors.get(rule().id) is None
+        assert uow.run_outcomes.latest(rule().id, RunKind.SYNC) is None
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT state FROM incidents").fetchone()[0] == "resolved"
+        assert connection.execute("SELECT COUNT(*) FROM audit_entries").fetchone()[0] == 1
+
+
+def test_memory_adapter_supports_removal_counts_and_outcomes() -> None:
+    factory = InMemoryUnitOfWorkFactory()
+    with factory() as uow:
+        uow.rules.add(rule(state=SyncRuleState.PAUSED))
+        uow.mappings.save(_mapping())
+        uow.run_outcomes.record(
+            RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
+        )
+        uow.commit()
+    with factory() as uow:
+        assert uow.mappings.count_for_rule(rule().id) == 1
+        assert uow.run_outcomes.latest(rule().id, RunKind.SYNC) is not None
+        uow.rules.remove(rule().id)
+        uow.commit()
+    assert factory.state.rules == {}
+    assert factory.state.mappings == {}
+    assert factory.state.outcomes == {}

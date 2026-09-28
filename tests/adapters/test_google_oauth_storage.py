@@ -100,7 +100,7 @@ def test_avatar_migration_upgrades_an_existing_installation(tmp_path: Path) -> N
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     with sqlite3.connect(database) as connection:
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
-    assert versions == [1, 2, 3]
+    assert versions == [1, 2, 3, 4]
     assert [(account.id.value, account.avatar_url) for account in store.list()] == [
         ("existing", None)
     ]
@@ -570,3 +570,15 @@ def test_access_check_rejects_an_account_without_visible_calendars(
 
     with pytest.raises(GoogleAccountAccessCheckFailed, match="did not expose a calendar"):
         oauth.verify_access(ConnectedAccountId("account-1"))
+
+
+def test_connected_account_authorization_reflects_disconnection(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    account = store.save("Work", "work@example.test", '{"refresh_token":"synthetic"}')
+
+    assert store.is_connected(account.id) is True
+    store.disconnect(account.id)
+    assert store.is_connected(account.id) is False
+    assert store.is_connected(ConnectedAccountId("missing")) is False

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { describeEntry, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
+import { ApiError } from "./api"
+import { describeEntry, entryInspection, eventLookupFailure, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
 import type { AuditEntry } from "./api"
 
 function entry(overrides: Partial<AuditEntry>): AuditEntry {
@@ -31,6 +32,45 @@ describe("activity presentation", () => {
     const copy = describeEntry(entry({ reason: null, detail: "excluded event has no managed projection" }))
     expect(copy.summary).toBe("Skipped an event")
     expect(copy.explanation).toBe("excluded event has no managed projection")
+  })
+
+  it("explains rule management entries in domain language", () => {
+    expect(describeEntry(entry({ action: "policy_changed", reason: null, detail: "privacy=copy_details, all_day=include" })).summary).toBe(
+      "Changed the projection policy",
+    )
+    expect(describeEntry(entry({ action: "remove_projection", reason: null })).summary).toBe(
+      "Deleted a projection during Rule Removal",
+    )
+    expect(describeEntry(entry({ action: "detach_projection", reason: null })).summary).toBe(
+      "Kept a projection as a Detached Event",
+    )
+    expect(describeEntry(entry({ action: "rule_removed", reason: null })).summary).toBe("Removed the rule")
+    expect(outcomeLabel(entry({ action: "remove_projection", category: "changed" }))).toBe("Removed")
+    expect(outcomeLabel(entry({ action: "rule_removed", category: "changed" }))).toBe("Removed")
+    expect(outcomeLabel(entry({ action: "detach_projection", category: "changed" }))).toBe("Kept")
+  })
+
+  it("only looks up events for rules that still exist", () => {
+    expect(entryInspection(entry({}), true)).toBe("event")
+    expect(entryInspection(entry({ action: "detach_projection", reason: null }), false)).toBe("details")
+    expect(entryInspection(entry({ action: "policy_changed", reason: null, source_event_id: null }), true)).toBe(
+      "details",
+    )
+    expect(
+      entryInspection(entry({ action: "create", reason: null, detail: "", source_event_id: null }), true),
+    ).toBeNull()
+  })
+
+  it("explains why an event lookup failed", () => {
+    expect(eventLookupFailure(new ApiError("gone", 410))).toBe(
+      "This rule was removed, so its events can no longer be looked up.",
+    )
+    expect(eventLookupFailure(new ApiError("unavailable", 503))).toBe(
+      "Google is not configured, so the event cannot be looked up.",
+    )
+    expect(eventLookupFailure(new ApiError("provider", 424))).toBe(
+      "Google could not return this event right now. The account may need reauthorization in Settings.",
+    )
   })
 
   it("labels outcomes by category before action", () => {

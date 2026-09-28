@@ -11,10 +11,13 @@ import { NativeSelect } from "@/components/ui/native-select"
 import {
   CATEGORY_FILTERS,
   describeEntry,
+  entryInspection,
+  eventLookupFailure,
   formatEventTime,
   formatRunTime,
   groupRuns,
   outcomeLabel,
+  REMOVED_RULE_LOOKUP,
   summarizeRun,
 } from "@/lib/activity"
 import {
@@ -25,7 +28,6 @@ import {
 } from "@/lib/activity-failure"
 import {
   ACTIVITY_PAGE_SIZE,
-  ApiError,
   api,
   type ActivityCategory,
   type AuditEntry,
@@ -178,7 +180,14 @@ export function ActivityView() {
                   </div>
                 </header>
                 <ul className="activity-entries">
-                  {run.entries.map((entry) => <ActivityEntryRow key={entry.id} entry={entry} />)}
+                  {run.entries.map((entry) => (
+                    <ActivityEntryRow
+                      key={entry.id}
+                      entry={entry}
+                      // Until rules load, assume the rule exists rather than hide lookups.
+                      ruleExists={rules.data === undefined || context.rulesById.has(run.ruleId)}
+                    />
+                  ))}
                 </ul>
               </section>
             ))}
@@ -247,16 +256,18 @@ const OUTCOME_VARIANT = {
   blocked: "attention",
 } as const
 
-function ActivityEntryRow({ entry }: { entry: AuditEntry }) {
+function ActivityEntryRow({ entry, ruleExists }: { entry: AuditEntry; ruleExists: boolean }) {
   const [open, setOpen] = useState(false)
   const detailsId = useId()
   const copy = describeEntry(entry)
+  const inspection = entryInspection(entry, ruleExists)
+  const noun = inspection === "event" ? "event" : "details"
   return (
     <li className="activity-entry">
       <div className="activity-entry-summary">
         <Badge variant={OUTCOME_VARIANT[entry.category]} className="activity-outcome">{outcomeLabel(entry)}</Badge>
         <p>{copy.summary}</p>
-        {entry.source_event_id && (
+        {inspection && (
           <Button
             variant="ghost"
             size="sm"
@@ -265,7 +276,7 @@ function ActivityEntryRow({ entry }: { entry: AuditEntry }) {
             aria-controls={detailsId}
             onClick={() => setOpen((current) => !current)}
           >
-            {open ? "Hide event" : "Show event"}
+            {open ? `Hide ${noun}` : `Show ${noun}`}
             <ChevronDown aria-hidden="true" data-open={open} />
           </Button>
         )}
@@ -273,7 +284,13 @@ function ActivityEntryRow({ entry }: { entry: AuditEntry }) {
       {open && (
         <div className="activity-entry-details" id={detailsId}>
           {copy.explanation && <p className="activity-explanation">{copy.explanation}</p>}
-          <ActivityEventDetails entry={entry} />
+          {inspection === "event" ? (
+            <ActivityEventDetails entry={entry} />
+          ) : (
+            entry.source_event_id && (
+              <p className="activity-event-status">{REMOVED_RULE_LOOKUP}</p>
+            )
+          )}
         </div>
       )}
     </li>
@@ -291,9 +308,7 @@ function ActivityEventDetails({ entry }: { entry: AuditEntry }) {
   if (event.error) {
     return (
       <p className="activity-event-status" role="alert">
-        {event.error instanceof ApiError && event.error.status === 503
-          ? "Google is not configured, so the event cannot be looked up."
-          : "Google could not return this event right now. The account may need reauthorization in Settings."}
+        {eventLookupFailure(event.error)}
       </p>
     )
   }

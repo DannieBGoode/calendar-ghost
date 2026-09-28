@@ -1,4 +1,4 @@
-import type { ActivityCategory, AuditEntry } from "@/lib/api"
+import { ApiError, type ActivityCategory, type AuditEntry } from "@/lib/api"
 
 type ReasonCopy = { summary: string; explanation: string }
 
@@ -85,8 +85,29 @@ const ACTION_FALLBACK: Record<string, string> = {
   conflict: "Blocked a change",
 }
 
+// Rule management entries carry no SyncReason; keep in sync with application/rules.py and removal.py.
+const RULE_ACTIONS: Record<string, ReasonCopy> = {
+  policy_changed: {
+    summary: "Changed the projection policy",
+    explanation:
+      "This is a Material Rule Change. The rule needs a new preview, and existing projections are rewritten on the next run after it is enabled.",
+  },
+  remove_projection: {
+    summary: "Deleted a projection during Rule Removal",
+    explanation: "The administrator chose to delete this rule's projections when removing it.",
+  },
+  detach_projection: {
+    summary: "Kept a projection as a Detached Event",
+    explanation: "The event stays in the destination calendar and is no longer updated or deleted.",
+  },
+  rule_removed: {
+    summary: "Removed the rule",
+    explanation: "The rule and its Event Mappings were removed. Its activity history is kept.",
+  },
+}
+
 export function describeEntry(entry: Pick<AuditEntry, "reason" | "action" | "detail">): ReasonCopy {
-  const known = entry.reason ? REASONS[entry.reason] : undefined
+  const known = entry.reason ? REASONS[entry.reason] : RULE_ACTIONS[entry.action]
   if (known) return known
   return {
     summary: ACTION_FALLBACK[entry.action] ?? entry.action.replaceAll("_", " "),
@@ -94,12 +115,34 @@ export function describeEntry(entry: Pick<AuditEntry, "reason" | "action" | "det
   }
 }
 
+/** Events can be looked up only while the rule that names their calendars still exists. */
+export function entryInspection(
+  entry: Pick<AuditEntry, "reason" | "action" | "detail" | "source_event_id">,
+  ruleExists: boolean,
+): "event" | "details" | null {
+  if (entry.source_event_id && ruleExists) return "event"
+  return describeEntry(entry).explanation ? "details" : null
+}
+
+export const REMOVED_RULE_LOOKUP =
+  "This rule was removed, so its events can no longer be looked up."
+
+/** The service answers 410 when the entry's rule was removed, whatever the page believed. */
+export function eventLookupFailure(error: unknown): string {
+  if (error instanceof ApiError && error.status === 410) return REMOVED_RULE_LOOKUP
+  if (error instanceof ApiError && error.status === 503) {
+    return "Google is not configured, so the event cannot be looked up."
+  }
+  return "Google could not return this event right now. The account may need reauthorization in Settings."
+}
+
 export function outcomeLabel(entry: Pick<AuditEntry, "action" | "category">): string {
   if (entry.category === "blocked") return "Blocked"
   if (entry.category === "skipped") return "Skipped"
   if (entry.category === "unchanged") return "No change"
   if (entry.action === "create") return "Created"
-  if (entry.action === "delete") return "Removed"
+  if (["delete", "remove_projection", "rule_removed"].includes(entry.action)) return "Removed"
+  if (entry.action === "detach_projection") return "Kept"
   return "Updated"
 }
 
