@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from calendar_sync.application.ports import UnitOfWorkFactory
+from calendar_sync.application.ports import CalendarProvider, UnitOfWorkFactory
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.reconciliation import ReconcileSyncRule
 from calendar_sync.application.rules import CreateSyncRule
@@ -42,6 +42,7 @@ class Container:
     admin_auth: SqliteAdminAuth
     connected_accounts: SqliteConnectedAccountStore | None
     google_oauth: GoogleOAuthService | None
+    calendar_provider: CalendarProvider | None
     execute_sync_rule: ExecuteSyncRule | None
     preview_sync_rule: PreviewSyncRule | None
     reconcile_sync_rule: ReconcileSyncRule | None
@@ -54,6 +55,7 @@ def build_container(settings: Settings | None = None) -> Container:
     unit_of_work = SqliteUnitOfWorkFactory(resolved.database_path)
     accounts = None
     google_oauth = None
+    provider: CalendarProvider | None = None
     execute_sync_rule = None
     preview_sync_rule = None
     reconcile_sync_rule = None
@@ -116,6 +118,7 @@ def build_container(settings: Settings | None = None) -> Container:
         admin_auth=SqliteAdminAuth(resolved.database_path),
         connected_accounts=accounts,
         google_oauth=google_oauth,
+        calendar_provider=provider,
         execute_sync_rule=execute_sync_rule,
         preview_sync_rule=preview_sync_rule,
         reconcile_sync_rule=reconcile_sync_rule,

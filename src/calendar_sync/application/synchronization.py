@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from threading import Lock
+from uuid import uuid4
 
 from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.ports import (
@@ -21,11 +23,14 @@ from calendar_sync.domain.model import (
     EventStatus,
     ProjectionFingerprint,
     SyncAction,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
 )
 from calendar_sync.domain.services import ProjectionFingerprinter, SyncDecisionService
+
+_OUTCOMES = {SyncAction.IGNORE: "skipped", SyncAction.CONFLICT: "blocked"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +50,7 @@ class ExecuteSyncRule:
     decisions: SyncDecisionService
     fingerprinter: ProjectionFingerprinter
     clock: Clock
+    new_run_id: Callable[[], str] = field(default=lambda: uuid4().hex)
     _rule_locks: dict[SyncRuleId, Lock] = field(default_factory=dict, init=False, repr=False)
     _locks_guard: Lock = field(default_factory=Lock, init=False, repr=False)
 
@@ -60,6 +66,7 @@ class ExecuteSyncRule:
             if rule.state is not SyncRuleState.ENABLED:
                 raise RuleNotExecutable(f"sync rule is {rule.state}, not enabled")
 
+            run_id = self.new_run_id()
             cursor = None if full else uow.cursors.get(rule.id)
             destination_cursor = None if full else uow.destination_cursors.get(rule.id)
             cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
@@ -73,6 +80,7 @@ class ExecuteSyncRule:
                 self._synchronize_event(
                     uow,
                     rule,
+                    run_id,
                     source_event,
                     counts,
                     destination_loaded=False,
@@ -95,9 +103,8 @@ class ExecuteSyncRule:
                             outcome="blocked",
                             source_event_id=mapping.source.event_id.value,
                             destination_event_id=mapping.destination.event_id.value,
-                            detail=(
-                                "source could not be verified while repairing a destination change"
-                            ),
+                            reason=SyncReason.SOURCE_UNVERIFIABLE.value,
+                            run_id=run_id,
                         )
                     )
                     uow.commit()
@@ -105,6 +112,7 @@ class ExecuteSyncRule:
                 self._synchronize_event(
                     uow,
                     rule,
+                    run_id,
                     authoritative_source,
                     counts,
                     destination_loaded=True,
@@ -137,6 +145,7 @@ class ExecuteSyncRule:
         self,
         uow: UnitOfWork,
         rule: SyncRule,
+        run_id: str,
         source_event: CalendarEvent,
         counts: dict[SyncAction, int],
         *,
@@ -207,10 +216,11 @@ class ExecuteSyncRule:
                 occurred_at=self.clock.now(),
                 rule_id=rule.id,
                 action=decision.action.value,
-                outcome="completed" if decision.action is not SyncAction.CONFLICT else "blocked",
+                outcome=_OUTCOMES.get(decision.action, "completed"),
                 source_event_id=source_event.reference.event_id.value,
                 destination_event_id=mapping.destination.event_id.value if mapping else None,
-                detail=decision.reason,
+                reason=decision.reason.value,
+                run_id=run_id,
             )
         )
 

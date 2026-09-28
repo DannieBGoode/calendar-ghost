@@ -4,6 +4,19 @@
 
 Check `docker compose ps`, then request `http://localhost:8000/health`. Review container logs without posting credentials or event payloads publicly.
 
+## An event did not synchronize
+
+Open **Activity**, filter by the rule, and choose **Skipped** or **Blocked**. Each entry explains
+why no Event Projection was written; choose **Show event** to see the event's title and time from Google
+and open it in Google Calendar. Common reasons:
+
+- **Skipped a recurring event**: recurring series and single-occurrence changes are not
+  synchronized in the current pre-alpha.
+- **Skipped an all-day event**: the rule syncs timed events only.
+- **Skipped a managed projection**: Managed Projections never become sources, which prevents loops.
+- **Blocked**: identity or ownership was ambiguous, so nothing was written. Run **Reconcile now**
+  from Rules and review any incident.
+
 ## Activity is temporarily unavailable
 
 The Activity screen names the reason it could not load audit entries and incidents:

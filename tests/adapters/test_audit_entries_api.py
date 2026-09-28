@@ -27,7 +27,15 @@ def test_audit_entries_return_empty_list_before_any_synchronization(tmp_path: Pa
     "method", ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"]
 )
 @pytest.mark.parametrize(
-    "path", ["/api", "/api/", "/api/v1/activity", "/api/v1/unknown", "/api/v2/audit-entries"]
+    "path",
+    [
+        "/api",
+        "/api/",
+        "/api/v1/activity",
+        "/api/v1/activity/1/event",
+        "/api/v1/unknown",
+        "/api/v2/audit-entries",
+    ],
 )
 def test_unknown_api_paths_return_not_found_instead_of_the_web_page(
     tmp_path: Path, method: str, path: str

@@ -1,6 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Activity,
   ArrowRight,
   CheckCircle2,
   CircleUserRound,
@@ -17,20 +16,17 @@ import {
 } from "lucide-react"
 import { useState, type FormEvent } from "react"
 
+import { AccountAvatar } from "@/components/account-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageSkeleton } from "@/components/page-skeleton"
+import { RuleEndpoint } from "@/components/rule-endpoint"
 import { useTheme } from "@/components/theme-provider"
+import { ActivityView } from "@/features/activity"
 import { api, type ConnectedAccount } from "@/lib/api"
-import { accountInitials } from "@/lib/account-avatar"
-import {
-  activityFailure,
-  activityFailureActions,
-  activityFailureMessages,
-  activityFailureRequiresReload,
-} from "@/lib/activity-failure"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
 import type { AppView } from "@/lib/navigation"
 import type { ThemePreference } from "@/lib/theme"
@@ -43,7 +39,7 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
     queryFn: api.googleConfiguration,
   })
 
-  if (dashboard.isPending || rules.isPending || google.isPending) return <DashboardSkeleton />
+  if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton />
   if (dashboard.error || rules.error || google.error) {
     return (
       <section className="page-section" role="alert">
@@ -253,8 +249,26 @@ function RulesView({
   const accountsById = new Map(
     (accounts.data ?? []).map((account) => [account.id, account]),
   )
+  const ruleAccountIds = [
+    ...new Set(
+      rules.flatMap((rule) => [
+        rule.source.connected_account_id,
+        rule.destination.connected_account_id,
+      ]),
+    ),
+  ].filter((accountId) => accountsById.get(accountId)?.state === "connected")
+  const calendarQueries = useQueries({
+    queries: ruleAccountIds.map((accountId) => ({
+      queryKey: ["calendars", accountId],
+      queryFn: () => api.calendars(accountId),
+      staleTime: 5 * 60 * 1000,
+    })),
+  })
+  const calendarsByAccount = new Map(
+    ruleAccountIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
+  )
 
-  if (accounts.isPending) return <DashboardSkeleton />
+  if (accounts.isPending) return <PageSkeleton />
   if (accounts.error) {
     return (
       <section className="page-section" role="alert">
@@ -319,12 +333,16 @@ function RulesView({
                       account={sourceAccount}
                       accountId={rule.source.connected_account_id}
                       calendarId={rule.source.calendar_id}
+                      calendars={calendarsByAccount.get(rule.source.connected_account_id)}
+                      role="Source"
                     />
                     <ArrowRight aria-hidden="true" />
                     <RuleEndpoint
                       account={destinationAccount}
                       accountId={rule.destination.connected_account_id}
                       calendarId={rule.destination.calendar_id}
+                      calendars={calendarsByAccount.get(rule.destination.connected_account_id)}
+                      role="Destination"
                     />
                   </div>
                   <p className="rule-policy">
@@ -389,25 +407,6 @@ function RulesView({
         <div className="inline-error" role="alert">{(preview.error ?? enable.error ?? sync.error ?? reconcile.error ?? pause.error)?.message}</div>
       )}
     </div>
-  )
-}
-
-function RuleEndpoint({
-  account,
-  accountId,
-  calendarId,
-}: {
-  account: ConnectedAccount | undefined
-  accountId: string
-  calendarId: string
-}) {
-  return (
-    <span className="rule-endpoint" title={account?.email ?? accountId}>
-      <span className="account-mark account-mark-compact" aria-hidden="true">
-        {accountInitials(account?.display_name ?? "", account?.email ?? accountId)}
-      </span>
-      <span>{calendarId}</span>
-    </span>
   )
 }
 
@@ -537,57 +536,6 @@ function RuleBuilder({ onCreated }: { onCreated: () => void }) {
         <div className="form-actions"><Button type="submit" disabled={!canSubmit || create.isPending}>{create.isPending ? "Saving draft…" : "Save rule draft"}</Button></div>
       </form>
     </section>
-  )
-}
-
-function ActivityView() {
-  const activity = useQuery({ queryKey: ["activity"], queryFn: api.activity })
-  const incidents = useQuery({ queryKey: ["incidents"], queryFn: api.incidents })
-  if (activity.isPending || incidents.isPending) return <DashboardSkeleton />
-
-  if (activity.error || incidents.error) {
-    const failure = activityFailure([activity.error, incidents.error])
-    const reloadRequired = activityFailureRequiresReload(failure)
-    const refreshing = activity.isFetching || incidents.isFetching
-    const recover = () => {
-      if (reloadRequired) {
-        window.location.reload()
-        return
-      }
-      void Promise.all([activity.refetch(), incidents.refetch()])
-    }
-
-    return (
-      <div className="page-section">
-        <ActivityHeading />
-        <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
-          <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
-          <h2 id="activity-error-title">Activity is temporarily unavailable</h2>
-          <p>{activityFailureMessages[failure]}</p>
-          <Button variant="outline" onClick={recover} disabled={refreshing && !reloadRequired}>
-            <RefreshCw aria-hidden="true" />
-            {refreshing && !reloadRequired ? "Trying again…" : activityFailureActions[failure]}
-          </Button>
-        </section>
-      </div>
-    )
-  }
-
-  return <div className="page-section"><ActivityHeading />
-    {incidents.data.length > 0 && <section className="workflow"><div className="section-heading"><div><h2>Incidents</h2><p>Authorization and repeated provider failures that may require attention.</p></div></div><div className="rule-list">{incidents.data.map((incident) => <div className="rule-row" key={incident.id}><div><strong>{incident.summary}</strong><p className="rule-policy">Rule {incident.rule_id ?? "installation"} · Updated {new Date(incident.updated_at).toLocaleString()}</p></div><Badge variant={incident.state === "open" ? "attention" : "neutral"}>{incident.state}</Badge></div>)}</div></section>}
-    {activity.data.length === 0 ? <section className="empty-panel"><div className="empty-icon"><Activity aria-hidden="true" /></div><h2>No activity yet</h2><p>Synchronization decisions will appear here after an enabled rule completes its first run.</p></section> : <section className="workflow"><div className="section-heading"><div><h2>Latest actions</h2><p>The 100 most recent synchronization decisions.</p></div></div><div className="rule-list">{activity.data.map((entry, index) => <div className="rule-row" key={`${entry.occurred_at}-${entry.rule_id}-${index}`}><div><strong>{entry.action.replaceAll("_", " ")}</strong><p className="rule-policy">{entry.detail} · {new Date(entry.occurred_at).toLocaleString()}</p></div><Badge variant={entry.outcome === "completed" ? "healthy" : "attention"}>{entry.outcome}</Badge></div>)}</div></section>}
-  </div>
-}
-
-function ActivityHeading() {
-  return (
-    <div>
-      <p className="page-context">Activity</p>
-      <h1>Incidents and audit activity</h1>
-      <p className="page-intro">
-        Operational details appear here without retaining event titles or descriptions.
-      </p>
-    </div>
   )
 }
 
@@ -795,9 +743,11 @@ function SettingsView({
                 <li className="account-item" key={account.id}>
                   <div className="account-main">
                     <div className="account-identity">
-                      <span className="account-mark" aria-hidden="true">
-                        {accountInitials(account.display_name, account.email)}
-                      </span>
+                      <AccountAvatar
+                        displayName={account.display_name}
+                        email={account.email}
+                        avatarUrl={account.avatar_url}
+                      />
                       <div className="account-copy">
                         <h3>{account.display_name}</h3>
                         <p>{account.email}</p>
@@ -1030,8 +980,4 @@ function SettingsView({
       </section>
     </div>
   )
-}
-
-function DashboardSkeleton() {
-  return <div className="page-section" aria-label="Loading overview"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-80 max-w-full" /><Skeleton className="h-20 w-full" /><Skeleton className="h-72 w-full" /></div>
 }

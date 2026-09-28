@@ -220,3 +220,7 @@ _Avoid_: Event snapshot, content hash
 **Operational Record**:
 Persisted synchronization evidence limited to identities, revisions, recurrence relationships, operation state, timestamps, and projection fingerprints. Event titles, descriptions, locations, attendee data, and conferencing data are not retained or included in audit entries or incident notifications.
 _Avoid_: Event history, cached event
+
+**Audit Entry**:
+An Operational Record of one synchronization decision: the rule, run, source and destination event identities, the action, and a stable reason code explaining why. Activity may read an entry's event title and time live from the provider for display, but that content is never persisted.
+_Avoid_: Event log, history item

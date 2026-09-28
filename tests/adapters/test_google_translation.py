@@ -77,3 +77,21 @@ def test_cancelled_google_tombstone_without_time_translates() -> None:
 
     assert translated.status is EventStatus.CANCELLED
     assert translated.time is None
+
+
+def test_only_https_google_event_links_are_translated() -> None:
+    payload = {
+        "id": "event-1",
+        "etag": "revision-1",
+        "start": {"dateTime": "2026-08-30T10:00:00+00:00"},
+        "end": {"dateTime": "2026-08-30T11:00:00+00:00"},
+    }
+    calendar = endpoint("account", "calendar")
+
+    linked = to_domain_event(
+        {**payload, "htmlLink": "https://www.google.com/calendar/event?eid=synthetic"}, calendar
+    )
+    unsafe = to_domain_event({**payload, "htmlLink": "javascript:alert(1)"}, calendar)
+
+    assert linked.web_link == "https://www.google.com/calendar/event?eid=synthetic"
+    assert unsafe.web_link is None

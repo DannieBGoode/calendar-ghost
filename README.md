@@ -78,6 +78,10 @@ Running on a Raspberry Pi or another LAN host? Google rejects plain-HTTP redirec
 `localhost`, so read [Google OAuth redirect URI on a LAN host](docs/deployment.md#google-oauth-redirect-uri-on-a-lan-host)
 before registering the redirect URI.
 
+The app requests event access and read-only calendar-list access for synchronization, plus basic
+profile access (`openid`, `userinfo.profile`) so each Connected Account shows its Google name and
+photo. Profile access is optional; without it, accounts show initials.
+
 ### 2. Configure local secrets
 
 Copy the example file:
@@ -117,6 +121,10 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 2. Create a directional rule and choose its privacy and all-day policies.
 3. Preview the rule, inspect the result, and enable it.
 
+**Activity** lists every decision each rule made, grouped by run, including skipped and blocked
+events and the reason for each. **Show event** looks up the event's title and time from Google on
+demand; that content is never stored.
+
 The main sections have stable URLs at `/overview`, `/rules`, `/activity`, and `/settings`, so they
 can be bookmarked and browser back/forward navigation works as expected.
 
@@ -125,7 +133,8 @@ account, check its Calendar API access, or disconnect it. **Check access** verif
 and event permissions with read-only requests and reports how many visible calendars can be used as
 destinations. Disconnecting removes stored Google credentials and degrades any enabled rule that
 uses the identity; mappings, Managed Projections, and incremental positions are preserved for safe
-reauthorization.
+reauthorization. Accounts connected before profile photos were supported show initials until they
+are connected again with **Connect Google account**, which updates the existing identity in place.
 
 Check service health with:
 
