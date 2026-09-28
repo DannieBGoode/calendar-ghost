@@ -20,9 +20,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (response.status === 204) return undefined as T
   try {
     return (await response.json()) as T
-  } catch {
-    // The request reached a server, so an unreadable body is a service failure, not a
+  } catch (error) {
+    // The request reached a server, so an unparseable body is a service failure, not a
     // connectivity one; a proxy fallback page is the usual cause.
+    if (!(error instanceof SyntaxError)) throw error
     throw new ApiError("The service returned an unreadable response.", response.status)
   }
 }

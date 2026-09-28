@@ -73,6 +73,16 @@ describe("activityFailure with real API responses", () => {
     expect(activityFailure([error, null])).toBe("service-error")
   })
 
+  it("keeps a connection lost while reading the body classified as unreachable", async () => {
+    const interrupted = { ok: true, status: 200, json: async () => Promise.reject(new TypeError("network error")) }
+    vi.stubGlobal("fetch", vi.fn(async () => interrupted))
+
+    const error = await api.activity().catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(TypeError)
+    expect(activityFailure([error, null])).toBe("unreachable")
+  })
+
   it("keeps a rejected fetch classified as unreachable", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))))
 
