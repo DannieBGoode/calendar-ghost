@@ -13,6 +13,10 @@ colors:
   healthy-ink: "oklch(0.31 0.09 155)"
   attention-soft: "oklch(0.94 0.055 80)"
   attention-ink: "oklch(0.34 0.08 70)"
+  attention-surface: "oklch(0.975 0.022 80)"
+  attention-border: "oklch(0.86 0.06 80)"
+  healthy-surface: "oklch(0.975 0.018 155)"
+  healthy-border: "oklch(0.85 0.035 155)"
   destructive: "oklch(0.50 0.18 25)"
   night: "oklch(0.18 0.012 250)"
   night-surface: "oklch(0.22 0.014 250)"
@@ -29,6 +33,8 @@ colors:
   night-healthy-border: "oklch(0.40 0.055 155)"
   night-attention-soft: "oklch(0.29 0.05 80)"
   night-attention-ink: "oklch(0.83 0.11 85)"
+  night-attention-surface: "oklch(0.22 0.025 80)"
+  night-attention-border: "oklch(0.42 0.06 80)"
   night-destructive: "oklch(0.68 0.16 25)"
   night-destructive-soft: "oklch(0.28 0.06 25)"
   night-destructive-ink: "oklch(0.80 0.11 25)"
@@ -154,6 +160,8 @@ Pure neutral daylight supports a cobalt indicator color, with distinct low-chrom
 
 ### Hierarchy
 
+Product text uses four steps: 2rem headlines, 1rem titles and body, 0.875rem labels and controls, and 0.8125rem supporting metadata.
+
 - **Headline**: Screen titles at a strong but quiet scale.
 - **Title**: Rule names, grouped settings, and recovery headings.
 - **Body**: Instructions and explanations, capped near 70 characters per line.
@@ -205,7 +213,23 @@ The desktop top bar uses text labels and a two-pixel active underline. Mobile re
 
 ### Health Strip
 
-A single horizontal summary combines an icon, plain-language state, status badge, and three compact facts. It is a status surface, not a metric-card grid.
+A single horizontal summary combines an icon, a plain-language state, one sentence of detail, and at most one action. It is a status surface, not a metric-card grid. Its surface follows one health model: moss when healthy, ochre when attention is required, and Quiet Surface during setup. When attention is required it names the affected rule and its action opens that rule. Counts such as rules running and connected accounts appear once, as a quiet line at the foot of the Overview.
+
+### Recent Changes
+
+The Overview lists the latest runs that changed events, newest first: a relative time, the rule, and one sentence in calendar language ("Added 1 event and updated 2 in Family."). Blocked changes use Attention Ochre text and link to that rule's Activity. Event titles appear only on request, looked up live and labelled as not saved.
+
+### Rule Rows
+
+Each rule row shows its direction, policy, last run, status badge, and at most one visible next step (preview, start syncing, or reauthorize). Routine commands such as Sync Now, Reconcile Now, and Pause live in a "More actions" menu whose items explain what each does and when it runs by itself. Command results appear on the row that ran them and are announced through one persistent live region.
+
+### Page Titles
+
+Pages carry no label above their title; the active navigation item already says where you are. Rule Details titles the page with the rule itself ("Family → Work").
+
+### Destructive and Privacy-Widening Changes
+
+Removal shows its choice, its consequence, and a destructive button that names the effect in one step, with a neutral "Keep rule" beside it. A change that shows event details to more people uses Attention Ochre, says who will see them, and names the effect on its button.
 
 ## Do's and Don'ts
 

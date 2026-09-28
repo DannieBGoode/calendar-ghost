@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import TracebackType
 from typing import Self
 
@@ -10,6 +10,8 @@ from calendar_sync.application.ports import (
     AuditRepository,
     EventMappingRepository,
     OccurrenceMappingRepository,
+    RulePreviewRepository,
+    RulePreviewSummary,
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
@@ -40,6 +42,7 @@ class MemoryState:
     destination_cursors: dict[SyncRuleId, str] = field(default_factory=dict)
     audit: list[AuditEntry] = field(default_factory=list)
     outcomes: dict[tuple[SyncRuleId, RunKind], RuleRunOutcome] = field(default_factory=dict)
+    previews: dict[SyncRuleId, RulePreviewSummary] = field(default_factory=dict)
 
 
 class InMemorySyncRuleRepository:
@@ -78,6 +81,7 @@ class InMemorySyncRuleRepository:
         self._state.outcomes = {
             key: outcome for key, outcome in self._state.outcomes.items() if key[0] != rule_id
         }
+        self._state.previews.pop(rule_id, None)
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         return any(
@@ -180,10 +184,31 @@ class InMemoryRuleRunOutcomeRepository:
         self._state = state
 
     def record(self, outcome: RuleRunOutcome) -> None:
-        self._state.outcomes[(outcome.rule_id, outcome.kind)] = outcome
+        previous = self._state.outcomes.get((outcome.rule_id, outcome.kind))
+        succeeded_at = (
+            outcome.completed_at
+            if outcome.succeeded
+            else previous.last_succeeded_at
+            if previous
+            else None
+        )
+        self._state.outcomes[(outcome.rule_id, outcome.kind)] = replace(
+            outcome, last_succeeded_at=succeeded_at
+        )
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:
         return self._state.outcomes.get((rule_id, kind))
+
+
+class InMemoryRulePreviewRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def record(self, summary: RulePreviewSummary) -> None:
+        self._state.previews[summary.rule_id] = summary
+
+    def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None:
+        return self._state.previews.get(rule_id)
 
 
 class InMemoryUnitOfWork:
@@ -194,6 +219,7 @@ class InMemoryUnitOfWork:
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
     run_outcomes: RuleRunOutcomeRepository
+    previews: RulePreviewRepository
 
     def __init__(self, target: MemoryState) -> None:
         self._target = target
@@ -209,6 +235,7 @@ class InMemoryUnitOfWork:
         self.destination_cursors = InMemorySyncCursorRepository(self._working.destination_cursors)
         self.audit = InMemoryAuditRepository(self._working)
         self.run_outcomes = InMemoryRuleRunOutcomeRepository(self._working)
+        self.previews = InMemoryRulePreviewRepository(self._working)
         return self
 
     def __exit__(
@@ -228,6 +255,7 @@ class InMemoryUnitOfWork:
         self._target.destination_cursors = self._working.destination_cursors
         self._target.audit = self._working.audit
         self._target.outcomes = self._working.outcomes
+        self._target.previews = self._working.previews
         self._committed = True
 
 

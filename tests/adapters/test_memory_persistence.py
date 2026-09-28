@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
+from calendar_sync.application.ports import RulePreviewSummary
 from calendar_sync.domain.model import (
     EventId,
     EventMapping,
@@ -58,6 +61,21 @@ def test_memory_occurrences_cascade_with_rule_removal() -> None:
         uow.commit()
 
     assert factory.state.occurrences == {}
+
+
+def test_memory_preview_summaries_cascade_with_rule_removal() -> None:
+    factory = InMemoryUnitOfWorkFactory()
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.previews.record(RulePreviewSummary(rule().id, datetime(2026, 9, 1, tzinfo=UTC), 3, 1))
+        uow.commit()
+    with factory() as uow:
+        uow.rules.remove(rule().id)
+        uow.commit()
+
+    # Matches SQLite's ON DELETE CASCADE: a reused rule ID never inherits stale preview counts.
+    with factory() as uow:
+        assert uow.previews.latest(rule().id) is None
 
 
 def test_memory_occurrences_require_an_existing_series_mapping() -> None:

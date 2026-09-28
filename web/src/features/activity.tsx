@@ -73,7 +73,7 @@ import {
   type Rule,
 } from "@/lib/api"
 import { createBatchLoader } from "@/lib/batch-loader"
-import { isPlainLeftClick, type AppLocation } from "@/lib/navigation"
+import { isPlainLeftClick, type OpenRule } from "@/lib/navigation"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
 type RuleContext = {
@@ -99,20 +99,12 @@ function ruleNames(ruleId: string, context: RuleContext): RuleNames | null {
   return { source: endpointName(rule.source, context), destination: endpointName(rule.destination, context) }
 }
 
-/** Filters and the open entry live in the address so Back, reload, and shared links keep them. */
-function useActivityLocation(appLocation: AppLocation) {
+/**
+ * Filters and the open entry live in the address so Back, reload, and shared links keep them. The
+ * view remounts on every arrival, including Back and Forward, so it only reads the address once.
+ */
+function useActivityLocation() {
   const [state, setState] = useState(() => activityStateFromSearch(window.location.search))
-  // The navigation bar can return to Activity without a popstate; start from its address.
-  const [seenLocation, setSeenLocation] = useState(appLocation)
-  if (seenLocation !== appLocation) {
-    setSeenLocation(appLocation)
-    setState(activityStateFromSearch(window.location.search))
-  }
-  useEffect(() => {
-    const handlePopState = () => setState(activityStateFromSearch(window.location.search))
-    window.addEventListener("popstate", handlePopState)
-    return () => window.removeEventListener("popstate", handlePopState)
-  }, [])
 
   function update(next: Partial<ActivityLocationState>, history: "push" | "replace") {
     const merged = { ...state, ...next }
@@ -141,14 +133,8 @@ function useEventCell(entry: AuditEntry, names: RuleNames | null): EventCell {
   )
 }
 
-export function ActivityView({
-  location,
-  onOpenRule,
-}: {
-  location: AppLocation
-  onOpenRule: (ruleId: string) => void
-}) {
-  const [state, update] = useActivityLocation(location)
+export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
+  const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
   // Expanded runs and how many pages of their no-change checks are loaded.
   const [expandedRuns, setExpandedRuns] = useState<ReadonlyMap<string, number>>(new Map())
@@ -212,7 +198,7 @@ export function ActivityView({
       placeholderData: keepPreviousData,
     })),
   })
-  if (activity.isPending || incidents.isPending) return <PageSkeleton />
+  if (activity.isPending || incidents.isPending) return <PageSkeleton label="Loading activity" />
 
   if (activity.error || incidents.error) {
     const failure = activityFailure([activity.error, incidents.error])
@@ -456,7 +442,6 @@ export function ActivityView({
 function ActivityHeading() {
   return (
     <div>
-      <p className="page-context">Activity</p>
       <h1>What your rules did</h1>
       <p className="page-intro">
         Every event a rule added, updated, removed, skipped, or blocked, and why. Event names are
@@ -796,7 +781,7 @@ function ActivityDetail({
   context: RuleContext
   focusRef: RefObject<boolean>
   onClose: () => void
-  onOpenRule: (ruleId: string) => void
+  onOpenRule: OpenRule
   onNewer?: () => void
   onOlder?: () => void
 }) {
@@ -846,7 +831,7 @@ function EntryDetails({
   entry: AuditEntry
   context: RuleContext
   focusRef: RefObject<boolean>
-  onOpenRule: (ruleId: string) => void
+  onOpenRule: OpenRule
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null)
   useEffect(() => {

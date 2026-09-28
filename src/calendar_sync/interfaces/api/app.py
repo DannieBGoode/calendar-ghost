@@ -28,7 +28,7 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
     RuleNotFound,
 )
-from calendar_sync.application.ports import RuleRunOutcome
+from calendar_sync.application.ports import RulePreviewSummary, RuleRunOutcome, RunKind
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
@@ -80,12 +80,15 @@ from calendar_sync.interfaces.api.schemas import (
     IncidentResponse,
     NoChangeRunResponse,
     PasswordRequest,
+    PreviewSummaryResponse,
     ProjectionChoice,
+    RecentChangeResponse,
     RemovalResponse,
     ReplaceRuleRequest,
     RuleDetailResponse,
     RuleReplacementResponse,
     RuleResponse,
+    RuleSummaryResponse,
     RunOutcomeResponse,
     SessionResponse,
     SetupStatusResponse,
@@ -207,23 +210,31 @@ def create_app(container: Container | None = None) -> FastAPI:
     )
     def dashboard() -> DashboardResponse:
         with sqlite3.connect(resolved.settings.database_path) as connection:
-            accounts = int(
+            account_states = dict(
                 connection.execute(
-                    "SELECT COUNT(*) FROM connected_accounts WHERE state = 'connected'"
-                ).fetchone()[0]
+                    "SELECT state, COUNT(*) FROM connected_accounts GROUP BY state"
+                ).fetchall()
             )
             incidents = int(
                 connection.execute(
                     "SELECT COUNT(*) FROM incidents WHERE state = 'open'"
                 ).fetchone()[0]
             )
+            last_synced_at = connection.execute(
+                "SELECT MAX(last_succeeded_at) FROM rule_run_outcomes WHERE kind = 'sync'"
+            ).fetchone()[0]
         with resolved.unit_of_work() as uow:
-            rules = len(uow.rules.list())
+            states = [rule.state for rule in uow.rules.list()]
+        stopped = sum(state in {SyncRuleState.DEGRADED, SyncRuleState.DISABLED} for state in states)
         return DashboardResponse(
-            health="attention" if incidents else "healthy",
-            connected_accounts=accounts,
-            sync_rules=rules,
+            health="attention" if incidents or stopped else "healthy",
+            connected_accounts=int(account_states.get("connected", 0)),
+            disconnected_accounts=int(account_states.get("disconnected", 0)),
+            sync_rules=len(states),
+            enabled_rules=sum(state is SyncRuleState.ENABLED for state in states),
+            stopped_rules=stopped,
             open_incidents=incidents,
+            last_synced_at=last_synced_at,
         )
 
     @app.get(
@@ -422,12 +433,19 @@ def create_app(container: Container | None = None) -> FastAPI:
 
     @app.get(
         "/api/v1/rules",
-        response_model=list[RuleResponse],
+        response_model=list[RuleSummaryResponse],
         dependencies=[Depends(require_admin)],
     )
-    def list_rules() -> list[RuleResponse]:
+    def list_rules() -> list[RuleSummaryResponse]:
         with resolved.unit_of_work() as uow:
-            return [_rule_response(rule) for rule in uow.rules.list()]
+            return [
+                RuleSummaryResponse(
+                    **_rule_response(rule).model_dump(),
+                    last_sync=_outcome_response(uow.run_outcomes.latest(rule.id, RunKind.SYNC)),
+                    latest_preview=_preview_response(uow.previews.latest(rule.id)),
+                )
+                for rule in uow.rules.list()
+            ]
 
     @app.get(
         "/api/v1/audit-entries",
@@ -591,6 +609,90 @@ def create_app(container: Container | None = None) -> FastAPI:
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry not found")
         return _audit_entry_response(row)
+
+    @app.get(
+        "/api/v1/recent-changes",
+        response_model=list[RecentChangeResponse],
+        dependencies=[Depends(require_admin)],
+    )
+    def recent_changes(
+        limit: Annotated[int, Query(ge=1, le=20)] = 5,
+    ) -> list[RecentChangeResponse]:
+        # Summarizes recent runs that wrote or were blocked, from counts and identifiers only.
+        # Distinct runs are found newest first by walking the primary key backwards and skipping
+        # runs already chosen, so neither unchanged decisions nor one very large run can crowd
+        # out the others; each chosen run is then counted in full.
+        with sqlite3.connect(resolved.settings.database_path) as connection:
+            connection.row_factory = sqlite3.Row
+            chosen: list[sqlite3.Row] = []
+            while len(chosen) < limit:
+                seen = [str(run["run_key"]) for run in chosen]
+                exclude = f"AND {_RUN_KEY} NOT IN ({','.join('?' * len(seen))})" if seen else ""
+                # Each newly chosen run's newest entry precedes the previous one's, so the scan
+                # resumes below it instead of re-reading the runs already chosen.
+                below = int(chosen[-1]["last_id"]) if chosen else None
+                newest = connection.execute(
+                    f"""
+                    SELECT {_RUN_KEY} AS run_key, rule_id, id AS last_id FROM audit_entries
+                    WHERE {_CHANGING} {exclude} {"AND id < ?" if below else ""}
+                    ORDER BY id DESC LIMIT 1
+                    """,
+                    [*seen, *([below] if below else [])],
+                ).fetchone()
+                if newest is None:
+                    break
+                chosen.append(newest)
+            if not chosen:
+                return []
+            rule_ids = sorted({str(run["rule_id"]) for run in chosen})
+            run_keys = [str(run["run_key"]) for run in chosen]
+            totals = {
+                (row["run_key"], row["rule_id"]): row
+                for row in connection.execute(
+                    f"""
+                    SELECT {_RUN_KEY} AS run_key, rule_id, MAX(occurred_at) AS occurred_at,
+                        SUM(action = 'create' AND {_NOT_REPAIR}) AS created,
+                        SUM(action = 'update' AND {_NOT_REPAIR}) AS updated,
+                        SUM(action IN ('delete', 'remove_projection')) AS deleted,
+                        SUM(action IN ('create', 'update') AND NOT {_NOT_REPAIR}) AS repaired,
+                        SUM({_BLOCKED}) AS blocked
+                    FROM audit_entries
+                    WHERE rule_id IN ({",".join("?" * len(rule_ids))})
+                        AND {_RUN_KEY} IN ({",".join("?" * len(run_keys))})
+                    GROUP BY run_key, rule_id
+                    """,
+                    (*rule_ids, *run_keys),
+                )
+            }
+            runs = [totals[(run["run_key"], run["rule_id"])] for run in chosen]
+            changes = []
+            for run in runs:
+                entry_ids = [
+                    int(row[0])
+                    for row in connection.execute(
+                        f"""
+                        SELECT id FROM audit_entries
+                        WHERE rule_id = ? AND {_RUN_KEY} = ? AND source_event_id IS NOT NULL
+                            AND {_CHANGING}
+                        ORDER BY id DESC LIMIT 5
+                        """,
+                        (run["rule_id"], run["run_key"]),
+                    )
+                ]
+                changes.append(
+                    RecentChangeResponse(
+                        run_key=run["run_key"],
+                        rule_id=run["rule_id"],
+                        occurred_at=run["occurred_at"],
+                        created=run["created"],
+                        updated=run["updated"],
+                        deleted=run["deleted"],
+                        repaired=run["repaired"],
+                        blocked=run["blocked"],
+                        entry_ids=entry_ids,
+                    )
+                )
+        return changes
 
     @app.get(
         "/api/v1/audit-entries/{entry_id}/event",
@@ -833,6 +935,7 @@ def create_app(container: Container | None = None) -> FastAPI:
             mapping_count=details.mapping_count,
             last_sync=_outcome_response(details.last_sync),
             last_reconciliation=_outcome_response(details.last_reconciliation),
+            latest_preview=_preview_response(details.latest_preview),
         )
 
     @app.patch(
@@ -926,6 +1029,28 @@ def create_app(container: Container | None = None) -> FastAPI:
             return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app
+
+
+_RUN_KEY = "COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16))"
+# Blocked entries match Activity's classification, including Rule Removal ownership conflicts.
+_BLOCKED = _ACTIVITY_CATEGORY_SQL["blocked"]
+_CHANGING = f"(action IN ('create', 'update', 'delete', 'remove_projection') OR {_BLOCKED})"
+_NOT_REPAIR = (
+    "COALESCE(reason, '') NOT IN "
+    "('projection_missing', 'destination_drift_repaired', 'occurrence_drift_repaired')"
+)
+
+
+def _preview_response(summary: RulePreviewSummary | None) -> PreviewSummaryResponse | None:
+    if summary is None:
+        return None
+    return PreviewSummaryResponse(
+        completed_at=summary.completed_at.isoformat(),
+        eligible_events=summary.eligible_events,
+        excluded_events=summary.excluded_events,
+        recurring_series=summary.recurring_series,
+        occurrence_changes=summary.occurrence_changes,
+    )
 
 
 _AUDIT_ENTRY_COLUMNS = (
@@ -1092,6 +1217,9 @@ def _outcome_response(outcome: RuleRunOutcome | None) -> RunOutcomeResponse | No
         checked_mappings=outcome.checked_mappings,
         drift=outcome.drift,
         failure_kind=outcome.failure_kind,
+        last_succeeded_at=(
+            outcome.last_succeeded_at.isoformat() if outcome.last_succeeded_at else None
+        ),
     )
 
 

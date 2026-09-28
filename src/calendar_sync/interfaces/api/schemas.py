@@ -52,6 +52,32 @@ class RunOutcomeResponse(BaseModel):
     checked_mappings: int
     drift: int
     failure_kind: str | None
+    last_succeeded_at: str | None
+
+
+class PreviewSummaryResponse(BaseModel):
+    completed_at: str
+    eligible_events: int
+    excluded_events: int
+    recurring_series: int
+    occurrence_changes: int
+
+
+class RuleSummaryResponse(RuleResponse):
+    last_sync: RunOutcomeResponse | None
+    latest_preview: PreviewSummaryResponse | None
+
+
+class RecentChangeResponse(BaseModel):
+    run_key: str
+    rule_id: str
+    occurred_at: str
+    created: int
+    updated: int
+    deleted: int
+    repaired: int
+    blocked: int
+    entry_ids: list[int]
 
 
 class RuleDetailResponse(RuleResponse):
@@ -59,6 +85,7 @@ class RuleDetailResponse(RuleResponse):
     mapping_count: int
     last_sync: RunOutcomeResponse | None
     last_reconciliation: RunOutcomeResponse | None
+    latest_preview: PreviewSummaryResponse | None
 
 
 class UpdateRulePolicyRequest(BaseModel):
@@ -88,8 +115,12 @@ class RuleReplacementResponse(BaseModel):
 class DashboardResponse(BaseModel):
     health: str
     connected_accounts: int
+    disconnected_accounts: int
     sync_rules: int
+    enabled_rules: int
+    stopped_rules: int
     open_incidents: int
+    last_synced_at: str | None
 
 
 class GoogleConfigurationResponse(BaseModel):

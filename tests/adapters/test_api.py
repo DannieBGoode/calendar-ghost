@@ -12,7 +12,7 @@ from fastapi.testclient import TestClient
 
 import calendar_sync.interfaces.api.app as api_module
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.ports import AuditEntry, CalendarProvider
+from calendar_sync.application.ports import AuditEntry, CalendarProvider, RuleRunOutcome, RunKind
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.bootstrap.config import Settings
@@ -67,8 +67,12 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
         assert dashboard.json() == {
             "health": "healthy",
             "connected_accounts": 0,
+            "disconnected_accounts": 0,
             "sync_rules": 0,
+            "enabled_rules": 0,
+            "stopped_rules": 0,
             "open_incidents": 0,
+            "last_synced_at": None,
         }
 
 
@@ -344,6 +348,10 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
     assert repeated.status_code == 200
     assert missing.status_code == 404
     assert dashboard.json()["connected_accounts"] == 0
+    assert dashboard.json()["disconnected_accounts"] == 1
+    # rule-1, validated-rule, and destination-rule degrade; the paused rule stays paused.
+    assert dashboard.json()["stopped_rules"] == 3
+    assert dashboard.json()["health"] == "attention"
     with container.unit_of_work() as uow:
         disconnected_rule = uow.rules.get(SyncRuleId("rule-1"))
     assert disconnected_rule is not None
@@ -946,6 +954,150 @@ def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path
     assert reconciled.status_code == 409
 
 
+def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Path) -> None:
+    container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.rules.add(
+            SyncRule(
+                id=SyncRuleId("rule-2"),
+                source=endpoint("personal-account", "second-calendar"),
+                destination=endpoint("work-account", "second-destination"),
+                state=SyncRuleState.ENABLED,
+            )
+        )
+        uow.run_outcomes.record(
+            RuleRunOutcome(
+                SyncRuleId("rule-1"),
+                RunKind.SYNC,
+                datetime(2026, 9, 28, 9, 0, tzinfo=UTC),
+                succeeded=True,
+                created=2,
+            )
+        )
+        uow.run_outcomes.record(
+            RuleRunOutcome(
+                SyncRuleId("rule-2"),
+                RunKind.SYNC,
+                datetime(2026, 9, 28, 10, 0, tzinfo=UTC),
+                succeeded=False,
+                failure_kind="rate_limit",
+            )
+        )
+        uow.commit()
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        dashboard = client.get("/api/v1/dashboard").json()
+        rules = {item["id"]: item for item in client.get("/api/v1/rules").json()}
+
+    # A failed run is not evidence that calendars are current.
+    assert dashboard["last_synced_at"] == "2026-09-28T09:00:00+00:00"
+    assert rules["rule-1"]["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
+    assert rules["rule-2"]["last_sync"]["last_succeeded_at"] is None
+    assert dashboard["enabled_rules"] == 2
+    assert dashboard["health"] == "healthy"
+    assert rules["rule-1"]["last_sync"]["created"] == 2
+    assert rules["rule-2"]["last_sync"]["failure_kind"] == "rate_limit"
+
+
+def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
+    container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        succeeded = RuleRunOutcome(
+            SyncRuleId("rule-1"), RunKind.SYNC, datetime(2026, 9, 28, 9, 0, tzinfo=UTC), True
+        )
+        uow.run_outcomes.record(succeeded)
+        uow.run_outcomes.record(
+            replace(
+                succeeded,
+                completed_at=datetime(2026, 9, 28, 10, 0, tzinfo=UTC),
+                succeeded=False,
+                failure_kind="rate_limit",
+            )
+        )
+        uow.commit()
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        dashboard = client.get("/api/v1/dashboard").json()
+        (listed,) = client.get("/api/v1/rules").json()
+
+    assert dashboard["last_synced_at"] == "2026-09-28T09:00:00+00:00"
+    assert listed["last_sync"]["succeeded"] is False
+    assert listed["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
+
+
+def test_recent_changes_summarize_runs_that_wrote_or_were_blocked(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("create", "source_created", run_id="run-1", destination_event_id="copy-1"),
+        _audit("ignore", "projection_current", run_id="run-2"),
+        _audit("update", "source_changed", run_id="run-3", destination_event_id="copy-1"),
+        _audit("update", "destination_drift_repaired", run_id="run-3"),
+        _audit("create", "projection_missing", run_id="run-3"),
+        _audit("delete", "source_cancelled", run_id="run-3"),
+        _audit("conflict", "mapping_inconsistent", rule_id="rule-2", run_id="run-4"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        assert client.get("/api/v1/recent-changes").status_code == 401
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = client.get("/api/v1/recent-changes").json()
+        limited = client.get("/api/v1/recent-changes", params={"limit": 1}).json()
+
+    # The run that only confirmed a current projection is quiet, so it is not listed.
+    assert [change["run_key"] for change in changes] == ["run-4", "run-3", "run-1"]
+    blocked, mixed, created = changes
+    assert (blocked["rule_id"], blocked["blocked"]) == ("rule-2", 1)
+    assert {key: mixed[key] for key in ("created", "updated", "deleted", "repaired")} == {
+        "created": 0,
+        "updated": 1,
+        "deleted": 1,
+        "repaired": 2,
+    }
+    assert len(mixed["entry_ids"]) == 4
+    assert created["created"] == 1
+    assert [change["run_key"] for change in limited] == ["run-4"]
+
+
+def test_recent_changes_count_large_runs_in_full(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    # An initial sync audits every decision; its writes must not be sliced by the scan window,
+    # nor hidden behind a newer run that only confirmed current projections.
+    _append_audit(
+        container,
+        *(_audit("update", "source_changed", run_id="initial") for _ in range(2100)),
+        *(_audit("ignore", "projection_current", run_id="quiet") for _ in range(2100)),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = client.get("/api/v1/recent-changes").json()
+
+    assert [(change["run_key"], change["updated"]) for change in changes] == [("initial", 2100)]
+
+
+def test_recent_changes_list_older_runs_behind_a_very_large_run(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("create", "source_created", run_id="older"),
+        *(_audit("update", "source_changed", run_id="initial") for _ in range(2100)),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = client.get("/api/v1/recent-changes").json()
+
+    assert [(change["run_key"], change["created"], change["updated"]) for change in changes] == [
+        ("initial", 0, 2100),
+        ("older", 1, 0),
+    ]
+
+
 def _append_audit(container: Container, *entries: AuditEntry) -> None:
     with container.unit_of_work() as uow:
         for entry in entries:
@@ -994,6 +1146,30 @@ def test_removal_conflicts_are_blocked_activity_scoped_by_rule(tmp_path: Path) -
     assert [(entry["action"], entry["rule_id"]) for entry in blocked] == [
         ("removal_conflict", "rule-1")
     ]
+
+
+def test_recent_changes_report_rule_removal_conflicts_as_blocked(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("remove_projection", None, run_id="removal"),
+        _audit("removal_conflict", None, run_id="removal"),
+        _audit("removal_conflict", None, rule_id="rule-2", run_id="conflict-only"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = {
+            change["run_key"]: change for change in client.get("/api/v1/recent-changes").json()
+        }
+
+    # Activity files these under Blocked, so a run that only left events in place still appears.
+    assert (changes["removal"]["deleted"], changes["removal"]["blocked"]) == (1, 1)
+    assert len(changes["removal"]["entry_ids"]) == 2
+    assert (changes["conflict-only"]["blocked"], len(changes["conflict-only"]["entry_ids"])) == (
+        1,
+        1,
+    )
 
 
 def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None:

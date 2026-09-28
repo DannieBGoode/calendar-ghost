@@ -1,0 +1,114 @@
+import { useQueryClient } from "@tanstack/react-query"
+import { useEffect, useRef, useState } from "react"
+
+import { api } from "@/lib/api"
+import { previewSummary } from "@/lib/rule-preview"
+import {
+  enabledMessage,
+  pausedMessage,
+  reconcileResultMessage,
+  syncResultMessage,
+} from "@/lib/rule-run"
+
+export type RuleCommand = "preview" | "enable" | "sync" | "reconcile" | "pause"
+export type RuleFeedback = { tone: "success" | "error"; text: string }
+
+const FAILED: Record<RuleCommand, string> = {
+  preview: "Preview did not complete.",
+  enable: "The rule was not enabled.",
+  sync: "Sync did not complete.",
+  reconcile: "Reconciliation did not complete.",
+  pause: "The rule was not paused.",
+}
+
+export const PENDING_LABELS: Record<RuleCommand, string> = {
+  preview: "Previewing…",
+  enable: "Enabling…",
+  sync: "Syncing…",
+  reconcile: "Reconciling…",
+  pause: "Pausing…",
+}
+
+/**
+ * Runs rule commands with per-rule pending state and feedback, so one row's work never
+ * relabels another row, and every result is announced through one persistent live region.
+ */
+export function useRuleCommands() {
+  const queryClient = useQueryClient()
+  const [pending, setPending] = useState<Record<string, RuleCommand>>({})
+  const [feedback, setFeedback] = useState<Record<string, RuleFeedback>>({})
+  const [announcement, setAnnouncement] = useState("")
+  const announceTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => window.clearTimeout(announceTimer.current), [])
+
+  function announce(text: string) {
+    // Clearing first makes screen readers repeat an identical message.
+    setAnnouncement("")
+    window.clearTimeout(announceTimer.current)
+    announceTimer.current = window.setTimeout(() => setAnnouncement(text), 60)
+  }
+
+  function notify(ruleId: string, next: RuleFeedback) {
+    setFeedback((current) => ({ ...current, [ruleId]: next }))
+    announce(next.text)
+  }
+
+  async function execute(ruleId: string, command: RuleCommand, destination: string): Promise<string> {
+    switch (command) {
+      case "preview":
+        return previewSummary(await api.previewRule(ruleId))
+      case "enable":
+        await api.enableRule(ruleId)
+        return enabledMessage(destination)
+      case "sync":
+        return syncResultMessage(await api.syncRule(ruleId))
+      case "reconcile":
+        return reconcileResultMessage(await api.reconcileRule(ruleId))
+      case "pause":
+        await api.pauseRule(ruleId)
+        return pausedMessage(destination)
+    }
+  }
+
+  /**
+   * `focusTarget` receives focus afterwards if the control that started the command is gone,
+   * as when a successful preview replaces its own button, so keyboard focus is never stranded.
+   */
+  async function run(
+    ruleId: string,
+    command: RuleCommand,
+    destination: string,
+    focusTarget?: () => HTMLElement | null,
+  ) {
+    setPending((current) => ({ ...current, [ruleId]: command }))
+    setFeedback((current) => {
+      const next = { ...current }
+      delete next[ruleId]
+      return next
+    })
+    try {
+      notify(ruleId, { tone: "success", text: await execute(ruleId, command, destination) })
+    } catch (error) {
+      const reason = error instanceof Error ? ` ${error.message}` : ""
+      notify(ruleId, { tone: "error", text: `${FAILED[command]}${reason}` })
+    } finally {
+      setPending((current) => {
+        const next = { ...current }
+        delete next[ruleId]
+        return next
+      })
+      await Promise.all(
+        [["rules"], ["rule", ruleId], ["dashboard"], ["activity"], ["accounts"], ["recent-changes"]].map(
+          (queryKey) => queryClient.invalidateQueries({ queryKey }),
+        ),
+      )
+      window.requestAnimationFrame(() => {
+        const active = document.activeElement
+        if (!active || active === document.body || !active.isConnected) focusTarget?.()?.focus()
+      })
+    }
+  }
+
+  return { pending, feedback, announcement, run, notify }
+}

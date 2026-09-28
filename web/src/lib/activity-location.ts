@@ -8,7 +8,8 @@ const SHOW_VALUES = new Set<string>(["all", "changed", "skipped", "blocked", "un
 
 export function activityStateFromSearch(search: string): ActivityLocationState {
   const params = new URLSearchParams(search)
-  const show = params.get("show") ?? ""
+  // Links from earlier releases name the outcome with `category`.
+  const show = params.get("show") ?? params.get("category") ?? ""
   const entry = Number(params.get("entry"))
   return {
     ruleId: params.get("rule") ?? "",

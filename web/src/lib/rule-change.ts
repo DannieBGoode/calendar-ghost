@@ -38,8 +38,8 @@ export function policyChangeConsequences({
   if (current.privacy_policy === "busy_only" && next.privacy_policy === "copy_details") {
     lines.push(
       mappingCount > 0
-        ? `${existing} will show event titles, descriptions, and locations after the next run.`
-        : `New projections in ${destination} will show event titles, descriptions, and locations.`,
+        ? `${existing} will show event titles, descriptions, and locations after the next run, to anyone who can see ${destination}.`
+        : `New projections in ${destination} will show event titles, descriptions, and locations to anyone who can see it.`,
     )
   }
   if (current.privacy_policy === "copy_details" && next.privacy_policy === "busy_only") {
@@ -61,7 +61,7 @@ export function removalConsequence(
   destination: string,
 ): string {
   if (handling === "delete") {
-    return `${plural(mappingCount, "Managed Projection")} will be deleted from ${destination}. Source events are not changed. Any event whose ownership cannot be verified is left in place. This cannot be undone.`
+    return `${plural(mappingCount, "projection")} this rule wrote will be deleted from ${destination}. Source events are not changed. Any event whose ownership cannot be verified is left in place. This cannot be undone.`
   }
   return `${plural(mappingCount, "projection")} stay in ${destination} as ordinary events that are no longer updated or deleted. This cannot be undone.`
 }
@@ -123,18 +123,22 @@ const FAILURE_LABELS: Record<string, string> = {
   permanent: "Google Calendar rejected the request",
 }
 
+export function failureLabel(failureKind: string | null): string {
+  return FAILURE_LABELS[failureKind ?? ""] ?? "Local synchronization failed"
+}
+
 export function runOutcomeSummary(
   outcome: RunOutcome | null,
   kind: "sync" | "reconciliation",
 ): string {
   if (outcome === null) return "Not run yet"
   if (!outcome.succeeded) {
-    return `Failed: ${FAILURE_LABELS[outcome.failure_kind ?? ""] ?? "Local synchronization failed"}`
+    return `Failed: ${failureLabel(outcome.failure_kind)}`
   }
   if (kind === "reconciliation") {
     return outcome.drift === 0
-      ? `Consistent: ${plural(outcome.checked_mappings, "mapping")} checked`
-      : `${plural(outcome.drift, "difference")} found in ${plural(outcome.checked_mappings, "mapping")}`
+      ? `All ${plural(outcome.checked_mappings, "projection")} matched their sources`
+      : `${plural(outcome.drift, "difference")} found in ${plural(outcome.checked_mappings, "projection")} and repaired`
   }
   const counts = `${outcome.created} created, ${outcome.updated} updated, ${outcome.deleted} deleted`
   return outcome.conflicts > 0

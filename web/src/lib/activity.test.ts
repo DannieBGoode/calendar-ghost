@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { ApiError } from "./api"
 import { describeEntry, entryInspection, eventLookupFailure, formatRunTime, groupRuns, whatHappened } from "./activity"
+import { activityStateFromSearch } from "./activity-location"
 import type { AuditEntry } from "./api"
 
 function entry(overrides: Partial<AuditEntry>): AuditEntry {
@@ -135,5 +136,13 @@ describe("activity presentation", () => {
     const now = new Date(2026, 8, 28, 18, 0)
     expect(formatRunTime(new Date(2026, 8, 28, 15, 18).toISOString(), now)).toMatch(/^Today at /)
     expect(formatRunTime(new Date(2026, 8, 27, 15, 18).toISOString(), now)).toMatch(/^Yesterday at /)
+  })
+})
+
+describe("activity address", () => {
+  it("reads links that name the outcome with the earlier category parameter", () => {
+    expect(activityStateFromSearch("?rule=rule-7&category=blocked")).toEqual({ ruleId: "rule-7", show: "blocked", entryId: null })
+    expect(activityStateFromSearch("?category=everything").show).toBe("")
+    expect(activityStateFromSearch("?show=skipped&category=blocked").show).toBe("skipped")
   })
 })
