@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { describeEntry, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
+import { describeEntry, entryInspection, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
 import type { AuditEntry } from "./api"
 
 function entry(overrides: Partial<AuditEntry>): AuditEntry {
@@ -47,6 +47,17 @@ describe("activity presentation", () => {
     expect(outcomeLabel(entry({ action: "remove_projection", category: "changed" }))).toBe("Removed")
     expect(outcomeLabel(entry({ action: "rule_removed", category: "changed" }))).toBe("Removed")
     expect(outcomeLabel(entry({ action: "detach_projection", category: "changed" }))).toBe("Kept")
+  })
+
+  it("only looks up events for rules that still exist", () => {
+    expect(entryInspection(entry({}), true)).toBe("event")
+    expect(entryInspection(entry({ action: "detach_projection", reason: null }), false)).toBe("details")
+    expect(entryInspection(entry({ action: "policy_changed", reason: null, source_event_id: null }), true)).toBe(
+      "details",
+    )
+    expect(
+      entryInspection(entry({ action: "create", reason: null, detail: "", source_event_id: null }), true),
+    ).toBeNull()
   })
 
   it("labels outcomes by category before action", () => {

@@ -115,6 +115,15 @@ export function describeEntry(entry: Pick<AuditEntry, "reason" | "action" | "det
   }
 }
 
+/** Events can be looked up only while the rule that names their calendars still exists. */
+export function entryInspection(
+  entry: Pick<AuditEntry, "reason" | "action" | "detail" | "source_event_id">,
+  ruleExists: boolean,
+): "event" | "details" | null {
+  if (entry.source_event_id && ruleExists) return "event"
+  return describeEntry(entry).explanation ? "details" : null
+}
+
 export function outcomeLabel(entry: Pick<AuditEntry, "action" | "category">): string {
   if (entry.category === "blocked") return "Blocked"
   if (entry.category === "skipped") return "Skipped"
