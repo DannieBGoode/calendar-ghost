@@ -84,6 +84,9 @@ class SynchronizeOccurrences:
             destination_reported,
         )
         if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
+            # The repair re-verifies the series' other occurrences; this one is re-decided below.
+            if source_occurrence is not None:
+                run.handled.add(source_occurrence.reference)
             self.repair_series(run, source_series)
             series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
             decision, destination = self._decide(
@@ -210,6 +213,8 @@ class SynchronizeOccurrences:
                     run_id=run.run_id,
                 )
             )
+            # Commit before the next provider call so no write lock spans network requests.
+            run.uow.commit()
 
     def _decide(
         self,

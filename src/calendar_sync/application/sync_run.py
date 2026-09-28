@@ -19,6 +19,8 @@ class SyncRunContext:
     counts: dict[SyncAction, int]
     reproject: bool = False
     handled: set[EventRef] = field(default_factory=set)
+    repaired: set[EventRef] = field(default_factory=set)
+    """Source series already repaired this run, so a repair never recurses."""
 
 
 def require_unchanged(run: SyncRunContext) -> None:

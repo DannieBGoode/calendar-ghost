@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ from calendar_sync.application.ports import ProviderChangeSet
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEndpoint,
+    CalendarEvent,
     EventRef,
     EventStatus,
     ManagedOrigin,
@@ -391,3 +393,77 @@ def test_unchanged_series_still_reverifies_exceptions_outside_the_window_on_poli
     cancelled = calendars.get_occurrence(destination, early)
     assert cancelled is not None and cancelled.status is EventStatus.CANCELLED
     assert calendars.events[destination].status is EventStatus.CONFIRMED
+
+
+def test_series_recreated_during_an_occurrence_repair_keeps_source_cancellations() -> None:
+    calendars, factory, destination = _synced()
+    calendars.report(calendars.put(occurrence(series(), 1, status=EventStatus.CANCELLED)))
+    sync_use_case(factory, calendars).execute(rule().id)
+    deleted = replace(calendars.events.pop(destination), status=EventStatus.CANCELLED, time=None)
+    for instance in calendars.instances_of(destination):
+        del calendars.events[instance.reference]
+    calendars.report(deleted)
+    calendars.report(calendars.put(occurrence(series(), 2, moved_by=timedelta(hours=1))))
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    recreated = factory.state.mappings[(rule().id, series().reference)].destination
+    assert recreated != destination
+    cancelled = calendars.get_occurrence(recreated, week_start(1))
+    assert cancelled is not None and cancelled.status is EventStatus.CANCELLED
+    moved = calendars.get_occurrence(recreated, week_start(2))
+    assert (
+        moved is not None
+        and moved.time == occurrence(series(), 2, moved_by=timedelta(hours=1)).time
+    )
+
+
+def test_occurrence_reverification_never_holds_the_database_write_lock(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    locked: list[str] = []
+
+    class ProbingCalendars(FakeCalendars):
+        def get_occurrence(
+            self, series: EventRef, original_start: OccurrenceStart
+        ) -> CalendarEvent | None:
+            probe = sqlite3.connect(database, timeout=0)
+            try:
+                probe.execute("BEGIN IMMEDIATE")
+                probe.rollback()
+            except sqlite3.OperationalError as error:
+                locked.append(str(error))
+            finally:
+                probe.close()
+            return super().get_occurrence(series, original_start)
+
+    calendars = ProbingCalendars()
+    calendars.put(series(), starts=STARTS)
+    calendars.put(occurrence(series(), 1, moved_by=timedelta(hours=1)))
+    calendars.put(occurrence(series(), 2, status=EventStatus.CANCELLED))
+    sync_use_case(factory, calendars).execute(rule().id)
+    calendars.report(
+        calendars.put(replace(series(), revision="series-revision-2", title="Renamed"))
+    )
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert locked == []
+
+
+def test_exception_of_an_unreadable_unmapped_series_is_skipped_not_blocked() -> None:
+    calendars = FakeCalendars()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    orphan = occurrence(series("elsewhere"), 1, status=EventStatus.CANCELLED)
+    calendars.report(orphan)
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.conflicts == 0
+    assert factory.state.audit[-1].reason == SyncReason.SERIES_NOT_SYNCHRONIZED.value
+    assert calendars.writes == []

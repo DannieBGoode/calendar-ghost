@@ -48,7 +48,12 @@ def test_preview_validation_waits_for_the_rule_write_lock() -> None:
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.DRAFT)
     locks = RuleLocks()
     preview = PreviewSyncRule(
-        unit_of_work, FakeCalendarProvider(event()), EventProjector(), FixedClock(), locks
+        unit_of_work,
+        FakeCalendarProvider(event()),
+        EventProjector(),
+        FixedClock(),
+        SyncDecisionService(EventProjector(), ProjectionFingerprinter()),
+        locks,
     )
 
     assert _blocks_until_released(locks, lambda: preview.execute(rule().id))

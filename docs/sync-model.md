@@ -51,9 +51,9 @@ keyed by its original start. Destination occurrences are resolved through the pr
 and original start (`events.instances(originalStart=...)`), never by constructing identifiers.
 
 Within a batch, series masters are processed before occurrence exceptions. An exception whose series
-is not yet mapped loads the series and creates it first; an exception of a managed, ineligible, or
-cancelled series is ignored, so metadata-less cancelled instances never become sources of a reverse
-rule.
+is not yet mapped loads the series and creates it first; an exception of a managed, ineligible,
+cancelled, or never-mapped missing series is ignored, so metadata-less cancelled instances never
+become sources of a reverse rule. A mapped series that the source no longer returns is a Conflict.
 
 | Source change | Destination behavior |
 | --- | --- |

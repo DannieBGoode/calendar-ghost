@@ -87,8 +87,10 @@ source series, Occurrence Start, source revision, and action. Every write uses
 Within each source batch, series masters and single events are processed before occurrence
 exceptions. When an exception's series has no Series Mapping, the application loads the source
 series and decides it first; if the series is eligible it is created, then the exception is
-applied. If the series is ineligible the exception is ignored. If the series cannot be loaded the
-run fails before any occurrence write and the cursors do not advance.
+applied. If the series is ineligible the exception is ignored. A provider failure while loading the
+series fails the run before any occurrence write, and the cursors do not advance. A series the
+provider reports as absent is ignored when this rule never mapped it (`series_not_synchronized`),
+and is a Conflict (`source_unverifiable`) with no write when it is mapped.
 
 Every occurrence write, cancellation, restoration, and mapping retirement is preceded by the same
 stop check as single-event writes: if the rule was paused, edited, or removed during the run, the
@@ -157,9 +159,11 @@ identical recurrence lines and time zone produce identical expansion, so the mas
 recorded exceptions are sufficient evidence. The recorded reconciliation outcome keeps
 `checked_mappings` as the number of Event Mappings and includes occurrence drift in `drift`.
 
-If the provider cannot restore a single cancelled instance, the application recreates the
-destination series under the existing Series Mapping identity and re-applies its Occurrence
-Mappings.
+Restoring a cancelled destination occurrence patches it back to `confirmed`. If the provider
+rejects the restore, the permanent provider failure stops the run and opens an incident rather than
+deleting and recreating the series; this provider behavior must be confirmed against a test
+calendar before release. When a repair recreates or rewrites a destination series, every
+Occurrence Mapping of that series is re-applied in the same run.
 
 ### Audit evidence
 

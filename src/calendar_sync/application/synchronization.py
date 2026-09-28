@@ -215,10 +215,13 @@ class ExecuteSyncRule:
         assert identity is not None
         series_ref = EventRef(run.rule.source, identity.series_event_id)
         source_series = self.provider.get_event(series_ref)
-        if source_series is None:
-            self._record_unverifiable(run, exception.reference, None)
-            return
         series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
+        if source_series is None:
+            if series_mapping is None:
+                self._record_skipped_occurrence(run, exception)
+            else:
+                self._record_unverifiable(run, exception.reference, series_mapping.destination)
+            return
         if series_mapping is None and series_ref not in run.handled:
             self._synchronize_event(
                 run, source_series, destination_loaded=False, actual_destination=None
@@ -264,8 +267,27 @@ class ExecuteSyncRule:
         )
 
     def _repair_series(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
+        if source_series.reference in run.repaired:
+            return
+        run.repaired.add(source_series.reference)
+        # Cascading re-applies every recorded occurrence if the repair recreated the series.
         self._synchronize_event(
-            run, source_series, destination_loaded=False, actual_destination=None, cascade=False
+            run, source_series, destination_loaded=False, actual_destination=None
+        )
+
+    def _record_skipped_occurrence(self, run: SyncRunContext, exception: CalendarEvent) -> None:
+        """An exception of a series this rule never projected has nothing to protect."""
+        run.counts[SyncAction.IGNORE] += 1
+        run.uow.audit.append(
+            AuditEntry(
+                occurred_at=self.clock.now(),
+                rule_id=run.rule.id,
+                action=SyncAction.IGNORE.value,
+                outcome=OUTCOMES[SyncAction.IGNORE],
+                source_event_id=exception.reference.event_id.value,
+                reason=SyncReason.SERIES_NOT_SYNCHRONIZED.value,
+                run_id=run.run_id,
+            )
         )
 
     def _record_unverifiable(
@@ -292,7 +314,6 @@ class ExecuteSyncRule:
         *,
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
-        cascade: bool = True,
     ) -> None:
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
@@ -305,8 +326,7 @@ class ExecuteSyncRule:
         # Occurrence re-verification takes the write lock per occurrence, so it runs outside it.
         series_changed = decision.action in {SyncAction.CREATE, SyncAction.UPDATE}
         if (
-            cascade
-            and mapping is not None
+            mapping is not None
             and decision.action is not SyncAction.DELETE
             and (series_changed or (run.reproject and decision.action is SyncAction.IGNORE))
         ):
@@ -390,6 +410,7 @@ class ExecuteSyncRule:
                 run_id=run.run_id,
             )
         )
+        uow.commit()
         return mapping, decision
 
     @staticmethod
