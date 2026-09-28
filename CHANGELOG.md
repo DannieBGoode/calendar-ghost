@@ -48,6 +48,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Incremental synchronization no longer projects single events that ended before the 30-day window and were never synced. Google's change feed reports edits to events of any age, which could copy events from years ago; these are now skipped with the reason `before_sync_window`, while already-synced events keep updating.
 - Recurring events excluded by the pre-alpha policy are recorded as skipped instead of as conflicts, so they no longer appear as blocked; existing entries are shown as skipped as well.
 - Google OAuth callbacks now support local HTTP development, preserve PKCE verification across redirects, and recover cleanly when Calendar permissions are declined.
 - Activity request failures, empty activity, and low-contrast actions now have distinct, accessible interface states.

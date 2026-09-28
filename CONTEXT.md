@@ -119,7 +119,7 @@ The source-event range inspected when a rule is first enabled: events ending wit
 _Avoid_: History limit, retention period
 
 **Incremental Sync**:
-Synchronization of provider-reported changes after the initial sync window has completed successfully.
+Synchronization of provider-reported changes after the initial sync window has completed successfully. Provider feeds report changes to events of any age; an unmapped single event that ended before the rolling window start is skipped, while mapped events stay current.
 _Avoid_: Delta import, partial sync
 
 **Scheduled Sync**:

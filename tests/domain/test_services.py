@@ -2,6 +2,7 @@ from dataclasses import replace
 from datetime import timedelta, timezone
 
 from calendar_sync.domain.model import (
+    AllDayRange,
     AllDaySyncPolicy,
     CalendarEvent,
     DriftKind,
@@ -144,6 +145,40 @@ def test_managed_projection_cannot_become_a_source() -> None:
 
     assert decision.action is SyncAction.IGNORE
     assert decision.reason is SyncReason.MANAGED_PROJECTION_SOURCE
+
+
+def test_unmapped_single_event_that_ended_before_the_window_is_skipped() -> None:
+    window_start = NOW - timedelta(days=30)
+    old = replace(
+        event(),
+        time=TimedInterval(window_start - timedelta(hours=2), window_start - timedelta(hours=1)),
+    )
+    old_all_day = replace(
+        all_day_event(),
+        time=AllDayRange(
+            window_start.date() - timedelta(days=2), window_start.date() - timedelta(days=1)
+        ),
+    )
+
+    for source in (old, old_all_day):
+        decision = decisions.decide(rule(), source, None, None, window_start=window_start)
+        assert decision.action is SyncAction.IGNORE
+        assert decision.reason is SyncReason.BEFORE_SYNC_WINDOW
+
+
+def test_window_does_not_block_mapped_events_or_series_that_began_before_it() -> None:
+    window_start = NOW + timedelta(days=1)
+    source = replace(event(), revision="revision-2")
+    destination = _destination(event())
+    old_series = replace(event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)))
+
+    mapped = decisions.decide(
+        rule(), source, _mapping(event(), destination), destination, window_start=window_start
+    )
+    series_start = decisions.decide(rule(), old_series, None, None, window_start=window_start)
+
+    assert mapped.action is SyncAction.UPDATE
+    assert series_start.action is SyncAction.CREATE
 
 
 def test_recurring_series_is_created_as_a_series() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.ports import UnitOfWork
@@ -17,6 +18,8 @@ class SyncRunContext:
     rule: SyncRule
     run_id: str
     counts: dict[SyncAction, int]
+    window_start: datetime
+    """Unmapped single events that ended before this instant are not projected."""
     reproject: bool = False
     handled: set[EventRef] = field(default_factory=set)
     repaired: set[EventRef] = field(default_factory=set)

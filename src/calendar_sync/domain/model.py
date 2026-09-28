@@ -208,6 +208,14 @@ class CalendarEvent:
     def is_all_day(self) -> bool:
         return isinstance(self.time, AllDayRange)
 
+    def ended_before(self, instant: datetime) -> bool:
+        """Whether a single event ended before an instant; a series spans its whole expansion."""
+        if self.recurrence is not None or self.time is None:
+            return False
+        if isinstance(self.time, AllDayRange):
+            return self.time.ends_before < instant.date()
+        return self.time.ends_at < instant
+
 
 @dataclass(frozen=True, slots=True)
 class EventProjection:
@@ -352,6 +360,7 @@ class SyncReason(StrEnum):
     RECURRING_UNSUPPORTED = "recurring_unsupported"
     CANCELLED_WITHOUT_PROJECTION = "cancelled_without_projection"
     ALL_DAY_EXCLUDED = "all_day_excluded"
+    BEFORE_SYNC_WINDOW = "before_sync_window"
     MAPPING_INCONSISTENT = "mapping_inconsistent"
     DESTINATION_IDENTITY_INCONSISTENT = "destination_identity_inconsistent"
     DESTINATION_OWNERSHIP_INCONSISTENT = "destination_ownership_inconsistent"

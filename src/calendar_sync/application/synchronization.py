@@ -113,7 +113,7 @@ class ExecuteSyncRule:
                 rule.destination, destination_cursor, cutoff
             )
             counts = {action: 0 for action in SyncAction}
-            run = SyncRunContext(uow, rule, run_id, counts, reproject)
+            run = SyncRunContext(uow, rule, run_id, counts, cutoff, reproject)
 
             # Series masters first, so an exception can always resolve its parent's mapping.
             for source_event in sorted(
@@ -349,7 +349,9 @@ class ExecuteSyncRule:
             fetched = self.provider.get_event(mapping.destination)
             # Google keeps deleted events as metadata-less cancellations; treat them as missing.
             actual = None if fetched is None or fetched.status is EventStatus.CANCELLED else fetched
-        decision = self.decisions.decide(rule, source_event, mapping, actual)
+        decision = self.decisions.decide(
+            rule, source_event, mapping, actual, window_start=run.window_start
+        )
         run.counts[decision.action] += 1
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action
