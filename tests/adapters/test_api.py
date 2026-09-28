@@ -1118,3 +1118,15 @@ def test_rule_management_entries_are_listed_as_changes(tmp_path: Path) -> None:
         "policy_changed",
     ]
     assert {entry["category"] for entry in changed} == {"changed"}
+
+
+def test_sync_reconciliation_and_removal_share_one_rule_lock(tmp_path: Path) -> None:
+    container = build_container(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+
+    assert container.execute_sync_rule is not None
+    assert container.reconcile_sync_rule is not None
+    assert container.execute_sync_rule.locks is container.rule_locks
+    assert container.reconcile_sync_rule.locks is container.rule_locks
+    assert container.remove_sync_rule.locks is container.rule_locks

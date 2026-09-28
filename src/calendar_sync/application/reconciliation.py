@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     CalendarProvider,
     Clock,
@@ -31,8 +32,13 @@ class ReconcileSyncRule:
     projector: EventProjector
     reconciliation: ReconciliationService
     clock: Clock
+    locks: RuleLocks = field(default_factory=RuleLocks)
 
     def execute(self, rule_id: SyncRuleId) -> ReconciliationReport:
+        with self.locks.for_rule(rule_id):
+            return self._execute_serialized(rule_id)
+
+    def _execute_serialized(self, rule_id: SyncRuleId) -> ReconciliationReport:
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
             if rule is None:
