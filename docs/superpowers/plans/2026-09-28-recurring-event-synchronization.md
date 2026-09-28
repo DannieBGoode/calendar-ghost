@@ -104,13 +104,24 @@ def test_only_modified_occurrence_mappings_carry_a_fingerprint() -> None:
 
     with pytest.raises(DomainValidationError):
         OccurrenceMapping(
-            OccurrenceMappingId("o-1"), EventMappingId("m-1"), start, source, destination,
-            OccurrenceState.MODIFIED, "r-1",
+            OccurrenceMappingId("o-1"),
+            EventMappingId("m-1"),
+            start,
+            source,
+            destination,
+            OccurrenceState.MODIFIED,
+            "r-1",
         )
     with pytest.raises(DomainValidationError):
         OccurrenceMapping(
-            OccurrenceMappingId("o-1"), EventMappingId("m-1"), start, source, destination,
-            OccurrenceState.CANCELLED, "r-1", ProjectionFingerprint("f"),
+            OccurrenceMappingId("o-1"),
+            EventMappingId("m-1"),
+            start,
+            source,
+            destination,
+            OccurrenceState.CANCELLED,
+            "r-1",
+            ProjectionFingerprint("f"),
         )
 ```
 
@@ -199,10 +210,9 @@ class OccurrenceIdentity:
     original_start: OccurrenceStart
 
     def __post_init__(self) -> None:
-        if (
-            isinstance(self.original_start, datetime)
-            and self.original_start.utcoffset() != timedelta(0)
-        ):
+        if isinstance(
+            self.original_start, datetime
+        ) and self.original_start.utcoffset() != timedelta(0):
             raise DomainValidationError("occurrence original start must be normalized to UTC")
 ```
 
@@ -262,38 +272,35 @@ In `src/calendar_sync/domain/services.py`, add `UTC` to the datetime import and 
 fingerprint time serialization:
 
 ```python
-    def fingerprint(self, projection: EventProjection) -> ProjectionFingerprint:
-        payload = {
-            "time": self._serialize_time(
-                projection.time, recurring=projection.recurrence is not None
-            ),
-            "title": projection.title,
-            "description": projection.description,
-            "location": projection.location,
-            "recurrence": projection.recurrence.lines if projection.recurrence else None,
-        }
-        encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        return ProjectionFingerprint(hashlib.sha256(encoded.encode()).hexdigest())
+def fingerprint(self, projection: EventProjection) -> ProjectionFingerprint:
+    payload = {
+        "time": self._serialize_time(projection.time, recurring=projection.recurrence is not None),
+        "title": projection.title,
+        "description": projection.description,
+        "location": projection.location,
+        "recurrence": projection.recurrence.lines if projection.recurrence else None,
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return ProjectionFingerprint(hashlib.sha256(encoded.encode()).hexdigest())
 
-    @staticmethod
-    def _serialize_time(
-        value: TimedInterval | AllDayRange, *, recurring: bool
-    ) -> dict[str, str]:
-        if isinstance(value, TimedInterval):
-            serialized = {
-                "kind": "timed",
-                "starts_at": value.starts_at.astimezone(UTC).isoformat(),
-                "ends_at": value.ends_at.astimezone(UTC).isoformat(),
-            }
-            # Only a series expands in its zone; single instants are zone-independent.
-            if recurring and value.time_zone is not None:
-                serialized["time_zone"] = value.time_zone
-            return serialized
-        return {
-            "kind": "all_day",
-            "starts_on": _serialize_temporal(value.starts_on),
-            "ends_before": _serialize_temporal(value.ends_before),
+
+@staticmethod
+def _serialize_time(value: TimedInterval | AllDayRange, *, recurring: bool) -> dict[str, str]:
+    if isinstance(value, TimedInterval):
+        serialized = {
+            "kind": "timed",
+            "starts_at": value.starts_at.astimezone(UTC).isoformat(),
+            "ends_at": value.ends_at.astimezone(UTC).isoformat(),
         }
+        # Only a series expands in its zone; single instants are zone-independent.
+        if recurring and value.time_zone is not None:
+            serialized["time_zone"] = value.time_zone
+        return serialized
+    return {
+        "kind": "all_day",
+        "starts_on": _serialize_temporal(value.starts_on),
+        "ends_before": _serialize_temporal(value.ends_before),
+    }
 ```
 
 In `src/calendar_sync/infrastructure/google/translation.py`, keep it compiling by replacing the
@@ -369,7 +376,11 @@ def week_start(week: int) -> datetime:
 
 
 def instance_id(series_id: str, start: OccurrenceStart) -> str:
-    token = start.strftime("%Y%m%dT%H%M%SZ") if isinstance(start, datetime) else start.strftime("%Y%m%d")
+    token = (
+        start.strftime("%Y%m%dT%H%M%SZ")
+        if isinstance(start, datetime)
+        else start.strftime("%Y%m%d")
+    )
     return f"{series_id}_{token}"
 
 
@@ -504,7 +515,9 @@ def busy_instance(**changes: object) -> CalendarEvent:
     return replace(instance, description="", location="", **changes)  # type: ignore[arg-type]
 
 
-def recorded(state: OccurrenceState = OccurrenceState.MODIFIED, revision: str = "occurrence-revision-1") -> OccurrenceMapping:
+def recorded(
+    state: OccurrenceState = OccurrenceState.MODIFIED, revision: str = "occurrence-revision-1"
+) -> OccurrenceMapping:
     return OccurrenceMapping(
         OccurrenceMappingId("occurrence-mapping"),
         SERIES_MAPPING.id,
@@ -573,7 +586,9 @@ def test_moved_occurrence_updates_destination_with_busy_title_only() -> None:
 
 
 def test_details_rule_copies_occurrence_details() -> None:
-    details = replace(rule(), transformation=TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS))
+    details = replace(
+        rule(), transformation=TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+    )
     moved = occurrence(SOURCE, 1, title="Offsite")
 
     decision = decide(moved, busy_instance(), sync_rule=details)
@@ -687,7 +702,9 @@ def test_destination_series_owned_by_another_rule_blocks_the_write() -> None:
 
 
 def test_destination_occurrence_of_another_series_blocks_the_write() -> None:
-    other_parent = replace(DESTINATION, reference=EventRef(rule().destination, EventId("unrelated")))
+    other_parent = replace(
+        DESTINATION, reference=EventRef(rule().destination, EventId("unrelated"))
+    )
 
     decision = decide(occurrence(SOURCE, 1), occurrence(other_parent, 1))
 
@@ -778,107 +795,101 @@ Add to `SyncDecisionService` (extend imports with `OccurrenceMapping`, `Occurren
 `ManagedOrigin`):
 
 ```python
-    def decide_occurrence(
-        self,
-        rule: SyncRule,
-        source_series: CalendarEvent,
-        series_mapping: EventMapping | None,
-        original_start: OccurrenceStart,
-        source_occurrence: CalendarEvent | None,
-        occurrence_mapping: OccurrenceMapping | None,
-        destination_series: CalendarEvent | None,
-        destination_occurrence: CalendarEvent | None,
-        *,
-        destination_reported: bool = False,
-    ) -> SyncDecision:
-        """Decide one occurrence of a mapped series; `None` occurrences mean "no such occurrence"."""
-        if source_series.reference.calendar != rule.source:
-            return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
-        if source_series.managed_origin is not None:
-            return SyncDecision(SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE)
-        if series_mapping is None or source_series.status is EventStatus.CANCELLED:
-            return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
-        if (
-            series_mapping.rule_id != rule.id
-            or series_mapping.source != source_series.reference
-            or series_mapping.destination.calendar != rule.destination
-            or (
-                occurrence_mapping is not None
-                and (
-                    occurrence_mapping.series_mapping_id != series_mapping.id
-                    or occurrence_mapping.original_start != original_start
-                )
-            )
-            or (
-                source_occurrence is not None
-                and not _is_occurrence_of(source_occurrence, source_series.reference, original_start)
-            )
-        ):
-            return SyncDecision(SyncAction.CONFLICT, SyncReason.MAPPING_INCONSISTENT)
-        if (
-            destination_series is None
-            or destination_series.status is EventStatus.CANCELLED
-            or destination_series.reference != series_mapping.destination
-        ):
-            return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
-        if not _owned_by(destination_series.managed_origin, rule, source_series.reference):
-            return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT)
-        if destination_occurrence is not None:
-            if not _is_occurrence_of(
-                destination_occurrence, series_mapping.destination, original_start
-            ):
-                return SyncDecision(
-                    SyncAction.CONFLICT, SyncReason.DESTINATION_IDENTITY_INCONSISTENT
-                )
-            # Google omits metadata on cancelled instances; the parent series proves ownership.
-            if destination_occurrence.managed_origin is not None and not _owned_by(
-                destination_occurrence.managed_origin, rule, source_series.reference
-            ):
-                return SyncDecision(
-                    SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
-                )
-
-        destination_absent = (
-            destination_occurrence is None
-            or destination_occurrence.status is EventStatus.CANCELLED
-        )
-        if source_occurrence is None:
-            if destination_absent:
-                return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_RETIRED)
-            return SyncDecision(SyncAction.DELETE, SyncReason.OCCURRENCE_REMOVED_FROM_SERIES)
-        excluded_all_day = (
-            source_occurrence.is_all_day
-            and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE
-        )
-        if source_occurrence.status is EventStatus.CANCELLED or excluded_all_day:
-            if destination_absent:
-                return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_ALREADY_CANCELLED)
-            reason = (
-                SyncReason.OCCURRENCE_CANCELLED
-                if source_occurrence.status is EventStatus.CANCELLED
-                else SyncReason.ALL_DAY_EXCLUDED_REMOVED
-            )
-            return SyncDecision(SyncAction.DELETE, reason)
-        if destination_occurrence is None:
-            return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
-
-        projection = self._projector.project(source_occurrence, rule)
-        source_unchanged = (
+def decide_occurrence(
+    self,
+    rule: SyncRule,
+    source_series: CalendarEvent,
+    series_mapping: EventMapping | None,
+    original_start: OccurrenceStart,
+    source_occurrence: CalendarEvent | None,
+    occurrence_mapping: OccurrenceMapping | None,
+    destination_series: CalendarEvent | None,
+    destination_occurrence: CalendarEvent | None,
+    *,
+    destination_reported: bool = False,
+) -> SyncDecision:
+    """Decide one occurrence of a mapped series; `None` occurrences mean "no such occurrence"."""
+    if source_series.reference.calendar != rule.source:
+        return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
+    if source_series.managed_origin is not None:
+        return SyncDecision(SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE)
+    if series_mapping is None or source_series.status is EventStatus.CANCELLED:
+        return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
+    if (
+        series_mapping.rule_id != rule.id
+        or series_mapping.source != source_series.reference
+        or series_mapping.destination.calendar != rule.destination
+        or (
             occurrence_mapping is not None
-            and occurrence_mapping.source_revision == source_occurrence.revision
+            and (
+                occurrence_mapping.series_mapping_id != series_mapping.id
+                or occurrence_mapping.original_start != original_start
+            )
         )
-        changed = (
-            SyncReason.OCCURRENCE_DRIFT_REPAIRED
-            if source_unchanged or destination_reported
-            else SyncReason.OCCURRENCE_CHANGED
+        or (
+            source_occurrence is not None
+            and not _is_occurrence_of(source_occurrence, source_series.reference, original_start)
         )
-        if destination_occurrence.status is EventStatus.CANCELLED:
-            return SyncDecision(SyncAction.UPDATE, changed, projection)
-        expected = self._fingerprinter.fingerprint(projection)
-        actual = self._fingerprinter.fingerprint(self._as_projection(destination_occurrence))
-        if expected == actual and (occurrence_mapping is None or source_unchanged):
-            return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CURRENT, projection)
+    ):
+        return SyncDecision(SyncAction.CONFLICT, SyncReason.MAPPING_INCONSISTENT)
+    if (
+        destination_series is None
+        or destination_series.status is EventStatus.CANCELLED
+        or destination_series.reference != series_mapping.destination
+    ):
+        return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
+    if not _owned_by(destination_series.managed_origin, rule, source_series.reference):
+        return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT)
+    if destination_occurrence is not None:
+        if not _is_occurrence_of(
+            destination_occurrence, series_mapping.destination, original_start
+        ):
+            return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_IDENTITY_INCONSISTENT)
+        # Google omits metadata on cancelled instances; the parent series proves ownership.
+        if destination_occurrence.managed_origin is not None and not _owned_by(
+            destination_occurrence.managed_origin, rule, source_series.reference
+        ):
+            return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT)
+
+    destination_absent = (
+        destination_occurrence is None or destination_occurrence.status is EventStatus.CANCELLED
+    )
+    if source_occurrence is None:
+        if destination_absent:
+            return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_RETIRED)
+        return SyncDecision(SyncAction.DELETE, SyncReason.OCCURRENCE_REMOVED_FROM_SERIES)
+    excluded_all_day = (
+        source_occurrence.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE
+    )
+    if source_occurrence.status is EventStatus.CANCELLED or excluded_all_day:
+        if destination_absent:
+            return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_ALREADY_CANCELLED)
+        reason = (
+            SyncReason.OCCURRENCE_CANCELLED
+            if source_occurrence.status is EventStatus.CANCELLED
+            else SyncReason.ALL_DAY_EXCLUDED_REMOVED
+        )
+        return SyncDecision(SyncAction.DELETE, reason)
+    if destination_occurrence is None:
+        return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
+
+    projection = self._projector.project(source_occurrence, rule)
+    source_unchanged = (
+        occurrence_mapping is not None
+        and occurrence_mapping.source_revision == source_occurrence.revision
+    )
+    changed = (
+        SyncReason.OCCURRENCE_DRIFT_REPAIRED
+        if source_unchanged or destination_reported
+        else SyncReason.OCCURRENCE_CHANGED
+    )
+    if destination_occurrence.status is EventStatus.CANCELLED:
         return SyncDecision(SyncAction.UPDATE, changed, projection)
+    expected = self._fingerprinter.fingerprint(projection)
+    actual = self._fingerprinter.fingerprint(self._as_projection(destination_occurrence))
+    if expected == actual and (occurrence_mapping is None or source_unchanged):
+        return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CURRENT, projection)
+    return SyncDecision(SyncAction.UPDATE, changed, projection)
 ```
 
 Module-level helpers in `services.py`:
@@ -939,8 +950,12 @@ def _series_reconciliation_inputs():  # type: ignore[no-untyped-def]
     )
     destination = replace(destination, description="", location="")
     mapping = EventMapping(
-        EventMappingId("series-mapping"), rule().id, source.reference, destination.reference,
-        source.revision, ProjectionFingerprint("f"),
+        EventMappingId("series-mapping"),
+        rule().id,
+        source.reference,
+        destination.reference,
+        source.revision,
+        ProjectionFingerprint("f"),
     )
     expected = {source.reference: EventProjector().project(source, rule())}
     return source, destination, mapping, expected
@@ -948,8 +963,13 @@ def _series_reconciliation_inputs():  # type: ignore[no-untyped-def]
 
 def _occurrence_mapping(mapping: EventMapping, destination: CalendarEvent, state: OccurrenceState):  # type: ignore[no-untyped-def]
     return OccurrenceMapping(
-        OccurrenceMappingId("o-1"), mapping.id, week_start(1),
-        occurrence(series(), 1).reference, occurrence(destination, 1).reference, state, "r-1",
+        OccurrenceMappingId("o-1"),
+        mapping.id,
+        week_start(1),
+        occurrence(series(), 1).reference,
+        occurrence(destination, 1).reference,
+        state,
+        "r-1",
         ProjectionFingerprint("f") if state is OccurrenceState.MODIFIED else None,
     )
 
@@ -960,7 +980,10 @@ def test_reconciliation_reports_edited_and_resurrected_occurrences() -> None:
     service = ReconciliationService(ProjectionFingerprinter())
 
     report = service.reconcile(
-        rule(), [mapping], expected, {destination.reference: destination, edited.reference: edited},
+        rule(),
+        [mapping],
+        expected,
+        {destination.reference: destination, edited.reference: edited},
         [
             OccurrenceCheck(
                 _occurrence_mapping(mapping, destination, OccurrenceState.MODIFIED),
@@ -969,7 +992,10 @@ def test_reconciliation_reports_edited_and_resurrected_occurrences() -> None:
                 edited,
             ),
             OccurrenceCheck(
-                replace(_occurrence_mapping(mapping, destination, OccurrenceState.CANCELLED), original_start=week_start(2)),
+                replace(
+                    _occurrence_mapping(mapping, destination, OccurrenceState.CANCELLED),
+                    original_start=week_start(2),
+                ),
                 destination.reference,
                 None,
                 replace(occurrence(destination, 2, title="Busy"), description="", location=""),
@@ -988,7 +1014,10 @@ def test_reconciliation_reports_a_missing_occurrence() -> None:
     source, destination, mapping, expected = _series_reconciliation_inputs()
 
     report = ReconciliationService(ProjectionFingerprinter()).reconcile(
-        rule(), [mapping], expected, {destination.reference: destination},
+        rule(),
+        [mapping],
+        expected,
+        {destination.reference: destination},
         [
             OccurrenceCheck(
                 _occurrence_mapping(mapping, destination, OccurrenceState.MODIFIED),
@@ -1010,7 +1039,9 @@ def test_unmapped_managed_exception_of_a_mapped_series_is_incorrect_not_unexpect
     )
 
     report = ReconciliationService(ProjectionFingerprinter()).reconcile(
-        rule(), [mapping], expected,
+        rule(),
+        [mapping],
+        expected,
         {destination.reference: destination, stray.reference: stray},
     )
 
@@ -1045,42 +1076,40 @@ In `ReconciliationService.reconcile`, add the parameter `occurrences: Iterable[O
 and, before the unexpected-destination loop:
 
 ```python
-        checked_occurrences: set[tuple[EventRef, OccurrenceStart]] = set()
-        for check in occurrences:
-            checked_occurrences.add((check.destination_series, check.mapping.original_start))
-            present = check.actual is not None and check.actual.status is EventStatus.CONFIRMED
-            if check.expected is None:
-                if present:
-                    drift.append(
-                        ReconciliationDrift(
-                            DriftKind.INCORRECT_PROJECTION,
-                            check.mapping.source,
-                            check.mapping.destination,
-                            "managed occurrence should be cancelled",
-                        )
-                    )
-            elif not present:
-                drift.append(
-                    ReconciliationDrift(
-                        DriftKind.MISSING,
-                        check.mapping.source,
-                        check.mapping.destination,
-                        "managed occurrence is missing",
-                    )
+checked_occurrences: set[tuple[EventRef, OccurrenceStart]] = set()
+for check in occurrences:
+    checked_occurrences.add((check.destination_series, check.mapping.original_start))
+    present = check.actual is not None and check.actual.status is EventStatus.CONFIRMED
+    if check.expected is None:
+        if present:
+            drift.append(
+                ReconciliationDrift(
+                    DriftKind.INCORRECT_PROJECTION,
+                    check.mapping.source,
+                    check.mapping.destination,
+                    "managed occurrence should be cancelled",
                 )
-            elif self._fingerprinter.fingerprint(
-                check.expected
-            ) != self._fingerprinter.fingerprint(
-                SyncDecisionService._as_projection(check.actual)  # type: ignore[arg-type]
-            ):
-                drift.append(
-                    ReconciliationDrift(
-                        DriftKind.INCORRECT_PROJECTION,
-                        check.mapping.source,
-                        check.mapping.destination,
-                        "managed occurrence differs from source authority",
-                    )
-                )
+            )
+    elif not present:
+        drift.append(
+            ReconciliationDrift(
+                DriftKind.MISSING,
+                check.mapping.source,
+                check.mapping.destination,
+                "managed occurrence is missing",
+            )
+        )
+    elif self._fingerprinter.fingerprint(check.expected) != self._fingerprinter.fingerprint(
+        SyncDecisionService._as_projection(check.actual)  # type: ignore[arg-type]
+    ):
+        drift.append(
+            ReconciliationDrift(
+                DriftKind.INCORRECT_PROJECTION,
+                check.mapping.source,
+                check.mapping.destination,
+                "managed occurrence differs from source authority",
+            )
+        )
 ```
 
 Replace the unexpected-destination loop with:
@@ -1151,19 +1180,27 @@ OccurrenceState` and `from tests.helpers import week_start`; keep existing helpe
 ```python
 def _series_mapping() -> EventMapping:
     return EventMapping(
-        EventMappingId("series-mapping"), rule().id,
+        EventMappingId("series-mapping"),
+        rule().id,
         EventRef(rule().source, EventId("source-series")),
         EventRef(rule().destination, EventId("projection-1")),
-        "r-1", ProjectionFingerprint("f"),
+        "r-1",
+        ProjectionFingerprint("f"),
     )
 
 
-def _occurrence(start: datetime | date, state: OccurrenceState = OccurrenceState.MODIFIED) -> OccurrenceMapping:
+def _occurrence(
+    start: datetime | date, state: OccurrenceState = OccurrenceState.MODIFIED
+) -> OccurrenceMapping:
     return OccurrenceMapping(
-        OccurrenceMappingId(f"o-{start}"), EventMappingId("series-mapping"), start,
+        OccurrenceMappingId(f"o-{start}"),
+        EventMappingId("series-mapping"),
+        start,
         EventRef(rule().source, EventId(f"source-series_{start}")),
         EventRef(rule().destination, EventId(f"projection-1_{start}")),
-        state, "r-1", ProjectionFingerprint("f") if state is OccurrenceState.MODIFIED else None,
+        state,
+        "r-1",
+        ProjectionFingerprint("f") if state is OccurrenceState.MODIFIED else None,
     )
 
 
@@ -1178,12 +1215,16 @@ def test_occurrence_mappings_round_trip_timed_and_all_day_starts(tmp_path: Path)
         uow.mappings.save(_series_mapping())
         uow.occurrences.save(timed)
         uow.occurrences.save(all_day)
-        uow.occurrences.save(replace(timed, state=OccurrenceState.CANCELLED, projection_fingerprint=None))
+        uow.occurrences.save(
+            replace(timed, state=OccurrenceState.CANCELLED, projection_fingerprint=None)
+        )
         uow.commit()
 
     with factory() as uow:
         stored = uow.occurrences.get(EventMappingId("series-mapping"), week_start(1))
-        assert stored == replace(timed, state=OccurrenceState.CANCELLED, projection_fingerprint=None)
+        assert stored == replace(
+            timed, state=OccurrenceState.CANCELLED, projection_fingerprint=None
+        )
         assert uow.occurrences.get(EventMappingId("series-mapping"), date(2026, 9, 15)) == all_day
         assert len(uow.occurrences.for_series(EventMappingId("series-mapping"))) == 2
 
@@ -1260,16 +1301,21 @@ from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFa
 from tests.helpers import rule, week_start
 
 SERIES = EventMapping(
-    EventMappingId("series-mapping"), rule().id,
+    EventMappingId("series-mapping"),
+    rule().id,
     EventRef(rule().source, EventId("source-series")),
     EventRef(rule().destination, EventId("projection-1")),
-    "r-1", ProjectionFingerprint("f"),
+    "r-1",
+    ProjectionFingerprint("f"),
 )
 OCCURRENCE = OccurrenceMapping(
-    OccurrenceMappingId("o-1"), SERIES.id, week_start(1),
+    OccurrenceMappingId("o-1"),
+    SERIES.id,
+    week_start(1),
     EventRef(rule().source, EventId("source-series_1")),
     EventRef(rule().destination, EventId("projection-1_1")),
-    OccurrenceState.CANCELLED, "r-1",
+    OccurrenceState.CANCELLED,
+    "r-1",
 )
 
 
@@ -1634,13 +1680,19 @@ def test_all_day_occurrence_keeps_its_original_date() -> None:
 
 def test_series_payload_writes_time_zone_and_single_payload_does_not() -> None:
     zoned = TimedInterval(
-        datetime(2026, 9, 1, 8, 0, tzinfo=UTC), datetime(2026, 9, 1, 9, 0, tzinfo=UTC), "Europe/Madrid"
+        datetime(2026, 9, 1, 8, 0, tzinfo=UTC),
+        datetime(2026, 9, 1, 9, 0, tzinfo=UTC),
+        "Europe/Madrid",
     )
     series_body = projection_payload(
         EventProjection(zoned, "Busy", recurrence=Recurrence(("RRULE:FREQ=WEEKLY",))),
-        SyncRuleId("rule-1"), event().reference, "key",
+        SyncRuleId("rule-1"),
+        event().reference,
+        "key",
     )
-    single_body = projection_payload(EventProjection(zoned, "Busy"), SyncRuleId("rule-1"), event().reference, "key")
+    single_body = projection_payload(
+        EventProjection(zoned, "Busy"), SyncRuleId("rule-1"), event().reference, "key"
+    )
 
     assert series_body["start"]["timeZone"] == "Europe/Madrid"
     assert series_body["end"]["timeZone"] == "Europe/Madrid"
@@ -1649,8 +1701,15 @@ def test_series_payload_writes_time_zone_and_single_payload_does_not() -> None:
 
 def test_occurrence_payload_records_the_original_start() -> None:
     body = projection_payload(
-        EventProjection(TimedInterval(datetime(2026, 9, 8, 8, 0, tzinfo=UTC), datetime(2026, 9, 8, 9, 0, tzinfo=UTC)), "Busy"),
-        SyncRuleId("rule-1"), event().reference, "key",
+        EventProjection(
+            TimedInterval(
+                datetime(2026, 9, 8, 8, 0, tzinfo=UTC), datetime(2026, 9, 8, 9, 0, tzinfo=UTC)
+            ),
+            "Busy",
+        ),
+        SyncRuleId("rule-1"),
+        event().reference,
+        "key",
         original_start=datetime(2026, 9, 8, 8, 0, tzinfo=UTC),
     )
 
@@ -1667,7 +1726,9 @@ SOURCE_EVENT_PROPERTY` from translation):
 ```python
 DESTINATION = endpoint("work-account", "work-calendar")
 SERIES = EventRef(DESTINATION, EventId("projection-1"))
-SOURCE_SERIES = EventRef(endpoint("personal-account", "personal-calendar"), EventId("source-series"))
+SOURCE_SERIES = EventRef(
+    endpoint("personal-account", "personal-calendar"), EventId("source-series")
+)
 START = datetime(2026, 9, 8, 8, 0, tzinfo=UTC)
 
 
@@ -1716,8 +1777,11 @@ def test_get_occurrence_resolves_through_instances_and_verifies_the_start() -> N
     assert resolved is not None
     assert resolved.occurrence is not None and resolved.occurrence.original_start == START
     events_api.instances.assert_called_once_with(
-        calendarId="work-calendar", eventId="projection-1",
-        originalStart="2026-09-08T08:00:00Z", showDeleted=True, maxResults=1,
+        calendarId="work-calendar",
+        eventId="projection-1",
+        originalStart="2026-09-08T08:00:00Z",
+        showDeleted=True,
+        maxResults=1,
     )
 
 
@@ -1764,7 +1828,10 @@ def test_write_occurrence_refuses_a_series_owned_by_another_rule() -> None:
 
     with pytest.raises(ProviderFailure) as failure:
         provider.write_occurrence(
-            SERIES, START, SOURCE_SERIES, SyncRuleId("rule-1"),
+            SERIES,
+            START,
+            SOURCE_SERIES,
+            SyncRuleId("rule-1"),
             EventProjection(TimedInterval(START, datetime(2026, 9, 8, 9, 0, tzinfo=UTC)), "Busy"),
             "key",
         )
@@ -1836,118 +1903,122 @@ Import `UTC` from datetime.
 In `ports.py` add the three protocol methods listed under Interfaces. In `provider.py` add:
 
 ```python
-    def get_occurrence(
-        self, series: EventRef, original_start: OccurrenceStart
-    ) -> CalendarEvent | None:
-        try:
-            response = (
-                self._service_for(series.calendar.connected_account_id)
-                .events()
-                .instances(
-                    calendarId=series.calendar.calendar_id.value,
-                    eventId=series.event_id.value,
-                    originalStart=format_occurrence_start(original_start),
-                    showDeleted=True,
-                    maxResults=1,
-                )
-                .execute()
+def get_occurrence(self, series: EventRef, original_start: OccurrenceStart) -> CalendarEvent | None:
+    try:
+        response = (
+            self._service_for(series.calendar.connected_account_id)
+            .events()
+            .instances(
+                calendarId=series.calendar.calendar_id.value,
+                eventId=series.event_id.value,
+                originalStart=format_occurrence_start(original_start),
+                showDeleted=True,
+                maxResults=1,
             )
-        except Exception as error:
-            if _status_code(error) in {404, 410}:
-                return None
-            raise _provider_failure(error) from error
-        for item in response.get("items", []):
-            candidate = to_domain_event(item, series.calendar)
-            # Never trust a positional result: the instance must name the requested start.
-            if (
-                candidate.occurrence is not None
-                and candidate.occurrence.series_event_id == series.event_id
-                and candidate.occurrence.original_start == original_start
-            ):
-                return candidate
-        return None
-
-    def write_occurrence(
-        self,
-        destination_series: EventRef,
-        original_start: OccurrenceStart,
-        source_series: EventRef,
-        rule_id: SyncRuleId,
-        projection: EventProjection,
-        operation_key: str,
-    ) -> CalendarEvent:
-        instance = self._owned_occurrence(destination_series, original_start, source_series, rule_id)
-        if instance is None:
-            raise ProviderFailure(
-                ProviderFailureKind.PERMANENT, "Google occurrence could not be resolved"
-            )
-        body = projection_payload(
-            projection, rule_id, source_series, operation_key, original_start=original_start
+            .execute()
         )
-        body["status"] = "confirmed"
-        try:
-            payload = (
-                self._service_for(destination_series.calendar.connected_account_id)
-                .events()
-                .patch(
-                    calendarId=destination_series.calendar.calendar_id.value,
-                    eventId=instance.reference.event_id.value,
-                    body=body,
-                    sendUpdates="none",
-                )
-                .execute()
+    except Exception as error:
+        if _status_code(error) in {404, 410}:
+            return None
+        raise _provider_failure(error) from error
+    for item in response.get("items", []):
+        candidate = to_domain_event(item, series.calendar)
+        # Never trust a positional result: the instance must name the requested start.
+        if (
+            candidate.occurrence is not None
+            and candidate.occurrence.series_event_id == series.event_id
+            and candidate.occurrence.original_start == original_start
+        ):
+            return candidate
+    return None
+
+
+def write_occurrence(
+    self,
+    destination_series: EventRef,
+    original_start: OccurrenceStart,
+    source_series: EventRef,
+    rule_id: SyncRuleId,
+    projection: EventProjection,
+    operation_key: str,
+) -> CalendarEvent:
+    instance = self._owned_occurrence(destination_series, original_start, source_series, rule_id)
+    if instance is None:
+        raise ProviderFailure(
+            ProviderFailureKind.PERMANENT, "Google occurrence could not be resolved"
+        )
+    body = projection_payload(
+        projection, rule_id, source_series, operation_key, original_start=original_start
+    )
+    body["status"] = "confirmed"
+    try:
+        payload = (
+            self._service_for(destination_series.calendar.connected_account_id)
+            .events()
+            .patch(
+                calendarId=destination_series.calendar.calendar_id.value,
+                eventId=instance.reference.event_id.value,
+                body=body,
+                sendUpdates="none",
             )
-            return to_domain_event(payload, destination_series.calendar)
-        except Exception as error:
+            .execute()
+        )
+        return to_domain_event(payload, destination_series.calendar)
+    except Exception as error:
+        raise _provider_failure(error) from error
+
+
+def cancel_occurrence(
+    self,
+    destination_series: EventRef,
+    original_start: OccurrenceStart,
+    source_series: EventRef,
+    rule_id: SyncRuleId,
+    operation_key: str,
+) -> None:
+    instance = self._owned_occurrence(destination_series, original_start, source_series, rule_id)
+    if instance is None or instance.status is EventStatus.CANCELLED:
+        return
+    try:
+        (
+            self._service_for(destination_series.calendar.connected_account_id)
+            .events()
+            .delete(
+                calendarId=destination_series.calendar.calendar_id.value,
+                eventId=instance.reference.event_id.value,
+                sendUpdates="none",
+            )
+            .execute()
+        )
+    except Exception as error:
+        if _status_code(error) not in {404, 410}:
             raise _provider_failure(error) from error
 
-    def cancel_occurrence(
-        self,
-        destination_series: EventRef,
-        original_start: OccurrenceStart,
-        source_series: EventRef,
-        rule_id: SyncRuleId,
-        operation_key: str,
-    ) -> None:
-        instance = self._owned_occurrence(destination_series, original_start, source_series, rule_id)
-        if instance is None or instance.status is EventStatus.CANCELLED:
-            return
-        try:
-            (
-                self._service_for(destination_series.calendar.connected_account_id)
-                .events()
-                .delete(
-                    calendarId=destination_series.calendar.calendar_id.value,
-                    eventId=instance.reference.event_id.value,
-                    sendUpdates="none",
-                )
-                .execute()
-            )
-        except Exception as error:
-            if _status_code(error) not in {404, 410}:
-                raise _provider_failure(error) from error
 
-    def _owned_occurrence(
-        self,
-        destination_series: EventRef,
-        original_start: OccurrenceStart,
-        source_series: EventRef,
-        rule_id: SyncRuleId,
-    ) -> CalendarEvent | None:
-        instance = self.get_occurrence(destination_series, original_start)
-        if instance is None:
-            return None
-        master = self.get_event(destination_series)
-        if not (
-            master is not None
-            and _owned(master.managed_origin, rule_id, source_series)
-            and (instance.managed_origin is None or _owned(instance.managed_origin, rule_id, source_series))
-        ):
-            raise ProviderFailure(
-                ProviderFailureKind.PERMANENT,
-                "Google occurrence does not carry compatible ownership metadata",
-            )
-        return instance
+def _owned_occurrence(
+    self,
+    destination_series: EventRef,
+    original_start: OccurrenceStart,
+    source_series: EventRef,
+    rule_id: SyncRuleId,
+) -> CalendarEvent | None:
+    instance = self.get_occurrence(destination_series, original_start)
+    if instance is None:
+        return None
+    master = self.get_event(destination_series)
+    if not (
+        master is not None
+        and _owned(master.managed_origin, rule_id, source_series)
+        and (
+            instance.managed_origin is None
+            or _owned(instance.managed_origin, rule_id, source_series)
+        )
+    ):
+        raise ProviderFailure(
+            ProviderFailureKind.PERMANENT,
+            "Google occurrence does not carry compatible ownership metadata",
+        )
+    return instance
 ```
 
 Module helper:
@@ -1965,14 +2036,31 @@ decides `UPDATE` after resolving the instance.
 Add to `FakeCalendarProvider` in `tests/application/test_execute_sync_rule.py`:
 
 ```python
-    def get_occurrence(self, series: EventRef, original_start: OccurrenceStart) -> CalendarEvent | None:
-        return None
+def get_occurrence(self, series: EventRef, original_start: OccurrenceStart) -> CalendarEvent | None:
+    return None
 
-    def write_occurrence(self, destination_series: EventRef, original_start: OccurrenceStart, source_series: EventRef, rule_id: SyncRuleId, projection: EventProjection, operation_key: str) -> CalendarEvent:
-        raise AssertionError("single-event tests never write occurrences")
 
-    def cancel_occurrence(self, destination_series: EventRef, original_start: OccurrenceStart, source_series: EventRef, rule_id: SyncRuleId, operation_key: str) -> None:
-        raise AssertionError("single-event tests never cancel occurrences")
+def write_occurrence(
+    self,
+    destination_series: EventRef,
+    original_start: OccurrenceStart,
+    source_series: EventRef,
+    rule_id: SyncRuleId,
+    projection: EventProjection,
+    operation_key: str,
+) -> CalendarEvent:
+    raise AssertionError("single-event tests never write occurrences")
+
+
+def cancel_occurrence(
+    self,
+    destination_series: EventRef,
+    original_start: OccurrenceStart,
+    source_series: EventRef,
+    rule_id: SyncRuleId,
+    operation_key: str,
+) -> None:
+    raise AssertionError("single-event tests never cancel occurrences")
 ```
 
 (format with ruff).
@@ -2065,7 +2153,9 @@ class FakeCalendars:
     unreadable: set[EventRef] = field(default_factory=set)
     created: int = 0
 
-    def put(self, event: CalendarEvent, *, starts: tuple[OccurrenceStart, ...] = ()) -> CalendarEvent:
+    def put(
+        self, event: CalendarEvent, *, starts: tuple[OccurrenceStart, ...] = ()
+    ) -> CalendarEvent:
         self.events[event.reference] = event
         if event.recurrence is not None:
             self.expansions[event.reference] = starts
@@ -2125,7 +2215,9 @@ class FakeCalendars:
         return stored if stored is not None else self._expand(master, original_start, reference)
 
     @staticmethod
-    def _expand(master: CalendarEvent, start: OccurrenceStart, reference: EventRef) -> CalendarEvent:
+    def _expand(
+        master: CalendarEvent, start: OccurrenceStart, reference: EventRef
+    ) -> CalendarEvent:
         if isinstance(master.time, TimedInterval):
             assert isinstance(start, datetime)
             time: TimedInterval | AllDayRange = TimedInterval(
@@ -2227,7 +2319,9 @@ class FakeCalendars:
         projection: EventProjection,
         operation_key: str,
     ) -> CalendarEvent:
-        instance = self._owned_occurrence(destination_series, original_start, source_series, rule_id)
+        instance = self._owned_occurrence(
+            destination_series, original_start, source_series, rule_id
+        )
         if instance is None:
             raise ProviderFailure(ProviderFailureKind.PERMANENT, "occurrence could not be resolved")
         written = replace(
@@ -2252,7 +2346,9 @@ class FakeCalendars:
         rule_id: SyncRuleId,
         operation_key: str,
     ) -> None:
-        instance = self._owned_occurrence(destination_series, original_start, source_series, rule_id)
+        instance = self._owned_occurrence(
+            destination_series, original_start, source_series, rule_id
+        )
         if instance is None or instance.status is EventStatus.CANCELLED:
             return
         # Google's cancelled exceptions carry no content and no private metadata.
@@ -2440,7 +2536,9 @@ def _synced() -> tuple[FakeCalendars, InMemoryUnitOfWorkFactory, EventRef]:
     return calendars, factory, mapping.destination
 
 
-def _occurrence_states(factory: InMemoryUnitOfWorkFactory) -> dict[OccurrenceStart, OccurrenceState]:
+def _occurrence_states(
+    factory: InMemoryUnitOfWorkFactory,
+) -> dict[OccurrenceStart, OccurrenceState]:
     return {key[1]: mapping.state for key, mapping in factory.state.occurrences.items()}
 
 
@@ -2518,7 +2616,9 @@ def test_cancelled_series_deletes_the_destination_series_and_its_occurrence_mapp
     calendars, factory, destination = _synced()
     calendars.report(calendars.put(occurrence(series(), 1, status=EventStatus.CANCELLED)))
     sync_use_case(factory, calendars).execute(rule().id)
-    cancelled_master = calendars.put(replace(series(), status=EventStatus.CANCELLED, time=None, recurrence=None))
+    cancelled_master = calendars.put(
+        replace(series(), status=EventStatus.CANCELLED, time=None, recurrence=None)
+    )
     calendars.report(cancelled_master)
 
     sync_use_case(factory, calendars).execute(rule().id)
@@ -2535,7 +2635,11 @@ def test_this_and_following_split_truncates_the_old_series_and_creates_the_new_o
     calendars.report(calendars.put(occurrence(series(), 3, moved_by=timedelta(hours=1))))
     sync_use_case(factory, calendars).execute(rule().id)
     truncated = calendars.put(
-        replace(series(), revision="series-revision-2", recurrence=Recurrence(("RRULE:FREQ=WEEKLY;UNTIL=20260915T080000Z",))),
+        replace(
+            series(),
+            revision="series-revision-2",
+            recurrence=Recurrence(("RRULE:FREQ=WEEKLY;UNTIL=20260915T080000Z",)),
+        ),
         starts=STARTS[:2],
     )
     del calendars.events[occurrence(series(), 3).reference]
@@ -2547,7 +2651,9 @@ def test_this_and_following_split_truncates_the_old_series_and_creates_the_new_o
     assert calendars.events[destination].recurrence == truncated.recurrence
     assert (rule().id, following.reference) in factory.state.mappings
     assert factory.state.occurrences == {}
-    assert not any(kind in {"write_occurrence", "cancel_occurrence"} for kind, _ in calendars.writes[-2:])
+    assert not any(
+        kind in {"write_occurrence", "cancel_occurrence"} for kind, _ in calendars.writes[-2:]
+    )
 
 
 def test_destination_edit_of_an_unmodified_occurrence_is_repaired() -> None:
@@ -2646,7 +2752,7 @@ def test_missing_destination_occurrence_after_repair_is_a_conflict() -> None:
 
     assert result.conflicts == 1
     assert factory.state.audit[-1].reason == SyncReason.DESTINATION_OCCURRENCE_MISSING.value
-    assert [kind for kind, _ in calendars.writes[len(before):]] == []
+    assert [kind for kind, _ in calendars.writes[len(before) :]] == []
 
 
 def test_rule_change_during_a_run_stops_occurrence_writes(tmp_path: Path) -> None:
@@ -2687,12 +2793,17 @@ def test_rule_change_during_a_run_stops_occurrence_writes(tmp_path: Path) -> Non
 
 def test_every_occurrence_audit_entry_has_a_run_id_and_reason_but_no_content() -> None:
     calendars, factory, _destination = _synced()
-    calendars.report(calendars.put(occurrence(series(), 1, title="Secret offsite", moved_by=timedelta(hours=1))))
+    calendars.report(
+        calendars.put(occurrence(series(), 1, title="Secret offsite", moved_by=timedelta(hours=1)))
+    )
 
     sync_use_case(factory, calendars).execute(rule().id)
 
     assert all(entry.run_id and entry.reason for entry in factory.state.audit)
-    assert all("Secret" not in repr(entry) and "Sensitive" not in repr(entry) for entry in factory.state.audit)
+    assert all(
+        "Secret" not in repr(entry) and "Sensitive" not in repr(entry)
+        for entry in factory.state.audit
+    )
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -2816,21 +2927,33 @@ class SynchronizeOccurrences:
             run.uow.occurrences.get(series_mapping.id, original_start) if series_mapping else None
         )
         decision, destination = self._decide(
-            run, series_mapping, source_series, original_start, source_occurrence, recorded,
+            run,
+            series_mapping,
+            source_series,
+            original_start,
+            source_occurrence,
+            recorded,
             destination_reported,
         )
         if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
             self.repair_series(run, source_series)
             series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
             decision, destination = self._decide(
-                run, series_mapping, source_series, original_start, source_occurrence, recorded,
+                run,
+                series_mapping,
+                source_series,
+                original_start,
+                source_occurrence,
+                recorded,
                 destination_reported,
             )
         run.counts[decision.action] += 1
         source_ref = (
             source_occurrence.reference
             if source_occurrence is not None
-            else recorded.source if recorded is not None else None
+            else recorded.source
+            if recorded is not None
+            else None
         )
         key = occurrence_operation_key(
             run.rule.id,
@@ -2853,9 +2976,15 @@ class SynchronizeOccurrences:
             )
             destination_ref = written.reference
             self._record(
-                run, recorded, series_mapping, original_start, source_occurrence,
-                destination_ref, OccurrenceState.MODIFIED,
-                self.fingerprinter.fingerprint(decision.projection), key,
+                run,
+                recorded,
+                series_mapping,
+                original_start,
+                source_occurrence,
+                destination_ref,
+                OccurrenceState.MODIFIED,
+                self.fingerprinter.fingerprint(decision.projection),
+                key,
             )
         elif decision.action is SyncAction.DELETE:
             assert series_mapping is not None
@@ -2872,8 +3001,15 @@ class SynchronizeOccurrences:
             else:
                 assert destination_ref is not None
                 self._record(
-                    run, recorded, series_mapping, original_start, source_occurrence,
-                    destination_ref, OccurrenceState.CANCELLED, None, key,
+                    run,
+                    recorded,
+                    series_mapping,
+                    original_start,
+                    source_occurrence,
+                    destination_ref,
+                    OccurrenceState.CANCELLED,
+                    None,
+                    key,
                 )
         elif decision.reason is SyncReason.OCCURRENCE_RETIRED and recorded is not None:
             run.uow.occurrences.delete(recorded)
@@ -2896,8 +3032,15 @@ class SynchronizeOccurrences:
                 or recorded.source_revision != source_occurrence.revision
             ):
                 self._record(
-                    run, recorded, series_mapping, original_start, source_occurrence,
-                    destination_ref, state, fingerprint, key,
+                    run,
+                    recorded,
+                    series_mapping,
+                    original_start,
+                    source_occurrence,
+                    destination_ref,
+                    state,
+                    fingerprint,
+                    key,
                 )
 
         if source_ref is not None:
@@ -3013,140 +3156,140 @@ In `synchronization.py`:
   `run = SyncRunContext(uow, rule, run_id, counts, reproject)` and replace the two loops with:
 
 ```python
-            # Series masters first, so an exception can always resolve its parent's mapping.
-            for source_event in sorted(changes.events, key=lambda item: item.occurrence is not None):
-                if source_event.occurrence is not None:
-                    self._synchronize_source_exception(run, source_event)
-                else:
-                    self._synchronize_event(
-                        run, source_event, destination_loaded=False, actual_destination=None
-                    )
-                    run.handled.add(source_event.reference)
-                uow.commit()
+# Series masters first, so an exception can always resolve its parent's mapping.
+for source_event in sorted(changes.events, key=lambda item: item.occurrence is not None):
+    if source_event.occurrence is not None:
+        self._synchronize_source_exception(run, source_event)
+    else:
+        self._synchronize_event(
+            run, source_event, destination_loaded=False, actual_destination=None
+        )
+        run.handled.add(source_event.reference)
+    uow.commit()
 
-            for destination_event in destination_changes.events:
-                if destination_event.occurrence is not None:
-                    self._repair_destination_occurrence(run, destination_event)
-                    uow.commit()
-                    continue
-                mapping = uow.mappings.for_destination(rule.id, destination_event.reference)
-                if mapping is None:
-                    continue
-                authoritative_source = self.provider.get_event(mapping.source)
-                if authoritative_source is None:
-                    self._record_unverifiable(run, mapping.source, mapping.destination)
-                    uow.commit()
-                    continue
-                self._synchronize_event(
-                    run,
-                    authoritative_source,
-                    destination_loaded=True,
-                    actual_destination=(
-                        None
-                        if destination_event.status is EventStatus.CANCELLED
-                        else destination_event
-                    ),
-                )
-                run.handled.add(mapping.source)
-                uow.commit()
+for destination_event in destination_changes.events:
+    if destination_event.occurrence is not None:
+        self._repair_destination_occurrence(run, destination_event)
+        uow.commit()
+        continue
+    mapping = uow.mappings.for_destination(rule.id, destination_event.reference)
+    if mapping is None:
+        continue
+    authoritative_source = self.provider.get_event(mapping.source)
+    if authoritative_source is None:
+        self._record_unverifiable(run, mapping.source, mapping.destination)
+        uow.commit()
+        continue
+    self._synchronize_event(
+        run,
+        authoritative_source,
+        destination_loaded=True,
+        actual_destination=(
+            None if destination_event.status is EventStatus.CANCELLED else destination_event
+        ),
+    )
+    run.handled.add(mapping.source)
+    uow.commit()
 
-            if reproject:
-                self._reproject_remaining(run)
+if reproject:
+    self._reproject_remaining(run)
 ```
 
 - Replace `_reproject_remaining`, `_synchronize_event`, and add helpers:
 
 ```python
-    def _reproject_remaining(self, run: SyncRunContext) -> None:
-        """Apply a changed policy to mappings the change feeds did not report."""
-        for mapping in run.uow.mappings.for_rule(run.rule.id):
-            if mapping.source in run.handled:
-                continue
-            authoritative_source = self.provider.get_event(mapping.source)
-            if authoritative_source is None:
-                self._record_unverifiable(run, mapping.source, mapping.destination)
-            else:
-                # Reprojection re-verifies every recorded occurrence of a series as well.
-                self._synchronize_event(
-                    run, authoritative_source, destination_loaded=False, actual_destination=None
-                )
-            run.handled.add(mapping.source)
-            run.uow.commit()
-
-    def _synchronize_source_exception(self, run: SyncRunContext, exception: CalendarEvent) -> None:
-        identity = exception.occurrence
-        assert identity is not None
-        series_ref = EventRef(run.rule.source, identity.series_event_id)
-        source_series = self.provider.get_event(series_ref)
-        if source_series is None:
-            self._record_unverifiable(run, exception.reference, None)
-            return
-        series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
-        if series_mapping is None and series_ref not in run.handled:
+def _reproject_remaining(self, run: SyncRunContext) -> None:
+    """Apply a changed policy to mappings the change feeds did not report."""
+    for mapping in run.uow.mappings.for_rule(run.rule.id):
+        if mapping.source in run.handled:
+            continue
+        authoritative_source = self.provider.get_event(mapping.source)
+        if authoritative_source is None:
+            self._record_unverifiable(run, mapping.source, mapping.destination)
+        else:
+            # Reprojection re-verifies every recorded occurrence of a series as well.
             self._synchronize_event(
-                run, source_series, destination_loaded=False, actual_destination=None
+                run, authoritative_source, destination_loaded=False, actual_destination=None
             )
-            run.handled.add(series_ref)
-            series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
-        self.occurrences.apply(
-            run,
-            series_mapping,
-            source_series,
-            identity.original_start,
-            exception,
-            record_current=True,
-        )
+        run.handled.add(mapping.source)
+        run.uow.commit()
 
-    def _repair_destination_occurrence(
-        self, run: SyncRunContext, destination_event: CalendarEvent
-    ) -> None:
-        identity = destination_event.occurrence
-        assert identity is not None
-        series_mapping = run.uow.mappings.for_destination(
-            run.rule.id, EventRef(run.rule.destination, identity.series_event_id)
-        )
-        if series_mapping is None:
-            return
-        source_series = self.provider.get_event(series_mapping.source)
-        if source_series is None:
-            self._record_unverifiable(run, series_mapping.source, destination_event.reference)
-            return
-        source_occurrence = self.provider.get_occurrence(
-            series_mapping.source, identity.original_start
-        )
-        if source_occurrence is not None and source_occurrence.reference in run.handled:
-            return
-        self.occurrences.apply(
-            run,
-            series_mapping,
-            source_series,
-            identity.original_start,
-            source_occurrence,
-            record_current=False,
-            destination_reported=True,
-        )
 
-    def _repair_series(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
+def _synchronize_source_exception(self, run: SyncRunContext, exception: CalendarEvent) -> None:
+    identity = exception.occurrence
+    assert identity is not None
+    series_ref = EventRef(run.rule.source, identity.series_event_id)
+    source_series = self.provider.get_event(series_ref)
+    if source_series is None:
+        self._record_unverifiable(run, exception.reference, None)
+        return
+    series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
+    if series_mapping is None and series_ref not in run.handled:
         self._synchronize_event(
-            run, source_series, destination_loaded=False, actual_destination=None, cascade=False
+            run, source_series, destination_loaded=False, actual_destination=None
         )
+        run.handled.add(series_ref)
+        series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
+    self.occurrences.apply(
+        run,
+        series_mapping,
+        source_series,
+        identity.original_start,
+        exception,
+        record_current=True,
+    )
 
-    def _record_unverifiable(
-        self, run: SyncRunContext, source: EventRef, destination: EventRef | None
-    ) -> None:
-        run.counts[SyncAction.CONFLICT] += 1
-        run.uow.audit.append(
-            AuditEntry(
-                occurred_at=self.clock.now(),
-                rule_id=run.rule.id,
-                action=SyncAction.CONFLICT.value,
-                outcome="blocked",
-                source_event_id=source.event_id.value,
-                destination_event_id=destination.event_id.value if destination else None,
-                reason=SyncReason.SOURCE_UNVERIFIABLE.value,
-                run_id=run.run_id,
-            )
+
+def _repair_destination_occurrence(
+    self, run: SyncRunContext, destination_event: CalendarEvent
+) -> None:
+    identity = destination_event.occurrence
+    assert identity is not None
+    series_mapping = run.uow.mappings.for_destination(
+        run.rule.id, EventRef(run.rule.destination, identity.series_event_id)
+    )
+    if series_mapping is None:
+        return
+    source_series = self.provider.get_event(series_mapping.source)
+    if source_series is None:
+        self._record_unverifiable(run, series_mapping.source, destination_event.reference)
+        return
+    source_occurrence = self.provider.get_occurrence(series_mapping.source, identity.original_start)
+    if source_occurrence is not None and source_occurrence.reference in run.handled:
+        return
+    self.occurrences.apply(
+        run,
+        series_mapping,
+        source_series,
+        identity.original_start,
+        source_occurrence,
+        record_current=False,
+        destination_reported=True,
+    )
+
+
+def _repair_series(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
+    self._synchronize_event(
+        run, source_series, destination_loaded=False, actual_destination=None, cascade=False
+    )
+
+
+def _record_unverifiable(
+    self, run: SyncRunContext, source: EventRef, destination: EventRef | None
+) -> None:
+    run.counts[SyncAction.CONFLICT] += 1
+    run.uow.audit.append(
+        AuditEntry(
+            occurred_at=self.clock.now(),
+            rule_id=run.rule.id,
+            action=SyncAction.CONFLICT.value,
+            outcome="blocked",
+            source_event_id=source.event_id.value,
+            destination_event_id=destination.event_id.value if destination else None,
+            reason=SyncReason.SOURCE_UNVERIFIABLE.value,
+            run_id=run.run_id,
         )
+    )
 ```
 
 `_synchronize_event(self, run, source_event, *, destination_loaded, actual_destination, cascade=True)`
@@ -3233,7 +3376,9 @@ def test_details_to_busy_change_rewrites_the_master_and_exceptions_outside_the_w
 
 def test_all_day_exclusion_deletes_all_day_series_and_cancels_all_day_exceptions() -> None:
     calendars = FakeCalendars()
-    all_day_master = calendars.put(series("all-day-series", all_day=True), starts=(STARTS[0].date(),))
+    all_day_master = calendars.put(
+        series("all-day-series", all_day=True), starts=(STARTS[0].date(),)
+    )
     timed_master = calendars.put(series(), starts=STARTS)
     calendars.put(occurrence(timed_master, 1, all_day=True))
     factory = enabled_rule_factory()
@@ -3245,7 +3390,9 @@ def test_all_day_exclusion_deletes_all_day_series_and_cancels_all_day_exceptions
     sync_use_case(factory, calendars).execute(rule().id)
 
     assert all_day_destination not in calendars.events
-    assert calendars.get_occurrence(timed_destination, week_start(1)).status is EventStatus.CANCELLED  # type: ignore[union-attr]
+    assert (
+        calendars.get_occurrence(timed_destination, week_start(1)).status is EventStatus.CANCELLED
+    )  # type: ignore[union-attr]
     assert factory.state.rules[rule().id].reprojection_required is False
 ```
 
@@ -3313,7 +3460,9 @@ def test_detaching_a_series_keeps_it_ignored_by_a_reverse_rule() -> None:
     RemoveSyncRule(factory, calendars, Accounts(), FixedClock(), RuleLocks()).execute(
         rule().id, ProjectionHandling.DETACH
     )
-    reverse = SyncRule(SyncRuleId("reverse"), rule().destination, rule().source, state=SyncRuleState.ENABLED)
+    reverse = SyncRule(
+        SyncRuleId("reverse"), rule().destination, rule().source, state=SyncRuleState.ENABLED
+    )
     reverse_factory = enabled_rule_factory(reverse)
     result = sync_use_case(reverse_factory, calendars).execute(reverse.id)
 
@@ -3370,7 +3519,11 @@ def test_reconciliation_counts_occurrence_drift_in_the_recorded_outcome() -> Non
     calendars.put(replace(edited, title="Edited"))
 
     report = ReconcileSyncRule(
-        factory, calendars, EventProjector(), ReconciliationService(ProjectionFingerprinter()), FixedClock()
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
     ).execute(rule().id)
 
     assert [item.kind for item in report.drift] == [DriftKind.INCORRECT_PROJECTION]
@@ -3640,7 +3793,9 @@ class PreviewSyncRule:
             actual = self.provider.get_event(mapping.destination) if mapping else None
             action = self.decisions.decide(rule, event, mapping, actual).action
             kind = "series" if event.recurrence is not None else "single"
-            return PreviewItem(event.reference.event_id.value, title, event.is_all_day, kind, action)
+            return PreviewItem(
+                event.reference.event_id.value, title, event.is_all_day, kind, action
+            )
         assert event.occurrence is not None
         start = event.occurrence.original_start
         series_mapping = uow.mappings.for_source(rule.id, parent.reference)
@@ -3661,7 +3816,9 @@ class PreviewSyncRule:
                 destination_series,
                 self.provider.get_occurrence(series_mapping.destination, start),
             ).action
-        return PreviewItem(event.reference.event_id.value, title, event.is_all_day, "occurrence", action)
+        return PreviewItem(
+            event.reference.event_id.value, title, event.is_all_day, "occurrence", action
+        )
 ```
 
 Pass `SyncDecisionService(projector, fingerprinter)` as the fifth argument in
