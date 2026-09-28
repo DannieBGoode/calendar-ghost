@@ -10,6 +10,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
+import calendar_sync.interfaces.api.app as api_module
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.ports import AuditEntry, CalendarProvider, RuleRunOutcome, RunKind
 from calendar_sync.application.preview import PreviewSyncRule
@@ -1110,6 +1111,7 @@ def _audit(
     *,
     rule_id: str = "rule-1",
     run_id: str | None = "run-1",
+    source_event_id: str | None = "source-event",
     destination_event_id: str | None = None,
 ) -> AuditEntry:
     return AuditEntry(
@@ -1117,7 +1119,7 @@ def _audit(
         rule_id=SyncRuleId(rule_id),
         action=action,
         outcome={"ignore": "skipped", "conflict": "blocked"}.get(action, "completed"),
-        source_event_id="source-event",
+        source_event_id=source_event_id,
         destination_event_id=destination_event_id,
         reason=reason,
         run_id=run_id,
@@ -1330,6 +1332,243 @@ def test_rule_management_entries_are_listed_as_changes(tmp_path: Path) -> None:
         "policy_changed",
     ]
     assert {entry["category"] for entry in changed} == {"changed"}
+
+
+def test_no_change_runs_count_whole_runs_that_a_page_boundary_splits(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("ignore", "projection_current", run_id="run-1"),
+        _audit("ignore", "projection_current", run_id="run-1"),
+        # The oldest entry on the loaded page; the run's checks above sit below the boundary.
+        _audit("create", "source_created", run_id="run-1"),
+        _audit("update", "source_changed", run_id="run-2"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        runs = client.get("/api/v1/audit-entries/no-change-runs", params={"after": 2}).json()
+
+    assert [(item["run_id"], item["count"]) for item in runs] == [("run-1", 2)]
+
+
+def test_no_change_runs_find_recent_runs_by_entry_range_not_by_run_index(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    build_container(Settings(database))
+
+    with sqlite3.connect(database) as connection:
+        plans = [
+            " ".join(str(row[3]) for row in connection.execute(f"EXPLAIN QUERY PLAN {sql}", args))
+            for sql, args in (
+                (api_module._recent_runs_sql(with_rule=False), (0, 500)),
+                (api_module._recent_runs_sql(with_rule=True), ("rule-1", 0, 500)),
+            )
+        ]
+
+    assert "INTEGER PRIMARY KEY (rowid>?)" in plans[0]
+    assert "audit_entries_rule_id (rule_id=? AND id>?)" in plans[1]
+    assert all("audit_entries_run_id" not in plan for plan in plans)
+
+
+def test_activity_lists_runs_with_no_change_checks_including_quiet_runs(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("ignore", "projection_current", run_id="run-1"),
+        _audit("ignore", "occurrence_current", run_id="run-1"),
+        _audit("create", "source_created", run_id="run-1"),
+        # A run that only confirmed events were up to date has no other entries to show.
+        _audit("ignore", "projection_current", run_id="run-2"),
+        _audit("ignore", "all_day_excluded", run_id="run-3"),
+        _audit("ignore", "projection_current", rule_id="rule-2", run_id="run-4"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        assert client.get("/api/v1/audit-entries/no-change-runs").status_code == 401
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        everything = client.get("/api/v1/audit-entries/no-change-runs").json()
+        one_rule = client.get(
+            "/api/v1/audit-entries/no-change-runs", params={"rule_id": "rule-1"}
+        ).json()
+        newer = client.get("/api/v1/audit-entries/no-change-runs", params={"after": 3}).json()
+        one_run = client.get(
+            "/api/v1/audit-entries", params={"run_id": "run-1", "category": "unchanged"}
+        )
+
+    assert [(item["run_id"], item["count"], item["newest_id"]) for item in everything] == [
+        ("run-4", 1, 6),
+        ("run-2", 1, 4),
+        ("run-1", 2, 2),
+    ]
+    assert everything[0]["rule_id"] == "rule-2"
+    assert [item["run_id"] for item in one_rule] == ["run-2", "run-1"]
+    assert [item["run_id"] for item in newer] == ["run-4", "run-2"]
+    assert [entry["reason"] for entry in one_run.json()] == [
+        "occurrence_current",
+        "projection_current",
+    ]
+
+
+def test_activity_filters_combine_several_categories(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("create", "source_created"),
+        _audit("ignore", "projection_current"),
+        _audit("ignore", "all_day_excluded"),
+        _audit("conflict", "mapping_inconsistent"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.get(
+            "/api/v1/audit-entries",
+            params=[("category", "changed"), ("category", "skipped"), ("category", "blocked")],
+        )
+
+    assert response.status_code == 200
+    assert [entry["reason"] for entry in response.json()] == [
+        "mapping_inconsistent",
+        "all_day_excluded",
+        "source_created",
+    ]
+
+
+def test_occurrences_that_already_match_are_listed_as_no_change(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("ignore", "occurrence_current"),
+        _audit("ignore", "occurrence_already_cancelled"),
+        _audit("ignore", "series_not_synchronized"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        everything = client.get("/api/v1/audit-entries").json()
+        unchanged = client.get("/api/v1/audit-entries", params={"category": "unchanged"}).json()
+        skipped = client.get("/api/v1/audit-entries", params={"category": "skipped"}).json()
+
+    assert [entry["category"] for entry in everything] == ["skipped", "unchanged", "unchanged"]
+    assert [entry["reason"] for entry in unchanged] == [
+        "occurrence_already_cancelled",
+        "occurrence_current",
+    ]
+    assert [entry["reason"] for entry in skipped] == ["series_not_synchronized"]
+
+
+def test_single_activity_entry_can_be_opened_directly(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(container, _audit("create", "source_created", destination_event_id="copy-1"))
+
+    with TestClient(create_app(container)) as client:
+        assert client.get("/api/v1/audit-entries/1").status_code == 401
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.get("/api/v1/audit-entries/1")
+        missing = client.get("/api/v1/audit-entries/99")
+
+    assert response.status_code == 200
+    assert response.json()["reason"] == "source_created"
+    assert response.json()["category"] == "changed"
+    assert response.json()["destination_event_id"] == "copy-1"
+    assert missing.status_code == 404
+
+
+def test_activity_event_summaries_read_each_source_event_once(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    provider = FakeInspectionProvider(
+        {"source-event": event(title="Dentist"), "other-event": event("other-event")}
+    )
+    container = replace(
+        build_container(Settings(database)), calendar_provider=cast(CalendarProvider, provider)
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    _append_audit(
+        container,
+        _audit("create", "source_created", destination_event_id="copy-1"),
+        _audit("ignore", "projection_current", run_id="run-2"),
+        _audit("ignore", "projection_current", source_event_id="other-event"),
+        _audit("policy_changed", None, run_id=None, source_event_id=None),
+        _audit("create", "source_created", rule_id="removed-rule"),
+        _audit("ignore", "projection_current", source_event_id="deleted-event"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        assert client.get("/api/v1/audit-entries/events", params={"ids": 1}).status_code == 401
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.get(
+            "/api/v1/audit-entries/events", params=[("ids", i) for i in (1, 2, 3, 4, 5, 6, 99)]
+        )
+        too_many = client.get(
+            "/api/v1/audit-entries/events", params=[("ids", i) for i in range(1, 27)]
+        )
+
+    assert response.status_code == 200
+    summaries = {item["entry_id"]: item for item in response.json()}
+    assert sorted(summaries) == [1, 2, 3, 5, 6]
+    assert summaries[1]["lookup"] == "found"
+    assert summaries[1]["source"]["title"] == "Dentist"
+    assert summaries[2] == summaries[1] | {"entry_id": 2}
+    assert summaries[3]["source"]["title"] == "Private appointment"
+    assert summaries[5] == {"entry_id": 5, "lookup": "rule_removed", "source": None}
+    assert summaries[6]["lookup"] == "found"
+    assert summaries[6]["source"]["found"] is False
+    assert sorted(reference.event_id.value for reference in provider.requested) == [
+        "deleted-event",
+        "other-event",
+        "source-event",
+    ]
+    assert too_many.status_code == 422
+    with sqlite3.connect(database) as connection:
+        dump = "\n".join(connection.iterdump())
+    assert "Dentist" not in dump
+
+
+def test_activity_event_summaries_report_failures_per_event(tmp_path: Path) -> None:
+    failing = FakeInspectionProvider(
+        {}, ProviderFailure(ProviderFailureKind.AUTHENTICATION, "token expired")
+    )
+    container = build_container(Settings(tmp_path / "test.db"))
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    _append_audit(container, _audit("create", "source_created"))
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        unconfigured = client.get("/api/v1/audit-entries/events", params={"ids": 1})
+
+    with TestClient(
+        create_app(replace(container, calendar_provider=cast(CalendarProvider, failing)))
+    ) as client:
+        client.post("/api/v1/session", json=PASSWORD)
+        response = client.get("/api/v1/audit-entries/events", params={"ids": 1})
+
+    assert unconfigured.status_code == 503
+    assert response.status_code == 200
+    assert response.json() == [{"entry_id": 1, "lookup": "unavailable", "source": None}]
+
+
+def test_cancelled_source_events_keep_their_title_for_display(tmp_path: Path) -> None:
+    cancelled = replace(event(title="Dentist"), status=EventStatus.CANCELLED)
+    provider = FakeInspectionProvider({"source-event": cancelled})
+    container = replace(
+        build_container(Settings(tmp_path / "test.db")),
+        calendar_provider=cast(CalendarProvider, provider),
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    _append_audit(container, _audit("delete", "source_cancelled"))
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.get("/api/v1/audit-entries/1/event")
+
+    assert response.json()["source"]["cancelled"] is True
+    assert response.json()["source"]["title"] == "Dentist"
 
 
 def test_sync_reconciliation_and_removal_share_one_rule_lock(tmp_path: Path) -> None:

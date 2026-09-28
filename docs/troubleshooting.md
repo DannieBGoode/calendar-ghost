@@ -6,9 +6,9 @@ Check `docker compose ps`, then request `http://localhost:8000/health`. Review c
 
 ## An event did not synchronize
 
-Open **Activity**, filter by the rule, and choose **Skipped** or **Blocked**. Each entry explains
-why no Event Projection was written; choose **Show event** to see the event's title and time from Google
-and open it in Google Calendar. Common reasons:
+Open **Activity**, filter by the rule, and choose **Skipped** or **Blocked**. Each row names the event
+and why no Event Projection was written; select it to see the full explanation, the event's title and
+time from Google, and a link to open it in Google Calendar. Common reasons:
 
 - **Skipped a recurring event**: recorded by a release before recurring-event support. The next
   run after upgrading projects the series.

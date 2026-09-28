@@ -15,6 +15,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Rule Removal with an explicit choice to delete mapped projections or keep them as Detached Events, and Rule Replacement for changing a rule's calendars.
 - Activity groups decisions by synchronization run, names the rule's calendars, explains every skipped, blocked, or changed event in plain language, and can be filtered by rule and outcome with older entries loaded on demand.
 - Activity entries can look up their source event and Managed Projection live from Google, showing the title, time, recurrence, and a Google Calendar link without storing any event content.
+- Activity is a table grouped by day with Time, Event, What happened, and Rule columns. Event titles and times are read live from Google in small deduplicated batches for the rows on screen (`GET /api/v1/audit-entries/events`), and selecting an entry opens its details beside the table, led by the event and what happened, with a way to open the rule when a change was blocked. Checks that found an event already up to date are counted in one expandable row per run by default, consecutive runs that only made such checks share one summary row, and **All decisions** lists every check. A rule picker shows each rule's calendars with their account photos, lists removed rules separately, and follows the accessible select-only combobox pattern. The rule, filter, and open entry are kept in the page address.
+- A development-only preview (`scripts/dev_preview.py`) serves the Web UI with synthetic data from its own marked database and a read-only fake Google; it refuses any other database and is excluded from the package and image.
+- `GET /api/v1/audit-entries/{id}` returns one audit entry, `category` may be repeated to combine outcomes, `run_id` filters to one run, and `GET /api/v1/audit-entries/no-change-runs` lists recent runs with how many no-change checks each made, including runs that made nothing else.
+- SQLite migration 7 indexes audit entries by run so Activity counts and expands runs without scanning the whole history.
 - SQLite migration 3 adds stable reason codes and run identifiers to audit entries and backfills reason codes for existing entries.
 - The Overview derives its headline, health strip, and single next action from one health model, so it never reports healthy while an incident, a stopped rule, or a lost authorization needs attention. It lists every rule with its state and last successful sync, and first-run guidance stays until a rule is running.
 - Rule rows and Rule Details show when each rule last synchronized, move Sync Now, Reconcile Now, and Pause into a "More actions" menu that explains how each differs, report each command's result on its own rule, and restate the privacy consequence of the latest preview before a rule starts syncing.
@@ -49,6 +53,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Activity request failures, empty activity, and low-contrast actions now have distinct, accessible interface states.
 - Activity now loads when browser content blockers such as uBlock Origin are enabled.
 - The Activity page now explains why it could not load: an expired session, an updated installation that needs a reload, a service error, or a request that never reached the service, such as one stopped by a content blocker.
+- Changing the Activity rule or outcome filter keeps the page, its filters, and keyboard focus on screen while the new entries load, instead of replacing the whole page with a loading placeholder.
+- Occurrences of a recurring event that already matched their projection are listed as no change instead of as skipped.
 
 ## [0.1.0] - 2026-08-30
 

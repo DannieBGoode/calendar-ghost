@@ -43,6 +43,10 @@ later failures, backfilled from existing successful outcomes. Rolling back works
 database: earlier releases ignore the table and column, and a rule previewed on the newer release
 still enables normally. Rows are removed with their rule.
 
+Migration 7 adds an index on `audit_entries(run_id, id)` so Activity can count and expand each
+run's no-change checks without scanning the whole audit history. Rolling back works with the same
+database: earlier releases ignore the index.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

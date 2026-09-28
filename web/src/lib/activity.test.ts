@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import { ApiError } from "./api"
-import { activityFiltersFromSearch, describeEntry, entryInspection, eventLookupFailure, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
+import { describeEntry, entryInspection, eventLookupFailure, formatRunTime, groupRuns, whatHappened } from "./activity"
+import { activityStateFromSearch } from "./activity-location"
 import type { AuditEntry } from "./api"
 
 function entry(overrides: Partial<AuditEntry>): AuditEntry {
@@ -24,35 +25,33 @@ function entry(overrides: Partial<AuditEntry>): AuditEntry {
 describe("activity presentation", () => {
   it("explains skipped recurring events in calendar language", () => {
     const copy = describeEntry(entry({}))
-    expect(copy.summary).toBe("Skipped a recurring event")
+    expect(copy.happened).toBe("Skipped: recurring event")
     expect(copy.explanation).toContain("Earlier versions")
   })
 
   it("explains cancelled occurrences in calendar language", () => {
     const copy = describeEntry(entry({ action: "delete", reason: "occurrence_cancelled" }))
-    expect(copy.summary).toBe("Removed one occurrence")
+    expect(copy.happened).toBe("One occurrence removed from {destination}")
   })
 
   it("falls back to the recorded detail for entries without a reason code", () => {
     const copy = describeEntry(entry({ reason: null, detail: "excluded event has no managed projection" }))
-    expect(copy.summary).toBe("Skipped an event")
+    expect(copy.happened).toBe("Skipped")
     expect(copy.explanation).toBe("excluded event has no managed projection")
   })
 
-  it("explains rule management entries in domain language", () => {
-    expect(describeEntry(entry({ action: "policy_changed", reason: null, detail: "privacy=copy_details, all_day=include" })).summary).toBe(
-      "Changed the projection policy",
-    )
-    expect(describeEntry(entry({ action: "remove_projection", reason: null })).summary).toBe(
-      "Deleted a projection during Rule Removal",
-    )
-    expect(describeEntry(entry({ action: "detach_projection", reason: null })).summary).toBe(
-      "Kept a projection as a Detached Event",
-    )
-    expect(describeEntry(entry({ action: "rule_removed", reason: null })).summary).toBe("Removed the rule")
-    expect(outcomeLabel(entry({ action: "remove_projection", category: "changed" }))).toBe("Removed")
-    expect(outcomeLabel(entry({ action: "rule_removed", category: "changed" }))).toBe("Removed")
-    expect(outcomeLabel(entry({ action: "detach_projection", category: "changed" }))).toBe("Kept")
+  it("says what happened to rule management entries without calling them event changes", () => {
+    const changed = (action: string) => whatHappened(entry({ action, reason: null, category: "changed" }), "Work")
+
+    expect(changed("policy_changed")).toEqual({ text: "Privacy setting changed", icon: "rule", tone: "change" })
+    expect(changed("rule_removed")).toEqual({ text: "Rule removed", icon: "rule", tone: "change" })
+    expect(changed("remove_projection")).toMatchObject({ text: "Removed from Work with the rule", icon: "removed" })
+    expect(changed("detach_projection")).toMatchObject({ text: "Kept in Work, no longer synced", icon: "kept" })
+    expect(whatHappened(entry({ action: "removal_conflict", reason: null, category: "blocked" }), "Work")).toEqual({
+      text: "Blocked: left in Work during Rule Removal",
+      icon: "blocked",
+      tone: "blocked",
+    })
   })
 
   it("only looks up events for rules that still exist", () => {
@@ -78,10 +77,26 @@ describe("activity presentation", () => {
     )
   })
 
-  it("labels outcomes by category before action", () => {
-    expect(outcomeLabel(entry({ action: "conflict", category: "skipped" }))).toBe("Skipped")
-    expect(outcomeLabel(entry({ action: "conflict", category: "blocked" }))).toBe("Blocked")
-    expect(outcomeLabel(entry({ action: "delete", category: "changed" }))).toBe("Removed")
+  it("says what happened in calendar terms, reserving colour for blocked changes", () => {
+    expect(whatHappened(entry({ action: "conflict", category: "skipped" }), "Work")).toMatchObject({
+      icon: "skipped",
+      tone: "quiet",
+    })
+    expect(
+      whatHappened(entry({ action: "conflict", reason: "destination_ownership_inconsistent", category: "blocked" }), "Work"),
+    ).toEqual({ text: "Blocked: not owned by this rule", icon: "blocked", tone: "blocked" })
+    expect(whatHappened(entry({ action: "delete", reason: "source_cancelled", category: "changed" }), "Work")).toEqual({
+      text: "Removed from Work",
+      icon: "removed",
+      tone: "change",
+    })
+    expect(
+      whatHappened(entry({ action: "update", reason: "destination_drift_repaired", category: "changed" }), null),
+    ).toMatchObject({ text: "Edit in the destination undone", icon: "repaired" })
+    expect(whatHappened(entry({ reason: "projection_current", category: "unchanged" }), "Work")).toMatchObject({
+      text: "Already up to date",
+      tone: "quiet",
+    })
   })
 
   it("groups consecutive entries by run and keeps legacy entries together by minute", () => {
@@ -94,7 +109,6 @@ describe("activity presentation", () => {
     ])
 
     expect(runs.map((run) => run.entries.map((item) => item.id))).toEqual([[5, 4], [3, 2], [1]])
-    expect(summarizeRun(runs[0].entries)).toBe("1 created · 1 skipped")
   })
 
   it("keeps one group per run when concurrent rules interleave their entries", () => {
@@ -109,14 +123,13 @@ describe("activity presentation", () => {
       ["work-run", [4, 2]],
       ["home-run", [3, 1]],
     ])
-    expect(summarizeRun(runs[0].entries)).toBe("1 created · 1 skipped")
   })
 
   it("describes decisions with Event Projection terminology", () => {
-    expect(describeEntry(entry({ reason: "source_created" })).summary).toBe("Created a projection")
-    expect(describeEntry(entry({ reason: "managed_projection_source" })).summary).toBe(
-      "Skipped a managed projection",
+    expect(whatHappened(entry({ action: "create", reason: "source_created", category: "changed" }), "Work").text).toBe(
+      "Added to Work",
     )
+    expect(describeEntry(entry({ reason: "managed_projection_source" })).explanation).toContain("never synced again")
   })
 
   it("uses relative day names for recent runs", () => {
@@ -126,13 +139,10 @@ describe("activity presentation", () => {
   })
 })
 
-describe("activityFiltersFromSearch", () => {
-  it("reads rule and category filters from the address", () => {
-    expect(activityFiltersFromSearch("?rule=rule-7&category=blocked")).toEqual({ ruleId: "rule-7", category: "blocked" })
-    expect(activityFiltersFromSearch("")).toEqual({ ruleId: "", category: "" })
-  })
-
-  it("ignores an unknown category rather than filtering by it", () => {
-    expect(activityFiltersFromSearch("?category=everything").category).toBe("")
+describe("activity address", () => {
+  it("reads links that name the outcome with the earlier category parameter", () => {
+    expect(activityStateFromSearch("?rule=rule-7&category=blocked")).toEqual({ ruleId: "rule-7", show: "blocked", entryId: null })
+    expect(activityStateFromSearch("?category=everything").show).toBe("")
+    expect(activityStateFromSearch("?show=skipped&category=blocked").show).toBe("skipped")
   })
 })

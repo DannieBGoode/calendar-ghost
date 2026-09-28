@@ -91,6 +91,8 @@ stable reason code from `SyncReason` in `domain/model.py`. Skips are recorded as
 the Activity view can explain why an event was not synchronized. Updates distinguish a changed
 source (`source_changed`) from a repaired destination edit (`destination_drift_repaired`). Entries
 store only identities; Activity reads titles and times from Google on demand and never persists them.
+Occurrence decisions that found the destination already matching (`occurrence_current`,
+`occurrence_already_cancelled`) are listed as no change, like `projection_current`.
 
 ## Partial failure
 

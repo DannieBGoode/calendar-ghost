@@ -155,7 +155,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         rows = connection.execute(
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
-    assert versions == [1, 2, 3, 4, 5, 6]
+    assert versions == [1, 2, 3, 4, 5, 6, 7]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -490,3 +490,26 @@ def test_migration_5_upgrades_a_version_4_installation_and_resets_cursors(tmp_pa
     with sqlite3.connect(database) as connection:
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
     assert versions.count(5) == 1
+
+
+def test_migration_7_indexes_audit_entries_by_run(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("DROP INDEX audit_entries_run_id")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 7")
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+        plan = " ".join(
+            str(row[3])
+            for row in connection.execute(
+                "EXPLAIN QUERY PLAN SELECT id FROM audit_entries WHERE run_id = ? ORDER BY id DESC",
+                ("run-1",),
+            )
+        )
+    assert versions.count(7) == 1
+    assert "audit_entries_run_id" in plan

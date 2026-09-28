@@ -11,9 +11,16 @@ describe("Activity view states", () => {
   })
 })
 
+describe("Activity filters", () => {
+  it("keeps the page and its filters on screen while another rule or filter loads", () => {
+    expect(activitySource).toContain("placeholderData: keepPreviousData")
+    expect(activitySource).toContain("aria-busy={updating}")
+  })
+})
+
 describe("activity for removed rules", () => {
   it("explains why events of a removed rule cannot be looked up", () => {
-    expect(activitySource).toContain("entryInspection(entry, ruleExists)")
+    expect(activitySource).toContain("entryInspection(entry, exists)")
     expect(activitySource).toContain("REMOVED_RULE_LOOKUP")
     expect(activitySource).toContain("eventLookupFailure(event.error)")
   })
