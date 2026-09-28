@@ -1,6 +1,5 @@
 // Regression: ISSUE-001 — Activity blamed a restarting service when a content blocker stopped the request
 // Found by /qa on 2026-09-28
-// Report: .gstack/qa-reports/qa-report-localhost-2026-09-28.md
 import { describe, expect, it } from "vitest"
 
 import dashboardSource from "../features/dashboard.tsx?raw"
