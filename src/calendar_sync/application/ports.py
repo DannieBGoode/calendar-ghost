@@ -44,6 +44,12 @@ class CalendarProvider(Protocol):
 
     def get_event(self, reference: EventRef) -> CalendarEvent | None: ...
 
+    def find_projection(
+        self, destination: CalendarEndpoint, operation_key: str
+    ) -> CalendarEvent | None:
+        """Return the projection an earlier write with this Operation Key created, if any."""
+        ...
+
     def create_projection(
         self,
         destination: CalendarEndpoint,

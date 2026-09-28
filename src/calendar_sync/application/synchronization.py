@@ -352,6 +352,15 @@ class ExecuteSyncRule:
         decision = self.decisions.decide(
             rule, source_event, mapping, actual, window_start=run.window_start
         )
+        if decision.reason is SyncReason.BEFORE_SYNC_WINDOW and self.provider.find_projection(
+            rule.destination,
+            self._operation_key(
+                rule.id, source_event.reference, source_event.revision, SyncAction.CREATE
+            ),
+        ):
+            # Google acknowledged this create before an interrupted run could record its
+            # mapping; complete it idempotently instead of orphaning the projection.
+            decision = self.decisions.decide(rule, source_event, mapping, actual)
         run.counts[decision.action] += 1
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action

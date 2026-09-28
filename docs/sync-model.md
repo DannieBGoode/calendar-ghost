@@ -10,6 +10,8 @@ authoritative source and repair edits or deletions during that same run. Google'
 is not bounded by the initial `timeMin`, so it also reports changes to events that ended long ago.
 An unmapped single event that ended before the rolling window start (30 days before the run) is
 ignored with reason `before_sync_window`; mapped events and recurring series are decided normally.
+Before skipping, the run looks up a projection created with the event's create Operation Key, so a
+create Google acknowledged before an interrupted run recorded its mapping is adopted, not orphaned.
 
 For each changed source event, the decision service chooses one action:
 

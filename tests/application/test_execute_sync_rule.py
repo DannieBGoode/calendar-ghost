@@ -88,6 +88,11 @@ class FakeCalendarProvider:
             else None
         )
 
+    def find_projection(
+        self, destination: CalendarEndpoint, operation_key: str
+    ) -> CalendarEvent | None:
+        return None
+
     def create_projection(
         self,
         destination: CalendarEndpoint,
