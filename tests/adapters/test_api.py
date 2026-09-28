@@ -2,6 +2,7 @@ import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Thread
 from typing import cast
 from unittest.mock import Mock
 
@@ -1130,3 +1131,27 @@ def test_sync_reconciliation_and_removal_share_one_rule_lock(tmp_path: Path) -> 
     assert container.execute_sync_rule.locks is container.rule_locks
     assert container.reconcile_sync_rule.locks is container.rule_locks
     assert container.remove_sync_rule.locks is container.rule_locks
+
+
+def test_pause_waits_for_an_in_flight_provider_write(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    responses: list[int] = []
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        writing = container.rule_locks.for_writes(rule().id)
+        writing.acquire()
+        worker = Thread(
+            target=lambda: responses.append(client.post("/api/v1/rules/rule-1/pause").status_code)
+        )
+        worker.start()
+        worker.join(0.2)
+        blocked_while_writing = worker.is_alive()
+        writing.release()
+        worker.join(2)
+
+    assert blocked_while_writing
+    assert responses == [200]

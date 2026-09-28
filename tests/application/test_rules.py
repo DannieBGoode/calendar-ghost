@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from threading import Thread
 
 import pytest
 
 from calendar_sync.application.errors import RuleNotFound
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import RuleRunOutcome, RunKind
 from calendar_sync.application.rules import ChangeSyncRulePolicy, GetSyncRuleDetails
 from calendar_sync.domain.errors import InvalidStateTransition
@@ -72,3 +74,26 @@ def test_details_report_mapping_count_and_latest_outcomes() -> None:
     assert details.last_reconciliation is None
     with pytest.raises(RuleNotFound):
         GetSyncRuleDetails(unit_of_work).execute(SyncRuleId("missing"))
+
+
+def test_policy_change_waits_for_an_in_flight_provider_write() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
+    locks = RuleLocks()
+    change = ChangeSyncRulePolicy(unit_of_work, FixedClock(), locks)
+    writing = locks.for_writes(rule().id)
+    writing.acquire()
+    worker = Thread(
+        target=change.execute,
+        args=(rule().id, PrivacyPolicy.COPY_DETAILS, AllDaySyncPolicy.INCLUDE),
+    )
+    worker.start()
+    worker.join(0.1)
+    blocked_while_writing = worker.is_alive()
+    saved_while_writing = unit_of_work.state.rules[rule().id].state
+    writing.release()
+    worker.join(2)
+
+    assert blocked_while_writing
+    assert saved_while_writing is SyncRuleState.ENABLED
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.PAUSED

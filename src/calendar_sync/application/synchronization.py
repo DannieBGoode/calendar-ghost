@@ -244,7 +244,29 @@ class ExecuteSyncRule:
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
     ) -> None:
-        self._require_unchanged(uow, rule)
+        with self.locks.for_writes(rule.id):
+            self._require_unchanged(uow, rule)
+            self._decide_and_write(
+                uow,
+                rule,
+                run_id,
+                source_event,
+                counts,
+                destination_loaded=destination_loaded,
+                actual_destination=actual_destination,
+            )
+
+    def _decide_and_write(
+        self,
+        uow: UnitOfWork,
+        rule: SyncRule,
+        run_id: str,
+        source_event: CalendarEvent,
+        counts: dict[SyncAction, int],
+        *,
+        destination_loaded: bool,
+        actual_destination: CalendarEvent | None,
+    ) -> None:
         mapping = uow.mappings.for_source(rule.id, source_event.reference)
         actual = (
             actual_destination

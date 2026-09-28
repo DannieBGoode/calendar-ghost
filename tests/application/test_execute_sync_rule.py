@@ -9,6 +9,7 @@ from time import sleep
 import pytest
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind, RuleNotExecutable
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     CreatedProjection,
     ProviderChangeSet,
@@ -713,3 +714,37 @@ def test_run_stops_before_writing_when_the_rule_changes_mid_run(tmp_path: Path) 
     with factory() as uow:
         assert uow.cursors.get(rule().id) is None
         assert uow.mappings.count_for_rule(rule().id) == 0
+
+
+def test_provider_writes_hold_the_rule_write_lock() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[rule().id] = rule()
+    locks = RuleLocks()
+    observed: list[bool] = []
+
+    class ObservingProvider(FakeCalendarProvider):
+        def create_projection(
+            self,
+            destination: CalendarEndpoint,
+            source: EventRef,
+            rule_id: SyncRuleId,
+            projection: EventProjection,
+            operation_key: str,
+        ) -> CreatedProjection:
+            observed.append(locks.for_writes(rule_id).locked())
+            return super().create_projection(
+                destination, source, rule_id, projection, operation_key
+            )
+
+    fingerprinter = ProjectionFingerprinter()
+    ExecuteSyncRule(
+        unit_of_work,
+        ObservingProvider(event()),
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        FixedClock(),
+        locks,
+    ).execute(rule().id)
+
+    assert observed == [True]
+    assert not locks.for_writes(rule().id).locked()

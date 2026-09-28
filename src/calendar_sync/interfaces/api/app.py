@@ -646,7 +646,8 @@ def create_app(container: Container | None = None) -> FastAPI:
         dependencies=[Depends(require_admin)],
     )
     def pause_rule(rule_id: str) -> RuleResponse:
-        with resolved.unit_of_work() as uow:
+        # Wait for any in-flight provider write so nothing is written after Pause returns.
+        with resolved.rule_locks.for_writes(SyncRuleId(rule_id)), resolved.unit_of_work() as uow:
             rule = uow.rules.get(SyncRuleId(rule_id))
             if rule is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")

@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.errors import (
     ApplicationError,
@@ -8,6 +8,7 @@ from calendar_sync.application.errors import (
     ReplacementInterrupted,
     RuleNotFound,
 )
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AuditEntry,
     Clock,
@@ -48,11 +49,14 @@ class ChangeSyncRulePolicy:
 
     unit_of_work: UnitOfWorkFactory
     clock: Clock
+    locks: RuleLocks = field(default_factory=RuleLocks)
 
     def execute(
         self, rule_id: SyncRuleId, privacy: PrivacyPolicy, all_day: AllDaySyncPolicy
     ) -> SyncRule:
-        with self.unit_of_work() as uow:
+        # Waiting for any in-flight provider write means none happens under the old policy
+        # once this returns; the run's next stop check then sees the paused rule.
+        with self.locks.for_writes(rule_id), self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
             if rule is None:
                 raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
