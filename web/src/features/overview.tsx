@@ -390,8 +390,9 @@ function OnboardingSteps({
   redirectUri: string | null
   onViewChange: ViewChange
 }) {
-  const hasAccount = dashboard.connected_accounts + dashboard.disconnected_accounts > 0
-  const done = [hasAccount, dashboard.sync_rules > 0, dashboard.enabled_rules > 0]
+  // Only an authorized account lets the next step work; a disconnected one must be renewed first.
+  const reauthorize = dashboard.connected_accounts === 0 && dashboard.disconnected_accounts > 0
+  const done = [dashboard.connected_accounts > 0, dashboard.sync_rules > 0, dashboard.enabled_rules > 0]
   const current = done.indexOf(false)
   const rulesLink = (label: string, createRule: boolean) => (
     <Button asChild>
@@ -408,7 +409,24 @@ function OnboardingSteps({
     </Button>
   )
   const steps = [
-    {
+    reauthorize ? {
+      title: "Reauthorize your Google account",
+      body: "Its access was removed or expired. Renew it in Settings before creating a rule.",
+      action: (
+        <Button asChild>
+          <a
+            href={appPathForView("settings")}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return
+              event.preventDefault()
+              onViewChange("settings")
+            }}
+          >
+            Reauthorize in Settings <ArrowRight aria-hidden="true" />
+          </a>
+        </Button>
+      ),
+    } : {
       title: "Connect a Google account",
       body: "Authorize calendar discovery and event access for one Google account.",
       action: (

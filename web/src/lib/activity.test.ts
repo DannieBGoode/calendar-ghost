@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { ApiError } from "./api"
-import { describeEntry, entryInspection, eventLookupFailure, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
+import { activityFiltersFromSearch, describeEntry, entryInspection, eventLookupFailure, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
 import type { AuditEntry } from "./api"
 
 function entry(overrides: Partial<AuditEntry>): AuditEntry {
@@ -123,5 +123,16 @@ describe("activity presentation", () => {
     const now = new Date(2026, 8, 28, 18, 0)
     expect(formatRunTime(new Date(2026, 8, 28, 15, 18).toISOString(), now)).toMatch(/^Today at /)
     expect(formatRunTime(new Date(2026, 8, 27, 15, 18).toISOString(), now)).toMatch(/^Yesterday at /)
+  })
+})
+
+describe("activityFiltersFromSearch", () => {
+  it("reads rule and category filters from the address", () => {
+    expect(activityFiltersFromSearch("?rule=rule-7&category=blocked")).toEqual({ ruleId: "rule-7", category: "blocked" })
+    expect(activityFiltersFromSearch("")).toEqual({ ruleId: "", category: "" })
+  })
+
+  it("ignores an unknown category rather than filtering by it", () => {
+    expect(activityFiltersFromSearch("?category=everything").category).toBe("")
   })
 })

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import {
   CATEGORY_FILTERS,
+  activityFiltersFromSearch,
   describeEntry,
   entryInspection,
   eventLookupFailure,
@@ -44,18 +45,11 @@ type RuleContext = {
   calendarsByAccount: Map<string, DiscoveredCalendar[] | undefined>
 }
 
-function filtersFromLocation(): { ruleId: string; category: ActivityCategory | "" } {
-  const params = new URLSearchParams(window.location.search)
-  const category = params.get("category") ?? ""
-  return {
-    ruleId: params.get("rule") ?? "",
-    category: CATEGORY_FILTERS.some((filter) => filter.value === category) ? (category as ActivityCategory | "") : "",
-  }
-}
-
 export function ActivityView() {
-  const [ruleId, setRuleId] = useState(() => filtersFromLocation().ruleId)
-  const [category, setCategory] = useState<ActivityCategory | "">(() => filtersFromLocation().category)
+  const [ruleId, setRuleId] = useState(() => activityFiltersFromSearch(window.location.search).ruleId)
+  const [category, setCategory] = useState<ActivityCategory | "">(
+    () => activityFiltersFromSearch(window.location.search).category,
+  )
 
   // Filters live in the address so other views can link to one rule's activity, and so the
   // filtered view survives a reload or a shared link.

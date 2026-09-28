@@ -50,6 +50,16 @@ export function overviewHealth(
       action: { label: "Reauthorize in Settings", view: "settings" },
     }
   }
+  if (dashboard.connected_accounts === 0 && dashboard.stopped_rules === 0 && dashboard.open_incidents === 0) {
+    return {
+      tone: "setup",
+      headline: "Reauthorize your Google account",
+      title: "No Google account can be used right now",
+      detail: "Access was removed or expired. Renew it in Settings before creating or running rules.",
+      badge: "Setup",
+      action: { label: "Reauthorize in Settings", view: "settings" },
+    }
+  }
   if (attention && (dashboard.open_incidents > 0 || dashboard.stopped_rules > 0)) {
     const others = Math.max(dashboard.open_incidents, dashboard.stopped_rules) - 1
     return {

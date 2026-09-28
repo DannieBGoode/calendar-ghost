@@ -478,26 +478,45 @@ def create_app(container: Container | None = None) -> FastAPI:
         limit: Annotated[int, Query(ge=1, le=20)] = 5,
     ) -> list[RecentChangeResponse]:
         # Summarizes recent runs that wrote or were blocked, from counts and identifiers only.
-        # The window bounds the scan so a long audit history stays cheap on small hardware.
+        # Runs are chosen from a bounded window of changing entries, so unchanged decisions never
+        # crowd them out; each chosen run is then counted in full, so a large run is never partial.
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
-            runs = connection.execute(
+            chosen = connection.execute(
                 f"""
-                SELECT COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16)) AS run_key,
-                    rule_id, MAX(occurred_at) AS occurred_at, MAX(id) AS last_id,
-                    SUM(action = 'create' AND {_NOT_REPAIR}) AS created,
-                    SUM(action = 'update' AND {_NOT_REPAIR}) AS updated,
-                    SUM(action IN ('delete', 'remove_projection')) AS deleted,
-                    SUM(action IN ('create', 'update') AND NOT {_NOT_REPAIR}) AS repaired,
-                    SUM(action = 'conflict' AND COALESCE(reason, '') != 'recurring_unsupported')
-                        AS blocked
-                FROM (SELECT * FROM audit_entries ORDER BY id DESC LIMIT {_RECENT_WINDOW})
-                GROUP BY run_key, rule_id
-                HAVING created + updated + deleted + repaired + blocked > 0
-                ORDER BY last_id DESC LIMIT ?
+                SELECT {_RUN_KEY} AS run_key, rule_id, MAX(id) AS last_id
+                FROM (
+                    SELECT * FROM audit_entries WHERE {_CHANGING}
+                    ORDER BY id DESC LIMIT {_RECENT_WINDOW}
+                )
+                GROUP BY run_key, rule_id ORDER BY last_id DESC LIMIT ?
                 """,
                 (limit,),
             ).fetchall()
+            if not chosen:
+                return []
+            rule_ids = sorted({str(run["rule_id"]) for run in chosen})
+            run_keys = [str(run["run_key"]) for run in chosen]
+            totals = {
+                (row["run_key"], row["rule_id"]): row
+                for row in connection.execute(
+                    f"""
+                    SELECT {_RUN_KEY} AS run_key, rule_id, MAX(occurred_at) AS occurred_at,
+                        SUM(action = 'create' AND {_NOT_REPAIR}) AS created,
+                        SUM(action = 'update' AND {_NOT_REPAIR}) AS updated,
+                        SUM(action IN ('delete', 'remove_projection')) AS deleted,
+                        SUM(action IN ('create', 'update') AND NOT {_NOT_REPAIR}) AS repaired,
+                        SUM(action = 'conflict'
+                            AND COALESCE(reason, '') != 'recurring_unsupported') AS blocked
+                    FROM audit_entries
+                    WHERE rule_id IN ({",".join("?" * len(rule_ids))})
+                        AND {_RUN_KEY} IN ({",".join("?" * len(run_keys))})
+                    GROUP BY run_key, rule_id
+                    """,
+                    (*rule_ids, *run_keys),
+                )
+            }
+            runs = [totals[(run["run_key"], run["rule_id"])] for run in chosen]
             changes = []
             for run in runs:
                 entry_ids = [
@@ -505,13 +524,14 @@ def create_app(container: Container | None = None) -> FastAPI:
                     for row in connection.execute(
                         """
                         SELECT id FROM audit_entries
-                        WHERE COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16)) = ?
-                            AND rule_id = ? AND source_event_id IS NOT NULL
+                        WHERE rule_id = ?
+                            AND COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16)) = ?
+                            AND source_event_id IS NOT NULL
                             AND action IN ('create', 'update', 'delete', 'conflict')
                             AND COALESCE(reason, '') != 'recurring_unsupported'
                         ORDER BY id DESC LIMIT 5
                         """,
-                        (run["run_key"], run["rule_id"]),
+                        (run["rule_id"], run["run_key"]),
                     )
                 ]
                 changes.append(
@@ -867,6 +887,11 @@ def create_app(container: Container | None = None) -> FastAPI:
 
 
 _RECENT_WINDOW = 2000
+_RUN_KEY = "COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16))"
+_CHANGING = (
+    "(action IN ('create', 'update', 'delete', 'remove_projection')"
+    " OR (action = 'conflict' AND COALESCE(reason, '') != 'recurring_unsupported'))"
+)
 _NOT_REPAIR = (
     "COALESCE(reason, '') NOT IN "
     "('projection_missing', 'destination_drift_repaired', 'occurrence_drift_repaired')"

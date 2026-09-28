@@ -9,11 +9,13 @@ import type { AppLocation, OpenRule, ViewChange, ViewOptions } from "@/lib/navig
 export function Dashboard({
   location,
   arrival,
+  visit,
   onViewChange,
   onOpenRule,
 }: {
   location: AppLocation
   arrival: ViewOptions
+  visit: number
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
@@ -38,8 +40,8 @@ export function Dashboard({
       />
     )
   }
-  // Keyed by its filters so a link to one rule's activity applies even from the Activity view.
-  if (view === "activity") return <ActivityView key={arrival.search ?? ""} />
+  // Remounted on every arrival so its filters always match the address it was opened at.
+  if (view === "activity") return <ActivityView key={visit} />
   if (view === "settings") return <SettingsPage />
   return <OverviewView onViewChange={onViewChange} onOpenRule={onOpenRule} />
 }

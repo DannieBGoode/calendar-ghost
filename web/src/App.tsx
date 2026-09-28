@@ -52,6 +52,9 @@ function AuthenticatedApp() {
   const view = location.view
   const [mobileNav, setMobileNav] = useState(false)
   const [arrival, setArrival] = useState<ViewOptions>({})
+  // Counts arrivals so views that read the address, such as Activity's filters, start fresh on
+  // every navigation, including back, forward, and links to the page already shown.
+  const [visit, setVisit] = useState(0)
   const [announcement, setAnnouncement] = useState("")
   const main = useRef<HTMLElement>(null)
   const menuButton = useRef<HTMLButtonElement>(null)
@@ -70,6 +73,7 @@ function AuthenticatedApp() {
     }
     const handlePopState = () => {
       navigated.current = true
+      setVisit((count) => count + 1)
       setArrival({})
       setLocation(appLocationFromPathname(window.location.pathname))
       setMobileNav(false)
@@ -114,6 +118,7 @@ function AuthenticatedApp() {
       window.history.pushState(null, "", nextPath)
     }
     navigated.current = true
+    setVisit((count) => count + 1)
     setArrival(options)
     setLocation(next)
     setMobileNav(false)
@@ -152,7 +157,7 @@ function AuthenticatedApp() {
           <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? "Close navigation" : "Open navigation"}>{mobileNav ? <X /> : <Menu />}</Button>
         </div>
       </header>
-      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} onViewChange={changeView} onOpenRule={openRule} /></main>
+      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
       <footer className="app-footer"><span>Local installation</span><span aria-hidden="true">·</span><a href="/api/docs">API documentation</a></footer>
     </div>

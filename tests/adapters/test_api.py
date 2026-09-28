@@ -1032,6 +1032,23 @@ def test_recent_changes_summarize_runs_that_wrote_or_were_blocked(tmp_path: Path
     assert [change["run_key"] for change in limited] == ["run-4"]
 
 
+def test_recent_changes_count_large_runs_in_full(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    # An initial sync audits every decision; its writes must not be sliced by the scan window,
+    # nor hidden behind a newer run that only confirmed current projections.
+    _append_audit(
+        container,
+        *(_audit("update", "source_changed", run_id="initial") for _ in range(2100)),
+        *(_audit("ignore", "projection_current", run_id="quiet") for _ in range(2100)),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = client.get("/api/v1/recent-changes").json()
+
+    assert [(change["run_key"], change["updated"]) for change in changes] == [("initial", 2100)]
+
+
 def _append_audit(container: Container, *entries: AuditEntry) -> None:
     with container.unit_of_work() as uow:
         for entry in entries:

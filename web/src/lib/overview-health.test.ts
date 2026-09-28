@@ -43,6 +43,16 @@ describe("overviewHealth", () => {
     expect(health.action?.view).toBe("settings")
   })
 
+  it("asks for reauthorization before setup when only a disconnected account remains", () => {
+    const health = overviewHealth(
+      { ...healthy, connected_accounts: 0, disconnected_accounts: 1, sync_rules: 0, enabled_rules: 0 },
+      now,
+    )
+    expect(health.tone).toBe("setup")
+    expect(health.headline).toBe("Reauthorize your Google account")
+    expect(health.action?.view).toBe("settings")
+  })
+
   it("flags stopped rules even without an incident", () => {
     const health = overviewHealth({ ...healthy, stopped_rules: 1 }, now)
     expect(health.tone).toBe("attention")
