@@ -30,6 +30,7 @@ import {
 import { overviewHealth, type AttentionRule } from "@/lib/overview-health"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
+import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel, recentChangeSummary } from "@/lib/rule-run"
 import { useNow } from "@/lib/use-now"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
@@ -338,6 +339,7 @@ function OverviewRules({
   onOpenRule: OpenRule
 }) {
   const shown = rules.slice(0, OVERVIEW_RULE_LIMIT)
+  const removingIds = useRemovingRuleIds()
   return (
     <section className="workflow" aria-labelledby="overview-rules-title">
       <div className="section-heading section-heading-inline">
@@ -370,7 +372,7 @@ function OverviewRules({
                   {rule.state === "enabled" || stopped ? lastRunLabel(rule.last_sync, now) : "Not running"}
                 </span>
               </a>
-              <RuleStatusBadge state={rule.state} stopped={stopped} />
+              <RuleStatusBadge state={removingIds.has(rule.id) ? "removing" : rule.state} stopped={stopped} />
             </li>
           )
         })}

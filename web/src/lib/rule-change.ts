@@ -109,6 +109,7 @@ const STATE_LABELS: Record<string, string> = {
   paused: "Paused",
   degraded: "Stopped",
   disabled: "Removal incomplete",
+  removing: "Removing",
 }
 
 export function ruleStateLabel(state: string): string {

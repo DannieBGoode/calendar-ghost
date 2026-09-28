@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, ArrowRight, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
+import { ArrowLeft, ArrowRight, LoaderCircle, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react"
 
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -45,6 +45,16 @@ import {
   runOutcomeSummary,
 } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
+import {
+  elapsedLabel,
+  removalErrorMessage,
+  removalMutationKey,
+  removalProgress,
+  REMOVAL_REFRESH_MS,
+  useActiveRemoval,
+  type ActiveRemoval,
+  type RemovalRequest,
+} from "@/lib/rule-removal"
 import { relativeTime } from "@/lib/relative-time"
 import { recoveryExplanation } from "@/lib/rule-run"
 import { useNow } from "@/lib/use-now"
@@ -65,11 +75,13 @@ export function RuleDetailsView({
 }) {
   const now = useNow()
   const commands = useRuleCommands()
+  const removal = useActiveRemoval(ruleId)
   const rule = useQuery({
     queryKey: ["rule", ruleId],
     queryFn: () => api.rule(ruleId),
     retry: false,
-    refetchInterval: 60_000,
+    // A removal commits each projection it deletes, so refresh quickly to show its progress.
+    refetchInterval: removal ? REMOVAL_REFRESH_MS : 60_000,
   })
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const heading = useRef<HTMLHeadingElement>(null)
@@ -112,7 +124,8 @@ export function RuleDetailsView({
   )
 
   if (rule.isPending || accounts.isPending) return <PageSkeleton label="Loading rule" />
-  if (rule.error || accounts.error) {
+  // The last refresh of a finishing removal can find the rule gone before the removal returns.
+  if (!rule.data || (rule.error && !removal) || accounts.error) {
     const missing = rule.error instanceof ApiError && rule.error.status === 404
     return (
       <section className="page-section" role="alert">
@@ -156,12 +169,13 @@ export function RuleDetailsView({
     destinationAccount,
     calendarsByAccount.get(detail.destination.connected_account_id),
   ).calendar
-  const removing = detail.state === "disabled"
+  const removing = removal !== undefined || detail.state === "disabled"
+  const displayState = removal ? "removing" : detail.state
   const pending = commands.pending[detail.id]
   const run = (command: Parameters<typeof commands.run>[1]) =>
     void commands.run(detail.id, command, destinationName, () => heading.current)
   const notify = (feedback: RuleFeedback) => commands.notify(detail.id, feedback)
-  const stopped = detail.state === "degraded" && !disconnected
+  const stopped = displayState === "degraded" && !disconnected
 
   return (
     <div className="page-section rule-details-page">
@@ -194,16 +208,16 @@ export function RuleDetailsView({
           </div>
         </div>
         <div className="rule-actions">
-          <RuleStatusBadge state={detail.state} stopped={detail.state === "degraded" || disconnected} />
+          <RuleStatusBadge state={displayState} stopped={detail.state === "degraded" || disconnected} />
           <RuleNextAction
-            state={detail.state}
+            state={displayState}
             disconnected={disconnected}
             pending={pending}
             onRun={run}
             onViewChange={onViewChange}
           />
           <RuleCommandMenu
-            state={detail.state}
+            state={displayState}
             disconnected={disconnected}
             pending={pending}
             source={sourceName}
@@ -219,7 +233,7 @@ export function RuleDetailsView({
           <p>{recoveryExplanation(detail.last_sync, now)}</p>
         </div>
       )}
-      {detail.state === "dry_run_validated" && (
+      {displayState === "dry_run_validated" && (
         <EnableReview
           preview={detail.latest_preview}
           source={sourceName}
@@ -231,7 +245,7 @@ export function RuleDetailsView({
       )}
       <RuleFeedbackNote pending={pending} feedback={commands.feedback[detail.id]} />
 
-      {detail.reprojection_required && PREVIEWABLE_STATES.includes(detail.state) && (
+      {detail.reprojection_required && PREVIEWABLE_STATES.includes(displayState) && (
         <div className="rule-recovery-note">
           <ShieldAlert aria-hidden="true" />
           <p>
@@ -896,73 +910,135 @@ function RuleRemoval({
   const queryClient = useQueryClient()
   const returnFocus = useRef<HTMLButtonElement>(null)
   const firstField = useRef<HTMLInputElement>(null)
-  const removing = detail.state === "disabled"
-  const [open, setOpen] = useState(removing)
+  const confirm = useRef<HTMLButtonElement>(null)
+  const progress = useRef<HTMLDivElement>(null)
+  const active = useActiveRemoval(detail.id)
+  const interrupted = detail.state === "disabled" && !active
+  const [open, setOpen] = useState(false)
+  const expanded = open || interrupted
   const [handling, setHandling] = useState<ProjectionHandling>("delete")
-  useDisclosureFocus(open && !removing, firstField, returnFocus)
+  useDisclosureFocus(open && !interrupted && !active, firstField, returnFocus)
   const effective: ProjectionHandling = destinationConnected ? handling : "detach"
+  const finish = async (result: RemovalResult) => {
+    // Update the cached list first so the removed rule never flashes back into view.
+    queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) => rules?.filter((rule) => rule.id !== detail.id))
+    onRemoved(result)
+    await leave()
+  }
   const remove = useMutation({
-    mutationFn: () => api.removeRule(detail.id, effective),
-    onSuccess: async (result) => {
-      // Update the cached list first so the removed rule never flashes back into view.
-      queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) => rules?.filter((rule) => rule.id !== detail.id))
-      onRemoved(result)
-      await leave()
-    },
-    onError: async () => {
+    mutationKey: removalMutationKey(detail.id),
+    mutationFn: (request: RemovalRequest) => api.removeRule(detail.id, request.handling),
+    onSuccess: finish,
+    onError: async (error) => {
+      // A retry that waited behind an earlier, successful attempt finds the rule already gone.
+      if (error instanceof ApiError && error.status === 404) {
+        await finish({ deleted: 0, detached: 0, conflicts: 0 })
+        return
+      }
       await invalidate()
     },
   })
+  // The confirming button leaves the page while removal runs, so keep focus on its progress.
+  useEffect(() => {
+    if (active) progress.current?.focus()
+  }, [active])
+  useEffect(() => {
+    if (remove.error) confirm.current?.focus()
+  }, [remove.error])
 
   return (
-    <section className="rule-section rule-removal" aria-labelledby="removal-title">
+    <section className="rule-section rule-removal" aria-labelledby="removal-title" aria-busy={active ? true : undefined}>
       <div className="section-heading">
         <div>
-          <h2 id="removal-title">{removing ? "Removal incomplete" : "Remove rule"}</h2>
+          <h2 id="removal-title">
+            {active ? "Removing rule" : interrupted ? "Removal incomplete" : "Remove rule"}
+          </h2>
           <p>
-            {removing
-              ? `Removal stopped with ${plural(detail.mapping_count, "projection")} left. Retry to finish; the rule does not synchronize meanwhile.`
-              : "Removing a rule is permanent. Source events are never changed."}
+            {active
+              ? "The rule no longer synchronizes. Source events are never changed. Removal continues if you leave this page."
+              : interrupted
+                ? `Removal stopped with ${plural(detail.mapping_count, "projection")} left. Retry to finish; the rule does not synchronize meanwhile.`
+                : "Removing a rule is permanent. Source events are never changed."}
           </p>
         </div>
-        {!open && (
+        {!expanded && !active && (
           <Button
             ref={returnFocus}
             variant="outline"
             className="removal-toggle"
             onClick={() => setOpen(true)}
-            aria-expanded={open}
+            aria-expanded={expanded}
             aria-controls="removal-form"
           >
             <Trash2 aria-hidden="true" /> Remove rule…
           </Button>
         )}
       </div>
-      {open && (
-        <div id="removal-form" className="rule-edit-form removal-form">
-          <ProjectionChoice
-            name="removal-projections"
-            value={effective}
-            onChange={setHandling}
-            firstField={firstField}
-            mappingCount={detail.mapping_count}
-            destinationName={destinationName}
-            deleteAvailable={destinationConnected}
-          />
-          <div className="form-actions">
-            <Button variant="destructive" onClick={() => remove.mutate()} disabled={remove.isPending}>
-              <Trash2 aria-hidden="true" />
-              {remove.isPending ? "Removing…" : removing ? "Retry removal" : removalConfirmLabel(effective, detail.mapping_count)}
-            </Button>
-            {!removing && (
-              <Button variant="outline" onClick={() => setOpen(false)} disabled={remove.isPending}>
-                Keep rule
+      {active ? (
+        <RemovalProgress
+          ref={progress}
+          request={active}
+          remaining={detail.mapping_count}
+          destinationName={destinationName}
+        />
+      ) : (
+        expanded && (
+          <div id="removal-form" className="rule-edit-form removal-form">
+            <ProjectionChoice
+              name="removal-projections"
+              value={effective}
+              onChange={setHandling}
+              firstField={firstField}
+              mappingCount={detail.mapping_count}
+              destinationName={destinationName}
+              deleteAvailable={destinationConnected}
+            />
+            <div className="form-actions">
+              <Button
+                ref={confirm}
+                variant="destructive"
+                onClick={() => remove.mutate({ handling: effective, total: detail.mapping_count })}
+              >
+                <Trash2 aria-hidden="true" />
+                {interrupted ? "Retry removal" : removalConfirmLabel(effective, detail.mapping_count)}
               </Button>
-            )}
+              {!interrupted && (
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Keep rule
+                </Button>
+              )}
+            </div>
+            {remove.error && <div className="inline-error" role="alert">{removalErrorMessage(remove.error)}</div>}
           </div>
-          {remove.error && <div className="inline-error" role="alert">{remove.error.message}</div>}
-        </div>
+        )
       )}
     </section>
+  )
+}
+
+function RemovalProgress({
+  ref,
+  request,
+  remaining,
+  destinationName,
+}: {
+  ref: RefObject<HTMLDivElement | null>
+  request: ActiveRemoval
+  remaining: number
+  destinationName: string
+}) {
+  const now = useNow(1_000)
+  const { done, label } = removalProgress(request, remaining, destinationName)
+  return (
+    <div ref={ref} tabIndex={-1} className="removal-progress">
+      <p className="removal-progress-label">
+        <LoaderCircle aria-hidden="true" className="removal-spinner" />
+        <span>{label}</span>
+      </p>
+      {done !== null && (
+        <progress className="removal-bar" value={done} max={request.total} aria-label={label} />
+      )}
+      <p className="removal-progress-meta">Running for {elapsedLabel(now - request.startedAt)}</p>
+    </div>
   )
 }
