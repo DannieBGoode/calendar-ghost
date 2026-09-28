@@ -8,6 +8,7 @@ import {
   appViewFromPathname,
   isKnownAppPath,
   isPlainLeftClick,
+  isViewingRule,
 } from "./navigation"
 
 describe("application section URLs", () => {
@@ -64,5 +65,15 @@ describe("rule detail URLs", () => {
     expect(isPlainLeftClick(plain)).toBe(true)
     expect(isPlainLeftClick({ ...plain, metaKey: true })).toBe(false)
     expect(isPlainLeftClick({ ...plain, button: 1 })).toBe(false)
+  })
+})
+
+describe("isViewingRule", () => {
+  it("matches only that rule's details page", () => {
+    expect(isViewingRule("rule-a", "/rules/rule-a")).toBe(true)
+    expect(isViewingRule("rule-a", "/rules/rule-a/")).toBe(true)
+    expect(isViewingRule("rule-a", "/rules/rule-b")).toBe(false)
+    expect(isViewingRule("rule-a", "/rules")).toBe(false)
+    expect(isViewingRule("rule-a", "/activity")).toBe(false)
   })
 })

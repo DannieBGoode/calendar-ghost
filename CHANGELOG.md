@@ -48,6 +48,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- A running Rule Removal shows live progress ("Handled 84 of 312 projections in Family", a progress bar, and elapsed time) instead of a static "Removing…" button, and no longer reports itself as "Removal incomplete" when the page refreshes mid-run. Rule Details, the rules list, and Overview show the rule as Removing, editing is hidden from the start, and keyboard focus follows the progress. A dropped connection or proxy timeout explains the removal may still be running, and a retry that finds the rule already removed finishes with a notice to check Activity under Blocked for events left in place. A removal that finishes after the administrator has moved to another page no longer pulls them back to the rules list, and Overview health does not count a running removal as a stopped rule.
 - Incremental synchronization no longer projects single events that ended before the 30-day window and were never synced. Google's change feed reports edits to events of any age, which could copy events from years ago; these are now skipped with the reason `before_sync_window`, while already-synced events keep updating.
 - Recurring events excluded by the pre-alpha policy are recorded as skipped instead of as conflicts, so they no longer appear as blocked; existing entries are shown as skipped as well.
 - Google OAuth callbacks now support local HTTP development, preserve PKCE verification across redirects, and recover cleanly when Calendar permissions are declined.

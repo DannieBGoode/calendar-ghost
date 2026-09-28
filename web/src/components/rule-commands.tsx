@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleAlert, CircleDot, CirclePause, ShieldAlert } from "lucide-react"
+import { CheckCircle2, CircleAlert, CircleDot, CirclePause, LoaderCircle, ShieldAlert } from "lucide-react"
 
 import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
 import { Badge } from "@/components/ui/badge"
@@ -11,7 +11,15 @@ import { PENDING_LABELS, type RuleCommand, type RuleFeedback } from "@/lib/use-r
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
+/** `removing` is a display state for a Rule Removal running in this session, not a stored one. */
 export function RuleStatusBadge({ state, stopped }: { state: string; stopped: boolean }) {
+  if (state === "removing") {
+    return (
+      <Badge variant="neutral">
+        <LoaderCircle aria-hidden="true" className="removal-spinner" /> {ruleStateLabel(state)}
+      </Badge>
+    )
+  }
   if (stopped || state === "disabled") {
     return (
       <Badge variant="attention">
@@ -53,7 +61,7 @@ export function RuleNextAction({
   onRun: (command: RuleCommand) => void
   onViewChange: (view: AppView) => void
 }) {
-  if (state === "disabled") return null
+  if (state === "disabled" || state === "removing") return null
   if (disconnected) {
     return (
       <Button variant="outline" asChild>

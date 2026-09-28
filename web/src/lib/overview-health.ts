@@ -13,6 +13,25 @@ export type OverviewHealth = {
   action: { label: string; view: AppView; ruleId?: string } | null
 }
 
+/**
+ * The service stores a rule as disabled from the moment its removal starts, so the dashboard
+ * counts it as stopped. A removal still running in this session is not a failure.
+ */
+export function withoutRunningRemovals(
+  dashboard: Dashboard,
+  rules: { id: string; state: string }[],
+  removing: ReadonlySet<string>,
+): Dashboard {
+  const running = rules.filter((rule) => removing.has(rule.id) && rule.state === "disabled").length
+  if (running === 0) return dashboard
+  const stopped = Math.max(0, dashboard.stopped_rules - running)
+  return {
+    ...dashboard,
+    stopped_rules: stopped,
+    health: stopped === 0 && dashboard.open_incidents === 0 ? "healthy" : dashboard.health,
+  }
+}
+
 /** The rule an attention state is about, so the Overview can name it and link straight to it. */
 export type AttentionRule = { ruleId: string; name: string; detail: string }
 

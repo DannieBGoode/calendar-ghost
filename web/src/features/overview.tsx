@@ -27,9 +27,10 @@ import {
   type OpenRule,
   type ViewChange,
 } from "@/lib/navigation"
-import { overviewHealth, type AttentionRule } from "@/lib/overview-health"
+import { overviewHealth, withoutRunningRemovals, type AttentionRule } from "@/lib/overview-health"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
+import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel, recentChangeSummary } from "@/lib/rule-run"
 import { useNow } from "@/lib/use-now"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
@@ -76,11 +77,16 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
     enabled: (dashboard.data?.open_incidents ?? 0) > 0,
   })
   const { endpoints } = useRuleEndpoints(rules.data ?? [])
+  const removingIds = useRemovingRuleIds()
 
   if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label="Loading overview" />
   if (dashboard.error || rules.error || google.error) return <LoadFailure title="Calendar Sync could not load" />
 
-  const health = overviewHealth(dashboard.data, now, attentionRule(rules.data, incidents.data, endpoints, now))
+  const health = overviewHealth(
+    withoutRunningRemovals(dashboard.data, rules.data, removingIds),
+    now,
+    attentionRule(rules.data.filter((rule) => !removingIds.has(rule.id)), incidents.data, endpoints, now),
+  )
   const SignalIcon = health.tone === "attention" ? ShieldAlert : health.tone === "healthy" ? CheckCircle2 : CircleDot
   const action = health.action
 
@@ -338,6 +344,7 @@ function OverviewRules({
   onOpenRule: OpenRule
 }) {
   const shown = rules.slice(0, OVERVIEW_RULE_LIMIT)
+  const removingIds = useRemovingRuleIds()
   return (
     <section className="workflow" aria-labelledby="overview-rules-title">
       <div className="section-heading section-heading-inline">
@@ -370,7 +377,7 @@ function OverviewRules({
                   {rule.state === "enabled" || stopped ? lastRunLabel(rule.last_sync, now) : "Not running"}
                 </span>
               </a>
-              <RuleStatusBadge state={rule.state} stopped={stopped} />
+              <RuleStatusBadge state={removingIds.has(rule.id) ? "removing" : rule.state} stopped={stopped} />
             </li>
           )
         })}
