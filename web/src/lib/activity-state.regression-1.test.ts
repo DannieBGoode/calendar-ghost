@@ -12,8 +12,8 @@ describe("Activity request failure guidance", () => {
   })
 
   it("keeps the expired-session guidance separate from connectivity failures", () => {
-    expect(dashboardSource).toContain(
-      "Your administrator session has expired. Sign in again to view operational activity.",
+    expect(dashboardSource).toMatch(
+      /authenticationExpired\s*\?\s*"Your administrator session has expired\.[^"]*"\s*:\s*"The request did not reach the local service\./,
     )
   })
 })

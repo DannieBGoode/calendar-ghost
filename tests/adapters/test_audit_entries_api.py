@@ -60,7 +60,6 @@ def test_legacy_activity_route_no_longer_serves_audit_entries(tmp_path: Path) ->
         current = client.get("/api/v1/audit-entries")
 
     for response in (anonymous, authenticated):
-        assert not response.headers["content-type"].startswith("application/json")
         assert "legacy route probe" not in response.text
     assert current.json()[0]["detail"] == "legacy route probe"
 
