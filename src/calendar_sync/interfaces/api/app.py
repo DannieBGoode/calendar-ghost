@@ -78,7 +78,7 @@ from calendar_sync.interfaces.api.schemas import (
     GoogleAccountAccessResponse,
     GoogleConfigurationResponse,
     IncidentResponse,
-    NoChangeCountResponse,
+    NoChangeRunResponse,
     PasswordRequest,
     ProjectionChoice,
     RemovalResponse,
@@ -107,8 +107,9 @@ _NO_CHANGE_REASONS = frozenset(
 _NO_CHANGE_SQL = ", ".join(f"'{reason.value}'" for reason in sorted(_NO_CHANGE_REASONS))
 # Event lookups share the Google quota with synchronization, so one request reads a bounded set.
 _EVENT_SUMMARY_LIMIT = 25
-# One page of 100 entries names at most 100 runs.
-ACTIVITY_RUN_LIMIT = 100
+# No-change summaries cover at most this many recent runs and audit entries.
+_NO_CHANGE_RUN_LIMIT = 500
+_NO_CHANGE_SCAN_LIMIT = 50_000
 _EVENT_SUMMARY_CONCURRENCY = 4
 
 # Recurring exclusions were recorded as conflicts before reason codes existed; they are skips.
@@ -467,25 +468,43 @@ def create_app(container: Container | None = None) -> FastAPI:
         return [_audit_entry_response(row) for row in rows]
 
     @app.get(
-        "/api/v1/audit-entries/no-change-counts",
-        response_model=list[NoChangeCountResponse],
+        "/api/v1/audit-entries/no-change-runs",
+        response_model=list[NoChangeRunResponse],
         dependencies=[Depends(require_admin)],
     )
-    def count_no_change_checks(
-        run_ids: Annotated[list[str], Query(min_length=1, max_length=ACTIVITY_RUN_LIMIT)],
-    ) -> list[NoChangeCountResponse]:
-        # The default view hides these checks; a count per run still shows they happened.
-        placeholders = ", ".join("?" for _ in run_ids)
+    def list_no_change_runs(
+        rule_id: str | None = None,
+        after: Annotated[int, Query(ge=0)] = 0,
+    ) -> list[NoChangeRunResponse]:
+        """Runs newer than entry `after` that made no-change checks, with how many each made.
+
+        The default Activity view hides these checks, including runs that made nothing else.
+        """
+        conditions = ["run_id IS NOT NULL", "id > ?", _ACTIVITY_CATEGORY_SQL["unchanged"]]
+        parameters: list[object] = []
+        if rule_id is not None:
+            conditions.append("rule_id = ?")
+            parameters.append(rule_id)
         with sqlite3.connect(resolved.settings.database_path) as connection:
+            newest = connection.execute(
+                "SELECT COALESCE(MAX(id), 0) FROM audit_entries"
+            ).fetchone()[0]
+            # Only recent history is summarized, so the scan stays bounded as history grows.
+            lower = max(after, int(newest) - _NO_CHANGE_SCAN_LIMIT)
             rows = connection.execute(
                 f"""
-                SELECT run_id, COUNT(*) FROM audit_entries
-                WHERE run_id IN ({placeholders}) AND {_ACTIVITY_CATEGORY_SQL["unchanged"]}
-                GROUP BY run_id ORDER BY run_id
+                SELECT run_id, rule_id, MAX(id), MAX(occurred_at), COUNT(*) FROM audit_entries
+                WHERE {" AND ".join(conditions)}
+                GROUP BY run_id ORDER BY MAX(id) DESC LIMIT ?
                 """,
-                run_ids,
+                (lower, *parameters, _NO_CHANGE_RUN_LIMIT),
             ).fetchall()
-        return [NoChangeCountResponse(run_id=row[0], count=row[1]) for row in rows]
+        return [
+            NoChangeRunResponse(
+                run_id=row[0], rule_id=row[1], newest_id=row[2], occurred_at=row[3], count=row[4]
+            )
+            for row in rows
+        ]
 
     @app.get(
         "/api/v1/audit-entries/events",

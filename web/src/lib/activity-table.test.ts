@@ -79,37 +79,62 @@ describe("activity rows", () => {
   const now = new Date(2026, 8, 28, 20, 0)
   const at = (day: number, hour: number) => new Date(2026, 8, day, hour, 0).toISOString()
   const runs = groupRuns([
-    entry({ id: 5, run_id: "run-3", occurred_at: at(28, 18), action: "create", category: "changed" }),
-    entry({ id: 4, run_id: "run-2", occurred_at: at(28, 9), action: "update", category: "changed" }),
-    entry({ id: 2, run_id: "run-1", occurred_at: at(27, 9), action: "create", category: "changed" }),
+    entry({ id: 50, run_id: "run-3", occurred_at: at(28, 18), action: "create", category: "changed" }),
+    entry({ id: 40, run_id: "run-2", occurred_at: at(28, 9), action: "update", category: "changed" }),
+    entry({ id: 20, run_id: "run-1", occurred_at: at(27, 9), action: "create", category: "changed" }),
   ])
+  const quiet = (run_id: string, newest_id: number, occurred_at: string, count = 2) => ({
+    run_id,
+    rule_id: "rule-1",
+    newest_id,
+    occurred_at,
+    count,
+  })
+  const shape = (groups: ReturnType<typeof activityRows>) =>
+    groups.map((group) =>
+      group.kind === "quiet"
+        ? `quiet ${group.runs}×${group.checks}`
+        : group.rows.map((row) => (row.kind === "entry" ? row.entry.id : `+${row.count}`)).join(","),
+    )
 
-  it("names each day once, above its first run", () => {
+  it("names each day once, above its first group", () => {
     const groups = activityRows(runs, { now })
 
     expect(groups.map((group) => group.day)).toEqual(["Today", null, "Yesterday"])
   })
 
   it("ends a run with a count of its hidden no-change checks", () => {
-    const groups = activityRows(runs, { now, noChangeCounts: new Map([["run-2", 3]]) })
+    const groups = activityRows(runs, { now, noChangeRuns: [quiet("run-2", 39, at(28, 9), 3)] })
 
-    expect(groups[1].rows).toEqual([
-      { kind: "entry", entry: runs[1].entries[0] },
-      { kind: "folded", count: 3, expanded: false },
-    ])
-    expect(groups[0].rows.map((row) => row.kind)).toEqual(["entry"])
+    expect(shape(groups)).toEqual(["50", "40,+3", "20"])
   })
 
-  it("lists a run's loaded no-change checks in place, newest first, when it is expanded", () => {
-    const checks = [entry({ id: 3, run_id: "run-2" }), entry({ id: 6, run_id: "run-2" })]
+  it("shows runs that only confirmed events were up to date, one row per stretch of such runs", () => {
     const groups = activityRows(runs, {
       now,
-      noChangeCounts: new Map([["run-2", 2]]),
-      expanded: new Map([["run-2", checks]]),
+      noChangeRuns: [
+        quiet("run-6", 70, at(28, 19)),
+        quiet("run-5", 60, at(28, 18)),
+        quiet("run-4", 45, at(28, 12), 5),
+        quiet("run-0", 10, at(27, 8)),
+      ],
     })
 
-    expect(groups[1].rows.map((row) => (row.kind === "entry" ? row.entry.id : "fold"))).toEqual([6, 4, 3, "fold"])
-    expect(groups[1].rows.at(-1)).toEqual({ kind: "folded", count: 2, expanded: true })
+    expect(shape(groups)).toEqual(["quiet 2×4", "50", "quiet 1×5", "40", "20", "quiet 1×2"])
+    expect(groups[0]).toMatchObject({ newest: at(28, 19), oldest: at(28, 18) })
+  })
+
+  it("lists a run's loaded no-change checks in place and offers more when some are unloaded", () => {
+    const checks = [entry({ id: 39, run_id: "run-2" }), entry({ id: 41, run_id: "run-2" })]
+    const groups = activityRows(runs, {
+      now,
+      noChangeRuns: [quiet("run-2", 41, at(28, 9), 150)],
+      expanded: new Map([["run-2", { entries: checks, complete: false }]]),
+    })
+
+    expect(shape(groups)[1]).toBe("41,40,39,+150")
+    const run = groups[1]
+    expect(run.kind === "run" && run.rows.at(-1)).toEqual({ kind: "folded", count: 150, expanded: true, more: true })
   })
 })
 

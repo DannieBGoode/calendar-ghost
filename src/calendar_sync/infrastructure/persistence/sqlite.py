@@ -47,6 +47,7 @@ _FORWARD_MIGRATIONS = (
     (3, "0003_audit_reasons.sql"),
     (4, "0004_rule_editing.sql"),
     (5, "0005_occurrence_mappings.sql"),
+    (6, "0006_audit_run_index.sql"),
 )
 
 

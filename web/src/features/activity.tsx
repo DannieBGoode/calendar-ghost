@@ -42,8 +42,10 @@ import {
   SHOW_FILTERS,
   showCategories,
   whatHappened,
+  type ActivityGroup,
   type ActivityRow,
   type EventCell,
+  type ExpandedChecks,
   type HappenedIcon,
   type RuleNames,
 } from "@/lib/activity"
@@ -148,7 +150,8 @@ export function ActivityView({
 }) {
   const [state, update] = useActivityLocation(location)
   const { ruleId, show, entryId } = state
-  const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(new Set())
+  // Expanded runs and how many pages of their no-change checks are loaded.
+  const [expandedRuns, setExpandedRuns] = useState<ReadonlyMap<string, number>>(new Map())
   const focusDetail = useRef(false)
   const activity = useInfiniteQuery({
     queryKey: ["activity", ruleId, show],
@@ -175,19 +178,16 @@ export function ActivityView({
   })
   const entries = activity.data?.pages.flat() ?? []
   const runs = groupRuns(entries)
-  // The default view hides no-change checks; each run still says how many it made.
+  // The default view hides no-change checks; each run still says how many it made, including runs
+  // that made nothing else. Runs older than the loaded entries wait until older entries load.
   const countsNoChange = show === ""
-  const runIds = countsNoChange ? runs.flatMap((run) => (run.entries[0].run_id ? [run.entries[0].run_id] : [])) : []
-  // The service counts at most one page's worth of runs per request.
-  const runChunks = Array.from({ length: Math.ceil(runIds.length / ACTIVITY_PAGE_SIZE) }, (_, index) =>
-    runIds.slice(index * ACTIVITY_PAGE_SIZE, (index + 1) * ACTIVITY_PAGE_SIZE),
-  )
-  const noChangeCounts = useQueries({
-    queries: runChunks.map((chunk) => ({
-      queryKey: ["activity-no-change-counts", chunk],
-      queryFn: () => api.noChangeCounts(chunk),
-      placeholderData: keepPreviousData,
-    })),
+  const oldestLoaded = entries.at(-1)?.id
+  const noChangeAfter = activity.hasNextPage && oldestLoaded ? oldestLoaded - 1 : 0
+  const noChangeRuns = useQuery({
+    queryKey: ["activity-no-change-runs", ruleId, noChangeAfter],
+    queryFn: () => api.noChangeRuns({ ruleId: ruleId || undefined, after: noChangeAfter }),
+    enabled: countsNoChange && !activity.isPending,
+    placeholderData: keepPreviousData,
   })
   const listedEntry = entries.find((item) => item.id === entryId)
   // A shared link or an older page can name an entry that is not loaded.
@@ -200,12 +200,16 @@ export function ActivityView({
   const selected = listedEntry ?? (directEntry.data?.id === entryId ? directEntry.data : undefined)
   // An open no-change check shows in the table by expanding its run.
   const openRun = countsNoChange && selected?.category === "unchanged" ? selected.run_id : null
-  const expanded = [...expandedRuns, ...(openRun && !expandedRuns.has(openRun) ? [openRun] : [])]
+  const expanded: [string, number][] = [
+    ...expandedRuns,
+    ...(openRun && !expandedRuns.has(openRun) ? [[openRun, 1] as [string, number]] : []),
+  ]
   const expandedChecks = useQueries({
-    queries: expanded.map((runKey) => ({
-      queryKey: ["activity-no-change-checks", runKey],
-      queryFn: () => api.activity({ runId: runKey, categories: ["unchanged"] }),
+    queries: expanded.map(([runKey, pages]) => ({
+      queryKey: ["activity-no-change-checks", runKey, pages],
+      queryFn: () => loadNoChangeChecks(runKey, pages),
       enabled: countsNoChange,
+      placeholderData: keepPreviousData,
     })),
   })
   if (activity.isPending || incidents.isPending) return <PageSkeleton />
@@ -246,19 +250,19 @@ export function ActivityView({
     ),
     rulesLoaded: rules.data !== undefined,
   }
-  const loadedChecks = new Map<string, AuditEntry[]>()
-  expanded.forEach((runKey, index) => {
-    const checks = expandedChecks[index]?.data
-    if (checks) loadedChecks.set(runKey, checks)
+  const loadedChecks = new Map<string, ExpandedChecks>()
+  const loadingRuns = new Set<string>()
+  expanded.forEach(([runKey], index) => {
+    const query = expandedChecks[index]
+    if (query?.data) loadedChecks.set(runKey, query.data)
+    if (!query?.data || query.isPlaceholderData) loadingRuns.add(runKey)
   })
   const groups = activityRows(runs, {
-    noChangeCounts: countsNoChange
-      ? new Map(noChangeCounts.flatMap((counts) => counts.data ?? []).map((item) => [item.run_id, item.count]))
-      : undefined,
+    noChangeRuns: countsNoChange ? noChangeRuns.data : undefined,
     expanded: loadedChecks,
   })
   const visibleEntries = groups.flatMap((group) =>
-    group.rows.flatMap((row) => (row.kind === "entry" ? [row.entry] : [])),
+    group.kind === "run" ? group.rows.flatMap((row) => (row.kind === "entry" ? [row.entry] : [])) : [],
   )
   const selectedIndex = selected ? visibleEntries.findIndex((item) => item.id === selected.id) : -1
   const updating = activity.isPlaceholderData
@@ -281,16 +285,20 @@ export function ActivityView({
   }
 
   function changeFilters(next: Partial<ActivityLocationState>) {
-    setExpandedRuns(new Set())
+    setExpandedRuns(new Map())
     update({ ...next, entryId: null }, "replace")
   }
 
   function toggleRun(runKey: string) {
     setExpandedRuns((current) => {
-      const next = new Set(current)
-      if (!next.delete(runKey)) next.add(runKey)
+      const next = new Map(current)
+      if (!next.delete(runKey)) next.set(runKey, 1)
       return next
     })
+  }
+
+  function loadMoreChecks(runKey: string) {
+    setExpandedRuns((current) => new Map(current).set(runKey, (current.get(runKey) ?? 1) + 1))
   }
 
   function moveSelection(event: KeyboardEvent<HTMLTableElement>) {
@@ -362,7 +370,7 @@ export function ActivityView({
         </div>
         <p className="sr-only" role="status">{updating ? "Updating activity…" : ""}</p>
 
-        {entries.length === 0 ? (
+        {groups.length === 0 ? (
           <EmptyActivity
             ruleId={ruleId}
             show={show}
@@ -383,31 +391,36 @@ export function ActivityView({
                     {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
                   </tr>
                 </thead>
-                {groups.flatMap(({ run, day, rows }) => [
-                  ...(day
+                {groups.flatMap((group) => [
+                  ...(group.day
                     ? [
-                        <tbody key={`${run.key}-day`} role="rowgroup" className="activity-day">
+                        <tbody key={`${group.key}-day`} role="rowgroup" className="activity-day">
                           <tr role="row">
-                            <th scope="colgroup" role="rowheader" colSpan={columns}>{day}</th>
+                            <th scope="colgroup" role="rowheader" colSpan={columns}>{group.day}</th>
                           </tr>
                         </tbody>,
                       ]
                     : []),
-                  <tbody key={run.key} role="rowgroup" className="activity-run">
-                    {rows.map((row) => (
-                      <ActivityTableRow
-                        key={row.kind === "entry" ? row.entry.id : `${run.key}-folded`}
-                        row={row}
-                        loadingChecks={row.kind === "folded" && expanded.includes(run.key) && !loadedChecks.has(run.key)}
-                        context={context}
-                        state={state}
-                        selectedId={entryId}
-                        showRuleColumn={showRuleColumn}
-                        onOpen={openEntry}
-                        onFilterRule={(value) => changeFilters({ ruleId: value })}
-                        onToggleRun={() => toggleRun(run.key)}
-                      />
-                    ))}
+                  <tbody key={group.key} role="rowgroup" className="activity-run">
+                    {group.kind === "quiet" ? (
+                      <QuietRunsRow group={group} columns={columns} onShowAll={() => changeFilters({ show: "all" })} />
+                    ) : (
+                      group.rows.map((row) => (
+                        <ActivityTableRow
+                          key={row.kind === "entry" ? row.entry.id : `${group.key}-folded`}
+                          row={row}
+                          loadingChecks={row.kind === "folded" && loadingRuns.has(group.key)}
+                          context={context}
+                          state={state}
+                          selectedId={entryId}
+                          showRuleColumn={showRuleColumn}
+                          onOpen={openEntry}
+                          onFilterRule={(value) => changeFilters({ ruleId: value })}
+                          onToggleRun={() => toggleRun(group.key)}
+                          onLoadMore={() => loadMoreChecks(group.key)}
+                        />
+                      ))
+                    )}
                   </tbody>,
                 ])}
               </table>
@@ -539,6 +552,7 @@ function ActivityTableRow({
   onOpen,
   onFilterRule,
   onToggleRun,
+  onLoadMore,
 }: {
   row: ActivityRow
   loadingChecks: boolean
@@ -549,22 +563,32 @@ function ActivityTableRow({
   onOpen: (entry: AuditEntry) => void
   onFilterRule: (ruleId: string) => void
   onToggleRun: () => void
+  onLoadMore: () => void
 }) {
   if (row.kind === "folded") {
-    const label = loadingChecks
-      ? "Loading no-change checks…"
-      : row.expanded
-        ? `Hide ${row.count} no-change ${row.count === 1 ? "check" : "checks"}`
-        : `${row.count} ${row.count === 1 ? "event" : "events"} already up to date`
+    const label = row.expanded
+      ? `Hide ${row.count} no-change ${row.count === 1 ? "check" : "checks"}`
+      : `${row.count} ${row.count === 1 ? "event" : "events"} already up to date`
     return (
       <tr role="row" className="activity-folded-row">
         <td role="cell" className="activity-col-time" />
         <td role="cell" colSpan={showRuleColumn ? 3 : 2}>
-          <button type="button" className="activity-fold" aria-expanded={row.expanded} onClick={onToggleRun} disabled={loadingChecks}>
-            <Check aria-hidden="true" />
-            {label}
-            <ChevronDown aria-hidden="true" data-open={row.expanded} />
-          </button>
+          <div className="activity-fold-actions">
+            <button type="button" className="activity-fold" aria-expanded={row.expanded} onClick={onToggleRun}>
+              <Check aria-hidden="true" />
+              {label}
+              <ChevronDown aria-hidden="true" data-open={row.expanded} />
+            </button>
+            {loadingChecks ? (
+              <span className="activity-fold-status" role="status">Loading…</span>
+            ) : (
+              row.more && (
+                <button type="button" className="activity-fold" onClick={onLoadMore}>
+                  Show more
+                </button>
+              )
+            )}
+          </div>
         </td>
       </tr>
     )
@@ -580,6 +604,47 @@ function ActivityTableRow({
       onFilterRule={onFilterRule}
     />
   )
+}
+
+function QuietRunsRow({
+  group,
+  columns,
+  onShowAll,
+}: {
+  group: Extract<ActivityGroup, { kind: "quiet" }>
+  columns: number
+  onShowAll: () => void
+}) {
+  const events = `${group.checks} ${group.checks === 1 ? "event" : "events"} already up to date`
+  const scope = group.runs > 1 ? ` across ${group.runs} runs since ${formatClockTime(group.oldest)}` : ""
+  return (
+    <tr role="row" className="activity-folded-row activity-quiet-row">
+      <td role="cell" className="activity-col-time">
+        <time dateTime={group.newest}>{formatClockTime(group.newest)}</time>
+      </td>
+      <td role="cell" colSpan={columns - 1}>
+        <div className="activity-fold-actions">
+          <span className="activity-quiet"><Check aria-hidden="true" />{events}{scope}</span>
+          <button type="button" className="activity-fold" onClick={onShowAll}>
+            Show all decisions
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+/** Loads the first `pages` pages of one run's no-change checks. */
+async function loadNoChangeChecks(runId: string, pages: number): Promise<ExpandedChecks> {
+  const entries: AuditEntry[] = []
+  let before: number | undefined
+  for (let page = 0; page < pages; page += 1) {
+    const batch = await api.activity({ runId, categories: ["unchanged"], before })
+    entries.push(...batch)
+    if (batch.length < ACTIVITY_PAGE_SIZE) return { entries, complete: true }
+    before = batch.at(-1)?.id
+  }
+  return { entries, complete: false }
 }
 
 function EntryRow({

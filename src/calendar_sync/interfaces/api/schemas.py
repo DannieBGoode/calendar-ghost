@@ -151,8 +151,11 @@ class ActivityEventResponse(BaseModel):
     destination: EventSnapshotResponse | None
 
 
-class NoChangeCountResponse(BaseModel):
+class NoChangeRunResponse(BaseModel):
     run_id: str
+    rule_id: str
+    newest_id: int
+    occurred_at: str
     count: int
 
 

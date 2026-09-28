@@ -251,6 +251,14 @@ def _seed(container: Container, path: Path, now: datetime) -> None:
         record(60, personal, "preview-run-4", "ignore", "projection_current", event)
     record(60, personal, "preview-run-4", "update", "destination_drift_repaired", "flight")
     record(60, personal, "preview-run-4", "conflict", "destination_ownership_inconsistent", "vet")
+    # Runs that only confirmed events were up to date, as scheduled checks usually do.
+    for minutes, run in ((50, "preview-quiet-1"), (40, "preview-quiet-2")):
+        for event in ("dentist", "gym", "school"):
+            record(minutes, personal, run, "ignore", "projection_current", event)
+    # A reconciliation large enough that its no-change checks load in pages.
+    for _ in range(150):
+        record(30, family, "preview-reconcile", "ignore", "projection_current", "yoga")
+    record(30, family, "preview-reconcile", "update", "occurrence_drift_repaired", "piano")
     record(20, personal, "preview-run-5", "delete", "source_cancelled", "dinner")
     record(20, personal, "preview-run-5", "delete", "source_cancelled", "deleted-event")
     record(20, personal, "preview-run-5", "ignore", "projection_current", "gym")

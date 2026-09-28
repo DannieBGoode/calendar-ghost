@@ -1458,7 +1458,8 @@ td.activity-col-time {
 
 .activity-day th {
   position: sticky;
-  top: 0;
+  /* Below the sticky top bar. */
+  top: 4rem;
   z-index: 1;
   padding: 1.5rem 0 0.5rem;
   border-bottom: 1px solid var(--border);
@@ -1772,6 +1773,30 @@ thead + .activity-day th {
   font-size: 0.8rem;
   font-weight: 600;
   transition: color var(--motion-fast) var(--ease-out);
+}
+
+.activity-fold-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+}
+
+.activity-fold-status,
+.activity-quiet {
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+
+.activity-quiet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.activity-quiet svg {
+  width: 0.9rem;
+  height: 0.9rem;
 }
 
 .activity-fold:hover {

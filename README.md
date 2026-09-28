@@ -125,7 +125,8 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 happens, what happened in plain words (such as "Added to Work" or "Blocked: not owned by this
 rule"), and the rule. Event titles and times are read live from Google for the rows on screen and are
 never stored. By default each run shows how many events it found already up to date in one row you
-can expand; **All decisions** lists every check. Choose a rule from the picker, which shows each
+can expand, and runs that found nothing else to do share one summary row; **All decisions** lists
+every check. Choose a rule from the picker, which shows each
 rule's calendars and accounts, or select a row's rule to filter to it. Select an entry to open its
 details beside the table: the event, what happened and why, the copy in the destination calendar,
 and technical identifiers on demand. The rule, filter, and open entry are kept in the address, so

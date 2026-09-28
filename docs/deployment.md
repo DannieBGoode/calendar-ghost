@@ -36,6 +36,10 @@ recurring projections first, pause rules before upgrading, then preview and enab
 back works with the same database: earlier releases ignore the table and skip recurring events, so
 existing recurring projections stay unchanged until you upgrade again.
 
+Migration 6 adds an index on `audit_entries(run_id, id)` so Activity can count and expand each
+run's no-change checks without scanning the whole audit history. Rolling back works with the same
+database: earlier releases ignore the index.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

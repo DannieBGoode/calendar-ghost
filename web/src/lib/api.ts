@@ -148,6 +148,14 @@ export type EventSnapshot = {
   web_link: string | null
 }
 export type ActivityEvent = { source: EventSnapshot; destination: EventSnapshot | null }
+/** A run that made no-change checks, which the default Activity view counts instead of listing. */
+export type NoChangeRun = {
+  run_id: string
+  rule_id: string
+  newest_id: number
+  occurred_at: string
+  count: number
+}
 export type ActivityEventSummary = {
   entry_id: number
   lookup: "found" | "rule_removed" | "unavailable"
@@ -256,10 +264,10 @@ export const api = {
     if (before) params.set("before", String(before))
     return request<AuditEntry[]>(`/api/v1/audit-entries?${params}`)
   },
-  noChangeCounts: (runIds: string[]) => {
-    const params = new URLSearchParams()
-    for (const runId of runIds) params.append("run_ids", runId)
-    return request<{ run_id: string; count: number }[]>(`/api/v1/audit-entries/no-change-counts?${params}`)
+  noChangeRuns: ({ ruleId, after }: { ruleId?: string; after: number }) => {
+    const params = new URLSearchParams({ after: String(after) })
+    if (ruleId) params.set("rule_id", ruleId)
+    return request<NoChangeRun[]>(`/api/v1/audit-entries/no-change-runs?${params}`)
   },
   activityEntry: (entryId: number) => request<AuditEntry>(`/api/v1/audit-entries/${entryId}`),
   activityEvent: (entryId: number) =>
