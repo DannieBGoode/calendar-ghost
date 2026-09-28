@@ -1098,6 +1098,30 @@ def test_removal_conflicts_are_blocked_activity_scoped_by_rule(tmp_path: Path) -
     ]
 
 
+def test_recent_changes_report_rule_removal_conflicts_as_blocked(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("remove_projection", None, run_id="removal"),
+        _audit("removal_conflict", None, run_id="removal"),
+        _audit("removal_conflict", None, rule_id="rule-2", run_id="conflict-only"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = {
+            change["run_key"]: change for change in client.get("/api/v1/recent-changes").json()
+        }
+
+    # Activity files these under Blocked, so a run that only left events in place still appears.
+    assert (changes["removal"]["deleted"], changes["removal"]["blocked"]) == (1, 1)
+    assert len(changes["removal"]["entry_ids"]) == 2
+    assert (changes["conflict-only"]["blocked"], len(changes["conflict-only"]["entry_ids"])) == (
+        1,
+        1,
+    )
+
+
 def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None:
     container = build_container(Settings(tmp_path / "test.db"))
     _append_audit(

@@ -506,8 +506,7 @@ def create_app(container: Container | None = None) -> FastAPI:
                         SUM(action = 'update' AND {_NOT_REPAIR}) AS updated,
                         SUM(action IN ('delete', 'remove_projection')) AS deleted,
                         SUM(action IN ('create', 'update') AND NOT {_NOT_REPAIR}) AS repaired,
-                        SUM(action = 'conflict'
-                            AND COALESCE(reason, '') != 'recurring_unsupported') AS blocked
+                        SUM({_BLOCKED}) AS blocked
                     FROM audit_entries
                     WHERE rule_id IN ({",".join("?" * len(rule_ids))})
                         AND {_RUN_KEY} IN ({",".join("?" * len(run_keys))})
@@ -522,13 +521,10 @@ def create_app(container: Container | None = None) -> FastAPI:
                 entry_ids = [
                     int(row[0])
                     for row in connection.execute(
-                        """
+                        f"""
                         SELECT id FROM audit_entries
-                        WHERE rule_id = ?
-                            AND COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16)) = ?
-                            AND source_event_id IS NOT NULL
-                            AND action IN ('create', 'update', 'delete', 'conflict')
-                            AND COALESCE(reason, '') != 'recurring_unsupported'
+                        WHERE rule_id = ? AND {_RUN_KEY} = ? AND source_event_id IS NOT NULL
+                            AND {_CHANGING}
                         ORDER BY id DESC LIMIT 5
                         """,
                         (run["rule_id"], run["run_key"]),
@@ -888,10 +884,9 @@ def create_app(container: Container | None = None) -> FastAPI:
 
 _RECENT_WINDOW = 2000
 _RUN_KEY = "COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16))"
-_CHANGING = (
-    "(action IN ('create', 'update', 'delete', 'remove_projection')"
-    " OR (action = 'conflict' AND COALESCE(reason, '') != 'recurring_unsupported'))"
-)
+# Blocked entries match Activity's classification, including Rule Removal ownership conflicts.
+_BLOCKED = _ACTIVITY_CATEGORY_SQL["blocked"]
+_CHANGING = f"(action IN ('create', 'update', 'delete', 'remove_projection') OR {_BLOCKED})"
 _NOT_REPAIR = (
     "COALESCE(reason, '') NOT IN "
     "('projection_missing', 'destination_drift_repaired', 'occurrence_drift_repaired')"
