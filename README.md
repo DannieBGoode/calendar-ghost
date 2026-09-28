@@ -74,6 +74,10 @@ slash. See Google's guides for [enabling Workspace APIs](https://developers.goog
 [web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), and
 [Calendar scopes](https://developers.google.com/workspace/calendar/api/auth).
 
+Running on a Raspberry Pi or another LAN host? Google rejects plain-HTTP redirect URIs other than
+`localhost`, so read [Google OAuth redirect URI on a LAN host](docs/deployment.md#google-oauth-redirect-uri-on-a-lan-host)
+before registering the redirect URI.
+
 ### 2. Configure local secrets
 
 Copy the example file:

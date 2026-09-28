@@ -713,6 +713,15 @@ p {
   line-height: 1.5;
 }
 
+.oauth-feedback code {
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
 .oauth-feedback-success {
   border-color: var(--success-border);
   background: var(--success-surface);

@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
 import { ApiError, api, type ConnectedAccount } from "@/lib/api"
 import { accountInitials } from "@/lib/account-avatar"
+import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
 import type { AppView } from "@/lib/navigation"
 import type { ThemePreference } from "@/lib/theme"
 
@@ -49,7 +50,14 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
 
   if (view === "rules") return <RulesView rules={rules.data} dashboard={dashboard.data} onViewChange={onViewChange} />
   if (view === "activity") return <ActivityView />
-  if (view === "settings") return <SettingsView googleConfigured={google.data.configured} />
+  if (view === "settings") {
+    return (
+      <SettingsView
+        googleConfigured={google.data.configured}
+        redirectUri={google.data.redirect_uri}
+      />
+    )
+  }
 
   const empty = dashboard.data.connected_accounts === 0
   return (
@@ -87,6 +95,7 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
         <OnboardingSteps
           onViewChange={onViewChange}
           googleConfigured={google.data.configured}
+          redirectUri={google.data.redirect_uri}
         />
       ) : (
         <RecentRules onViewChange={onViewChange} count={rules.data.length} />
@@ -98,9 +107,11 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
 function OnboardingSteps({
   onViewChange,
   googleConfigured,
+  redirectUri,
 }: {
   onViewChange: (view: AppView) => void
   googleConfigured: boolean
+  redirectUri: string | null
 }) {
   return (
     <section className="workflow" aria-labelledby="workflow-title">
@@ -108,6 +119,7 @@ function OnboardingSteps({
         <div><h2 id="workflow-title">Start with an account</h2><p>Nothing is written to Google until a rule passes preview and you enable it.</p></div>
         <span className="step-progress">Step 1 of 3</span>
       </div>
+      <RedirectMismatchNotice redirectUri={redirectUri} />
       <ol className="step-list">
         <li className="step-row current">
           <span className="step-number">1</span>
@@ -140,6 +152,31 @@ function OnboardingSteps({
       </ol>
       <Button variant="ghost" onClick={() => onViewChange("rules")}>Learn how rules work <ArrowRight /></Button>
     </section>
+  )
+}
+
+function RedirectMismatchNotice({ redirectUri }: { redirectUri: string | null }) {
+  const mismatch = oauthRedirectMismatch(redirectUri, window.location.origin)
+  if (!mismatch) return null
+  return (
+    <div className="oauth-feedback oauth-feedback-warning" role="status">
+      <ShieldAlert aria-hidden="true" />
+      <div>
+        <h2>Google will return to a different address</h2>
+        <p>
+          After you approve access, Google sends your browser to <code>{mismatch.redirectOrigin}</code>,
+          not <code>{mismatch.currentOrigin}</code>. If that address does not reach this
+          installation, the account will not connect.
+        </p>
+        <p>
+          Open Calendar Sync at <code>{mismatch.redirectOrigin}</code>, for example through an SSH
+          tunnel, or set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address for this
+          installation. If Google lands on a connection error, replace{" "}
+          <code>{mismatch.redirectOrigin}</code> with <code>{mismatch.currentOrigin}</code> in the
+          address bar within 10 minutes.
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -553,7 +590,13 @@ function ActivityHeading() {
   )
 }
 
-function SettingsView({ googleConfigured }: { googleConfigured: boolean }) {
+function SettingsView({
+  googleConfigured,
+  redirectUri,
+}: {
+  googleConfigured: boolean
+  redirectUri: string | null
+}) {
   const { preference, setPreference } = useTheme()
   const queryClient = useQueryClient()
   const oauthOutcome = new URLSearchParams(window.location.search).get("google")
@@ -718,6 +761,7 @@ function SettingsView({ googleConfigured }: { googleConfigured: boolean }) {
             before connecting an account.
           </div>
         )}
+        <RedirectMismatchNotice redirectUri={redirectUri} />
         {accounts.isPending && (
           <div className="account-list-loading" aria-label="Loading connected accounts">
             <Skeleton className="h-20 w-full" />
