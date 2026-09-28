@@ -14,6 +14,7 @@ describe("Activity view states", () => {
 describe("activity for removed rules", () => {
   it("explains why events of a removed rule cannot be looked up", () => {
     expect(activitySource).toContain("entryInspection(entry, ruleExists)")
-    expect(activitySource).toContain("This rule was removed, so its events can no longer be looked up.")
+    expect(activitySource).toContain("REMOVED_RULE_LOOKUP")
+    expect(activitySource).toContain("eventLookupFailure(event.error)")
   })
 })

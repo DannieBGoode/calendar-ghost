@@ -448,12 +448,6 @@ def create_app(container: Container | None = None) -> FastAPI:
         dependencies=[Depends(require_admin)],
     )
     async def inspect_activity_event(entry_id: int) -> ActivityEventResponse:
-        provider = resolved.calendar_provider
-        if provider is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure Google OAuth and the installation master key before inspecting events",
-            )
         with sqlite3.connect(resolved.settings.database_path) as connection:
             row = connection.execute(
                 """
@@ -467,7 +461,17 @@ def create_app(container: Container | None = None) -> FastAPI:
         with resolved.unit_of_work() as uow:
             rule = uow.rules.get(SyncRuleId(str(row[0])))
         if rule is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")
+            # Retained history of a removed rule no longer names its calendars.
+            raise HTTPException(
+                status.HTTP_410_GONE,
+                "the rule for this activity entry was removed, so its events cannot be looked up",
+            )
+        provider = resolved.calendar_provider
+        if provider is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "configure Google OAuth and the installation master key before inspecting events",
+            )
         # Event content is read live for display only; it is never persisted or logged.
         try:
             source = await asyncio.to_thread(

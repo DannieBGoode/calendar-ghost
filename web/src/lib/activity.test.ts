@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { describeEntry, entryInspection, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
+import { ApiError } from "./api"
+import { describeEntry, entryInspection, eventLookupFailure, formatRunTime, groupRuns, outcomeLabel, summarizeRun } from "./activity"
 import type { AuditEntry } from "./api"
 
 function entry(overrides: Partial<AuditEntry>): AuditEntry {
@@ -58,6 +59,18 @@ describe("activity presentation", () => {
     expect(
       entryInspection(entry({ action: "create", reason: null, detail: "", source_event_id: null }), true),
     ).toBeNull()
+  })
+
+  it("explains why an event lookup failed", () => {
+    expect(eventLookupFailure(new ApiError("gone", 410))).toBe(
+      "This rule was removed, so its events can no longer be looked up.",
+    )
+    expect(eventLookupFailure(new ApiError("unavailable", 503))).toBe(
+      "Google is not configured, so the event cannot be looked up.",
+    )
+    expect(eventLookupFailure(new ApiError("provider", 424))).toBe(
+      "Google could not return this event right now. The account may need reauthorization in Settings.",
+    )
   })
 
   it("labels outcomes by category before action", () => {

@@ -1,4 +1,4 @@
-import type { ActivityCategory, AuditEntry } from "@/lib/api"
+import { ApiError, type ActivityCategory, type AuditEntry } from "@/lib/api"
 
 type ReasonCopy = { summary: string; explanation: string }
 
@@ -122,6 +122,18 @@ export function entryInspection(
 ): "event" | "details" | null {
   if (entry.source_event_id && ruleExists) return "event"
   return describeEntry(entry).explanation ? "details" : null
+}
+
+export const REMOVED_RULE_LOOKUP =
+  "This rule was removed, so its events can no longer be looked up."
+
+/** The service answers 410 when the entry's rule was removed, whatever the page believed. */
+export function eventLookupFailure(error: unknown): string {
+  if (error instanceof ApiError && error.status === 410) return REMOVED_RULE_LOOKUP
+  if (error instanceof ApiError && error.status === 503) {
+    return "Google is not configured, so the event cannot be looked up."
+  }
+  return "Google could not return this event right now. The account may need reauthorization in Settings."
 }
 
 export function outcomeLabel(entry: Pick<AuditEntry, "action" | "category">): string {

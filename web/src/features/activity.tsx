@@ -12,10 +12,12 @@ import {
   CATEGORY_FILTERS,
   describeEntry,
   entryInspection,
+  eventLookupFailure,
   formatEventTime,
   formatRunTime,
   groupRuns,
   outcomeLabel,
+  REMOVED_RULE_LOOKUP,
   summarizeRun,
 } from "@/lib/activity"
 import {
@@ -26,7 +28,6 @@ import {
 } from "@/lib/activity-failure"
 import {
   ACTIVITY_PAGE_SIZE,
-  ApiError,
   api,
   type ActivityCategory,
   type AuditEntry,
@@ -287,9 +288,7 @@ function ActivityEntryRow({ entry, ruleExists }: { entry: AuditEntry; ruleExists
             <ActivityEventDetails entry={entry} />
           ) : (
             entry.source_event_id && (
-              <p className="activity-event-status">
-                This rule was removed, so its events can no longer be looked up.
-              </p>
+              <p className="activity-event-status">{REMOVED_RULE_LOOKUP}</p>
             )
           )}
         </div>
@@ -309,9 +308,7 @@ function ActivityEventDetails({ entry }: { entry: AuditEntry }) {
   if (event.error) {
     return (
       <p className="activity-event-status" role="alert">
-        {event.error instanceof ApiError && event.error.status === 503
-          ? "Google is not configured, so the event cannot be looked up."
-          : "Google could not return this event right now. The account may need reauthorization in Settings."}
+        {eventLookupFailure(event.error)}
       </p>
     )
   }

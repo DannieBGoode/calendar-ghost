@@ -1155,3 +1155,23 @@ def test_pause_waits_for_an_in_flight_provider_write(tmp_path: Path) -> None:
 
     assert blocked_while_writing
     assert responses == [200]
+
+
+def test_activity_event_of_a_removed_rule_reports_gone_without_provider_reads(
+    tmp_path: Path,
+) -> None:
+    provider = FakeInspectionProvider({"source-event": event()})
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(container, _audit("detach_projection", None, run_id=None))
+
+    for candidate in (
+        container,
+        replace(container, calendar_provider=cast(CalendarProvider, provider)),
+    ):
+        with TestClient(create_app(candidate)) as client:
+            client.post("/api/v1/setup/admin", json=PASSWORD)
+            client.post("/api/v1/session", json=PASSWORD)
+            response = client.get("/api/v1/audit-entries/1/event")
+            assert response.status_code == 410
+            assert "removed" in response.json()["detail"]
+    assert provider.requested == []
