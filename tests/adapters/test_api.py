@@ -1,4 +1,5 @@
 import sqlite3
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -1175,3 +1176,63 @@ def test_activity_event_of_a_removed_rule_reports_gone_without_provider_reads(
             assert response.status_code == 410
             assert "removed" in response.json()["detail"]
     assert provider.requested == []
+
+
+def _waits_for_rule_writes(container: Container, request: Callable[[TestClient], int]) -> int:
+    responses: list[int] = []
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        writing = container.rule_locks.for_writes(rule().id)
+        writing.acquire()
+        worker = Thread(target=lambda: responses.append(request(client)))
+        worker.start()
+        worker.join(0.2)
+        blocked = worker.is_alive()
+        writing.release()
+        worker.join(2)
+    assert blocked
+    return responses[0]
+
+
+def test_enable_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.DRY_RUN_VALIDATED))
+        uow.commit()
+
+    status_code = _waits_for_rule_writes(
+        container, lambda client: client.post("/api/v1/rules/rule-1/enable").status_code
+    )
+
+    assert status_code == 200
+
+
+def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
+    container = replace(
+        build_container(Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())),
+        scheduler=None,
+    )
+    assert container.connected_accounts is not None
+    account = container.connected_accounts.save(
+        "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(
+            SyncRule(
+                rule().id,
+                endpoint("personal", "personal-calendar"),
+                endpoint(account.id.value, "work-calendar"),
+                state=SyncRuleState.ENABLED,
+            )
+        )
+        uow.commit()
+
+    status_code = _waits_for_rule_writes(
+        container,
+        lambda client: client.post(f"/api/v1/accounts/{account.id.value}/disconnect").status_code,
+    )
+
+    assert status_code == 200
+    with container.unit_of_work() as uow:
+        degraded = uow.rules.get(rule().id)
+    assert degraded is not None and degraded.state is SyncRuleState.DEGRADED

@@ -45,10 +45,11 @@ class RemoveSyncRule:
 
     def execute(self, rule_id: SyncRuleId, handling: ProjectionHandling) -> RemovalResult:
         with self.locks.for_rule(rule_id), self.unit_of_work() as uow:
-            rule = self._require_possible(uow.rules.get(rule_id), rule_id, handling)
+            with self.locks.for_writes(rule_id):
+                rule = self._require_possible(uow.rules.get(rule_id), rule_id, handling)
+                uow.rules.save(rule.begin_removal())
+                uow.commit()
             deleting = handling is ProjectionHandling.DELETE
-            uow.rules.save(rule.begin_removal())
-            uow.commit()
 
             mappings = uow.mappings.for_rule(rule.id)
             deleted = 0

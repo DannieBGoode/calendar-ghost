@@ -95,6 +95,7 @@ def build_container(settings: Settings | None = None) -> Container:
             provider,
             projector,
             SystemClock(),
+            rule_locks,
         )
         reconcile_sync_rule = ReconcileSyncRule(
             unit_of_work,
@@ -126,6 +127,7 @@ def build_container(settings: Settings | None = None) -> Container:
                 resolved.database_path,
                 unit_of_work,
                 IncidentNotifier(channels) if channels else None,
+                locks=rule_locks,
             ),
         )
     create_sync_rule = CreateSyncRule(unit_of_work)

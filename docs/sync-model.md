@@ -23,9 +23,12 @@ would otherwise reach only future edits. When a rule's reprojection flag is set,
 ignores both cursors, then loads the authoritative source of every remaining Event Mapping,
 including events that ended before the Initial Sync Window, and applies the normal decision. A
 source that cannot be verified is recorded as a Conflict and its projection is left unchanged. The
-run clears the flag with its cursors only if the rule was not changed again meanwhile. Saving the
-change, like pausing, waits for any provider write already in flight; a Sync Run re-checks the
-rule before each write and stops without advancing cursors once it is paused or changed.
+run clears the flag with its cursors only if the rule was not changed again meanwhile. Every change
+to a rule's state or policy, including saving, pausing, enabling, preview validation, removal, and
+degradation, takes a short per-rule lock that also spans each provider write. Lifecycle changes
+therefore never overwrite one another and wait for at most one write already in flight; a Sync
+Run re-checks the rule before each write and stops without advancing cursors once it is paused or
+changed.
 
 ## Rule Removal
 

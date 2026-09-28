@@ -309,13 +309,18 @@ def create_app(container: Container | None = None) -> FastAPI:
                 f"connected account {account_id} does not exist",
             ) from error
         with resolved.unit_of_work() as uow:
-            for rule in uow.rules.list():
-                if _rule_uses_account(rule, existing.id) and rule.state in {
+            affected = [
+                rule.id for rule in uow.rules.list() if _rule_uses_account(rule, existing.id)
+            ]
+        for rule_id in affected:
+            with resolved.rule_locks.for_writes(rule_id), resolved.unit_of_work() as uow:
+                rule = uow.rules.get(rule_id)
+                if rule is not None and rule.state in {
                     SyncRuleState.DRY_RUN_VALIDATED,
                     SyncRuleState.ENABLED,
                 }:
                     uow.rules.save(rule.degrade())
-            uow.commit()
+                    uow.commit()
         try:
             account = resolved.connected_accounts.disconnect(ConnectedAccountId(account_id))
         except ConnectedGoogleAccountNotFound as error:
@@ -632,7 +637,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         dependencies=[Depends(require_admin)],
     )
     def enable_rule(rule_id: str) -> RuleResponse:
-        with resolved.unit_of_work() as uow:
+        with resolved.rule_locks.for_writes(SyncRuleId(rule_id)), resolved.unit_of_work() as uow:
             rule = uow.rules.get(SyncRuleId(rule_id))
             if rule is None:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")

@@ -1,5 +1,6 @@
 import sqlite3
 from pathlib import Path
+from threading import Thread
 from typing import cast
 
 import pytest
@@ -9,9 +10,10 @@ from calendar_sync.application.errors import (
     ProviderFailureKind,
     RuleNotExecutable,
 )
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
-from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.model import SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import (
     IncidentNotification,
     IncidentNotifier,
@@ -203,3 +205,32 @@ def test_rule_removed_or_edited_during_a_pass_is_skipped_without_an_incident() -
     assert execute.calls == 1
     assert health.failures == []
     assert health.successes == 0
+
+
+def test_degrading_after_an_authorization_failure_waits_for_a_concurrent_rule_change(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    unit_of_work = SqliteUnitOfWorkFactory(database)
+    with unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    locks = RuleLocks()
+    health = SqliteRuleHealth(database, unit_of_work, locks=locks)
+    held = locks.for_writes(rule().id)
+    held.acquire()
+    worker = Thread(
+        target=health.record_failure,
+        args=(rule(), ProviderFailure(ProviderFailureKind.AUTHENTICATION, "expired")),
+    )
+    worker.start()
+    worker.join(0.1)
+    blocked = worker.is_alive()
+    held.release()
+    worker.join(2)
+
+    assert blocked
+    with unit_of_work() as uow:
+        degraded = uow.rules.get(rule().id)
+    assert degraded is not None and degraded.state is SyncRuleState.DEGRADED

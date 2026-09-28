@@ -15,6 +15,7 @@ from calendar_sync.application.errors import (
     ProviderFailureKind,
     RuleNotExecutable,
 )
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import SyncRule, SyncRuleState
@@ -35,9 +36,12 @@ class SqliteRuleHealth:
         database_path: Path,
         unit_of_work: UnitOfWorkFactory,
         notifier: IncidentNotifier | None = None,
+        *,
+        locks: RuleLocks | None = None,
     ) -> None:
         self._database_path = database_path
         self._unit_of_work = unit_of_work
+        self._locks = locks or RuleLocks()
         self._notifier = notifier
 
     def record_success(self, rule: SyncRule) -> None:
@@ -88,7 +92,7 @@ class SqliteRuleHealth:
     def _degrade(self, rule: SyncRule) -> None:
         if rule.state is not SyncRuleState.ENABLED:
             return
-        with self._unit_of_work() as uow:
+        with self._locks.for_writes(rule.id), self._unit_of_work() as uow:
             current = uow.rules.get(rule.id)
             if current is not None and current.state is SyncRuleState.ENABLED:
                 uow.rules.save(current.degrade())

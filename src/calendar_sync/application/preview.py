@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 
 from calendar_sync.application.errors import RuleNotExecutable
+from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import CalendarProvider, Clock, UnitOfWorkFactory
 from calendar_sync.domain.model import AllDaySyncPolicy, EventStatus, SyncRuleId, SyncRuleState
 from calendar_sync.domain.services import EventProjector
@@ -30,6 +31,7 @@ class PreviewSyncRule:
     provider: CalendarProvider
     projector: EventProjector
     clock: Clock
+    locks: RuleLocks = field(default_factory=RuleLocks)
 
     def execute(self, rule_id: SyncRuleId) -> RulePreview:
         with self.unit_of_work() as uow:
@@ -67,7 +69,7 @@ class PreviewSyncRule:
                 )
             )
 
-        with self.unit_of_work() as uow:
+        with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
             current = uow.rules.get(rule.id)
             if current is None or current.material_signature != rule.material_signature:
                 raise RuleNotExecutable("sync rule changed while preview was running")

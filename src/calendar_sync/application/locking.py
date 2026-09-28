@@ -11,8 +11,10 @@ class RuleLocks:
     """Per-rule locks shared by every operation that writes on behalf of one rule.
 
     ``for_rule`` serializes whole runs: synchronization, reconciliation, and removal. ``for_writes``
-    is held only around each provider write and its stop check, so pausing or saving a Material
-    Rule Change waits for at most one in-flight write instead of a whole run.
+    is short: it spans each provider write with its stop check, and every read-modify-write of the
+    rule itself, so lifecycle changes never overwrite each other and wait for at most one
+    in-flight write instead of a whole run. Acquire ``for_rule`` before ``for_writes``, never the
+    reverse.
     """
 
     _locks: dict[SyncRuleId, Lock] = field(default_factory=dict)

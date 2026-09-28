@@ -160,15 +160,17 @@ class ExecuteSyncRule:
 
             uow.cursors.save(rule.id, changes.next_cursor)
             uow.destination_cursors.save(rule.id, destination_changes.next_cursor)
-            if reproject:
-                current = uow.rules.get(rule.id)
-                # An edit made while this run was in flight keeps reprojection pending.
-                if (
-                    current is not None
-                    and current.reprojection_required
-                    and current.material_signature == rule.material_signature
-                ):
-                    uow.rules.save(current.complete_reprojection())
+            with self.locks.for_writes(rule.id):
+                if reproject:
+                    current = uow.rules.get(rule.id)
+                    # An edit made while this run was in flight keeps reprojection pending.
+                    if (
+                        current is not None
+                        and current.reprojection_required
+                        and current.material_signature == rule.material_signature
+                    ):
+                        uow.rules.save(current.complete_reprojection())
+                uow.commit()
             uow.run_outcomes.record(
                 RuleRunOutcome(
                     rule.id,
