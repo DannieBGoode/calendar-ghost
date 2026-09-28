@@ -52,6 +52,11 @@ export function appLocationFromPathname(pathname: string): AppLocation {
   return { view: PATH_VIEWS.get(normalized) ?? "overview", ruleId: null }
 }
 
+/** Whether the browser is showing this rule's details right now. */
+export function isViewingRule(ruleId: string, pathname: string = window.location.pathname): boolean {
+  return appLocationFromPathname(pathname).ruleId === ruleId
+}
+
 export function appViewFromPathname(pathname: string): AppView {
   return appLocationFromPathname(pathname).view
 }

@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { api, type ConnectedAccount, type DiscoveredCalendar, type Rule } from "@/lib/api"
 import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
+import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
 import { useNow } from "@/lib/use-now"
 import { useRuleCommands } from "@/lib/use-rule-commands"
@@ -41,6 +42,7 @@ export function RulesView({
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules, refetchInterval: 60_000 })
   const { accounts, endpoints } = useRuleEndpoints(rules.data ?? [])
   const commands = useRuleCommands()
+  const removingIds = useRemovingRuleIds()
   const [builderChoice, setBuilderChoice] = useState<boolean | null>(null)
   const [noticeDismissed, setNoticeDismissed] = useState(false)
   const createButton = useRef<HTMLButtonElement>(null)
@@ -156,6 +158,7 @@ export function RulesView({
             const { source, destination, disconnected } = endpoints(rule)
             const stopped = rule.state === "degraded" || disconnected.length > 0
             const pending = commands.pending[rule.id]
+            const state = removingIds.has(rule.id) ? "removing" : rule.state
             const headingId = `rule-${rule.id}-name`
             const run = (command: Parameters<typeof commands.run>[1]) =>
               void commands.run(rule.id, command, destination.name, () => rows.current.get(rule.id) ?? null)
@@ -202,9 +205,9 @@ export function RulesView({
                     </p>
                   </div>
                   <div className="rule-actions">
-                    <RuleStatusBadge state={rule.state} stopped={stopped} />
+                    <RuleStatusBadge state={state} stopped={stopped} />
                     <RuleNextAction
-                      state={rule.state}
+                      state={state}
                       disconnected={disconnected.length > 0}
                       pending={pending}
                       describedBy={headingId}
@@ -225,7 +228,7 @@ export function RulesView({
                       </a>
                     </Button>
                     <RuleCommandMenu
-                      state={rule.state}
+                      state={state}
                       disconnected={disconnected.length > 0}
                       pending={pending}
                       source={source.name}
