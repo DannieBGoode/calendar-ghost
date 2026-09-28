@@ -18,7 +18,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(body?.detail ?? "The request could not be completed.", response.status)
   }
   if (response.status === 204) return undefined as T
-  return (await response.json()) as T
+  try {
+    return (await response.json()) as T
+  } catch (error) {
+    // The request reached a server, so an unparseable body is a service failure, not a
+    // connectivity one; a proxy fallback page is the usual cause.
+    if (!(error instanceof SyntaxError)) throw error
+    throw new ApiError("The service returned an unreadable response.", response.status)
+  }
 }
 
 export type SetupStatus = { administrator_configured: boolean }
@@ -177,9 +184,9 @@ export const api = {
     if (ruleId) params.set("rule_id", ruleId)
     if (category) params.set("category", category)
     if (before) params.set("before", String(before))
-    return request<AuditEntry[]>(`/api/v1/activity?${params}`)
+    return request<AuditEntry[]>(`/api/v1/audit-entries?${params}`)
   },
   activityEvent: (entryId: number) =>
-    request<ActivityEvent>(`/api/v1/activity/${entryId}/event`),
+    request<ActivityEvent>(`/api/v1/audit-entries/${entryId}/event`),
   incidents: () => request<Incident[]>("/api/v1/incidents"),
 }

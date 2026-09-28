@@ -120,10 +120,10 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
 
     app = create_app(container)
     with TestClient(app) as client:
-        assert client.get("/api/v1/activity").status_code == 401
+        assert client.get("/api/v1/audit-entries").status_code == 401
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
 
-        activity = client.get("/api/v1/activity").json()
+        activity = client.get("/api/v1/audit-entries").json()
         incidents = client.get("/api/v1/incidents").json()
 
         assert activity[0]["action"] == "create"
@@ -798,10 +798,10 @@ def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
 
-        everything = client.get("/api/v1/activity").json()
+        everything = client.get("/api/v1/audit-entries").json()
 
         def categories(**params: str | int) -> list[str | None]:
-            response = client.get("/api/v1/activity", params=params)
+            response = client.get("/api/v1/audit-entries", params=params)
             assert response.status_code == 200
             return [entry["reason"] for entry in response.json()]
 
@@ -824,8 +824,8 @@ def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None
             "recurring_unsupported",
             "recurring_unsupported",
         ]
-        assert client.get("/api/v1/activity", params={"category": "other"}).status_code == 422
-        assert client.get("/api/v1/activity", params={"limit": 500}).status_code == 422
+        assert client.get("/api/v1/audit-entries", params={"category": "other"}).status_code == 422
+        assert client.get("/api/v1/audit-entries", params={"limit": 500}).status_code == 422
 
 
 class FakeInspectionProvider:
@@ -858,10 +858,10 @@ def test_activity_event_is_read_live_without_persisting_content(tmp_path: Path) 
     _append_audit(container, _audit("delete", "source_cancelled", destination_event_id="gone"))
 
     with TestClient(create_app(container)) as client:
-        assert client.get("/api/v1/activity/1/event").status_code == 401
+        assert client.get("/api/v1/audit-entries/1/event").status_code == 401
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
 
-        response = client.get("/api/v1/activity/1/event")
+        response = client.get("/api/v1/audit-entries/1/event")
 
         assert response.status_code == 200
         assert response.json() == {
@@ -890,7 +890,7 @@ def test_activity_event_is_read_live_without_persisting_content(tmp_path: Path) 
             EventRef(rule().source, EventId("source-event")),
             EventRef(rule().destination, EventId("gone")),
         ]
-        assert client.get("/api/v1/activity/99/event").status_code == 404
+        assert client.get("/api/v1/audit-entries/99/event").status_code == 404
     with sqlite3.connect(database) as connection:
         dump = "\n".join(connection.iterdump())
     assert "Dentist" not in dump
@@ -909,12 +909,12 @@ def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
 
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
-        assert client.get("/api/v1/activity/1/event").status_code == 503
+        assert client.get("/api/v1/audit-entries/1/event").status_code == 503
 
     with TestClient(
         create_app(replace(container, calendar_provider=cast(CalendarProvider, failing)))
     ) as client:
         client.post("/api/v1/session", json={"password": "correct horse battery staple"})
-        response = client.get("/api/v1/activity/1/event")
+        response = client.get("/api/v1/audit-entries/1/event")
         assert response.status_code == 424
         assert "authentication" in response.json()["detail"]

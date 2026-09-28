@@ -18,6 +18,12 @@ import {
   summarizeRun,
 } from "@/lib/activity"
 import {
+  activityFailure,
+  activityFailureActions,
+  activityFailureMessages,
+  activityFailureRequiresReload,
+} from "@/lib/activity-failure"
+import {
   ACTIVITY_PAGE_SIZE,
   ApiError,
   api,
@@ -63,12 +69,11 @@ export function ActivityView() {
   if (activity.isPending || incidents.isPending) return <PageSkeleton />
 
   if (activity.error || incidents.error) {
-    const authenticationExpired = [activity.error, incidents.error].some(
-      (error) => error instanceof ApiError && error.status === 401,
-    )
+    const failure = activityFailure([activity.error, incidents.error])
+    const reloadRequired = activityFailureRequiresReload(failure)
     const refreshing = activity.isFetching || incidents.isFetching
     const recover = () => {
-      if (authenticationExpired) {
+      if (reloadRequired) {
         window.location.reload()
         return
       }
@@ -81,14 +86,10 @@ export function ActivityView() {
         <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
           <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
           <h2 id="activity-error-title">Activity is temporarily unavailable</h2>
-          <p>
-            {authenticationExpired
-              ? "Your administrator session has expired. Sign in again to view operational activity."
-              : "The local service did not answer. It may have been restarting; try the request again."}
-          </p>
-          <Button variant="outline" onClick={recover} disabled={refreshing}>
+          <p>{activityFailureMessages[failure]}</p>
+          <Button variant="outline" onClick={recover} disabled={refreshing && !reloadRequired}>
             <RefreshCw aria-hidden="true" />
-            {authenticationExpired ? "Sign in again" : refreshing ? "Trying again…" : "Try again"}
+            {refreshing && !reloadRequired ? "Trying again…" : activityFailureActions[failure]}
           </Button>
         </section>
       </div>

@@ -12,6 +12,9 @@ import uvicorn
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import URL
+from starlette.routing import Match, Route
+from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.application.errors import (
@@ -383,7 +386,7 @@ def create_app(container: Container | None = None) -> FastAPI:
             return [_rule_response(rule) for rule in uow.rules.list()]
 
     @app.get(
-        "/api/v1/activity",
+        "/api/v1/audit-entries",
         response_model=list[AuditEntryResponse],
         dependencies=[Depends(require_admin)],
     )
@@ -422,7 +425,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         ]
 
     @app.get(
-        "/api/v1/activity/{entry_id}/event",
+        "/api/v1/audit-entries/{entry_id}/event",
         response_model=ActivityEventResponse,
         dependencies=[Depends(require_admin)],
     )
@@ -632,6 +635,11 @@ def create_app(container: Container | None = None) -> FastAPI:
             uow.commit()
         return _rule_response(paused)
 
+    # Registered after every API route so an unknown API path is a JSON error for any method
+    # instead of falling through to the web page.
+    app.router.routes.append(Route("/api", UnknownApiPath(), include_in_schema=False))
+    app.router.routes.append(Route("/api/{path:path}", UnknownApiPath(), include_in_schema=False))
+
     static_directory = Path(__file__).with_name("static")
     if static_directory.exists():
         static_root = static_directory.resolve()
@@ -641,10 +649,17 @@ def create_app(container: Container | None = None) -> FastAPI:
 
         @app.get("/{full_path:path}", include_in_schema=False)
         def frontend(full_path: str) -> FileResponse:
+            index = static_root / "index.html"
             requested = (static_root / full_path).resolve()
-            if full_path and requested.is_file() and requested.is_relative_to(static_root):
+            if (
+                full_path
+                and requested.is_file()
+                and requested.is_relative_to(static_root)
+                and not requested.samefile(index)
+            ):
                 return FileResponse(requested)
-            return FileResponse(static_root / "index.html")
+            # Revalidate the page on every load so an upgrade replaces it and its asset hashes.
+            return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app
 
@@ -678,6 +693,46 @@ def _event_snapshot(event: CalendarEvent | None) -> EventSnapshotResponse:
         recurring=event.recurrence is not None or event.occurrence is not None,
         web_link=event.web_link,
     )
+
+
+class UnknownApiPath:
+    """ASGI endpoint, rather than a function, so its route accepts every HTTP method.
+
+    Its full match outranks what Starlette's router would otherwise do for a known route: the
+    trailing-slash redirect and the 405 for a wrong method. Both are restored here.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        router = scope["app"].router
+        api_routes = [
+            route
+            for route in router.routes
+            if isinstance(route, Route)
+            and route.path.startswith("/api/")
+            and not isinstance(route.endpoint, UnknownApiPath)
+        ]
+        path = scope["path"]
+        if router.redirect_slashes:
+            redirect_scope = {
+                **scope,
+                "path": path.rstrip("/") if path.endswith("/") else path + "/",
+            }
+            if any(route.matches(redirect_scope)[0] is not Match.NONE for route in api_routes):
+                await RedirectResponse(str(URL(scope=redirect_scope)))(scope, receive, send)
+                return
+        allowed = {
+            method
+            for route in api_routes
+            if route.matches(scope)[0] is Match.PARTIAL
+            for method in route.methods or ()
+        }
+        if allowed:
+            raise HTTPException(
+                status.HTTP_405_METHOD_NOT_ALLOWED,
+                "Method Not Allowed",
+                headers={"Allow": ", ".join(sorted(allowed))},
+            )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
 
 
 def _set_session_cookie(response: Response, token: str, secure: bool) -> None:
