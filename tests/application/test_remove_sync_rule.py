@@ -345,6 +345,47 @@ def test_detaching_a_series_keeps_it_ignored_by_a_reverse_rule() -> None:
     assert cancelled is not None and cancelled.managed_origin is None
 
 
+def test_deleting_one_of_two_reverse_rules_removes_only_its_own_projections() -> None:
+    calendars = FakeCalendars()
+    forward_original = calendars.put(event("forward-original"))
+    reverse_original = calendars.put(event("reverse-original", calendar=rule().destination))
+    reverse = SyncRule(
+        SyncRuleId("reverse"), rule().destination, rule().source, state=SyncRuleState.ENABLED
+    )
+    factory = enabled_rule_factory()
+    with factory() as uow:
+        uow.rules.add(reverse)
+        uow.commit()
+    sync_use_case(factory, calendars).execute(rule().id)
+    sync_use_case(factory, calendars).execute(reverse.id)
+    forward_projection = factory.state.mappings[(rule().id, forward_original.reference)]
+    reverse_projection = factory.state.mappings[(reverse.id, reverse_original.reference)]
+    before = len(calendars.writes)
+
+    result = RemoveSyncRule(factory, calendars, Accounts(), FixedClock(), RuleLocks()).execute(
+        rule().id, ProjectionHandling.DELETE
+    )
+
+    assert (result.deleted, result.conflicts) == (1, 0)
+    assert calendars.writes[before:] == [("delete", forward_projection.destination.event_id.value)]
+    assert set(calendars.events) == {
+        forward_original.reference,
+        reverse_original.reference,
+        reverse_projection.destination,
+    }
+    assert calendars.events[forward_original.reference] == forward_original
+    assert calendars.events[reverse_original.reference] == reverse_original
+    assert set(factory.state.mappings) == {(reverse.id, reverse_original.reference)}
+    # Google then reports the deletion in the reverse rule's source feed, without metadata.
+    calendars.report(
+        CalendarEvent(forward_projection.destination, None, "deleted", status=EventStatus.CANCELLED)
+    )
+    after_removal = len(calendars.writes)
+    follow_up = sync_use_case(factory, calendars).execute(reverse.id)
+    assert follow_up.created == follow_up.updated == follow_up.deleted == 0
+    assert len(calendars.writes) == after_removal
+
+
 class ScriptedProvider(RecordingProvider):
     """Raises the scripted failures for a destination, in order, before deleting it."""
 
