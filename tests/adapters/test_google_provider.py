@@ -7,8 +7,21 @@ from unittest.mock import MagicMock
 import pytest
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.domain.model import EventProjection, SyncRuleId, TimedInterval
+from calendar_sync.domain.model import (
+    EventId,
+    EventProjection,
+    EventRef,
+    EventStatus,
+    SyncRuleId,
+    TimedInterval,
+)
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.google.translation import (
+    RULE_PROPERTY,
+    SOURCE_ACCOUNT_PROPERTY,
+    SOURCE_CALENDAR_PROPERTY,
+    SOURCE_EVENT_PROPERTY,
+)
 from tests.helpers import endpoint, event
 
 
@@ -228,3 +241,137 @@ def test_deleting_a_projection_owned_by_another_source_is_refused() -> None:
             destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
         )
     events_api.delete.assert_not_called()
+
+
+DESTINATION = endpoint("work-account", "work-calendar")
+SERIES = EventRef(DESTINATION, EventId("projection-1"))
+SOURCE_SERIES = EventRef(
+    endpoint("personal-account", "personal-calendar"), EventId("source-series")
+)
+START = datetime(2026, 9, 8, 8, 0, tzinfo=UTC)
+
+
+def _owned(payload: dict[str, object]) -> dict[str, object]:
+    return {
+        **payload,
+        "extendedProperties": {
+            "private": {
+                RULE_PROPERTY: "rule-1",
+                SOURCE_ACCOUNT_PROPERTY: "personal-account",
+                SOURCE_CALENDAR_PROPERTY: "personal-calendar",
+                SOURCE_EVENT_PROPERTY: "source-series",
+            }
+        },
+    }
+
+
+def _instance(status: str = "confirmed") -> dict[str, object]:
+    payload: dict[str, object] = {
+        "id": "projection-1_20260908T080000Z",
+        "etag": "instance-etag",
+        "status": status,
+        "recurringEventId": "projection-1",
+        "originalStartTime": {"dateTime": "2026-09-08T08:00:00Z"},
+    }
+    if status == "confirmed":
+        payload |= {
+            "summary": "Busy",
+            "start": {"dateTime": "2026-09-08T08:00:00Z"},
+            "end": {"dateTime": "2026-09-08T09:00:00Z"},
+        }
+    return payload
+
+
+def _master() -> dict[str, object]:
+    return _owned({**google_event_payload("projection-1"), "recurrence": ["RRULE:FREQ=WEEKLY"]})
+
+
+def test_get_occurrence_resolves_through_instances_and_verifies_the_start() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
+    provider = provider_with_events_api(events_api)
+
+    resolved = provider.get_occurrence(SERIES, START)
+
+    assert resolved is not None
+    assert resolved.occurrence is not None and resolved.occurrence.original_start == START
+    events_api.instances.assert_called_once_with(
+        calendarId="work-calendar",
+        eventId="projection-1",
+        originalStart="2026-09-08T08:00:00Z",
+        showDeleted=True,
+        maxResults=1,
+    )
+
+
+def test_get_occurrence_returns_none_for_a_different_start_or_missing_series() -> None:
+    events_api = MagicMock()
+    events_api.instances.side_effect = [
+        request_returning({"items": [_instance()]}),
+        request_raising(404),
+    ]
+    provider = provider_with_events_api(events_api)
+
+    assert provider.get_occurrence(SERIES, datetime(2026, 9, 15, 8, 0, tzinfo=UTC)) is None
+    assert provider.get_occurrence(SERIES, START) is None
+
+
+def test_write_occurrence_restores_a_cancelled_instance_without_notifications() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance("cancelled")]})
+    events_api.get.return_value = request_returning(_master())
+    events_api.patch.return_value = request_returning(_owned(_instance()))
+    provider = provider_with_events_api(events_api)
+    projection = EventProjection(
+        TimedInterval(START, datetime(2026, 9, 8, 9, 0, tzinfo=UTC)), "Busy"
+    )
+
+    written = provider.write_occurrence(
+        SERIES, START, SOURCE_SERIES, SyncRuleId("rule-1"), projection, "key"
+    )
+
+    kwargs = events_api.patch.call_args.kwargs
+    assert kwargs["eventId"] == "projection-1_20260908T080000Z"
+    assert kwargs["sendUpdates"] == "none"
+    assert kwargs["body"]["status"] == "confirmed"
+    assert written.status is EventStatus.CONFIRMED
+
+
+def test_write_occurrence_refuses_a_series_owned_by_another_rule() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
+    foreign = _master()
+    foreign["extendedProperties"]["private"][RULE_PROPERTY] = "other-rule"  # type: ignore[index]
+    events_api.get.return_value = request_returning(foreign)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.write_occurrence(
+            SERIES,
+            START,
+            SOURCE_SERIES,
+            SyncRuleId("rule-1"),
+            EventProjection(TimedInterval(START, datetime(2026, 9, 8, 9, 0, tzinfo=UTC)), "Busy"),
+            "key",
+        )
+
+    assert failure.value.kind is ProviderFailureKind.PERMANENT
+    events_api.patch.assert_not_called()
+
+
+def test_cancel_occurrence_deletes_only_the_instance_and_skips_cancelled_ones() -> None:
+    events_api = MagicMock()
+    events_api.instances.side_effect = [
+        request_returning({"items": [_instance()]}),
+        request_returning({"items": [_instance("cancelled")]}),
+    ]
+    events_api.get.return_value = request_returning(_master())
+    events_api.delete.return_value = request_returning({})
+    provider = provider_with_events_api(events_api)
+
+    provider.cancel_occurrence(SERIES, START, SOURCE_SERIES, SyncRuleId("rule-1"), "key")
+    provider.cancel_occurrence(SERIES, START, SOURCE_SERIES, SyncRuleId("rule-1"), "key")
+
+    events_api.delete.assert_called_once_with(
+        calendarId="work-calendar", eventId="projection-1_20260908T080000Z", sendUpdates="none"
+    )

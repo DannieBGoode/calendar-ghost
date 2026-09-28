@@ -73,6 +73,32 @@ class CalendarProvider(Protocol):
         self, destination: CalendarEndpoint, rule_id: SyncRuleId
     ) -> Sequence[CalendarEvent]: ...
 
+    def get_occurrence(
+        self, series: EventRef, original_start: OccurrenceStart
+    ) -> CalendarEvent | None:
+        """Resolve one occurrence of a series, cancelled or not; `None` if it has none there."""
+
+    def write_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        projection: EventProjection,
+        operation_key: str,
+    ) -> CalendarEvent:
+        """Write or restore an owned destination occurrence without notifying attendees."""
+
+    def cancel_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        operation_key: str,
+    ) -> None:
+        """Cancel one owned destination occurrence; the rest of its series is unchanged."""
+
 
 class SyncRuleRepository(Protocol):
     def get(self, rule_id: SyncRuleId) -> SyncRule | None: ...

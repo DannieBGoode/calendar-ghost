@@ -1,0 +1,9 @@
+{
+  "id": "synthetic-series-001",
+  "etag": "synthetic-series-revision-001",
+  "status": "confirmed",
+  "summary": "Synthetic weekly sync",
+  "start": { "dateTime": "2026-09-01T10:00:00+02:00", "timeZone": "Europe/Madrid" },
+  "end": { "dateTime": "2026-09-01T11:00:00+02:00", "timeZone": "Europe/Madrid" },
+  "recurrence": ["RRULE:FREQ=WEEKLY;COUNT=10", "EXDATE;TZID=Europe/Madrid:20260915T100000"]
+}

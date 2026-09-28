@@ -27,6 +27,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     ManagedOrigin,
+    OccurrenceStart,
     PrivacyPolicy,
     ProjectionFingerprint,
     SyncAction,
@@ -140,6 +141,32 @@ class FakeCalendarProvider:
         self.operation_keys.append(operation_key)
         self.deleted += 1
         self.destination = None
+
+    def get_occurrence(
+        self, series: EventRef, original_start: OccurrenceStart
+    ) -> CalendarEvent | None:
+        return None
+
+    def write_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        projection: EventProjection,
+        operation_key: str,
+    ) -> CalendarEvent:
+        raise AssertionError("single-event tests never write occurrences")
+
+    def cancel_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        operation_key: str,
+    ) -> None:
+        raise AssertionError("single-event tests never cancel occurrences")
 
     def managed_events(
         self, destination: CalendarEndpoint, rule_id: SyncRuleId
