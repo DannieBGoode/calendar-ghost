@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from calendar_sync.domain.model import SyncRuleId
+
 
 class ApplicationError(Exception):
     """Base class for use-case failures."""
@@ -68,6 +70,21 @@ class RemovalInterrupted(ApplicationError):
         return (
             f"removal stopped after {self.processed} of {total} projections because Google "
             f"reported {self.failure.kind.value}; retry to continue"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ReplacementInterrupted(ApplicationError):
+    """The replacement draft exists, but removing the previous rule stopped partway."""
+
+    replacement_rule_id: SyncRuleId
+    removal: RemovalInterrupted
+
+    def __str__(self) -> str:
+        return (
+            "the new draft rule was created, but removing the previous rule stopped after "
+            f"{self.removal.processed} of {self.removal.processed + self.removal.remaining} "
+            "projections; open the previous rule to retry its removal"
         )
 
 

@@ -1,8 +1,11 @@
 from dataclasses import dataclass, replace
 
 from calendar_sync.application.errors import (
+    ApplicationError,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
+    RemovalInterrupted,
+    ReplacementInterrupted,
     RuleNotFound,
 )
 from calendar_sync.application.ports import (
@@ -105,7 +108,7 @@ class RuleReplacement:
 
 @dataclass(slots=True)
 class ReplaceSyncRuleCalendars:
-    """Rule Replacement: Rule Removal followed by a new Draft with the same policy."""
+    """Rule Replacement: reserve a new Draft with the same policy, then remove the old rule."""
 
     unit_of_work: UnitOfWorkFactory
     remove_rule: RemoveSyncRule
@@ -137,6 +140,18 @@ class ReplaceSyncRuleCalendars:
             raise DuplicateDirectionalRelationship(
                 "a rule already exists for this source and destination"
             )
-        removal = self.remove_rule.execute(rule_id, handling)
+        self.remove_rule.check(rule_id, handling)
+        # Creating first reserves the relationship through its uniqueness constraint, so a
+        # concurrent duplicate fails here, before anything destructive happens.
         self.create_rule.execute(replacement)
+        try:
+            removal = self.remove_rule.execute(rule_id, handling)
+        except RemovalInterrupted as interrupted:
+            raise ReplacementInterrupted(replacement.id, interrupted) from interrupted
+        except ApplicationError:
+            # Removal did not start, so withdraw the unused draft and leave the old rule as is.
+            with self.unit_of_work() as uow:
+                uow.rules.remove(replacement.id)
+                uow.commit()
+            raise
         return RuleReplacement(replacement, removal)

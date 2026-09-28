@@ -11,8 +11,10 @@ stripping ownership from retained events would let a reverse rule treat them as 
 
 - Transformation policy and all-day eligibility are editable as a Material Rule Change that
   stops synchronization, requires a new Rule Preview, and reprojects every mapping on the next run.
-- Source and destination calendars are never edited in place. A Rule Replacement validates the new
-  relationship, performs Rule Removal, and creates a new draft with the same policy.
+- Source and destination calendars are never edited in place. A Rule Replacement creates a new
+  draft with the same policy first, which reserves the relationship through its uniqueness
+  constraint, and only then performs Rule Removal of the previous rule. An interrupted removal
+  leaves the new draft and a retryable previous rule.
 - Rule Removal requires an explicit choice: delete mapped projections (recommended, requires an
   authorized destination) or keep them as Detached Events. Detached Events keep the removed rule's
   origin metadata and receive no provider write.

@@ -18,7 +18,7 @@ from calendar_sync.application.ports import (
     Clock,
     UnitOfWorkFactory,
 )
-from calendar_sync.domain.model import EventMapping, ProjectionHandling, SyncRuleId
+from calendar_sync.domain.model import EventMapping, ProjectionHandling, SyncRule, SyncRuleId
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,23 +37,16 @@ class RemoveSyncRule:
     clock: Clock
     locks: RuleLocks
 
+    def check(self, rule_id: SyncRuleId, handling: ProjectionHandling) -> None:
+        """Raise the error execute() would raise before changing anything."""
+        with self.unit_of_work() as uow:
+            rule = uow.rules.get(rule_id)
+        self._require_possible(rule, rule_id, handling)
+
     def execute(self, rule_id: SyncRuleId, handling: ProjectionHandling) -> RemovalResult:
         with self.locks.for_rule(rule_id), self.unit_of_work() as uow:
-            rule = uow.rules.get(rule_id)
-            if rule is None:
-                raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+            rule = self._require_possible(uow.rules.get(rule_id), rule_id, handling)
             deleting = handling is ProjectionHandling.DELETE
-            if deleting:
-                if self.provider is None or self.accounts is None:
-                    raise RemovalRequiresProvider(
-                        "configure Google OAuth and the installation master key before "
-                        "deleting projections"
-                    )
-                if not self.accounts.is_connected(rule.destination.connected_account_id):
-                    raise RemovalRequiresAuthorization(
-                        "reauthorize the destination account before deleting projections, "
-                        "or keep them as detached events"
-                    )
             uow.rules.save(rule.begin_removal())
             uow.commit()
 
@@ -89,6 +82,24 @@ class RemoveSyncRule:
             )
             uow.commit()
         return RemovalResult(deleted, detached)
+
+    def _require_possible(
+        self, rule: SyncRule | None, rule_id: SyncRuleId, handling: ProjectionHandling
+    ) -> SyncRule:
+        if rule is None:
+            raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+        if handling is ProjectionHandling.DELETE:
+            if self.provider is None or self.accounts is None:
+                raise RemovalRequiresProvider(
+                    "configure Google OAuth and the installation master key before "
+                    "deleting projections"
+                )
+            if not self.accounts.is_connected(rule.destination.connected_account_id):
+                raise RemovalRequiresAuthorization(
+                    "reauthorize the destination account before deleting projections, "
+                    "or keep them as detached events"
+                )
+        return rule
 
     def _projection_entry(self, mapping: EventMapping, deleting: bool) -> AuditEntry:
         return AuditEntry(

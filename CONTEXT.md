@@ -176,7 +176,7 @@ Permanent removal of a rule after the administrator explicitly chooses to delete
 _Avoid_: Disable rule, pause rule
 
 **Rule Replacement**:
-A change of a rule's source or destination calendar, performed as a Rule Removal followed by a new draft rule with the same transformation policy. The new relationship is validated before anything is removed.
+A change of a rule's source or destination calendar, performed as a new draft rule with the same transformation policy followed by Rule Removal of the previous rule. The new draft is created first, so a duplicate relationship is rejected before anything is removed; if the removal is interrupted, the new draft remains and the previous rule's removal can be retried.
 _Avoid_: Calendar edit, rule move
 
 **Detached Event**:

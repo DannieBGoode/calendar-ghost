@@ -24,6 +24,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     RemovalInterrupted,
     RemovalRequiresProvider,
+    ReplacementInterrupted,
     RuleNotExecutable,
     RuleNotFound,
 )
@@ -904,7 +905,7 @@ def _rule_change_http_error(error: ApplicationError) -> HTTPException:
         return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
     if isinstance(error, RemovalRequiresProvider):
         return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error))
-    if isinstance(error, RemovalInterrupted):
+    if isinstance(error, RemovalInterrupted | ReplacementInterrupted):
         return HTTPException(status.HTTP_424_FAILED_DEPENDENCY, str(error))
     if isinstance(error, NotACalendarChange):
         return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))

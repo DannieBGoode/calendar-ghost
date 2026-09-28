@@ -540,6 +540,7 @@ function CalendarReplacement({
   destinationConnected: boolean
   onReplaced: (ruleId: string) => void
 }) {
+  const invalidate = useRuleInvalidation(detail.id)
   const leave = useRuleExit(detail.id)
   const connected = accounts.filter((account) => account.state === "connected")
   const returnFocus = useRef<HTMLButtonElement>(null)
@@ -578,6 +579,8 @@ function CalendarReplacement({
       onReplaced(result.rule.id)
       await leave()
     },
+    // An interrupted replacement leaves the new draft and a retryable old rule behind.
+    onError: invalidate,
   })
   const canSubmit = !unchanged && !sameEndpoint && Boolean(sourceCalendar && destinationCalendar)
 

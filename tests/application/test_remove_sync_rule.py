@@ -12,6 +12,7 @@ from calendar_sync.application.errors import (
     RemovalInterrupted,
     RemovalRequiresAuthorization,
     RemovalRequiresProvider,
+    ReplacementInterrupted,
 )
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import AccountAuthorizations, CalendarProvider
@@ -214,3 +215,79 @@ def test_replacement_removes_the_rule_and_creates_a_draft_with_the_same_policy()
     assert replacement.rule.state is SyncRuleState.DRAFT
     assert replacement.rule.transformation == details
     assert replacement.rule.destination == new_destination
+
+
+class CompetingCreate(CreateSyncRule):
+    """Simulates another request creating the same relationship just before this one."""
+
+    def execute(self, rule: SyncRule) -> SyncRule:
+        self.unit_of_work.state.rules[SyncRuleId("competitor")] = SyncRule(  # type: ignore[attr-defined]
+            SyncRuleId("competitor"), rule.source, rule.destination
+        )
+        return CreateSyncRule.execute(self, rule)
+
+
+def test_replacement_reserves_the_new_rule_before_removing_the_old_one() -> None:
+    unit_of_work = _with_mappings(1)
+    provider = RecordingProvider()
+    replace_rule = ReplaceSyncRuleCalendars(
+        unit_of_work,
+        _remover(unit_of_work, provider),
+        CompetingCreate(unit_of_work),
+        Ids(),
+    )
+
+    with pytest.raises(DuplicateDirectionalRelationship):
+        replace_rule.execute(
+            rule().id,
+            rule().source,
+            endpoint("work-account", "other-calendar"),
+            ProjectionHandling.DELETE,
+        )
+
+    assert provider.deleted_refs == []
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.ENABLED
+    assert len(unit_of_work.state.mappings) == 1
+
+
+def test_replacement_creates_nothing_when_removal_cannot_start() -> None:
+    unit_of_work = _with_mappings(1)
+    replace_rule = ReplaceSyncRuleCalendars(
+        unit_of_work,
+        _remover(unit_of_work, accounts=Accounts(connected=False)),
+        CreateSyncRule(unit_of_work),
+        Ids(),
+    )
+
+    with pytest.raises(RemovalRequiresAuthorization):
+        replace_rule.execute(
+            rule().id,
+            rule().source,
+            endpoint("work-account", "other-calendar"),
+            ProjectionHandling.DELETE,
+        )
+
+    assert list(unit_of_work.state.rules) == [rule().id]
+
+
+def test_interrupted_replacement_keeps_the_new_draft_and_a_retryable_old_rule() -> None:
+    unit_of_work = _with_mappings(2)
+    replace_rule = ReplaceSyncRuleCalendars(
+        unit_of_work,
+        _remover(unit_of_work, RecordingProvider(fail_on_call=2)),
+        CreateSyncRule(unit_of_work),
+        Ids(),
+    )
+
+    with pytest.raises(ReplacementInterrupted) as interrupted:
+        replace_rule.execute(
+            rule().id,
+            rule().source,
+            endpoint("work-account", "other-calendar"),
+            ProjectionHandling.DELETE,
+        )
+
+    assert interrupted.value.replacement_rule_id == SyncRuleId("replacement-rule")
+    assert "retry" in str(interrupted.value)
+    assert unit_of_work.state.rules[SyncRuleId("replacement-rule")].state is SyncRuleState.DRAFT
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DISABLED
