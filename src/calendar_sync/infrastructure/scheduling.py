@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    ProviderFailure,
+    ProviderFailureKind,
+    RuleNotExecutable,
+)
 from calendar_sync.application.ports import UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import SyncRule, SyncRuleState
@@ -171,6 +175,9 @@ class SyncScheduler:
             try:
                 self._execute_rule.execute(rule.id, full=full)
                 self._health.record_success(rule)
+                return True
+            except RuleNotExecutable:
+                # The rule was paused, edited, or removed after this pass listed it.
                 return True
             except ProviderFailure as failure:
                 if not failure.retryable or attempt == 2:

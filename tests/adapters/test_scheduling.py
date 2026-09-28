@@ -4,7 +4,11 @@ from typing import cast
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    ProviderFailure,
+    ProviderFailureKind,
+    RuleNotExecutable,
+)
 from calendar_sync.application.ports import UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import SyncRuleId
@@ -182,3 +186,20 @@ def test_scheduler_isolates_unexpected_rule_failure() -> None:
     assert execute.calls == 1
     assert len(health.failures) == 1
     assert health.failures[0].kind is ProviderFailureKind.INFRASTRUCTURE
+
+
+def test_rule_removed_or_edited_during_a_pass_is_skipped_without_an_incident() -> None:
+    execute = RecordingExecuteRule([RuleNotExecutable("sync rule rule-1 does not exist")])
+    health = RecordingHealth()
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, execute),
+        cast(UnitOfWorkFactory, None),
+        cast(SqliteRuleHealth, health),
+    )
+
+    successful = scheduler._execute_with_retry(rule())
+
+    assert successful is True
+    assert execute.calls == 1
+    assert health.failures == []
+    assert health.successes == 0
