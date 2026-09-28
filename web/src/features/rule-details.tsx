@@ -1,10 +1,17 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, ArrowRight, CircleDot, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { ArrowLeft, ArrowRight, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react"
 
 import { PageSkeleton } from "@/components/page-skeleton"
+import {
+  EnableReview,
+  LiveAnnouncement,
+  RuleCommandMenu,
+  RuleFeedbackNote,
+  RuleNextAction,
+  RuleStatusBadge,
+} from "@/components/rule-commands"
 import { RuleEndpoint } from "@/components/rule-endpoint"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
@@ -17,9 +24,16 @@ import {
   type RemovalResult,
   type RuleDetail,
   type RulePolicyPayload,
+  type RuleSummary,
   type RunOutcome,
 } from "@/lib/api"
-import { appPathForView, isPlainLeftClick, type AppView } from "@/lib/navigation"
+import {
+  activitySearch,
+  appPathForView,
+  isPlainLeftClick,
+  type OpenRule,
+  type ViewChange,
+} from "@/lib/navigation"
 import {
   plural,
   policyChanged,
@@ -28,26 +42,35 @@ import {
   removalConsequence,
   removalOutcome,
   replacementConfirmLabel,
-  ruleStateLabel,
   runOutcomeSummary,
 } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
-import { previewSummary } from "@/lib/rule-preview"
+import { relativeTime } from "@/lib/relative-time"
+import { recoveryExplanation } from "@/lib/rule-run"
+import { useNow } from "@/lib/use-now"
+import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
 export function RuleDetailsView({
   ruleId,
+  notice,
   onViewChange,
   onOpenRule,
-  onRemoved,
 }: {
   ruleId: string
-  onViewChange: (view: AppView) => void
-  onOpenRule: (ruleId: string) => void
-  onRemoved: (outcome: ReturnType<typeof removalOutcome>) => void
+  notice: string | null
+  onViewChange: ViewChange
+  onOpenRule: OpenRule
 }) {
-  const rule = useQuery({ queryKey: ["rule", ruleId], queryFn: () => api.rule(ruleId), retry: false })
+  const now = useNow()
+  const commands = useRuleCommands()
+  const rule = useQuery({
+    queryKey: ["rule", ruleId],
+    queryFn: () => api.rule(ruleId),
+    retry: false,
+    refetchInterval: 60_000,
+  })
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const heading = useRef<HTMLHeadingElement>(null)
   const loadedRuleId = rule.data?.id
@@ -68,9 +91,11 @@ export function RuleDetailsView({
     connectedIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
   )
 
+  // Wait for calendar names so the focused heading never announces placeholder names.
+  const namesReady = calendarQueries.every((query) => !query.isPending)
   useEffect(() => {
-    if (loadedRuleId) heading.current?.focus()
-  }, [loadedRuleId])
+    if (loadedRuleId && namesReady) heading.current?.focus()
+  }, [loadedRuleId, namesReady])
 
   const back = (
     <a
@@ -86,7 +111,7 @@ export function RuleDetailsView({
     </a>
   )
 
-  if (rule.isPending || accounts.isPending) return <PageSkeleton />
+  if (rule.isPending || accounts.isPending) return <PageSkeleton label="Loading rule" />
   if (rule.error || accounts.error) {
     const missing = rule.error instanceof ApiError && rule.error.status === 404
     return (
@@ -121,21 +146,35 @@ export function RuleDetailsView({
   const disconnected = [sourceAccount, destinationAccount].some(
     (account) => account?.state === "disconnected",
   )
+  const sourceName = ruleEndpointLabel(
+    detail.source.calendar_id,
+    sourceAccount,
+    calendarsByAccount.get(detail.source.connected_account_id),
+  ).calendar
   const destinationName = ruleEndpointLabel(
     detail.destination.calendar_id,
     destinationAccount,
     calendarsByAccount.get(detail.destination.connected_account_id),
   ).calendar
   const removing = detail.state === "disabled"
-  const attention = removing || detail.state === "degraded" || disconnected
+  const pending = commands.pending[detail.id]
+  const run = (command: Parameters<typeof commands.run>[1]) =>
+    void commands.run(detail.id, command, destinationName, () => heading.current)
+  const notify = (feedback: RuleFeedback) => commands.notify(detail.id, feedback)
+  const stopped = detail.state === "degraded" && !disconnected
 
   return (
     <div className="page-section rule-details-page">
+      <LiveAnnouncement text={commands.announcement} />
       {back}
+      {notice && <p className="page-notice">{notice}</p>}
       <div className="page-heading-row">
-        <div>
-          <p className="page-context">Directional Sync Rule</p>
-          <h1 ref={heading} tabIndex={-1}>Rule details</h1>
+        <div className="rule-heading">
+          <h1 ref={heading} tabIndex={-1}>
+            {sourceName} <ArrowRight aria-hidden="true" className="rule-heading-arrow" />
+            <span className="sr-only"> to </span>
+            {destinationName}
+          </h1>
           <div className="rule-direction rule-details-direction">
             <RuleEndpoint
               account={sourceAccount}
@@ -155,19 +194,48 @@ export function RuleDetailsView({
           </div>
         </div>
         <div className="rule-actions">
-          <Badge variant={detail.state === "enabled" && !disconnected ? "healthy" : attention ? "attention" : "neutral"}>
-            {attention ? <ShieldAlert aria-hidden="true" /> : <CircleDot aria-hidden="true" />}
-            {disconnected && !removing ? "Stopped" : ruleStateLabel(detail.state)}
-          </Badge>
-          <RuleNextAction detail={detail} disconnected={disconnected} onViewChange={onViewChange} />
+          <RuleStatusBadge state={detail.state} stopped={detail.state === "degraded" || disconnected} />
+          <RuleNextAction
+            state={detail.state}
+            disconnected={disconnected}
+            pending={pending}
+            onRun={run}
+            onViewChange={onViewChange}
+          />
+          <RuleCommandMenu
+            state={detail.state}
+            disconnected={disconnected}
+            pending={pending}
+            source={sourceName}
+            destination={destinationName}
+            onRun={run}
+          />
         </div>
       </div>
 
+      {stopped && (
+        <div className="rule-recovery-note">
+          <ShieldAlert aria-hidden="true" />
+          <p>{recoveryExplanation(detail.last_sync, now)}</p>
+        </div>
+      )}
+      {detail.state === "dry_run_validated" && (
+        <EnableReview
+          preview={detail.latest_preview}
+          source={sourceName}
+          destination={destinationName}
+          privacy={detail.privacy_policy}
+          pending={pending}
+          onEnable={() => run("enable")}
+        />
+      )}
+      <RuleFeedbackNote pending={pending} feedback={commands.feedback[detail.id]} />
+
       {detail.reprojection_required && PREVIEWABLE_STATES.includes(detail.state) && (
-        <div className="rule-recovery-note" role="status">
+        <div className="rule-recovery-note">
           <ShieldAlert aria-hidden="true" />
           <p>
-            <strong>Preview required.</strong> The policy changed. Preview this rule, then enable it;{" "}
+            <strong>Preview required.</strong> The policy changed. Preview this rule, then start syncing;{" "}
             {plural(detail.mapping_count, "existing projection")} will be rewritten on the next run.
           </p>
         </div>
@@ -189,108 +257,84 @@ export function RuleDetailsView({
             <dd>{detail.sync_all_day_events ? "Included" : "Excluded; timed events only"}</dd>
           </div>
           <div>
-            <dt>Initial window</dt>
-            <dd>Events ending in the last {plural(detail.initial_lookback_days, "day")} or later</dd>
+            <dt>Starting point</dt>
+            <dd>Includes events from the past {plural(detail.initial_lookback_days, "day")} onward</dd>
           </div>
           <div>
-            <dt>Managed projections</dt>
-            <dd>{plural(detail.mapping_count, "Event Mapping")} in {destinationName}</dd>
+            <dt>Projections</dt>
+            <dd>{plural(detail.mapping_count, "projection")} this rule manages in {destinationName}</dd>
           </div>
         </dl>
       </section>
 
       <section className="rule-section" aria-labelledby="rule-runs-title">
-        <h2 id="rule-runs-title">Recent runs</h2>
+        <div className="section-heading section-heading-inline">
+          <h2 id="rule-runs-title">Latest runs</h2>
+          <a
+            className="text-link"
+            href={`${appPathForView("activity")}${activitySearch(detail.id)}`}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return
+              event.preventDefault()
+              onViewChange("activity", { search: activitySearch(detail.id) })
+            }}
+          >
+            This rule's activity <ArrowRight aria-hidden="true" />
+          </a>
+        </div>
         <dl className="rule-facts">
-          <OutcomeFact label="Last synchronization" outcome={detail.last_sync} kind="sync" />
-          <OutcomeFact label="Last reconciliation" outcome={detail.last_reconciliation} kind="reconciliation" />
+          <OutcomeFact
+            label="Last sync"
+            explanation={`Applies changes made in ${sourceName} since the previous run. Runs every five minutes.`}
+            outcome={detail.last_sync}
+            kind="sync"
+            now={now}
+          />
+          <OutcomeFact
+            label="Last reconciliation"
+            explanation={`Checks every event this rule wrote to ${destinationName} and repairs any edited or deleted there. Runs once a day.`}
+            outcome={detail.last_reconciliation}
+            kind="reconciliation"
+            now={now}
+          />
         </dl>
       </section>
 
-      {!removing && <PolicyEditor detail={detail} destinationName={destinationName} />}
+      {!removing && <PolicyEditor detail={detail} destinationName={destinationName} onSaved={notify} />}
       {!removing && (
         <CalendarReplacement
           detail={detail}
           accounts={accounts.data}
           destinationName={destinationName}
           destinationConnected={destinationConnected}
-          onReplaced={onOpenRule}
+          onReplaced={(nextRuleId, message) => onOpenRule(nextRuleId, { notice: message })}
         />
       )}
       <RuleRemoval
         detail={detail}
         destinationName={destinationName}
         destinationConnected={destinationConnected}
-        onRemoved={(result) => onRemoved(removalOutcome(result, destinationName))}
+        onRemoved={(result) => {
+          const outcome = removalOutcome(result, destinationName)
+          onViewChange("rules", { notice: outcome.message, noticeTone: outcome.attention ? "attention" : undefined })
+        }}
       />
     </div>
   )
 }
 
-function RuleNextAction({
-  detail,
-  disconnected,
-  onViewChange,
-}: {
-  detail: RuleDetail
-  disconnected: boolean
-  onViewChange: (view: AppView) => void
-}) {
-  const invalidate = useRuleInvalidation(detail.id)
-  const preview = useMutation({ mutationFn: () => api.previewRule(detail.id), onSuccess: invalidate })
-  const enable = useMutation({ mutationFn: () => api.enableRule(detail.id), onSuccess: invalidate })
-  const sync = useMutation({ mutationFn: () => api.syncRule(detail.id), onSuccess: invalidate })
-  const error = preview.error ?? enable.error ?? sync.error
-
-  let action = null
-  if (detail.state === "disabled") action = null
-  else if (disconnected) {
-    action = (
-      <Button variant="outline" onClick={() => onViewChange("settings")}>
-        Reauthorize in Settings
-      </Button>
-    )
-  } else if (PREVIEWABLE_STATES.includes(detail.state)) {
-    action = (
-      <Button variant="outline" onClick={() => preview.mutate()} disabled={preview.isPending}>
-        {preview.isPending ? "Previewing…" : detail.state === "degraded" ? "Validate recovery" : "Preview rule"}
-      </Button>
-    )
-  } else if (detail.state === "dry_run_validated") {
-    action = (
-      <Button onClick={() => enable.mutate()} disabled={enable.isPending}>
-        {enable.isPending ? "Enabling…" : "Enable rule"}
-      </Button>
-    )
-  } else if (detail.state === "enabled") {
-    action = (
-      <Button variant="outline" onClick={() => sync.mutate()} disabled={sync.isPending}>
-        <RefreshCw aria-hidden="true" /> {sync.isPending ? "Syncing…" : "Sync now"}
-      </Button>
-    )
-  }
-
-  return (
-    <>
-      {action}
-      {preview.data && (
-        <p className="preview-result" role="status">
-          {previewSummary(preview.data)}
-        </p>
-      )}
-      {error && <div className="inline-error" role="alert">{error.message}</div>}
-    </>
-  )
-}
-
 function OutcomeFact({
   label,
+  explanation,
   outcome,
   kind,
+  now,
 }: {
   label: string
+  explanation: string
   outcome: RunOutcome | null
   kind: "sync" | "reconciliation"
+  now: number
 }) {
   return (
     <div>
@@ -298,13 +342,32 @@ function OutcomeFact({
       <dd>
         {runOutcomeSummary(outcome, kind)}
         {outcome && (
-          <time dateTime={outcome.completed_at} className="rule-fact-time">
-            {new Date(outcome.completed_at).toLocaleString()}
+          <time
+            dateTime={outcome.completed_at}
+            className="rule-fact-time"
+            title={new Date(outcome.completed_at).toLocaleString()}
+          >
+            {relativeTime(outcome.completed_at, now)}
           </time>
         )}
+        <span className="rule-fact-explanation">{explanation}</span>
       </dd>
     </div>
   )
+}
+
+/** Focuses the first field when a form opens and returns focus to its toggle when it closes. */
+function useDisclosureFocus(
+  open: boolean,
+  first: RefObject<HTMLElement | null>,
+  toggle: RefObject<HTMLElement | null>,
+) {
+  const wasOpen = useRef(open)
+  useEffect(() => {
+    if (open) first.current?.focus()
+    else if (wasOpen.current) toggle.current?.focus()
+    wasOpen.current = open
+  }, [open, first, toggle])
 }
 
 function useRuleInvalidation(ruleId: string) {
@@ -358,16 +421,16 @@ function DestructiveConfirmation({
   return (
     <div className="disconnect-confirmation delete-confirmation" id={id} role="group" aria-labelledby={`${id}-title`}>
       <div>
-        <h4 id={`${id}-title`} ref={heading} tabIndex={-1}>
+        <h3 id={`${id}-title`} ref={heading} tabIndex={-1}>
           {title}
-        </h4>
+        </h3>
         <p>{body}</p>
       </div>
       <div className="confirmation-actions">
-        <Button variant="outline" onClick={onCancel} disabled={pending}>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
           {cancelLabel}
         </Button>
-        <Button variant="destructive" onClick={onConfirm} disabled={pending}>
+        <Button type="button" variant="destructive" onClick={onConfirm} disabled={pending}>
           <Trash2 aria-hidden="true" />
           {pending ? pendingLabel : confirmLabel}
         </Button>
@@ -376,8 +439,18 @@ function DestructiveConfirmation({
   )
 }
 
-function PolicyEditor({ detail, destinationName }: { detail: RuleDetail; destinationName: string }) {
+function PolicyEditor({
+  detail,
+  destinationName,
+  onSaved,
+}: {
+  detail: RuleDetail
+  destinationName: string
+  onSaved: (feedback: RuleFeedback) => void
+}) {
   const invalidate = useRuleInvalidation(detail.id)
+  const toggle = useRef<HTMLButtonElement>(null)
+  const firstField = useRef<HTMLSelectElement>(null)
   const current: RulePolicyPayload = {
     privacy_policy: detail.privacy_policy,
     sync_all_day_events: detail.sync_all_day_events,
@@ -385,13 +458,22 @@ function PolicyEditor({ detail, destinationName }: { detail: RuleDetail; destina
   const [open, setOpen] = useState(false)
   const [next, setNext] = useState<RulePolicyPayload>(current)
   const changed = policyChanged(current, next)
+  // Showing details to everyone who can see the destination is the one change that widens access.
+  const widens = current.privacy_policy === "busy_only" && next.privacy_policy === "copy_details"
   const update = useMutation({
     mutationFn: () => api.updateRulePolicy(detail.id, next),
     onSuccess: async () => {
       await invalidate()
       setOpen(false)
+      onSaved({ tone: "success", text: "Policy saved. Preview the rule to start syncing with the new policy." })
     },
   })
+
+  useDisclosureFocus(open, firstField, toggle)
+
+  function cancel() {
+    setOpen(false)
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -402,27 +484,31 @@ function PolicyEditor({ detail, destinationName }: { detail: RuleDetail; destina
     <section className="rule-section" aria-labelledby="policy-title">
       <div className="section-heading">
         <div>
-          <h2 id="policy-title">Projection policy</h2>
-          <p>Changing it is a Material Rule Change and needs a new preview.</p>
+          <h2 id="policy-title">What {destinationName} shows</h2>
+          <p>A change stops the rule from writing until you preview it again.</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {
-            setNext(current)
-            update.reset()
-            setOpen((value) => !value)
-          }}
-          aria-expanded={open}
-          aria-controls="policy-form"
-        >
-          {open ? "Cancel" : "Change policy"}
-        </Button>
+        {!open && (
+          <Button
+            ref={toggle}
+            variant="outline"
+            onClick={() => {
+              setNext(current)
+              update.reset()
+              setOpen(true)
+            }}
+            aria-expanded={open}
+            aria-controls="policy-form"
+          >
+            Change policy
+          </Button>
+        )}
       </div>
       {open && (
         <form id="policy-form" className="rule-edit-form" onSubmit={submit}>
           <div className="field-stack">
             <Label htmlFor="edit-privacy-policy">Event information</Label>
             <NativeSelect
+              ref={firstField}
               id="edit-privacy-policy"
               value={next.privacy_policy}
               onChange={(event) =>
@@ -445,8 +531,8 @@ function PolicyEditor({ detail, destinationName }: { detail: RuleDetail; destina
             </span>
           </label>
           {changed && (
-            <div className="consequence-panel" role="status" aria-live="polite">
-              <h3>What happens when you save</h3>
+            <div className="consequence-panel" data-tone={widens ? "attention" : undefined} role="status" aria-live="polite">
+              <h3>{widens ? `Everyone who can see ${destinationName} will see event details` : "What happens when you save"}</h3>
               <ul>
                 {policyChangeConsequences({
                   state: detail.state,
@@ -463,7 +549,10 @@ function PolicyEditor({ detail, destinationName }: { detail: RuleDetail; destina
           {update.error && <div className="inline-error" role="alert">{update.error.message}</div>}
           <div className="form-actions">
             <Button type="submit" disabled={!changed || update.isPending}>
-              {update.isPending ? "Saving…" : "Save policy change"}
+              {update.isPending ? "Saving…" : widens ? `Show event details in ${destinationName}` : "Save policy change"}
+            </Button>
+            <Button type="button" variant="outline" onClick={cancel} disabled={update.isPending}>
+              Cancel
             </Button>
           </div>
         </form>
@@ -476,6 +565,7 @@ function ProjectionChoice({
   name,
   value,
   onChange,
+  firstField,
   mappingCount,
   destinationName,
   deleteAvailable,
@@ -483,16 +573,18 @@ function ProjectionChoice({
   name: string
   value: ProjectionHandling
   onChange: (value: ProjectionHandling) => void
+  firstField?: RefObject<HTMLInputElement | null>
   mappingCount: number
   destinationName: string
   deleteAvailable: boolean
 }) {
   return (
-    <fieldset className="projection-choice">
-      <legend id={`${name}-legend`}>Existing projections</legend>
-      <div role="radiogroup" aria-labelledby={`${name}-legend`} aria-describedby={`${name}-consequence`}>
+    <fieldset className="projection-choice" aria-describedby={`${name}-consequence`}>
+      <legend>Projections this rule wrote</legend>
+      <div className="radio-options">
         <label className="radio-row">
           <input
+            ref={value === "delete" ? firstField : undefined}
             type="radio"
             name={name}
             value="delete"
@@ -513,6 +605,7 @@ function ProjectionChoice({
         </label>
         <label className="radio-row">
           <input
+            ref={value === "detach" ? firstField : undefined}
             type="radio"
             name={name}
             value="detach"
@@ -543,14 +636,17 @@ function CalendarReplacement({
   accounts: ConnectedAccount[]
   destinationName: string
   destinationConnected: boolean
-  onReplaced: (ruleId: string) => void
+  onReplaced: (ruleId: string, notice: string) => void
 }) {
   const invalidate = useRuleInvalidation(detail.id)
   const leave = useRuleExit(detail.id)
   const connected = accounts.filter((account) => account.state === "connected")
   const returnFocus = useRef<HTMLButtonElement>(null)
+  const toggle = useRef<HTMLButtonElement>(null)
+  const firstField = useRef<HTMLSelectElement>(null)
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  useDisclosureFocus(open, firstField, toggle)
   const [sourceAccount, setSourceAccount] = useState(detail.source.connected_account_id)
   const [sourceCalendar, setSourceCalendar] = useState(detail.source.calendar_id)
   const [destinationAccount, setDestinationAccount] = useState(detail.destination.connected_account_id)
@@ -560,11 +656,13 @@ function CalendarReplacement({
   const sourceCalendars = useQuery({
     queryKey: ["calendars", sourceAccount],
     queryFn: () => api.calendars(sourceAccount),
+    staleTime: 5 * 60 * 1000,
     enabled: open && connected.some((account) => account.id === sourceAccount),
   })
   const destinationCalendars = useQuery({
     queryKey: ["calendars", destinationAccount],
     queryFn: () => api.calendars(destinationAccount),
+    staleTime: 5 * 60 * 1000,
     enabled: open && connected.some((account) => account.id === destinationAccount),
   })
   const unchanged =
@@ -581,7 +679,11 @@ function CalendarReplacement({
         projections: effective,
       }),
     onSuccess: async (result) => {
-      onReplaced(result.rule.id)
+      const outcome = removalOutcome(result, destinationName)
+      onReplaced(
+        result.rule.id,
+        `Calendars replaced. This is the new draft rule; preview it before it starts syncing.${outcome.attention ? ` ${outcome.message.replace("The rule was removed. ", "")}` : ""}`,
+      )
       await leave()
     },
     // An interrupted replacement leaves the new draft and a retryable old rule behind.
@@ -608,23 +710,27 @@ function CalendarReplacement({
           <h2 id="replace-title">Calendars</h2>
           <p>Changing a calendar removes this rule and creates a new draft with the same policy.</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {
-            replace.reset()
-            setOpen((value) => !value)
-          }}
-          aria-expanded={open}
-          aria-controls="replace-form"
-        >
-          {open ? "Cancel" : "Change calendars"}
-        </Button>
+        {!open && (
+          <Button
+            ref={toggle}
+            variant="outline"
+            onClick={() => {
+              replace.reset()
+              setOpen(true)
+            }}
+            aria-expanded={open}
+            aria-controls="replace-form"
+          >
+            Replace calendars…
+          </Button>
+        )}
       </div>
       {open && (
         <form id="replace-form" className="rule-edit-form" onSubmit={submit}>
           <EndpointFields
             legend="Source calendar"
             idPrefix="replace-source"
+            firstField={firstField}
             accounts={connected}
             account={sourceAccount}
             calendar={sourceCalendar}
@@ -644,6 +750,7 @@ function CalendarReplacement({
             calendar={destinationCalendar}
             calendars={destinationCalendars.data}
             writableOnly
+            errorId={sameEndpoint ? "replace-destination-error" : undefined}
             onAccount={edited((value: string) => {
               setDestinationAccount(value)
               setDestinationCalendar("")
@@ -658,7 +765,11 @@ function CalendarReplacement({
             destinationName={destinationName}
             deleteAvailable={destinationConnected}
           />
-          {sameEndpoint && <p className="field-error" role="alert">Choose a different destination calendar.</p>}
+          {sameEndpoint && (
+            <p id="replace-destination-error" className="field-error" role="alert">
+              Choose a destination different from the source calendar.
+            </p>
+          )}
           {replace.error && <div className="inline-error" role="alert">{replace.error.message}</div>}
           <div className="form-actions">
             <Button
@@ -670,6 +781,17 @@ function CalendarReplacement({
               aria-controls="replace-confirmation"
             >
               Review replacement
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setConfirming(false)
+                setOpen(false)
+              }}
+              disabled={replace.isPending}
+            >
+              Cancel
             </Button>
           </div>
           {confirming && (
@@ -697,6 +819,8 @@ function CalendarReplacement({
 function EndpointFields({
   legend,
   idPrefix,
+  firstField,
+  errorId,
   accounts,
   account,
   calendar,
@@ -707,6 +831,8 @@ function EndpointFields({
 }: {
   legend: string
   idPrefix: string
+  firstField?: RefObject<HTMLSelectElement | null>
+  errorId?: string
   accounts: ConnectedAccount[]
   account: string
   calendar: string
@@ -722,8 +848,8 @@ function EndpointFields({
     <fieldset className="endpoint-fields">
       <legend>{legend}</legend>
       <div className="field-stack">
-        <Label htmlFor={`${idPrefix}-account`}>Google identity</Label>
-        <NativeSelect id={`${idPrefix}-account`} value={account} onChange={(event) => onAccount(event.target.value)}>
+        <Label htmlFor={`${idPrefix}-account`}>Google account</Label>
+        <NativeSelect ref={firstField} id={`${idPrefix}-account`} value={account} onChange={(event) => onAccount(event.target.value)}>
           {accounts.map((item) => (
             <option key={item.id} value={item.id}>
               {item.display_name} ({item.email})
@@ -732,8 +858,14 @@ function EndpointFields({
         </NativeSelect>
       </div>
       <div className="field-stack">
-        <Label htmlFor={`${idPrefix}-calendar`}>{writableOnly ? "Writable calendar" : "Calendar"}</Label>
-        <NativeSelect id={`${idPrefix}-calendar`} value={calendar} onChange={(event) => onCalendar(event.target.value)}>
+        <Label htmlFor={`${idPrefix}-calendar`}>{writableOnly ? "Calendar you can edit" : "Calendar"}</Label>
+        <NativeSelect
+          id={`${idPrefix}-calendar`}
+          value={calendar}
+          onChange={(event) => onCalendar(event.target.value)}
+          aria-invalid={errorId ? true : undefined}
+          aria-describedby={errorId}
+        >
           <option value="" disabled>
             Choose a calendar
           </option>
@@ -761,13 +893,19 @@ function RuleRemoval({
 }) {
   const invalidate = useRuleInvalidation(detail.id)
   const leave = useRuleExit(detail.id)
+  const queryClient = useQueryClient()
   const returnFocus = useRef<HTMLButtonElement>(null)
+  const firstField = useRef<HTMLInputElement>(null)
+  const removing = detail.state === "disabled"
+  const [open, setOpen] = useState(removing)
   const [handling, setHandling] = useState<ProjectionHandling>("delete")
-  const [confirming, setConfirming] = useState(false)
+  useDisclosureFocus(open && !removing, firstField, returnFocus)
   const effective: ProjectionHandling = destinationConnected ? handling : "detach"
   const remove = useMutation({
     mutationFn: () => api.removeRule(detail.id, effective),
     onSuccess: async (result) => {
+      // Update the cached list first so the removed rule never flashes back into view.
+      queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) => rules?.filter((rule) => rule.id !== detail.id))
       onRemoved(result)
       await leave()
     },
@@ -775,7 +913,6 @@ function RuleRemoval({
       await invalidate()
     },
   })
-  const removing = detail.state === "disabled"
 
   return (
     <section className="rule-section rule-removal" aria-labelledby="removal-title">
@@ -785,50 +922,47 @@ function RuleRemoval({
           <p>
             {removing
               ? `Removal stopped with ${plural(detail.mapping_count, "projection")} left. Retry to finish; the rule does not synchronize meanwhile.`
-              : "Rule Removal is permanent. Choose what happens to the events this rule manages."}
+              : "Removing a rule is permanent. Source events are never changed."}
           </p>
         </div>
+        {!open && (
+          <Button
+            ref={returnFocus}
+            variant="outline"
+            className="removal-toggle"
+            onClick={() => setOpen(true)}
+            aria-expanded={open}
+            aria-controls="removal-form"
+          >
+            <Trash2 aria-hidden="true" /> Remove rule…
+          </Button>
+        )}
       </div>
-      <ProjectionChoice
-        name="removal-projections"
-        value={effective}
-        onChange={(value) => {
-          setHandling(value)
-          setConfirming(false)
-        }}
-        mappingCount={detail.mapping_count}
-        destinationName={destinationName}
-        deleteAvailable={destinationConnected}
-      />
-      <div className="form-actions">
-        <Button
-          ref={returnFocus}
-          variant="outline"
-          onClick={() => setConfirming(true)}
-          disabled={remove.isPending}
-          aria-expanded={confirming}
-          aria-controls="removal-confirmation"
-        >
-          <Trash2 aria-hidden="true" /> {removing ? "Retry removal" : "Remove rule"}
-        </Button>
-      </div>
-      {confirming && (
-        <DestructiveConfirmation
-          id="removal-confirmation"
-          title="Remove this rule permanently?"
-          body={removalConsequence(effective, detail.mapping_count, destinationName)}
-          cancelLabel="Keep rule"
-          confirmLabel={removalConfirmLabel(effective, detail.mapping_count)}
-          pendingLabel="Removing…"
-          pending={remove.isPending}
-          onConfirm={() => remove.mutate()}
-          onCancel={() => {
-            setConfirming(false)
-            returnFocus.current?.focus()
-          }}
-        />
+      {open && (
+        <div id="removal-form" className="rule-edit-form removal-form">
+          <ProjectionChoice
+            name="removal-projections"
+            value={effective}
+            onChange={setHandling}
+            firstField={firstField}
+            mappingCount={detail.mapping_count}
+            destinationName={destinationName}
+            deleteAvailable={destinationConnected}
+          />
+          <div className="form-actions">
+            <Button variant="destructive" onClick={() => remove.mutate()} disabled={remove.isPending}>
+              <Trash2 aria-hidden="true" />
+              {remove.isPending ? "Removing…" : removing ? "Retry removal" : removalConfirmLabel(effective, detail.mapping_count)}
+            </Button>
+            {!removing && (
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={remove.isPending}>
+                Keep rule
+              </Button>
+            )}
+          </div>
+          {remove.error && <div className="inline-error" role="alert">{remove.error.message}</div>}
+        </div>
       )}
-      {remove.error && <div className="inline-error" role="alert">{remove.error.message}</div>}
     </section>
   )
 }

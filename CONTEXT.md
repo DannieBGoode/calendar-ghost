@@ -165,7 +165,7 @@ _Avoid_: OAuth secret, administrator password, database password
 ## Rule Lifecycle
 
 **Rule Preview**:
-A side-effect-free evaluation showing eligible source events, excluded events, destination projections, and planned actions. A new or materially changed rule must pass preview before it can be enabled.
+A side-effect-free evaluation showing eligible source events, excluded events, destination projections, and planned actions. A new or materially changed rule must pass preview before it can be enabled. It writes nothing to Google; locally it records only the rule's validated state and the preview's counts, so enabling can restate what will be written.
 _Avoid_: Test sync, simulation
 
 **Material Rule Change**:
@@ -223,6 +223,25 @@ _Avoid_: Retry error, Google outage
 **Rule Isolation**:
 The guarantee that one rule's failed or degraded sync run does not block or roll back unrelated rules. Provider requests may still share connected-account rate limits.
 _Avoid_: Independent deployment, separate worker
+
+## Interface Wording
+
+The Web UI speaks to a household administrator, so its primary copy uses calendar language and
+keeps glossary terms for places that need their precision. Code, documentation, audit reasons, and
+diagnostics keep the glossary terms above.
+
+| Glossary term | Primary interface wording |
+| --- | --- |
+| Directional Sync Rule | rule, named "Source → Destination" |
+| Event Projection, Managed Projection | projection where precision matters (removal, counts); "events this rule wrote to Family" otherwise; never "copied event" |
+| Busy-Only Projection | "Busy only: titles, descriptions, and locations stay private" |
+| Details Projection | "Copy title, description, and location" |
+| Material Rule Change | "A change stops the rule from writing until you preview it again" |
+| Rule Preview, then enable | "Preview rule", then "Start syncing" |
+| Degraded Rule | "Stopped", with the cause and "Preview to restart" |
+| Reconciliation | "Reconcile now", always with its explanation: checks every event the rule wrote and repairs any edited or deleted there |
+| Connected Account | "Google account" |
+| Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
 
 ## Data Minimization
 

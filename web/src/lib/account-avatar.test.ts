@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import avatarSource from "../components/account-avatar.tsx?raw"
 import ruleEndpointSource from "../components/rule-endpoint.tsx?raw"
-import dashboardSource from "../features/dashboard.tsx?raw"
+import rulesSource from "../features/rules.tsx?raw"
+import settingsSource from "../features/settings.tsx?raw"
 import { accountInitials } from "./account-avatar"
 
 describe("accountInitials", () => {
@@ -32,9 +33,10 @@ describe("AccountAvatar", () => {
   })
 
   it("is used for every account identity in the dashboard", () => {
-    expect(dashboardSource).not.toContain("accountInitials(")
+    expect(settingsSource).not.toContain("accountInitials(")
+    expect(rulesSource).not.toContain("accountInitials(")
     expect(ruleEndpointSource).not.toContain("accountInitials(")
-    expect(dashboardSource.match(/<AccountAvatar/g)).toHaveLength(1)
+    expect(settingsSource.match(/<AccountAvatar/g)).toHaveLength(1)
     expect(ruleEndpointSource.match(/<AccountAvatar/g)).toHaveLength(1)
   })
 })

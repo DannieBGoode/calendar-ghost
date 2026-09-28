@@ -13,6 +13,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     Clock,
     IdGenerator,
+    RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
@@ -85,6 +86,7 @@ class SyncRuleDetails:
     mapping_count: int
     last_sync: RuleRunOutcome | None
     last_reconciliation: RuleRunOutcome | None
+    latest_preview: RulePreviewSummary | None = None
 
 
 @dataclass(slots=True)
@@ -101,6 +103,7 @@ class GetSyncRuleDetails:
                 mapping_count=uow.mappings.count_for_rule(rule_id),
                 last_sync=uow.run_outcomes.latest(rule_id, RunKind.SYNC),
                 last_reconciliation=uow.run_outcomes.latest(rule_id, RunKind.RECONCILIATION),
+                latest_preview=uow.previews.latest(rule_id),
             )
 
 

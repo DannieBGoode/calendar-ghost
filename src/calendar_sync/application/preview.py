@@ -5,7 +5,13 @@ from datetime import timedelta
 
 from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import CalendarProvider, Clock, UnitOfWork, UnitOfWorkFactory
+from calendar_sync.application.ports import (
+    CalendarProvider,
+    Clock,
+    RulePreviewSummary,
+    UnitOfWork,
+    UnitOfWorkFactory,
+)
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEvent,
@@ -99,6 +105,16 @@ class PreviewSyncRule:
             if current is None or current.material_signature != rule.material_signature:
                 raise RuleNotExecutable("sync rule changed while preview was running")
             uow.rules.save(current.mark_dry_run_validated())
+            uow.previews.record(
+                RulePreviewSummary(
+                    rule.id,
+                    self.clock.now(),
+                    len(eligible) - occurrence_changes,
+                    excluded,
+                    recurring_series=series_count,
+                    occurrence_changes=occurrence_changes,
+                )
+            )
             uow.commit()
 
         return RulePreview(

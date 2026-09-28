@@ -36,6 +36,13 @@ recurring projections first, pause rules before upgrading, then preview and enab
 back works with the same database: earlier releases ignore the table and skip recurring events, so
 existing recurring projections stay unchanged until you upgrade again.
 
+Migration 6 adds the `rule_previews` table, which keeps only the timestamp and counts of each
+rule's latest Rule Preview so the Web UI can restate them before a rule starts syncing, and a
+`rule_run_outcomes.last_succeeded_at` column that keeps the last successful run's time across
+later failures, backfilled from existing successful outcomes. Rolling back works with the same
+database: earlier releases ignore the table and column, and a rule previewed on the newer release
+still enables normally. Rows are removed with their rule.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

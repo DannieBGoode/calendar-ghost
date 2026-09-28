@@ -48,6 +48,9 @@ def test_preview_is_side_effect_free_and_unlocks_enablement() -> None:
     assert preview.sample[0].projected_title == "Busy"
     assert provider.destination is None
     assert unit_of_work.state.rules[draft.id].state is SyncRuleState.DRY_RUN_VALIDATED
+    # Counts are kept so enabling can restate them after a reload; content never is.
+    summary = unit_of_work.state.previews[draft.id]
+    assert (summary.eligible_events, summary.excluded_events, summary.completed_at) == (1, 0, NOW)
 
 
 def test_preview_revalidates_a_degraded_rule_after_reauthorization() -> None:

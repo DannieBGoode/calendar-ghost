@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
 import { Activity, ArrowRight, ChevronDown, ExternalLink, RefreshCw, Repeat, ShieldAlert } from "lucide-react"
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 
 import { PageSkeleton } from "@/components/page-skeleton"
 import { RuleEndpoint } from "@/components/rule-endpoint"
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import {
   CATEGORY_FILTERS,
+  activityFiltersFromSearch,
   describeEntry,
   entryInspection,
   eventLookupFailure,
@@ -45,8 +46,22 @@ type RuleContext = {
 }
 
 export function ActivityView() {
-  const [ruleId, setRuleId] = useState("")
-  const [category, setCategory] = useState<ActivityCategory | "">("")
+  const [ruleId, setRuleId] = useState(() => activityFiltersFromSearch(window.location.search).ruleId)
+  const [category, setCategory] = useState<ActivityCategory | "">(
+    () => activityFiltersFromSearch(window.location.search).category,
+  )
+
+  // Filters live in the address so other views can link to one rule's activity, and so the
+  // filtered view survives a reload or a shared link.
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (ruleId) params.set("rule", ruleId)
+    if (category) params.set("category", category)
+    const search = params.size ? `?${params}` : ""
+    if (window.location.search !== search) {
+      window.history.replaceState(null, "", `${window.location.pathname}${search}`)
+    }
+  }, [ruleId, category])
   const activity = useInfiniteQuery({
     queryKey: ["activity", ruleId, category],
     queryFn: ({ pageParam }) =>
@@ -68,7 +83,7 @@ export function ActivityView() {
       staleTime: 5 * 60 * 1000,
     })),
   })
-  if (activity.isPending || incidents.isPending) return <PageSkeleton />
+  if (activity.isPending || incidents.isPending) return <PageSkeleton label="Loading activity" />
 
   if (activity.error || incidents.error) {
     const failure = activityFailure([activity.error, incidents.error])
@@ -207,7 +222,6 @@ export function ActivityView() {
 function ActivityHeading() {
   return (
     <div>
-      <p className="page-context">Activity</p>
       <h1>Incidents and audit activity</h1>
       <p className="page-intro">
         What each rule did and why. Event titles are fetched from Google only when you open an

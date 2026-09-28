@@ -194,12 +194,33 @@ class RuleRunOutcome:
     checked_mappings: int = 0
     drift: int = 0
     failure_kind: str | None = None
+    # When the most recent successful run of this kind completed. The repository keeps it across
+    # later failures, so a failed run never erases evidence that calendars were once current.
+    last_succeeded_at: datetime | None = None
 
 
 class RuleRunOutcomeRepository(Protocol):
     def record(self, outcome: RuleRunOutcome) -> None: ...
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RulePreviewSummary:
+    """Counts from the latest Rule Preview, kept so enabling can restate them; never content."""
+
+    rule_id: SyncRuleId
+    completed_at: datetime
+    eligible_events: int
+    excluded_events: int
+    recurring_series: int = 0
+    occurrence_changes: int = 0
+
+
+class RulePreviewRepository(Protocol):
+    def record(self, summary: RulePreviewSummary) -> None: ...
+
+    def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None: ...
 
 
 class UnitOfWork(Protocol):
@@ -210,6 +231,7 @@ class UnitOfWork(Protocol):
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
     run_outcomes: RuleRunOutcomeRepository
+    previews: RulePreviewRepository
 
     def __enter__(self) -> Self: ...
 

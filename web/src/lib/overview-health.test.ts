@@ -1,0 +1,86 @@
+import { describe, expect, it } from "vitest"
+
+import type { Dashboard } from "./api"
+import { overviewHealth } from "./overview-health"
+
+const now = Date.parse("2026-09-28T12:00:00Z")
+const healthy: Dashboard = {
+  health: "healthy",
+  connected_accounts: 2,
+  disconnected_accounts: 0,
+  sync_rules: 3,
+  enabled_rules: 2,
+  stopped_rules: 0,
+  open_incidents: 0,
+  last_synced_at: "2026-09-28T11:57:00Z",
+}
+
+describe("overviewHealth", () => {
+  it("reports the last successful sync when everything is quiet", () => {
+    const health = overviewHealth(healthy, now)
+    expect(health.tone).toBe("healthy")
+    expect(health.headline).toBe("Synchronization is healthy")
+    expect(health.title).toBe("2 rules running normally")
+    expect(health.detail).toMatch(/^Last sync 3 minutes ago\./)
+    expect(health.action).toBeNull()
+  })
+
+  it("never calls an installation with open incidents healthy", () => {
+    const health = overviewHealth({ ...healthy, health: "attention", open_incidents: 2 }, now)
+    expect(health.tone).toBe("attention")
+    expect(health.headline).not.toMatch(/healthy/i)
+    expect(health.title).toBe("2 incidents need attention")
+    expect(health.action).toEqual({ label: "Open Activity", view: "activity" })
+  })
+
+  it("asks for reauthorization instead of setup when the only account lost access", () => {
+    const health = overviewHealth(
+      { ...healthy, connected_accounts: 0, disconnected_accounts: 1, stopped_rules: 2, enabled_rules: 0 },
+      now,
+    )
+    expect(health.tone).toBe("attention")
+    expect(health.title).toBe("1 Google account needs reauthorization")
+    expect(health.action?.view).toBe("settings")
+  })
+
+  it("asks for reauthorization before setup when only a disconnected account remains", () => {
+    const health = overviewHealth(
+      { ...healthy, connected_accounts: 0, disconnected_accounts: 1, sync_rules: 0, enabled_rules: 0 },
+      now,
+    )
+    expect(health.tone).toBe("setup")
+    expect(health.headline).toBe("Reauthorize your Google account")
+    expect(health.action?.view).toBe("settings")
+  })
+
+  it("flags stopped rules even without an incident", () => {
+    const health = overviewHealth({ ...healthy, stopped_rules: 1 }, now)
+    expect(health.tone).toBe("attention")
+    expect(health.title).toBe("1 rule stopped")
+  })
+
+  it("guides setup until a rule is running", () => {
+    expect(overviewHealth({ ...healthy, connected_accounts: 0 }, now).tone).toBe("setup")
+    expect(overviewHealth({ ...healthy, sync_rules: 0, enabled_rules: 0 }, now).headline).toBe(
+      "Create your first rule",
+    )
+    expect(overviewHealth({ ...healthy, enabled_rules: 0 }, now).headline).toBe("No rule is synchronizing")
+  })
+
+  it("waits for the first run without inventing a time", () => {
+    expect(overviewHealth({ ...healthy, last_synced_at: null }, now).detail).toBe(
+      "The first sync runs within five minutes.",
+    )
+  })
+
+  it("names the affected rule and links straight to it", () => {
+    const health = overviewHealth({ ...healthy, open_incidents: 1, stopped_rules: 2 }, now, {
+      ruleId: "rule-7",
+      name: "Family → Work",
+      detail: "Stopped 1 hour ago.",
+    })
+    expect(health.title).toBe("Family → Work needs attention")
+    expect(health.detail).toBe("Stopped 1 hour ago. 1 other problem also needs a look.")
+    expect(health.action).toEqual({ label: "Review this rule", view: "rules", ruleId: "rule-7" })
+  })
+})

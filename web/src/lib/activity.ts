@@ -197,6 +197,16 @@ export const CATEGORY_FILTERS: { value: ActivityCategory | ""; label: string }[]
   { value: "unchanged", label: "No change needed" },
 ]
 
+/** Reads Activity filters from an address such as `?rule=A&category=blocked`, ignoring unknown values. */
+export function activityFiltersFromSearch(search: string): { ruleId: string; category: ActivityCategory | "" } {
+  const params = new URLSearchParams(search)
+  const category = params.get("category") ?? ""
+  return {
+    ruleId: params.get("rule") ?? "",
+    category: CATEGORY_FILTERS.some((filter) => filter.value === category) ? (category as ActivityCategory | "") : "",
+  }
+}
+
 export type ActivityRun = {
   key: string
   ruleId: string

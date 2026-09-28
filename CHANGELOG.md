@@ -16,6 +16,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Activity groups decisions by synchronization run, names the rule's calendars, explains every skipped, blocked, or changed event in plain language, and can be filtered by rule and outcome with older entries loaded on demand.
 - Activity entries can look up their source event and Managed Projection live from Google, showing the title, time, recurrence, and a Google Calendar link without storing any event content.
 - SQLite migration 3 adds stable reason codes and run identifiers to audit entries and backfills reason codes for existing entries.
+- The Overview derives its headline, health strip, and single next action from one health model, so it never reports healthy while an incident, a stopped rule, or a lost authorization needs attention. It lists every rule with its state and last successful sync, and first-run guidance stays until a rule is running.
+- Rule rows and Rule Details show when each rule last synchronized, move Sync Now, Reconcile Now, and Pause into a "More actions" menu that explains how each differs, report each command's result on its own rule, and restate the privacy consequence of the latest preview before a rule starts syncing.
+- `GET /api/v1/dashboard` adds `disconnected_accounts`, `enabled_rules`, `stopped_rules`, and `last_synced_at`, and reports `attention` for stopped rules as well as open incidents. `GET /api/v1/rules` adds each rule's `last_sync` outcome.
+- The Overview shows recent changes: the last runs that added, updated, removed, or repaired events, per rule and in plain language, with blocked changes linked to that rule's Activity. "Show events" looks up the affected events' titles and times live from Google on request and never stores them. When something needs attention, the status names the affected rule and links straight to it.
+- `GET /api/v1/recent-changes` summarizes recent runs that changed or blocked events, using counts and entry identifiers only.
+- SQLite migration 6 keeps the counts of each rule's latest preview, so "Start syncing" always restates how many events will appear. Rules and Rule Details expose them as `latest_preview`. It also keeps each rule's last successful run time across later failures (`last_succeeded_at`), so the Overview's last sync never disappears after a failed run.
+- Activity filters live in the address (`/activity?rule=…`), and Rule Details links to that rule's activity.
 - Recurring series and single-occurrence changes synchronize under the same ownership, privacy, drift-repair, reprojection, and removal guarantees as single events, and Rule Preview reports recurring series and changed occurrences with their planned actions.
 
 ### Changed
@@ -28,6 +35,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Migration 5 records Occurrence Mappings and resets incremental positions once so enabled rules backfill recurring events on their next run. Pause a rule before upgrading to preview its recurring projections first.
 - Audit entries moved from `/api/v1/activity` to `/api/v1/audit-entries`, and the old path is removed. After upgrading, reload or hard-refresh every Calendar Sync tab and bookmark: pages loaded from the previous release still call the old path, and browsers may have cached them.
 - Unknown `/api/` paths now return a JSON 404 for every method, known paths called with the wrong method return 405 with an `Allow` header, and known paths with an extra or missing trailing slash redirect, instead of the web app page.
+- Rule Removal is collapsed until requested, confirms with a message on the rules list, and returns focus to the next view. Navigation now moves focus into the new view, names each page in the browser title, and closes the mobile menu with Escape.
+- Rule Removal is a single step with the choice, its consequence, and a named confirm button together. Widening a rule from Busy only to event details now warns who will see them and names the effect on its button.
+- A stopped rule's details explain what stopped it and that nothing was lost, and its next step reads "Preview to restart".
+- Keyboard focus stays on the page after preview, start syncing, pause, and saving a policy; the "More actions" menu shows a visible focus ring, stays inside the viewport on small screens, and keeps focus while a command runs. Relative times such as "3 minutes ago" keep updating while a page is open.
+- Buttons, labels, and supporting text use one compact type scale, the top bar is opaque, and focus rings remain visible in forced-colors mode.
 - The web app page is now revalidated on every load, so future upgrades take effect without a hard refresh.
 
 ### Fixed
