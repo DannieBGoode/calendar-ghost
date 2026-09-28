@@ -25,6 +25,7 @@ import {
   policyChangeConsequences,
   removalConfirmLabel,
   removalConsequence,
+  replacementConfirmLabel,
   ruleStateLabel,
   runOutcomeSummary,
 } from "@/lib/rule-change"
@@ -312,6 +313,64 @@ function useRuleInvalidation(ruleId: string) {
   }
 }
 
+function useRuleExit(ruleId: string) {
+  const queryClient = useQueryClient()
+  return async () => {
+    queryClient.removeQueries({ queryKey: ["rule", ruleId] })
+    await Promise.all(
+      [["rules"], ["dashboard"], ["activity"], ["accounts"]].map((queryKey) =>
+        queryClient.invalidateQueries({ queryKey }),
+      ),
+    )
+  }
+}
+
+function DestructiveConfirmation({
+  id,
+  title,
+  body,
+  cancelLabel,
+  confirmLabel,
+  pendingLabel,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  id: string
+  title: string
+  body: string
+  cancelLabel: string
+  confirmLabel: string
+  pendingLabel: string
+  pending: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const heading = useRef<HTMLHeadingElement>(null)
+  useEffect(() => {
+    heading.current?.focus()
+  }, [])
+  return (
+    <div className="disconnect-confirmation delete-confirmation" id={id} role="group" aria-labelledby={`${id}-title`}>
+      <div>
+        <h4 id={`${id}-title`} ref={heading} tabIndex={-1}>
+          {title}
+        </h4>
+        <p>{body}</p>
+      </div>
+      <div className="confirmation-actions">
+        <Button variant="outline" onClick={onCancel} disabled={pending}>
+          {cancelLabel}
+        </Button>
+        <Button variant="destructive" onClick={onConfirm} disabled={pending}>
+          <Trash2 aria-hidden="true" />
+          {pending ? pendingLabel : confirmLabel}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function PolicyEditor({ detail, destinationName }: { detail: RuleDetail; destinationName: string }) {
   const invalidate = useRuleInvalidation(detail.id)
   const current: RulePolicyPayload = {
@@ -481,9 +540,11 @@ function CalendarReplacement({
   destinationConnected: boolean
   onReplaced: (ruleId: string) => void
 }) {
-  const invalidate = useRuleInvalidation(detail.id)
+  const leave = useRuleExit(detail.id)
   const connected = accounts.filter((account) => account.state === "connected")
+  const returnFocus = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
+  const [confirming, setConfirming] = useState(false)
   const [sourceAccount, setSourceAccount] = useState(detail.source.connected_account_id)
   const [sourceCalendar, setSourceCalendar] = useState(detail.source.calendar_id)
   const [destinationAccount, setDestinationAccount] = useState(detail.destination.connected_account_id)
@@ -514,15 +575,22 @@ function CalendarReplacement({
         projections: effective,
       }),
     onSuccess: async (result) => {
-      await invalidate()
       onReplaced(result.rule.id)
+      await leave()
     },
   })
   const canSubmit = !unchanged && !sameEndpoint && Boolean(sourceCalendar && destinationCalendar)
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (canSubmit) replace.mutate()
+    if (canSubmit) setConfirming(true)
+  }
+
+  function edited<T>(apply: (value: T) => void) {
+    return (value: T) => {
+      apply(value)
+      setConfirming(false)
+    }
   }
 
   return (
@@ -554,11 +622,11 @@ function CalendarReplacement({
             calendar={sourceCalendar}
             calendars={sourceCalendars.data}
             writableOnly={false}
-            onAccount={(value) => {
+            onAccount={edited((value: string) => {
               setSourceAccount(value)
               setSourceCalendar("")
-            }}
-            onCalendar={setSourceCalendar}
+            })}
+            onCalendar={edited(setSourceCalendar)}
           />
           <EndpointFields
             legend="Destination calendar"
@@ -568,16 +636,16 @@ function CalendarReplacement({
             calendar={destinationCalendar}
             calendars={destinationCalendars.data}
             writableOnly
-            onAccount={(value) => {
+            onAccount={edited((value: string) => {
               setDestinationAccount(value)
               setDestinationCalendar("")
-            }}
-            onCalendar={setDestinationCalendar}
+            })}
+            onCalendar={edited(setDestinationCalendar)}
           />
           <ProjectionChoice
             name="replace-projections"
             value={effective}
-            onChange={setHandling}
+            onChange={edited(setHandling)}
             mappingCount={detail.mapping_count}
             destinationName={destinationName}
             deleteAvailable={destinationConnected}
@@ -585,10 +653,33 @@ function CalendarReplacement({
           {sameEndpoint && <p className="field-error" role="alert">Choose a different destination calendar.</p>}
           {replace.error && <div className="inline-error" role="alert">{replace.error.message}</div>}
           <div className="form-actions">
-            <Button type="submit" variant="destructive" disabled={!canSubmit || replace.isPending}>
-              {replace.isPending ? "Replacing…" : "Remove and replace rule"}
+            <Button
+              ref={returnFocus}
+              type="submit"
+              variant="outline"
+              disabled={!canSubmit || replace.isPending}
+              aria-expanded={confirming}
+              aria-controls="replace-confirmation"
+            >
+              Review replacement
             </Button>
           </div>
+          {confirming && (
+            <DestructiveConfirmation
+              id="replace-confirmation"
+              title="Remove this rule and create a new draft?"
+              body={`${removalConsequence(effective, detail.mapping_count, destinationName)} The new draft keeps this rule's policy and needs a preview before it can be enabled.`}
+              cancelLabel="Keep current rule"
+              confirmLabel={replacementConfirmLabel(effective, detail.mapping_count)}
+              pendingLabel="Replacing…"
+              pending={replace.isPending}
+              onConfirm={() => replace.mutate()}
+              onCancel={() => {
+                setConfirming(false)
+                returnFocus.current?.focus()
+              }}
+            />
+          )}
         </form>
       )}
     </section>
@@ -661,14 +752,16 @@ function RuleRemoval({
   onRemoved: () => void
 }) {
   const invalidate = useRuleInvalidation(detail.id)
+  const leave = useRuleExit(detail.id)
+  const returnFocus = useRef<HTMLButtonElement>(null)
   const [handling, setHandling] = useState<ProjectionHandling>("delete")
   const [confirming, setConfirming] = useState(false)
   const effective: ProjectionHandling = destinationConnected ? handling : "detach"
   const remove = useMutation({
     mutationFn: () => api.removeRule(detail.id, effective),
     onSuccess: async () => {
-      await invalidate()
       onRemoved()
+      await leave()
     },
     onError: async () => {
       await invalidate()
@@ -699,33 +792,33 @@ function RuleRemoval({
         destinationName={destinationName}
         deleteAvailable={destinationConnected}
       />
-      {!confirming ? (
-        <div className="form-actions">
-          <Button variant="outline" onClick={() => setConfirming(true)} aria-expanded={false}>
-            <Trash2 aria-hidden="true" /> {removing ? "Retry removal" : "Remove rule"}
-          </Button>
-        </div>
-      ) : (
-        <div
-          className="disconnect-confirmation delete-confirmation"
-          id="removal-confirmation"
-          role="group"
-          aria-labelledby="removal-confirm-title"
+      <div className="form-actions">
+        <Button
+          ref={returnFocus}
+          variant="outline"
+          onClick={() => setConfirming(true)}
+          disabled={remove.isPending}
+          aria-expanded={confirming}
+          aria-controls="removal-confirmation"
         >
-          <div>
-            <h4 id="removal-confirm-title">Remove this rule permanently?</h4>
-            <p>{removalConsequence(effective, detail.mapping_count, destinationName)}</p>
-          </div>
-          <div className="confirmation-actions">
-            <Button variant="outline" onClick={() => setConfirming(false)} disabled={remove.isPending}>
-              Keep rule
-            </Button>
-            <Button variant="destructive" onClick={() => remove.mutate()} disabled={remove.isPending}>
-              <Trash2 aria-hidden="true" />
-              {remove.isPending ? "Removing…" : removalConfirmLabel(effective, detail.mapping_count)}
-            </Button>
-          </div>
-        </div>
+          <Trash2 aria-hidden="true" /> {removing ? "Retry removal" : "Remove rule"}
+        </Button>
+      </div>
+      {confirming && (
+        <DestructiveConfirmation
+          id="removal-confirmation"
+          title="Remove this rule permanently?"
+          body={removalConsequence(effective, detail.mapping_count, destinationName)}
+          cancelLabel="Keep rule"
+          confirmLabel={removalConfirmLabel(effective, detail.mapping_count)}
+          pendingLabel="Removing…"
+          pending={remove.isPending}
+          onConfirm={() => remove.mutate()}
+          onCancel={() => {
+            setConfirming(false)
+            returnFocus.current?.focus()
+          }}
+        />
       )}
       {remove.error && <div className="inline-error" role="alert">{remove.error.message}</div>}
     </section>

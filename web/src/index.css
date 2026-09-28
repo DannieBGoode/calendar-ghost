@@ -1184,8 +1184,15 @@ p {
   gap: 2rem;
 }
 
-.rule-details-page h1:focus {
+.rule-details-page h1:focus,
+.rule-details-page .disconnect-confirmation h4:focus {
   outline: none;
+}
+
+.rule-details-page .disconnect-confirmation {
+  max-width: 44rem;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .rule-details-direction {

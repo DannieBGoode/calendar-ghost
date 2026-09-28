@@ -5,6 +5,7 @@ import {
   policyChangeConsequences,
   removalConfirmLabel,
   removalConsequence,
+  replacementConfirmLabel,
   ruleStateLabel,
   runOutcomeSummary,
 } from "./rule-change"
@@ -96,6 +97,14 @@ describe("rule removal copy", () => {
     expect(removalConsequence("detach", 2, "Family")).toBe(
       "2 projections stay in Family as ordinary events that are no longer updated or deleted. This cannot be undone.",
     )
+  })
+})
+
+describe("rule replacement copy", () => {
+  it("names what happens to existing projections", () => {
+    expect(replacementConfirmLabel("delete", 37)).toBe("Replace rule and delete 37 projections")
+    expect(replacementConfirmLabel("detach", 1)).toBe("Replace rule and keep 1 event")
+    expect(replacementConfirmLabel("delete", 0)).toBe("Replace rule")
   })
 })
 

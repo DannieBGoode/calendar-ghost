@@ -73,6 +73,13 @@ export function removalConfirmLabel(handling: ProjectionHandling, mappingCount: 
     : `Remove rule and keep ${plural(mappingCount, "event")}`
 }
 
+export function replacementConfirmLabel(handling: ProjectionHandling, mappingCount: number): string {
+  if (mappingCount === 0) return "Replace rule"
+  return handling === "delete"
+    ? `Replace rule and delete ${plural(mappingCount, "projection")}`
+    : `Replace rule and keep ${plural(mappingCount, "event")}`
+}
+
 const STATE_LABELS: Record<string, string> = {
   draft: "Draft",
   dry_run_validated: "Preview passed",
