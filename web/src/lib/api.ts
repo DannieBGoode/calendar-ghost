@@ -18,7 +18,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(body?.detail ?? "The request could not be completed.", response.status)
   }
   if (response.status === 204) return undefined as T
-  return (await response.json()) as T
+  try {
+    return (await response.json()) as T
+  } catch (error) {
+    // The request reached a server, so an unparseable body is a service failure, not a
+    // connectivity one; a proxy fallback page is the usual cause.
+    if (!(error instanceof SyntaxError)) throw error
+    throw new ApiError("The service returned an unreadable response.", response.status)
+  }
 }
 
 export type SetupStatus = { administrator_configured: boolean }
@@ -101,13 +108,32 @@ export type SyncResult = {
   checked_mappings?: number
   drift?: { kind: string; detail: string }[]
 }
+export type ActivityCategory = "changed" | "unchanged" | "skipped" | "blocked"
 export type AuditEntry = {
+  id: number
+  run_id: string | null
   occurred_at: string
   rule_id: string
   action: string
   outcome: string
+  category: ActivityCategory
+  reason: string | null
   detail: string
+  source_event_id: string | null
+  destination_event_id: string | null
 }
+export type ActivityFilters = { ruleId?: string; category?: ActivityCategory; before?: number }
+export type EventSnapshot = {
+  found: boolean
+  cancelled: boolean
+  title: string
+  all_day: boolean
+  starts: string | null
+  ends: string | null
+  recurring: boolean
+  web_link: string | null
+}
+export type ActivityEvent = { source: EventSnapshot; destination: EventSnapshot | null }
 export type Incident = {
   id: string
   rule_id: string | null
@@ -117,6 +143,8 @@ export type Incident = {
   opened_at: string
   updated_at: string
 }
+
+export const ACTIVITY_PAGE_SIZE = 100
 
 export const api = {
   setup: () => request<SetupStatus>("/api/v1/setup"),
@@ -199,6 +227,14 @@ export const api = {
     request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
       method: "POST",
     }),
-  activity: () => request<AuditEntry[]>("/api/v1/activity"),
+  activity: ({ ruleId, category, before }: ActivityFilters = {}) => {
+    const params = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) })
+    if (ruleId) params.set("rule_id", ruleId)
+    if (category) params.set("category", category)
+    if (before) params.set("before", String(before))
+    return request<AuditEntry[]>(`/api/v1/audit-entries?${params}`)
+  },
+  activityEvent: (entryId: number) =>
+    request<ActivityEvent>(`/api/v1/audit-entries/${entryId}/event`),
   incidents: () => request<Incident[]>("/api/v1/incidents"),
 }

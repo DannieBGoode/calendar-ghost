@@ -28,7 +28,9 @@ from calendar_sync.domain.model import (
     ManagedOrigin,
     PrivacyPolicy,
     ProjectionFingerprint,
+    Recurrence,
     SyncAction,
+    SyncReason,
     SyncRuleId,
     SyncRuleState,
     TransformationPolicy,
@@ -187,7 +189,8 @@ def test_complete_create_use_case_persists_mapping_cursor_and_audit() -> None:
     assert unit_of_work.state.destination_cursors[rule().id] == "destination-cursor-1"
     assert len(unit_of_work.state.mappings) == 1
     assert unit_of_work.state.audit[0].action == "create"
-    assert unit_of_work.state.audit[0].detail == "source has no managed projection"
+    assert unit_of_work.state.audit[0].reason == SyncReason.SOURCE_CREATED
+    assert unit_of_work.state.audit[0].run_id
     assert unit_of_work.state.audit[0].source_event_id == "source-event"
     assert provider.operation_keys[0]
 
@@ -375,7 +378,7 @@ def test_destination_change_does_not_delete_when_source_cannot_be_verified() -> 
     assert provider.deleted == 0
     assert provider.destination == destination
     assert unit_of_work.state.audit[-1].outcome == "blocked"
-    assert "could not be verified" in unit_of_work.state.audit[-1].detail
+    assert unit_of_work.state.audit[-1].reason == SyncReason.SOURCE_UNVERIFIABLE
 
 
 def test_cancelled_source_deletes_only_its_owned_mapping() -> None:
@@ -435,6 +438,41 @@ def test_managed_source_is_ignored_without_destination_write() -> None:
     assert result.ignored == 1
     assert provider.operation_keys == []
     assert unit_of_work.state.audit[0].action == SyncAction.IGNORE.value
+
+
+def test_each_run_groups_its_audit_entries_and_skips_recurring_events() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[rule().id] = rule()
+    recurring = replace(event("weekly"), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)))
+    provider = FakeCalendarProvider(event())
+    provider.source_changes = (event(), recurring)
+    fingerprinter = ProjectionFingerprinter()
+    run_ids = iter(("run-1", "run-2"))
+    use_case = ExecuteSyncRule(
+        unit_of_work,
+        provider,
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        FixedClock(),
+        new_run_id=lambda: next(run_ids),
+    )
+
+    first = use_case.execute(rule().id)
+    provider.source_changes = (recurring,)
+    use_case.execute(rule().id)
+
+    assert first.created == 1
+    assert first.ignored == 1
+    assert first.conflicts == 0
+    assert [
+        (entry.run_id, entry.action, entry.outcome, entry.reason)
+        for entry in (unit_of_work.state.audit)
+    ] == [
+        ("run-1", "create", "completed", SyncReason.SOURCE_CREATED),
+        ("run-1", "ignore", "skipped", SyncReason.RECURRING_UNSUPPORTED),
+        ("run-2", "ignore", "skipped", SyncReason.RECURRING_UNSUPPORTED),
+    ]
+    assert all("Private appointment" not in repr(entry) for entry in unit_of_work.state.audit)
 
 
 @pytest.mark.parametrize(

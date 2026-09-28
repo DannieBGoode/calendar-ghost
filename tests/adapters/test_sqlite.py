@@ -1,6 +1,7 @@
 import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime
+from importlib.resources import files
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
-from tests.helpers import endpoint, event, rule
+from tests.helpers import NOW, endpoint, event, rule
 
 
 def test_sqlite_rule_repository_round_trip(tmp_path: Path) -> None:
@@ -112,6 +113,73 @@ def test_sqlite_unique_relationship_is_translated_to_application_error(tmp_path:
         uow.rules.add(second_id)
 
 
+def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initial = (
+        files("calendar_sync.infrastructure.persistence").joinpath("0001_initial.sql").read_text()
+    )
+    with sqlite3.connect(database) as connection:
+        connection.executescript(initial)
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (1, '2026-09-01')"
+        )
+        connection.executemany(
+            """
+            INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, detail)
+            VALUES ('2026-09-01T10:00:00+00:00', 'rule-1', ?, ?, ?)
+            """,
+            [
+                (
+                    "conflict",
+                    "blocked",
+                    "recurring series and occurrence exceptions are not supported yet",
+                ),
+                ("create", "completed", "source has no managed projection"),
+                ("ignore", "completed", "excluded event has no managed projection"),
+            ],
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+        rows = connection.execute(
+            "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
+        ).fetchall()
+    assert versions == [1, 2, 3, 4]
+    assert rows == [
+        ("conflict", "blocked", "recurring_unsupported", None),
+        ("create", "completed", "source_created", None),
+        ("ignore", "completed", None, None),
+    ]
+
+
+def test_audit_entries_persist_reason_and_run(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.audit.append(
+            AuditEntry(
+                occurred_at=NOW,
+                rule_id=rule().id,
+                action="ignore",
+                outcome="skipped",
+                source_event_id="weekly",
+                reason="recurring_unsupported",
+                run_id="run-1",
+            )
+        )
+        uow.commit()
+
+    with sqlite3.connect(database) as connection:
+        stored = connection.execute(
+            "SELECT reason, run_id, source_event_id, detail FROM audit_entries"
+        ).fetchone()
+    assert stored == ("recurring_unsupported", "run-1", "weekly", "")
+
+
 def _mapping(event_id: str = "source-event") -> EventMapping:
     return EventMapping(
         EventMappingId(f"mapping-{event_id}"),
@@ -123,7 +191,7 @@ def _mapping(event_id: str = "source-event") -> EventMapping:
     )
 
 
-def test_migration_3_upgrades_a_version_2_installation_with_rules(tmp_path: Path) -> None:
+def test_migration_4_upgrades_a_version_3_installation_with_rules(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     with SqliteUnitOfWorkFactory(database)() as uow:
@@ -132,7 +200,7 @@ def test_migration_3_upgrades_a_version_2_installation_with_rules(tmp_path: Path
     with sqlite3.connect(database) as connection:
         connection.execute("DROP TABLE rule_run_outcomes")
         connection.execute("ALTER TABLE sync_rules DROP COLUMN reprojection_required")
-        connection.execute("DELETE FROM schema_migrations WHERE version = 3")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 4")
 
     initialize_database(database)
     initialize_database(database)
@@ -143,7 +211,7 @@ def test_migration_3_upgrades_a_version_2_installation_with_rules(tmp_path: Path
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
     assert restored is not None
     assert restored.reprojection_required is False
-    assert versions.count(3) == 1
+    assert versions.count(4) == 1
 
 
 def test_reprojection_flag_round_trips(tmp_path: Path) -> None:

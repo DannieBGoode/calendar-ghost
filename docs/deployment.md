@@ -8,12 +8,21 @@ Copy `.env.example` to `.env`, configure Google OAuth values when the adapter is
 docker compose up -d --build
 ```
 
-The named volume contains SQLite state. Back it up before upgrades. Future releases run forward-only, idempotent migrations during startup so `docker compose pull && docker compose up -d` does not require wiping state.
+The named volume contains SQLite state. Back it up before upgrades. Releases run forward-only, idempotent migrations during startup so `docker compose pull && docker compose up -d` does not require wiping state. Applied versions are recorded in `schema_migrations`, and each upgrade commits atomically with its ledger row.
 
 Migration 2 adds a nullable `connected_accounts.avatar_url` column for Google profile photos. Earlier
 releases ignore the column, so rolling back to the previous image works with the same database.
 
-Migration 3 adds `sync_rules.reprojection_required` (default `0`) and the `rule_run_outcomes`
+Migration 3 adds nullable `reason` and `run_id` columns to `audit_entries` and backfills reason codes for entries written by earlier releases. Rolling back to an earlier image is safe: older releases ignore the added columns. Entries written by the older release have no reason code or run identifier and appear in Activity with their original wording.
+
+After upgrading, reload every open Calendar Sync tab. The web page is served with
+`Cache-Control: no-cache`, so a normal reload picks up the new release. Releases before this header
+may be cached by the browser: after the first upgrade from such a release, hard-refresh each tab
+once. The upgrade that moves audit entries from `/api/v1/activity` to `/api/v1/audit-entries`
+removes the old path, so a page loaded before it cannot show Activity until it is reloaded. Pages
+from this release onward recognize a removed API path and ask you to reload.
+
+Migration 4 adds `sync_rules.reprojection_required` (default `0`) and the `rule_run_outcomes`
 table, which stores only timestamps, counts, and failure categories for the Rule Details view.
 Rolling back to the previous image works with the same database: it ignores the new column and
 table and leaves the flag untouched. The previous image does not rewrite existing projections after

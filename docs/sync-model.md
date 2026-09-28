@@ -43,6 +43,16 @@ current pre-alpha synchronization policy excludes recurring series and occurrenc
 Projecting only the series or only an exception can duplicate or resurrect occurrences, and timed
 series also require provider timezone identity across daylight-saving changes. The system therefore
 fails closed until series-to-series and occurrence-to-occurrence mapping is implemented.
+Excluded recurring events are recorded as skipped with the `recurring_unsupported` reason; they are
+not Conflicts, because no identity is ambiguous.
+
+## Audit evidence
+
+Every decision in a run appends one Audit Entry carrying the run identifier, the action, and a
+stable reason code from `SyncReason` in `domain/model.py`. Skips are recorded as well as writes, so
+the Activity view can explain why an event was not synchronized. Updates distinguish a changed
+source (`source_changed`) from a repaired destination edit (`destination_drift_repaired`). Entries
+store only identities; Activity reads titles and times from Google on demand and never persists them.
 
 ## Partial failure
 

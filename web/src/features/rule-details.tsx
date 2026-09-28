@@ -2,7 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { ArrowLeft, ArrowRight, CircleDot, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
-import { DashboardSkeleton } from "@/components/dashboard-skeleton"
+import { PageSkeleton } from "@/components/page-skeleton"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -81,7 +81,7 @@ export function RuleDetailsView({
     </a>
   )
 
-  if (rule.isPending || accounts.isPending) return <DashboardSkeleton />
+  if (rule.isPending || accounts.isPending) return <PageSkeleton />
   if (rule.error || accounts.error) {
     const missing = rule.error instanceof ApiError && rule.error.status === 404
     return (

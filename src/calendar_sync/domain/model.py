@@ -170,6 +170,7 @@ class CalendarEvent:
     recurrence: Recurrence | None = None
     occurrence: OccurrenceIdentity | None = None
     managed_origin: ManagedOrigin | None = None
+    web_link: str | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty(self.revision, "event revision")
@@ -285,10 +286,31 @@ class SyncAction(StrEnum):
     CONFLICT = "conflict"
 
 
+class SyncReason(StrEnum):
+    """Stable, content-free explanation codes recorded with every synchronization decision."""
+
+    SOURCE_CREATED = "source_created"
+    PROJECTION_MISSING = "projection_missing"
+    SOURCE_CHANGED = "source_changed"
+    DESTINATION_DRIFT_REPAIRED = "destination_drift_repaired"
+    SOURCE_CANCELLED = "source_cancelled"
+    ALL_DAY_EXCLUDED_REMOVED = "all_day_excluded_removed"
+    PROJECTION_CURRENT = "projection_current"
+    OUTSIDE_SOURCE_CALENDAR = "outside_source_calendar"
+    MANAGED_PROJECTION_SOURCE = "managed_projection_source"
+    RECURRING_UNSUPPORTED = "recurring_unsupported"
+    CANCELLED_WITHOUT_PROJECTION = "cancelled_without_projection"
+    ALL_DAY_EXCLUDED = "all_day_excluded"
+    MAPPING_INCONSISTENT = "mapping_inconsistent"
+    DESTINATION_IDENTITY_INCONSISTENT = "destination_identity_inconsistent"
+    DESTINATION_OWNERSHIP_INCONSISTENT = "destination_ownership_inconsistent"
+    SOURCE_UNVERIFIABLE = "source_unverifiable"
+
+
 @dataclass(frozen=True, slots=True)
 class SyncDecision:
     action: SyncAction
-    reason: str
+    reason: SyncReason
     projection: EventProjection | None = None
 
 

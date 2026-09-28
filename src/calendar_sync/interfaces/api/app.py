@@ -6,18 +6,22 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import uvicorn
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import URL
+from starlette.routing import Match, Route
+from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.application.errors import (
     ApplicationError,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
+    ProviderFailure,
     RemovalInterrupted,
     RemovalRequiresProvider,
     RuleNotExecutable,
@@ -29,13 +33,20 @@ from calendar_sync.domain.errors import DomainValidationError, InvalidStateTrans
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEndpoint,
+    CalendarEvent,
     CalendarId,
     ConnectedAccountId,
+    EventId,
+    EventRef,
+    EventStatus,
     PrivacyPolicy,
     ProjectionHandling,
+    SyncAction,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
+    TimedInterval,
     TransformationPolicy,
 )
 from calendar_sync.infrastructure.google.oauth import (
@@ -54,12 +65,14 @@ from calendar_sync.infrastructure.security import (
     PasswordPolicyViolation,
 )
 from calendar_sync.interfaces.api.schemas import (
+    ActivityEventResponse,
     AuditEntryResponse,
     CalendarEndpointPayload,
     ConnectedAccountResponse,
     CreateRuleRequest,
     DashboardResponse,
     DiscoveredCalendarResponse,
+    EventSnapshotResponse,
     GoogleAccountAccessResponse,
     GoogleConfigurationResponse,
     IncidentResponse,
@@ -77,6 +90,22 @@ from calendar_sync.interfaces.api.schemas import (
 )
 
 SESSION_COOKIE = "calendar_sync_session"
+
+ActivityCategory = Literal["changed", "unchanged", "skipped", "blocked"]
+
+# Recurring exclusions were recorded as conflicts before reason codes existed; they are skips.
+_ACTIVITY_CATEGORY_SQL: dict[ActivityCategory, str] = {
+    "changed": (
+        "action IN ('create', 'update', 'delete', 'policy_changed', 'remove_projection',"
+        " 'detach_projection', 'rule_removed')"
+    ),
+    "unchanged": "action = 'ignore' AND reason = 'projection_current'",
+    "skipped": (
+        "((action = 'ignore' AND COALESCE(reason, '') != 'projection_current')"
+        " OR reason = 'recurring_unsupported')"
+    ),
+    "blocked": "action = 'conflict' AND COALESCE(reason, '') != 'recurring_unsupported'",
+}
 
 
 def create_app(container: Container | None = None) -> FastAPI:
@@ -374,20 +403,91 @@ def create_app(container: Container | None = None) -> FastAPI:
             return [_rule_response(rule) for rule in uow.rules.list()]
 
     @app.get(
-        "/api/v1/activity",
+        "/api/v1/audit-entries",
         response_model=list[AuditEntryResponse],
         dependencies=[Depends(require_admin)],
     )
-    def list_activity() -> list[AuditEntryResponse]:
+    def list_activity(
+        rule_id: str | None = None,
+        category: ActivityCategory | None = None,
+        before: Annotated[int | None, Query(ge=1)] = None,
+        limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    ) -> list[AuditEntryResponse]:
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if rule_id is not None:
+            conditions.append("rule_id = ?")
+            parameters.append(rule_id)
+        if category is not None:
+            conditions.append(_ACTIVITY_CATEGORY_SQL[category])
+        if before is not None:
+            conditions.append("id < ?")
+            parameters.append(before)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
-                """
-                SELECT occurred_at, rule_id, action, outcome, detail
-                FROM audit_entries ORDER BY id DESC LIMIT 100
-                """
+                f"""
+                SELECT id, run_id, occurred_at, rule_id, action, outcome, reason, detail,
+                    source_event_id, destination_event_id
+                FROM audit_entries {where} ORDER BY id DESC LIMIT ?
+                """,
+                (*parameters, limit),
             ).fetchall()
-        return [AuditEntryResponse(**dict(row)) for row in rows]
+        return [
+            AuditEntryResponse(
+                **dict(row), category=_activity_category(row["action"], row["reason"])
+            )
+            for row in rows
+        ]
+
+    @app.get(
+        "/api/v1/audit-entries/{entry_id}/event",
+        response_model=ActivityEventResponse,
+        dependencies=[Depends(require_admin)],
+    )
+    async def inspect_activity_event(entry_id: int) -> ActivityEventResponse:
+        provider = resolved.calendar_provider
+        if provider is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "configure Google OAuth and the installation master key before inspecting events",
+            )
+        with sqlite3.connect(resolved.settings.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT rule_id, source_event_id, destination_event_id
+                FROM audit_entries WHERE id = ?
+                """,
+                (entry_id,),
+            ).fetchone()
+        if row is None or row[1] is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry has no source event")
+        with resolved.unit_of_work() as uow:
+            rule = uow.rules.get(SyncRuleId(str(row[0])))
+        if rule is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")
+        # Event content is read live for display only; it is never persisted or logged.
+        try:
+            source = await asyncio.to_thread(
+                provider.get_event, EventRef(rule.source, EventId(str(row[1])))
+            )
+            destination = (
+                await asyncio.to_thread(
+                    provider.get_event, EventRef(rule.destination, EventId(str(row[2])))
+                )
+                if row[2] is not None
+                else None
+            )
+        except ProviderFailure as error:
+            raise HTTPException(
+                status.HTTP_424_FAILED_DEPENDENCY,
+                f"Google could not return this event: {error.kind.value}",
+            ) from error
+        return ActivityEventResponse(
+            source=_event_snapshot(source),
+            destination=_event_snapshot(destination) if row[2] is not None else None,
+        )
 
     @app.get(
         "/api/v1/incidents",
@@ -636,6 +736,11 @@ def create_app(container: Container | None = None) -> FastAPI:
             detached=replacement.removal.detached,
         )
 
+    # Registered after every API route so an unknown API path is a JSON error for any method
+    # instead of falling through to the web page.
+    app.router.routes.append(Route("/api", UnknownApiPath(), include_in_schema=False))
+    app.router.routes.append(Route("/api/{path:path}", UnknownApiPath(), include_in_schema=False))
+
     static_directory = Path(__file__).with_name("static")
     if static_directory.exists():
         static_root = static_directory.resolve()
@@ -645,12 +750,90 @@ def create_app(container: Container | None = None) -> FastAPI:
 
         @app.get("/{full_path:path}", include_in_schema=False)
         def frontend(full_path: str) -> FileResponse:
+            index = static_root / "index.html"
             requested = (static_root / full_path).resolve()
-            if full_path and requested.is_file() and requested.is_relative_to(static_root):
+            if (
+                full_path
+                and requested.is_file()
+                and requested.is_relative_to(static_root)
+                and not requested.samefile(index)
+            ):
                 return FileResponse(requested)
-            return FileResponse(static_root / "index.html")
+            # Revalidate the page on every load so an upgrade replaces it and its asset hashes.
+            return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app
+
+
+def _activity_category(action: str, reason: str | None) -> ActivityCategory:
+    if reason == SyncReason.RECURRING_UNSUPPORTED:
+        return "skipped"
+    if action == SyncAction.CONFLICT:
+        return "blocked"
+    if action == SyncAction.IGNORE:
+        return "unchanged" if reason == SyncReason.PROJECTION_CURRENT else "skipped"
+    return "changed"
+
+
+def _event_snapshot(event: CalendarEvent | None) -> EventSnapshotResponse:
+    if event is None:
+        return EventSnapshotResponse(found=False)
+    if event.status is EventStatus.CANCELLED or event.time is None:
+        return EventSnapshotResponse(found=True, cancelled=True, web_link=event.web_link)
+    time = event.time
+    if isinstance(time, TimedInterval):
+        starts, ends = time.starts_at.isoformat(), time.ends_at.isoformat()
+    else:
+        starts, ends = time.starts_on.isoformat(), time.ends_before.isoformat()
+    return EventSnapshotResponse(
+        found=True,
+        title=event.title,
+        all_day=event.is_all_day,
+        starts=starts,
+        ends=ends,
+        recurring=event.recurrence is not None or event.occurrence is not None,
+        web_link=event.web_link,
+    )
+
+
+class UnknownApiPath:
+    """ASGI endpoint, rather than a function, so its route accepts every HTTP method.
+
+    Its full match outranks what Starlette's router would otherwise do for a known route: the
+    trailing-slash redirect and the 405 for a wrong method. Both are restored here.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        router = scope["app"].router
+        api_routes = [
+            route
+            for route in router.routes
+            if isinstance(route, Route)
+            and route.path.startswith("/api/")
+            and not isinstance(route.endpoint, UnknownApiPath)
+        ]
+        path = scope["path"]
+        if router.redirect_slashes:
+            redirect_scope = {
+                **scope,
+                "path": path.rstrip("/") if path.endswith("/") else path + "/",
+            }
+            if any(route.matches(redirect_scope)[0] is not Match.NONE for route in api_routes):
+                await RedirectResponse(str(URL(scope=redirect_scope)))(scope, receive, send)
+                return
+        allowed = {
+            method
+            for route in api_routes
+            if route.matches(scope)[0] is Match.PARTIAL
+            for method in route.methods or ()
+        }
+        if allowed:
+            raise HTTPException(
+                status.HTTP_405_METHOD_NOT_ALLOWED,
+                "Method Not Allowed",
+                headers={"Allow": ", ".join(sorted(allowed))},
+            )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
 
 
 def _set_session_cookie(response: Response, token: str, secure: bool) -> None:

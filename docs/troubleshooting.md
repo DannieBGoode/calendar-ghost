@@ -4,6 +4,33 @@
 
 Check `docker compose ps`, then request `http://localhost:8000/health`. Review container logs without posting credentials or event payloads publicly.
 
+## An event did not synchronize
+
+Open **Activity**, filter by the rule, and choose **Skipped** or **Blocked**. Each entry explains
+why no Event Projection was written; choose **Show event** to see the event's title and time from Google
+and open it in Google Calendar. Common reasons:
+
+- **Skipped a recurring event**: recurring series and single-occurrence changes are not
+  synchronized in the current pre-alpha.
+- **Skipped an all-day event**: the rule syncs timed events only.
+- **Skipped a managed projection**: Managed Projections never become sources, which prevents loops.
+- **Blocked**: identity or ownership was ambiguous, so nothing was written. Run **Reconcile now**
+  from Rules and review any incident.
+
+## Activity is temporarily unavailable
+
+The Activity screen names the reason it could not load audit entries and incidents:
+
+- **Your administrator session has expired.** Choose **Sign in again**.
+- **Calendar Sync was updated.** The open page predates the running service, for example after an
+  upgrade renamed an API path. Choose **Reload page**; if the message returns, hard-refresh the tab.
+- **The local service returned an error.** The request reached the service or a reverse proxy in
+  front of it. Choose **Try again**, then review container and proxy logs.
+- **The request did not reach the local service.** The service may have been restarting, or a
+  browser extension blocked the request. Check `/health` as above. If the service is healthy, allow
+  Calendar Sync's address in content blockers such as uBlock Origin. Audit entries are served from
+  `/api/v1/audit-entries` because common filter lists block request paths containing `/activity`.
+
 ## A rule is degraded
 
 Open the incident in the Web UI. Authorization incidents require reauthorizing the affected identity

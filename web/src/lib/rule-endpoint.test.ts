@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import dashboardSource from "../features/dashboard.tsx?raw"
+import ruleEndpointSource from "../components/rule-endpoint.tsx?raw"
 import { ruleEndpointLabel } from "./rule-endpoint"
 
 const account = { email: "person@example.test" }
@@ -43,7 +43,7 @@ describe("ruleEndpointLabel", () => {
 
 describe("rule endpoint presentation", () => {
   it("renders calendar names rather than raw calendar identifiers", () => {
-    expect(dashboardSource).toContain("ruleEndpointLabel(")
-    expect(dashboardSource).not.toContain("<span>{calendarId}</span>")
+    expect(ruleEndpointSource).toContain("ruleEndpointLabel(")
+    expect(ruleEndpointSource).not.toContain("<span>{calendarId}</span>")
   })
 })
