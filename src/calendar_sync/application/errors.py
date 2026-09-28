@@ -57,6 +57,13 @@ class ProviderFailure(ApplicationError):
         return self.detail
 
 
+class ProjectionOwnershipMismatch(ProviderFailure):
+    """A destination event exists, but its Managed Origin metadata does not prove ownership."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(ProviderFailureKind.PERMANENT, detail)
+
+
 @dataclass(frozen=True, slots=True)
 class RemovalInterrupted(ApplicationError):
     """Rule Removal stopped partway; the rule stays Disabled with its remaining mappings."""

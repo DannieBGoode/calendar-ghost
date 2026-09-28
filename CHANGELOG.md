@@ -20,6 +20,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Rule Removal leaves an event whose ownership cannot be verified in place and continues instead of stopping, retries temporary and rate-limited Google failures with backoff and Google's `Retry-After` hint (bounded to 60 seconds, also used by scheduled runs), opens an Incident when destination authorization is lost, and reports deleted, detached, and left-behind events on the rules list. The removal and replacement API responses include a `conflicts` count.
 - Disconnected-account rules now stop clearly and preserve recovery data until reauthorization or permanent deletion.
 - Appearance and color-theme preferences now share one Settings control.
 - Rules name each Source and Destination Calendar and its account email instead of showing provider calendar identifiers.

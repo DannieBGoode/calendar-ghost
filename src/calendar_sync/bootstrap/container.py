@@ -73,6 +73,7 @@ def build_container(settings: Settings | None = None) -> Container:
     preview_sync_rule = None
     reconcile_sync_rule = None
     scheduler = None
+    rule_health = None
     rule_locks = RuleLocks()
     if resolved.master_key:
         accounts = SqliteConnectedAccountStore(
@@ -121,18 +122,17 @@ def build_container(settings: Settings | None = None) -> Container:
                     use_starttls=resolved.smtp_starttls,
                 )
             )
-        scheduler = SyncScheduler(
-            execute_sync_rule,
+        rule_health = SqliteRuleHealth(
+            resolved.database_path,
             unit_of_work,
-            SqliteRuleHealth(
-                resolved.database_path,
-                unit_of_work,
-                IncidentNotifier(channels) if channels else None,
-                locks=rule_locks,
-            ),
+            IncidentNotifier(channels) if channels else None,
+            locks=rule_locks,
         )
+        scheduler = SyncScheduler(execute_sync_rule, unit_of_work, rule_health)
     create_sync_rule = CreateSyncRule(unit_of_work)
-    remove_sync_rule = RemoveSyncRule(unit_of_work, provider, accounts, SystemClock(), rule_locks)
+    remove_sync_rule = RemoveSyncRule(
+        unit_of_work, provider, accounts, SystemClock(), rule_locks, incidents=rule_health
+    )
     return Container(
         settings=resolved,
         unit_of_work=unit_of_work,

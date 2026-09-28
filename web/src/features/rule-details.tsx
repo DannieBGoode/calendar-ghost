@@ -14,6 +14,7 @@ import {
   type ConnectedAccount,
   type DiscoveredCalendar,
   type ProjectionHandling,
+  type RemovalResult,
   type RuleDetail,
   type RulePolicyPayload,
   type RunOutcome,
@@ -25,6 +26,7 @@ import {
   policyChangeConsequences,
   removalConfirmLabel,
   removalConsequence,
+  removalOutcome,
   replacementConfirmLabel,
   ruleStateLabel,
   runOutcomeSummary,
@@ -38,10 +40,12 @@ export function RuleDetailsView({
   ruleId,
   onViewChange,
   onOpenRule,
+  onRemoved,
 }: {
   ruleId: string
   onViewChange: (view: AppView) => void
   onOpenRule: (ruleId: string) => void
+  onRemoved: (outcome: ReturnType<typeof removalOutcome>) => void
 }) {
   const rule = useQuery({ queryKey: ["rule", ruleId], queryFn: () => api.rule(ruleId), retry: false })
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
@@ -217,7 +221,7 @@ export function RuleDetailsView({
         detail={detail}
         destinationName={destinationName}
         destinationConnected={destinationConnected}
-        onRemoved={() => onViewChange("rules")}
+        onRemoved={(result) => onRemoved(removalOutcome(result, destinationName))}
       />
     </div>
   )
@@ -753,7 +757,7 @@ function RuleRemoval({
   detail: RuleDetail
   destinationName: string
   destinationConnected: boolean
-  onRemoved: () => void
+  onRemoved: (result: RemovalResult) => void
 }) {
   const invalidate = useRuleInvalidation(detail.id)
   const leave = useRuleExit(detail.id)
@@ -763,8 +767,8 @@ function RuleRemoval({
   const effective: ProjectionHandling = destinationConnected ? handling : "detach"
   const remove = useMutation({
     mutationFn: () => api.removeRule(detail.id, effective),
-    onSuccess: async () => {
-      onRemoved()
+    onSuccess: async (result) => {
+      onRemoved(result)
       await leave()
     },
     onError: async () => {

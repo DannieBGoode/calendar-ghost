@@ -32,7 +32,7 @@ import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 import { previewSummary } from "@/lib/rule-preview"
 import { RuleDetailsView } from "@/features/rule-details"
 import { appPathForRule, isPlainLeftClick, type AppLocation, type AppView } from "@/lib/navigation"
-import { ruleStateLabel } from "@/lib/rule-change"
+import { ruleStateLabel, type removalOutcome } from "@/lib/rule-change"
 import type { ThemePreference } from "@/lib/theme"
 
 export function Dashboard({
@@ -45,12 +45,21 @@ export function Dashboard({
   onOpenRule: (ruleId: string) => void
 }) {
   const view = location.view
+  const [removalNotice, setRemovalNotice] = useState<RemovalNotice | null>(null)
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard })
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
   const google = useQuery({
     queryKey: ["google-configuration"],
     queryFn: api.googleConfiguration,
   })
+
+  // A removal outcome belongs to the rules list it returned to; leaving the list retires it.
+  const listingRules = view === "rules" && location.ruleId === null
+  const [wasListingRules, setWasListingRules] = useState(listingRules)
+  if (listingRules !== wasListingRules) {
+    setWasListingRules(listingRules)
+    if (!listingRules) setRemovalNotice(null)
+  }
 
   if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton />
   if (dashboard.error || rules.error || google.error) {
@@ -65,7 +74,15 @@ export function Dashboard({
 
   if (view === "rules" && location.ruleId !== null) {
     return (
-      <RuleDetailsView ruleId={location.ruleId} onViewChange={onViewChange} onOpenRule={onOpenRule} />
+      <RuleDetailsView
+        ruleId={location.ruleId}
+        onViewChange={onViewChange}
+        onOpenRule={onOpenRule}
+        onRemoved={(outcome) => {
+          setRemovalNotice(outcome)
+          onViewChange("rules")
+        }}
+      />
     )
   }
   if (view === "rules") {
@@ -75,6 +92,8 @@ export function Dashboard({
         dashboard={dashboard.data}
         onViewChange={onViewChange}
         onOpenRule={onOpenRule}
+        removalNotice={removalNotice}
+        onDismissRemovalNotice={() => setRemovalNotice(null)}
       />
     )
   }
@@ -220,16 +239,22 @@ function RecentRules({ onViewChange, count }: { onViewChange: (view: AppView) =>
   )
 }
 
+type RemovalNotice = ReturnType<typeof removalOutcome>
+
 function RulesView({
   rules,
   dashboard,
   onViewChange,
   onOpenRule,
+  removalNotice,
+  onDismissRemovalNotice,
 }: {
   rules: Awaited<ReturnType<typeof api.rules>>
   dashboard: Awaited<ReturnType<typeof api.dashboard>>
   onViewChange: (view: AppView) => void
   onOpenRule: (ruleId: string) => void
+  removalNotice: RemovalNotice | null
+  onDismissRemovalNotice: () => void
 }) {
   const queryClient = useQueryClient()
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
@@ -328,6 +353,24 @@ function RulesView({
           <Plus /> {showBuilder ? "Close rule builder" : "Create sync rule"}
         </Button>
       </div>
+      {removalNotice && (
+        <div
+          className={`oauth-feedback ${removalNotice.attention ? "oauth-feedback-warning" : "oauth-feedback-success"}`}
+          role="status"
+        >
+          {removalNotice.attention ? <ShieldAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+          <div>
+            <h2>{removalNotice.attention ? "Rule removed; some events were left" : "Rule removed"}</h2>
+            <p>{removalNotice.message}</p>
+          </div>
+          <div className="confirmation-actions">
+            {removalNotice.attention && (
+              <Button variant="outline" onClick={() => onViewChange("activity")}>Review in Activity</Button>
+            )}
+            <Button variant="ghost" onClick={onDismissRemovalNotice}>Dismiss</Button>
+          </div>
+        </div>
+      )}
       {showBuilder && <RuleBuilder onCreated={() => setShowBuilder(false)} />}
       {rules.length === 0 ? (
         <section className="empty-panel">

@@ -234,3 +234,46 @@ def test_degrading_after_an_authorization_failure_waits_for_a_concurrent_rule_ch
     with unit_of_work() as uow:
         degraded = uow.rules.get(rule().id)
     assert degraded is not None and degraded.state is SyncRuleState.DEGRADED
+
+
+def test_blocked_removal_opens_one_incident_that_completed_removal_resolves(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    unit_of_work = SqliteUnitOfWorkFactory(database)
+    with unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.DISABLED))
+        uow.commit()
+    channel = RecordingChannel()
+    health = SqliteRuleHealth(database, unit_of_work, IncidentNotifier([channel]))
+    failure = ProviderFailure(ProviderFailureKind.AUTHORIZATION, "synthetic denial")
+
+    health.removal_blocked(rule().id, failure)
+    health.removal_blocked(rule().id, failure)
+
+    with sqlite3.connect(database) as connection:
+        incidents = connection.execute(
+            "SELECT deduplication_key, rule_id, category, state, summary FROM incidents"
+        ).fetchall()
+    assert incidents == [
+        (
+            "removal:rule-1",
+            "rule-1",
+            "authorization",
+            "open",
+            "Rule Removal stopped: Google calendar access was denied",
+        )
+    ]
+    assert len(channel.incidents) == 1
+    with sqlite3.connect(database) as connection:
+        rule_state = connection.execute("SELECT state FROM sync_rules").fetchone()
+    assert rule_state == ("disabled",)
+
+    with unit_of_work() as uow:
+        uow.rules.remove(rule().id)
+        uow.commit()
+
+    with sqlite3.connect(database) as connection:
+        states = connection.execute("SELECT state FROM incidents").fetchall()
+    assert states == [("resolved",)]

@@ -138,6 +138,11 @@ const RULE_ACTIONS: Record<string, ReasonCopy> = {
     summary: "Kept a projection as a Detached Event",
     explanation: "The event stays in the destination calendar and is no longer updated or deleted.",
   },
+  removal_conflict: {
+    summary: "Blocked: left an event during Rule Removal",
+    explanation:
+      "The event's ownership could not be verified, so it was not deleted. It stays in the destination calendar and is no longer managed.",
+  },
   rule_removed: {
     summary: "Removed the rule",
     explanation: "The rule and its Event Mappings were removed. Its activity history is kept.",

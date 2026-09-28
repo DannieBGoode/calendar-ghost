@@ -37,6 +37,15 @@ ownership checks and `sendUpdates=none`, committing each mapping as it is remove
 projections as Detached Events removes mappings without provider writes. Managed events without a
 mapping are never deleted.
 
+A mapped event whose Managed Origin metadata does not match the rule and source is a Conflict for
+that event only: it stays in Google untouched, its mapping is removed, a `removal_conflict` audit
+entry records it under **Blocked**, and removal continues. Temporary and rate-limited failures retry
+each deletion up to three times with exponential backoff and jitter under the same Operation Key
+before removal stops as interrupted. Google's `Retry-After` hint, bounded to 60 seconds, replaces
+the backoff delay for removal and scheduled runs alike. Authentication and authorization failures stop removal at once
+and open one Incident for the rule, resolved when the removal completes. See
+[ADR 0012](adr/0012-rule-removal-conflicts-and-retries.md).
+
 ## Loop prevention
 
 Managed Google events carry private extended properties containing rule, source, and operation identity. A reverse rule ignores any event bearing managed origin metadata. This permits `A -> B` and `B -> A` while native events flow in both directions without projection loops.
