@@ -105,7 +105,10 @@ _ACTIVITY_CATEGORY_SQL: dict[ActivityCategory, str] = {
         "((action = 'ignore' AND COALESCE(reason, '') != 'projection_current')"
         " OR reason = 'recurring_unsupported')"
     ),
-    "blocked": "action = 'conflict' AND COALESCE(reason, '') != 'recurring_unsupported'",
+    "blocked": (
+        "((action = 'conflict' AND COALESCE(reason, '') != 'recurring_unsupported')"
+        " OR action = 'removal_conflict')"
+    ),
 }
 
 
@@ -722,7 +725,9 @@ def create_app(container: Container | None = None) -> FastAPI:
             )
         except ApplicationError as error:
             raise _rule_change_http_error(error) from error
-        return RemovalResponse(deleted=result.deleted, detached=result.detached)
+        return RemovalResponse(
+            deleted=result.deleted, detached=result.detached, conflicts=result.conflicts
+        )
 
     @app.post(
         "/api/v1/rules/{rule_id}/replace",
@@ -749,6 +754,7 @@ def create_app(container: Container | None = None) -> FastAPI:
             rule=_rule_response(replacement.rule),
             deleted=replacement.removal.deleted,
             detached=replacement.removal.detached,
+            conflicts=replacement.removal.conflicts,
         )
 
     # Registered after every API route so an unknown API path is a JSON error for any method
@@ -783,7 +789,7 @@ def create_app(container: Container | None = None) -> FastAPI:
 def _activity_category(action: str, reason: str | None) -> ActivityCategory:
     if reason == SyncReason.RECURRING_UNSUPPORTED:
         return "skipped"
-    if action == SyncAction.CONFLICT:
+    if action in {SyncAction.CONFLICT, "removal_conflict"}:
         return "blocked"
     if action == SyncAction.IGNORE:
         return "unchanged" if reason == SyncReason.PROJECTION_CURRENT else "skipped"

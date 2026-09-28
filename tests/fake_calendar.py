@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    ProjectionOwnershipMismatch,
+    ProviderFailure,
+    ProviderFailureKind,
+)
 from calendar_sync.application.ports import CreatedProjection, ProviderChangeSet, UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
@@ -43,7 +47,7 @@ def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) 
 
 
 def _denied() -> ProviderFailure:
-    return ProviderFailure(ProviderFailureKind.PERMANENT, "incompatible ownership metadata")
+    return ProjectionOwnershipMismatch("incompatible ownership metadata")
 
 
 @dataclass

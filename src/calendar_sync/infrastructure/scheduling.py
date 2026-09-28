@@ -18,7 +18,7 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule
-from calendar_sync.domain.model import SyncRule, SyncRuleState
+from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import IncidentNotification, IncidentNotifier
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,16 @@ logger = logging.getLogger(__name__)
 class SystemClock:
     def now(self) -> datetime:
         return datetime.now(UTC)
+
+
+_FAILURE_SUMMARIES = {
+    ProviderFailureKind.AUTHENTICATION: "Google authorization expired",
+    ProviderFailureKind.AUTHORIZATION: "Google calendar access was denied",
+    ProviderFailureKind.RATE_LIMIT: "Google Calendar is limiting requests",
+    ProviderFailureKind.TEMPORARY: "Google Calendar is temporarily unavailable",
+    ProviderFailureKind.PERMANENT: "Google Calendar rejected synchronization",
+    ProviderFailureKind.INFRASTRUCTURE: "Local synchronization infrastructure failed",
+}
 
 
 class SqliteRuleHealth:
@@ -87,7 +97,7 @@ class SqliteRuleHealth:
         if needs_intervention:
             self._degrade(rule)
         if needs_intervention or count >= 3:
-            self._open_incident(rule, failure.kind, now)
+            self._open_incident(rule.id, failure.kind, now)
 
     def _degrade(self, rule: SyncRule) -> None:
         if rule.state is not SyncRuleState.ENABLED:
@@ -98,16 +108,26 @@ class SqliteRuleHealth:
                 uow.rules.save(current.degrade())
                 uow.commit()
 
-    def _open_incident(self, rule: SyncRule, kind: ProviderFailureKind, occurred_at: str) -> None:
-        key = f"provider:{rule.id.value}"
-        summary = {
-            ProviderFailureKind.AUTHENTICATION: "Google authorization expired",
-            ProviderFailureKind.AUTHORIZATION: "Google calendar access was denied",
-            ProviderFailureKind.RATE_LIMIT: "Google Calendar is limiting requests",
-            ProviderFailureKind.TEMPORARY: "Google Calendar is temporarily unavailable",
-            ProviderFailureKind.PERMANENT: "Google Calendar rejected synchronization",
-            ProviderFailureKind.INFRASTRUCTURE: "Local synchronization infrastructure failed",
-        }[kind]
+    def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+        self._open_incident(
+            rule_id,
+            failure.kind,
+            datetime.now(UTC).isoformat(),
+            key=f"removal:{rule_id.value}",
+            summary=f"Rule Removal stopped: {_FAILURE_SUMMARIES[failure.kind]}",
+        )
+
+    def _open_incident(
+        self,
+        rule_id: SyncRuleId,
+        kind: ProviderFailureKind,
+        occurred_at: str,
+        *,
+        key: str | None = None,
+        summary: str | None = None,
+    ) -> None:
+        key = key or f"provider:{rule_id.value}"
+        summary = summary or _FAILURE_SUMMARIES[kind]
         with sqlite3.connect(self._database_path) as connection:
             existing = connection.execute(
                 "SELECT state FROM incidents WHERE deduplication_key = ?", (key,)
@@ -129,7 +149,7 @@ class SqliteRuleHealth:
                 (
                     str(uuid.uuid4()),
                     key,
-                    rule.id.value,
+                    rule_id.value,
                     kind.value,
                     summary,
                     occurred_at,
@@ -138,7 +158,7 @@ class SqliteRuleHealth:
             )
         if newly_opened and self._notifier is not None:
             self._notifier.notify(
-                IncidentNotification(rule.id.value, kind.value, summary, occurred_at)
+                IncidentNotification(rule_id.value, kind.value, summary, occurred_at)
             )
 
 

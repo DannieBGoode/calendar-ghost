@@ -5,7 +5,11 @@ from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    ProjectionOwnershipMismatch,
+    ProviderFailure,
+    ProviderFailureKind,
+)
 from calendar_sync.application.ports import CreatedProjection, ProviderChangeSet
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -178,9 +182,8 @@ class GoogleCalendarProvider:
             or existing.managed_origin.rule_id != rule_id
             or existing.managed_origin.source != source
         ):
-            raise ProviderFailure(
-                ProviderFailureKind.PERMANENT,
-                "Google event does not carry compatible ownership metadata",
+            raise ProjectionOwnershipMismatch(
+                "Google event does not carry compatible ownership metadata"
             )
         try:
             (

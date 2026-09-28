@@ -22,6 +22,21 @@ and open it in Google Calendar. Common reasons:
 - **Blocked**: identity or ownership was ambiguous, so nothing was written. Run **Reconcile now**
   from Rules and review any incident.
 
+## A rule removal stopped or left events behind
+
+**Removal incomplete** means the rule stopped partway and does not synchronize. Temporary Google
+errors are already retried with backoff before removal stops; choose **Retry removal** to continue
+from the remaining projections.
+
+- **Rule Removal stopped: Google authorization expired** or **… calendar access was denied**: an
+  Incident is open for the rule. Reauthorize the destination account in **Settings**, then retry.
+  If access cannot be restored, retry with **Keep them as ordinary events**; those events then stay in
+  Google and are no longer managed.
+- **Some events were left**: the rules list reports events whose ownership could not be verified,
+  for example because their private Calendar Sync metadata names another rule or was removed.
+  They were not deleted. Open **Activity**, choose **Blocked**, and delete them in Google Calendar
+  yourself if they are no longer wanted.
+
 ## Activity is temporarily unavailable
 
 The Activity screen names the reason it could not load audit entries and incidents:

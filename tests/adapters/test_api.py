@@ -13,14 +13,18 @@ from fastapi.testclient import TestClient
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.ports import AuditEntry, CalendarProvider
 from calendar_sync.application.preview import PreviewSyncRule
+from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.model import (
     CalendarEvent,
     ConnectedAccountId,
     EventId,
+    EventMapping,
+    EventMappingId,
     EventRef,
     EventStatus,
+    ProjectionFingerprint,
     Recurrence,
     SyncRule,
     SyncRuleId,
@@ -861,7 +865,7 @@ def test_rule_removal_requires_an_explicit_choice_and_detach_removes_the_rule(
     assert invalid.status_code == 422
     assert delete_without_google.status_code == 503
     assert detached.status_code == 200
-    assert detached.json() == {"deleted": 0, "detached": 0}
+    assert detached.json() == {"deleted": 0, "detached": 0, "conflicts": 0}
     assert after.status_code == 404
     assert missing.status_code == 404
 
@@ -966,6 +970,28 @@ def _audit(
         reason=reason,
         run_id=run_id,
     )
+
+
+def test_removal_conflicts_are_blocked_activity_scoped_by_rule(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("remove_projection", None, run_id=None),
+        _audit("removal_conflict", None, run_id=None),
+        _audit("removal_conflict", None, rule_id="rule-2", run_id=None),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        everything = client.get("/api/v1/audit-entries").json()
+        blocked = client.get(
+            "/api/v1/audit-entries", params={"category": "blocked", "rule_id": "rule-1"}
+        ).json()
+
+    assert [entry["category"] for entry in everything] == ["blocked", "blocked", "changed"]
+    assert [(entry["action"], entry["rule_id"]) for entry in blocked] == [
+        ("removal_conflict", "rule-1")
+    ]
 
 
 def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None:
@@ -1275,3 +1301,49 @@ def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) ->
         ("series", "create"),
         ("occurrence", "delete"),
     ]
+
+
+class _ConnectedAccounts:
+    def is_connected(self, account_id: ConnectedAccountId) -> bool:
+        return True
+
+
+def test_delete_removal_reports_events_left_because_ownership_was_not_proven(
+    tmp_path: Path,
+) -> None:
+    calendars = FakeCalendars()
+    calendars.put(event("native", calendar=rule().destination))
+    container = build_container(Settings(tmp_path / "test.db"))
+    container = replace(
+        container,
+        remove_sync_rule=RemoveSyncRule(
+            container.unit_of_work,
+            calendars,
+            _ConnectedAccounts(),
+            FixedClock(),
+            container.rule_locks,
+        ),
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.mappings.save(
+            EventMapping(
+                EventMappingId("mapping-1"),
+                rule().id,
+                event("source-event").reference,
+                EventRef(rule().destination, EventId("native")),
+                "revision-1",
+                ProjectionFingerprint("fingerprint"),
+            )
+        )
+        uow.commit()
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        removed = client.delete("/api/v1/rules/rule-1?projections=delete")
+        after = client.get("/api/v1/rules/rule-1")
+
+    assert removed.status_code == 200
+    assert removed.json() == {"deleted": 0, "detached": 0, "conflicts": 1}
+    assert after.status_code == 404
+    assert calendars.writes == []

@@ -6,7 +6,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    ProjectionOwnershipMismatch,
+    ProviderFailure,
+    ProviderFailureKind,
+)
 from calendar_sync.domain.model import (
     EventId,
     EventProjection,
@@ -236,7 +240,21 @@ def test_deleting_a_projection_owned_by_another_source_is_refused() -> None:
     provider = provider_with_events_api(events_api)
     destination = event("managed", calendar=endpoint("work-account", "work-calendar")).reference
 
-    with pytest.raises(ProviderFailure):
+    with pytest.raises(ProjectionOwnershipMismatch) as refused:
+        provider.delete_projection(
+            destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
+        )
+    assert refused.value.kind is ProviderFailureKind.PERMANENT
+    events_api.delete.assert_not_called()
+
+
+def test_deleting_a_native_event_is_refused_as_an_ownership_mismatch() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(google_event_payload("native"))
+    provider = provider_with_events_api(events_api)
+    destination = event("native", calendar=endpoint("work-account", "work-calendar")).reference
+
+    with pytest.raises(ProjectionOwnershipMismatch):
         provider.delete_projection(
             destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
         )

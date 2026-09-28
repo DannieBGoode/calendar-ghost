@@ -181,7 +181,7 @@ A reversible rule state that suspends synchronization while leaving its managed 
 _Avoid_: Disabled rule, stopped rule
 
 **Rule Removal**:
-Permanent removal of a rule after the administrator explicitly chooses to delete its mapped projections or keep them as detached ordinary events. Mapped projection deletion is the recommended default and requires an authorized destination account. A removal interrupted by a provider failure leaves the rule inert until it is retried.
+Permanent removal of a rule after the administrator explicitly chooses to delete its mapped projections or keep them as detached ordinary events. Mapped projection deletion is the recommended default and requires an authorized destination account. An event whose ownership cannot be verified is a conflict for that event only: it is left in place and removal continues. A removal interrupted by a provider failure leaves the rule inert until it is retried; lost authorization also opens an incident.
 _Avoid_: Disable rule, pause rule
 
 **Rule Replacement**:

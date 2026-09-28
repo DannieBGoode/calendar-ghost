@@ -8,6 +8,7 @@ import pytest
 from calendar_sync.application.errors import (
     DuplicateDirectionalRelationship,
     NotACalendarChange,
+    ProjectionOwnershipMismatch,
     ProviderFailure,
     ProviderFailureKind,
     RemovalInterrupted,
@@ -20,12 +21,14 @@ from calendar_sync.application.ports import AccountAuthorizations, CalendarProvi
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.rules import CreateSyncRule, ReplaceSyncRuleCalendars
 from calendar_sync.domain.model import (
+    CalendarEvent,
     ConnectedAccountId,
     EventId,
     EventMapping,
     EventMappingId,
     EventRef,
     EventStatus,
+    ManagedOrigin,
     PrivacyPolicy,
     ProjectionFingerprint,
     ProjectionHandling,
@@ -340,3 +343,194 @@ def test_detaching_a_series_keeps_it_ignored_by_a_reverse_rule() -> None:
     assert result.created == result.updated == result.deleted == 0
     cancelled = calendars.get_occurrence(destination, week_start(1))
     assert cancelled is not None and cancelled.managed_origin is None
+
+
+class ScriptedProvider(RecordingProvider):
+    """Raises the scripted failures for a destination, in order, before deleting it."""
+
+    def __init__(self, failures: dict[str, list[ProviderFailure]]) -> None:
+        super().__init__()
+        self.failures = failures
+        self.attempts: list[tuple[str, str]] = []
+
+    def delete_projection(
+        self,
+        destination: EventRef,
+        source: EventRef,
+        rule_id: SyncRuleId,
+        operation_key: str,
+    ) -> None:
+        self.attempts.append((destination.event_id.value, operation_key))
+        pending = self.failures.get(destination.event_id.value)
+        if pending:
+            raise pending.pop(0)
+        self.deleted_refs.append(destination)
+
+
+class Incidents:
+    def __init__(self) -> None:
+        self.blocked: list[tuple[SyncRuleId, ProviderFailureKind]] = []
+
+    def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+        self.blocked.append((rule_id, failure.kind))
+
+
+class Sleeps:
+    def __init__(self) -> None:
+        self.delays: list[float] = []
+
+    def __call__(self, seconds: float) -> None:
+        self.delays.append(seconds)
+
+
+def _retrying_remover(
+    unit_of_work: InMemoryUnitOfWorkFactory,
+    provider: CalendarProvider,
+    incidents: Incidents | None = None,
+    sleeps: Sleeps | None = None,
+) -> RemoveSyncRule:
+    return RemoveSyncRule(
+        unit_of_work,
+        provider,
+        Accounts(),
+        FixedClock(),
+        RuleLocks(),
+        incidents=incidents if incidents is not None else Incidents(),
+        sleep=sleeps if sleeps is not None else Sleeps(),
+    )
+
+
+def _destination(event_id: str, origin: ManagedOrigin | None) -> CalendarEvent:
+    return replace(event(event_id, calendar=rule().destination), managed_origin=origin)
+
+
+def test_ownership_conflict_leaves_that_event_and_removal_completes() -> None:
+    calendars = FakeCalendars()
+    owned_source = EventRef(rule().source, EventId("source-0"))
+    other_rule = ManagedOrigin(SyncRuleId("other-rule"), owned_source)
+    calendars.put(_destination("destination-0", ManagedOrigin(rule().id, owned_source)))
+    calendars.put(_destination("destination-1", other_rule))
+    calendars.put(_destination("destination-2", None))
+    unmapped = calendars.put(
+        _destination("unmapped", ManagedOrigin(rule().id, EventRef(rule().source, EventId("x"))))
+    )
+    unit_of_work = _with_mappings(3)
+
+    result = _retrying_remover(unit_of_work, calendars).execute(
+        rule().id, ProjectionHandling.DELETE
+    )
+
+    assert (result.deleted, result.detached, result.conflicts) == (1, 0, 2)
+    assert calendars.writes == [("delete", "destination-0")]
+    remaining = {reference.event_id.value for reference in calendars.events}
+    assert remaining == {"destination-1", "destination-2", unmapped.reference.event_id.value}
+    assert unit_of_work.state.rules == {}
+    assert unit_of_work.state.mappings == {}
+    blocked = [entry for entry in unit_of_work.state.audit if entry.outcome == "blocked"]
+    assert [entry.destination_event_id for entry in blocked] == ["destination-1", "destination-2"]
+    assert {entry.action for entry in blocked} == {"removal_conflict"}
+    completed = unit_of_work.state.audit[-1]
+    assert completed.action == "rule_removed"
+    assert "2 left because ownership could not be verified" in completed.detail
+    assert all("Private appointment" not in entry.detail for entry in unit_of_work.state.audit)
+
+
+def test_temporary_failures_retry_with_backoff_using_the_same_operation_key() -> None:
+    unit_of_work = _with_mappings(2)
+    provider = ScriptedProvider(
+        {
+            "destination-0": [
+                ProviderFailure(ProviderFailureKind.TEMPORARY, "synthetic outage"),
+                ProviderFailure(ProviderFailureKind.RATE_LIMIT, "slow down", 7),
+            ]
+        }
+    )
+    sleeps = Sleeps()
+    incidents = Incidents()
+
+    result = _retrying_remover(unit_of_work, provider, incidents, sleeps).execute(
+        rule().id, ProjectionHandling.DELETE
+    )
+
+    assert result.deleted == 2
+    first_attempts = [key for event_id, key in provider.attempts if event_id == "destination-0"]
+    assert len(first_attempts) == 3 and len(set(first_attempts)) == 1
+    assert len(sleeps.delays) == 2
+    assert 1 <= sleeps.delays[0] < 1.25
+    assert 7 <= sleeps.delays[1] < 7.25
+    assert incidents.blocked == []
+    assert unit_of_work.state.rules == {}
+
+
+def test_exhausted_temporary_retries_interrupt_without_an_incident() -> None:
+    unit_of_work = _with_mappings(2)
+    outage = ProviderFailure(ProviderFailureKind.TEMPORARY, "synthetic outage")
+    provider = ScriptedProvider({"destination-1": [outage, outage, outage]})
+    sleeps = Sleeps()
+    incidents = Incidents()
+
+    with pytest.raises(RemovalInterrupted) as interrupted:
+        _retrying_remover(unit_of_work, provider, incidents, sleeps).execute(
+            rule().id, ProjectionHandling.DELETE
+        )
+
+    assert (interrupted.value.processed, interrupted.value.remaining) == (1, 1)
+    assert len(sleeps.delays) == 2
+    assert incidents.blocked == []
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DISABLED
+    assert len(unit_of_work.state.mappings) == 1
+
+
+@pytest.mark.parametrize(
+    "kind", [ProviderFailureKind.AUTHENTICATION, ProviderFailureKind.AUTHORIZATION]
+)
+def test_authorization_failure_stops_at_once_and_opens_an_incident(
+    kind: ProviderFailureKind,
+) -> None:
+    unit_of_work = _with_mappings(2)
+    provider = ScriptedProvider({"destination-0": [ProviderFailure(kind, "denied")]})
+    sleeps = Sleeps()
+    incidents = Incidents()
+
+    with pytest.raises(RemovalInterrupted):
+        _retrying_remover(unit_of_work, provider, incidents, sleeps).execute(
+            rule().id, ProjectionHandling.DELETE
+        )
+
+    assert len(provider.attempts) == 1
+    assert sleeps.delays == []
+    assert incidents.blocked == [(rule().id, kind)]
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DISABLED
+    assert len(unit_of_work.state.mappings) == 2
+
+
+def test_permanent_failure_other_than_ownership_still_interrupts_removal() -> None:
+    unit_of_work = _with_mappings(1)
+    provider = ScriptedProvider(
+        {"destination-0": [ProviderFailure(ProviderFailureKind.PERMANENT, "bad request")]}
+    )
+    incidents = Incidents()
+
+    with pytest.raises(RemovalInterrupted):
+        _retrying_remover(unit_of_work, provider, incidents).execute(
+            rule().id, ProjectionHandling.DELETE
+        )
+
+    assert incidents.blocked == []
+    assert len(unit_of_work.state.mappings) == 1
+
+
+def test_ownership_mismatch_is_not_retried() -> None:
+    unit_of_work = _with_mappings(1)
+    provider = ScriptedProvider(
+        {"destination-0": [ProjectionOwnershipMismatch("incompatible ownership metadata")]}
+    )
+    sleeps = Sleeps()
+
+    result = _retrying_remover(unit_of_work, provider, sleeps=sleeps).execute(
+        rule().id, ProjectionHandling.DELETE
+    )
+
+    assert (result.deleted, result.conflicts) == (0, 1)
+    assert len(provider.attempts) == 1
+    assert sleeps.delays == []

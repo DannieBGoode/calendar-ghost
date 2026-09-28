@@ -46,6 +46,7 @@ export type Rule = {
   reprojection_required: boolean
 }
 export type ProjectionHandling = "delete" | "detach"
+export type RemovalResult = { deleted: number; detached: number; conflicts: number }
 export type RunOutcome = {
   completed_at: string
   succeeded: boolean
@@ -177,7 +178,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   removeRule: (ruleId: string, projections: ProjectionHandling) =>
-    request<{ deleted: number; detached: number }>(
+    request<RemovalResult>(
       `/api/v1/rules/${encodeURIComponent(ruleId)}?projections=${projections}`,
       { method: "DELETE" },
     ),
@@ -189,7 +190,7 @@ export const api = {
       projections: ProjectionHandling
     },
   ) =>
-    request<{ rule: Rule; deleted: number; detached: number }>(
+    request<{ rule: Rule } & RemovalResult>(
       `/api/v1/rules/${encodeURIComponent(ruleId)}/replace`,
       { method: "POST", body: JSON.stringify(payload) },
     ),

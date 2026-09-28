@@ -132,7 +132,8 @@ Open **View details** on a rule (`/rules/{id}`) to see its calendars, policy, pr
 latest runs. Changing its privacy or all-day policy pauses the rule until it passes a new preview,
 then rewrites existing projections on the next run. Changing a calendar removes the rule and creates
 a new draft; removing a rule asks whether to delete its projections (recommended) or keep them as
-ordinary events that are no longer managed.
+ordinary events that are no longer managed. Removal never deletes an event whose ownership it cannot
+verify; such events are left in place and listed under **Blocked** in Activity.
 
 Use **Settings → Connected accounts** to review every authorized identity, connect another Google
 account, check its Calendar API access, or disconnect it. **Check access** verifies calendar-list
