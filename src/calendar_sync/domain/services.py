@@ -16,6 +16,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     ManagedOrigin,
+    OccurrenceCheck,
     OccurrenceMapping,
     OccurrenceStart,
     PrivacyPolicy,
@@ -310,6 +311,7 @@ class ReconciliationService:
         mappings: Iterable[EventMapping],
         expected_by_source: Mapping[EventRef, EventProjection],
         actual_by_destination: Mapping[EventRef, CalendarEvent],
+        occurrences: Iterable[OccurrenceCheck] = (),
     ) -> ReconciliationReport:
         mapping_list = tuple(mappings)
         drift: list[ReconciliationDrift] = []
@@ -360,7 +362,26 @@ class ReconciliationService:
                     )
                 )
 
+        checked_occurrences: set[tuple[EventRef, OccurrenceStart]] = set()
+        for check in occurrences:
+            checked_occurrences.add((check.destination_series, check.mapping.original_start))
+            drift.extend(self._occurrence_drift(check))
+
         for destination in actual_by_destination.keys() - managed_destinations:
+            parent = actual_by_destination[destination].occurrence
+            if parent is not None:
+                series_ref = EventRef(destination.calendar, parent.series_event_id)
+                if series_ref in managed_destinations:
+                    if (series_ref, parent.original_start) not in checked_occurrences:
+                        drift.append(
+                            ReconciliationDrift(
+                                DriftKind.INCORRECT_PROJECTION,
+                                None,
+                                destination,
+                                "managed occurrence has no occurrence mapping",
+                            )
+                        )
+                    continue
             drift.append(
                 ReconciliationDrift(
                     DriftKind.UNEXPECTED,
@@ -371,3 +392,22 @@ class ReconciliationService:
             )
 
         return ReconciliationReport(rule.id, len(mapping_list), tuple(drift))
+
+    def _occurrence_drift(self, check: OccurrenceCheck) -> list[ReconciliationDrift]:
+        actual = check.actual
+        if actual is None or actual.status is not EventStatus.CONFIRMED:
+            if check.expected is None:
+                return []
+            kind, detail = DriftKind.MISSING, "managed occurrence is missing"
+        elif check.expected is None:
+            kind, detail = DriftKind.INCORRECT_PROJECTION, "managed occurrence should be cancelled"
+        elif self._fingerprinter.fingerprint(check.expected) == self._fingerprinter.fingerprint(
+            SyncDecisionService._as_projection(actual)
+        ):
+            return []
+        else:
+            kind, detail = (
+                DriftKind.INCORRECT_PROJECTION,
+                "managed occurrence differs from source authority",
+            )
+        return [ReconciliationDrift(kind, check.mapping.source, check.mapping.destination, detail)]

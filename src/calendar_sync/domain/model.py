@@ -390,6 +390,16 @@ class ReconciliationDrift:
 
 
 @dataclass(frozen=True, slots=True)
+class OccurrenceCheck:
+    """Expected and actual state of one recorded occurrence; `expected=None` means cancelled."""
+
+    mapping: OccurrenceMapping
+    destination_series: EventRef
+    expected: EventProjection | None
+    actual: CalendarEvent | None
+
+
+@dataclass(frozen=True, slots=True)
 class ReconciliationReport:
     rule_id: SyncRuleId
     checked_mappings: int
