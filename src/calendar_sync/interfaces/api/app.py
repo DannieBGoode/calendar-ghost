@@ -12,6 +12,7 @@ import uvicorn
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import URL
 from starlette.routing import Match, Route
 from starlette.types import Receive, Scope, Send
 
@@ -697,18 +698,32 @@ def _event_snapshot(event: CalendarEvent | None) -> EventSnapshotResponse:
 class UnknownApiPath:
     """ASGI endpoint, rather than a function, so its route accepts every HTTP method.
 
-    Its full match outranks the partial match of a known route called with the wrong method,
-    so that case is restored to 405 with the methods the path does support.
+    Its full match outranks what Starlette's router would otherwise do for a known route: the
+    trailing-slash redirect and the 405 for a wrong method. Both are restored here.
     """
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        allowed = {
-            method
-            for route in scope["app"].router.routes
+        router = scope["app"].router
+        api_routes = [
+            route
+            for route in router.routes
             if isinstance(route, Route)
             and route.path.startswith("/api/")
             and not isinstance(route.endpoint, UnknownApiPath)
-            and route.matches(scope)[0] is Match.PARTIAL
+        ]
+        path = scope["path"]
+        if router.redirect_slashes:
+            redirect_scope = {
+                **scope,
+                "path": path.rstrip("/") if path.endswith("/") else path + "/",
+            }
+            if any(route.matches(redirect_scope)[0] is not Match.NONE for route in api_routes):
+                await RedirectResponse(str(URL(scope=redirect_scope)))(scope, receive, send)
+                return
+        allowed = {
+            method
+            for route in api_routes
+            if route.matches(scope)[0] is Match.PARTIAL
             for method in route.methods or ()
         }
         if allowed:

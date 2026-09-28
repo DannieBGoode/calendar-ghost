@@ -34,6 +34,7 @@ def test_audit_entries_return_empty_list_before_any_synchronization(tmp_path: Pa
         "/api/v1/activity",
         "/api/v1/activity/1/event",
         "/api/v1/unknown",
+        "/api/v1/unknown/",
         "/api/v2/audit-entries",
     ],
 )
@@ -72,6 +73,26 @@ def test_known_api_routes_keep_their_method_errors(
     assert response.status_code == 405
     assert response.json() == {"detail": "Method Not Allowed"}
     assert response.headers["allow"] == allow
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "location"),
+    [
+        ("GET", "/api/v1/audit-entries/?limit=5", "/api/v1/audit-entries?limit=5"),
+        ("GET", "/api/v1/rules/", "/api/v1/rules"),
+        ("POST", "/api/v1/session/", "/api/v1/session"),
+    ],
+)
+def test_known_api_routes_keep_their_trailing_slash_redirects(
+    tmp_path: Path, method: str, path: str, location: str
+) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+
+    with TestClient(app) as client:
+        response = client.request(method, path, follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"].endswith(location)
 
 
 @pytest.mark.parametrize("path", ["/apiary", "/api-keys"])

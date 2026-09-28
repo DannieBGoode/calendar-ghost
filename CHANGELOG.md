@@ -20,7 +20,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Appearance and color-theme preferences now share one Settings control.
 - Rules name each Source and Destination Calendar and its account email instead of showing provider calendar identifiers.
 - Audit entries moved from `/api/v1/activity` to `/api/v1/audit-entries`, and the old path is removed. After upgrading, reload or hard-refresh every Calendar Sync tab and bookmark: pages loaded from the previous release still call the old path, and browsers may have cached them.
-- Unknown `/api/` paths now return a JSON 404 for every method, and known paths called with the wrong method return 405 with an `Allow` header, instead of the web app page.
+- Unknown `/api/` paths now return a JSON 404 for every method, known paths called with the wrong method return 405 with an `Allow` header, and known paths with an extra or missing trailing slash redirect, instead of the web app page.
 - The web app page is now revalidated on every load, so future upgrades take effect without a hard refresh.
 
 ### Fixed
