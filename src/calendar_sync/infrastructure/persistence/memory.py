@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import TracebackType
 from typing import Self
 
@@ -183,7 +183,17 @@ class InMemoryRuleRunOutcomeRepository:
         self._state = state
 
     def record(self, outcome: RuleRunOutcome) -> None:
-        self._state.outcomes[(outcome.rule_id, outcome.kind)] = outcome
+        previous = self._state.outcomes.get((outcome.rule_id, outcome.kind))
+        succeeded_at = (
+            outcome.completed_at
+            if outcome.succeeded
+            else previous.last_succeeded_at
+            if previous
+            else None
+        )
+        self._state.outcomes[(outcome.rule_id, outcome.kind)] = replace(
+            outcome, last_succeeded_at=succeeded_at
+        )
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:
         return self._state.outcomes.get((rule_id, kind))

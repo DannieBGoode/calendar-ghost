@@ -992,10 +992,40 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
 
     # A failed run is not evidence that calendars are current.
     assert dashboard["last_synced_at"] == "2026-09-28T09:00:00+00:00"
+    assert rules["rule-1"]["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
+    assert rules["rule-2"]["last_sync"]["last_succeeded_at"] is None
     assert dashboard["enabled_rules"] == 2
     assert dashboard["health"] == "healthy"
     assert rules["rule-1"]["last_sync"]["created"] == 2
     assert rules["rule-2"]["last_sync"]["failure_kind"] == "rate_limit"
+
+
+def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
+    container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        succeeded = RuleRunOutcome(
+            SyncRuleId("rule-1"), RunKind.SYNC, datetime(2026, 9, 28, 9, 0, tzinfo=UTC), True
+        )
+        uow.run_outcomes.record(succeeded)
+        uow.run_outcomes.record(
+            replace(
+                succeeded,
+                completed_at=datetime(2026, 9, 28, 10, 0, tzinfo=UTC),
+                succeeded=False,
+                failure_kind="rate_limit",
+            )
+        )
+        uow.commit()
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        dashboard = client.get("/api/v1/dashboard").json()
+        (listed,) = client.get("/api/v1/rules").json()
+
+    assert dashboard["last_synced_at"] == "2026-09-28T09:00:00+00:00"
+    assert listed["last_sync"]["succeeded"] is False
+    assert listed["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
 
 
 def test_recent_changes_summarize_runs_that_wrote_or_were_blocked(tmp_path: Path) -> None:

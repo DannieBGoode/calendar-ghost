@@ -62,6 +62,7 @@ export type RunOutcome = {
   checked_mappings: number
   drift: number
   failure_kind: string | null
+  last_succeeded_at?: string | null
 }
 export type PreviewSummary = {
   completed_at: string

@@ -8,3 +8,8 @@ CREATE TABLE rule_previews (
     recurring_series INTEGER NOT NULL DEFAULT 0,
     occurrence_changes INTEGER NOT NULL DEFAULT 0
 );
+
+-- The latest-outcome snapshot is replaced on every run, so keep the last successful completion
+-- separately; a later failure must not erase evidence that a rule's calendars were current.
+ALTER TABLE rule_run_outcomes ADD COLUMN last_succeeded_at TEXT;
+UPDATE rule_run_outcomes SET last_succeeded_at = completed_at WHERE succeeded = 1;

@@ -408,9 +408,11 @@ class SqliteRuleRunOutcomeRepository:
             """
             INSERT INTO rule_run_outcomes (
                 rule_id, kind, completed_at, succeeded, full_run, created, updated,
-                deleted, conflicts, checked_mappings, drift, failure_kind
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                deleted, conflicts, checked_mappings, drift, failure_kind, last_succeeded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id, kind) DO UPDATE SET
+                last_succeeded_at = CASE WHEN excluded.succeeded
+                    THEN excluded.completed_at ELSE rule_run_outcomes.last_succeeded_at END,
                 completed_at = excluded.completed_at,
                 succeeded = excluded.succeeded,
                 full_run = excluded.full_run,
@@ -435,6 +437,7 @@ class SqliteRuleRunOutcomeRepository:
                 outcome.checked_mappings,
                 outcome.drift,
                 outcome.failure_kind,
+                outcome.completed_at.isoformat() if outcome.succeeded else None,
             ),
         )
 
@@ -458,6 +461,11 @@ class SqliteRuleRunOutcomeRepository:
             checked_mappings=int(row["checked_mappings"]),
             drift=int(row["drift"]),
             failure_kind=None if row["failure_kind"] is None else str(row["failure_kind"]),
+            last_succeeded_at=(
+                None
+                if row["last_succeeded_at"] is None
+                else datetime.fromisoformat(str(row["last_succeeded_at"]))
+            ),
         )
 
 

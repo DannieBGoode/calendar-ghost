@@ -203,8 +203,7 @@ def create_app(container: Container | None = None) -> FastAPI:
                 ).fetchone()[0]
             )
             last_synced_at = connection.execute(
-                "SELECT MAX(completed_at) FROM rule_run_outcomes"
-                " WHERE kind = 'sync' AND succeeded = 1"
+                "SELECT MAX(last_succeeded_at) FROM rule_run_outcomes WHERE kind = 'sync'"
             ).fetchone()[0]
         with resolved.unit_of_work() as uow:
             states = [rule.state for rule in uow.rules.list()]
@@ -1035,6 +1034,9 @@ def _outcome_response(outcome: RuleRunOutcome | None) -> RunOutcomeResponse | No
         checked_mappings=outcome.checked_mappings,
         drift=outcome.drift,
         failure_kind=outcome.failure_kind,
+        last_succeeded_at=(
+            outcome.last_succeeded_at.isoformat() if outcome.last_succeeded_at else None
+        ),
     )
 
 

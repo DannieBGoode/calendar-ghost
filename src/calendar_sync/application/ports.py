@@ -194,6 +194,9 @@ class RuleRunOutcome:
     checked_mappings: int = 0
     drift: int = 0
     failure_kind: str | None = None
+    # When the most recent successful run of this kind completed. The repository keeps it across
+    # later failures, so a failed run never erases evidence that calendars were once current.
+    last_succeeded_at: datetime | None = None
 
 
 class RuleRunOutcomeRepository(Protocol):

@@ -222,6 +222,35 @@ def test_migration_4_upgrades_a_version_3_installation_with_rules(tmp_path: Path
     assert versions.count(4) == 1
 
 
+def test_migration_6_backfills_the_last_successful_run(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.add(rule())
+        uow.run_outcomes.record(
+            RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
+        )
+        uow.run_outcomes.record(
+            RuleRunOutcome(
+                rule().id, RunKind.RECONCILIATION, datetime(2026, 9, 2, tzinfo=UTC), False
+            )
+        )
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("DROP TABLE rule_previews")
+        connection.execute("ALTER TABLE rule_run_outcomes DROP COLUMN last_succeeded_at")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 6")
+
+    initialize_database(database)
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        sync = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+        reconciliation = uow.run_outcomes.latest(rule().id, RunKind.RECONCILIATION)
+    assert sync is not None and sync.last_succeeded_at == datetime(2026, 9, 1, tzinfo=UTC)
+    # A failure-only history stays empty rather than inventing a success.
+    assert reconciliation is not None and reconciliation.last_succeeded_at is None
+
+
 def test_reprojection_flag_round_trips(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
@@ -257,8 +286,30 @@ def test_run_outcomes_keep_the_latest_per_kind(tmp_path: Path) -> None:
         uow.commit()
 
     with factory() as uow:
-        assert uow.run_outcomes.latest(rule().id, RunKind.SYNC) == second
+        latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+        assert latest == replace(second, last_succeeded_at=first.completed_at)
         assert uow.run_outcomes.latest(rule().id, RunKind.RECONCILIATION) is None
+
+
+def test_a_later_success_replaces_the_last_successful_run(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    failed = RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), False)
+    succeeded = replace(failed, completed_at=datetime(2026, 9, 2, tzinfo=UTC), succeeded=True)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.run_outcomes.record(failed)
+        uow.commit()
+    with factory() as uow:
+        # A rule that has only ever failed has no successful run to report.
+        latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+        assert latest is not None and latest.last_succeeded_at is None
+        uow.run_outcomes.record(succeeded)
+        uow.commit()
+    with factory() as uow:
+        latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+        assert latest is not None and latest.last_succeeded_at == succeeded.completed_at
 
 
 def test_rule_previews_keep_the_latest_counts_and_cascade_with_the_rule(tmp_path: Path) -> None:

@@ -52,6 +52,7 @@ class RunOutcomeResponse(BaseModel):
     checked_mappings: int
     drift: int
     failure_kind: str | None
+    last_succeeded_at: str | None
 
 
 class PreviewSummaryResponse(BaseModel):
