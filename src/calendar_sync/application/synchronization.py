@@ -232,6 +232,7 @@ class ExecuteSyncRule:
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
     ) -> None:
+        self._require_unchanged(uow, rule)
         mapping = uow.mappings.for_source(rule.id, source_event.reference)
         actual = (
             actual_destination
@@ -302,6 +303,17 @@ class ExecuteSyncRule:
                 detail=decision.reason,
             )
         )
+
+    @staticmethod
+    def _require_unchanged(uow: UnitOfWork, rule: SyncRule) -> None:
+        """Stop before writing if the rule was paused, edited, or removed during this run."""
+        current = uow.rules.get(rule.id)
+        if (
+            current is None
+            or current.state is not SyncRuleState.ENABLED
+            or current.material_signature != rule.material_signature
+        ):
+            raise RuleNotExecutable("sync rule changed during synchronization; run stopped")
 
     @staticmethod
     def _operation_key(

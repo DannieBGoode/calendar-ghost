@@ -640,3 +640,38 @@ def test_failed_run_records_failure_kind_without_detail() -> None:
     outcome = unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)]
     assert outcome.succeeded is False
     assert outcome.failure_kind == "rate_limit"
+
+
+def test_run_stops_before_writing_when_the_rule_changes_mid_run(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    with factory() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+
+    class EditingProvider(FakeCalendarProvider):
+        edited = False
+
+        def changes(
+            self, source: CalendarEndpoint, cursor: str | None, not_ended_before: datetime
+        ) -> ProviderChangeSet:
+            if not self.edited:
+                self.edited = True
+                with factory() as concurrent:
+                    current = concurrent.rules.get(rule().id)
+                    assert current is not None
+                    concurrent.rules.save(current.change_policy(DETAILS))
+                    concurrent.commit()
+            return super().changes(source, cursor, not_ended_before)
+
+    provider = EditingProvider(event())
+
+    with pytest.raises(RuleNotExecutable):
+        _use_case(factory, provider).execute(rule().id)
+
+    assert provider.destination is None
+    assert provider.operation_keys == []
+    with factory() as uow:
+        assert uow.cursors.get(rule().id) is None
+        assert uow.mappings.count_for_rule(rule().id) == 0

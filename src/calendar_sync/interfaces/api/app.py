@@ -445,7 +445,12 @@ def create_app(container: Container | None = None) -> FastAPI:
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "configure Google OAuth and the installation master key before synchronizing",
             )
-        result = await asyncio.to_thread(resolved.execute_sync_rule.execute, SyncRuleId(rule_id))
+        try:
+            result = await asyncio.to_thread(
+                resolved.execute_sync_rule.execute, SyncRuleId(rule_id)
+            )
+        except RuleNotExecutable as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return {
             "rule_id": result.rule_id.value,
             "created": result.created,
@@ -465,10 +470,15 @@ def create_app(container: Container | None = None) -> FastAPI:
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "configure Google OAuth and the installation master key before reconciling",
             )
-        result = await asyncio.to_thread(
-            resolved.execute_sync_rule.execute, SyncRuleId(rule_id), full=True
-        )
-        report = await asyncio.to_thread(resolved.reconcile_sync_rule.execute, SyncRuleId(rule_id))
+        try:
+            result = await asyncio.to_thread(
+                resolved.execute_sync_rule.execute, SyncRuleId(rule_id), full=True
+            )
+            report = await asyncio.to_thread(
+                resolved.reconcile_sync_rule.execute, SyncRuleId(rule_id)
+            )
+        except RuleNotExecutable as error:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return {
             "rule_id": result.rule_id.value,
             "created": result.created,

@@ -900,3 +900,21 @@ def test_replacement_creates_a_new_draft_and_rejects_invalid_calendars(tmp_path:
     assert replaced.json()["rule"]["destination"]["calendar_id"] == "team-calendar"
     assert replaced.json()["detached"] == 0
     assert [item["id"] for item in rules] == [replaced.json()["rule"]["id"]]
+
+
+def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path) -> None:
+    container = replace(
+        build_container(Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())),
+        scheduler=None,
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.PAUSED))
+        uow.commit()
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        synced = client.post("/api/v1/rules/rule-1/sync")
+        reconciled = client.post("/api/v1/rules/rule-1/reconcile")
+
+    assert synced.status_code == 409
+    assert reconciled.status_code == 409
