@@ -13,6 +13,7 @@ from calendar_sync.domain.model import (
     ConnectedAccountId,
     EventProjection,
     EventRef,
+    EventStatus,
     SyncRuleId,
 )
 from calendar_sync.infrastructure.google.translation import (
@@ -167,7 +168,7 @@ class GoogleCalendarProvider:
         operation_key: str,
     ) -> None:
         existing = self.get_event(destination)
-        if existing is None:
+        if existing is None or existing.status is EventStatus.CANCELLED:
             return
         if (
             existing.managed_origin is None
@@ -190,7 +191,7 @@ class GoogleCalendarProvider:
                 .execute()
             )
         except Exception as error:
-            if _status_code(error) != 404:
+            if _status_code(error) not in {404, 410}:
                 raise _provider_failure(error) from error
 
     def managed_events(
