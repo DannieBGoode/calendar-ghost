@@ -95,6 +95,7 @@ def build_container(settings: Settings | None = None) -> Container:
             provider,
             projector,
             SystemClock(),
+            SyncDecisionService(projector, fingerprinter),
             rule_locks,
         )
         reconcile_sync_rule = ReconcileSyncRule(

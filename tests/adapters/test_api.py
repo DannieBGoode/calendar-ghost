@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.ports import AuditEntry, CalendarProvider
+from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.model import (
@@ -19,10 +20,16 @@ from calendar_sync.domain.model import (
     ConnectedAccountId,
     EventId,
     EventRef,
+    EventStatus,
     Recurrence,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
+)
+from calendar_sync.domain.services import (
+    EventProjector,
+    ProjectionFingerprinter,
+    SyncDecisionService,
 )
 from calendar_sync.infrastructure.google.oauth import (
     ConnectedGoogleAccountNotFound,
@@ -33,7 +40,8 @@ from calendar_sync.infrastructure.google.oauth import (
     GoogleOAuthCompletionFailed,
 )
 from calendar_sync.interfaces.api.app import create_app
-from tests.helpers import endpoint, event, rule
+from tests.fake_calendar import FakeCalendars, FixedClock
+from tests.helpers import endpoint, event, occurrence, rule, series, week_start
 
 
 def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
@@ -1236,3 +1244,34 @@ def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
     with container.unit_of_work() as uow:
         degraded = uow.rules.get(rule().id)
     assert degraded is not None and degraded.state is SyncRuleState.DEGRADED
+
+
+def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.DRAFT))
+        uow.commit()
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0), week_start(1)))
+    calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED))
+    fingerprinter = ProjectionFingerprinter()
+    preview = PreviewSyncRule(
+        container.unit_of_work,
+        calendars,
+        EventProjector(),
+        FixedClock(),
+        SyncDecisionService(EventProjector(), fingerprinter),
+    )
+
+    with TestClient(create_app(replace(container, preview_sync_rule=preview))) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        body = client.post("/api/v1/rules/rule-1/preview").json()
+
+    assert body["eligible_events"] == 1
+    assert body["excluded_events"] == 0
+    assert body["recurring_series"] == 1
+    assert body["occurrence_changes"] == 1
+    assert [(item["kind"], item["planned_action"]) for item in body["sample"]] == [
+        ("series", "create"),
+        ("occurrence", "delete"),
+    ]

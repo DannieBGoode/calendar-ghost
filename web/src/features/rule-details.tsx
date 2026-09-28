@@ -30,6 +30,7 @@ import {
   runOutcomeSummary,
 } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
+import { previewSummary } from "@/lib/rule-preview"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
@@ -270,7 +271,7 @@ function RuleNextAction({
       {action}
       {preview.data && (
         <p className="preview-result" role="status">
-          Preview found {preview.data.eligible_events} eligible and {preview.data.excluded_events} excluded events.
+          {previewSummary(preview.data)}
         </p>
       )}
       {error && <div className="inline-error" role="alert">{error.message}</div>}
