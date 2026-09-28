@@ -6,14 +6,19 @@ The first run selects source events ending no earlier than 30 days before the ru
 cutoff, and observes the destination endpoint. A successful initial run establishes separate opaque
 incremental cursors for source and destination. Later runs request both change feeds every five
 minutes or through Sync Now. Source changes project forward; mapped destination changes load their
-authoritative source and repair edits or deletions during that same run.
+authoritative source and repair edits or deletions during that same run. Google's incremental feed
+is not bounded by the initial `timeMin`, so it also reports changes to events that ended long ago.
+An unmapped single event that ended before the rolling window start (30 days before the run) is
+ignored with reason `before_sync_window`; mapped events and recurring series are decided normally.
+Before skipping, the run looks up a projection created with the event's create Operation Key, so a
+create Google acknowledged before an interrupted run recorded its mapping is adopted, not orphaned.
 
 For each changed source event, the decision service chooses one action:
 
 - **Create** when an eligible source has no managed projection or the mapped projection is missing.
 - **Update** whenever actual destination content differs from the projection derived from source authority.
 - **Delete** when a mapped source is cancelled or becomes excluded by rule policy.
-- **Ignore** when content is current, the source is itself managed, or an excluded/cancelled source has no mapping.
+- **Ignore** when content is current, the source is itself managed, an excluded/cancelled source has no mapping, or an unmapped single event ended before the window.
 - **Conflict** only when identity or ownership is ambiguous.
 
 ## Reprojection after a Material Rule Change

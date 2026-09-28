@@ -108,6 +108,8 @@ class SyncDecisionService:
         source_event: CalendarEvent,
         mapping: EventMapping | None,
         actual_destination: CalendarEvent | None,
+        *,
+        window_start: datetime | None = None,
     ) -> SyncDecision:
         if source_event.reference.calendar != rule.source:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
@@ -148,6 +150,10 @@ class SyncDecisionService:
             if mapping is None:
                 return SyncDecision(SyncAction.IGNORE, SyncReason.ALL_DAY_EXCLUDED)
             return SyncDecision(SyncAction.DELETE, SyncReason.ALL_DAY_EXCLUDED_REMOVED)
+
+        # Incremental feeds report changes to any event, however old; only mapped ones stay current.
+        if mapping is None and window_start is not None and source_event.ended_before(window_start):
+            return SyncDecision(SyncAction.IGNORE, SyncReason.BEFORE_SYNC_WINDOW)
 
         projection = self._projector.project(source_event, rule)
         if mapping is None:

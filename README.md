@@ -167,7 +167,9 @@ docker compose down
 The first run reads source events ending no earlier than 30 days before the run, with no future
 cutoff, observes the destination calendar, and records Google's opaque incremental tokens for both
 endpoints. Later runs consume both change feeds, so a destination-only edit or deletion is repaired
-on the next sync without repeatedly scanning every event.
+on the next sync without repeatedly scanning every event. Google's change feed also reports edits to
+events of any age; an unsynced single event that ended more than 30 days ago is skipped, while an
+already-synced event keeps being updated.
 
 For every relevant source event, the domain chooses one action:
 

@@ -57,6 +57,7 @@ class FakeCalendars:
     feeds: dict[CalendarEndpoint, list[CalendarEvent]] = field(default_factory=dict)
     writes: list[tuple[str, str]] = field(default_factory=list)
     unreadable: set[EventRef] = field(default_factory=set)
+    operations: dict[str, EventRef] = field(default_factory=dict)
     created: int = 0
 
     def put(
@@ -147,6 +148,12 @@ class FakeCalendars:
             managed_origin=master.managed_origin,
         )
 
+    def find_projection(
+        self, destination: CalendarEndpoint, operation_key: str
+    ) -> CalendarEvent | None:
+        reference = self.operations.get(operation_key)
+        return None if reference is None else self.events.get(reference)
+
     def create_projection(
         self,
         destination: CalendarEndpoint,
@@ -155,6 +162,9 @@ class FakeCalendars:
         projection: EventProjection,
         operation_key: str,
     ) -> CreatedProjection:
+        existing = self.find_projection(destination, operation_key)
+        if existing is not None:
+            return CreatedProjection(existing)
         self.created += 1
         reference = EventRef(destination, EventId(f"projection-{self.created}"))
         created = CalendarEvent(
@@ -168,6 +178,7 @@ class FakeCalendars:
             managed_origin=ManagedOrigin(rule_id, source),
         )
         self.events[reference] = created
+        self.operations[operation_key] = reference
         if projection.recurrence is not None:
             self.expansions[reference] = self.expansions.get(source, ())
         self.writes.append(("create", reference.event_id.value))

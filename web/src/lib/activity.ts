@@ -57,6 +57,11 @@ const REASONS: Record<string, ReasonCopy> = {
     happened: "Skipped: all-day event",
     explanation: "This rule syncs timed events only. Edit the rule to include all-day events.",
   },
+  before_sync_window: {
+    happened: "Skipped: ended before the sync window",
+    explanation:
+      "The event changed, but it ended before this rule's sync window and was never synced, so no projection was created.",
+  },
   mapping_inconsistent: {
     happened: "Blocked: the event mapping does not match",
     explanation:

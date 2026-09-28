@@ -98,18 +98,13 @@ class GoogleCalendarProvider:
                 return None
             raise _provider_failure(error) from error
 
-    def create_projection(
-        self,
-        destination: CalendarEndpoint,
-        source: EventRef,
-        rule_id: SyncRuleId,
-        projection: EventProjection,
-        operation_key: str,
-    ) -> CreatedProjection:
-        service = self._service_for(destination.connected_account_id)
+    def find_projection(
+        self, destination: CalendarEndpoint, operation_key: str
+    ) -> CalendarEvent | None:
         try:
             existing = (
-                service.events()
+                self._service_for(destination.connected_account_id)
+                .events()
                 .list(
                     calendarId=destination.calendar_id.value,
                     privateExtendedProperty=f"{OPERATION_PROPERTY}={operation_key}",
@@ -119,8 +114,23 @@ class GoogleCalendarProvider:
                 .execute()
                 .get("items", [])
             )
-            if existing:
-                return CreatedProjection(to_domain_event(existing[0], destination))
+        except Exception as error:
+            raise _provider_failure(error) from error
+        return to_domain_event(existing[0], destination) if existing else None
+
+    def create_projection(
+        self,
+        destination: CalendarEndpoint,
+        source: EventRef,
+        rule_id: SyncRuleId,
+        projection: EventProjection,
+        operation_key: str,
+    ) -> CreatedProjection:
+        existing = self.find_projection(destination, operation_key)
+        if existing is not None:
+            return CreatedProjection(existing)
+        service = self._service_for(destination.connected_account_id)
+        try:
             payload = (
                 service.events()
                 .insert(
