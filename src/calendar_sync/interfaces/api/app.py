@@ -551,11 +551,17 @@ def create_app(container: Container | None = None) -> FastAPI:
 
         @app.get("/{full_path:path}", include_in_schema=False)
         def frontend(full_path: str) -> FileResponse:
+            index = static_root / "index.html"
             requested = (static_root / full_path).resolve()
-            if full_path and requested.is_file() and requested.is_relative_to(static_root):
+            if (
+                full_path
+                and requested != index
+                and requested.is_file()
+                and requested.is_relative_to(static_root)
+            ):
                 return FileResponse(requested)
             # Revalidate the page on every load so an upgrade replaces it and its asset hashes.
-            return FileResponse(static_root / "index.html", headers={"Cache-Control": "no-cache"})
+            return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app
 
