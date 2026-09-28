@@ -20,6 +20,18 @@ class DuplicateDirectionalRelationship(ApplicationError):
     """The same source-to-destination relationship already exists."""
 
 
+class NotACalendarChange(ApplicationError):
+    """A Rule Replacement was requested with the rule's current calendars."""
+
+
+class RemovalRequiresProvider(ApplicationError):
+    """Deleting projections needs a configured Google adapter."""
+
+
+class RemovalRequiresAuthorization(ApplicationError):
+    """Deleting projections needs an authorized destination account."""
+
+
 class ProviderFailureKind(StrEnum):
     AUTHENTICATION = "authentication"
     AUTHORIZATION = "authorization"
@@ -41,6 +53,22 @@ class ProviderFailure(ApplicationError):
 
     def __str__(self) -> str:
         return self.detail
+
+
+@dataclass(frozen=True, slots=True)
+class RemovalInterrupted(ApplicationError):
+    """Rule Removal stopped partway; the rule stays Disabled with its remaining mappings."""
+
+    processed: int
+    remaining: int
+    failure: ProviderFailure
+
+    def __str__(self) -> str:
+        total = self.processed + self.remaining
+        return (
+            f"removal stopped after {self.processed} of {total} projections because Google "
+            f"reported {self.failure.kind.value}; retry to continue"
+        )
 
 
 class InfrastructureFailure(ApplicationError):

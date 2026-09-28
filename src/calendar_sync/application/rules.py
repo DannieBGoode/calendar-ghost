@@ -1,14 +1,27 @@
 from dataclasses import dataclass, replace
 
-from calendar_sync.application.errors import DuplicateDirectionalRelationship, RuleNotFound
+from calendar_sync.application.errors import (
+    DuplicateDirectionalRelationship,
+    NotACalendarChange,
+    RuleNotFound,
+)
 from calendar_sync.application.ports import (
     AuditEntry,
     Clock,
+    IdGenerator,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
 )
-from calendar_sync.domain.model import AllDaySyncPolicy, PrivacyPolicy, SyncRule, SyncRuleId
+from calendar_sync.application.removal import RemovalResult, RemoveSyncRule
+from calendar_sync.domain.model import (
+    AllDaySyncPolicy,
+    CalendarEndpoint,
+    PrivacyPolicy,
+    ProjectionHandling,
+    SyncRule,
+    SyncRuleId,
+)
 
 
 @dataclass(slots=True)
@@ -82,3 +95,48 @@ class GetSyncRuleDetails:
                 last_sync=uow.run_outcomes.latest(rule_id, RunKind.SYNC),
                 last_reconciliation=uow.run_outcomes.latest(rule_id, RunKind.RECONCILIATION),
             )
+
+
+@dataclass(frozen=True, slots=True)
+class RuleReplacement:
+    rule: SyncRule
+    removal: RemovalResult
+
+
+@dataclass(slots=True)
+class ReplaceSyncRuleCalendars:
+    """Rule Replacement: Rule Removal followed by a new Draft with the same policy."""
+
+    unit_of_work: UnitOfWorkFactory
+    remove_rule: RemoveSyncRule
+    create_rule: CreateSyncRule
+    ids: IdGenerator
+
+    def execute(
+        self,
+        rule_id: SyncRuleId,
+        source: CalendarEndpoint,
+        destination: CalendarEndpoint,
+        handling: ProjectionHandling,
+    ) -> RuleReplacement:
+        with self.unit_of_work() as uow:
+            current = uow.rules.get(rule_id)
+            if current is None:
+                raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+            duplicate = uow.rules.relationship_exists(source, destination)
+        if (source, destination) == (current.source, current.destination):
+            raise NotACalendarChange("the calendars are unchanged; edit the policy instead")
+        replacement = SyncRule(
+            id=SyncRuleId(self.ids.new()),
+            source=source,
+            destination=destination,
+            transformation=current.transformation,
+            initial_lookback_days=current.initial_lookback_days,
+        )
+        if duplicate:
+            raise DuplicateDirectionalRelationship(
+                "a rule already exists for this source and destination"
+            )
+        removal = self.remove_rule.execute(rule_id, handling)
+        self.create_rule.execute(replacement)
+        return RuleReplacement(replacement, removal)
