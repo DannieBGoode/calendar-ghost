@@ -195,7 +195,10 @@ def create_app(container: Container | None = None) -> FastAPI:
             and resolved.settings.google_client_id
             and resolved.settings.google_client_secret
         )
-        return GoogleConfigurationResponse(configured=configured)
+        return GoogleConfigurationResponse(
+            configured=configured,
+            redirect_uri=resolved.settings.google_redirect_uri if configured else None,
+        )
 
     @app.get(
         "/api/v1/oauth/google/start",
@@ -720,6 +723,7 @@ def _account_response(
         id=account.id.value,
         display_name=account.display_name,
         email=account.email,
+        avatar_url=account.avatar_url,
         state=account.state,
         rule_count=rule_count,
     )

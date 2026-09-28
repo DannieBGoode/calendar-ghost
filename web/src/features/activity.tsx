@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
 import { Activity, ArrowRight, ChevronDown, ExternalLink, RefreshCw, Repeat, ShieldAlert } from "lucide-react"
 import { useId, useState } from "react"
 
@@ -24,11 +24,17 @@ import {
   type ActivityCategory,
   type AuditEntry,
   type ConnectedAccount,
+  type DiscoveredCalendar,
   type EventSnapshot,
   type Rule,
 } from "@/lib/api"
+import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
-type RuleContext = { rulesById: Map<string, Rule>; accountsById: Map<string, ConnectedAccount> }
+type RuleContext = {
+  rulesById: Map<string, Rule>
+  accountsById: Map<string, ConnectedAccount>
+  calendarsByAccount: Map<string, DiscoveredCalendar[] | undefined>
+}
 
 export function ActivityView() {
   const [ruleId, setRuleId] = useState("")
@@ -43,6 +49,17 @@ export function ActivityView() {
   const incidents = useQuery({ queryKey: ["incidents"], queryFn: api.incidents })
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
+  // Shares the Rules view cache so calendars show their names rather than Google identifiers.
+  const connectedAccountIds = (accounts.data ?? [])
+    .filter((account) => account.state === "connected")
+    .map((account) => account.id)
+  const calendarQueries = useQueries({
+    queries: connectedAccountIds.map((accountId) => ({
+      queryKey: ["calendars", accountId],
+      queryFn: () => api.calendars(accountId),
+      staleTime: 5 * 60 * 1000,
+    })),
+  })
   if (activity.isPending || incidents.isPending) return <PageSkeleton />
 
   if (activity.error || incidents.error) {
@@ -81,6 +98,9 @@ export function ActivityView() {
   const context: RuleContext = {
     rulesById: new Map((rules.data ?? []).map((rule) => [rule.id, rule])),
     accountsById: new Map((accounts.data ?? []).map((account) => [account.id, account])),
+    calendarsByAccount: new Map(
+      connectedAccountIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
+    ),
   }
   const entries = activity.data.pages.flat()
   const runs = groupRuns(entries)
@@ -121,7 +141,7 @@ export function ActivityView() {
               <NativeSelect id="activity-rule" value={ruleId} onChange={(event) => setRuleId(event.target.value)}>
                 <option value="">All rules</option>
                 {(rules.data ?? []).map((rule) => (
-                  <option key={rule.id} value={rule.id}>{rule.source.calendar_id} → {rule.destination.calendar_id}</option>
+                  <option key={rule.id} value={rule.id}>{endpointName(rule.source, context)} → {endpointName(rule.destination, context)}</option>
                 ))}
               </NativeSelect>
             </div>
@@ -187,6 +207,14 @@ function ActivityHeading() {
   )
 }
 
+function endpointName(endpoint: Rule["source"], context: RuleContext): string {
+  return ruleEndpointLabel(
+    endpoint.calendar_id,
+    context.accountsById.get(endpoint.connected_account_id),
+    context.calendarsByAccount.get(endpoint.connected_account_id),
+  ).calendar
+}
+
 function RuleDirection({ ruleId, context }: { ruleId: string; context: RuleContext }) {
   const rule = context.rulesById.get(ruleId)
   if (!rule) return <span>Removed rule</span>
@@ -196,12 +224,16 @@ function RuleDirection({ ruleId, context }: { ruleId: string; context: RuleConte
         account={context.accountsById.get(rule.source.connected_account_id)}
         accountId={rule.source.connected_account_id}
         calendarId={rule.source.calendar_id}
+        calendars={context.calendarsByAccount.get(rule.source.connected_account_id)}
+        role="Source"
       />
       <ArrowRight aria-label="to" />
       <RuleEndpoint
         account={context.accountsById.get(rule.destination.connected_account_id)}
         accountId={rule.destination.connected_account_id}
         calendarId={rule.destination.calendar_id}
+        calendars={context.calendarsByAccount.get(rule.destination.connected_account_id)}
+        role="Destination"
       />
     </span>
   )

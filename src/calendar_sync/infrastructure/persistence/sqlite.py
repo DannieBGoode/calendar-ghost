@@ -34,15 +34,17 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 
-UPGRADE_MIGRATIONS = ((2, "0002_audit_reasons.sql"),)
+_FORWARD_MIGRATIONS = (
+    (2, "0002_account_avatar.sql"),
+    (3, "0003_audit_reasons.sql"),
+)
 
 
 def initialize_database(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    scripts = files("calendar_sync.infrastructure.persistence")
+    migrations = files("calendar_sync.infrastructure.persistence")
     with sqlite3.connect(path) as connection:
-        # The initial schema is idempotent and creates the schema_migrations ledger.
-        connection.executescript(scripts.joinpath("0001_initial.sql").read_text())
+        connection.executescript(migrations.joinpath("0001_initial.sql").read_text())
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
             (1, datetime.now(UTC).isoformat()),
@@ -51,14 +53,17 @@ def initialize_database(path: Path) -> None:
         applied = {
             int(row[0]) for row in connection.execute("SELECT version FROM schema_migrations")
         }
-        for version, name in UPGRADE_MIGRATIONS:
+        for version, name in _FORWARD_MIGRATIONS:
             if version in applied:
                 continue
-            # Each upgrade and its ledger row commit atomically.
+            # Later migrations are not idempotent, so each one commits atomically with its
+            # version record and runs at most once.
             connection.executescript(
-                f"BEGIN;\n{scripts.joinpath(name).read_text()}\n"
+                "BEGIN;\n"
+                f"{migrations.joinpath(name).read_text()}\n"
                 "INSERT INTO schema_migrations(version, applied_at) "
-                f"VALUES ({version}, '{datetime.now(UTC).isoformat()}');\nCOMMIT;"
+                f"VALUES ({version}, '{datetime.now(UTC).isoformat()}');\n"
+                "COMMIT;"
             )
 
 

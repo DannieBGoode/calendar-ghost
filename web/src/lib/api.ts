@@ -37,11 +37,12 @@ export type Rule = {
   sync_all_day_events: boolean
   state: string
 }
-export type GoogleConfiguration = { configured: boolean }
+export type GoogleConfiguration = { configured: boolean; redirect_uri: string | null }
 export type ConnectedAccount = {
   id: string
   display_name: string
   email: string
+  avatar_url: string | null
   state: string
   rule_count: number
 }

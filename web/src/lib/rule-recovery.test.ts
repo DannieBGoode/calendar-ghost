@@ -5,7 +5,7 @@ import dashboardSource from "../features/dashboard.tsx?raw"
 
 describe("Directional Sync Rule recovery presentation", () => {
   it("shows account avatars and stops every rule that uses a disconnected account", () => {
-    expect(ruleEndpointSource).toContain("account-mark account-mark-compact")
+    expect(ruleEndpointSource).toContain("avatarUrl={account?.avatar_url}")
     expect(dashboardSource).toContain("<RuleEndpoint")
     expect(dashboardSource).toContain(
       'rule.state === "degraded" || disconnectedAccounts.length > 0',

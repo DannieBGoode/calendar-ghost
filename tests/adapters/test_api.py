@@ -209,10 +209,35 @@ def test_google_routes_report_unconfigured_installation(tmp_path: Path) -> None:
     with TestClient(app) as client:
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
 
-        assert client.get("/api/v1/google/configuration").json() == {"configured": False}
+        assert client.get("/api/v1/google/configuration").json() == {
+            "configured": False,
+            "redirect_uri": None,
+        }
         assert client.get("/api/v1/oauth/google/start").status_code == 503
         assert client.get("/api/v1/accounts").json() == []
         assert client.post("/api/v1/rules/missing/preview").status_code == 503
+
+
+def test_google_configuration_reports_redirect_uri_to_administrators(tmp_path: Path) -> None:
+    settings = Settings(
+        tmp_path / "test.db",
+        master_key=CredentialCipher.generate_key(),
+        google_client_id="synthetic-client",
+        google_client_secret="synthetic-secret",
+        google_redirect_uri="http://localhost:18000/api/v1/oauth/google/callback",
+    )
+    app = create_app(build_container(settings))
+
+    with TestClient(app) as client:
+        anonymous = client.get("/api/v1/google/configuration")
+        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        configuration = client.get("/api/v1/google/configuration")
+
+    assert anonymous.status_code == 401
+    assert configuration.json() == {
+        "configured": True,
+        "redirect_uri": "http://localhost:18000/api/v1/oauth/google/callback",
+    }
 
 
 def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> None:
@@ -223,7 +248,10 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
     )
     assert container.connected_accounts is not None
     account = container.connected_accounts.save(
-        "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Personal",
+        "person@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        avatar_url="https://lh3.googleusercontent.com/a/synthetic=s96-c",
     )
     with container.unit_of_work() as uow:
         uow.rules.add(rule())
@@ -287,6 +315,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
             "id": account.id.value,
             "display_name": "Personal",
             "email": "person@example.test",
+            "avatar_url": "https://lh3.googleusercontent.com/a/synthetic=s96-c",
             "state": "connected",
             "rule_count": 4,
         }

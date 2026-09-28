@@ -1,17 +1,22 @@
 import base64
 import hashlib
+import json
 import sqlite3
+from importlib.resources import files
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from oauthlib.oauth2 import WebApplicationClient  # type: ignore[import-untyped]
 
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,
+    OAUTH_SCOPES,
+    PROFILE_SCOPES,
     ConnectedGoogleAccountDisconnected,
     CredentialCipher,
     GoogleAccountAccessCheckFailed,
@@ -50,6 +55,55 @@ def test_connected_account_upsert_preserves_identity(tmp_path: Path) -> None:
     assert updated.id == first.id
     assert updated.display_name == "Renamed"
     assert len(store.list()) == 1
+
+
+def test_connected_account_avatar_round_trips_and_follows_reauthorization(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    photo = "https://lh3.googleusercontent.com/a/synthetic=s96-c"
+
+    saved = store.save("Person", "person@example.test", "{}", avatar_url=photo)
+    listed = store.list()
+    reauthorized = store.save("Person", "person@example.test", "{}")
+
+    assert saved.avatar_url == photo
+    assert listed[0].avatar_url == photo
+    assert reauthorized.avatar_url is None
+
+
+def test_avatar_migration_upgrades_an_existing_installation(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initial = (
+        files("calendar_sync.infrastructure.persistence").joinpath("0001_initial.sql").read_text()
+    )
+    with sqlite3.connect(database) as connection:
+        connection.executescript(initial)
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (1, '2026-01-01')"
+        )
+        connection.execute(
+            """
+            INSERT INTO connected_accounts (
+                id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at
+            ) VALUES ('existing', 'google', 'Person', 'person@example.test', x'00',
+                'connected', '2026-01-01', '2026-01-01')
+            """
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+    assert versions == [1, 2, 3]
+    assert [(account.id.value, account.avatar_url) for account in store.list()] == [
+        ("existing", None)
+    ]
 
 
 def test_disconnect_discards_credentials_and_reauthorization_preserves_identity(
@@ -147,6 +201,8 @@ def test_oauth_completion_exchanges_explicit_code_without_parsing_callback_url(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class StubCredentials:
+        granted_scopes = CALENDAR_SCOPES
+
         def to_json(self) -> str:
             return '{"token":"synthetic-token"}'
 
@@ -205,11 +261,137 @@ def test_oauth_completion_exchanges_explicit_code_without_parsing_callback_url(
     assert account.email == "person@example.test"
 
 
-def test_oauth_completion_rejects_a_grant_without_all_calendar_scopes(
+def _synthetic_id_token(claims: dict[str, Any]) -> str:
+    def segment(value: dict[str, Any]) -> str:
+        return base64.urlsafe_b64encode(json.dumps(value).encode()).rstrip(b"=").decode()
+
+    return f"{segment({'alg': 'RS256', 'typ': 'JWT'})}.{segment(claims)}.c2lnbmF0dXJl"
+
+
+def _complete_with_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    id_token: str | None,
+    granted_scopes: tuple[str, ...],
+) -> Any:
+    class StubCredentials:
+        def __init__(self) -> None:
+            self.id_token = id_token
+            self.granted_scopes = granted_scopes
+
+        def to_json(self) -> str:
+            return '{"token":"synthetic-token"}'
+
+    class StubFlow:
+        credentials = StubCredentials()
+
+        def fetch_token(self, **kwargs: Any) -> None:
+            assert kwargs == {"code": "synthetic-code"}
+
+    class StubCalendarRequest:
+        def execute(self) -> dict[str, Any]:
+            return {
+                "items": [{"id": "person@example.test", "summary": "Personal", "primary": True}]
+            }
+
+    class StubCalendarService:
+        def calendarList(self) -> Any:
+            return SimpleNamespace(list=lambda pageToken=None: StubCalendarRequest())
+
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    oauth = GoogleOAuthService(Settings(database), store)
+    oauth._store_state("synthetic-state")
+    monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
+    monkeypatch.setattr(
+        "calendar_sync.infrastructure.google.oauth.build",
+        lambda *args, **kwargs: StubCalendarService(),
+    )
+    return oauth.complete("synthetic-state", "synthetic-code")
+
+
+def test_oauth_requests_calendar_and_basic_profile_scopes_only() -> None:
+    assert OAUTH_SCOPES == CALENDAR_SCOPES + PROFILE_SCOPES
+    assert PROFILE_SCOPES == ("openid", "https://www.googleapis.com/auth/userinfo.profile")
+
+
+def test_oauth_token_exchange_accepts_a_grant_without_optional_profile_scopes() -> None:
+    client = WebApplicationClient("synthetic.apps.googleusercontent.com")
+
+    token = client.parse_request_body_response(
+        json.dumps(
+            {
+                "access_token": "synthetic-token",
+                "token_type": "Bearer",
+                "scope": " ".join(CALENDAR_SCOPES),
+            }
+        ),
+        scope=list(OAUTH_SCOPES),
+    )
+
+    assert set(token["scope"]) == set(CALENDAR_SCOPES)
+
+
+def test_oauth_completion_records_google_profile_photo_and_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    account = _complete_with_identity(
+        tmp_path,
+        monkeypatch,
+        id_token=_synthetic_id_token(
+            {
+                "name": "Person Example",
+                "picture": "https://lh3.googleusercontent.com/a/synthetic=s96-c",
+            }
+        ),
+        granted_scopes=OAUTH_SCOPES,
+    )
+
+    assert account.display_name == "Person Example"
+    assert account.avatar_url == "https://lh3.googleusercontent.com/a/synthetic=s96-c"
+
+
+def test_oauth_completion_connects_without_profile_consent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    account = _complete_with_identity(
+        tmp_path, monkeypatch, id_token=None, granted_scopes=CALENDAR_SCOPES
+    )
+
+    assert account.display_name == "Personal"
+    assert account.avatar_url is None
+
+
+@pytest.mark.parametrize(
+    "id_token",
+    [
+        "not-a-jwt",
+        _synthetic_id_token({"picture": "http://example.test/photo.png"}),
+        _synthetic_id_token({"picture": "javascript:alert(1)"}),
+        _synthetic_id_token({"picture": 42, "name": ["not", "text"]}),
+    ],
+)
+def test_oauth_completion_ignores_unusable_profile_claims(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, id_token: str
+) -> None:
+    account = _complete_with_identity(
+        tmp_path, monkeypatch, id_token=id_token, granted_scopes=OAUTH_SCOPES
+    )
+
+    assert account.display_name == "Personal"
+    assert account.avatar_url is None
+
+
+@pytest.mark.parametrize("granted_scopes", [(CALENDAR_SCOPES[0], *PROFILE_SCOPES), ()])
+def test_oauth_completion_rejects_a_grant_without_all_calendar_scopes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, granted_scopes: tuple[str, ...]
+) -> None:
     class StubCredentials:
-        granted_scopes = (CALENDAR_SCOPES[0],)
+        pass
+
+    StubCredentials.granted_scopes = granted_scopes  # type: ignore[attr-defined]
 
     class StubFlow:
         credentials = StubCredentials()

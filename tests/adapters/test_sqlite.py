@@ -141,7 +141,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         rows = connection.execute(
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
-    assert versions == [1, 2]
+    assert versions == [1, 2, 3]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),

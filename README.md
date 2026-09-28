@@ -74,6 +74,14 @@ slash. See Google's guides for [enabling Workspace APIs](https://developers.goog
 [web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), and
 [Calendar scopes](https://developers.google.com/workspace/calendar/api/auth).
 
+Running on a Raspberry Pi or another LAN host? Google rejects plain-HTTP redirect URIs other than
+`localhost`, so read [Google OAuth redirect URI on a LAN host](docs/deployment.md#google-oauth-redirect-uri-on-a-lan-host)
+before registering the redirect URI.
+
+The app requests event access and read-only calendar-list access for synchronization, plus basic
+profile access (`openid`, `userinfo.profile`) so each Connected Account shows its Google name and
+photo. Profile access is optional; without it, accounts show initials.
+
 ### 2. Configure local secrets
 
 Copy the example file:
@@ -125,7 +133,8 @@ account, check its Calendar API access, or disconnect it. **Check access** verif
 and event permissions with read-only requests and reports how many visible calendars can be used as
 destinations. Disconnecting removes stored Google credentials and degrades any enabled rule that
 uses the identity; mappings, Managed Projections, and incremental positions are preserved for safe
-reauthorization.
+reauthorization. Accounts connected before profile photos were supported show initials until they
+are connected again with **Connect Google account**, which updates the existing identity in place.
 
 Check service health with:
 

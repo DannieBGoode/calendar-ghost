@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
 
+import avatarSource from "../components/account-avatar.tsx?raw"
+import ruleEndpointSource from "../components/rule-endpoint.tsx?raw"
+import dashboardSource from "../features/dashboard.tsx?raw"
 import { accountInitials } from "./account-avatar"
 
 describe("accountInitials", () => {
@@ -14,5 +17,24 @@ describe("accountInitials", () => {
   it("falls back safely when identity fields are sparse", () => {
     expect(accountInitials("", "daniel@example.com")).toBe("DA")
     expect(accountInitials("", "")).toBe("?")
+  })
+})
+
+describe("AccountAvatar", () => {
+  it("shows the Google profile photo without leaking the page as a referrer", () => {
+    expect(avatarSource).toContain("referrerPolicy=\"no-referrer\"")
+    expect(avatarSource).toContain('alt=""')
+  })
+
+  it("falls back to initials when there is no photo or it fails to load", () => {
+    expect(avatarSource).toContain("onError={() => setFailedUrl(photo)}")
+    expect(avatarSource).toContain("accountInitials(displayName, email)")
+  })
+
+  it("is used for every account identity in the dashboard", () => {
+    expect(dashboardSource).not.toContain("accountInitials(")
+    expect(ruleEndpointSource).not.toContain("accountInitials(")
+    expect(dashboardSource.match(/<AccountAvatar/g)).toHaveLength(1)
+    expect(ruleEndpointSource.match(/<AccountAvatar/g)).toHaveLength(1)
   })
 })

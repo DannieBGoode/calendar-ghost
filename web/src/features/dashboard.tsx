@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowRight,
   CheckCircle2,
@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { useState, type FormEvent } from "react"
 
+import { AccountAvatar } from "@/components/account-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -26,7 +27,7 @@ import { RuleEndpoint } from "@/components/rule-endpoint"
 import { useTheme } from "@/components/theme-provider"
 import { ActivityView } from "@/features/activity"
 import { api, type ConnectedAccount } from "@/lib/api"
-import { accountInitials } from "@/lib/account-avatar"
+import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
 import type { AppView } from "@/lib/navigation"
 import type { ThemePreference } from "@/lib/theme"
 
@@ -51,7 +52,14 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
 
   if (view === "rules") return <RulesView rules={rules.data} dashboard={dashboard.data} onViewChange={onViewChange} />
   if (view === "activity") return <ActivityView />
-  if (view === "settings") return <SettingsView googleConfigured={google.data.configured} />
+  if (view === "settings") {
+    return (
+      <SettingsView
+        googleConfigured={google.data.configured}
+        redirectUri={google.data.redirect_uri}
+      />
+    )
+  }
 
   const empty = dashboard.data.connected_accounts === 0
   return (
@@ -89,6 +97,7 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
         <OnboardingSteps
           onViewChange={onViewChange}
           googleConfigured={google.data.configured}
+          redirectUri={google.data.redirect_uri}
         />
       ) : (
         <RecentRules onViewChange={onViewChange} count={rules.data.length} />
@@ -100,9 +109,11 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
 function OnboardingSteps({
   onViewChange,
   googleConfigured,
+  redirectUri,
 }: {
   onViewChange: (view: AppView) => void
   googleConfigured: boolean
+  redirectUri: string | null
 }) {
   return (
     <section className="workflow" aria-labelledby="workflow-title">
@@ -110,6 +121,7 @@ function OnboardingSteps({
         <div><h2 id="workflow-title">Start with an account</h2><p>Nothing is written to Google until a rule passes preview and you enable it.</p></div>
         <span className="step-progress">Step 1 of 3</span>
       </div>
+      <RedirectMismatchNotice redirectUri={redirectUri} />
       <ol className="step-list">
         <li className="step-row current">
           <span className="step-number">1</span>
@@ -142,6 +154,31 @@ function OnboardingSteps({
       </ol>
       <Button variant="ghost" onClick={() => onViewChange("rules")}>Learn how rules work <ArrowRight /></Button>
     </section>
+  )
+}
+
+function RedirectMismatchNotice({ redirectUri }: { redirectUri: string | null }) {
+  const mismatch = oauthRedirectMismatch(redirectUri, window.location.origin)
+  if (!mismatch) return null
+  return (
+    <div className="oauth-feedback oauth-feedback-warning" role="status">
+      <ShieldAlert aria-hidden="true" />
+      <div>
+        <h2>Google will return to a different address</h2>
+        <p>
+          After you approve access, Google sends your browser to <code>{mismatch.redirectOrigin}</code>,
+          not <code>{mismatch.currentOrigin}</code>. If that address does not reach this
+          installation, the account will not connect.
+        </p>
+        <p>
+          Open Calendar Sync at <code>{mismatch.redirectOrigin}</code>, for example through an SSH
+          tunnel, or set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address for this
+          installation. If Google lands on a connection error, replace{" "}
+          <code>{mismatch.redirectOrigin}</code> with <code>{mismatch.currentOrigin}</code> in the
+          address bar within 10 minutes.
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -212,6 +249,24 @@ function RulesView({
   const accountsById = new Map(
     (accounts.data ?? []).map((account) => [account.id, account]),
   )
+  const ruleAccountIds = [
+    ...new Set(
+      rules.flatMap((rule) => [
+        rule.source.connected_account_id,
+        rule.destination.connected_account_id,
+      ]),
+    ),
+  ].filter((accountId) => accountsById.get(accountId)?.state === "connected")
+  const calendarQueries = useQueries({
+    queries: ruleAccountIds.map((accountId) => ({
+      queryKey: ["calendars", accountId],
+      queryFn: () => api.calendars(accountId),
+      staleTime: 5 * 60 * 1000,
+    })),
+  })
+  const calendarsByAccount = new Map(
+    ruleAccountIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
+  )
 
   if (accounts.isPending) return <PageSkeleton />
   if (accounts.error) {
@@ -278,12 +333,16 @@ function RulesView({
                       account={sourceAccount}
                       accountId={rule.source.connected_account_id}
                       calendarId={rule.source.calendar_id}
+                      calendars={calendarsByAccount.get(rule.source.connected_account_id)}
+                      role="Source"
                     />
                     <ArrowRight aria-hidden="true" />
                     <RuleEndpoint
                       account={destinationAccount}
                       accountId={rule.destination.connected_account_id}
                       calendarId={rule.destination.calendar_id}
+                      calendars={calendarsByAccount.get(rule.destination.connected_account_id)}
+                      role="Destination"
                     />
                   </div>
                   <p className="rule-policy">
@@ -480,7 +539,13 @@ function RuleBuilder({ onCreated }: { onCreated: () => void }) {
   )
 }
 
-function SettingsView({ googleConfigured }: { googleConfigured: boolean }) {
+function SettingsView({
+  googleConfigured,
+  redirectUri,
+}: {
+  googleConfigured: boolean
+  redirectUri: string | null
+}) {
   const { preference, setPreference } = useTheme()
   const queryClient = useQueryClient()
   const oauthOutcome = new URLSearchParams(window.location.search).get("google")
@@ -645,6 +710,7 @@ function SettingsView({ googleConfigured }: { googleConfigured: boolean }) {
             before connecting an account.
           </div>
         )}
+        <RedirectMismatchNotice redirectUri={redirectUri} />
         {accounts.isPending && (
           <div className="account-list-loading" aria-label="Loading connected accounts">
             <Skeleton className="h-20 w-full" />
@@ -677,9 +743,11 @@ function SettingsView({ googleConfigured }: { googleConfigured: boolean }) {
                 <li className="account-item" key={account.id}>
                   <div className="account-main">
                     <div className="account-identity">
-                      <span className="account-mark" aria-hidden="true">
-                        {accountInitials(account.display_name, account.email)}
-                      </span>
+                      <AccountAvatar
+                        displayName={account.display_name}
+                        email={account.email}
+                        avatarUrl={account.avatar_url}
+                      />
                       <div className="account-copy">
                         <h3>{account.display_name}</h3>
                         <p>{account.email}</p>

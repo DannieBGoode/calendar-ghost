@@ -47,12 +47,14 @@ class DashboardResponse(BaseModel):
 
 class GoogleConfigurationResponse(BaseModel):
     configured: bool
+    redirect_uri: str | None
 
 
 class ConnectedAccountResponse(BaseModel):
     id: str
     display_name: str
     email: str
+    avatar_url: str | None
     state: str
     rule_count: int
 
