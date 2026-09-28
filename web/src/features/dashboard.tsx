@@ -543,6 +543,7 @@ function ActivityView() {
     const authenticationExpired = [activity.error, incidents.error].some(
       (error) => error instanceof ApiError && error.status === 401,
     )
+    const serviceFailed = [activity.error, incidents.error].some((error) => error instanceof ApiError)
     const refreshing = activity.isFetching || incidents.isFetching
     const recover = () => {
       if (authenticationExpired) {
@@ -561,7 +562,9 @@ function ActivityView() {
           <p>
             {authenticationExpired
               ? "Your administrator session has expired. Sign in again to view operational activity."
-              : "The request did not reach the local service. It may have been restarting, or a browser extension such as a content blocker may be blocking it; try the request again."}
+              : serviceFailed
+                ? "The local service returned an error; try the request again."
+                : "The request did not reach the local service. It may have been restarting, or a browser extension such as a content blocker may be blocking it; try the request again."}
           </p>
           <Button variant="outline" onClick={recover} disabled={refreshing}>
             <RefreshCw aria-hidden="true" />

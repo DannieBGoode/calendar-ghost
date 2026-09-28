@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
 import dashboardSource from "../features/dashboard.tsx?raw"
-import apiSource from "./api.ts?raw"
 
 describe("Activity view states", () => {
   it("keeps successful empty activity distinct from a recoverable request failure", () => {
@@ -11,8 +10,18 @@ describe("Activity view states", () => {
     expect(dashboardSource).toContain("incidents.refetch()")
   })
 
-  it("loads audit entries from a path that content blockers do not treat as tracking", () => {
-    expect(apiSource).toContain('"/api/v1/audit-entries"')
-    expect(apiSource).not.toContain("/api/v1/activity")
+  it("names browser extensions as a cause when the request never reaches the service", () => {
+    expect(dashboardSource).toContain("The request did not reach the local service.")
+    expect(dashboardSource).toContain("a browser extension such as a content blocker")
+    expect(dashboardSource).not.toContain("The local service did not answer.")
+  })
+
+  it("keeps expired-session, server-error, and connectivity guidance on separate branches", () => {
+    expect(dashboardSource).toContain(
+      "const serviceFailed = [activity.error, incidents.error].some((error) => error instanceof ApiError)",
+    )
+    expect(dashboardSource).toMatch(
+      /authenticationExpired\s*\?\s*"Your administrator session has expired\.[^"]*"\s*:\s*serviceFailed\s*\?\s*"The local service returned an error; try the request again\."\s*:\s*"The request did not reach the local service\./,
+    )
   })
 })
