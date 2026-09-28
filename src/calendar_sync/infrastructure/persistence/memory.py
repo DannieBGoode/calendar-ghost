@@ -192,8 +192,15 @@ class InMemoryRuleRunOutcomeRepository:
             if previous
             else None
         )
+        full_at = (
+            outcome.completed_at
+            if outcome.succeeded and outcome.full_run
+            else previous.last_full_succeeded_at
+            if previous
+            else None
+        )
         self._state.outcomes[(outcome.rule_id, outcome.kind)] = replace(
-            outcome, last_succeeded_at=succeeded_at
+            outcome, last_succeeded_at=succeeded_at, last_full_succeeded_at=full_at
         )
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:

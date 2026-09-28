@@ -57,6 +57,8 @@ class FakeCalendars:
     feeds: dict[CalendarEndpoint, list[CalendarEvent]] = field(default_factory=dict)
     writes: list[tuple[str, str]] = field(default_factory=list)
     unreadable: set[EventRef] = field(default_factory=set)
+    reads: list[EventRef] = field(default_factory=list)
+    """Every single-event and single-occurrence lookup, in order."""
     operations: dict[str, EventRef] = field(default_factory=dict)
     created: int = 0
 
@@ -105,6 +107,7 @@ class FakeCalendars:
         return event.time.ends_at >= not_ended_before
 
     def get_event(self, reference: EventRef) -> CalendarEvent | None:
+        self.reads.append(reference)
         if reference in self.unreadable:
             return None
         return self.events.get(reference)
@@ -112,6 +115,7 @@ class FakeCalendars:
     def get_occurrence(
         self, series: EventRef, original_start: OccurrenceStart
     ) -> CalendarEvent | None:
+        self.reads.append(series)
         master = self.events.get(series)
         if master is None:
             raise ProviderFailure(ProviderFailureKind.TEMPORARY, "series could not be read")

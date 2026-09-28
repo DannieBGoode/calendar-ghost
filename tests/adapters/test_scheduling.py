@@ -1,4 +1,7 @@
+import asyncio
 import sqlite3
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Thread
 from typing import cast
@@ -11,7 +14,7 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import UnitOfWorkFactory
+from calendar_sync.application.ports import RuleRunOutcome, RunKind, UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import (
@@ -19,12 +22,13 @@ from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
 )
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.scheduling import SqliteRuleHealth, SyncScheduler
-from tests.helpers import rule
+from tests.helpers import endpoint, rule
 
 
 class RecordingChannel(NotificationChannel):
@@ -277,3 +281,34 @@ def test_blocked_removal_opens_one_incident_that_completed_removal_resolves(
     with sqlite3.connect(database) as connection:
         states = connection.execute("SELECT state FROM incidents").fetchall()
     assert states == [("resolved",)]
+
+
+class FullPassRecordingExecuteRule:
+    def __init__(self) -> None:
+        self.full: list[tuple[str, bool]] = []
+
+    def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+        self.full.append((rule_id.value, full))
+        return SyncRunResult(rule_id)
+
+
+def test_daily_full_pass_is_due_per_rule_and_survives_a_restart() -> None:
+    factory = InMemoryUnitOfWorkFactory()
+    second = replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.rules.add(second)
+        uow.run_outcomes.record(
+            RuleRunOutcome(rule().id, RunKind.SYNC, datetime.now(UTC), True, full_run=True)
+        )
+        uow.commit()
+    execute = FullPassRecordingExecuteRule()
+
+    for _restart in range(2):
+        scheduler = SyncScheduler(
+            cast(ExecuteSyncRule, execute), factory, cast(SqliteRuleHealth, RecordingHealth())
+        )
+        asyncio.run(scheduler.run_once())
+
+    # rule-1 finished today's full pass; rule-2 never did, so only it lists everything again.
+    assert execute.full == [("rule-1", False), ("rule-2", True)] * 2

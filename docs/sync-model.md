@@ -13,6 +13,27 @@ ignored with reason `before_sync_window`; mapped events and recurring series are
 Before skipping, the run looks up a projection created with the event's create Operation Key, so a
 create Google acknowledged before an interrupted run recorded its mapping is adopted, not orphaned.
 
+## Cost of a run
+
+A run with nothing to do makes two provider requests per rule: one incremental listing each for the
+source and destination, which return no changes. Per-event reads are spent only where something
+could have drifted:
+
+- The destination feed reports this rule's own writes back on the next run. A reported projection
+  or occurrence that still carries this rule's Managed Origin and matches the fingerprint recorded
+  when it was written has not drifted, so it is counted as ignored without reading its source.
+  Source changes arrive through the source feed. Any other content, status, or ownership repairs
+  from the source as before.
+- A mapping already decided from the source feed in the same run is not decided again from the
+  destination feed.
+- A full listing (the daily pass, the first run, or reprojection) reuses each listed projection for
+  its decision instead of reading it again. Each listed projection is used once; a projection the
+  listing did not include is read directly, and absence from the listing never counts as deletion.
+
+The scheduler runs each rule's daily full pass when that rule has not completed one on the current
+UTC day. The completion time is stored with the rule's run outcome, so restarting the service or
+another rule failing does not repeat a full pass that already completed.
+
 For each changed source event, the decision service chooses one action:
 
 - **Create** when an eligible source has no managed projection or the mapped projection is missing.
@@ -91,13 +112,23 @@ releases.
 
 ## Audit evidence
 
-Every decision in a run appends one Audit Entry carrying the run identifier, the action, and a
-stable reason code from `SyncReason` in `domain/model.py`. Skips are recorded as well as writes, so
-the Activity view can explain why an event was not synchronized. Updates distinguish a changed
+Every write, block, and meaningful skip in a run appends one Audit Entry carrying the run
+identifier, the action, and a stable reason code from `SyncReason` in `domain/model.py`, so the
+Activity view can explain what changed and why an expected event was not synchronized. Updates
+distinguish a changed
 source (`source_changed`) from a repaired destination edit (`destination_drift_repaired`). Entries
 store only identities; Activity reads titles and times from Google on demand and never persists them.
 Occurrence decisions that found the destination already matching (`occurrence_current`,
 `occurrence_already_cancelled`) are listed as no change, like `projection_current`.
+
+Decisions that answer no question an administrator would ask are counted in the run's ignored
+total but not recorded: `managed_projection_source` (loop prevention), `outside_source_calendar`,
+`cancelled_without_projection`, `before_sync_window`, and `occurrence_retired` (bookkeeping with no
+provider write). `all_day_excluded` and `series_not_synchronized` are recorded by the first run and
+by incremental runs that saw the event change, but not by the daily full pass, which would repeat
+them for every unchanged event each day. Entries with the unrecorded reasons written by earlier
+releases are hidden from Activity. See
+[ADR 0013](adr/0013-record-decisions-worth-explaining.md).
 
 ## Partial failure
 

@@ -162,7 +162,7 @@ class SyncDecisionService:
             return SyncDecision(SyncAction.CREATE, SyncReason.PROJECTION_MISSING, projection)
 
         expected = self._fingerprinter.fingerprint(projection)
-        actual = self._fingerprinter.fingerprint(self._as_projection(actual_destination))
+        actual = self._fingerprinter.fingerprint(self.as_projection(actual_destination))
         source_unchanged = mapping.source_revision == source_event.revision
         if source_unchanged and expected == actual:
             return SyncDecision(SyncAction.IGNORE, SyncReason.PROJECTION_CURRENT)
@@ -268,7 +268,7 @@ class SyncDecisionService:
         if destination_occurrence.status is EventStatus.CANCELLED:
             return SyncDecision(SyncAction.UPDATE, changed, projection)
         expected = self._fingerprinter.fingerprint(projection)
-        actual = self._fingerprinter.fingerprint(self._as_projection(destination_occurrence))
+        actual = self._fingerprinter.fingerprint(self.as_projection(destination_occurrence))
         if expected == actual and (occurrence_mapping is None or source_unchanged):
             return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CURRENT, projection)
         return SyncDecision(SyncAction.UPDATE, changed, projection)
@@ -280,7 +280,7 @@ class SyncDecisionService:
         return mapping
 
     @staticmethod
-    def _as_projection(event: CalendarEvent) -> EventProjection:
+    def as_projection(event: CalendarEvent) -> EventProjection:
         if event.time is None:
             raise DomainValidationError("cancelled destination events cannot be projected")
         return EventProjection(
@@ -357,7 +357,7 @@ class ReconciliationService:
                     )
                 )
             elif self._fingerprinter.fingerprint(expected) != self._fingerprinter.fingerprint(
-                SyncDecisionService._as_projection(actual)
+                SyncDecisionService.as_projection(actual)
             ):
                 drift.append(
                     ReconciliationDrift(
@@ -408,7 +408,7 @@ class ReconciliationService:
         elif check.expected is None:
             kind, detail = DriftKind.INCORRECT_PROJECTION, "managed occurrence should be cancelled"
         elif self._fingerprinter.fingerprint(check.expected) == self._fingerprinter.fingerprint(
-            SyncDecisionService._as_projection(actual)
+            SyncDecisionService.as_projection(actual)
         ):
             return []
         else:

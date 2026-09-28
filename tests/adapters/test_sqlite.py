@@ -12,6 +12,7 @@ from calendar_sync.application.ports import (
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
+    UnitOfWorkFactory,
 )
 from calendar_sync.domain.model import (
     EventId,
@@ -155,7 +156,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         rows = connection.execute(
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
-    assert versions == [1, 2, 3, 4, 5, 6, 7]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -513,3 +514,54 @@ def test_migration_7_indexes_audit_entries_by_run(tmp_path: Path) -> None:
         )
     assert versions.count(7) == 1
     assert "audit_entries_run_id" in plan
+
+
+@pytest.mark.parametrize("backend", ["sqlite", "memory"])
+def test_run_outcomes_keep_the_last_full_run_across_later_runs(
+    tmp_path: Path, backend: str
+) -> None:
+    factory: UnitOfWorkFactory
+    if backend == "sqlite":
+        database = tmp_path / "calendar-sync.db"
+        initialize_database(database)
+        factory = SqliteUnitOfWorkFactory(database)
+    else:
+        factory = InMemoryUnitOfWorkFactory()
+    full = RuleRunOutcome(
+        rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True, full_run=True
+    )
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.run_outcomes.record(full)
+        uow.run_outcomes.record(
+            replace(full, completed_at=datetime(2026, 9, 2, tzinfo=UTC), full_run=False)
+        )
+        # A failed full run leaves the daily pass due, so it must not count as completed.
+        uow.run_outcomes.record(
+            replace(full, completed_at=datetime(2026, 9, 3, tzinfo=UTC), succeeded=False)
+        )
+        uow.commit()
+
+    with factory() as uow:
+        latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+    assert latest is not None and latest.last_full_succeeded_at == full.completed_at
+
+
+def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    completed = datetime(2026, 9, 1, tzinfo=UTC)
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.add(rule())
+        uow.run_outcomes.record(RuleRunOutcome(rule().id, RunKind.SYNC, completed, True, True))
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE rule_run_outcomes DROP COLUMN last_full_succeeded_at")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 8")
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+    assert latest is not None and latest.last_full_succeeded_at == completed

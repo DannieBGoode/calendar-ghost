@@ -12,7 +12,6 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     EventProjection,
     EventRef,
-    SyncReason,
     SyncRuleId,
     TimedInterval,
 )
@@ -47,7 +46,9 @@ def test_incremental_change_to_an_event_that_ended_before_the_window_is_not_proj
     assert result.created == 0
     assert calendars.writes == []
     assert factory.state.mappings == {}
-    assert factory.state.audit[-1].reason == SyncReason.BEFORE_SYNC_WINDOW.value
+    assert result.ignored == 1
+    # An event outside the rule's scope is counted, not explained in Activity.
+    assert factory.state.audit == []
 
 
 def test_incremental_change_to_an_event_inside_the_window_is_projected() -> None:

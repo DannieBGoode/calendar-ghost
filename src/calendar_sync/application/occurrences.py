@@ -6,7 +6,12 @@ from dataclasses import dataclass
 
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import AuditEntry, CalendarProvider, Clock
-from calendar_sync.application.sync_run import OUTCOMES, SyncRunContext, require_unchanged
+from calendar_sync.application.sync_run import (
+    OUTCOMES,
+    SyncRunContext,
+    record,
+    require_unchanged,
+)
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,
@@ -199,7 +204,8 @@ class SynchronizeOccurrences:
 
             if source_ref is not None:
                 run.handled.add(source_ref)
-            run.uow.audit.append(
+            record(
+                run,
                 AuditEntry(
                     occurred_at=self.clock.now(),
                     rule_id=run.rule.id,
@@ -211,7 +217,7 @@ class SynchronizeOccurrences:
                     else None,
                     reason=decision.reason.value,
                     run_id=run.run_id,
-                )
+                ),
             )
             # Commit before the next provider call so no write lock spans network requests.
             run.uow.commit()

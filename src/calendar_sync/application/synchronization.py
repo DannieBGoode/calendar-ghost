@@ -22,13 +22,19 @@ from calendar_sync.application.ports import (
     RunKind,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.sync_run import OUTCOMES, SyncRunContext, require_unchanged
+from calendar_sync.application.sync_run import (
+    OUTCOMES,
+    SyncRunContext,
+    record,
+    require_unchanged,
+)
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,
     EventMappingId,
     EventRef,
     EventStatus,
+    OccurrenceState,
     ProjectionFingerprint,
     SyncAction,
     SyncDecision,
@@ -105,7 +111,8 @@ class ExecuteSyncRule:
             run_id = self.new_run_id()
             reproject = rule.reprojection_required
             full_run = full or reproject
-            cursor = None if full_run else uow.cursors.get(rule.id)
+            previous_cursor = uow.cursors.get(rule.id)
+            cursor = None if full_run else previous_cursor
             destination_cursor = None if full_run else uow.destination_cursors.get(rule.id)
             cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
             changes = self.provider.changes(rule.source, cursor, cutoff)
@@ -113,7 +120,23 @@ class ExecuteSyncRule:
                 rule.destination, destination_cursor, cutoff
             )
             counts = {action: 0 for action in SyncAction}
-            run = SyncRunContext(uow, rule, run_id, counts, cutoff, reproject)
+            run = SyncRunContext(
+                uow,
+                rule,
+                run_id,
+                counts,
+                cutoff,
+                reproject,
+                incremental=not full_run,
+                daily_pass=full_run and previous_cursor is not None,
+            )
+            if destination_cursor is None:
+                # A full listing already holds each projection, so decisions need not re-read it.
+                run.listed_destinations = {
+                    event.reference: event
+                    for event in destination_changes.events
+                    if event.occurrence is None
+                }
 
             # Series masters first, so an exception can always resolve its parent's mapping.
             for source_event in sorted(
@@ -134,7 +157,10 @@ class ExecuteSyncRule:
                     uow.commit()
                     continue
                 mapping = uow.mappings.for_destination(rule.id, destination_event.reference)
-                if mapping is None:
+                if mapping is None or mapping.source in run.handled:
+                    continue
+                if self._is_own_write(run, mapping, destination_event):
+                    run.counts[SyncAction.IGNORE] += 1
                     continue
                 authoritative_source = self.provider.get_event(mapping.source)
                 if authoritative_source is None:
@@ -194,6 +220,47 @@ class ExecuteSyncRule:
             conflicts=counts[SyncAction.CONFLICT],
         )
 
+    def _is_own_write(
+        self, run: SyncRunContext, mapping: EventMapping, destination: CalendarEvent
+    ) -> bool:
+        """A reported projection still exactly as this rule last wrote it has not drifted.
+
+        The incremental feed reports this rule's own writes back on the next run. Source changes
+        arrive through the source feed, so an unedited projection needs no source read to confirm
+        it. Full runs keep verifying every reported projection against its source.
+        """
+        origin = destination.managed_origin
+        return (
+            run.incremental
+            and destination.status is EventStatus.CONFIRMED
+            and origin is not None
+            and origin.rule_id == run.rule.id
+            and origin.source == mapping.source
+            and self.fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
+            == mapping.projection_fingerprint
+        )
+
+    def _is_own_occurrence_write(
+        self, run: SyncRunContext, series_mapping: EventMapping, destination: CalendarEvent
+    ) -> bool:
+        """An occurrence still as this rule last wrote or cancelled it has not drifted."""
+        identity = destination.occurrence
+        assert identity is not None
+        recorded = run.uow.occurrences.get(series_mapping.id, identity.original_start)
+        if not run.incremental or recorded is None or recorded.destination != destination.reference:
+            return False
+        if recorded.state is OccurrenceState.CANCELLED:
+            return destination.status is EventStatus.CANCELLED
+        origin = destination.managed_origin
+        return (
+            destination.status is EventStatus.CONFIRMED
+            and origin is not None
+            and origin.rule_id == run.rule.id
+            and origin.source == series_mapping.source
+            and self.fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
+            == recorded.projection_fingerprint
+        )
+
     def _reproject_remaining(self, run: SyncRunContext) -> None:
         """Apply a changed policy to mappings the change feeds did not report."""
         for mapping in run.uow.mappings.for_rule(run.rule.id):
@@ -247,6 +314,9 @@ class ExecuteSyncRule:
         )
         if series_mapping is None:
             return
+        if self._is_own_occurrence_write(run, series_mapping, destination_event):
+            run.counts[SyncAction.IGNORE] += 1
+            return
         source_series = self.provider.get_event(series_mapping.source)
         if source_series is None:
             self._record_unverifiable(run, series_mapping.source, destination_event.reference)
@@ -280,7 +350,8 @@ class ExecuteSyncRule:
     def _record_skipped_occurrence(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         """An exception of a series this rule never projected has nothing to protect."""
         run.counts[SyncAction.IGNORE] += 1
-        run.uow.audit.append(
+        record(
+            run,
             AuditEntry(
                 occurred_at=self.clock.now(),
                 rule_id=run.rule.id,
@@ -289,7 +360,7 @@ class ExecuteSyncRule:
                 source_event_id=exception.reference.event_id.value,
                 reason=SyncReason.SERIES_NOT_SYNCHRONIZED.value,
                 run_id=run.run_id,
-            )
+            ),
         )
 
     def _record_unverifiable(
@@ -346,7 +417,9 @@ class ExecuteSyncRule:
         mapping = uow.mappings.for_source(rule.id, source_event.reference)
         actual = actual_destination
         if not destination_loaded and mapping is not None:
-            fetched = self.provider.get_event(mapping.destination)
+            # A listed projection is used once; any later decision this run reads it fresh.
+            listed = run.listed_destinations.pop(mapping.destination, None)
+            fetched = listed if listed is not None else self.provider.get_event(mapping.destination)
             # Google keeps deleted events as metadata-less cancellations; treat them as missing.
             actual = None if fetched is None or fetched.status is EventStatus.CANCELLED else fetched
         decision = self.decisions.decide(
@@ -411,7 +484,8 @@ class ExecuteSyncRule:
             )
             uow.mappings.delete(owned)
 
-        uow.audit.append(
+        record(
+            run,
             AuditEntry(
                 occurred_at=self.clock.now(),
                 rule_id=rule.id,
@@ -421,7 +495,7 @@ class ExecuteSyncRule:
                 destination_event_id=mapping.destination.event_id.value if mapping else None,
                 reason=decision.reason.value,
                 run_id=run.run_id,
-            )
+            ),
         )
         uow.commit()
         return mapping, decision

@@ -29,6 +29,7 @@ from calendar_sync.application.errors import (
     RuleNotFound,
 )
 from calendar_sync.application.ports import RulePreviewSummary, RuleRunOutcome, RunKind
+from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
@@ -108,6 +109,8 @@ _NO_CHANGE_REASONS = frozenset(
     }
 )
 _NO_CHANGE_SQL = ", ".join(f"'{reason.value}'" for reason in sorted(_NO_CHANGE_REASONS))
+# Earlier releases recorded these skips; Activity no longer lists them.
+_UNRECORDED_SQL = ", ".join(f"'{reason.value}'" for reason in sorted(UNRECORDED_REASONS))
 # Event lookups share the Google quota with synchronization, so one request reads a bounded set.
 _EVENT_SUMMARY_LIMIT = 25
 # No-change summaries cover at most this many recent runs and audit entries.
@@ -459,7 +462,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         before: Annotated[int | None, Query(ge=1)] = None,
         limit: Annotated[int, Query(ge=1, le=200)] = 100,
     ) -> list[AuditEntryResponse]:
-        conditions: list[str] = []
+        conditions = [f"COALESCE(reason, '') NOT IN ({_UNRECORDED_SQL})"]
         parameters: list[object] = []
         if rule_id is not None:
             conditions.append("rule_id = ?")
@@ -473,7 +476,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         if before is not None:
             conditions.append("id < ?")
             parameters.append(before)
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        where = f"WHERE {' AND '.join(conditions)}"
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
