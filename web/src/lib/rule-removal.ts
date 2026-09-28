@@ -52,7 +52,8 @@ export function removalProgress(
     }
   }
   const done = Math.min(request.total, Math.max(0, request.total - remaining))
-  return { done, label: `Deleted ${done} of ${plural(request.total, "projection")} from ${destination}` }
+  // Conflicted events leave the count too, but stay in Google, so this is not a deletion count.
+  return { done, label: `Handled ${done} of ${plural(request.total, "projection")} in ${destination}` }
 }
 
 export function elapsedLabel(milliseconds: number): string {

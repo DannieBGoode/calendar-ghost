@@ -21,7 +21,6 @@ import {
   type ConnectedAccount,
   type DiscoveredCalendar,
   type ProjectionHandling,
-  type RemovalResult,
   type RuleDetail,
   type RulePolicyPayload,
   type RuleSummary,
@@ -41,7 +40,9 @@ import {
   removalConfirmLabel,
   removalConsequence,
   removalOutcome,
+  removalOutcomeUnknown,
   replacementConfirmLabel,
+  type RemovalOutcome,
   runOutcomeSummary,
 } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
@@ -328,8 +329,7 @@ export function RuleDetailsView({
         detail={detail}
         destinationName={destinationName}
         destinationConnected={destinationConnected}
-        onRemoved={(result) => {
-          const outcome = removalOutcome(result, destinationName)
+        onRemoved={(outcome) => {
           onViewChange("rules", { notice: outcome.message, noticeTone: outcome.attention ? "attention" : undefined })
         }}
       />
@@ -903,7 +903,7 @@ function RuleRemoval({
   detail: RuleDetail
   destinationName: string
   destinationConnected: boolean
-  onRemoved: (result: RemovalResult) => void
+  onRemoved: (outcome: RemovalOutcome) => void
 }) {
   const invalidate = useRuleInvalidation(detail.id)
   const leave = useRuleExit(detail.id)
@@ -919,20 +919,21 @@ function RuleRemoval({
   const [handling, setHandling] = useState<ProjectionHandling>("delete")
   useDisclosureFocus(open && !interrupted && !active, firstField, returnFocus)
   const effective: ProjectionHandling = destinationConnected ? handling : "detach"
-  const finish = async (result: RemovalResult) => {
+  const finish = async (outcome: RemovalOutcome) => {
     // Update the cached list first so the removed rule never flashes back into view.
     queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) => rules?.filter((rule) => rule.id !== detail.id))
-    onRemoved(result)
+    onRemoved(outcome)
     await leave()
   }
   const remove = useMutation({
     mutationKey: removalMutationKey(detail.id),
     mutationFn: (request: RemovalRequest) => api.removeRule(detail.id, request.handling),
-    onSuccess: finish,
+    onSuccess: (result) => finish(removalOutcome(result, destinationName)),
     onError: async (error) => {
-      // A retry that waited behind an earlier, successful attempt finds the rule already gone.
+      // A retry that waited behind an earlier, successful attempt finds the rule already gone;
+      // that attempt's counts are lost, so say what to check instead of claiming none.
       if (error instanceof ApiError && error.status === 404) {
-        await finish({ deleted: 0, detached: 0, conflicts: 0 })
+        await finish(removalOutcomeUnknown(destinationName))
         return
       }
       await invalidate()

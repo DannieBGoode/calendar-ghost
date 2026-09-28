@@ -66,10 +66,9 @@ export function removalConsequence(
   return `${plural(mappingCount, "projection")} stay in ${destination} as ordinary events that are no longer updated or deleted. This cannot be undone.`
 }
 
-export function removalOutcome(
-  result: RemovalResult,
-  destination: string,
-): { attention: boolean; message: string } {
+export type RemovalOutcome = { attention: boolean; message: string }
+
+export function removalOutcome(result: RemovalResult, destination: string): RemovalOutcome {
   const parts = ["The rule was removed."]
   if (result.deleted > 0) {
     parts.push(`${plural(result.deleted, "projection")} ${result.deleted === 1 ? "was" : "were"} deleted from ${destination}.`)
@@ -86,6 +85,14 @@ export function removalOutcome(
     )
   }
   return { attention: result.conflicts > 0, message: parts.join(" ") }
+}
+
+/** For a removal that finished while the browser was not waiting, so its counts are unknown. */
+export function removalOutcomeUnknown(destination: string): RemovalOutcome {
+  return {
+    attention: true,
+    message: `The rule was removed. Any events left in ${destination} because their ownership could not be verified are listed in Activity under Blocked.`,
+  }
 }
 
 export function removalConfirmLabel(handling: ProjectionHandling, mappingCount: number): string {

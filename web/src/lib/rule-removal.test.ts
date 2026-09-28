@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import detailsSource from "../features/rule-details.tsx?raw"
 import { ApiError } from "@/lib/api"
-import { ruleStateLabel } from "@/lib/rule-change"
+import { removalOutcomeUnknown, ruleStateLabel } from "@/lib/rule-change"
 import {
   elapsedLabel,
   removalConnectionLost,
@@ -11,13 +11,13 @@ import {
 } from "@/lib/rule-removal"
 
 describe("rule removal progress", () => {
-  it("counts deleted projections from the falling mapping count", () => {
+  it("counts handled projections without claiming conflicted ones were deleted", () => {
     expect(removalProgress({ handling: "delete", total: 312 }, 228, "Family")).toEqual({
       done: 84,
-      label: "Deleted 84 of 312 projections from Family",
+      label: "Handled 84 of 312 projections in Family",
     })
     expect(removalProgress({ handling: "delete", total: 1 }, 1, "Family").label).toBe(
-      "Deleted 0 of 1 projection from Family",
+      "Handled 0 of 1 projection in Family",
     )
   })
 
@@ -85,7 +85,13 @@ describe("rule removal presentation", () => {
     expect(detailsSource).toContain("<progress")
   })
 
-  it("finishes a retry that finds the rule already removed", () => {
+  it("finishes a retry that finds the rule already removed without claiming no conflicts", () => {
     expect(detailsSource).toContain("error instanceof ApiError && error.status === 404")
+    expect(detailsSource).toContain("finish(removalOutcomeUnknown(destinationName))")
+    expect(removalOutcomeUnknown("Family")).toEqual({
+      attention: true,
+      message:
+        "The rule was removed. Any events left in Family because their ownership could not be verified are listed in Activity under Blocked.",
+    })
   })
 })
