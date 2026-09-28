@@ -27,10 +27,18 @@ import { useTheme } from "@/components/theme-provider"
 import { ApiError, api, type ConnectedAccount, type DiscoveredCalendar } from "@/lib/api"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
-import type { AppView } from "@/lib/navigation"
+import type { AppLocation, AppView } from "@/lib/navigation"
 import type { ThemePreference } from "@/lib/theme"
 
-export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange: (view: AppView) => void }) {
+export function Dashboard({
+  location,
+  onViewChange,
+}: {
+  location: AppLocation
+  onViewChange: (view: AppView) => void
+  onOpenRule: (ruleId: string) => void
+}) {
+  const view = location.view
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard })
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
   const google = useQuery({
