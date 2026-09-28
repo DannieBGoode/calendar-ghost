@@ -12,6 +12,7 @@ from calendar_sync.domain.model import (
     PrivacyPolicy,
     Recurrence,
     SyncAction,
+    SyncReason,
     TransformationPolicy,
 )
 from calendar_sync.domain.services import (
@@ -113,7 +114,7 @@ def test_mismatched_destination_origin_blocks_update_and_delete() -> None:
 
     assert update.action is SyncAction.CONFLICT
     assert deletion.action is SyncAction.CONFLICT
-    assert "ownership metadata" in update.reason
+    assert update.reason is SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
 
 
 def test_excluded_all_day_event_is_not_created() -> None:
@@ -133,16 +134,54 @@ def test_managed_projection_cannot_become_a_source() -> None:
     decision = decisions.decide(rule(), source, None, None)
 
     assert decision.action is SyncAction.IGNORE
-    assert "cannot become sources" in decision.reason
+    assert decision.reason is SyncReason.MANAGED_PROJECTION_SOURCE
 
 
-def test_recurring_event_is_blocked_until_series_mapping_is_supported() -> None:
+def test_recurring_event_is_skipped_until_series_mapping_is_supported() -> None:
     source = replace(event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)))
 
     decision = decisions.decide(rule(), source, None, None)
 
-    assert decision.action is SyncAction.CONFLICT
-    assert "not supported yet" in decision.reason
+    assert decision.action is SyncAction.IGNORE
+    assert decision.reason is SyncReason.RECURRING_UNSUPPORTED
+
+
+def test_cancelled_and_excluded_all_day_events_record_distinct_reasons() -> None:
+    exclude_rule = replace(
+        rule(),
+        transformation=TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE),
+    )
+    cancelled = replace(event(), status=EventStatus.CANCELLED, time=None)
+    all_day = all_day_event()
+    all_day_destination = _destination(all_day)
+
+    assert decisions.decide(rule(), cancelled, None, None).reason is (
+        SyncReason.CANCELLED_WITHOUT_PROJECTION
+    )
+    assert decisions.decide(exclude_rule, all_day, None, None).reason is (
+        SyncReason.ALL_DAY_EXCLUDED
+    )
+    removal = decisions.decide(
+        exclude_rule, all_day, _mapping(all_day, all_day_destination), all_day_destination
+    )
+    assert removal.action is SyncAction.DELETE
+    assert removal.reason is SyncReason.ALL_DAY_EXCLUDED_REMOVED
+
+
+def test_update_reason_distinguishes_source_change_from_destination_drift() -> None:
+    source = event()
+    edited_destination = _destination(source, title="Edited in destination")
+    mapping = _mapping(source, edited_destination)
+
+    drift = decisions.decide(rule(), source, mapping, edited_destination)
+    changed = decisions.decide(
+        rule(), replace(source, revision="revision-2"), mapping, _destination(source)
+    )
+
+    assert drift.action is SyncAction.UPDATE
+    assert drift.reason is SyncReason.DESTINATION_DRIFT_REPAIRED
+    assert changed.action is SyncAction.UPDATE
+    assert changed.reason is SyncReason.SOURCE_CHANGED
 
 
 def test_reconciliation_reports_missing_and_unexpected_events() -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -73,11 +75,33 @@ class DiscoveredCalendarResponse(BaseModel):
 
 
 class AuditEntryResponse(BaseModel):
+    id: int
+    run_id: str | None
     occurred_at: str
     rule_id: str
     action: str
     outcome: str
+    category: Literal["changed", "unchanged", "skipped", "blocked"]
+    reason: str | None
     detail: str
+    source_event_id: str | None
+    destination_event_id: str | None
+
+
+class EventSnapshotResponse(BaseModel):
+    found: bool
+    cancelled: bool = False
+    title: str = ""
+    all_day: bool = False
+    starts: str | None = None
+    ends: str | None = None
+    recurring: bool = False
+    web_link: str | None = None
+
+
+class ActivityEventResponse(BaseModel):
+    source: EventSnapshotResponse
+    destination: EventSnapshotResponse | None
 
 
 class IncidentResponse(BaseModel):

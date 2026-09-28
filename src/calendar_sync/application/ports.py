@@ -112,6 +112,8 @@ class AuditEntry:
     source_event_id: str | None = None
     destination_event_id: str | None = None
     detail: str = ""
+    reason: str | None = None
+    run_id: str | None = None
 
 
 class AuditRepository(Protocol):

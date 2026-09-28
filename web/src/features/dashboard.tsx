@@ -1,6 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
-  Activity,
   ArrowRight,
   CheckCircle2,
   CircleUserRound,
@@ -23,10 +22,12 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { PageSkeleton } from "@/components/page-skeleton"
+import { RuleEndpoint } from "@/components/rule-endpoint"
 import { useTheme } from "@/components/theme-provider"
-import { ApiError, api, type ConnectedAccount, type DiscoveredCalendar } from "@/lib/api"
+import { ActivityView } from "@/features/activity"
+import { api, type ConnectedAccount } from "@/lib/api"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
-import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 import type { AppView } from "@/lib/navigation"
 import type { ThemePreference } from "@/lib/theme"
 
@@ -38,7 +39,7 @@ export function Dashboard({ view, onViewChange }: { view: AppView; onViewChange:
     queryFn: api.googleConfiguration,
   })
 
-  if (dashboard.isPending || rules.isPending || google.isPending) return <DashboardSkeleton />
+  if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton />
   if (dashboard.error || rules.error || google.error) {
     return (
       <section className="page-section" role="alert">
@@ -267,7 +268,7 @@ function RulesView({
     ruleAccountIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
   )
 
-  if (accounts.isPending) return <DashboardSkeleton />
+  if (accounts.isPending) return <PageSkeleton />
   if (accounts.error) {
     return (
       <section className="page-section" role="alert">
@@ -409,37 +410,6 @@ function RulesView({
   )
 }
 
-function RuleEndpoint({
-  account,
-  accountId,
-  calendarId,
-  calendars,
-  role,
-}: {
-  account: ConnectedAccount | undefined
-  accountId: string
-  calendarId: string
-  calendars: DiscoveredCalendar[] | undefined
-  role: "Source" | "Destination"
-}) {
-  const label = ruleEndpointLabel(calendarId, account, calendars)
-  return (
-    <span className="rule-endpoint" title={`${label.calendar} · ${account?.email ?? accountId}`}>
-      <AccountAvatar
-        displayName={account?.display_name ?? ""}
-        email={account?.email ?? accountId}
-        avatarUrl={account?.avatar_url}
-        compact
-      />
-      <span className="rule-endpoint-copy">
-        <span className="sr-only">{role}: </span>
-        <span className="rule-endpoint-calendar">{label.calendar}</span>
-        <span className="rule-endpoint-account">{label.account}</span>
-      </span>
-    </span>
-  )
-}
-
 function RuleBuilder({ onCreated }: { onCreated: () => void }) {
   const queryClient = useQueryClient()
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
@@ -566,62 +536,6 @@ function RuleBuilder({ onCreated }: { onCreated: () => void }) {
         <div className="form-actions"><Button type="submit" disabled={!canSubmit || create.isPending}>{create.isPending ? "Saving draft…" : "Save rule draft"}</Button></div>
       </form>
     </section>
-  )
-}
-
-function ActivityView() {
-  const activity = useQuery({ queryKey: ["activity"], queryFn: api.activity })
-  const incidents = useQuery({ queryKey: ["incidents"], queryFn: api.incidents })
-  if (activity.isPending || incidents.isPending) return <DashboardSkeleton />
-
-  if (activity.error || incidents.error) {
-    const authenticationExpired = [activity.error, incidents.error].some(
-      (error) => error instanceof ApiError && error.status === 401,
-    )
-    const refreshing = activity.isFetching || incidents.isFetching
-    const recover = () => {
-      if (authenticationExpired) {
-        window.location.reload()
-        return
-      }
-      void Promise.all([activity.refetch(), incidents.refetch()])
-    }
-
-    return (
-      <div className="page-section">
-        <ActivityHeading />
-        <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
-          <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
-          <h2 id="activity-error-title">Activity is temporarily unavailable</h2>
-          <p>
-            {authenticationExpired
-              ? "Your administrator session has expired. Sign in again to view operational activity."
-              : "The local service did not answer. It may have been restarting; try the request again."}
-          </p>
-          <Button variant="outline" onClick={recover} disabled={refreshing}>
-            <RefreshCw aria-hidden="true" />
-            {authenticationExpired ? "Sign in again" : refreshing ? "Trying again…" : "Try again"}
-          </Button>
-        </section>
-      </div>
-    )
-  }
-
-  return <div className="page-section"><ActivityHeading />
-    {incidents.data.length > 0 && <section className="workflow"><div className="section-heading"><div><h2>Incidents</h2><p>Authorization and repeated provider failures that may require attention.</p></div></div><div className="rule-list">{incidents.data.map((incident) => <div className="rule-row" key={incident.id}><div><strong>{incident.summary}</strong><p className="rule-policy">Rule {incident.rule_id ?? "installation"} · Updated {new Date(incident.updated_at).toLocaleString()}</p></div><Badge variant={incident.state === "open" ? "attention" : "neutral"}>{incident.state}</Badge></div>)}</div></section>}
-    {activity.data.length === 0 ? <section className="empty-panel"><div className="empty-icon"><Activity aria-hidden="true" /></div><h2>No activity yet</h2><p>Synchronization decisions will appear here after an enabled rule completes its first run.</p></section> : <section className="workflow"><div className="section-heading"><div><h2>Latest actions</h2><p>The 100 most recent synchronization decisions.</p></div></div><div className="rule-list">{activity.data.map((entry, index) => <div className="rule-row" key={`${entry.occurred_at}-${entry.rule_id}-${index}`}><div><strong>{entry.action.replaceAll("_", " ")}</strong><p className="rule-policy">{entry.detail} · {new Date(entry.occurred_at).toLocaleString()}</p></div><Badge variant={entry.outcome === "completed" ? "healthy" : "attention"}>{entry.outcome}</Badge></div>)}</div></section>}
-  </div>
-}
-
-function ActivityHeading() {
-  return (
-    <div>
-      <p className="page-context">Activity</p>
-      <h1>Incidents and audit activity</h1>
-      <p className="page-intro">
-        Operational details appear here without retaining event titles or descriptions.
-      </p>
-    </div>
   )
 }
 
@@ -1066,8 +980,4 @@ function SettingsView({
       </section>
     </div>
   )
-}
-
-function DashboardSkeleton() {
-  return <div className="page-section" aria-label="Loading overview"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-80 max-w-full" /><Skeleton className="h-20 w-full" /><Skeleton className="h-72 w-full" /></div>
 }

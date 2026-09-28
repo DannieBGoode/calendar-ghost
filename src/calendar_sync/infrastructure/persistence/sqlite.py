@@ -34,7 +34,10 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 
-_FORWARD_MIGRATIONS = ((2, "0002_account_avatar.sql"),)
+_FORWARD_MIGRATIONS = (
+    (2, "0002_account_avatar.sql"),
+    (3, "0003_audit_reasons.sql"),
+)
 
 
 def initialize_database(path: Path) -> None:
@@ -254,8 +257,8 @@ class SqliteAuditRepository:
             """
             INSERT INTO audit_entries (
                 occurred_at, rule_id, action, outcome,
-                source_event_id, destination_event_id, detail
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                source_event_id, destination_event_id, detail, reason, run_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry.occurred_at.isoformat(),
@@ -265,6 +268,8 @@ class SqliteAuditRepository:
                 entry.source_event_id,
                 entry.destination_event_id,
                 entry.detail,
+                entry.reason,
+                entry.run_id,
             ),
         )
 

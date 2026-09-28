@@ -21,6 +21,7 @@ from calendar_sync.domain.model import (
     ReconciliationReport,
     SyncAction,
     SyncDecision,
+    SyncReason,
     SyncRule,
     TimedInterval,
 )
@@ -99,24 +100,23 @@ class SyncDecisionService:
         actual_destination: CalendarEvent | None,
     ) -> SyncDecision:
         if source_event.reference.calendar != rule.source:
-            return SyncDecision(SyncAction.IGNORE, "event is outside the rule source calendar")
+            return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
         if source_event.managed_origin is not None:
-            return SyncDecision(SyncAction.IGNORE, "managed projections cannot become sources")
+            return SyncDecision(SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE)
         if source_event.recurrence is not None or source_event.occurrence is not None:
-            return SyncDecision(
-                SyncAction.CONFLICT,
-                "recurring series and occurrence exceptions are not supported yet",
-            )
+            return SyncDecision(SyncAction.IGNORE, SyncReason.RECURRING_UNSUPPORTED)
 
         if mapping is not None and (
             mapping.rule_id != rule.id
             or mapping.source != source_event.reference
             or mapping.destination.calendar != rule.destination
         ):
-            return SyncDecision(SyncAction.CONFLICT, "mapping identity is inconsistent")
+            return SyncDecision(SyncAction.CONFLICT, SyncReason.MAPPING_INCONSISTENT)
         if mapping is not None and actual_destination is not None:
             if actual_destination.reference != mapping.destination:
-                return SyncDecision(SyncAction.CONFLICT, "destination identity is inconsistent")
+                return SyncDecision(
+                    SyncAction.CONFLICT, SyncReason.DESTINATION_IDENTITY_INCONSISTENT
+                )
             origin = actual_destination.managed_origin
             if (
                 origin is None
@@ -124,37 +124,36 @@ class SyncDecisionService:
                 or origin.source != source_event.reference
             ):
                 return SyncDecision(
-                    SyncAction.CONFLICT,
-                    "destination ownership metadata is inconsistent",
+                    SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
                 )
 
         excluded_all_day = (
             source_event.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE
         )
-        if source_event.status is EventStatus.CANCELLED or excluded_all_day:
+        if source_event.status is EventStatus.CANCELLED:
             if mapping is None:
-                reason = "excluded event has no managed projection"
-                return SyncDecision(SyncAction.IGNORE, reason)
-            reason = (
-                "mapped source event was cancelled"
-                if source_event.status is EventStatus.CANCELLED
-                else "rule excludes mapped all-day event"
-            )
-            return SyncDecision(SyncAction.DELETE, reason)
+                return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
+            return SyncDecision(SyncAction.DELETE, SyncReason.SOURCE_CANCELLED)
+        if excluded_all_day:
+            if mapping is None:
+                return SyncDecision(SyncAction.IGNORE, SyncReason.ALL_DAY_EXCLUDED)
+            return SyncDecision(SyncAction.DELETE, SyncReason.ALL_DAY_EXCLUDED_REMOVED)
 
         projection = self._projector.project(source_event, rule)
         if mapping is None:
-            return SyncDecision(SyncAction.CREATE, "source has no managed projection", projection)
+            return SyncDecision(SyncAction.CREATE, SyncReason.SOURCE_CREATED, projection)
         if actual_destination is None:
-            return SyncDecision(SyncAction.CREATE, "managed projection is missing", projection)
+            return SyncDecision(SyncAction.CREATE, SyncReason.PROJECTION_MISSING, projection)
 
         expected = self._fingerprinter.fingerprint(projection)
         actual = self._fingerprinter.fingerprint(self._as_projection(actual_destination))
-        if mapping.source_revision == source_event.revision and expected == actual:
-            return SyncDecision(SyncAction.IGNORE, "projection is current")
-        return SyncDecision(
-            SyncAction.UPDATE, "source authority repairs destination drift", projection
+        source_unchanged = mapping.source_revision == source_event.revision
+        if source_unchanged and expected == actual:
+            return SyncDecision(SyncAction.IGNORE, SyncReason.PROJECTION_CURRENT)
+        reason = (
+            SyncReason.DESTINATION_DRIFT_REPAIRED if source_unchanged else SyncReason.SOURCE_CHANGED
         )
+        return SyncDecision(SyncAction.UPDATE, reason, projection)
 
     @staticmethod
     def require_delete_ownership(mapping: EventMapping | None) -> EventMapping:
