@@ -1079,6 +1079,24 @@ def test_recent_changes_count_large_runs_in_full(tmp_path: Path) -> None:
     assert [(change["run_key"], change["updated"]) for change in changes] == [("initial", 2100)]
 
 
+def test_recent_changes_list_older_runs_behind_a_very_large_run(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("create", "source_created", run_id="older"),
+        *(_audit("update", "source_changed", run_id="initial") for _ in range(2100)),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = client.get("/api/v1/recent-changes").json()
+
+    assert [(change["run_key"], change["created"], change["updated"]) for change in changes] == [
+        ("initial", 0, 2100),
+        ("older", 1, 0),
+    ]
+
+
 def _append_audit(container: Container, *entries: AuditEntry) -> None:
     with container.unit_of_work() as uow:
         for entry in entries:

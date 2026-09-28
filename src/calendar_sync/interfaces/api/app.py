@@ -477,21 +477,29 @@ def create_app(container: Container | None = None) -> FastAPI:
         limit: Annotated[int, Query(ge=1, le=20)] = 5,
     ) -> list[RecentChangeResponse]:
         # Summarizes recent runs that wrote or were blocked, from counts and identifiers only.
-        # Runs are chosen from a bounded window of changing entries, so unchanged decisions never
-        # crowd them out; each chosen run is then counted in full, so a large run is never partial.
+        # Distinct runs are found newest first by walking the primary key backwards and skipping
+        # runs already chosen, so neither unchanged decisions nor one very large run can crowd
+        # out the others; each chosen run is then counted in full.
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
-            chosen = connection.execute(
-                f"""
-                SELECT {_RUN_KEY} AS run_key, rule_id, MAX(id) AS last_id
-                FROM (
-                    SELECT * FROM audit_entries WHERE {_CHANGING}
-                    ORDER BY id DESC LIMIT {_RECENT_WINDOW}
-                )
-                GROUP BY run_key, rule_id ORDER BY last_id DESC LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
+            chosen: list[sqlite3.Row] = []
+            while len(chosen) < limit:
+                seen = [str(run["run_key"]) for run in chosen]
+                exclude = f"AND {_RUN_KEY} NOT IN ({','.join('?' * len(seen))})" if seen else ""
+                # Each newly chosen run's newest entry precedes the previous one's, so the scan
+                # resumes below it instead of re-reading the runs already chosen.
+                below = int(chosen[-1]["last_id"]) if chosen else None
+                newest = connection.execute(
+                    f"""
+                    SELECT {_RUN_KEY} AS run_key, rule_id, id AS last_id FROM audit_entries
+                    WHERE {_CHANGING} {exclude} {"AND id < ?" if below else ""}
+                    ORDER BY id DESC LIMIT 1
+                    """,
+                    [*seen, *([below] if below else [])],
+                ).fetchone()
+                if newest is None:
+                    break
+                chosen.append(newest)
             if not chosen:
                 return []
             rule_ids = sorted({str(run["rule_id"]) for run in chosen})
@@ -881,7 +889,6 @@ def create_app(container: Container | None = None) -> FastAPI:
     return app
 
 
-_RECENT_WINDOW = 2000
 _RUN_KEY = "COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16))"
 # Blocked entries match Activity's classification, including Rule Removal ownership conflicts.
 _BLOCKED = _ACTIVITY_CATEGORY_SQL["blocked"]
