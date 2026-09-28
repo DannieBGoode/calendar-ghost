@@ -5,6 +5,7 @@ import {
   policyChangeConsequences,
   removalConfirmLabel,
   removalConsequence,
+  removalOutcome,
   replacementConfirmLabel,
   ruleStateLabel,
   runOutcomeSummary,
@@ -92,7 +93,7 @@ describe("rule removal copy", () => {
     expect(removalConfirmLabel("detach", 1)).toBe("Remove rule and keep 1 event")
     expect(removalConfirmLabel("delete", 0)).toBe("Remove rule")
     expect(removalConsequence("delete", 2, "Family")).toBe(
-      "2 projections this rule wrote will be deleted from Family. Source events are not changed. This cannot be undone.",
+      "2 projections this rule wrote will be deleted from Family. Source events are not changed. Any event whose ownership cannot be verified is left in place. This cannot be undone.",
     )
     expect(removalConsequence("detach", 2, "Family")).toBe(
       "2 projections stay in Family as ordinary events that are no longer updated or deleted. This cannot be undone.",
@@ -143,5 +144,32 @@ describe("state and outcome labels", () => {
     expect(
       runOutcomeSummary({ ...base, succeeded: false, failure_kind: "infrastructure" }, "sync"),
     ).toBe("Failed: Local synchronization failed")
+  })
+})
+
+describe("rule removal outcome", () => {
+  it("reports deleted and detached events", () => {
+    expect(removalOutcome({ deleted: 3, detached: 0, conflicts: 0 }, "Family")).toEqual({
+      attention: false,
+      message: "The rule was removed. 3 projections were deleted from Family.",
+    })
+    expect(removalOutcome({ deleted: 0, detached: 1, conflicts: 0 }, "Family")).toEqual({
+      attention: false,
+      message: "The rule was removed. 1 event stays in Family as a Detached Event.",
+    })
+    expect(removalOutcome({ deleted: 0, detached: 0, conflicts: 0 }, "Family").message).toBe(
+      "The rule was removed.",
+    )
+  })
+
+  it("calls attention to events left because ownership could not be verified", () => {
+    expect(removalOutcome({ deleted: 2, detached: 0, conflicts: 1 }, "Family")).toEqual({
+      attention: true,
+      message:
+        "The rule was removed. 2 projections were deleted from Family. 1 event was left in Family because its ownership could not be verified. Review it in Activity under Blocked.",
+    })
+    expect(removalOutcome({ deleted: 0, detached: 0, conflicts: 2 }, "Family").message).toContain(
+      "2 events were left in Family because their ownership could not be verified. Review them",
+    )
   })
 })

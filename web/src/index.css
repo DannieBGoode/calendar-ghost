@@ -1532,7 +1532,11 @@ a.recent-change-rule:focus-visible,
 }
 
 .page-notice {
-  max-width: 66ch;
+  display: flex;
+  max-width: 52rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--success-border);
   border-radius: var(--radius-lg);
@@ -1540,6 +1544,29 @@ a.recent-change-rule:focus-visible,
   color: var(--success-foreground);
   font-size: 0.875rem;
   line-height: 1.5;
+}
+
+.page-notice > svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+}
+
+.page-notice > p {
+  flex: 1;
+}
+
+.page-notice[data-tone="attention"] {
+  border-color: var(--warning-border);
+  background: var(--warning-surface);
+  color: var(--warning-foreground);
+}
+
+.page-notice-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .empty-note {

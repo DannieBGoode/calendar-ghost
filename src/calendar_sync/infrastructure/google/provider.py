@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
-from datetime import datetime
+import math
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from typing import Any
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    ProjectionOwnershipMismatch,
+    ProviderFailure,
+    ProviderFailureKind,
+)
 from calendar_sync.application.ports import CreatedProjection, ProviderChangeSet
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -178,9 +184,8 @@ class GoogleCalendarProvider:
             or existing.managed_origin.rule_id != rule_id
             or existing.managed_origin.source != source
         ):
-            raise ProviderFailure(
-                ProviderFailureKind.PERMANENT,
-                "Google event does not carry compatible ownership metadata",
+            raise ProjectionOwnershipMismatch(
+                "Google event does not carry compatible ownership metadata"
             )
         try:
             (
@@ -367,7 +372,35 @@ def _provider_failure(error: Exception) -> ProviderFailure:
         kind = ProviderFailureKind.TEMPORARY
     else:
         kind = ProviderFailureKind.PERMANENT
-    return ProviderFailure(kind, detail)
+    return ProviderFailure(kind, detail, _retry_after_seconds(error))
+
+
+# Retries wait in-process while holding the rule lock, so a longer provider hint is bounded; the
+# attempt then fails again and the rule's normal failure handling takes over.
+MAX_RETRY_AFTER_SECONDS = 60
+
+
+def _retry_after_seconds(error: Exception) -> int | None:
+    """Read Google's Retry-After header, given either as seconds or as an HTTP date."""
+    response = getattr(error, "resp", None)
+    value = response.get("retry-after") if isinstance(response, Mapping) else None
+    if not isinstance(value, str):
+        return None
+    if value.strip().isdigit():
+        seconds = int(value.strip())
+    else:
+        try:
+            moment = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return None
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=UTC)
+        seconds = max(0, math.ceil((moment - _now()).total_seconds()))
+    return min(seconds, MAX_RETRY_AFTER_SECONDS)
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
 
 
 def _status_code(error: Exception) -> int | None:

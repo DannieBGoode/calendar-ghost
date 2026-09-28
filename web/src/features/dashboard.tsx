@@ -31,7 +31,7 @@ export function Dashboard({
   if (view === "rules") {
     return (
       <RulesView
-        notice={arrival.notice ?? null}
+        notice={arrival.notice ? { text: arrival.notice, attention: arrival.noticeTone === "attention" } : null}
         createRule={arrival.createRule === true}
         onViewChange={onViewChange}
         onOpenRule={onOpenRule}

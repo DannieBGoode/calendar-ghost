@@ -7,6 +7,7 @@ from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 
+from calendar_sync.application.errors import ProviderFailure
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -255,3 +256,9 @@ class IdGenerator(Protocol):
 
 class AccountAuthorizations(Protocol):
     def is_connected(self, account_id: ConnectedAccountId) -> bool: ...
+
+
+class RemovalIncidents(Protocol):
+    def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+        """Open or refresh the one Incident for a removal stopped by lost authorization."""
+        ...

@@ -21,6 +21,7 @@ import {
   type ConnectedAccount,
   type DiscoveredCalendar,
   type ProjectionHandling,
+  type RemovalResult,
   type RuleDetail,
   type RulePolicyPayload,
   type RuleSummary,
@@ -39,6 +40,7 @@ import {
   policyChangeConsequences,
   removalConfirmLabel,
   removalConsequence,
+  removalOutcome,
   replacementConfirmLabel,
   runOutcomeSummary,
 } from "@/lib/rule-change"
@@ -310,10 +312,12 @@ export function RuleDetailsView({
       )}
       <RuleRemoval
         detail={detail}
-        sourceName={sourceName}
         destinationName={destinationName}
         destinationConnected={destinationConnected}
-        onRemoved={(message) => onViewChange("rules", { notice: message })}
+        onRemoved={(result) => {
+          const outcome = removalOutcome(result, destinationName)
+          onViewChange("rules", { notice: outcome.message, noticeTone: outcome.attention ? "attention" : undefined })
+        }}
       />
     </div>
   )
@@ -675,9 +679,10 @@ function CalendarReplacement({
         projections: effective,
       }),
     onSuccess: async (result) => {
+      const outcome = removalOutcome(result, destinationName)
       onReplaced(
         result.rule.id,
-        "Calendars replaced. This is the new draft rule; preview it before it starts syncing.",
+        `Calendars replaced. This is the new draft rule; preview it before it starts syncing.${outcome.attention ? ` ${outcome.message.replace("The rule was removed. ", "")}` : ""}`,
       )
       await leave()
     },
@@ -877,16 +882,14 @@ function EndpointFields({
 
 function RuleRemoval({
   detail,
-  sourceName,
   destinationName,
   destinationConnected,
   onRemoved,
 }: {
   detail: RuleDetail
-  sourceName: string
   destinationName: string
   destinationConnected: boolean
-  onRemoved: (notice: string) => void
+  onRemoved: (result: RemovalResult) => void
 }) {
   const invalidate = useRuleInvalidation(detail.id)
   const leave = useRuleExit(detail.id)
@@ -901,14 +904,9 @@ function RuleRemoval({
   const remove = useMutation({
     mutationFn: () => api.removeRule(detail.id, effective),
     onSuccess: async (result) => {
-      const outcome = result.deleted
-        ? `${plural(result.deleted, "projection")} deleted from ${destinationName}.`
-        : result.detached
-          ? `${plural(result.detached, "projection")} kept in ${destinationName} as ordinary events.`
-          : ""
       // Update the cached list first so the removed rule never flashes back into view.
       queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) => rules?.filter((rule) => rule.id !== detail.id))
-      onRemoved(`Rule ${sourceName} to ${destinationName} removed. ${outcome}`.trim())
+      onRemoved(result)
       await leave()
     },
     onError: async () => {

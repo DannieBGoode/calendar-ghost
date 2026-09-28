@@ -28,6 +28,13 @@ describe("Rule Details presentation", () => {
     expect(detailsSource).toContain("returnFocus.current?.focus()")
   })
 
+  it("reports the removal outcome on the rules list, including events left in place", () => {
+    expect(detailsSource).toContain("const outcome = removalOutcome(result, destinationName)")
+    expect(detailsSource).toContain('noticeTone: outcome.attention ? "attention" : undefined')
+    expect(rulesSource).toContain("notice.attention")
+    expect(rulesSource).toContain("Review in Activity")
+  })
+
   it("does not refetch a removed rule before leaving its page", () => {
     expect(detailsSource).toContain('removeQueries({ queryKey: ["rule", ruleId] })')
   })

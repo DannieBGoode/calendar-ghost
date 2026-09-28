@@ -4,7 +4,13 @@ export type AppLocation = { view: AppView; ruleId: string | null }
  * Changes view. A notice is announced on arrival; `createRule` opens the rule builder; `search`
  * carries filters such as `?rule=` into the destination.
  */
-export type ViewOptions = { notice?: string; createRule?: boolean; search?: string }
+export type ViewOptions = {
+  notice?: string
+  /** An attention notice stays until dismissed and offers a way to review what happened. */
+  noticeTone?: "attention"
+  createRule?: boolean
+  search?: string
+}
 export type ViewChange = (view: AppView, options?: ViewOptions) => void
 export type OpenRule = (ruleId: string, options?: ViewOptions) => void
 

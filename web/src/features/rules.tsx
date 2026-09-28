@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowRight, Plus, ShieldAlert } from "lucide-react"
+import { ArrowRight, CheckCircle2, Plus, ShieldAlert } from "lucide-react"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
 import { LoadFailure } from "@/components/load-failure"
@@ -32,7 +32,7 @@ export function RulesView({
   onViewChange,
   onOpenRule,
 }: {
-  notice: string | null
+  notice: { text: string; attention: boolean } | null
   createRule: boolean
   onViewChange: ViewChange
   onOpenRule: OpenRule
@@ -42,6 +42,7 @@ export function RulesView({
   const { accounts, endpoints } = useRuleEndpoints(rules.data ?? [])
   const commands = useRuleCommands()
   const [builderChoice, setBuilderChoice] = useState<boolean | null>(null)
+  const [noticeDismissed, setNoticeDismissed] = useState(false)
   const createButton = useRef<HTMLButtonElement>(null)
   const rows = useRef(new Map<string, HTMLLIElement>())
 
@@ -102,7 +103,29 @@ export function RulesView({
           )}
         </div>
       </div>
-      {notice && <p className="page-notice">{notice}</p>}
+      {notice && !noticeDismissed && (
+        <div className="page-notice" data-tone={notice.attention ? "attention" : undefined}>
+          {notice.attention ? <ShieldAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+          <p>{notice.text}</p>
+          <div className="page-notice-actions">
+            {notice.attention && (
+              <Button variant="outline" asChild>
+                <a
+                  href={appPathForView("activity")}
+                  onClick={(event) => {
+                    if (!isPlainLeftClick(event)) return
+                    event.preventDefault()
+                    onViewChange("activity")
+                  }}
+                >
+                  Review in Activity
+                </a>
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => setNoticeDismissed(true)}>Dismiss</Button>
+          </div>
+        </div>
+      )}
       {showBuilder && (
         <RuleBuilder
           accounts={connected}

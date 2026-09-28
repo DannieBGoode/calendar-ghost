@@ -101,12 +101,14 @@ class ReplaceRuleRequest(BaseModel):
 class RemovalResponse(BaseModel):
     deleted: int
     detached: int
+    conflicts: int
 
 
 class RuleReplacementResponse(BaseModel):
     rule: RuleResponse
     deleted: int
     detached: int
+    conflicts: int
 
 
 class DashboardResponse(BaseModel):

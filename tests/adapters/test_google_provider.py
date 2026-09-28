@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    ProjectionOwnershipMismatch,
+    ProviderFailure,
+    ProviderFailureKind,
+)
 from calendar_sync.domain.model import (
     EventId,
     EventProjection,
@@ -25,10 +28,24 @@ from calendar_sync.infrastructure.google.translation import (
 from tests.helpers import endpoint, event
 
 
+class GoogleResponse(dict[str, str]):
+    """Mirrors httplib2.Response: lower-cased headers plus an integer status."""
+
+    def __init__(self, status: int, headers: dict[str, str]) -> None:
+        super().__init__({key.lower(): value for key, value in headers.items()})
+        self.status = status
+
+
 class GoogleApiError(Exception):
-    def __init__(self, status: int, *, reason: str | None = None) -> None:
+    def __init__(
+        self,
+        status: int,
+        *,
+        reason: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
         super().__init__(f"synthetic Google status {status}")
-        self.resp = SimpleNamespace(status=status)
+        self.resp = GoogleResponse(status, headers or {})
         self.content = (
             b""
             if reason is None
@@ -42,9 +59,11 @@ def request_returning(payload: dict[str, object]) -> MagicMock:
     return request
 
 
-def request_raising(status: int, *, reason: str | None = None) -> MagicMock:
+def request_raising(
+    status: int, *, reason: str | None = None, headers: dict[str, str] | None = None
+) -> MagicMock:
     request = MagicMock()
-    request.execute.side_effect = GoogleApiError(status, reason=reason)
+    request.execute.side_effect = GoogleApiError(status, reason=reason, headers=headers)
     return request
 
 
@@ -152,6 +171,53 @@ def test_google_rate_limit_is_classified_as_retryable() -> None:
     assert raised.value.retryable is True
 
 
+@pytest.mark.parametrize(
+    ("headers", "expected"),
+    [
+        ({"Retry-After": "7"}, 7),
+        ({"Retry-After": "Mon, 28 Sep 2026 15:18:30 GMT"}, 30),
+        ({"Retry-After": "Mon, 28 Sep 2026 15:17:00 GMT"}, 0),
+        ({"Retry-After": "Mon, 28 Sep 2026 15:18:10 -0000"}, 10),
+        ({"Retry-After": "3600"}, 60),
+        ({"Retry-After": "soon"}, None),
+        ({}, None),
+    ],
+)
+def test_google_retry_after_hint_is_propagated_and_bounded(
+    headers: dict[str, str], expected: int | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "calendar_sync.infrastructure.google.provider._now",
+        lambda: datetime(2026, 9, 28, 15, 18, tzinfo=UTC),
+    )
+    events_api = MagicMock()
+    events_api.get.return_value = request_raising(429, headers=headers)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.get_event(event().reference)
+
+    assert raised.value.retry_after_seconds == expected
+
+
+def test_google_delete_failure_carries_the_retry_after_hint() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(_managed_payload("managed", "source-event"))
+    events_api.delete.return_value = request_raising(503, headers={"Retry-After": "5"})
+    provider = provider_with_events_api(events_api)
+    destination = event("managed", calendar=endpoint("work-account", "work-calendar")).reference
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.delete_projection(
+            destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
+        )
+
+    assert (raised.value.kind, raised.value.retry_after_seconds) == (
+        ProviderFailureKind.TEMPORARY,
+        5,
+    )
+
+
 def test_google_403_quota_limit_is_retryable_but_permission_denial_is_not() -> None:
     rate_limited_api = MagicMock()
     rate_limited_api.get.return_value = request_raising(403, reason="userRateLimitExceeded")
@@ -236,7 +302,21 @@ def test_deleting_a_projection_owned_by_another_source_is_refused() -> None:
     provider = provider_with_events_api(events_api)
     destination = event("managed", calendar=endpoint("work-account", "work-calendar")).reference
 
-    with pytest.raises(ProviderFailure):
+    with pytest.raises(ProjectionOwnershipMismatch) as refused:
+        provider.delete_projection(
+            destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
+        )
+    assert refused.value.kind is ProviderFailureKind.PERMANENT
+    events_api.delete.assert_not_called()
+
+
+def test_deleting_a_native_event_is_refused_as_an_ownership_mismatch() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(google_event_payload("native"))
+    provider = provider_with_events_api(events_api)
+    destination = event("native", calendar=endpoint("work-account", "work-calendar")).reference
+
+    with pytest.raises(ProjectionOwnershipMismatch):
         provider.delete_projection(
             destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
         )

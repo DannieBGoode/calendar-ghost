@@ -1,4 +1,4 @@
-import type { ProjectionHandling, RulePolicyPayload, RunOutcome } from "@/lib/api"
+import type { ProjectionHandling, RemovalResult, RulePolicyPayload, RunOutcome } from "@/lib/api"
 
 export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralForm}`
@@ -61,9 +61,31 @@ export function removalConsequence(
   destination: string,
 ): string {
   if (handling === "delete") {
-    return `${plural(mappingCount, "projection")} this rule wrote will be deleted from ${destination}. Source events are not changed. This cannot be undone.`
+    return `${plural(mappingCount, "projection")} this rule wrote will be deleted from ${destination}. Source events are not changed. Any event whose ownership cannot be verified is left in place. This cannot be undone.`
   }
   return `${plural(mappingCount, "projection")} stay in ${destination} as ordinary events that are no longer updated or deleted. This cannot be undone.`
+}
+
+export function removalOutcome(
+  result: RemovalResult,
+  destination: string,
+): { attention: boolean; message: string } {
+  const parts = ["The rule was removed."]
+  if (result.deleted > 0) {
+    parts.push(`${plural(result.deleted, "projection")} ${result.deleted === 1 ? "was" : "were"} deleted from ${destination}.`)
+  }
+  if (result.detached > 0) {
+    parts.push(
+      `${plural(result.detached, "event")} ${result.detached === 1 ? "stays" : "stay"} in ${destination} as ${result.detached === 1 ? "a Detached Event" : "Detached Events"}.`,
+    )
+  }
+  if (result.conflicts > 0) {
+    const one = result.conflicts === 1
+    parts.push(
+      `${plural(result.conflicts, "event")} ${one ? "was" : "were"} left in ${destination} because ${one ? "its" : "their"} ownership could not be verified. Review ${one ? "it" : "them"} in Activity under Blocked.`,
+    )
+  }
+  return { attention: result.conflicts > 0, message: parts.join(" ") }
 }
 
 export function removalConfirmLabel(handling: ProjectionHandling, mappingCount: number): string {
