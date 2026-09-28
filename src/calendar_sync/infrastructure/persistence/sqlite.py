@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
 from types import TracebackType
@@ -13,6 +13,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
     EventMappingRepository,
+    OccurrenceMappingRepository,
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
@@ -29,6 +30,10 @@ from calendar_sync.domain.model import (
     EventMapping,
     EventMappingId,
     EventRef,
+    OccurrenceMapping,
+    OccurrenceMappingId,
+    OccurrenceStart,
+    OccurrenceState,
     PrivacyPolicy,
     ProjectionFingerprint,
     SyncRule,
@@ -41,6 +46,7 @@ _FORWARD_MIGRATIONS = (
     (2, "0002_account_avatar.sql"),
     (3, "0003_audit_reasons.sql"),
     (4, "0004_rule_editing.sql"),
+    (5, "0005_occurrence_mappings.sql"),
 )
 
 
@@ -228,6 +234,101 @@ class SqliteEventMappingRepository:
         return int(row[0])
 
 
+class SqliteOccurrenceMappingRepository:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def for_series(self, series_mapping_id: EventMappingId) -> Sequence[OccurrenceMapping]:
+        rows = self._connection.execute(
+            "SELECT * FROM occurrence_mappings WHERE series_mapping_id = ? ORDER BY original_start",
+            (series_mapping_id.value,),
+        ).fetchall()
+        return tuple(_occurrence_from_row(row) for row in rows)
+
+    def get(
+        self, series_mapping_id: EventMappingId, original_start: OccurrenceStart
+    ) -> OccurrenceMapping | None:
+        row = self._connection.execute(
+            "SELECT * FROM occurrence_mappings WHERE series_mapping_id = ? AND original_start = ?",
+            (series_mapping_id.value, _serialize_start(original_start)),
+        ).fetchone()
+        return _occurrence_from_row(row) if row else None
+
+    def save(self, mapping: OccurrenceMapping) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO occurrence_mappings (
+                id, series_mapping_id, original_start,
+                source_account_id, source_calendar_id, source_event_id,
+                destination_account_id, destination_calendar_id, destination_event_id,
+                state, source_revision, projection_fingerprint
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(series_mapping_id, original_start) DO UPDATE SET
+                source_account_id = excluded.source_account_id,
+                source_calendar_id = excluded.source_calendar_id,
+                source_event_id = excluded.source_event_id,
+                destination_account_id = excluded.destination_account_id,
+                destination_calendar_id = excluded.destination_calendar_id,
+                destination_event_id = excluded.destination_event_id,
+                state = excluded.state,
+                source_revision = excluded.source_revision,
+                projection_fingerprint = excluded.projection_fingerprint
+            """,
+            (
+                mapping.id.value,
+                mapping.series_mapping_id.value,
+                _serialize_start(mapping.original_start),
+                mapping.source.calendar.connected_account_id.value,
+                mapping.source.calendar.calendar_id.value,
+                mapping.source.event_id.value,
+                mapping.destination.calendar.connected_account_id.value,
+                mapping.destination.calendar.calendar_id.value,
+                mapping.destination.event_id.value,
+                mapping.state.value,
+                mapping.source_revision,
+                mapping.projection_fingerprint.value if mapping.projection_fingerprint else None,
+            ),
+        )
+
+    def delete(self, mapping: OccurrenceMapping) -> None:
+        self._connection.execute(
+            "DELETE FROM occurrence_mappings WHERE series_mapping_id = ? AND original_start = ?",
+            (mapping.series_mapping_id.value, _serialize_start(mapping.original_start)),
+        )
+
+
+def _serialize_start(value: OccurrenceStart) -> str:
+    return value.isoformat()
+
+
+def _parse_start(value: str) -> OccurrenceStart:
+    return date.fromisoformat(value) if len(value) == 10 else datetime.fromisoformat(value)
+
+
+def _ref(row: sqlite3.Row, prefix: str) -> EventRef:
+    return EventRef(
+        CalendarEndpoint(
+            ConnectedAccountId(str(row[f"{prefix}_account_id"])),
+            CalendarId(str(row[f"{prefix}_calendar_id"])),
+        ),
+        EventId(str(row[f"{prefix}_event_id"])),
+    )
+
+
+def _occurrence_from_row(row: sqlite3.Row) -> OccurrenceMapping:
+    fingerprint = row["projection_fingerprint"]
+    return OccurrenceMapping(
+        id=OccurrenceMappingId(str(row["id"])),
+        series_mapping_id=EventMappingId(str(row["series_mapping_id"])),
+        original_start=_parse_start(str(row["original_start"])),
+        source=_ref(row, "source"),
+        destination=_ref(row, "destination"),
+        state=OccurrenceState(str(row["state"])),
+        source_revision=str(row["source_revision"]),
+        projection_fingerprint=ProjectionFingerprint(str(fingerprint)) if fingerprint else None,
+    )
+
+
 class SqliteSyncCursorRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -360,6 +461,7 @@ class SqliteRuleRunOutcomeRepository:
 class SqliteUnitOfWork:
     rules: SyncRuleRepository
     mappings: EventMappingRepository
+    occurrences: OccurrenceMappingRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
@@ -376,6 +478,7 @@ class SqliteUnitOfWork:
         self._connection = connection
         self.rules = SqliteSyncRuleRepository(connection)
         self.mappings = SqliteEventMappingRepository(connection)
+        self.occurrences = SqliteOccurrenceMappingRepository(connection)
         self.cursors = SqliteSyncCursorRepository(connection)
         self.destination_cursors = SqliteDestinationSyncCursorRepository(connection)
         self.audit = SqliteAuditRepository(connection)

@@ -621,11 +621,15 @@ def create_app(container: Container | None = None) -> FastAPI:
             "rule_id": preview.rule_id.value,
             "eligible_events": preview.eligible_events,
             "excluded_events": preview.excluded_events,
+            "recurring_series": preview.recurring_series,
+            "occurrence_changes": preview.occurrence_changes,
             "sample": [
                 {
                     "source_event_id": item.source_event_id,
                     "projected_title": item.projected_title,
                     "all_day": item.all_day,
+                    "kind": item.kind,
+                    "planned_action": item.planned_action.value,
                 }
                 for item in preview.sample
             ],

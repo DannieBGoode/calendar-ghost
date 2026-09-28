@@ -29,6 +29,7 @@ import { ActivityView } from "@/features/activity"
 import { api, type ConnectedAccount } from "@/lib/api"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
+import { previewSummary } from "@/lib/rule-preview"
 import { RuleDetailsView } from "@/features/rule-details"
 import { appPathForRule, isPlainLeftClick, type AppLocation, type AppView } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
@@ -396,7 +397,7 @@ function RulesView({
                   )}
                   {latestPreview && (
                     <p className="preview-result" role="status">
-                      Preview found {latestPreview.eligible_events} eligible and {latestPreview.excluded_events} excluded events.
+                      {previewSummary(latestPreview)}
                     </p>
                   )}
                 </div>

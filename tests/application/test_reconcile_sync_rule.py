@@ -1,9 +1,12 @@
+from dataclasses import replace
+from datetime import timedelta
 from threading import Thread
 
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import RunKind
 from calendar_sync.application.reconciliation import ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.domain.model import DriftKind
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
@@ -12,7 +15,8 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
-from tests.helpers import event, rule
+from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
+from tests.helpers import event, occurrence, rule, series, week_start
 
 
 def test_reconciliation_independently_proves_managed_projection() -> None:
@@ -82,3 +86,72 @@ def test_reconciliation_waits_for_the_rule_lock_held_by_removal_or_sync() -> Non
     assert blocked_while_held
     assert not worker.is_alive()
     assert (rule().id, RunKind.RECONCILIATION) in unit_of_work.state.outcomes
+
+
+def test_reconciliation_counts_occurrence_drift_in_the_recorded_outcome() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    edited = calendars.get_occurrence(destination, week_start(1))
+    assert edited is not None
+    calendars.put(replace(edited, title="Edited"))
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert [(item.kind, item.source) for item in report.drift] == [
+        (DriftKind.INCORRECT_PROJECTION, occurrence(master, 1).reference)
+    ]
+    outcome = factory.state.outcomes[(rule().id, RunKind.RECONCILIATION)]
+    assert outcome.checked_mappings == 1
+    assert outcome.drift == 1
+
+
+def test_reconciliation_reports_a_recorded_occurrence_deleted_in_the_destination() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    calendars.cancel_occurrence(destination, week_start(1), master.reference, rule().id, "user")
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert [item.kind for item in report.drift] == [DriftKind.MISSING]
+
+
+def test_reconciliation_reports_a_deleted_destination_series_without_failing() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    for instance in calendars.instances_of(destination):
+        del calendars.events[instance.reference]
+    del calendars.events[destination]
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert DriftKind.MISSING in [item.kind for item in report.drift]

@@ -57,9 +57,10 @@ _Avoid_: Synced event, copied event
 
 ## Recurrence
 
-The domain retains recurrence identity so unsupported events can be recognized safely. The current
-pre-alpha synchronization policy excludes recurring series and occurrence exceptions rather than
-creating an incomplete projection. Full recurring-event support remains future work.
+A recurring source event projects as one recurring destination series, never as unrelated single
+events. Moving, editing, or cancelling one source occurrence changes only the matching destination
+occurrence, and deleting a source series deletes its destination series. Direct destination edits
+to a series or one of its occurrences are repaired from the source.
 
 **Event Series**:
 A recurring source event that defines a recurrence pattern shared by its occurrences. Its managed projection remains a recurring series rather than a collection of unrelated events.
@@ -72,6 +73,14 @@ _Avoid_: Child event, standalone event
 **Occurrence Exception**:
 A modification or cancellation that applies to one occurrence without changing the rest of its event series.
 _Avoid_: Recurrence override, detached event
+
+**Series Mapping**:
+An Event Mapping whose source is an Event Series. It proves ownership of the destination series and every occurrence in it.
+_Avoid_: Parent mapping, master mapping
+
+**Occurrence Mapping**:
+Ownership evidence for one destination occurrence the application wrote under a Series Mapping, identified by the occurrence's original start. Cancellations are retained so a recreated destination series cannot resurrect occurrences the source cancelled.
+_Avoid_: Instance record, child event
 
 ## Event Time
 
@@ -222,7 +231,7 @@ A non-reversible digest of the normalized event projection used to compare expec
 _Avoid_: Event snapshot, content hash
 
 **Operational Record**:
-Persisted synchronization evidence limited to identities, revisions, recurrence relationships, operation state, timestamps, and projection fingerprints. Event titles, descriptions, locations, attendee data, and conferencing data are not retained or included in audit entries or incident notifications.
+Persisted synchronization evidence limited to identities, revisions, recurrence relationships, occurrence starts, operation state, timestamps, and projection fingerprints. Event titles, descriptions, locations, attendee data, and conferencing data are not retained or included in audit entries or incident notifications.
 _Avoid_: Event history, cached event
 
 **Audit Entry**:

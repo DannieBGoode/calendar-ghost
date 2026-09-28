@@ -29,6 +29,13 @@ table and leaves the flag untouched. The previous image does not rewrite existin
 a policy change; upgrading again resumes the pending reprojection. Rules whose removal was
 interrupted stay inert on the previous image, which cannot finish the removal.
 
+Migration 5 adds the `occurrence_mappings` table for recurring-event ownership and clears every
+rule's incremental positions once, so the next run re-reads the Initial Sync Window and backfills
+recurring series that earlier releases skipped. Enabled rules project them automatically; to review
+recurring projections first, pause rules before upgrading, then preview and enable them. Rolling
+back works with the same database: earlier releases ignore the table and skip recurring events, so
+existing recurring projections stay unchanged until you upgrade again.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

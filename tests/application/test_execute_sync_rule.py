@@ -27,9 +27,9 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     ManagedOrigin,
+    OccurrenceStart,
     PrivacyPolicy,
     ProjectionFingerprint,
-    Recurrence,
     SyncAction,
     SyncReason,
     SyncRuleId,
@@ -141,6 +141,32 @@ class FakeCalendarProvider:
         self.operation_keys.append(operation_key)
         self.deleted += 1
         self.destination = None
+
+    def get_occurrence(
+        self, series: EventRef, original_start: OccurrenceStart
+    ) -> CalendarEvent | None:
+        return None
+
+    def write_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        projection: EventProjection,
+        operation_key: str,
+    ) -> CalendarEvent:
+        raise AssertionError("single-event tests never write occurrences")
+
+    def cancel_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        operation_key: str,
+    ) -> None:
+        raise AssertionError("single-event tests never cancel occurrences")
 
     def managed_events(
         self, destination: CalendarEndpoint, rule_id: SyncRuleId
@@ -441,12 +467,12 @@ def test_managed_source_is_ignored_without_destination_write() -> None:
     assert unit_of_work.state.audit[0].action == SyncAction.IGNORE.value
 
 
-def test_each_run_groups_its_audit_entries_and_skips_recurring_events() -> None:
+def test_each_run_groups_its_audit_entries() -> None:
     unit_of_work = InMemoryUnitOfWorkFactory()
     unit_of_work.state.rules[rule().id] = rule()
-    recurring = replace(event("weekly"), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)))
+    managed = replace(event("managed"), managed_origin=ManagedOrigin(rule().id, event().reference))
     provider = FakeCalendarProvider(event())
-    provider.source_changes = (event(), recurring)
+    provider.source_changes = (event(), managed)
     fingerprinter = ProjectionFingerprinter()
     run_ids = iter(("run-1", "run-2"))
     use_case = ExecuteSyncRule(
@@ -459,7 +485,7 @@ def test_each_run_groups_its_audit_entries_and_skips_recurring_events() -> None:
     )
 
     first = use_case.execute(rule().id)
-    provider.source_changes = (recurring,)
+    provider.source_changes = (managed,)
     use_case.execute(rule().id)
 
     assert first.created == 1
@@ -470,8 +496,8 @@ def test_each_run_groups_its_audit_entries_and_skips_recurring_events() -> None:
         for entry in (unit_of_work.state.audit)
     ] == [
         ("run-1", "create", "completed", SyncReason.SOURCE_CREATED),
-        ("run-1", "ignore", "skipped", SyncReason.RECURRING_UNSUPPORTED),
-        ("run-2", "ignore", "skipped", SyncReason.RECURRING_UNSUPPORTED),
+        ("run-1", "ignore", "skipped", SyncReason.MANAGED_PROJECTION_SOURCE),
+        ("run-2", "ignore", "skipped", SyncReason.MANAGED_PROJECTION_SOURCE),
     ]
     assert all("Private appointment" not in repr(entry) for entry in unit_of_work.state.audit)
 

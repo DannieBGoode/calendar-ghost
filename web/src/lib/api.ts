@@ -95,7 +95,15 @@ export type RulePreview = {
   rule_id: string
   eligible_events: number
   excluded_events: number
-  sample: { source_event_id: string; projected_title: string; all_day: boolean }[]
+  recurring_series: number
+  occurrence_changes: number
+  sample: {
+    source_event_id: string
+    projected_title: string
+    all_day: boolean
+    kind: "single" | "series" | "occurrence"
+    planned_action: "create" | "update" | "delete" | "ignore" | "conflict"
+  }[]
 }
 export type SyncResult = {
   rule_id: string
