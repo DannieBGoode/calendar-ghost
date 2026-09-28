@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { Dashboard } from "./api"
-import { overviewHealth } from "./overview-health"
+import { overviewHealth, withoutRunningRemovals } from "./overview-health"
 
 const now = Date.parse("2026-09-28T12:00:00Z")
 const healthy: Dashboard = {
@@ -82,5 +82,31 @@ describe("overviewHealth", () => {
     expect(health.title).toBe("Family → Work needs attention")
     expect(health.detail).toBe("Stopped 1 hour ago. 1 other problem also needs a look.")
     expect(health.action).toEqual({ label: "Review this rule", view: "rules", ruleId: "rule-7" })
+  })
+})
+
+describe("withoutRunningRemovals", () => {
+  const removing = new Set(["rule-a"])
+
+  it("does not count a rule whose removal is running as stopped", () => {
+    const dashboard = { ...healthy, health: "attention" as const, stopped_rules: 1 }
+    const shown = withoutRunningRemovals(dashboard, [{ id: "rule-a", state: "disabled" }], removing)
+    expect(shown).toMatchObject({ stopped_rules: 0, health: "healthy" })
+    expect(overviewHealth(shown, now).tone).toBe("healthy")
+  })
+
+  it("keeps other stopped rules and interrupted removals", () => {
+    const dashboard = { ...healthy, health: "attention" as const, stopped_rules: 2 }
+    const rules = [
+      { id: "rule-a", state: "disabled" },
+      { id: "rule-b", state: "disabled" },
+    ]
+    expect(withoutRunningRemovals(dashboard, rules, removing)).toMatchObject({ stopped_rules: 1, health: "attention" })
+    expect(withoutRunningRemovals(dashboard, rules, new Set())).toBe(dashboard)
+  })
+
+  it("leaves a removal the dashboard has not seen start alone", () => {
+    const shown = withoutRunningRemovals(healthy, [{ id: "rule-a", state: "enabled" }], removing)
+    expect(shown).toBe(healthy)
   })
 })

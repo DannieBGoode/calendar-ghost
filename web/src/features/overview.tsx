@@ -27,7 +27,7 @@ import {
   type OpenRule,
   type ViewChange,
 } from "@/lib/navigation"
-import { overviewHealth, type AttentionRule } from "@/lib/overview-health"
+import { overviewHealth, withoutRunningRemovals, type AttentionRule } from "@/lib/overview-health"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
@@ -77,11 +77,16 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
     enabled: (dashboard.data?.open_incidents ?? 0) > 0,
   })
   const { endpoints } = useRuleEndpoints(rules.data ?? [])
+  const removingIds = useRemovingRuleIds()
 
   if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label="Loading overview" />
   if (dashboard.error || rules.error || google.error) return <LoadFailure title="Calendar Sync could not load" />
 
-  const health = overviewHealth(dashboard.data, now, attentionRule(rules.data, incidents.data, endpoints, now))
+  const health = overviewHealth(
+    withoutRunningRemovals(dashboard.data, rules.data, removingIds),
+    now,
+    attentionRule(rules.data.filter((rule) => !removingIds.has(rule.id)), incidents.data, endpoints, now),
+  )
   const SignalIcon = health.tone === "attention" ? ShieldAlert : health.tone === "healthy" ? CheckCircle2 : CircleDot
   const action = health.action
 

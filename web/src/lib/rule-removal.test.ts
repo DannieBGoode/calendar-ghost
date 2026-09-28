@@ -85,6 +85,10 @@ describe("rule removal presentation", () => {
     expect(detailsSource).toContain("<progress")
   })
 
+  it("navigates on completion only while the rule's details are still showing", () => {
+    expect(detailsSource).toContain("if (isViewingRule(detail.id)) onRemoved(outcome)")
+  })
+
   it("finishes a retry that finds the rule already removed without claiming no conflicts", () => {
     expect(detailsSource).toContain("error instanceof ApiError && error.status === 404")
     expect(detailsSource).toContain("finish(removalOutcomeUnknown(destinationName))")

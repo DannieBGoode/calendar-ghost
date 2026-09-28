@@ -30,6 +30,7 @@ import {
   activitySearch,
   appPathForView,
   isPlainLeftClick,
+  isViewingRule,
   type OpenRule,
   type ViewChange,
 } from "@/lib/navigation"
@@ -922,7 +923,9 @@ function RuleRemoval({
   const finish = async (outcome: RemovalOutcome) => {
     // Update the cached list first so the removed rule never flashes back into view.
     queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) => rules?.filter((rule) => rule.id !== detail.id))
-    onRemoved(outcome)
+    // The removal outlives this view; only take the administrator to the rules list if they
+    // are still watching it. Activity keeps the outcome either way.
+    if (isViewingRule(detail.id)) onRemoved(outcome)
     await leave()
   }
   const remove = useMutation({
