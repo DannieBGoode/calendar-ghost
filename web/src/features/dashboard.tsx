@@ -18,21 +18,26 @@ import {
 import { useState, type FormEvent } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { DashboardSkeleton } from "@/components/dashboard-skeleton"
+import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
-import { ApiError, api, type ConnectedAccount, type DiscoveredCalendar } from "@/lib/api"
+import { ApiError, api, type ConnectedAccount } from "@/lib/api"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
-import type { AppLocation, AppView } from "@/lib/navigation"
+import { RuleDetailsView } from "@/features/rule-details"
+import { appPathForRule, isPlainLeftClick, type AppLocation, type AppView } from "@/lib/navigation"
+import { ruleStateLabel } from "@/lib/rule-change"
 import type { ThemePreference } from "@/lib/theme"
 
 export function Dashboard({
   location,
   onViewChange,
+  onOpenRule,
 }: {
   location: AppLocation
   onViewChange: (view: AppView) => void
@@ -57,7 +62,21 @@ export function Dashboard({
     )
   }
 
-  if (view === "rules") return <RulesView rules={rules.data} dashboard={dashboard.data} onViewChange={onViewChange} />
+  if (view === "rules" && location.ruleId !== null) {
+    return (
+      <RuleDetailsView ruleId={location.ruleId} onViewChange={onViewChange} onOpenRule={onOpenRule} />
+    )
+  }
+  if (view === "rules") {
+    return (
+      <RulesView
+        rules={rules.data}
+        dashboard={dashboard.data}
+        onViewChange={onViewChange}
+        onOpenRule={onOpenRule}
+      />
+    )
+  }
   if (view === "activity") return <ActivityView />
   if (view === "settings") {
     return (
@@ -204,10 +223,12 @@ function RulesView({
   rules,
   dashboard,
   onViewChange,
+  onOpenRule,
 }: {
   rules: Awaited<ReturnType<typeof api.rules>>
   dashboard: Awaited<ReturnType<typeof api.dashboard>>
   onViewChange: (view: AppView) => void
+  onOpenRule: (ruleId: string) => void
 }) {
   const queryClient = useQueryClient()
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
@@ -356,6 +377,12 @@ function RulesView({
                     {rule.privacy_policy === "busy_only" ? "Busy only" : "Copy details"}
                     {rule.sync_all_day_events ? ", including all-day events" : ", timed events only"}
                   </p>
+                  {rule.reprojection_required && ["draft", "paused", "degraded"].includes(rule.state) && (
+                    <p className="preview-result" role="status">
+                      Preview required. The policy changed; existing projections are rewritten on
+                      the next run after you enable the rule.
+                    </p>
+                  )}
                   {synchronizationStopped && (
                     <div className="rule-recovery-note" role="status">
                       <ShieldAlert aria-hidden="true" />
@@ -375,7 +402,7 @@ function RulesView({
                 </div>
                 <div className="rule-actions">
                   <Badge variant={rule.state === "enabled" ? "healthy" : synchronizationStopped ? "attention" : "neutral"}>
-                    {synchronizationStopped ? "Stopped" : rule.state.replaceAll("_", " ")}
+                    {synchronizationStopped ? "Stopped" : ruleStateLabel(rule.state)}
                   </Badge>
                   {disconnectedAccounts.length > 0 && synchronizationStopped ? (
                     <Button variant="outline" onClick={() => onViewChange("settings")}>
@@ -404,6 +431,19 @@ function RulesView({
                       </Button>
                     </>
                   )}
+                  <Button variant="ghost" asChild>
+                    <a
+                      href={appPathForRule(rule.id)}
+                      onClick={(event) => {
+                        if (!isPlainLeftClick(event)) return
+                        event.preventDefault()
+                        onOpenRule(rule.id)
+                      }}
+                      aria-label={`View details for the rule from ${ruleEndpointLabel(rule.source.calendar_id, sourceAccount, calendarsByAccount.get(rule.source.connected_account_id)).calendar} to ${ruleEndpointLabel(rule.destination.calendar_id, destinationAccount, calendarsByAccount.get(rule.destination.connected_account_id)).calendar}`}
+                    >
+                      View details <ArrowRight aria-hidden="true" />
+                    </a>
+                  </Button>
                 </div>
               </div>
             )
@@ -414,37 +454,6 @@ function RulesView({
         <div className="inline-error" role="alert">{(preview.error ?? enable.error ?? sync.error ?? reconcile.error ?? pause.error)?.message}</div>
       )}
     </div>
-  )
-}
-
-function RuleEndpoint({
-  account,
-  accountId,
-  calendarId,
-  calendars,
-  role,
-}: {
-  account: ConnectedAccount | undefined
-  accountId: string
-  calendarId: string
-  calendars: DiscoveredCalendar[] | undefined
-  role: "Source" | "Destination"
-}) {
-  const label = ruleEndpointLabel(calendarId, account, calendars)
-  return (
-    <span className="rule-endpoint" title={`${label.calendar} · ${account?.email ?? accountId}`}>
-      <AccountAvatar
-        displayName={account?.display_name ?? ""}
-        email={account?.email ?? accountId}
-        avatarUrl={account?.avatar_url}
-        compact
-      />
-      <span className="rule-endpoint-copy">
-        <span className="sr-only">{role}: </span>
-        <span className="rule-endpoint-calendar">{label.calendar}</span>
-        <span className="rule-endpoint-account">{label.account}</span>
-      </span>
-    </span>
   )
 }
 
@@ -1074,8 +1083,4 @@ function SettingsView({
       </section>
     </div>
   )
-}
-
-function DashboardSkeleton() {
-  return <div className="page-section" aria-label="Loading overview"><Skeleton className="h-4 w-24" /><Skeleton className="h-10 w-80 max-w-full" /><Skeleton className="h-20 w-full" /><Skeleton className="h-72 w-full" /></div>
 }
