@@ -10,6 +10,13 @@ docker compose up -d --build
 
 The named volume contains SQLite state. Back it up before upgrades. Future releases run forward-only, idempotent migrations during startup so `docker compose pull && docker compose up -d` does not require wiping state.
 
+After upgrading, reload every open Calendar Sync tab. The web page is served with
+`Cache-Control: no-cache`, so a normal reload picks up the new release. Releases before this header
+may be cached by the browser: after the first upgrade from such a release, hard-refresh each tab
+once. The upgrade that moves audit entries from `/api/v1/activity` to `/api/v1/audit-entries`
+removes the old path, so a page loaded before it cannot show Activity until it is reloaded. Pages
+from this release onward recognize a removed API path and ask you to reload.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.
