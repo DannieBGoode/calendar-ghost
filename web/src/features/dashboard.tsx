@@ -564,7 +564,7 @@ function ActivityView() {
           <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
           <h2 id="activity-error-title">Activity is temporarily unavailable</h2>
           <p>{activityFailureMessages[failure]}</p>
-          <Button variant="outline" onClick={recover} disabled={refreshing}>
+          <Button variant="outline" onClick={recover} disabled={refreshing && !reloadRequired}>
             <RefreshCw aria-hidden="true" />
             {refreshing && !reloadRequired ? "Trying again…" : activityFailureActions[failure]}
           </Button>
