@@ -10,6 +10,13 @@ export const activityFailureMessages: Record<ActivityFailure, string> = {
     "The request did not reach the local service. It may have been restarting, or a browser extension such as a content blocker may be blocking it; try the request again.",
 }
 
+export const activityFailureActions: Record<ActivityFailure, string> = {
+  "session-expired": "Sign in again",
+  "application-updated": "Reload page",
+  "service-error": "Try again",
+  unreachable: "Try again",
+}
+
 // A 404 from a known API path means this page predates the running service, so only a reload
 // recovers; a failure without an HTTP response never reached the service at all.
 export function activityFailure(errors: unknown[]): ActivityFailure {

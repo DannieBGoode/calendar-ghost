@@ -25,7 +25,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
 import { api, type ConnectedAccount } from "@/lib/api"
 import { accountInitials } from "@/lib/account-avatar"
-import { activityFailure, activityFailureMessages, activityFailureRequiresReload } from "@/lib/activity-failure"
+import {
+  activityFailure,
+  activityFailureActions,
+  activityFailureMessages,
+  activityFailureRequiresReload,
+} from "@/lib/activity-failure"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
 import type { AppView } from "@/lib/navigation"
 import type { ThemePreference } from "@/lib/theme"
@@ -561,13 +566,7 @@ function ActivityView() {
           <p>{activityFailureMessages[failure]}</p>
           <Button variant="outline" onClick={recover} disabled={refreshing}>
             <RefreshCw aria-hidden="true" />
-            {failure === "session-expired"
-              ? "Sign in again"
-              : failure === "application-updated"
-                ? "Reload page"
-                : refreshing
-                  ? "Trying again…"
-                  : "Try again"}
+            {refreshing && !reloadRequired ? "Trying again…" : activityFailureActions[failure]}
           </Button>
         </section>
       </div>

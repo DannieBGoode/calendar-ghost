@@ -40,13 +40,25 @@ def test_unknown_api_paths_return_not_found_instead_of_the_web_page(
     assert response.json() == {"detail": "Not Found"}
 
 
-def test_known_api_routes_keep_their_method_errors(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("method", "path", "allow"),
+    [
+        ("DELETE", "/api/v1/setup/admin", "POST"),
+        ("GET", "/api/v1/rules/rule-1/pause", "POST"),
+        ("POST", "/api/docs", "GET, HEAD"),
+    ],
+)
+def test_known_api_routes_keep_their_method_errors(
+    tmp_path: Path, method: str, path: str, allow: str
+) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
     with TestClient(app) as client:
-        response = client.delete("/api/v1/setup/admin")
+        response = client.request(method, path)
 
     assert response.status_code == 405
+    assert response.json() == {"detail": "Method Not Allowed"}
+    assert response.headers["allow"] == allow
 
 
 @pytest.mark.parametrize("path", ["/apiary", "/api-keys"])

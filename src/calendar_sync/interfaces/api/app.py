@@ -11,9 +11,8 @@ from typing import Annotated
 import uvicorn
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
-from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
-from starlette.routing import Match
+from starlette.routing import Match, Route
 
 from calendar_sync import __version__
 from calendar_sync.application.errors import DuplicateDirectionalRelationship, RuleNotExecutable
@@ -62,6 +61,7 @@ from calendar_sync.interfaces.api.schemas import (
 )
 
 SESSION_COOKIE = "calendar_sync_session"
+UNKNOWN_API_PATH_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
 
 
 def create_app(container: Container | None = None) -> FastAPI:
@@ -540,26 +540,24 @@ def create_app(container: Container | None = None) -> FastAPI:
     # Registered after every API route so an unknown API path is a JSON error for any method
     # instead of falling through to the web page. A full match here outranks the partial match
     # of a known route called with the wrong method, so that case is restored to 405.
-    @app.api_route(
-        "/api",
-        methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
-        include_in_schema=False,
-    )
-    @app.api_route(
-        "/api/{path:path}",
-        methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
-        include_in_schema=False,
-    )
+    @app.api_route("/api", methods=UNKNOWN_API_PATH_METHODS, include_in_schema=False)
+    @app.api_route("/api/{path:path}", methods=UNKNOWN_API_PATH_METHODS, include_in_schema=False)
     def unknown_api_path(request: Request) -> None:
-        wrong_method = any(
-            route.matches(request.scope)[0] is Match.PARTIAL
+        allowed = {
+            method
             for route in request.app.router.routes
-            if isinstance(route, APIRoute)
+            if isinstance(route, Route)
             and route.path.startswith("/api/")
             and route.endpoint is not unknown_api_path
-        )
-        if wrong_method:
-            raise HTTPException(status.HTTP_405_METHOD_NOT_ALLOWED, "Method Not Allowed")
+            and route.matches(request.scope)[0] is Match.PARTIAL
+            for method in route.methods or ()
+        }
+        if allowed:
+            raise HTTPException(
+                status.HTTP_405_METHOD_NOT_ALLOWED,
+                "Method Not Allowed",
+                headers={"Allow": ", ".join(sorted(allowed))},
+            )
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
 
     static_directory = Path(__file__).with_name("static")

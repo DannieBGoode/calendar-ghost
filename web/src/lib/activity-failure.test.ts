@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { activityFailure, activityFailureMessages, activityFailureRequiresReload } from "./activity-failure"
+import {
+  activityFailure,
+  activityFailureActions,
+  activityFailureMessages,
+  activityFailureRequiresReload,
+  type ActivityFailure,
+} from "./activity-failure"
 import { ApiError } from "./api"
 
 const blocked = new TypeError("Failed to fetch")
@@ -21,6 +27,15 @@ describe("activityFailure", () => {
     expect(activityFailureRequiresReload("application-updated")).toBe(true)
   })
 
+  it("asks for a reload when one request hits a removed path and the other fails on the server", () => {
+    expect(activityFailure([new ApiError("Not Found", 404), new ApiError("boom", 500)])).toBe(
+      "application-updated",
+    )
+    expect(activityFailure([new ApiError("boom", 500), new ApiError("Not Found", 404)])).toBe(
+      "application-updated",
+    )
+  })
+
   it("prioritizes an expired session over every other failure", () => {
     expect(activityFailure([new ApiError("Not Found", 404), new ApiError("expired", 401)])).toBe(
       "session-expired",
@@ -31,5 +46,12 @@ describe("activityFailure", () => {
   it("retries in place for failures a reload would not fix", () => {
     expect(activityFailureRequiresReload("service-error")).toBe(false)
     expect(activityFailureRequiresReload("unreachable")).toBe(false)
+  })
+
+  it("labels reload recoveries differently from in-place retries", () => {
+    const failures: ActivityFailure[] = ["session-expired", "application-updated", "service-error", "unreachable"]
+    for (const failure of failures) {
+      expect(activityFailureActions[failure] === "Try again").toBe(!activityFailureRequiresReload(failure))
+    }
   })
 })
