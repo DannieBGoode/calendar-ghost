@@ -28,9 +28,20 @@ Invariants:
 - Update or deletion requires a valid mapping and matching origin metadata.
 - Identity ambiguity is a Conflict; content difference is Drift.
 
+An Event Mapping whose source is an Event Series is a Series Mapping. It may own Occurrence Mappings:
+one per destination occurrence the application wrote, keyed by the occurrence's original start and
+recording whether the occurrence is `modified` or `cancelled`, its source revision, and (for
+modified occurrences) a Projection Fingerprint.
+
+- At most one Occurrence Mapping exists per Series Mapping and original start.
+- Occurrence Mappings are removed with their Series Mapping, including on Rule Removal.
+- Occurrence Mappings are not counted as managed projections; a series counts once.
+- Writing an occurrence requires the Series Mapping, a destination series carrying this rule's
+  Managed Origin, and an occurrence whose parent is exactly that series.
+
 ## Calendar Event values
 
-A Calendar Event is a transient provider-neutral representation. Its time is either a timezone-aware Timed Interval or an All-Day Range with an exclusive end date. Recurring events retain Event Series, Occurrence, and Occurrence Exception identity so the current pre-alpha policy can exclude them safely until complete series mapping is available.
+A Calendar Event is a transient provider-neutral representation. Its time is either a timezone-aware Timed Interval or an All-Day Range with an exclusive end date. Recurring events retain Event Series, Occurrence, and Occurrence Exception identity. An occurrence's original start is normalized to a UTC instant (timed series) or a date (all-day series) so both calendars identify it identically, and a timed series keeps its IANA time zone so its recurrence expands at the same local times across daylight-saving changes.
 
 Attendees, organizer identity, conferencing links, and attachments do not enter an Event Projection. Event content is processed in memory and excluded from operational persistence.
 

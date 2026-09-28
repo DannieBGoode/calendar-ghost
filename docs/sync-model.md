@@ -43,13 +43,37 @@ Managed Google events carry private extended properties containing rule, source,
 
 ## Recurrence
 
-The domain preserves iCalendar recurrence and occurrence identity at the Google boundary, but the
-current pre-alpha synchronization policy excludes recurring series and occurrence exceptions.
-Projecting only the series or only an exception can duplicate or resurrect occurrences, and timed
-series also require provider timezone identity across daylight-saving changes. The system therefore
-fails closed until series-to-series and occurrence-to-occurrence mapping is implemented.
-Excluded recurring events are recorded as skipped with the `recurring_unsupported` reason; they are
-not Conflicts, because no identity is ambiguous.
+[ADR 0011](adr/0011-recurring-event-synchronization.md) records the design.
+
+A source Event Series projects as one destination series through a Series Mapping, keeping its
+recurrence lines and time zone. Each occurrence the application writes gets an Occurrence Mapping
+keyed by its original start. Destination occurrences are resolved through the provider by series
+and original start (`events.instances(originalStart=...)`), never by constructing identifiers.
+
+Within a batch, series masters are processed before occurrence exceptions. An exception whose series
+is not yet mapped loads the series and creates it first; an exception of a managed, ineligible, or
+cancelled series is ignored, so metadata-less cancelled instances never become sources of a reverse
+rule.
+
+| Source change | Destination behavior |
+| --- | --- |
+| Series content, time, or recurrence change | Update the destination series, then re-verify every Occurrence Mapping |
+| "This and following" split | Truncate the old destination series and create the new one; retire Occurrence Mappings that no longer exist on either side |
+| Moved or edited occurrence | Update the matching destination occurrence |
+| Cancelled occurrence | Cancel the matching destination occurrence and keep a `cancelled` Occurrence Mapping |
+| Deleted series | Delete the destination series with its occurrences |
+
+A destination occurrence is cancelled only when the source proves it cancelled or absent from an
+existing series; an unverifiable source series is a Conflict. When the destination series has no
+matching occurrence, the series is repaired from the source and resolved once more before a
+Conflict is recorded. Direct destination edits or deletions of an occurrence are restored from the
+source, and a recreated destination series re-applies every Occurrence Mapping. A Material Rule
+Change re-decides every Series Mapping and each of its Occurrence Mappings, including exceptions
+outside the Initial Sync Window. Rule Preview reports recurring series and changed occurrences with
+their planned actions.
+
+`recurring_unsupported` is no longer produced; it remains for audit entries recorded by earlier
+releases.
 
 ## Audit evidence
 
@@ -70,3 +94,7 @@ Three consecutive scheduled failures open one deduplicated incident.
 ## Reconciliation
 
 Touched mappings reconcile before a run completes. A Full Reconciliation runs daily and through Reconcile Now. It derives expected projections from current sources, fetches managed destination state independently, and reports missing, unexpected, incorrect, or inconsistent mappings. Drift repairs automatically; conflicts require intervention.
+
+For recurring projections, Full Reconciliation verifies each series and every Occurrence Mapping
+without expanding the series, and reports a managed exception of a mapped series that has no
+Occurrence Mapping as an incorrect projection rather than an unexpected event.

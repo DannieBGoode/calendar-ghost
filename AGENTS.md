@@ -31,8 +31,9 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
   loops.
 - Update and deletion require a valid Event Mapping plus exact rule, source, destination, and
   Managed Origin ownership. Ambiguity is a Conflict, not permission to write.
-- Recurring series and occurrence exceptions are intentionally excluded in the current pre-alpha.
-  Do not claim or implement partial recurrence support without designing series identity first.
+- Recurring series project as series. Occurrence writes require a Series Mapping plus parent-series
+  and Managed Origin ownership, and a destination occurrence is cancelled only when the source
+  proves it cancelled or absent from an existing series. See ADR 0011.
 - Preview is side-effect-free and required before enabling a new or materially changed rule.
 - Pausing preserves mappings and projections. Reauthorization and resume begin with validation and
   reconciliation.
