@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import timedelta, timezone
 
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -6,6 +7,7 @@ from calendar_sync.domain.model import (
     EventId,
     EventMapping,
     EventMappingId,
+    EventProjection,
     EventRef,
     EventStatus,
     ManagedOrigin,
@@ -13,6 +15,7 @@ from calendar_sync.domain.model import (
     Recurrence,
     SyncAction,
     SyncReason,
+    TimedInterval,
     TransformationPolicy,
 )
 from calendar_sync.domain.services import (
@@ -21,7 +24,7 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
-from tests.helpers import all_day_event, event, rule
+from tests.helpers import NOW, all_day_event, event, rule
 
 projector = EventProjector()
 fingerprinter = ProjectionFingerprinter()
@@ -202,3 +205,27 @@ def test_reconciliation_reports_missing_and_unexpected_events() -> None:
     )
 
     assert {item.kind.value for item in report.drift} == {"missing", "unexpected"}
+
+
+def test_fingerprint_compares_timed_bounds_as_instants() -> None:
+    offset = timezone(timedelta(hours=2))
+    utc = EventProjection(TimedInterval(NOW, NOW + timedelta(hours=1)), "Busy")
+    local = EventProjection(
+        TimedInterval(NOW.astimezone(offset), (NOW + timedelta(hours=1)).astimezone(offset)),
+        "Busy",
+    )
+
+    assert fingerprinter.fingerprint(utc) == fingerprinter.fingerprint(local)
+
+
+def test_fingerprint_includes_time_zone_only_for_series() -> None:
+    zoned = TimedInterval(NOW, NOW + timedelta(hours=1), "Europe/Madrid")
+    plain = TimedInterval(NOW, NOW + timedelta(hours=1))
+    weekly = Recurrence(("RRULE:FREQ=WEEKLY",))
+
+    assert fingerprinter.fingerprint(EventProjection(zoned, "Busy")) == fingerprinter.fingerprint(
+        EventProjection(plain, "Busy")
+    )
+    assert fingerprinter.fingerprint(
+        EventProjection(zoned, "Busy", recurrence=weekly)
+    ) != fingerprinter.fingerprint(EventProjection(plain, "Busy", recurrence=weekly))

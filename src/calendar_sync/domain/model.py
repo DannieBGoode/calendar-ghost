@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import Self
 
@@ -54,6 +54,14 @@ class EventMappingId:
 
 
 @dataclass(frozen=True, slots=True)
+class OccurrenceMappingId:
+    value: str
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.value, "occurrence mapping id")
+
+
+@dataclass(frozen=True, slots=True)
 class CalendarEndpoint:
     connected_account_id: ConnectedAccountId
     calendar_id: CalendarId
@@ -69,12 +77,16 @@ class EventRef:
 class TimedInterval:
     starts_at: datetime
     ends_at: datetime
+    time_zone: str | None = None
+    """IANA zone that anchors recurrence expansion; meaningful only for a series."""
 
     def __post_init__(self) -> None:
         if self.starts_at.tzinfo is None or self.ends_at.tzinfo is None:
             raise DomainValidationError("timed event bounds must include a timezone")
         if self.ends_at <= self.starts_at:
             raise DomainValidationError("event end must be after its start")
+        if self.time_zone is not None:
+            _require_non_empty(self.time_zone, "time zone")
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,13 +113,28 @@ class Recurrence:
             raise DomainValidationError("recurrence must contain non-empty iCalendar lines")
 
 
+OccurrenceStart = datetime | date
+"""An occurrence's original start: a UTC instant for timed series, a date for all-day series."""
+
+
+def occurrence_start(value: datetime | date) -> OccurrenceStart:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            raise DomainValidationError("timed occurrence starts must include a timezone")
+        return value.astimezone(UTC)
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class OccurrenceIdentity:
     series_event_id: EventId
-    original_start: str
+    original_start: OccurrenceStart
 
     def __post_init__(self) -> None:
-        _require_non_empty(self.original_start, "occurrence original start")
+        if isinstance(
+            self.original_start, datetime
+        ) and self.original_start.utcoffset() != timedelta(0):
+            raise DomainValidationError("occurrence original start must be normalized to UTC")
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +305,30 @@ class EventMapping:
         _require_non_empty(self.source_revision, "mapped source revision")
 
 
+class OccurrenceState(StrEnum):
+    MODIFIED = "modified"
+    CANCELLED = "cancelled"
+
+
+@dataclass(frozen=True, slots=True)
+class OccurrenceMapping:
+    """Ownership evidence for one destination occurrence written under a Series Mapping."""
+
+    id: OccurrenceMappingId
+    series_mapping_id: EventMappingId
+    original_start: OccurrenceStart
+    source: EventRef
+    destination: EventRef
+    state: OccurrenceState
+    source_revision: str
+    projection_fingerprint: ProjectionFingerprint | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_empty(self.source_revision, "mapped source revision")
+        if (self.state is OccurrenceState.MODIFIED) != (self.projection_fingerprint is not None):
+            raise DomainValidationError("only modified occurrences carry a projection fingerprint")
+
+
 class SyncAction(StrEnum):
     CREATE = "create"
     UPDATE = "update"
@@ -305,6 +356,15 @@ class SyncReason(StrEnum):
     DESTINATION_IDENTITY_INCONSISTENT = "destination_identity_inconsistent"
     DESTINATION_OWNERSHIP_INCONSISTENT = "destination_ownership_inconsistent"
     SOURCE_UNVERIFIABLE = "source_unverifiable"
+    OCCURRENCE_CHANGED = "occurrence_changed"
+    OCCURRENCE_CANCELLED = "occurrence_cancelled"
+    OCCURRENCE_REMOVED_FROM_SERIES = "occurrence_removed_from_series"
+    OCCURRENCE_DRIFT_REPAIRED = "occurrence_drift_repaired"
+    OCCURRENCE_CURRENT = "occurrence_current"
+    OCCURRENCE_ALREADY_CANCELLED = "occurrence_already_cancelled"
+    OCCURRENCE_RETIRED = "occurrence_retired"
+    SERIES_NOT_SYNCHRONIZED = "series_not_synchronized"
+    DESTINATION_OCCURRENCE_MISSING = "destination_occurrence_missing"
 
 
 @dataclass(frozen=True, slots=True)

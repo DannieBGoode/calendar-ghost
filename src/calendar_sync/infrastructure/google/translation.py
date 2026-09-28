@@ -14,9 +14,11 @@ from calendar_sync.domain.model import (
     EventStatus,
     ManagedOrigin,
     OccurrenceIdentity,
+    OccurrenceStart,
     Recurrence,
     SyncRuleId,
     TimedInterval,
+    occurrence_start,
 )
 
 RULE_PROPERTY = "gcs_rule_id"
@@ -47,9 +49,9 @@ def to_domain_event(payload: Mapping[str, Any], endpoint: CalendarEndpoint) -> C
     original_start = payload.get("originalStartTime")
     occurrence = None
     if isinstance(recurring_event_id, str) and isinstance(original_start, Mapping):
-        original_value = original_start.get("dateTime") or original_start.get("date")
-        if isinstance(original_value, str):
-            occurrence = OccurrenceIdentity(EventId(recurring_event_id), original_value)
+        parsed_start = _parse_original_start(original_start)
+        if parsed_start is not None:
+            occurrence = OccurrenceIdentity(EventId(recurring_event_id), parsed_start)
     html_link = payload.get("htmlLink")
 
     return CalendarEvent(
@@ -161,6 +163,16 @@ def _managed_origin(payload: Mapping[str, Any]) -> ManagedOrigin | None:
 
     source_endpoint = CalendarEndpoint(ConnectedAccountId(account), CalendarId(calendar))
     return ManagedOrigin(SyncRuleId(rule), EventRef(source_endpoint, EventId(event)))
+
+
+def _parse_original_start(value: Mapping[str, Any]) -> OccurrenceStart | None:
+    timed = value.get("dateTime")
+    if isinstance(timed, str):
+        return occurrence_start(_parse_datetime(timed))
+    all_day = value.get("date")
+    if isinstance(all_day, str):
+        return date.fromisoformat(all_day)
+    return None
 
 
 def _required_string(payload: Mapping[str, Any], key: str) -> str:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable, Mapping
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from calendar_sync.domain.errors import DomainValidationError, OwnershipNotEstablished
 from calendar_sync.domain.model import (
@@ -57,7 +57,9 @@ class ProjectionFingerprinter:
 
     def fingerprint(self, projection: EventProjection) -> ProjectionFingerprint:
         payload = {
-            "time": self._serialize_time(projection.time),
+            "time": self._serialize_time(
+                projection.time, recurring=projection.recurrence is not None
+            ),
             "title": projection.title,
             "description": projection.description,
             "location": projection.location,
@@ -67,13 +69,17 @@ class ProjectionFingerprinter:
         return ProjectionFingerprint(hashlib.sha256(encoded.encode()).hexdigest())
 
     @staticmethod
-    def _serialize_time(value: TimedInterval | AllDayRange) -> dict[str, str]:
+    def _serialize_time(value: TimedInterval | AllDayRange, *, recurring: bool) -> dict[str, str]:
         if isinstance(value, TimedInterval):
-            return {
+            serialized = {
                 "kind": "timed",
-                "starts_at": _serialize_temporal(value.starts_at),
-                "ends_at": _serialize_temporal(value.ends_at),
+                "starts_at": _serialize_temporal(value.starts_at.astimezone(UTC)),
+                "ends_at": _serialize_temporal(value.ends_at.astimezone(UTC)),
             }
+            # Only a series expands in its zone; single instants are zone-independent.
+            if recurring and value.time_zone is not None:
+                serialized["time_zone"] = value.time_zone
+            return serialized
         return {
             "kind": "all_day",
             "starts_on": _serialize_temporal(value.starts_on),
