@@ -2,15 +2,26 @@ import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.ports import AuditEntry
+from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.ports import AuditEntry, CalendarProvider
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import build_container
-from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.bootstrap.container import Container, build_container
+from calendar_sync.domain.model import (
+    CalendarEvent,
+    ConnectedAccountId,
+    EventId,
+    EventRef,
+    Recurrence,
+    SyncRule,
+    SyncRuleId,
+    SyncRuleState,
+)
 from calendar_sync.infrastructure.google.oauth import (
     ConnectedGoogleAccountNotFound,
     CredentialCipher,
@@ -20,7 +31,7 @@ from calendar_sync.infrastructure.google.oauth import (
     GoogleOAuthCompletionFailed,
 )
 from calendar_sync.interfaces.api.app import create_app
-from tests.helpers import endpoint, rule
+from tests.helpers import endpoint, event, rule
 
 
 def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
@@ -713,3 +724,168 @@ def test_enabled_rule_can_be_paused_through_api(tmp_path: Path) -> None:
     assert paused.status_code == 200
     assert paused.json()["state"] == "paused"
     assert repeated.status_code == 409
+
+
+def _append_audit(container: Container, *entries: AuditEntry) -> None:
+    with container.unit_of_work() as uow:
+        for entry in entries:
+            uow.audit.append(entry)
+        uow.commit()
+
+
+def _audit(
+    action: str,
+    reason: str | None,
+    *,
+    rule_id: str = "rule-1",
+    run_id: str | None = "run-1",
+    destination_event_id: str | None = None,
+) -> AuditEntry:
+    return AuditEntry(
+        occurred_at=datetime(2026, 9, 28, 15, 18, tzinfo=UTC),
+        rule_id=SyncRuleId(rule_id),
+        action=action,
+        outcome={"ignore": "skipped", "conflict": "blocked"}.get(action, "completed"),
+        source_event_id="source-event",
+        destination_event_id=destination_event_id,
+        reason=reason,
+        run_id=run_id,
+    )
+
+
+def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("create", "source_created", destination_event_id="copy-1"),
+        _audit("ignore", "projection_current"),
+        _audit("ignore", "recurring_unsupported"),
+        # Recorded before recurring exclusions became skips.
+        _audit("conflict", "recurring_unsupported", run_id=None),
+        _audit("conflict", "mapping_inconsistent"),
+        _audit("update", "source_changed", rule_id="rule-2", run_id="run-2"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+
+        everything = client.get("/api/v1/activity").json()
+
+        def categories(**params: str | int) -> list[str | None]:
+            response = client.get("/api/v1/activity", params=params)
+            assert response.status_code == 200
+            return [entry["reason"] for entry in response.json()]
+
+        assert [entry["category"] for entry in everything] == [
+            "changed",
+            "blocked",
+            "skipped",
+            "skipped",
+            "unchanged",
+            "changed",
+        ]
+        assert everything[-1]["run_id"] == "run-1"
+        assert everything[-1]["source_event_id"] == "source-event"
+        assert everything[-1]["destination_event_id"] == "copy-1"
+        assert categories(category="skipped") == ["recurring_unsupported"] * 2
+        assert categories(category="blocked") == ["mapping_inconsistent"]
+        assert categories(category="unchanged") == ["projection_current"]
+        assert categories(rule_id="rule-2") == ["source_changed"]
+        assert categories(before=everything[1]["id"], limit=2) == [
+            "recurring_unsupported",
+            "recurring_unsupported",
+        ]
+        assert client.get("/api/v1/activity", params={"category": "other"}).status_code == 422
+        assert client.get("/api/v1/activity", params={"limit": 500}).status_code == 422
+
+
+class FakeInspectionProvider:
+    def __init__(self, events: dict[str, CalendarEvent], failure: Exception | None = None) -> None:
+        self.events = events
+        self.failure = failure
+        self.requested: list[EventRef] = []
+
+    def get_event(self, reference: EventRef) -> CalendarEvent | None:
+        self.requested.append(reference)
+        if self.failure is not None:
+            raise self.failure
+        return self.events.get(reference.event_id.value)
+
+
+def test_activity_event_is_read_live_without_persisting_content(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    source = replace(
+        event(title="Dentist"),
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)),
+        web_link="https://calendar.google.com/event?eid=synthetic",
+    )
+    provider = FakeInspectionProvider({"source-event": source})
+    container = replace(
+        build_container(Settings(database)), calendar_provider=cast(CalendarProvider, provider)
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    _append_audit(container, _audit("delete", "source_cancelled", destination_event_id="gone"))
+
+    with TestClient(create_app(container)) as client:
+        assert client.get("/api/v1/activity/1/event").status_code == 401
+        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+
+        response = client.get("/api/v1/activity/1/event")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "source": {
+                "found": True,
+                "cancelled": False,
+                "title": "Dentist",
+                "all_day": False,
+                "starts": "2026-08-30T10:00:00+00:00",
+                "ends": "2026-08-30T11:00:00+00:00",
+                "recurring": True,
+                "web_link": "https://calendar.google.com/event?eid=synthetic",
+            },
+            "destination": {
+                "found": False,
+                "cancelled": False,
+                "title": "",
+                "all_day": False,
+                "starts": None,
+                "ends": None,
+                "recurring": False,
+                "web_link": None,
+            },
+        }
+        assert provider.requested == [
+            EventRef(rule().source, EventId("source-event")),
+            EventRef(rule().destination, EventId("gone")),
+        ]
+        assert client.get("/api/v1/activity/99/event").status_code == 404
+    with sqlite3.connect(database) as connection:
+        dump = "\n".join(connection.iterdump())
+    assert "Dentist" not in dump
+
+
+def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    failing = FakeInspectionProvider(
+        {}, ProviderFailure(ProviderFailureKind.AUTHENTICATION, "token expired")
+    )
+    container = build_container(Settings(database))
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    _append_audit(container, _audit("create", "source_created"))
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        assert client.get("/api/v1/activity/1/event").status_code == 503
+
+    with TestClient(
+        create_app(replace(container, calendar_provider=cast(CalendarProvider, failing)))
+    ) as client:
+        client.post("/api/v1/session", json={"password": "correct horse battery staple"})
+        response = client.get("/api/v1/activity/1/event")
+        assert response.status_code == 424
+        assert "authentication" in response.json()["detail"]

@@ -113,6 +113,10 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 2. Create a directional rule and choose its privacy and all-day policies.
 3. Preview the rule, inspect the result, and enable it.
 
+**Activity** lists every decision each rule made, grouped by run, including skipped and blocked
+events and the reason for each. **Show event** looks up the event's title and time from Google on
+demand; that content is never stored.
+
 The main sections have stable URLs at `/overview`, `/rules`, `/activity`, and `/settings`, so they
 can be bookmarked and browser back/forward navigation works as expected.
 

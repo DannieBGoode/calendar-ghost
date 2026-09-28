@@ -50,6 +50,7 @@ def to_domain_event(payload: Mapping[str, Any], endpoint: CalendarEndpoint) -> C
         original_value = original_start.get("dateTime") or original_start.get("date")
         if isinstance(original_value, str):
             occurrence = OccurrenceIdentity(EventId(recurring_event_id), original_value)
+    html_link = payload.get("htmlLink")
 
     return CalendarEvent(
         reference=EventRef(endpoint, EventId(event_id)),
@@ -62,6 +63,9 @@ def to_domain_event(payload: Mapping[str, Any], endpoint: CalendarEndpoint) -> C
         recurrence=recurrence,
         occurrence=occurrence,
         managed_origin=_managed_origin(payload),
+        web_link=(
+            html_link if isinstance(html_link, str) and html_link.startswith("https://") else None
+        ),
     )
 
 

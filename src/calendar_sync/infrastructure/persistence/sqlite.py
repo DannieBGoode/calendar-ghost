@@ -34,18 +34,32 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 
+UPGRADE_MIGRATIONS = ((2, "0002_audit_reasons.sql"),)
+
 
 def initialize_database(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    migration = (
-        files("calendar_sync.infrastructure.persistence").joinpath("0001_initial.sql").read_text()
-    )
+    scripts = files("calendar_sync.infrastructure.persistence")
     with sqlite3.connect(path) as connection:
-        connection.executescript(migration)
+        # The initial schema is idempotent and creates the schema_migrations ledger.
+        connection.executescript(scripts.joinpath("0001_initial.sql").read_text())
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
             (1, datetime.now(UTC).isoformat()),
         )
+        connection.commit()
+        applied = {
+            int(row[0]) for row in connection.execute("SELECT version FROM schema_migrations")
+        }
+        for version, name in UPGRADE_MIGRATIONS:
+            if version in applied:
+                continue
+            # Each upgrade and its ledger row commit atomically.
+            connection.executescript(
+                f"BEGIN;\n{scripts.joinpath(name).read_text()}\n"
+                "INSERT INTO schema_migrations(version, applied_at) "
+                f"VALUES ({version}, '{datetime.now(UTC).isoformat()}');\nCOMMIT;"
+            )
 
 
 class SqliteSyncRuleRepository:
@@ -238,8 +252,8 @@ class SqliteAuditRepository:
             """
             INSERT INTO audit_entries (
                 occurred_at, rule_id, action, outcome,
-                source_event_id, destination_event_id, detail
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                source_event_id, destination_event_id, detail, reason, run_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry.occurred_at.isoformat(),
@@ -249,6 +263,8 @@ class SqliteAuditRepository:
                 entry.source_event_id,
                 entry.destination_event_id,
                 entry.detail,
+                entry.reason,
+                entry.run_id,
             ),
         )
 

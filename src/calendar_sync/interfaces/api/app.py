@@ -6,26 +6,37 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 import uvicorn
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from calendar_sync import __version__
-from calendar_sync.application.errors import DuplicateDirectionalRelationship, RuleNotExecutable
+from calendar_sync.application.errors import (
+    DuplicateDirectionalRelationship,
+    ProviderFailure,
+    RuleNotExecutable,
+)
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEndpoint,
+    CalendarEvent,
     CalendarId,
     ConnectedAccountId,
+    EventId,
+    EventRef,
+    EventStatus,
     PrivacyPolicy,
+    SyncAction,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
+    TimedInterval,
     TransformationPolicy,
 )
 from calendar_sync.infrastructure.google.oauth import (
@@ -44,12 +55,14 @@ from calendar_sync.infrastructure.security import (
     PasswordPolicyViolation,
 )
 from calendar_sync.interfaces.api.schemas import (
+    ActivityEventResponse,
     AuditEntryResponse,
     CalendarEndpointPayload,
     ConnectedAccountResponse,
     CreateRuleRequest,
     DashboardResponse,
     DiscoveredCalendarResponse,
+    EventSnapshotResponse,
     GoogleAccountAccessResponse,
     GoogleConfigurationResponse,
     IncidentResponse,
@@ -60,6 +73,19 @@ from calendar_sync.interfaces.api.schemas import (
 )
 
 SESSION_COOKIE = "calendar_sync_session"
+
+ActivityCategory = Literal["changed", "unchanged", "skipped", "blocked"]
+
+# Recurring exclusions were recorded as conflicts before reason codes existed; they are skips.
+_ACTIVITY_CATEGORY_SQL: dict[ActivityCategory, str] = {
+    "changed": "action IN ('create', 'update', 'delete')",
+    "unchanged": "action = 'ignore' AND reason = 'projection_current'",
+    "skipped": (
+        "((action = 'ignore' AND COALESCE(reason, '') != 'projection_current')"
+        " OR reason = 'recurring_unsupported')"
+    ),
+    "blocked": "action = 'conflict' AND COALESCE(reason, '') != 'recurring_unsupported'",
+}
 
 
 def create_app(container: Container | None = None) -> FastAPI:
@@ -358,16 +384,87 @@ def create_app(container: Container | None = None) -> FastAPI:
         response_model=list[AuditEntryResponse],
         dependencies=[Depends(require_admin)],
     )
-    def list_activity() -> list[AuditEntryResponse]:
+    def list_activity(
+        rule_id: str | None = None,
+        category: ActivityCategory | None = None,
+        before: Annotated[int | None, Query(ge=1)] = None,
+        limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    ) -> list[AuditEntryResponse]:
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if rule_id is not None:
+            conditions.append("rule_id = ?")
+            parameters.append(rule_id)
+        if category is not None:
+            conditions.append(_ACTIVITY_CATEGORY_SQL[category])
+        if before is not None:
+            conditions.append("id < ?")
+            parameters.append(before)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
-                """
-                SELECT occurred_at, rule_id, action, outcome, detail
-                FROM audit_entries ORDER BY id DESC LIMIT 100
-                """
+                f"""
+                SELECT id, run_id, occurred_at, rule_id, action, outcome, reason, detail,
+                    source_event_id, destination_event_id
+                FROM audit_entries {where} ORDER BY id DESC LIMIT ?
+                """,
+                (*parameters, limit),
             ).fetchall()
-        return [AuditEntryResponse(**dict(row)) for row in rows]
+        return [
+            AuditEntryResponse(
+                **dict(row), category=_activity_category(row["action"], row["reason"])
+            )
+            for row in rows
+        ]
+
+    @app.get(
+        "/api/v1/activity/{entry_id}/event",
+        response_model=ActivityEventResponse,
+        dependencies=[Depends(require_admin)],
+    )
+    async def inspect_activity_event(entry_id: int) -> ActivityEventResponse:
+        provider = resolved.calendar_provider
+        if provider is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "configure Google OAuth and the installation master key before inspecting events",
+            )
+        with sqlite3.connect(resolved.settings.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT rule_id, source_event_id, destination_event_id
+                FROM audit_entries WHERE id = ?
+                """,
+                (entry_id,),
+            ).fetchone()
+        if row is None or row[1] is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry has no source event")
+        with resolved.unit_of_work() as uow:
+            rule = uow.rules.get(SyncRuleId(str(row[0])))
+        if rule is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")
+        # Event content is read live for display only; it is never persisted or logged.
+        try:
+            source = await asyncio.to_thread(
+                provider.get_event, EventRef(rule.source, EventId(str(row[1])))
+            )
+            destination = (
+                await asyncio.to_thread(
+                    provider.get_event, EventRef(rule.destination, EventId(str(row[2])))
+                )
+                if row[2] is not None
+                else None
+            )
+        except ProviderFailure as error:
+            raise HTTPException(
+                status.HTTP_424_FAILED_DEPENDENCY,
+                f"Google could not return this event: {error.kind.value}",
+            ) from error
+        return ActivityEventResponse(
+            source=_event_snapshot(source),
+            destination=_event_snapshot(destination) if row[2] is not None else None,
+        )
 
     @app.get(
         "/api/v1/incidents",
@@ -547,6 +644,37 @@ def create_app(container: Container | None = None) -> FastAPI:
             return FileResponse(static_root / "index.html")
 
     return app
+
+
+def _activity_category(action: str, reason: str | None) -> ActivityCategory:
+    if reason == SyncReason.RECURRING_UNSUPPORTED:
+        return "skipped"
+    if action == SyncAction.CONFLICT:
+        return "blocked"
+    if action == SyncAction.IGNORE:
+        return "unchanged" if reason == SyncReason.PROJECTION_CURRENT else "skipped"
+    return "changed"
+
+
+def _event_snapshot(event: CalendarEvent | None) -> EventSnapshotResponse:
+    if event is None:
+        return EventSnapshotResponse(found=False)
+    if event.status is EventStatus.CANCELLED or event.time is None:
+        return EventSnapshotResponse(found=True, cancelled=True, web_link=event.web_link)
+    time = event.time
+    if isinstance(time, TimedInterval):
+        starts, ends = time.starts_at.isoformat(), time.ends_at.isoformat()
+    else:
+        starts, ends = time.starts_on.isoformat(), time.ends_before.isoformat()
+    return EventSnapshotResponse(
+        found=True,
+        title=event.title,
+        all_day=event.is_all_day,
+        starts=starts,
+        ends=ends,
+        recurring=event.recurrence is not None or event.occurrence is not None,
+        web_link=event.web_link,
+    )
 
 
 def _set_session_cookie(response: Response, token: str, secure: bool) -> None:
