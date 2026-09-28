@@ -42,6 +42,7 @@ export type ConnectedAccount = {
   id: string
   display_name: string
   email: string
+  avatar_url: string | null
   state: string
   rule_count: number
 }

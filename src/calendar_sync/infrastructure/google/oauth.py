@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from google.oauth2.credentials import Credentials
@@ -24,6 +25,10 @@ CALENDAR_SCOPES = (
     "https://www.googleapis.com/auth/calendar.events",
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 )
+# Basic profile identifies each Connected Account by name and photo. It is optional: a grant
+# without it still connects, and the account falls back to initials.
+PROFILE_SCOPES = ("openid", "https://www.googleapis.com/auth/userinfo.profile")
+OAUTH_SCOPES = CALENDAR_SCOPES + PROFILE_SCOPES
 
 
 class GoogleOAuthNotConfigured(RuntimeError):
@@ -68,6 +73,7 @@ class ConnectedGoogleAccount:
     display_name: str
     email: str
     state: str
+    avatar_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,19 +121,21 @@ class SqliteConnectedAccountStore:
     def list(self) -> tuple[ConnectedGoogleAccount, ...]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT id, display_name, email, state FROM connected_accounts ORDER BY email"
+                """
+                SELECT id, display_name, email, state, avatar_url
+                FROM connected_accounts ORDER BY email
+                """
             ).fetchall()
-        return tuple(
-            ConnectedGoogleAccount(
-                ConnectedAccountId(str(row["id"])),
-                str(row["display_name"]),
-                str(row["email"]),
-                str(row["state"]),
-            )
-            for row in rows
-        )
+        return tuple(_account_from_row(row) for row in rows)
 
-    def save(self, display_name: str, email: str, credential_json: str) -> ConnectedGoogleAccount:
+    def save(
+        self,
+        display_name: str,
+        email: str,
+        credential_json: str,
+        *,
+        avatar_url: str | None = None,
+    ) -> ConnectedGoogleAccount:
         now = datetime.now(UTC).isoformat()
         account_id = str(uuid.uuid4())
         encrypted = self._cipher.encrypt(credential_json)
@@ -135,28 +143,27 @@ class SqliteConnectedAccountStore:
             connection.execute(
                 """
                 INSERT INTO connected_accounts (
-                    id, provider, display_name, email, encrypted_credentials,
+                    id, provider, display_name, email, avatar_url, encrypted_credentials,
                     state, created_at, updated_at
-                ) VALUES (?, 'google', ?, ?, ?, 'connected', ?, ?)
+                ) VALUES (?, 'google', ?, ?, ?, ?, 'connected', ?, ?)
                 ON CONFLICT(provider, email) DO UPDATE SET
                     display_name = excluded.display_name,
+                    avatar_url = excluded.avatar_url,
                     encrypted_credentials = excluded.encrypted_credentials,
                     state = 'connected',
                     updated_at = excluded.updated_at
                 """,
-                (account_id, display_name, email, encrypted, now, now),
+                (account_id, display_name, email, avatar_url, encrypted, now, now),
             )
             row = connection.execute(
-                "SELECT id, display_name, email, state FROM connected_accounts WHERE email = ?",
+                """
+                SELECT id, display_name, email, state, avatar_url
+                FROM connected_accounts WHERE email = ?
+                """,
                 (email,),
             ).fetchone()
         assert row is not None
-        return ConnectedGoogleAccount(
-            ConnectedAccountId(str(row["id"])),
-            str(row["display_name"]),
-            str(row["email"]),
-            str(row["state"]),
-        )
+        return _account_from_row(row)
 
     def credentials(self, account_id: ConnectedAccountId) -> Credentials:
         with self._connect() as connection:
@@ -183,7 +190,7 @@ class SqliteConnectedAccountStore:
         cleared_credentials = self._cipher.encrypt("{}")
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT id, display_name, email FROM connected_accounts WHERE id = ?",
+                "SELECT id, display_name, email, avatar_url FROM connected_accounts WHERE id = ?",
                 (account_id.value,),
             ).fetchone()
             if row is None:
@@ -203,6 +210,7 @@ class SqliteConnectedAccountStore:
             str(row["display_name"]),
             str(row["email"]),
             "disconnected",
+            _optional_text(row["avatar_url"]),
         )
 
     def delete(self, account_id: ConnectedAccountId) -> int:
@@ -304,8 +312,14 @@ class GoogleOAuthService:
         email = str(primary.get("id") or "")
         if not email:
             raise GoogleOAuthCompletionFailed("Google primary calendar did not expose an identity")
-        display_name = str(primary.get("summary") or email)
-        return self._accounts.save(display_name, email, credentials.to_json())
+        profile = _profile_claims(getattr(credentials, "id_token", None))
+        display_name = _optional_text(profile.get("name")) or str(primary.get("summary") or email)
+        return self._accounts.save(
+            display_name,
+            email,
+            credentials.to_json(),
+            avatar_url=_https_url(profile.get("picture")),
+        )
 
     def cancel(self, state: str) -> None:
         self._consume_state(state)
@@ -392,7 +406,7 @@ class GoogleOAuthService:
         }
         return Flow.from_client_config(
             client_config,
-            scopes=CALENDAR_SCOPES,
+            scopes=OAUTH_SCOPES,
             state=state,
             redirect_uri=self._settings.google_redirect_uri,
             code_verifier=self._code_verifier(state),
@@ -454,6 +468,42 @@ class GoogleOAuthService:
             )
         if cursor.rowcount != 1:
             raise InvalidOAuthState("OAuth state is missing, expired, or already used")
+
+
+def _account_from_row(row: sqlite3.Row) -> ConnectedGoogleAccount:
+    return ConnectedGoogleAccount(
+        ConnectedAccountId(str(row["id"])),
+        str(row["display_name"]),
+        str(row["email"]),
+        str(row["state"]),
+        _optional_text(row["avatar_url"]),
+    )
+
+
+def _profile_claims(id_token: object) -> dict[str, Any]:
+    # The ID token arrives directly from Google's token endpoint over TLS, which OpenID Connect
+    # accepts in place of signature validation. Its claims only label the account in the UI and
+    # never authorize access.
+    if not isinstance(id_token, str):
+        return {}
+    try:
+        payload = id_token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (IndexError, ValueError):
+        return {}
+    return claims if isinstance(claims, dict) else {}
+
+
+def _optional_text(value: object) -> str | None:
+    return value.strip() or None if isinstance(value, str) else None
+
+
+def _https_url(value: object) -> str | None:
+    url = _optional_text(value)
+    if url is None or len(url) > 2048:
+        return None
+    parsed = urlparse(url)
+    return url if parsed.scheme == "https" and parsed.netloc else None
 
 
 def _state_hash(state: str) -> str:

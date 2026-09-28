@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Activity,
   ArrowRight,
@@ -17,15 +17,16 @@ import {
 } from "lucide-react"
 import { useState, type FormEvent } from "react"
 
+import { AccountAvatar } from "@/components/account-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
-import { ApiError, api, type ConnectedAccount } from "@/lib/api"
-import { accountInitials } from "@/lib/account-avatar"
+import { ApiError, api, type ConnectedAccount, type DiscoveredCalendar } from "@/lib/api"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
+import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 import type { AppView } from "@/lib/navigation"
 import type { ThemePreference } from "@/lib/theme"
 
@@ -247,6 +248,24 @@ function RulesView({
   const accountsById = new Map(
     (accounts.data ?? []).map((account) => [account.id, account]),
   )
+  const ruleAccountIds = [
+    ...new Set(
+      rules.flatMap((rule) => [
+        rule.source.connected_account_id,
+        rule.destination.connected_account_id,
+      ]),
+    ),
+  ].filter((accountId) => accountsById.get(accountId)?.state === "connected")
+  const calendarQueries = useQueries({
+    queries: ruleAccountIds.map((accountId) => ({
+      queryKey: ["calendars", accountId],
+      queryFn: () => api.calendars(accountId),
+      staleTime: 5 * 60 * 1000,
+    })),
+  })
+  const calendarsByAccount = new Map(
+    ruleAccountIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
+  )
 
   if (accounts.isPending) return <DashboardSkeleton />
   if (accounts.error) {
@@ -313,12 +332,16 @@ function RulesView({
                       account={sourceAccount}
                       accountId={rule.source.connected_account_id}
                       calendarId={rule.source.calendar_id}
+                      calendars={calendarsByAccount.get(rule.source.connected_account_id)}
+                      role="Source"
                     />
                     <ArrowRight aria-hidden="true" />
                     <RuleEndpoint
                       account={destinationAccount}
                       accountId={rule.destination.connected_account_id}
                       calendarId={rule.destination.calendar_id}
+                      calendars={calendarsByAccount.get(rule.destination.connected_account_id)}
+                      role="Destination"
                     />
                   </div>
                   <p className="rule-policy">
@@ -390,17 +413,29 @@ function RuleEndpoint({
   account,
   accountId,
   calendarId,
+  calendars,
+  role,
 }: {
   account: ConnectedAccount | undefined
   accountId: string
   calendarId: string
+  calendars: DiscoveredCalendar[] | undefined
+  role: "Source" | "Destination"
 }) {
+  const label = ruleEndpointLabel(calendarId, account, calendars)
   return (
-    <span className="rule-endpoint" title={account?.email ?? accountId}>
-      <span className="account-mark account-mark-compact" aria-hidden="true">
-        {accountInitials(account?.display_name ?? "", account?.email ?? accountId)}
+    <span className="rule-endpoint" title={`${label.calendar} · ${account?.email ?? accountId}`}>
+      <AccountAvatar
+        displayName={account?.display_name ?? ""}
+        email={account?.email ?? accountId}
+        avatarUrl={account?.avatar_url}
+        compact
+      />
+      <span className="rule-endpoint-copy">
+        <span className="sr-only">{role}: </span>
+        <span className="rule-endpoint-calendar">{label.calendar}</span>
+        <span className="rule-endpoint-account">{label.account}</span>
       </span>
-      <span>{calendarId}</span>
     </span>
   )
 }
@@ -794,9 +829,11 @@ function SettingsView({
                 <li className="account-item" key={account.id}>
                   <div className="account-main">
                     <div className="account-identity">
-                      <span className="account-mark" aria-hidden="true">
-                        {accountInitials(account.display_name, account.email)}
-                      </span>
+                      <AccountAvatar
+                        displayName={account.display_name}
+                        email={account.email}
+                        avatarUrl={account.avatar_url}
+                      />
                       <div className="account-copy">
                         <h3>{account.display_name}</h3>
                         <p>{account.email}</p>
