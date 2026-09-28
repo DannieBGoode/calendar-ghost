@@ -1,0 +1,312 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+from calendar_sync.application.errors import RuleNotExecutable
+from calendar_sync.application.ports import ProviderChangeSet
+from calendar_sync.domain.model import (
+    CalendarEndpoint,
+    EventRef,
+    EventStatus,
+    ManagedOrigin,
+    OccurrenceStart,
+    OccurrenceState,
+    Recurrence,
+    SyncReason,
+    SyncRule,
+    SyncRuleId,
+    SyncRuleState,
+    TimedInterval,
+)
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.sqlite import (
+    SqliteUnitOfWorkFactory,
+    initialize_database,
+)
+from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
+from tests.helpers import occurrence, rule, series, week_start
+
+STARTS = tuple(week_start(week) for week in range(4))
+
+
+def _synced() -> tuple[FakeCalendars, InMemoryUnitOfWorkFactory, EventRef]:
+    calendars = FakeCalendars()
+    calendars.put(series(), starts=STARTS)
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    mapping = factory.state.mappings[(rule().id, series().reference)]
+    return calendars, factory, mapping.destination
+
+
+def _occurrence_states(
+    factory: InMemoryUnitOfWorkFactory,
+) -> dict[OccurrenceStart, OccurrenceState]:
+    return {key[1]: mapping.state for key, mapping in factory.state.occurrences.items()}
+
+
+def test_first_run_creates_one_busy_destination_series_with_its_time_zone() -> None:
+    calendars, _factory, destination = _synced()
+
+    projected = calendars.events[destination]
+    assert projected.recurrence == series().recurrence
+    assert projected.title == "Busy"
+    assert isinstance(projected.time, TimedInterval)
+    assert projected.time.time_zone == "Europe/Madrid"
+    assert calendars.writes == [("create", destination.event_id.value)]
+
+
+def test_exception_listed_before_its_series_is_applied_after_the_series_is_created() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS)
+    moved = occurrence(master, 1, moved_by=timedelta(hours=2), title="Secret offsite")
+    factory = enabled_rule_factory()
+    calendars.put(moved)
+    # A full listing may return the exception first; the run must still create the series first.
+    calendars.events = {moved.reference: moved, master.reference: master}
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    written = calendars.get_occurrence(destination, week_start(1))
+    assert written is not None
+    assert written.title == "Busy"
+    assert written.time == moved.time
+    assert [kind for kind, _ in calendars.writes] == ["create", "write_occurrence"]
+    assert _occurrence_states(factory) == {week_start(1): OccurrenceState.MODIFIED}
+    assert result.conflicts == 0
+
+
+def test_exception_without_its_series_in_the_batch_uses_the_existing_series_mapping() -> None:
+    calendars, factory, destination = _synced()
+    moved = calendars.put(occurrence(series(), 2, moved_by=timedelta(minutes=30)))
+    calendars.report(moved)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    written = calendars.get_occurrence(destination, week_start(2))
+    assert written is not None and written.time == moved.time
+
+
+def test_exception_of_an_unmapped_series_creates_the_series_first() -> None:
+    calendars = FakeCalendars()
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    master = calendars.put(series(), starts=STARTS)
+    moved = calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    calendars.report(moved)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert (rule().id, master.reference) in factory.state.mappings
+    assert [kind for kind, _ in calendars.writes] == ["create", "write_occurrence"]
+
+
+def test_cancelled_source_occurrence_cancels_only_that_destination_occurrence() -> None:
+    calendars, factory, destination = _synced()
+    cancelled = calendars.put(occurrence(series(), 1, status=EventStatus.CANCELLED))
+    calendars.report(cancelled)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert calendars.get_occurrence(destination, week_start(1)).status is EventStatus.CANCELLED  # type: ignore[union-attr]
+    assert calendars.events[destination].status is EventStatus.CONFIRMED
+    assert calendars.writes[-1][0] == "cancel_occurrence"
+    assert _occurrence_states(factory) == {week_start(1): OccurrenceState.CANCELLED}
+
+
+def test_cancelled_series_deletes_the_destination_series_and_its_occurrence_mappings() -> None:
+    calendars, factory, destination = _synced()
+    calendars.report(calendars.put(occurrence(series(), 1, status=EventStatus.CANCELLED)))
+    sync_use_case(factory, calendars).execute(rule().id)
+    cancelled_master = calendars.put(
+        replace(series(), status=EventStatus.CANCELLED, time=None, recurrence=None)
+    )
+    calendars.report(cancelled_master)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert destination not in calendars.events
+    assert factory.state.mappings == {}
+    assert factory.state.occurrences == {}
+    assert ("delete", destination.event_id.value) in calendars.writes
+    assert not any(kind == "delete" and "_" in ref for kind, ref in calendars.writes)
+
+
+def test_this_and_following_split_truncates_the_old_series_and_creates_the_new_one() -> None:
+    calendars, factory, destination = _synced()
+    calendars.report(calendars.put(occurrence(series(), 3, moved_by=timedelta(hours=1))))
+    sync_use_case(factory, calendars).execute(rule().id)
+    truncated = calendars.put(
+        replace(
+            series(),
+            revision="series-revision-2",
+            recurrence=Recurrence(("RRULE:FREQ=WEEKLY;UNTIL=20260915T080000Z",)),
+        ),
+        starts=STARTS[:2],
+    )
+    del calendars.events[occurrence(series(), 3).reference]
+    following = calendars.put(series("source-series-2"), starts=STARTS[2:])
+    calendars.report(truncated, following)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert calendars.events[destination].recurrence == truncated.recurrence
+    assert (rule().id, following.reference) in factory.state.mappings
+    assert factory.state.occurrences == {}
+    assert not any(
+        kind in {"write_occurrence", "cancel_occurrence"} for kind, _ in calendars.writes[-2:]
+    )
+
+
+def test_destination_edit_of_an_unmodified_occurrence_is_repaired() -> None:
+    calendars, factory, destination = _synced()
+    edited = calendars.get_occurrence(destination, week_start(2))
+    assert edited is not None
+    edited = calendars.put(replace(edited, title="Edited in destination"))
+    calendars.report(edited)
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert calendars.get_occurrence(destination, week_start(2)).title == "Busy"  # type: ignore[union-attr]
+    assert result.conflicts == 0
+    assert factory.state.audit[-1].reason == SyncReason.OCCURRENCE_DRIFT_REPAIRED.value
+
+
+def test_destination_cancellation_of_a_confirmed_occurrence_is_restored() -> None:
+    calendars, factory, destination = _synced()
+    calendars.cancel_occurrence(destination, week_start(2), series().reference, rule().id, "user")
+    calendars.report(calendars.get_occurrence(destination, week_start(2)))  # type: ignore[arg-type]
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert calendars.get_occurrence(destination, week_start(2)).status is EventStatus.CONFIRMED  # type: ignore[union-attr]
+
+
+def test_recreated_destination_series_keeps_source_cancellations() -> None:
+    calendars, factory, destination = _synced()
+    calendars.report(calendars.put(occurrence(series(), 1, status=EventStatus.CANCELLED)))
+    sync_use_case(factory, calendars).execute(rule().id)
+    deleted = replace(calendars.events.pop(destination), status=EventStatus.CANCELLED, time=None)
+    for instance in calendars.instances_of(destination):
+        del calendars.events[instance.reference]
+    calendars.report(deleted)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    recreated = factory.state.mappings[(rule().id, series().reference)].destination
+    assert recreated != destination
+    assert calendars.get_occurrence(recreated, week_start(1)).status is EventStatus.CANCELLED  # type: ignore[union-attr]
+    assert _occurrence_states(factory) == {week_start(1): OccurrenceState.CANCELLED}
+
+
+def test_reverse_rule_ignores_managed_series_and_their_metadata_less_cancellations() -> None:
+    calendars, _factory, destination = _synced()
+    calendars.cancel_occurrence(destination, week_start(1), series().reference, rule().id, "k")
+    reverse = SyncRule(SyncRuleId("reverse"), rule().destination, rule().source, state=rule().state)
+    reverse_factory = enabled_rule_factory(reverse)
+    before = list(calendars.writes)
+
+    result = sync_use_case(reverse_factory, calendars).execute(reverse.id)
+
+    assert calendars.writes == before
+    assert result.created == 0 and result.updated == 0 and result.deleted == 0
+    assert reverse_factory.state.mappings == {}
+
+
+def test_destination_series_owned_by_another_rule_blocks_occurrence_writes() -> None:
+    calendars, factory, destination = _synced()
+    master = calendars.events[destination]
+    calendars.events[destination] = replace(
+        master, managed_origin=ManagedOrigin(SyncRuleId("other"), series().reference)
+    )
+    calendars.report(calendars.put(occurrence(series(), 1, moved_by=timedelta(hours=1))))
+    before = list(calendars.writes)
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.conflicts >= 1
+    assert [write for write in calendars.writes if write not in before] == []
+
+
+def test_unverifiable_source_series_blocks_without_deleting() -> None:
+    calendars, factory, destination = _synced()
+    calendars.unreadable.add(series().reference)
+    edited = calendars.get_occurrence(destination, week_start(2))
+    assert edited is not None
+    calendars.report(calendars.put(replace(edited, title="Edited")))
+    before = list(calendars.writes)
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.conflicts == 1
+    assert calendars.writes == before
+    assert factory.state.audit[-1].reason == SyncReason.SOURCE_UNVERIFIABLE.value
+
+
+def test_missing_destination_occurrence_after_repair_is_a_conflict() -> None:
+    calendars, factory, destination = _synced()
+    # The destination series has drifted: it no longer expands to the source's occurrences.
+    calendars.expansions[destination] = ()
+    calendars.report(calendars.put(occurrence(series(), 2, moved_by=timedelta(hours=1))))
+    before = list(calendars.writes)
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.conflicts == 1
+    assert factory.state.audit[-1].reason == SyncReason.DESTINATION_OCCURRENCE_MISSING.value
+    assert [kind for kind, _ in calendars.writes[len(before) :]] == []
+
+
+def test_rule_change_during_a_run_stops_occurrence_writes(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    calendars = FakeCalendars()
+    calendars.put(series(), starts=STARTS)
+    sync_use_case(factory, calendars).execute(rule().id)
+    calendars.report(calendars.put(occurrence(series(), 1, moved_by=timedelta(hours=1))))
+
+    class EditingCalendars(FakeCalendars):
+        def changes(
+            self, source: CalendarEndpoint, cursor: str | None, not_ended_before: datetime
+        ) -> ProviderChangeSet:
+            with factory() as concurrent:
+                current = concurrent.rules.get(rule().id)
+                assert current is not None
+                if current.state is SyncRuleState.ENABLED:
+                    concurrent.rules.save(current.pause())
+                    concurrent.commit()
+            return super().changes(source, cursor, not_ended_before)
+
+    editing = EditingCalendars(calendars.events, calendars.expansions, calendars.feeds)
+    with factory() as uow:
+        cursor_before = uow.cursors.get(rule().id)
+
+    with pytest.raises(RuleNotExecutable):
+        sync_use_case(factory, editing).execute(rule().id)
+
+    assert editing.writes == []
+    with factory() as uow:
+        assert uow.cursors.get(rule().id) == cursor_before
+
+
+def test_every_occurrence_audit_entry_has_a_run_id_and_reason_but_no_content() -> None:
+    calendars, factory, _destination = _synced()
+    calendars.report(
+        calendars.put(occurrence(series(), 1, title="Secret offsite", moved_by=timedelta(hours=1)))
+    )
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert all(entry.run_id and entry.reason for entry in factory.state.audit)
+    assert all(
+        "Secret" not in repr(entry) and "Sensitive" not in repr(entry)
+        for entry in factory.state.audit
+    )

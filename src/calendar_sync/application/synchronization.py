@@ -13,15 +13,16 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.locking import RuleLocks
+from calendar_sync.application.occurrences import SynchronizeOccurrences
 from calendar_sync.application.ports import (
     AuditEntry,
     CalendarProvider,
     Clock,
     RuleRunOutcome,
     RunKind,
-    UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.sync_run import OUTCOMES, SyncRunContext, require_unchanged
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,
@@ -30,14 +31,12 @@ from calendar_sync.domain.model import (
     EventStatus,
     ProjectionFingerprint,
     SyncAction,
+    SyncDecision,
     SyncReason,
-    SyncRule,
     SyncRuleId,
     SyncRuleState,
 )
 from calendar_sync.domain.services import ProjectionFingerprinter, SyncDecisionService
-
-_OUTCOMES = {SyncAction.IGNORE: "skipped", SyncAction.CONFLICT: "blocked"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +58,17 @@ class ExecuteSyncRule:
     clock: Clock
     locks: RuleLocks = field(default_factory=RuleLocks)
     new_run_id: Callable[[], str] = field(default=lambda: uuid4().hex)
+    occurrences: SynchronizeOccurrences = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.occurrences = SynchronizeOccurrences(
+            self.provider,
+            self.decisions,
+            self.fingerprinter,
+            self.clock,
+            self._repair_series,
+            self.locks,
+        )
 
     def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
         with self.locks.for_rule(rule_id):
@@ -103,48 +113,37 @@ class ExecuteSyncRule:
                 rule.destination, destination_cursor, cutoff
             )
             counts = {action: 0 for action in SyncAction}
-            handled: set[EventRef] = set()
+            run = SyncRunContext(uow, rule, run_id, counts, reproject)
 
-            for source_event in changes.events:
-                self._synchronize_event(
-                    uow,
-                    rule,
-                    run_id,
-                    source_event,
-                    counts,
-                    destination_loaded=False,
-                    actual_destination=None,
-                )
-                handled.add(source_event.reference)
+            # Series masters first, so an exception can always resolve its parent's mapping.
+            for source_event in sorted(
+                changes.events, key=lambda item: item.occurrence is not None
+            ):
+                if source_event.occurrence is not None:
+                    self._synchronize_source_exception(run, source_event)
+                else:
+                    self._synchronize_event(
+                        run, source_event, destination_loaded=False, actual_destination=None
+                    )
+                    run.handled.add(source_event.reference)
                 uow.commit()
 
             for destination_event in destination_changes.events:
+                if destination_event.occurrence is not None:
+                    self._repair_destination_occurrence(run, destination_event)
+                    uow.commit()
+                    continue
                 mapping = uow.mappings.for_destination(rule.id, destination_event.reference)
                 if mapping is None:
                     continue
                 authoritative_source = self.provider.get_event(mapping.source)
                 if authoritative_source is None:
-                    counts[SyncAction.CONFLICT] += 1
-                    uow.audit.append(
-                        AuditEntry(
-                            occurred_at=self.clock.now(),
-                            rule_id=rule.id,
-                            action=SyncAction.CONFLICT.value,
-                            outcome="blocked",
-                            source_event_id=mapping.source.event_id.value,
-                            destination_event_id=mapping.destination.event_id.value,
-                            reason=SyncReason.SOURCE_UNVERIFIABLE.value,
-                            run_id=run_id,
-                        )
-                    )
+                    self._record_unverifiable(run, mapping.source, mapping.destination)
                     uow.commit()
                     continue
                 self._synchronize_event(
-                    uow,
-                    rule,
-                    run_id,
+                    run,
                     authoritative_source,
-                    counts,
                     destination_loaded=True,
                     actual_destination=(
                         None
@@ -152,11 +151,11 @@ class ExecuteSyncRule:
                         else destination_event
                     ),
                 )
-                handled.add(mapping.source)
+                run.handled.add(mapping.source)
                 uow.commit()
 
             if reproject:
-                self._reproject_remaining(uow, rule, run_id, handled, counts)
+                self._reproject_remaining(run)
 
             uow.cursors.save(rule.id, changes.next_cursor)
             uow.destination_cursors.save(rule.id, destination_changes.next_cursor)
@@ -195,90 +194,141 @@ class ExecuteSyncRule:
             conflicts=counts[SyncAction.CONFLICT],
         )
 
-    def _reproject_remaining(
-        self,
-        uow: UnitOfWork,
-        rule: SyncRule,
-        run_id: str,
-        handled: set[EventRef],
-        counts: dict[SyncAction, int],
-    ) -> None:
+    def _reproject_remaining(self, run: SyncRunContext) -> None:
         """Apply a changed policy to mappings the change feeds did not report."""
-        for mapping in uow.mappings.for_rule(rule.id):
-            if mapping.source in handled:
+        for mapping in run.uow.mappings.for_rule(run.rule.id):
+            if mapping.source in run.handled:
                 continue
             authoritative_source = self.provider.get_event(mapping.source)
             if authoritative_source is None:
-                counts[SyncAction.CONFLICT] += 1
-                uow.audit.append(
-                    AuditEntry(
-                        occurred_at=self.clock.now(),
-                        rule_id=rule.id,
-                        action=SyncAction.CONFLICT.value,
-                        outcome="blocked",
-                        source_event_id=mapping.source.event_id.value,
-                        destination_event_id=mapping.destination.event_id.value,
-                        reason=SyncReason.SOURCE_UNVERIFIABLE.value,
-                        run_id=run_id,
-                    )
+                self._record_unverifiable(run, mapping.source, mapping.destination)
+            else:
+                # Reprojection re-verifies every recorded occurrence of a series as well.
+                self._synchronize_event(
+                    run, authoritative_source, destination_loaded=False, actual_destination=None
                 )
-                uow.commit()
-                continue
+            run.handled.add(mapping.source)
+            run.uow.commit()
+
+    def _synchronize_source_exception(self, run: SyncRunContext, exception: CalendarEvent) -> None:
+        identity = exception.occurrence
+        assert identity is not None
+        series_ref = EventRef(run.rule.source, identity.series_event_id)
+        source_series = self.provider.get_event(series_ref)
+        if source_series is None:
+            self._record_unverifiable(run, exception.reference, None)
+            return
+        series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
+        if series_mapping is None and series_ref not in run.handled:
             self._synchronize_event(
-                uow,
-                rule,
-                run_id,
-                authoritative_source,
-                counts,
-                destination_loaded=False,
-                actual_destination=None,
+                run, source_series, destination_loaded=False, actual_destination=None
             )
-            uow.commit()
+            run.handled.add(series_ref)
+            series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
+        self.occurrences.apply(
+            run,
+            series_mapping,
+            source_series,
+            identity.original_start,
+            exception,
+            record_current=True,
+        )
+
+    def _repair_destination_occurrence(
+        self, run: SyncRunContext, destination_event: CalendarEvent
+    ) -> None:
+        identity = destination_event.occurrence
+        assert identity is not None
+        series_mapping = run.uow.mappings.for_destination(
+            run.rule.id, EventRef(run.rule.destination, identity.series_event_id)
+        )
+        if series_mapping is None:
+            return
+        source_series = self.provider.get_event(series_mapping.source)
+        if source_series is None:
+            self._record_unverifiable(run, series_mapping.source, destination_event.reference)
+            return
+        source_occurrence = self.provider.get_occurrence(
+            series_mapping.source, identity.original_start
+        )
+        if source_occurrence is not None and source_occurrence.reference in run.handled:
+            return
+        self.occurrences.apply(
+            run,
+            series_mapping,
+            source_series,
+            identity.original_start,
+            source_occurrence,
+            record_current=False,
+            destination_reported=True,
+        )
+
+    def _repair_series(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
+        self._synchronize_event(
+            run, source_series, destination_loaded=False, actual_destination=None, cascade=False
+        )
+
+    def _record_unverifiable(
+        self, run: SyncRunContext, source: EventRef, destination: EventRef | None
+    ) -> None:
+        run.counts[SyncAction.CONFLICT] += 1
+        run.uow.audit.append(
+            AuditEntry(
+                occurred_at=self.clock.now(),
+                rule_id=run.rule.id,
+                action=SyncAction.CONFLICT.value,
+                outcome="blocked",
+                source_event_id=source.event_id.value,
+                destination_event_id=destination.event_id.value if destination else None,
+                reason=SyncReason.SOURCE_UNVERIFIABLE.value,
+                run_id=run.run_id,
+            )
+        )
 
     def _synchronize_event(
         self,
-        uow: UnitOfWork,
-        rule: SyncRule,
-        run_id: str,
+        run: SyncRunContext,
         source_event: CalendarEvent,
-        counts: dict[SyncAction, int],
         *,
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
+        cascade: bool = True,
     ) -> None:
-        with self.locks.for_writes(rule.id):
-            self._require_unchanged(uow, rule)
-            self._decide_and_write(
-                uow,
-                rule,
-                run_id,
+        with self.locks.for_writes(run.rule.id):
+            require_unchanged(run)
+            mapping, decision = self._decide_and_write(
+                run,
                 source_event,
-                counts,
                 destination_loaded=destination_loaded,
                 actual_destination=actual_destination,
             )
+        # Occurrence re-verification takes the write lock per occurrence, so it runs outside it.
+        series_changed = decision.action in {SyncAction.CREATE, SyncAction.UPDATE}
+        if (
+            cascade
+            and mapping is not None
+            and decision.action is not SyncAction.DELETE
+            and (series_changed or (run.reproject and decision.action is SyncAction.IGNORE))
+        ):
+            self.occurrences.reverify(run, mapping, source_event)
 
     def _decide_and_write(
         self,
-        uow: UnitOfWork,
-        rule: SyncRule,
-        run_id: str,
+        run: SyncRunContext,
         source_event: CalendarEvent,
-        counts: dict[SyncAction, int],
         *,
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
-    ) -> None:
+    ) -> tuple[EventMapping | None, SyncDecision]:
+        uow, rule = run.uow, run.rule
         mapping = uow.mappings.for_source(rule.id, source_event.reference)
-        actual = (
-            actual_destination
-            if destination_loaded
-            else self.provider.get_event(mapping.destination)
-            if mapping
-            else None
-        )
+        actual = actual_destination
+        if not destination_loaded and mapping is not None:
+            fetched = self.provider.get_event(mapping.destination)
+            # Google keeps deleted events as metadata-less cancellations; treat them as missing.
+            actual = None if fetched is None or fetched.status is EventStatus.CANCELLED else fetched
         decision = self.decisions.decide(rule, source_event, mapping, actual)
-        counts[decision.action] += 1
+        run.counts[decision.action] += 1
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action
         )
@@ -333,24 +383,14 @@ class ExecuteSyncRule:
                 occurred_at=self.clock.now(),
                 rule_id=rule.id,
                 action=decision.action.value,
-                outcome=_OUTCOMES.get(decision.action, "completed"),
+                outcome=OUTCOMES.get(decision.action, "completed"),
                 source_event_id=source_event.reference.event_id.value,
                 destination_event_id=mapping.destination.event_id.value if mapping else None,
                 reason=decision.reason.value,
-                run_id=run_id,
+                run_id=run.run_id,
             )
         )
-
-    @staticmethod
-    def _require_unchanged(uow: UnitOfWork, rule: SyncRule) -> None:
-        """Stop before writing if the rule was paused, edited, or removed during this run."""
-        current = uow.rules.get(rule.id)
-        if (
-            current is None
-            or current.state is not SyncRuleState.ENABLED
-            or current.material_signature != rule.material_signature
-        ):
-            raise RuleNotExecutable("sync rule changed during synchronization; run stopped")
+        return mapping, decision
 
     @staticmethod
     def _operation_key(
