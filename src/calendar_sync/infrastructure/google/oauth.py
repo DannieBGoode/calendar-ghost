@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import secrets
 import sqlite3
 import uuid
@@ -29,6 +30,9 @@ CALENDAR_SCOPES = (
 # without it still connects, and the account falls back to initials.
 PROFILE_SCOPES = ("openid", "https://www.googleapis.com/auth/userinfo.profile")
 OAUTH_SCOPES = CALENDAR_SCOPES + PROFILE_SCOPES
+# Google may grant fewer scopes than requested (a declined profile) or more (previously granted
+# scopes). oauthlib rejects any difference unless relaxed; complete() enforces Calendar scopes.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 
 class GoogleOAuthNotConfigured(RuntimeError):
@@ -291,7 +295,7 @@ class GoogleOAuthService:
             ) from error
         credentials = flow.credentials
         granted_scopes = set(getattr(credentials, "granted_scopes", None) or ())
-        if granted_scopes and not set(CALENDAR_SCOPES).issubset(granted_scopes):
+        if not set(CALENDAR_SCOPES).issubset(granted_scopes):
             raise GoogleCalendarPermissionRequired(
                 "Google Calendar permission is required to connect this account"
             )

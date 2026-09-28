@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from oauthlib.oauth2 import WebApplicationClient  # type: ignore[import-untyped]
 
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.domain.model import ConnectedAccountId
@@ -200,6 +201,8 @@ def test_oauth_completion_exchanges_explicit_code_without_parsing_callback_url(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class StubCredentials:
+        granted_scopes = CALENDAR_SCOPES
+
         def to_json(self) -> str:
             return '{"token":"synthetic-token"}'
 
@@ -314,6 +317,23 @@ def test_oauth_requests_calendar_and_basic_profile_scopes_only() -> None:
     assert PROFILE_SCOPES == ("openid", "https://www.googleapis.com/auth/userinfo.profile")
 
 
+def test_oauth_token_exchange_accepts_a_grant_without_optional_profile_scopes() -> None:
+    client = WebApplicationClient("synthetic.apps.googleusercontent.com")
+
+    token = client.parse_request_body_response(
+        json.dumps(
+            {
+                "access_token": "synthetic-token",
+                "token_type": "Bearer",
+                "scope": " ".join(CALENDAR_SCOPES),
+            }
+        ),
+        scope=list(OAUTH_SCOPES),
+    )
+
+    assert set(token["scope"]) == set(CALENDAR_SCOPES)
+
+
 def test_oauth_completion_records_google_profile_photo_and_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -364,11 +384,14 @@ def test_oauth_completion_ignores_unusable_profile_claims(
     assert account.avatar_url is None
 
 
+@pytest.mark.parametrize("granted_scopes", [(CALENDAR_SCOPES[0], *PROFILE_SCOPES), ()])
 def test_oauth_completion_rejects_a_grant_without_all_calendar_scopes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, granted_scopes: tuple[str, ...]
 ) -> None:
     class StubCredentials:
-        granted_scopes = (CALENDAR_SCOPES[0],)
+        pass
+
+    StubCredentials.granted_scopes = granted_scopes  # type: ignore[attr-defined]
 
     class StubFlow:
         credentials = StubCredentials()
