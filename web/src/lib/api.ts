@@ -131,7 +131,12 @@ export type AuditEntry = {
   source_event_id: string | null
   destination_event_id: string | null
 }
-export type ActivityFilters = { ruleId?: string; category?: ActivityCategory; before?: number }
+export type ActivityFilters = {
+  ruleId?: string
+  runId?: string
+  categories?: ActivityCategory[]
+  before?: number
+}
 export type EventSnapshot = {
   found: boolean
   cancelled: boolean
@@ -143,6 +148,11 @@ export type EventSnapshot = {
   web_link: string | null
 }
 export type ActivityEvent = { source: EventSnapshot; destination: EventSnapshot | null }
+export type ActivityEventSummary = {
+  entry_id: number
+  lookup: "found" | "rule_removed" | "unavailable"
+  source: EventSnapshot | null
+}
 export type Incident = {
   id: string
   rule_id: string | null
@@ -154,6 +164,8 @@ export type Incident = {
 }
 
 export const ACTIVITY_PAGE_SIZE = 100
+/** The service reads at most this many entries' events from Google per request. */
+export const EVENT_SUMMARY_BATCH_SIZE = 25
 
 export const api = {
   setup: () => request<SetupStatus>("/api/v1/setup"),
@@ -236,14 +248,26 @@ export const api = {
     request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
       method: "POST",
     }),
-  activity: ({ ruleId, category, before }: ActivityFilters = {}) => {
+  activity: ({ ruleId, runId, categories, before }: ActivityFilters = {}) => {
     const params = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) })
     if (ruleId) params.set("rule_id", ruleId)
-    if (category) params.set("category", category)
+    if (runId) params.set("run_id", runId)
+    for (const category of categories ?? []) params.append("category", category)
     if (before) params.set("before", String(before))
     return request<AuditEntry[]>(`/api/v1/audit-entries?${params}`)
   },
+  noChangeCounts: (runIds: string[]) => {
+    const params = new URLSearchParams()
+    for (const runId of runIds) params.append("run_ids", runId)
+    return request<{ run_id: string; count: number }[]>(`/api/v1/audit-entries/no-change-counts?${params}`)
+  },
+  activityEntry: (entryId: number) => request<AuditEntry>(`/api/v1/audit-entries/${entryId}`),
   activityEvent: (entryId: number) =>
     request<ActivityEvent>(`/api/v1/audit-entries/${entryId}/event`),
+  activityEventSummaries: (entryIds: number[]) => {
+    const params = new URLSearchParams()
+    for (const entryId of entryIds) params.append("ids", String(entryId))
+    return request<ActivityEventSummary[]>(`/api/v1/audit-entries/events?${params}`)
+  },
   incidents: () => request<Incident[]>("/api/v1/incidents"),
 }

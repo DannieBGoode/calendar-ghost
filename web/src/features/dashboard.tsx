@@ -97,7 +97,7 @@ export function Dashboard({
       />
     )
   }
-  if (view === "activity") return <ActivityView />
+  if (view === "activity") return <ActivityView location={location} onOpenRule={onOpenRule} />
   if (view === "settings") {
     return (
       <SettingsView

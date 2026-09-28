@@ -121,9 +121,15 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 2. Create a directional rule and choose its privacy and all-day policies.
 3. Preview the rule, inspect the result, and enable it.
 
-**Activity** lists every decision each rule made, grouped by run, including skipped and blocked
-events and the reason for each. **Show event** looks up the event's title and time from Google on
-demand; that content is never stored.
+**Activity** is a table of what each rule did, grouped by day: the time, the event and when it
+happens, what happened in plain words (such as "Added to Work" or "Blocked: not owned by this
+rule"), and the rule. Event titles and times are read live from Google for the rows on screen and are
+never stored. By default each run shows how many events it found already up to date in one row you
+can expand; **All decisions** lists every check. Choose a rule from the picker, which shows each
+rule's calendars and accounts, or select a row's rule to filter to it. Select an entry to open its
+details beside the table: the event, what happened and why, the copy in the destination calendar,
+and technical identifiers on demand. The rule, filter, and open entry are kept in the address, so
+the view survives reloads and can be linked.
 
 The main sections have stable URLs at `/overview`, `/rules`, `/activity`, and `/settings`, so they
 can be bookmarked and browser back/forward navigation works as expected.

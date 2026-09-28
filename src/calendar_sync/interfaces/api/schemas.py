@@ -151,6 +151,17 @@ class ActivityEventResponse(BaseModel):
     destination: EventSnapshotResponse | None
 
 
+class NoChangeCountResponse(BaseModel):
+    run_id: str
+    count: int
+
+
+class ActivityEventSummaryResponse(BaseModel):
+    entry_id: int
+    lookup: Literal["found", "rule_removed", "unavailable"]
+    source: EventSnapshotResponse | None = None
+
+
 class IncidentResponse(BaseModel):
     id: str
     rule_id: str | None

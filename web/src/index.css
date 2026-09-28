@@ -1348,26 +1348,8 @@ p {
 
 .activity-filters {
   display: grid;
-  grid-template-columns: minmax(12rem, 16rem) minmax(10rem, 12rem);
+  grid-template-columns: minmax(14rem, 22rem) minmax(12rem, 15.5rem);
   gap: 0.75rem;
-}
-
-.activity-runs {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.activity-run-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding-bottom: 0.75rem;
-}
-
-.activity-run-header h3 {
-  font-size: 0.95rem;
-  line-height: 1.35;
 }
 
 .activity-run-meta {
@@ -1380,10 +1362,6 @@ p {
   color: var(--muted-foreground);
   font-size: 0.8rem;
   line-height: 1.45;
-}
-
-.activity-run-header .activity-run-meta {
-  margin-top: 0;
 }
 
 .activity-direction {
@@ -1399,58 +1377,500 @@ p {
   font-size: 0.6rem;
 }
 
-.activity-entries {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border-top: 1px solid var(--border);
+.activity-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
+}
+
+.activity-layout[data-detail="true"] {
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+}
+
+.activity-table-wrap {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1.5rem;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+.activity-table-wrap[data-updating="true"] {
+  opacity: 0.55;
+}
+
+.activity-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  table-layout: fixed;
+}
+
+.activity-table th {
+  padding: 0 0.75rem 0.6rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: left;
   border-bottom: 1px solid var(--border);
 }
 
-.activity-entry + .activity-entry {
+.activity-table td {
+  padding: 0.7rem 0.75rem;
+  vertical-align: top;
+}
+
+/* A small inset keeps the time clear of a selected row's highlight edge. */
+.activity-table th:first-child,
+.activity-table td:first-child {
+  padding-left: 0.5rem;
+}
+
+.activity-col-time {
+  width: 5.5rem;
+}
+
+.activity-col-happened {
+  width: 16rem;
+}
+
+.activity-col-rule {
+  width: 12rem;
+}
+
+/* Rows of one run share a light divider; a full divider starts the next run. */
+.activity-run tr + tr td {
+  border-top: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+}
+
+.activity-run + .activity-run tr:first-child td {
   border-top: 1px solid var(--border);
 }
 
-.activity-entry-summary {
-  display: grid;
-  min-height: 3.25rem;
-  grid-template-columns: 6.25rem minmax(0, 1fr) auto;
+td.activity-col-time {
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.activity-day th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 1.5rem 0 0.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.activity-day:first-of-type th,
+thead + .activity-day th {
+  padding-top: 0.75rem;
+}
+
+.activity-happened {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  color: var(--foreground);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.activity-happened svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: none;
+  margin-top: 0.1rem;
+  color: var(--muted-foreground);
+}
+
+.activity-happened[data-tone="quiet"] {
+  color: var(--muted-foreground);
+}
+
+.activity-happened[data-tone="blocked"],
+.activity-happened[data-tone="blocked"] svg {
+  color: var(--warning-foreground);
+  font-weight: 600;
+}
+
+.activity-row {
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.activity-row:hover td {
+  background: var(--surface);
+}
+
+.activity-row[data-selected="true"] td {
+  background: var(--primary-soft);
+}
+
+.activity-row-link {
+  display: block;
+  min-width: 0;
+  border-radius: 0.25rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.activity-row-link:focus-visible,
+.activity-fold:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.activity-event-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.activity-event-title {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-event-when {
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+
+.activity-event-cell-muted .activity-event-title {
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+
+.activity-event-placeholder {
+  display: block;
+  width: min(14rem, 80%);
+  height: 0.9rem;
+  margin: 0.2rem 0 0.35rem;
+  border-radius: 0.25rem;
+  background: var(--muted);
+}
+
+.activity-rule-name {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
   align-items: center;
-  gap: 1rem;
-  padding: 0.5rem 0;
+  gap: 0.35rem;
+  border-radius: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  text-align: left;
+  text-underline-offset: 0.2em;
 }
 
-.activity-outcome {
-  justify-self: start;
+.activity-rule-name:hover {
+  color: var(--foreground);
+  text-decoration: underline;
 }
 
-.activity-entry-summary p {
+.activity-rule-name:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.activity-rule-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-rule-name svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: none;
+}
+
+.activity-section .section-heading h2 {
+  font-weight: 700;
+}
+
+.activity-removed-rule {
+  color: var(--muted-foreground);
+}
+
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.rule-picker {
+  position: relative;
+}
+
+.rule-picker-trigger {
+  display: flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--input);
+  border-radius: 0.375rem;
+  background: var(--background);
+  color: var(--foreground);
   font-size: 0.875rem;
-  line-height: 1.45;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out);
 }
 
-.activity-toggle svg {
+.rule-picker-trigger:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ring) 90%, transparent);
+}
+
+.rule-picker-chevron {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--muted-foreground);
   transition: transform var(--motion-fast) var(--ease-out);
 }
 
-.activity-toggle svg[data-open="true"] {
+.rule-picker-chevron[data-open="true"] {
   transform: rotate(180deg);
 }
 
-.activity-entry-details {
+/* A temporary layer, so it may lift above the page. */
+.rule-picker-list {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  max-height: 20rem;
+  overflow-y: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--background);
+  box-shadow: 0 12px 32px -12px color-mix(in oklch, var(--foreground) 35%, transparent);
+}
+
+.rule-picker-list[hidden] {
+  display: none;
+}
+
+.rule-picker-option {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.rule-picker-option[data-active="true"] {
+  background: var(--muted);
+}
+
+.rule-picker-option[aria-selected="true"] {
+  font-weight: 600;
+}
+
+.rule-picker-check {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--primary);
+  visibility: hidden;
+}
+
+.rule-picker-check[data-visible="true"] {
+  visibility: visible;
+}
+
+.rule-picker-group {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border);
+}
+
+.rule-picker-group-label {
+  padding: 0.35rem 0.5rem 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.rule-picker-direction,
+.rule-picker-endpoint {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.rule-picker-direction {
+  gap: 0.5rem;
+}
+
+.rule-picker-direction .account-mark-compact {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.6rem;
+}
+
+.rule-picker-endpoint-copy {
+  display: grid;
+  min-width: 0;
+}
+
+.rule-picker-calendar,
+.rule-picker-account,
+.rule-picker-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-picker-account {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.rule-picker-muted {
+  color: var(--muted-foreground);
+}
+
+.rule-picker-arrow {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.activity-fold {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: color var(--motion-fast) var(--ease-out);
+}
+
+.activity-fold:hover {
+  color: var(--foreground);
+}
+
+.activity-fold svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  transition: transform var(--motion-fast) var(--ease-out);
+}
+
+.activity-fold svg[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+.activity-detail {
+  position: sticky;
+  top: 1.5rem;
+  display: flex;
+  max-height: calc(100vh - 3rem);
+  min-width: 0;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow-y: auto;
+  padding: 0.75rem 1.25rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--background);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.activity-detail-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 -0.5rem;
+}
+
+.activity-detail-steps {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.activity-detail-heading {
   display: flex;
   flex-direction: column;
-  gap: 0.875rem;
-  margin: 0 0 0.875rem 7.25rem;
-  padding: 0.875rem 1rem;
-  border-radius: 0.5rem;
-  background: var(--surface);
-  font-size: 0.85rem;
-  line-height: 1.5;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.activity-detail-heading h2 {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.activity-detail-heading h2:focus-visible {
+  border-radius: 0.25rem;
+  outline: 3px solid var(--ring);
+  outline-offset: 3px;
 }
 
 .activity-explanation {
   max-width: 68ch;
+  color: var(--muted-foreground);
+}
+
+.activity-detail-facts,
+.activity-event,
+.activity-diagnostics dl {
+  display: grid;
+  gap: 0.875rem;
+  margin: 0;
+}
+
+.activity-detail-facts dt,
+.activity-event dt,
+.activity-diagnostics dt {
+  margin-bottom: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.activity-detail-facts dd,
+.activity-event dd,
+.activity-diagnostics dd {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+}
+
+.activity-event {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 
 .activity-event-status,
@@ -1458,29 +1878,30 @@ p {
   color: var(--muted-foreground);
 }
 
-.activity-event {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: 0.875rem 1.5rem;
-  margin: 0;
+.activity-diagnostics {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 
-.activity-event dt {
-  margin-bottom: 0.2rem;
+.activity-diagnostics summary {
+  width: fit-content;
+  border-radius: 0.25rem;
   color: var(--muted-foreground);
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 600;
+  cursor: pointer;
 }
 
-.activity-event dd {
-  display: flex;
-  margin: 0;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.2rem;
+.activity-diagnostics summary:focus-visible {
+  outline: 3px solid var(--ring);
+  outline-offset: 2px;
 }
 
-.activity-event-ids code {
+.activity-diagnostics[open] summary {
+  margin-bottom: 0.875rem;
+}
+
+.activity-diagnostics code {
   font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
@@ -1521,6 +1942,22 @@ p {
 
 .activity-more {
   align-self: center;
+}
+
+/* Beside a narrower table the pane would crowd it, so details take the whole width instead. */
+@media (max-width: 1000px) {
+  .activity-layout[data-detail="true"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .activity-layout[data-detail="true"] .activity-table-wrap {
+    display: none;
+  }
+
+  .activity-detail {
+    position: static;
+    max-height: none;
+  }
 }
 
 @media (max-width: 800px) {
@@ -1665,18 +2102,80 @@ p {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .activity-entry-summary {
+  /* Each entry stacks: what happened and the time, then the event, then the rule. */
+  .activity-table,
+  .activity-table tbody,
+  .activity-table tr,
+  .activity-table td,
+  .activity-table th {
+    display: block;
+  }
+
+  .activity-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .activity-table tr.activity-row,
+  .activity-table tr.activity-folded-row {
+    display: grid;
+    grid-template-areas:
+      "happened time"
+      "event event"
+      "rule rule";
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.35rem 0.75rem;
+    gap: 0.3rem 0.75rem;
+    padding: 0.75rem 0;
   }
 
-  .activity-entry-summary p {
-    grid-column: 1 / -1;
-    grid-row: 2;
+  .activity-table tr.activity-folded-row {
+    grid-template-areas: "fold fold";
+    padding: 0.35rem 0;
   }
 
-  .activity-entry-details {
-    margin-left: 0;
+  .activity-run tr + tr,
+  .activity-run + .activity-run tr:first-child {
+    border-top: 1px solid var(--border);
+  }
+
+  .activity-table td,
+  .activity-run tr + tr td,
+  .activity-run + .activity-run tr:first-child td {
+    width: auto;
+    padding: 0;
+    border-top: 0;
+  }
+
+  .activity-table td.activity-col-time {
+    grid-area: time;
+  }
+
+  .activity-folded-row td.activity-col-time {
+    display: none;
+  }
+
+  .activity-folded-row td[colspan] {
+    grid-area: fold;
+  }
+
+  .activity-col-event {
+    grid-area: event;
+  }
+
+  .activity-col-happened {
+    grid-area: happened;
+  }
+
+  .activity-col-rule {
+    grid-area: rule;
+  }
+
+  .activity-row:hover td,
+  .activity-row[data-selected="true"] td {
+    background: none;
   }
 
   .rule-form {
