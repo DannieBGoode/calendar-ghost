@@ -27,6 +27,8 @@ from calendar_sync.domain.model import (
 class ProviderChangeSet:
     events: tuple[CalendarEvent, ...]
     next_cursor: str
+    complete: bool = False
+    """Every event in the window, not only changes since a cursor, as after a rejected cursor."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -119,6 +119,9 @@ class ExecuteSyncRule:
             destination_changes = self.provider.changes(
                 rule.destination, destination_cursor, cutoff
             )
+            # A missing or rejected cursor also yields a full listing instead of changes.
+            source_listed = cursor is None or changes.complete
+            destination_listed = destination_cursor is None or destination_changes.complete
             counts = {action: 0 for action in SyncAction}
             run = SyncRunContext(
                 uow,
@@ -127,10 +130,10 @@ class ExecuteSyncRule:
                 counts,
                 cutoff,
                 reproject,
-                incremental=not full_run,
-                daily_pass=full_run and previous_cursor is not None,
+                incremental=not source_listed and not destination_listed,
+                daily_pass=source_listed and previous_cursor is not None,
             )
-            if destination_cursor is None:
+            if destination_listed:
                 # A full listing already holds each projection, so decisions need not re-read it.
                 run.listed_destinations = {
                     event.reference: event
@@ -202,7 +205,8 @@ class ExecuteSyncRule:
                     RunKind.SYNC,
                     self.clock.now(),
                     True,
-                    full_run,
+                    # Listing both calendars in full, as a first run does, completes the daily pass.
+                    source_listed and destination_listed,
                     created=counts[SyncAction.CREATE],
                     updated=counts[SyncAction.UPDATE],
                     deleted=counts[SyncAction.DELETE],

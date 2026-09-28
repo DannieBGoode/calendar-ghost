@@ -6,15 +6,17 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
 
-from calendar_sync.application.ports import AuditEntry
+from calendar_sync.application.ports import AuditEntry, RunKind
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
+    EventRef,
     EventStatus,
     ManagedOrigin,
     SyncReason,
     SyncRuleId,
     TransformationPolicy,
 )
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, all_day_event, event, occurrence, rule, series, week_start
 
@@ -273,3 +275,58 @@ def test_full_pass_verifies_an_unedited_projection_whose_source_was_not_listed()
     assert event().reference in calendars.reads
     assert factory.state.audit[-1].reason == SyncReason.DESTINATION_DRIFT_REPAIRED.value
     assert calendars.events[destination].time == calendars.events[event().reference].time
+
+
+def _projection_matching_a_source_moved_out_of_the_window() -> tuple[
+    FakeCalendars, InMemoryUnitOfWorkFactory, EventRef
+]:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, event().reference)].destination
+    # The source moved before the window without its feed reporting it, while the projection
+    # still matches what this rule wrote; only a source read reveals the Drift.
+    calendars.events[event().reference] = replace(
+        event(),
+        time=replace(
+            event().time,  # type: ignore[type-var]
+            starts_at=NOW - timedelta(days=60),
+            ends_at=NOW - timedelta(days=60, hours=-1),
+        ),
+    )
+    return calendars, factory, destination
+
+
+def test_expired_cursors_relist_without_trusting_projections_as_echoes() -> None:
+    calendars, factory, destination = _projection_matching_a_source_moved_out_of_the_window()
+    calendars.expired = {rule().source, rule().destination}
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert factory.state.audit[-1].reason == SyncReason.DESTINATION_DRIFT_REPAIRED.value
+    assert calendars.events[destination].time == calendars.events[event().reference].time
+
+
+def test_missing_cursors_relist_without_trusting_projections_as_echoes() -> None:
+    calendars, factory, destination = _projection_matching_a_source_moved_out_of_the_window()
+    factory.state.cursors.clear()
+    factory.state.destination_cursors.clear()
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert factory.state.audit[-1].reason == SyncReason.DESTINATION_DRIFT_REPAIRED.value
+    assert calendars.events[destination].time == calendars.events[event().reference].time
+
+
+def test_first_run_lists_everything_so_it_counts_as_the_days_full_pass() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    with factory() as uow:
+        latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+    assert latest is not None and latest.full_run
+    assert latest.last_full_succeeded_at == NOW

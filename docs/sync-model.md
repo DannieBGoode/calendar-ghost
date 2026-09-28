@@ -23,7 +23,9 @@ could have drifted:
   or occurrence that still carries this rule's Managed Origin and matches the fingerprint recorded
   when it was written has not drifted, so it is counted as ignored without reading its source.
   Source changes arrive through the source feed. Any other content, status, or ownership repairs
-  from the source as before.
+  from the source as before. This applies only when both feeds returned changes since a cursor; a
+  missing cursor, or one Google rejects (HTTP 410), yields a full listing, and every reported
+  projection is then verified against its source.
 - A mapping already decided from the source feed in the same run is not decided again from the
   destination feed.
 - A full listing (the daily pass, the first run, or reprojection) reuses each listed projection for
@@ -31,7 +33,8 @@ could have drifted:
   listing did not include is read directly, and absence from the listing never counts as deletion.
 
 The scheduler runs each rule's daily full pass when that rule has not completed one on the current
-UTC day. The completion time is stored with the rule's run outcome, so restarting the service or
+UTC day. Any successful run that listed both calendars in full, including a rule's first run,
+completes that day's pass. The completion time is stored with the rule's run outcome, so restarting the service or
 another rule failing does not repeat a full pass that already completed.
 
 For each changed source event, the decision service chooses one action:

@@ -20,9 +20,10 @@ prevention and bookkeeping, and each echo cost a provider read.
 - `all_day_excluded` and `series_not_synchronized` are recorded on the first run and on
   incremental runs that saw the event change, and not on the daily full pass.
 - Earlier entries with the unrecorded reasons stay in SQLite and are hidden from Activity.
-- A destination projection or occurrence reported back unchanged, still carrying this rule's
-  Managed Origin and the fingerprint recorded when it was written, is counted as ignored without
-  reading its source or recording a check.
+- A destination projection or occurrence reported back unchanged by an incremental feed, still
+  carrying this rule's Managed Origin and the fingerprint recorded when it was written, is counted
+  as ignored without reading its source or recording a check. When either feed is a full listing,
+  because of a missing or rejected cursor, every reported projection is verified as before.
 
 ## Alternatives considered
 
