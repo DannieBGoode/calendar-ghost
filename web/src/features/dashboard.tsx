@@ -23,8 +23,9 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
-import { ApiError, api, type ConnectedAccount } from "@/lib/api"
+import { api, type ConnectedAccount } from "@/lib/api"
 import { accountInitials } from "@/lib/account-avatar"
+import { activityFailure, activityFailureMessages, activityFailureRequiresReload } from "@/lib/activity-failure"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
 import type { AppView } from "@/lib/navigation"
 import type { ThemePreference } from "@/lib/theme"
@@ -540,13 +541,11 @@ function ActivityView() {
   if (activity.isPending || incidents.isPending) return <DashboardSkeleton />
 
   if (activity.error || incidents.error) {
-    const authenticationExpired = [activity.error, incidents.error].some(
-      (error) => error instanceof ApiError && error.status === 401,
-    )
-    const serviceFailed = [activity.error, incidents.error].some((error) => error instanceof ApiError)
+    const failure = activityFailure([activity.error, incidents.error])
+    const reloadRequired = activityFailureRequiresReload(failure)
     const refreshing = activity.isFetching || incidents.isFetching
     const recover = () => {
-      if (authenticationExpired) {
+      if (reloadRequired) {
         window.location.reload()
         return
       }
@@ -559,16 +558,16 @@ function ActivityView() {
         <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
           <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
           <h2 id="activity-error-title">Activity is temporarily unavailable</h2>
-          <p>
-            {authenticationExpired
-              ? "Your administrator session has expired. Sign in again to view operational activity."
-              : serviceFailed
-                ? "The local service returned an error; try the request again."
-                : "The request did not reach the local service. It may have been restarting, or a browser extension such as a content blocker may be blocking it; try the request again."}
-          </p>
+          <p>{activityFailureMessages[failure]}</p>
           <Button variant="outline" onClick={recover} disabled={refreshing}>
             <RefreshCw aria-hidden="true" />
-            {authenticationExpired ? "Sign in again" : refreshing ? "Trying again…" : "Try again"}
+            {failure === "session-expired"
+              ? "Sign in again"
+              : failure === "application-updated"
+                ? "Reload page"
+                : refreshing
+                  ? "Trying again…"
+                  : "Try again"}
           </Button>
         </section>
       </div>
