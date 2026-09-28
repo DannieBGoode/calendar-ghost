@@ -52,6 +52,28 @@ describe("activity presentation", () => {
     expect(summarizeRun(runs[0].entries)).toBe("1 created · 1 skipped")
   })
 
+  it("keeps one group per run when concurrent rules interleave their entries", () => {
+    const runs = groupRuns([
+      entry({ id: 4, run_id: "work-run", rule_id: "rule-1" }),
+      entry({ id: 3, run_id: "home-run", rule_id: "rule-2" }),
+      entry({ id: 2, run_id: "work-run", rule_id: "rule-1", action: "create", category: "changed" }),
+      entry({ id: 1, run_id: "home-run", rule_id: "rule-2" }),
+    ])
+
+    expect(runs.map((run) => [run.key, run.entries.map((item) => item.id)])).toEqual([
+      ["work-run", [4, 2]],
+      ["home-run", [3, 1]],
+    ])
+    expect(summarizeRun(runs[0].entries)).toBe("1 created · 1 skipped")
+  })
+
+  it("describes decisions with Event Projection terminology", () => {
+    expect(describeEntry(entry({ reason: "source_created" })).summary).toBe("Created a projection")
+    expect(describeEntry(entry({ reason: "managed_projection_source" })).summary).toBe(
+      "Skipped a managed projection",
+    )
+  })
+
   it("uses relative day names for recent runs", () => {
     const now = new Date(2026, 8, 28, 18, 0)
     expect(formatRunTime(new Date(2026, 8, 28, 15, 18).toISOString(), now)).toMatch(/^Today at /)

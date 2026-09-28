@@ -299,7 +299,7 @@ function ActivityEventDetails({ entry }: { entry: AuditEntry }) {
   return (
     <dl className="activity-event">
       <EventFacts label="Source event" snapshot={event.data.source} />
-      {event.data.destination && <EventFacts label="Copy" snapshot={event.data.destination} />}
+      {event.data.destination && <EventFacts label="Managed projection" snapshot={event.data.destination} />}
       <div className="activity-event-ids">
         <dt>Event ID</dt>
         <dd><code>{entry.source_event_id}</code></dd>

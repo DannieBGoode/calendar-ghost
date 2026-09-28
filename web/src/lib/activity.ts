@@ -5,82 +5,82 @@ type ReasonCopy = { summary: string; explanation: string }
 // Keep in sync with SyncReason in src/calendar_sync/domain/model.py.
 const REASONS: Record<string, ReasonCopy> = {
   source_created: {
-    summary: "Created a copy",
-    explanation: "The source event had no copy in the destination calendar yet.",
+    summary: "Created a projection",
+    explanation: "The source event had no projection in the destination calendar yet.",
   },
   projection_missing: {
-    summary: "Recreated a missing copy",
-    explanation: "The copy was deleted from the destination calendar, so it was restored from the source.",
+    summary: "Recreated a missing projection",
+    explanation: "The projection was deleted from the destination calendar, so it was restored from the source.",
   },
   source_changed: {
-    summary: "Updated the copy",
-    explanation: "The source event changed, so the copy was updated to match.",
+    summary: "Updated the projection",
+    explanation: "The source event changed, so its projection was updated to match.",
   },
   destination_drift_repaired: {
-    summary: "Restored an edited copy",
+    summary: "Repaired an edited projection",
     explanation:
-      "The copy was edited directly in the destination calendar. The source is authoritative, so the edit was replaced.",
+      "The projection was edited directly in the destination calendar. The source is authoritative, so the edit was replaced.",
   },
   source_cancelled: {
-    summary: "Removed the copy",
+    summary: "Removed the projection",
     explanation: "The source event was cancelled or deleted.",
   },
   all_day_excluded_removed: {
-    summary: "Removed an all-day copy",
-    explanation: "This rule syncs timed events only, so the existing all-day copy was removed.",
+    summary: "Removed an all-day projection",
+    explanation: "This rule syncs timed events only, so the existing all-day projection was removed.",
   },
   projection_current: {
     summary: "No change needed",
-    explanation: "The copy already matches the source event.",
+    explanation: "The projection already matches the source event.",
   },
   outside_source_calendar: {
     summary: "Skipped an event from another calendar",
     explanation: "The event does not belong to this rule's source calendar.",
   },
   managed_projection_source: {
-    summary: "Skipped a copy made by a sync rule",
+    summary: "Skipped a managed projection",
     explanation:
-      "Copies created by Calendar Sync are never synced again. This prevents events from looping between calendars.",
+      "Projections created by Calendar Sync are never synced again. This prevents events from looping between calendars.",
   },
   recurring_unsupported: {
     summary: "Skipped a recurring event",
     explanation:
-      "Recurring events and changes to single occurrences are not synced yet. No copy was created or changed.",
+      "Recurring events and changes to single occurrences are not synced yet. No projection was created or changed.",
   },
   cancelled_without_projection: {
     summary: "Skipped a cancelled event",
-    explanation: "The event was cancelled before a copy existed, so there was nothing to remove.",
+    explanation: "The event was cancelled before a projection existed, so there was nothing to remove.",
   },
   all_day_excluded: {
     summary: "Skipped an all-day event",
     explanation: "This rule syncs timed events only. Edit the rule to include all-day events.",
   },
   mapping_inconsistent: {
-    summary: "Blocked: the event's link does not match this rule",
+    summary: "Blocked: the event mapping does not match this rule",
     explanation:
-      "The stored link between this event and its copy points somewhere unexpected. Nothing was written. Reconcile the rule to investigate.",
+      "The stored mapping between this event and its projection points somewhere unexpected. Nothing was written. Reconcile the rule to investigate.",
   },
   destination_identity_inconsistent: {
-    summary: "Blocked: the copy's identity changed",
+    summary: "Blocked: the projection's identity changed",
     explanation:
-      "The destination event no longer matches the recorded copy. Nothing was written. Reconcile the rule to investigate.",
+      "The destination event no longer matches the mapped projection. Nothing was written. Reconcile the rule to investigate.",
   },
   destination_ownership_inconsistent: {
-    summary: "Blocked: the copy is not owned by this rule",
+    summary: "Blocked: the projection is not owned by this rule",
     explanation:
       "The destination event is missing this rule's ownership marker, so Calendar Sync will not change or delete it.",
   },
   source_unverifiable: {
     summary: "Blocked: the source event could not be confirmed",
     explanation:
-      "The copy was edited, but the source event could not be read to repair it. The copy was left unchanged rather than risk deleting it.",
+      "The projection was edited, but the source event could not be read to repair it. The projection was left unchanged rather than risk deleting it.",
   },
 }
 
 const ACTION_FALLBACK: Record<string, string> = {
-  create: "Created a copy",
-  update: "Updated the copy",
-  delete: "Removed the copy",
+  create: "Created a projection",
+  update: "Updated the projection",
+  delete: "Removed the projection",
   ignore: "Skipped an event",
   conflict: "Blocked a change",
 }
@@ -118,20 +118,23 @@ export type ActivityRun = {
   entries: AuditEntry[]
 }
 
-/** Groups newest-first entries into synchronization runs, preserving order. */
+/**
+ * Groups newest-first entries into synchronization runs, ordered by each run's newest entry.
+ * Concurrent runs of different rules interleave their entries, so groups are keyed, not adjacent.
+ */
 export function groupRuns(entries: AuditEntry[]): ActivityRun[] {
-  const runs: ActivityRun[] = []
+  const runs = new Map<string, ActivityRun>()
   for (const entry of entries) {
     // Entries recorded before run identifiers existed are grouped by rule and minute.
     const key = entry.run_id ?? `${entry.rule_id}@${entry.occurred_at.slice(0, 16)}`
-    const current = runs.at(-1)
-    if (current?.key === key) {
-      current.entries.push(entry)
+    const run = runs.get(key)
+    if (run) {
+      run.entries.push(entry)
     } else {
-      runs.push({ key, ruleId: entry.rule_id, occurredAt: entry.occurred_at, entries: [entry] })
+      runs.set(key, { key, ruleId: entry.rule_id, occurredAt: entry.occurred_at, entries: [entry] })
     }
   }
-  return runs
+  return [...runs.values()]
 }
 
 export function summarizeRun(entries: AuditEntry[]): string {

@@ -11,7 +11,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - A warning before connecting a Google account when the browser address differs from the configured OAuth redirect URI, with LAN and Raspberry Pi redirect guidance.
 - Google profile names and photos for Connected Accounts through optional basic profile access. Reconnect existing accounts to show their photos.
 - Activity groups decisions by synchronization run, names the rule's calendars, explains every skipped, blocked, or changed event in plain language, and can be filtered by rule and outcome with older entries loaded on demand.
-- Activity entries can look up their source event and copy live from Google, showing the title, time, recurrence, and a Google Calendar link without storing any event content.
+- Activity entries can look up their source event and Managed Projection live from Google, showing the title, time, recurrence, and a Google Calendar link without storing any event content.
 - SQLite migration 3 adds stable reason codes and run identifiers to audit entries and backfills reason codes for existing entries.
 
 ### Changed
