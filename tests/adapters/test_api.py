@@ -109,10 +109,10 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
 
     app = create_app(container)
     with TestClient(app) as client:
-        assert client.get("/api/v1/activity").status_code == 401
+        assert client.get("/api/v1/audit-entries").status_code == 401
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
 
-        activity = client.get("/api/v1/activity").json()
+        activity = client.get("/api/v1/audit-entries").json()
         incidents = client.get("/api/v1/incidents").json()
 
         assert activity[0]["action"] == "create"

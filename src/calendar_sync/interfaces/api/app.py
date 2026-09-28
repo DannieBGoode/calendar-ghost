@@ -354,7 +354,7 @@ def create_app(container: Container | None = None) -> FastAPI:
             return [_rule_response(rule) for rule in uow.rules.list()]
 
     @app.get(
-        "/api/v1/activity",
+        "/api/v1/audit-entries",
         response_model=list[AuditEntryResponse],
         dependencies=[Depends(require_admin)],
     )

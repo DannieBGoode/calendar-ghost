@@ -18,6 +18,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - Google OAuth callbacks now support local HTTP development, preserve PKCE verification across redirects, and recover cleanly when Calendar permissions are declined.
 - Activity request failures, empty activity, and low-contrast actions now have distinct, accessible interface states.
+- Activity now loads when browser content blockers such as uBlock Origin are enabled; audit entries are served from `/api/v1/audit-entries` instead of `/api/v1/activity`.
 
 ## [0.1.0] - 2026-08-30
 

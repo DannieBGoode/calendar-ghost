@@ -150,6 +150,6 @@ export const api = {
     request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
       method: "POST",
     }),
-  activity: () => request<AuditEntry[]>("/api/v1/activity"),
+  activity: () => request<AuditEntry[]>("/api/v1/audit-entries"),
   incidents: () => request<Incident[]>("/api/v1/incidents"),
 }
