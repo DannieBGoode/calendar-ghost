@@ -85,7 +85,7 @@ def test_web_page_is_revalidated_so_upgrades_replace_cached_asset_references(
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
     with TestClient(app) as client:
-        pages = [client.get(path) for path in ("/", "/activity", "/index.html")]
+        pages = [client.get(path) for path in ("/", "/activity", "/index.html", "/./index.html")]
         favicon = client.get("/favicon.svg")
 
     for page in pages:

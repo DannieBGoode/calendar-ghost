@@ -555,9 +555,9 @@ def create_app(container: Container | None = None) -> FastAPI:
             requested = (static_root / full_path).resolve()
             if (
                 full_path
-                and requested != index
                 and requested.is_file()
                 and requested.is_relative_to(static_root)
+                and not requested.samefile(index)
             ):
                 return FileResponse(requested)
             # Revalidate the page on every load so an upgrade replaces it and its asset hashes.
