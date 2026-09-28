@@ -47,6 +47,13 @@ Migration 7 adds an index on `audit_entries(run_id, id)` so Activity can count a
 run's no-change checks without scanning the whole audit history. Rolling back works with the same
 database: earlier releases ignore the index.
 
+Migration 8 adds `rule_run_outcomes.last_full_succeeded_at`, the time of each rule's last successful
+full synchronization, backfilled where the latest recorded run was a successful full run. The
+scheduler uses it to run each rule's daily full pass once per UTC day across restarts. Rolling back
+works with the same database: earlier releases ignore the column and return to running the daily
+pass after every restart. Audit entries are unchanged; entries with reasons that are no longer
+recorded stay in the database and are hidden from Activity.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

@@ -27,6 +27,8 @@ from calendar_sync.domain.model import (
 class ProviderChangeSet:
     events: tuple[CalendarEvent, ...]
     next_cursor: str
+    complete: bool = False
+    """Every event in the window, not only changes since a cursor, as after a rejected cursor."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +205,9 @@ class RuleRunOutcome:
     # When the most recent successful run of this kind completed. The repository keeps it across
     # later failures, so a failed run never erases evidence that calendars were once current.
     last_succeeded_at: datetime | None = None
+    # When the most recent successful full run completed, kept across later incremental runs so
+    # the daily full pass is due per rule and survives restarts.
+    last_full_succeeded_at: datetime | None = None
 
 
 class RuleRunOutcomeRepository(Protocol):

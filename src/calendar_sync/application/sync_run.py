@@ -4,10 +4,34 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.ports import UnitOfWork
-from calendar_sync.domain.model import EventRef, SyncAction, SyncRule, SyncRuleState
+from calendar_sync.application.ports import AuditEntry, UnitOfWork
+from calendar_sync.domain.model import (
+    CalendarEvent,
+    EventRef,
+    SyncAction,
+    SyncReason,
+    SyncRule,
+    SyncRuleState,
+)
 
 OUTCOMES = {SyncAction.IGNORE: "skipped", SyncAction.CONFLICT: "blocked"}
+
+# Skips that answer no question a person would ask: loop prevention, bookkeeping, and events
+# that never were in scope. Runs count them but do not record them.
+UNRECORDED_REASONS = frozenset(
+    {
+        SyncReason.MANAGED_PROJECTION_SOURCE,
+        SyncReason.OUTSIDE_SOURCE_CALENDAR,
+        SyncReason.CANCELLED_WITHOUT_PROJECTION,
+        SyncReason.BEFORE_SYNC_WINDOW,
+        SyncReason.OCCURRENCE_RETIRED,
+    }
+)
+# Skips that explain a missing projection. A daily pass re-lists unchanged events, so only the
+# run that first saw the event, or saw it change, records why it was skipped.
+UNRECORDED_ON_DAILY_PASS = frozenset(
+    {SyncReason.ALL_DAY_EXCLUDED, SyncReason.SERIES_NOT_SYNCHRONIZED}
+)
 
 
 @dataclass(slots=True)
@@ -21,6 +45,12 @@ class SyncRunContext:
     window_start: datetime
     """Unmapped single events that ended before this instant are not projected."""
     reproject: bool = False
+    incremental: bool = True
+    """Both feeds report only changes since the previous run."""
+    daily_pass: bool = False
+    """A full re-listing of a rule whose calendars already synchronized incrementally."""
+    listed_destinations: dict[EventRef, CalendarEvent] = field(default_factory=dict)
+    """Destination events from this run's full listing, each usable once instead of a read."""
     handled: set[EventRef] = field(default_factory=set)
     repaired: set[EventRef] = field(default_factory=set)
     """Source series already repaired this run, so a repair never recurses."""
@@ -35,3 +65,11 @@ def require_unchanged(run: SyncRunContext) -> None:
         or current.material_signature != run.rule.material_signature
     ):
         raise RuleNotExecutable("sync rule changed during synchronization; run stopped")
+
+
+def record(run: SyncRunContext, entry: AuditEntry) -> None:
+    """Append an Audit Entry unless its decision is one Activity deliberately leaves out."""
+    reason = entry.reason
+    if reason in UNRECORDED_REASONS or (run.daily_pass and reason in UNRECORDED_ON_DAILY_PASS):
+        return
+    run.uow.audit.append(entry)

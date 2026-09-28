@@ -16,7 +16,7 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import UnitOfWorkFactory
+from calendar_sync.application.ports import RuleRunOutcome, RunKind, UnitOfWorkFactory
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import IncidentNotification, IncidentNotifier
@@ -174,7 +174,6 @@ class SyncScheduler:
         self._unit_of_work = unit_of_work
         self._health = health
         self._interval_seconds = interval_seconds
-        self._last_full_reconciliation: date | None = None
 
     async def run_forever(self) -> None:
         while True:
@@ -182,17 +181,17 @@ class SyncScheduler:
             await asyncio.sleep(self._interval_seconds)
 
     async def run_once(self) -> None:
-        with self._unit_of_work() as uow:
-            enabled = tuple(
-                rule for rule in uow.rules.list() if rule.state is SyncRuleState.ENABLED
-            )
         today = datetime.now(UTC).date()
-        full = self._last_full_reconciliation != today
-        successful = []
-        for rule in enabled:
-            successful.append(await asyncio.to_thread(self._execute_with_retry, rule, full))
-        if full and enabled and all(successful):
-            self._last_full_reconciliation = today
+        with self._unit_of_work() as uow:
+            # Each rule's daily full pass is due from its own last one, so a restart or another
+            # rule's failure never re-lists calendars that already completed today's pass.
+            due = tuple(
+                (rule, _full_pass_due(uow.run_outcomes.latest(rule.id, RunKind.SYNC), today))
+                for rule in uow.rules.list()
+                if rule.state is SyncRuleState.ENABLED
+            )
+        for rule, full in due:
+            await asyncio.to_thread(self._execute_with_retry, rule, full)
 
     def _execute_with_retry(self, rule: SyncRule, full: bool = False) -> bool:
         for attempt in range(3):
@@ -220,3 +219,8 @@ class SyncScheduler:
                 )
                 return False
         return False
+
+
+def _full_pass_due(latest: RuleRunOutcome | None, today: date) -> bool:
+    completed = latest.last_full_succeeded_at if latest is not None else None
+    return completed is None or completed.astimezone(UTC).date() != today

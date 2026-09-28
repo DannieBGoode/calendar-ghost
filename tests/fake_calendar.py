@@ -57,6 +57,10 @@ class FakeCalendars:
     feeds: dict[CalendarEndpoint, list[CalendarEvent]] = field(default_factory=dict)
     writes: list[tuple[str, str]] = field(default_factory=list)
     unreadable: set[EventRef] = field(default_factory=set)
+    reads: list[EventRef] = field(default_factory=list)
+    expired: set[CalendarEndpoint] = field(default_factory=set)
+    """Calendars whose next cursor is rejected, so their feed falls back to a full listing."""
+    """Every single-event and single-occurrence lookup, in order."""
     operations: dict[str, EventRef] = field(default_factory=dict)
     created: int = 0
 
@@ -84,6 +88,9 @@ class FakeCalendars:
     def changes(
         self, source: CalendarEndpoint, cursor: str | None, not_ended_before: datetime
     ) -> ProviderChangeSet:
+        if source in self.expired:
+            self.expired.discard(source)
+            cursor = None
         if cursor is None:
             self.feeds.pop(source, None)
             items = tuple(
@@ -93,7 +100,9 @@ class FakeCalendars:
             )
         else:
             items = tuple(self.feeds.pop(source, []))
-        return ProviderChangeSet(items, f"cursor-{source.calendar_id.value}")
+        return ProviderChangeSet(
+            items, f"cursor-{source.calendar_id.value}", complete=cursor is None
+        )
 
     @staticmethod
     def _in_window(event: CalendarEvent, not_ended_before: datetime) -> bool:
@@ -105,6 +114,7 @@ class FakeCalendars:
         return event.time.ends_at >= not_ended_before
 
     def get_event(self, reference: EventRef) -> CalendarEvent | None:
+        self.reads.append(reference)
         if reference in self.unreadable:
             return None
         return self.events.get(reference)
@@ -112,6 +122,7 @@ class FakeCalendars:
     def get_occurrence(
         self, series: EventRef, original_start: OccurrenceStart
     ) -> CalendarEvent | None:
+        self.reads.append(series)
         master = self.events.get(series)
         if master is None:
             raise ProviderFailure(ProviderFailureKind.TEMPORARY, "series could not be read")

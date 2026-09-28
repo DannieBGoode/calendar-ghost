@@ -51,6 +51,7 @@ _FORWARD_MIGRATIONS = (
     (5, "0005_occurrence_mappings.sql"),
     (6, "0006_rule_previews.sql"),
     (7, "0007_audit_run_index.sql"),
+    (8, "0008_last_full_sync.sql"),
 )
 
 
@@ -409,11 +410,14 @@ class SqliteRuleRunOutcomeRepository:
             """
             INSERT INTO rule_run_outcomes (
                 rule_id, kind, completed_at, succeeded, full_run, created, updated,
-                deleted, conflicts, checked_mappings, drift, failure_kind, last_succeeded_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                deleted, conflicts, checked_mappings, drift, failure_kind, last_succeeded_at,
+                last_full_succeeded_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id, kind) DO UPDATE SET
                 last_succeeded_at = CASE WHEN excluded.succeeded
                     THEN excluded.completed_at ELSE rule_run_outcomes.last_succeeded_at END,
+                last_full_succeeded_at = CASE WHEN excluded.succeeded AND excluded.full_run
+                    THEN excluded.completed_at ELSE rule_run_outcomes.last_full_succeeded_at END,
                 completed_at = excluded.completed_at,
                 succeeded = excluded.succeeded,
                 full_run = excluded.full_run,
@@ -439,6 +443,9 @@ class SqliteRuleRunOutcomeRepository:
                 outcome.drift,
                 outcome.failure_kind,
                 outcome.completed_at.isoformat() if outcome.succeeded else None,
+                outcome.completed_at.isoformat()
+                if outcome.succeeded and outcome.full_run
+                else None,
             ),
         )
 
@@ -466,6 +473,11 @@ class SqliteRuleRunOutcomeRepository:
                 None
                 if row["last_succeeded_at"] is None
                 else datetime.fromisoformat(str(row["last_succeeded_at"]))
+            ),
+            last_full_succeeded_at=(
+                None
+                if row["last_full_succeeded_at"] is None
+                else datetime.fromisoformat(str(row["last_full_succeeded_at"]))
             ),
         )
 

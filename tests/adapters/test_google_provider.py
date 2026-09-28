@@ -99,6 +99,7 @@ def test_changes_paginates_and_returns_the_final_sync_token() -> None:
 
     assert [item.reference.event_id.value for item in result.events] == ["one", "two"]
     assert result.next_cursor == "cursor-2"
+    assert result.complete
     first_parameters = events_api.list.call_args_list[0].kwargs
     second_parameters = events_api.list.call_args_list[1].kwargs
     assert first_parameters["timeMin"] == "2026-07-31T00:00:00+00:00"
@@ -120,9 +121,23 @@ def test_expired_google_sync_token_recovers_with_a_full_window_request() -> None
     )
 
     assert result.next_cursor == "replacement-cursor"
+    # The replacement is a full listing, so callers must not treat it as changes since a cursor.
+    assert result.complete
     assert events_api.list.call_args_list[0].kwargs["syncToken"] == "expired-cursor"
     assert "syncToken" not in events_api.list.call_args_list[1].kwargs
     assert "timeMin" in events_api.list.call_args_list[1].kwargs
+
+
+def test_incremental_changes_are_not_a_complete_listing() -> None:
+    events_api = MagicMock()
+    events_api.list.return_value = request_returning({"items": [], "nextSyncToken": "cursor-3"})
+    provider = provider_with_events_api(events_api)
+
+    result = provider.changes(
+        endpoint("account", "calendar"), "cursor-2", datetime(2026, 7, 31, tzinfo=UTC)
+    )
+
+    assert not result.complete
 
 
 def test_create_projection_reuses_an_existing_operation() -> None:

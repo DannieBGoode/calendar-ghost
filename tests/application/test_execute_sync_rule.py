@@ -30,7 +30,6 @@ from calendar_sync.domain.model import (
     OccurrenceStart,
     PrivacyPolicy,
     ProjectionFingerprint,
-    SyncAction,
     SyncReason,
     SyncRuleId,
     SyncRuleState,
@@ -469,7 +468,8 @@ def test_managed_source_is_ignored_without_destination_write() -> None:
 
     assert result.ignored == 1
     assert provider.operation_keys == []
-    assert unit_of_work.state.audit[0].action == SyncAction.IGNORE.value
+    # Loop prevention is counted on the run but explains nothing worth an Audit Entry.
+    assert unit_of_work.state.audit == []
 
 
 def test_each_run_groups_its_audit_entries() -> None:
@@ -490,7 +490,9 @@ def test_each_run_groups_its_audit_entries() -> None:
     )
 
     first = use_case.execute(rule().id)
-    provider.source_changes = (managed,)
+    changed = event(revision="revision-2")
+    provider.source = changed
+    provider.source_changes = (changed, managed)
     use_case.execute(rule().id)
 
     assert first.created == 1
@@ -501,8 +503,7 @@ def test_each_run_groups_its_audit_entries() -> None:
         for entry in (unit_of_work.state.audit)
     ] == [
         ("run-1", "create", "completed", SyncReason.SOURCE_CREATED),
-        ("run-1", "ignore", "skipped", SyncReason.MANAGED_PROJECTION_SOURCE),
-        ("run-2", "ignore", "skipped", SyncReason.MANAGED_PROJECTION_SOURCE),
+        ("run-2", "update", "completed", SyncReason.SOURCE_CHANGED),
     ]
     assert all("Private appointment" not in repr(entry) for entry in unit_of_work.state.audit)
 

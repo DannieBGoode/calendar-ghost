@@ -72,7 +72,7 @@ class GoogleCalendarProvider:
                             ProviderFailureKind.PERMANENT,
                             "Google response did not include a synchronization token",
                         )
-                    return ProviderChangeSet(tuple(items), next_cursor)
+                    return ProviderChangeSet(tuple(items), next_cursor, complete=not cursor)
                 parameters["pageToken"] = page_token
         except ProviderFailure:
             raise

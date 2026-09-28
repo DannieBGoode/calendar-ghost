@@ -31,6 +31,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Synchronization runs spend fewer Google requests. A projection or occurrence that the incremental destination feed reports back unchanged after this rule wrote it is no longer re-checked against its source, a mapping reported by both feeds in one run is decided once, and full passes reuse the destination listing instead of reading each projection again.
+- Each rule's daily full pass runs once per UTC day, tracked per rule in SQLite migration 8 (`last_full_succeeded_at`). A rule's first run counts as that day's pass, and restarting the service or another rule failing no longer repeats it.
+- Activity no longer records loop prevention (`managed_projection_source`), events outside the rule's scope (`outside_source_calendar`, `cancelled_without_projection`, `before_sync_window`), or retired occurrence records (`occurrence_retired`); runs still count them. The daily full pass no longer repeats `all_day_excluded` and `series_not_synchronized` skips. Earlier entries with these reasons are hidden from `GET /api/v1/audit-entries`.
 - Rule Removal leaves an event whose ownership cannot be verified in place and continues instead of stopping, retries temporary and rate-limited Google failures with backoff and Google's `Retry-After` hint (bounded to 60 seconds, also used by scheduled runs), opens an Incident when destination authorization is lost, and reports deleted, detached, and left-behind events on the rules list. The removal and replacement API responses include a `conflicts` count.
 - Disconnected-account rules now stop clearly and preserve recovery data until reauthorization or permanent deletion.
 - Appearance and color-theme preferences now share one Settings control.
