@@ -81,6 +81,7 @@ class InMemorySyncRuleRepository:
         self._state.outcomes = {
             key: outcome for key, outcome in self._state.outcomes.items() if key[0] != rule_id
         }
+        self._state.previews.pop(rule_id, None)
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         return any(
