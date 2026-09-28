@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Annotated
 
 import uvicorn
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Match, Route
+from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.application.errors import DuplicateDirectionalRelationship, RuleNotExecutable
@@ -61,7 +62,6 @@ from calendar_sync.interfaces.api.schemas import (
 )
 
 SESSION_COOKIE = "calendar_sync_session"
-UNKNOWN_API_PATH_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]
 
 
 def create_app(container: Container | None = None) -> FastAPI:
@@ -538,27 +538,9 @@ def create_app(container: Container | None = None) -> FastAPI:
         return _rule_response(paused)
 
     # Registered after every API route so an unknown API path is a JSON error for any method
-    # instead of falling through to the web page. A full match here outranks the partial match
-    # of a known route called with the wrong method, so that case is restored to 405.
-    @app.api_route("/api", methods=UNKNOWN_API_PATH_METHODS, include_in_schema=False)
-    @app.api_route("/api/{path:path}", methods=UNKNOWN_API_PATH_METHODS, include_in_schema=False)
-    def unknown_api_path(request: Request) -> None:
-        allowed = {
-            method
-            for route in request.app.router.routes
-            if isinstance(route, Route)
-            and route.path.startswith("/api/")
-            and route.endpoint is not unknown_api_path
-            and route.matches(request.scope)[0] is Match.PARTIAL
-            for method in route.methods or ()
-        }
-        if allowed:
-            raise HTTPException(
-                status.HTTP_405_METHOD_NOT_ALLOWED,
-                "Method Not Allowed",
-                headers={"Allow": ", ".join(sorted(allowed))},
-            )
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+    # instead of falling through to the web page.
+    app.router.routes.append(Route("/api", UnknownApiPath(), include_in_schema=False))
+    app.router.routes.append(Route("/api/{path:path}", UnknownApiPath(), include_in_schema=False))
 
     static_directory = Path(__file__).with_name("static")
     if static_directory.exists():
@@ -572,9 +554,36 @@ def create_app(container: Container | None = None) -> FastAPI:
             requested = (static_root / full_path).resolve()
             if full_path and requested.is_file() and requested.is_relative_to(static_root):
                 return FileResponse(requested)
-            return FileResponse(static_root / "index.html")
+            # Revalidate the page on every load so an upgrade replaces it and its asset hashes.
+            return FileResponse(static_root / "index.html", headers={"Cache-Control": "no-cache"})
 
     return app
+
+
+class UnknownApiPath:
+    """ASGI endpoint, rather than a function, so its route accepts every HTTP method.
+
+    Its full match outranks the partial match of a known route called with the wrong method,
+    so that case is restored to 405 with the methods the path does support.
+    """
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        allowed = {
+            method
+            for route in scope["app"].router.routes
+            if isinstance(route, Route)
+            and route.path.startswith("/api/")
+            and not isinstance(route.endpoint, UnknownApiPath)
+            and route.matches(scope)[0] is Match.PARTIAL
+            for method in route.methods or ()
+        }
+        if allowed:
+            raise HTTPException(
+                status.HTTP_405_METHOD_NOT_ALLOWED,
+                "Method Not Allowed",
+                headers={"Allow": ", ".join(sorted(allowed))},
+            )
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
 
 
 def _set_session_cookie(response: Response, token: str, secure: bool) -> None:

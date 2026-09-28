@@ -23,7 +23,9 @@ def test_audit_entries_return_empty_list_before_any_synchronization(tmp_path: Pa
     assert response.json() == []
 
 
-@pytest.mark.parametrize("method", ["GET", "POST", "PUT", "PATCH", "DELETE"])
+@pytest.mark.parametrize(
+    "method", ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"]
+)
 @pytest.mark.parametrize(
     "path", ["/api", "/api/", "/api/v1/activity", "/api/v1/unknown", "/api/v2/audit-entries"]
 )
@@ -37,7 +39,9 @@ def test_unknown_api_paths_return_not_found_instead_of_the_web_page(
         response = client.request(method, path)
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Not Found"}
+    assert "allow" not in response.headers
+    if method != "HEAD":
+        assert response.json() == {"detail": "Not Found"}
 
 
 @pytest.mark.parametrize(
@@ -46,6 +50,7 @@ def test_unknown_api_paths_return_not_found_instead_of_the_web_page(
         ("DELETE", "/api/v1/setup/admin", "POST"),
         ("GET", "/api/v1/rules/rule-1/pause", "POST"),
         ("POST", "/api/docs", "GET, HEAD"),
+        ("OPTIONS", "/api/v1/session", "DELETE, GET, POST"),
     ],
 )
 def test_known_api_routes_keep_their_method_errors(
@@ -72,6 +77,19 @@ def test_paths_that_only_share_the_api_prefix_still_serve_the_web_page(
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
+
+
+def test_web_page_is_revalidated_so_upgrades_replace_cached_asset_references(
+    tmp_path: Path,
+) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+
+    with TestClient(app) as client:
+        page = client.get("/activity")
+        favicon = client.get("/favicon.svg")
+
+    assert page.headers["cache-control"] == "no-cache"
+    assert "cache-control" not in favicon.headers
 
 
 def test_shipped_frontend_bundle_requests_audit_entries_path() -> None:
