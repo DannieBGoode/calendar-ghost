@@ -16,6 +16,22 @@ For each changed source event, the decision service chooses one action:
 - **Ignore** when content is current, the source is itself managed, or an excluded/cancelled source has no mapping.
 - **Conflict** only when identity or ownership is ambiguous.
 
+## Reprojection after a Material Rule Change
+
+Incremental change feeds only report source events that changed, so a new transformation policy
+would otherwise reach only future edits. When a rule's reprojection flag is set, its next Sync Run
+ignores both cursors, then loads the authoritative source of every remaining Event Mapping,
+including events that ended before the Initial Sync Window, and applies the normal decision. A
+source that cannot be verified is recorded as a Conflict and its projection is left unchanged. The
+run clears the flag with its cursors only if the rule was not changed again meanwhile.
+
+## Rule Removal
+
+Removal holds the same per-rule lock as synchronization. Deleting projections uses the normal
+ownership checks and `sendUpdates=none`, committing each mapping as it is removed; keeping
+projections as Detached Events removes mappings without provider writes. Managed events without a
+mapping are never deleted.
+
 ## Loop prevention
 
 Managed Google events carry private extended properties containing rule, source, and operation identity. A reverse rule ignores any event bearing managed origin metadata. This permits `A -> B` and `B -> A` while native events flow in both directions without projection loops.

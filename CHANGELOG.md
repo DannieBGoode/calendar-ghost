@@ -10,12 +10,16 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Stable URLs for Overview, Rules, Activity, and Settings, with account identity markers throughout rule management.
 - A warning before connecting a Google account when the browser address differs from the configured OAuth redirect URI, with LAN and Raspberry Pi redirect guidance.
 - Google profile names and photos for Connected Accounts through optional basic profile access. Reconnect existing accounts to show their photos.
+- Rule Details at `/rules/{id}` showing calendars, projection policy, all-day eligibility, initial window, state, managed projection count, and the last synchronization and reconciliation outcomes.
+- Transformation Policy and all-day eligibility editing as a Material Rule Change that pauses the rule, requires a new preview, and rewrites every existing projection on the next run.
+- Rule Removal with an explicit choice to delete mapped projections or keep them as Detached Events, and Rule Replacement for changing a rule's calendars.
 
 ### Changed
 
 - Disconnected-account rules now stop clearly and preserve recovery data until reauthorization or permanent deletion.
 - Appearance and color-theme preferences now share one Settings control.
 - Rules name each Source and Destination Calendar and its account email instead of showing provider calendar identifiers.
+- Migration 3 records pending reprojection and the latest run outcomes for each rule.
 
 ### Fixed
 

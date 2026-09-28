@@ -124,6 +124,12 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 The main sections have stable URLs at `/overview`, `/rules`, `/activity`, and `/settings`, so they
 can be bookmarked and browser back/forward navigation works as expected.
 
+Open **View details** on a rule (`/rules/{id}`) to see its calendars, policy, projection count, and
+latest runs. Changing its privacy or all-day policy pauses the rule until it passes a new preview,
+then rewrites existing projections on the next run. Changing a calendar removes the rule and creates
+a new draft; removing a rule asks whether to delete its projections (recommended) or keep them as
+ordinary events that are no longer managed.
+
 Use **Settings → Connected accounts** to review every authorized identity, connect another Google
 account, check its Calendar API access, or disconnect it. **Check access** verifies calendar-list
 and event permissions with read-only requests and reports how many visible calendars can be used as
