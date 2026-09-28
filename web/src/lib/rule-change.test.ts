@@ -30,7 +30,7 @@ describe("policy change consequences", () => {
     })
     expect(lines[0]).toBe("Synchronization pauses now. Preview the rule, then enable it again.")
     expect(lines).toContain(
-      "37 existing projections in Family will show event titles, descriptions, and locations after the next run.",
+      "37 existing projections in Family will show event titles, descriptions, and locations after the next run, to anyone who can see Family.",
     )
     expect(lines.at(-1)).toBe("Nothing changes in Google Calendar until the rule is enabled again.")
   })
@@ -81,7 +81,7 @@ describe("policy change consequences", () => {
       destination: "Family",
     })
     expect(lines).toContain(
-      "New projections in Family will show event titles, descriptions, and locations.",
+      "New projections in Family will show event titles, descriptions, and locations to anyone who can see it.",
     )
   })
 })
@@ -92,7 +92,7 @@ describe("rule removal copy", () => {
     expect(removalConfirmLabel("detach", 1)).toBe("Remove rule and keep 1 event")
     expect(removalConfirmLabel("delete", 0)).toBe("Remove rule")
     expect(removalConsequence("delete", 2, "Family")).toBe(
-      "2 Managed Projections will be deleted from Family. Source events are not changed. This cannot be undone.",
+      "2 projections this rule wrote will be deleted from Family. Source events are not changed. This cannot be undone.",
     )
     expect(removalConsequence("detach", 2, "Family")).toBe(
       "2 projections stay in Family as ordinary events that are no longer updated or deleted. This cannot be undone.",
@@ -133,9 +133,9 @@ describe("state and outcome labels", () => {
     expect(runOutcomeSummary({ ...base, conflicts: 1 }, "sync")).toBe(
       "Succeeded: 2 created, 1 updated, 0 deleted, 1 conflict",
     )
-    expect(runOutcomeSummary(base, "reconciliation")).toBe("Consistent: 42 mappings checked")
+    expect(runOutcomeSummary(base, "reconciliation")).toBe("All 42 projections matched their sources")
     expect(runOutcomeSummary({ ...base, drift: 3 }, "reconciliation")).toBe(
-      "3 differences found in 42 mappings",
+      "3 differences found in 42 projections and repaired",
     )
     expect(
       runOutcomeSummary({ ...base, succeeded: false, failure_kind: "authentication" }, "sync"),

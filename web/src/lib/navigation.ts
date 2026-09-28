@@ -1,5 +1,16 @@
 export type AppView = "overview" | "rules" | "activity" | "settings"
 export type AppLocation = { view: AppView; ruleId: string | null }
+/**
+ * Changes view. A notice is announced on arrival; `createRule` opens the rule builder; `search`
+ * carries filters such as `?rule=` into the destination.
+ */
+export type ViewOptions = { notice?: string; createRule?: boolean; search?: string }
+export type ViewChange = (view: AppView, options?: ViewOptions) => void
+export type OpenRule = (ruleId: string, options?: ViewOptions) => void
+
+export function activitySearch(ruleId: string): string {
+  return `?rule=${encodeURIComponent(ruleId)}`
+}
 
 export const APP_VIEW_PATHS: Record<AppView, string> = {
   overview: "/overview",

@@ -33,8 +33,12 @@ export type SessionStatus = { authenticated: boolean }
 export type Dashboard = {
   health: "healthy" | "attention"
   connected_accounts: number
+  disconnected_accounts: number
   sync_rules: number
+  enabled_rules: number
+  stopped_rules: number
   open_incidents: number
+  last_synced_at: string | null
 }
 export type Rule = {
   id: string
@@ -58,11 +62,31 @@ export type RunOutcome = {
   drift: number
   failure_kind: string | null
 }
+export type PreviewSummary = {
+  completed_at: string
+  eligible_events: number
+  excluded_events: number
+  recurring_series: number
+  occurrence_changes: number
+}
+export type RuleSummary = Rule & { last_sync: RunOutcome | null; latest_preview: PreviewSummary | null }
+export type RecentChange = {
+  run_key: string
+  rule_id: string
+  occurred_at: string
+  created: number
+  updated: number
+  deleted: number
+  repaired: number
+  blocked: number
+  entry_ids: number[]
+}
 export type RuleDetail = Rule & {
   initial_lookback_days: number
   mapping_count: number
   last_sync: RunOutcome | null
   last_reconciliation: RunOutcome | null
+  latest_preview: PreviewSummary | null
 }
 export type RulePolicyPayload = {
   privacy_policy: "busy_only" | "copy_details"
@@ -169,7 +193,7 @@ export const api = {
     }),
   logOut: () => request<void>("/api/v1/session", { method: "DELETE" }),
   dashboard: () => request<Dashboard>("/api/v1/dashboard"),
-  rules: () => request<Rule[]>("/api/v1/rules"),
+  rules: () => request<RuleSummary[]>("/api/v1/rules"),
   rule: (ruleId: string) => request<RuleDetail>(`/api/v1/rules/${encodeURIComponent(ruleId)}`),
   updateRulePolicy: (ruleId: string, payload: RulePolicyPayload) =>
     request<Rule>(`/api/v1/rules/${encodeURIComponent(ruleId)}`, {
@@ -245,4 +269,5 @@ export const api = {
   activityEvent: (entryId: number) =>
     request<ActivityEvent>(`/api/v1/audit-entries/${entryId}/event`),
   incidents: () => request<Incident[]>("/api/v1/incidents"),
+  recentChanges: (limit = 5) => request<RecentChange[]>(`/api/v1/recent-changes?limit=${limit}`),
 }

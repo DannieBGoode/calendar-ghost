@@ -201,6 +201,24 @@ class RuleRunOutcomeRepository(Protocol):
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class RulePreviewSummary:
+    """Counts from the latest Rule Preview, kept so enabling can restate them; never content."""
+
+    rule_id: SyncRuleId
+    completed_at: datetime
+    eligible_events: int
+    excluded_events: int
+    recurring_series: int = 0
+    occurrence_changes: int = 0
+
+
+class RulePreviewRepository(Protocol):
+    def record(self, summary: RulePreviewSummary) -> None: ...
+
+    def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None: ...
+
+
 class UnitOfWork(Protocol):
     rules: SyncRuleRepository
     mappings: EventMappingRepository
@@ -209,6 +227,7 @@ class UnitOfWork(Protocol):
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
     run_outcomes: RuleRunOutcomeRepository
+    previews: RulePreviewRepository
 
     def __enter__(self) -> Self: ...
 

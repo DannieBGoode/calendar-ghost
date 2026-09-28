@@ -7,7 +7,12 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import AuditEntry, RuleRunOutcome, RunKind
+from calendar_sync.application.ports import (
+    AuditEntry,
+    RulePreviewSummary,
+    RuleRunOutcome,
+    RunKind,
+)
 from calendar_sync.domain.model import (
     EventId,
     EventMapping,
@@ -150,7 +155,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         rows = connection.execute(
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
-    assert versions == [1, 2, 3, 4, 5]
+    assert versions == [1, 2, 3, 4, 5, 6]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -254,6 +259,26 @@ def test_run_outcomes_keep_the_latest_per_kind(tmp_path: Path) -> None:
     with factory() as uow:
         assert uow.run_outcomes.latest(rule().id, RunKind.SYNC) == second
         assert uow.run_outcomes.latest(rule().id, RunKind.RECONCILIATION) is None
+
+
+def test_rule_previews_keep_the_latest_counts_and_cascade_with_the_rule(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    first = RulePreviewSummary(rule().id, datetime(2026, 9, 1, tzinfo=UTC), 3, 1)
+    second = replace(first, completed_at=datetime(2026, 9, 2, tzinfo=UTC), eligible_events=7)
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.previews.record(first)
+        uow.previews.record(second)
+        uow.commit()
+
+    with factory() as uow:
+        assert uow.previews.latest(rule().id) == second
+    with sqlite3.connect(database) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule().id.value,))
+        assert connection.execute("SELECT COUNT(*) FROM rule_previews").fetchone()[0] == 0
 
 
 def test_rule_removal_cascades_resolves_incidents_and_keeps_audit(tmp_path: Path) -> None:

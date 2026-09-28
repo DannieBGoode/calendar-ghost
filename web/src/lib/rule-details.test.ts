@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest"
 
 import dashboardSource from "../features/dashboard.tsx?raw"
+import rulesSource from "../features/rules.tsx?raw"
 import detailsSource from "../features/rule-details.tsx?raw"
 
 describe("Rule Details presentation", () => {
-  it("defaults Rule Removal to deleting mapped projections and confirms separately", () => {
+  it("defaults Rule Removal to deleting mapped projections and names the effect on its button", () => {
     expect(detailsSource).toContain('useState<ProjectionHandling>("delete")')
-    expect(detailsSource).toContain("removalConfirmLabel(")
-    expect(detailsSource).toContain('role="radiogroup"')
+    expect(detailsSource).toContain("removalConfirmLabel(effective, detail.mapping_count)")
+    expect(detailsSource).toContain("aria-describedby={`${name}-consequence`}")
     expect(detailsSource).toContain("Removal incomplete")
   })
 
@@ -32,8 +33,8 @@ describe("Rule Details presentation", () => {
   })
 
   it("links every rule row to its details and renders the details route", () => {
-    expect(dashboardSource).toContain("appPathForRule(rule.id)")
+    expect(rulesSource).toContain("appPathForRule(rule.id)")
     expect(dashboardSource).toContain("<RuleDetailsView")
-    expect(dashboardSource).toContain("Preview required")
+    expect(rulesSource).toContain("Preview required")
   })
 })

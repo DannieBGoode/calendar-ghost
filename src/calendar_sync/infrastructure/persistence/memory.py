@@ -10,6 +10,8 @@ from calendar_sync.application.ports import (
     AuditRepository,
     EventMappingRepository,
     OccurrenceMappingRepository,
+    RulePreviewRepository,
+    RulePreviewSummary,
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
@@ -40,6 +42,7 @@ class MemoryState:
     destination_cursors: dict[SyncRuleId, str] = field(default_factory=dict)
     audit: list[AuditEntry] = field(default_factory=list)
     outcomes: dict[tuple[SyncRuleId, RunKind], RuleRunOutcome] = field(default_factory=dict)
+    previews: dict[SyncRuleId, RulePreviewSummary] = field(default_factory=dict)
 
 
 class InMemorySyncRuleRepository:
@@ -186,6 +189,17 @@ class InMemoryRuleRunOutcomeRepository:
         return self._state.outcomes.get((rule_id, kind))
 
 
+class InMemoryRulePreviewRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def record(self, summary: RulePreviewSummary) -> None:
+        self._state.previews[summary.rule_id] = summary
+
+    def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None:
+        return self._state.previews.get(rule_id)
+
+
 class InMemoryUnitOfWork:
     rules: SyncRuleRepository
     mappings: EventMappingRepository
@@ -194,6 +208,7 @@ class InMemoryUnitOfWork:
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
     run_outcomes: RuleRunOutcomeRepository
+    previews: RulePreviewRepository
 
     def __init__(self, target: MemoryState) -> None:
         self._target = target
@@ -209,6 +224,7 @@ class InMemoryUnitOfWork:
         self.destination_cursors = InMemorySyncCursorRepository(self._working.destination_cursors)
         self.audit = InMemoryAuditRepository(self._working)
         self.run_outcomes = InMemoryRuleRunOutcomeRepository(self._working)
+        self.previews = InMemoryRulePreviewRepository(self._working)
         return self
 
     def __exit__(
@@ -228,6 +244,7 @@ class InMemoryUnitOfWork:
         self._target.destination_cursors = self._working.destination_cursors
         self._target.audit = self._working.audit
         self._target.outcomes = self._working.outcomes
+        self._target.previews = self._working.previews
         self._committed = True
 
 

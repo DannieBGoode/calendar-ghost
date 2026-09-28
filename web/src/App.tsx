@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Activity, CalendarCheck2, LogOut, Menu, Settings2, Waypoints, X } from "lucide-react"
-import { useEffect, useState, type MouseEvent } from "react"
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -16,6 +16,7 @@ import {
   isPlainLeftClick,
   type AppLocation,
   type AppView,
+  type ViewOptions,
 } from "@/lib/navigation"
 import { cn } from "@/lib/utils"
 
@@ -50,6 +51,11 @@ function AuthenticatedApp() {
   )
   const view = location.view
   const [mobileNav, setMobileNav] = useState(false)
+  const [arrival, setArrival] = useState<ViewOptions>({})
+  const [announcement, setAnnouncement] = useState("")
+  const main = useRef<HTMLElement>(null)
+  const menuButton = useRef<HTMLButtonElement>(null)
+  const navigated = useRef(false)
   const queryClient = useQueryClient()
   const logout = useMutation({ mutationFn: api.logOut, onSuccess: () => queryClient.clear() })
 
@@ -63,6 +69,8 @@ function AuthenticatedApp() {
       )
     }
     const handlePopState = () => {
+      navigated.current = true
+      setArrival({})
       setLocation(appLocationFromPathname(window.location.pathname))
       setMobileNav(false)
     }
@@ -70,22 +78,54 @@ function AuthenticatedApp() {
     return () => window.removeEventListener("popstate", handlePopState)
   }, [])
 
-  function navigate(next: AppLocation) {
-    const nextPath = appPathForLocation(next)
-    if (window.location.pathname !== nextPath || window.location.search || window.location.hash) {
+  // A layout effect runs before the new view's own effects, so a view that focuses its heading
+  // (Rule Details, the rule builder) refines this rather than being overridden by it.
+  useLayoutEffect(() => {
+    const title = navItems.find((item) => item.id === view)?.label ?? "Overview"
+    document.title = `${location.ruleId ? "Rule" : title} – Calendar Sync`
+    if (navigated.current) main.current?.focus({ preventScroll: true })
+  }, [view, location.ruleId])
+
+  useEffect(() => {
+    // The live region stays mounted across views; filling it after arrival makes the notice
+    // reliably announced even though the view that shows it has just mounted.
+    const clear = window.setTimeout(() => setAnnouncement(""), 0)
+    const fill = window.setTimeout(() => setAnnouncement(arrival.notice ?? ""), 60)
+    return () => {
+      window.clearTimeout(clear)
+      window.clearTimeout(fill)
+    }
+  }, [arrival])
+
+  useEffect(() => {
+    if (!mobileNav) return
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      setMobileNav(false)
+      menuButton.current?.focus()
+    }
+    document.addEventListener("keydown", close)
+    return () => document.removeEventListener("keydown", close)
+  }, [mobileNav])
+
+  function navigate(next: AppLocation, options: ViewOptions = {}) {
+    const nextPath = `${appPathForLocation(next)}${options.search ?? ""}`
+    if (`${window.location.pathname}${window.location.search}` !== nextPath || window.location.hash) {
       window.history.pushState(null, "", nextPath)
     }
+    navigated.current = true
+    setArrival(options)
     setLocation(next)
     setMobileNav(false)
     window.scrollTo(0, 0)
   }
 
-  function changeView(next: AppView) {
-    navigate({ view: next, ruleId: null })
+  function changeView(next: AppView, options?: ViewOptions) {
+    navigate({ view: next, ruleId: null }, options)
   }
 
-  function openRule(ruleId: string) {
-    navigate({ view: "rules", ruleId })
+  function openRule(ruleId: string, options?: ViewOptions) {
+    navigate({ view: "rules", ruleId }, options)
   }
 
   function followSectionLink(event: MouseEvent<HTMLAnchorElement>, next: AppView) {
@@ -100,7 +140,7 @@ function AuthenticatedApp() {
         <a className="wordmark" href={appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label="Calendar Sync overview">
           <span className="wordmark-icon"><CalendarCheck2 /></span><span>Calendar Sync</span>
         </a>
-        <nav className={cn("primary-nav", mobileNav && "open")} aria-label="Primary navigation">
+        <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label="Primary navigation">
           {navItems.map((item) => {
             const Icon = item.icon
             return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{item.label}</span></a>
@@ -108,11 +148,12 @@ function AuthenticatedApp() {
         </nav>
         <div className="topbar-actions">
           <ThemeToggle />
-          <Button variant="ghost" size="sm" onClick={() => logout.mutate()} disabled={logout.isPending}><LogOut /> <span className="desktop-only">Sign out</span></Button>
-          <Button className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-label={mobileNav ? "Close navigation" : "Open navigation"}>{mobileNav ? <X /> : <Menu />}</Button>
+          <Button variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending} aria-label="Sign out"><LogOut /> <span className="desktop-only">Sign out</span></Button>
+          <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? "Close navigation" : "Open navigation"}>{mobileNav ? <X /> : <Menu />}</Button>
         </div>
       </header>
-      <main className="app-main"><Dashboard location={location} onViewChange={changeView} onOpenRule={openRule} /></main>
+      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} onViewChange={changeView} onOpenRule={openRule} /></main>
+      <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
       <footer className="app-footer"><span>Local installation</span><span aria-hidden="true">·</span><a href="/api/docs">API documentation</a></footer>
     </div>
   )

@@ -14,6 +14,8 @@ from calendar_sync.application.ports import (
     AuditRepository,
     EventMappingRepository,
     OccurrenceMappingRepository,
+    RulePreviewRepository,
+    RulePreviewSummary,
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
@@ -47,6 +49,7 @@ _FORWARD_MIGRATIONS = (
     (3, "0003_audit_reasons.sql"),
     (4, "0004_rule_editing.sql"),
     (5, "0005_occurrence_mappings.sql"),
+    (6, "0006_rule_previews.sql"),
 )
 
 
@@ -458,6 +461,50 @@ class SqliteRuleRunOutcomeRepository:
         )
 
 
+class SqliteRulePreviewRepository:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def record(self, summary: RulePreviewSummary) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO rule_previews (
+                rule_id, completed_at, eligible_events, excluded_events, recurring_series,
+                occurrence_changes
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(rule_id) DO UPDATE SET
+                completed_at = excluded.completed_at,
+                eligible_events = excluded.eligible_events,
+                excluded_events = excluded.excluded_events,
+                recurring_series = excluded.recurring_series,
+                occurrence_changes = excluded.occurrence_changes
+            """,
+            (
+                summary.rule_id.value,
+                summary.completed_at.isoformat(),
+                summary.eligible_events,
+                summary.excluded_events,
+                summary.recurring_series,
+                summary.occurrence_changes,
+            ),
+        )
+
+    def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None:
+        row = self._connection.execute(
+            "SELECT * FROM rule_previews WHERE rule_id = ?", (rule_id.value,)
+        ).fetchone()
+        if row is None:
+            return None
+        return RulePreviewSummary(
+            rule_id=rule_id,
+            completed_at=datetime.fromisoformat(str(row["completed_at"])),
+            eligible_events=int(row["eligible_events"]),
+            excluded_events=int(row["excluded_events"]),
+            recurring_series=int(row["recurring_series"]),
+            occurrence_changes=int(row["occurrence_changes"]),
+        )
+
+
 class SqliteUnitOfWork:
     rules: SyncRuleRepository
     mappings: EventMappingRepository
@@ -466,6 +513,7 @@ class SqliteUnitOfWork:
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
     run_outcomes: RuleRunOutcomeRepository
+    previews: RulePreviewRepository
 
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
@@ -483,6 +531,7 @@ class SqliteUnitOfWork:
         self.destination_cursors = SqliteDestinationSyncCursorRepository(connection)
         self.audit = SqliteAuditRepository(connection)
         self.run_outcomes = SqliteRuleRunOutcomeRepository(connection)
+        self.previews = SqliteRulePreviewRepository(connection)
         return self
 
     def __exit__(
