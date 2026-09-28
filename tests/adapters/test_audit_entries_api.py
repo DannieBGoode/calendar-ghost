@@ -66,6 +66,19 @@ def test_unknown_api_paths_return_not_found_instead_of_the_web_page(
     assert response.headers["content-type"].startswith("application/json")
 
 
+@pytest.mark.parametrize("path", ["/apiary", "/api-keys"])
+def test_paths_that_only_share_the_api_prefix_still_serve_the_web_page(
+    tmp_path: Path, path: str
+) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+
+    with TestClient(app) as client:
+        response = client.get(path)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+
+
 def test_shipped_frontend_bundle_requests_audit_entries_path() -> None:
     assets = Path(api_module.__file__).with_name("static") / "assets"
     bundles = [path.read_text(encoding="utf-8") for path in assets.glob("*.js")]

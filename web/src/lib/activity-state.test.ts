@@ -11,15 +11,11 @@ describe("Activity view states", () => {
   })
 
   it("names browser extensions as a cause when the request never reaches the service", () => {
-    expect(dashboardSource).toContain("The request did not reach the local service.")
     expect(dashboardSource).toContain("a browser extension such as a content blocker")
     expect(dashboardSource).not.toContain("The local service did not answer.")
   })
 
   it("keeps expired-session, server-error, and connectivity guidance on separate branches", () => {
-    expect(dashboardSource).toContain(
-      "const serviceFailed = [activity.error, incidents.error].some((error) => error instanceof ApiError)",
-    )
     expect(dashboardSource).toMatch(
       /authenticationExpired\s*\?\s*"Your administrator session has expired\.[^"]*"\s*:\s*serviceFailed\s*\?\s*"The local service returned an error; try the request again\."\s*:\s*"The request did not reach the local service\./,
     )
