@@ -2529,7 +2529,8 @@ git commit -m "feat: describe rule change and removal consequences before confir
 
 **Files:**
 - Create: `web/src/features/rule-details.tsx`, `web/src/lib/rule-details.test.ts`
-- Modify: `web/src/features/dashboard.tsx` (route, row link, preview-required note, state label, and the exports `RuleEndpoint` and `DashboardSkeleton`), `web/src/index.css`
+- Create: `web/src/components/rule-endpoint.tsx` (moved `RuleEndpoint`) and `web/src/components/dashboard-skeleton.tsx` (moved `DashboardSkeleton`), shared so `rule-details.tsx` and `dashboard.tsx` never import each other
+- Modify: `web/src/features/dashboard.tsx` (route, row link, preview-required note, state label, imports of the moved components), `web/src/lib/rule-recovery.test.ts` (read `../components/rule-endpoint.tsx?raw` for the `avatarUrl={account?.avatar_url}` assertion), `web/src/index.css`
 
 **Interfaces:**
 - Consumes Tasks 7 and 8, plus `AccountAvatar` and `ruleEndpointLabel` from PR #4.
@@ -2572,7 +2573,7 @@ Expected: FAIL, because `rule-details.tsx` does not exist.
 - [ ] **Step 3: Implement**
 
 In `dashboard.tsx`, make these changes:
-- Export `RuleEndpoint` and `DashboardSkeleton` (add `export`).
+- Move `RuleEndpoint` (same body, `export function`) to `web/src/components/rule-endpoint.tsx` and `DashboardSkeleton` to `web/src/components/dashboard-skeleton.tsx` with their imports, and import both back.
 - Import `RuleDetailsView` from `@/features/rule-details`, `appPathForRule` and `isPlainLeftClick` from `@/lib/navigation`, and `ruleStateLabel` from `@/lib/rule-change`.
 - In `Dashboard`, before the `view === "rules"` line, add the following:
 
@@ -3183,7 +3184,7 @@ function RuleRemoval({
 }
 ```
 
-(The implementer must check that `Badge` accepts `variant="neutral" | "healthy" | "attention"`, which `dashboard.tsx` already uses, and that `Button` supports `variant="destructive"` and `asChild`, which Settings already uses. If ESLint `react-refresh/only-export-components` complains about exporting non-components from `dashboard.tsx`, it won't, because both exports are components. If `react-hooks/exhaustive-deps` flags the focus effect, depend on `rule.data`.)
+(The implementer must check that `Badge` accepts `variant="neutral" | "healthy" | "attention"`, which `dashboard.tsx` already uses, and that `Button` supports `variant="destructive"` and `asChild`, which Settings already uses. If `react-hooks/exhaustive-deps` flags the focus effect, depend on `rule.data`.)
 
 `web/src/index.css`. Add these after the `.form-actions` block and reuse the existing tokens:
 
