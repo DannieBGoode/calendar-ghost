@@ -9,9 +9,11 @@ from pathlib import Path
 from typing import Annotated
 
 import uvicorn
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import Match
 
 from calendar_sync import __version__
 from calendar_sync.application.errors import DuplicateDirectionalRelationship, RuleNotExecutable
@@ -535,6 +537,31 @@ def create_app(container: Container | None = None) -> FastAPI:
             uow.commit()
         return _rule_response(paused)
 
+    # Registered after every API route so an unknown API path is a JSON error for any method
+    # instead of falling through to the web page. A full match here outranks the partial match
+    # of a known route called with the wrong method, so that case is restored to 405.
+    @app.api_route(
+        "/api",
+        methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+        include_in_schema=False,
+    )
+    @app.api_route(
+        "/api/{path:path}",
+        methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+        include_in_schema=False,
+    )
+    def unknown_api_path(request: Request) -> None:
+        wrong_method = any(
+            route.matches(request.scope)[0] is Match.PARTIAL
+            for route in request.app.router.routes
+            if isinstance(route, APIRoute)
+            and route.path.startswith("/api/")
+            and route.endpoint is not unknown_api_path
+        )
+        if wrong_method:
+            raise HTTPException(status.HTTP_405_METHOD_NOT_ALLOWED, "Method Not Allowed")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+
     static_directory = Path(__file__).with_name("static")
     if static_directory.exists():
         static_root = static_directory.resolve()
@@ -544,8 +571,6 @@ def create_app(container: Container | None = None) -> FastAPI:
 
         @app.get("/{full_path:path}", include_in_schema=False)
         def frontend(full_path: str) -> FileResponse:
-            if full_path == "api" or full_path.startswith("api/"):
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
             requested = (static_root / full_path).resolve()
             if full_path and requested.is_file() and requested.is_relative_to(static_root):
                 return FileResponse(requested)
