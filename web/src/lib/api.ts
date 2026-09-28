@@ -18,7 +18,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(body?.detail ?? "The request could not be completed.", response.status)
   }
   if (response.status === 204) return undefined as T
-  return (await response.json()) as T
+  try {
+    return (await response.json()) as T
+  } catch {
+    // The request reached a server, so an unreadable body is a service failure, not a
+    // connectivity one; a proxy fallback page is the usual cause.
+    throw new ApiError("The service returned an unreadable response.", response.status)
+  }
 }
 
 export type SetupStatus = { administrator_configured: boolean }

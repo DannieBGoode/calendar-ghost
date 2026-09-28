@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   activityFailure,
@@ -7,7 +7,7 @@ import {
   activityFailureRequiresReload,
   type ActivityFailure,
 } from "./activity-failure"
-import { ApiError } from "./api"
+import { ApiError, api } from "./api"
 
 const blocked = new TypeError("Failed to fetch")
 
@@ -53,5 +53,31 @@ describe("activityFailure", () => {
     for (const failure of failures) {
       expect(activityFailureActions[failure] === "Try again").toBe(!activityFailureRequiresReload(failure))
     }
+  })
+})
+
+describe("activityFailure with real API responses", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("treats an unreadable success response as a service error, not a blocked request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<!doctype html><title>Proxy</title>", { status: 200 })),
+    )
+
+    const error = await api.activity().catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ApiError)
+    expect(activityFailure([error, null])).toBe("service-error")
+  })
+
+  it("keeps a rejected fetch classified as unreachable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))))
+
+    const error = await api.activity().catch((caught: unknown) => caught)
+
+    expect(activityFailure([error, null])).toBe("unreachable")
   })
 })
