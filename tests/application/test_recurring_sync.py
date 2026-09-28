@@ -368,9 +368,8 @@ def test_all_day_exclusion_deletes_all_day_series_and_cancels_all_day_exceptions
     sync_use_case(factory, calendars).execute(rule().id)
 
     assert all_day_destination not in calendars.events
-    assert (
-        calendars.get_occurrence(timed_destination, week_start(1)).status is EventStatus.CANCELLED
-    )  # type: ignore[union-attr]
+    excluded = calendars.get_occurrence(timed_destination, week_start(1))
+    assert excluded is not None and excluded.status is EventStatus.CANCELLED
     assert factory.state.rules[rule().id].reprojection_required is False
 
 
