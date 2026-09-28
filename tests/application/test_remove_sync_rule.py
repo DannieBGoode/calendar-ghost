@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 
@@ -24,6 +25,7 @@ from calendar_sync.domain.model import (
     EventMapping,
     EventMappingId,
     EventRef,
+    EventStatus,
     PrivacyPolicy,
     ProjectionFingerprint,
     ProjectionHandling,
@@ -34,7 +36,8 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
-from tests.helpers import endpoint, event, rule
+from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
+from tests.helpers import endpoint, event, occurrence, rule, series, week_start
 
 
 class Accounts:
@@ -291,3 +294,49 @@ def test_interrupted_replacement_keeps_the_new_draft_and_a_retryable_old_rule() 
     assert "retry" in str(interrupted.value)
     assert unit_of_work.state.rules[SyncRuleId("replacement-rule")].state is SyncRuleState.DRAFT
     assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DISABLED
+
+
+def _synced_series() -> tuple[FakeCalendars, InMemoryUnitOfWorkFactory, EventRef]:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED))
+    calendars.put(occurrence(master, 2, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    return calendars, factory, factory.state.mappings[(rule().id, master.reference)].destination
+
+
+def test_removing_a_series_deletes_only_its_destination_master() -> None:
+    calendars, factory, destination = _synced_series()
+    assert len(factory.state.occurrences) == 2
+    before = len(calendars.writes)
+
+    result = RemoveSyncRule(factory, calendars, Accounts(), FixedClock(), RuleLocks()).execute(
+        rule().id, ProjectionHandling.DELETE
+    )
+
+    assert result.deleted == 1
+    assert calendars.writes[before:] == [("delete", destination.event_id.value)]
+    assert calendars.instances_of(destination) == []
+    assert factory.state.occurrences == {}
+    assert factory.state.mappings == {}
+
+
+def test_detaching_a_series_keeps_it_ignored_by_a_reverse_rule() -> None:
+    calendars, factory, destination = _synced_series()
+    before = list(calendars.writes)
+
+    RemoveSyncRule(factory, calendars, Accounts(), FixedClock(), RuleLocks()).execute(
+        rule().id, ProjectionHandling.DETACH
+    )
+    reverse = SyncRule(
+        SyncRuleId("reverse"), rule().destination, rule().source, state=SyncRuleState.ENABLED
+    )
+    reverse_factory = enabled_rule_factory(reverse)
+    result = sync_use_case(reverse_factory, calendars).execute(reverse.id)
+
+    assert calendars.writes == before
+    assert factory.state.occurrences == {}
+    assert result.created == result.updated == result.deleted == 0
+    cancelled = calendars.get_occurrence(destination, week_start(1))
+    assert cancelled is not None and cancelled.managed_origin is None
