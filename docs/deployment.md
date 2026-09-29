@@ -70,6 +70,14 @@ back works with the same database: earlier releases ignore the table, leave unfi
 their daily full pass, and resume recreating such series on every run. Upgrading again finishes or
 clears any remaining rows.
 
+Migration 11 adds the `rule_block_checks` table, which stores for each rule only the identifier of
+the newest audit entry before its latest successful daily pass and when that pass finished. Blocks
+recorded since then are the rule's open blocks; the daily pass decides every blocked event again,
+so an older block it did not repeat is no longer open. Rows are removed with their rule. No state is
+rewritten: until a rule's first daily pass after upgrading, all of its blocks that are still the
+latest decision about their event count as open. Rolling back works with the same database: earlier
+releases ignore the table and do not report blocked events on the Overview.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

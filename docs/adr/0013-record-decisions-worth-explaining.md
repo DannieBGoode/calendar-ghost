@@ -20,6 +20,9 @@ prevention and bookkeeping, and each echo cost a provider read.
 - `all_day_excluded`, `series_not_synchronized`, and `series_without_occurrences` are recorded on
   the first run and on incremental runs that saw the event change, and not on the daily full pass.
 - Earlier entries with the unrecorded reasons stay in SQLite and are hidden from Activity.
+- A series check made only to repair one missing occurrence is not recorded when it finds the
+  series current. Listed beside the occurrence's block it read as a contradiction ("already up to
+  date" and "blocked" for the same event); the block's detail records the check instead.
 - A destination projection or occurrence reported back unchanged by an incremental feed, still
   carrying this rule's Managed Origin and the fingerprint recorded when it was written, is counted
   as ignored without reading its source or recording a check. When either feed is a full listing,

@@ -44,7 +44,8 @@ class SynchronizeOccurrences:
     decisions: SyncDecisionService
     fingerprinter: ProjectionFingerprinter
     clock: Clock
-    repair_series: Callable[[SyncRunContext, CalendarEvent], None]
+    repair_series: Callable[[SyncRunContext, CalendarEvent], SyncReason | None]
+    """Repairs a series for one occurrence, answering how the series was found."""
     locks: RuleLocks
 
     def reverify(
@@ -107,14 +108,16 @@ class SynchronizeOccurrences:
             recorded,
             destination_reported,
         )
+        detail = ""
         if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
             # A dormant series has no projection to repair, so nothing is missing.
             live = has_live_occurrences(run, self.provider, source_series.reference)
+            series_check = None
             if live:
                 # The repair re-verifies the series' other occurrences; this one is re-decided.
                 if source_occurrence is not None:
                     run.handled.add(source_occurrence.reference)
-                self.repair_series(run, source_series)
+                series_check = self.repair_series(run, source_series)
                 series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
             decision, destination = self._decide(
                 run,
@@ -126,6 +129,8 @@ class SynchronizeOccurrences:
                 destination_reported,
                 has_live_occurrences=live,
             )
+            if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
+                detail = _missing_occurrence_detail(series_check, live, original_start)
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
@@ -238,6 +243,7 @@ class SynchronizeOccurrences:
                     destination_event_id=destination_ref.event_id.value
                     if destination_ref
                     else None,
+                    detail=detail,
                     reason=decision.reason.value,
                     run_id=run.run_id,
                     event=_recorded_event(source_occurrence),
@@ -306,6 +312,23 @@ class SynchronizeOccurrences:
                 projection_fingerprint=fingerprint,
             )
         )
+
+
+def _missing_occurrence_detail(
+    series_check: SyncReason | None, live: bool, original_start: OccurrenceStart
+) -> str:
+    """What the run verified before blocking, so a recurring block can be diagnosed later."""
+    check = (
+        series_check.value
+        if series_check is not None
+        else "already made this run"
+        if live
+        else "not made, no live occurrence"
+    )
+    return (
+        f"Series check before blocking: {check}. "
+        f"No destination occurrence originally starts at {original_start.isoformat()}."
+    )
 
 
 def _recorded_event(source_occurrence: CalendarEvent | None) -> RecordedEvent:

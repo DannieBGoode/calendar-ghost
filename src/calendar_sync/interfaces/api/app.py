@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sqlite3
 import uuid
 from collections.abc import AsyncIterator, Sequence
@@ -62,6 +63,8 @@ from calendar_sync.infrastructure.google.oauth import (
     GoogleOAuthNotConfigured,
     InvalidOAuthState,
 )
+from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
+from calendar_sync.infrastructure.scheduling import SqliteRuleHealth
 from calendar_sync.infrastructure.security import (
     AdminAlreadyConfigured,
     PasswordPolicyViolation,
@@ -84,6 +87,7 @@ from calendar_sync.interfaces.api.schemas import (
     ProjectionChoice,
     RecentChangeResponse,
     RecordedEventResponse,
+    RecordedTimeResponse,
     RemovalResponse,
     ReplaceRuleRequest,
     RuleDetailResponse,
@@ -97,6 +101,7 @@ from calendar_sync.interfaces.api.schemas import (
 )
 
 SESSION_COOKIE = "calendar_sync_session"
+logger = logging.getLogger(__name__)
 
 ActivityCategory = Literal["changed", "unchanged", "skipped", "blocked"]
 
@@ -226,6 +231,8 @@ def create_app(container: Container | None = None) -> FastAPI:
         with resolved.unit_of_work() as uow:
             states = [rule.state for rule in uow.rules.list()]
         stopped = sum(state in {SyncRuleState.DEGRADED, SyncRuleState.DISABLED} for state in states)
+        with sqlite3.connect(resolved.settings.database_path) as connection:
+            blocks = open_blocks(connection)
         return DashboardResponse(
             health="attention" if incidents or stopped else "healthy",
             connected_accounts=int(account_states.get("connected", 0)),
@@ -235,6 +242,10 @@ def create_app(container: Container | None = None) -> FastAPI:
             stopped_rules=stopped,
             open_incidents=incidents,
             last_synced_at=last_synced_at,
+            blocked_events=len(blocks),
+            blocked_entry_id=blocks[0][0] if blocks else None,
+            # Name the rule only when every open block belongs to it.
+            blocked_rule_id=blocks[0][1] if len({rule for _, rule in blocks}) == 1 else None,
         )
 
     @app.get(
@@ -555,81 +566,44 @@ def create_app(container: Container | None = None) -> FastAPI:
     def recent_changes(
         limit: Annotated[int, Query(ge=1, le=20)] = 5,
     ) -> list[RecentChangeResponse]:
-        # Summarizes recent runs that wrote or were blocked, from counts and identifiers only.
-        # Distinct runs are found newest first by walking the primary key backwards and skipping
-        # runs already chosen, so neither unchanged decisions nor one very large run can crowd
-        # out the others; each chosen run is then counted in full.
+        # The newest written events. A repair identical to a newer one, the same repair of the
+        # same event as recorded at the same time, is counted on it rather than listed again, so a
+        # repair repeated on every run shows as one line.
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
-            chosen: list[sqlite3.Row] = []
-            while len(chosen) < limit:
-                seen = [str(run["run_key"]) for run in chosen]
-                exclude = f"AND {_RUN_KEY} NOT IN ({','.join('?' * len(seen))})" if seen else ""
-                # Each newly chosen run's newest entry precedes the previous one's, so the scan
-                # resumes below it instead of re-reading the runs already chosen.
-                below = int(chosen[-1]["last_id"]) if chosen else None
-                newest = connection.execute(
+            groups: dict[tuple[object, ...], list[sqlite3.Row]] = {}
+            # Page backwards until more distinct changes than requested are found, so a repair
+            # repeated on every run never hides older changes; the scan stays bounded.
+            before: int | None = None
+            for _ in range(_RECENT_WRITE_PAGES):
+                rows = connection.execute(
                     f"""
-                    SELECT {_RUN_KEY} AS run_key, rule_id, id AS last_id FROM audit_entries
-                    WHERE {_CHANGING} {exclude} {"AND id < ?" if below else ""}
-                    ORDER BY id DESC LIMIT 1
+                    SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS} FROM audit_entries
+                    WHERE action IN ({_WRITE_ACTIONS}) AND source_event_id IS NOT NULL
+                        {"AND id < ?" if before is not None else ""}
+                    ORDER BY id DESC LIMIT ?
                     """,
-                    [*seen, *([below] if below else [])],
-                ).fetchone()
-                if newest is None:
+                    (*([before] if before is not None else []), _RECENT_WRITE_PAGE_SIZE),
+                ).fetchall()
+                for row in rows:
+                    # Only repairs collapse; any other write is a change of its own.
+                    key = (
+                        tuple(row[column] for column in _IDENTICAL_WRITE)
+                        if row["reason"] in _REPAIRS
+                        else (row["id"],)
+                    )
+                    groups.setdefault(key, []).append(row)
+                if len(rows) < _RECENT_WRITE_PAGE_SIZE or len(groups) > limit:
                     break
-                chosen.append(newest)
-            if not chosen:
-                return []
-            rule_ids = sorted({str(run["rule_id"]) for run in chosen})
-            run_keys = [str(run["run_key"]) for run in chosen]
-            totals = {
-                (row["run_key"], row["rule_id"]): row
-                for row in connection.execute(
-                    f"""
-                    SELECT {_RUN_KEY} AS run_key, rule_id, MAX(occurred_at) AS occurred_at,
-                        SUM(action = 'create' AND {_NOT_REPAIR}) AS created,
-                        SUM(action = 'update' AND {_NOT_REPAIR}) AS updated,
-                        SUM(action IN ('delete', 'remove_projection')) AS deleted,
-                        SUM(action IN ('create', 'update') AND NOT {_NOT_REPAIR}) AS repaired,
-                        SUM({_BLOCKED}) AS blocked
-                    FROM audit_entries
-                    WHERE rule_id IN ({",".join("?" * len(rule_ids))})
-                        AND {_RUN_KEY} IN ({",".join("?" * len(run_keys))})
-                    GROUP BY run_key, rule_id
-                    """,
-                    (*rule_ids, *run_keys),
-                )
-            }
-            runs = [totals[(run["run_key"], run["rule_id"])] for run in chosen]
-            changes = []
-            for run in runs:
-                entry_ids = [
-                    int(row[0])
-                    for row in connection.execute(
-                        f"""
-                        SELECT id FROM audit_entries
-                        WHERE rule_id = ? AND {_RUN_KEY} = ? AND source_event_id IS NOT NULL
-                            AND {_CHANGING}
-                        ORDER BY id DESC LIMIT 5
-                        """,
-                        (run["rule_id"], run["run_key"]),
-                    )
-                ]
-                changes.append(
-                    RecentChangeResponse(
-                        run_key=run["run_key"],
-                        rule_id=run["rule_id"],
-                        occurred_at=run["occurred_at"],
-                        created=run["created"],
-                        updated=run["updated"],
-                        deleted=run["deleted"],
-                        repaired=run["repaired"],
-                        blocked=run["blocked"],
-                        entry_ids=entry_ids,
-                    )
-                )
-        return changes
+                before = int(rows[-1]["id"])
+            chosen = list(groups.values())[:limit]
+            heads = _audit_entry_responses(connection, [group[0] for group in chosen])
+        return [
+            RecentChangeResponse(
+                entry=head, repeats=len(group), first_occurred_at=group[-1]["occurred_at"]
+            )
+            for head, group in zip(heads, chosen, strict=True)
+        ]
 
     @app.get(
         "/api/v1/audit-entries/{entry_id}/event",
@@ -764,10 +738,19 @@ def create_app(container: Container | None = None) -> FastAPI:
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "configure Google OAuth and the installation master key before reconciling",
             )
+        health = resolved.rule_health
+        # Reconcile Now is a full pass, which also stands in for that day's scheduled one. Like the
+        # scheduler's, this bookkeeping is best-effort and never aborts the requested commands.
+        floor = await asyncio.to_thread(_audit_floor, health) if health is not None else None
         try:
             result = await asyncio.to_thread(
                 resolved.execute_sync_rule.execute, SyncRuleId(rule_id), full=True
             )
+            # The full pass succeeded and counts as today's; reconciliation can still fail after.
+            if health is not None and floor is not None:
+                await asyncio.to_thread(
+                    _record_full_pass, health, SyncRuleId(rule_id), floor, result.run_id
+                )
             report = await asyncio.to_thread(
                 resolved.reconcile_sync_rule.execute, SyncRuleId(rule_id)
             )
@@ -968,14 +951,49 @@ def create_app(container: Container | None = None) -> FastAPI:
     return app
 
 
-_RUN_KEY = "COALESCE(run_id, rule_id || '@' || substr(occurred_at, 1, 16))"
-# Blocked entries match Activity's classification, including Rule Removal ownership conflicts.
-_BLOCKED = _ACTIVITY_CATEGORY_SQL["blocked"]
-_CHANGING = f"(action IN ('create', 'update', 'delete', 'remove_projection') OR {_BLOCKED})"
-_NOT_REPAIR = (
-    "COALESCE(reason, '') NOT IN "
-    "('projection_missing', 'destination_drift_repaired', 'occurrence_drift_repaired')"
+_WRITES = ("create", "update", "delete", "remove_projection")
+# Writes that put a destination event back to match its source.
+_REPAIRS = frozenset(
+    {
+        SyncReason.PROJECTION_MISSING.value,
+        SyncReason.DESTINATION_DRIFT_REPAIRED.value,
+        SyncReason.OCCURRENCE_DRIFT_REPAIRED.value,
+    }
 )
+_WRITE_ACTIONS = ", ".join(f"'{action}'" for action in _WRITES)
+# Recent changes read writes in pages until they find more distinct changes than requested, at
+# most 10,000 writes; a repeated repair's count covers the writes read.
+_RECENT_WRITE_PAGE_SIZE = 500
+_RECENT_WRITE_PAGES = 20
+_IDENTICAL_WRITE = (
+    "rule_id",
+    "source_event_id",
+    "action",
+    "reason",
+    "event_title",
+    "event_starts",
+    "event_ends",
+    "event_all_day",
+    "event_recurring",
+    "event_cancelled",
+)
+
+
+def _audit_floor(health: SqliteRuleHealth) -> int | None:
+    try:
+        return health.audit_floor()
+    except Exception:
+        logger.exception("Could not read the audit position before Reconcile Now")
+        return None
+
+
+def _record_full_pass(
+    health: SqliteRuleHealth, rule_id: SyncRuleId, floor: int, run_id: str | None
+) -> None:
+    try:
+        health.record_full_pass(rule_id, floor, run_id)
+    except Exception:
+        logger.exception("Could not record block health for rule %s", rule_id.value)
 
 
 def _preview_response(summary: RulePreviewSummary | None) -> PreviewSummaryResponse | None:
@@ -1043,11 +1061,39 @@ def _audit_entry_responses(
                 ids,
             )
         }
+    # Only repairs can be told to repeat: a source change that kept the recorded title and time,
+    # such as a new location, is a change of its own that the summary cannot distinguish.
+    written = [row["id"] for row in rows if row["id"] in ids and row["reason"] in _REPAIRS]
+    repeated = (
+        {
+            int(row[0])
+            for row in connection.execute(
+                f"""
+                SELECT a.id FROM audit_entries a JOIN audit_entries p ON p.id = (
+                    SELECT id FROM audit_entries
+                    WHERE rule_id = a.rule_id AND source_event_id = a.source_event_id
+                        AND id < a.id
+                    ORDER BY id DESC LIMIT 1
+                )
+                WHERE a.id IN ({", ".join("?" for _ in written)})
+                    AND p.action = a.action AND p.reason IS a.reason
+                    AND p.event_title IS a.event_title AND p.event_cancelled = a.event_cancelled
+                    AND p.event_recurring = a.event_recurring AND p.event_all_day = a.event_all_day
+                    AND p.event_starts IS a.event_starts AND p.event_ends IS a.event_ends
+                    AND COALESCE(p.run_id, '') != COALESCE(a.run_id, '')
+                """,
+                written,
+            )
+        }
+        if written
+        else set()
+    )
     return [
         AuditEntryResponse(
             **{key: row[key] for key in _AUDIT_ENTRY_KEYS},
             category=_activity_category(row["action"], row["reason"]),
             event=_recorded_event(row, previous.get(row["id"])),
+            repeated=row["id"] in repeated,
         )
         for row in rows
     ]
@@ -1082,6 +1128,24 @@ def _recorded_event(row: sqlite3.Row, previous: sqlite3.Row | None) -> RecordedE
         renamed_from=earlier
         if observed and not cancelled and earlier is not None and earlier != title
         else None,
+        moved_from=_moved_from(own, previous) if not cancelled else None,
+    )
+
+
+def _moved_from(
+    own: sqlite3.Row | None, previous: sqlite3.Row | None
+) -> RecordedTimeResponse | None:
+    """The previously recorded time, when this entry saw the event at a different one."""
+    if own is None or previous is None or own["event_starts"] is None:
+        return None
+    if previous["event_starts"] is None:
+        return None
+    # Only a new start is a move; a change of end alone is a change of length.
+    before = (previous["event_starts"], previous["event_ends"], bool(previous["event_all_day"]))
+    if before[0] == own["event_starts"] and before[2] == bool(own["event_all_day"]):
+        return None
+    return RecordedTimeResponse(
+        all_day=before[2], starts=previous["event_starts"], ends=previous["event_ends"]
     )
 
 

@@ -157,7 +157,10 @@ Activity names it from the latest earlier entry for the same rule and source eve
 confirmed event with an empty title keeps it. An entry whose title differs from that earlier one is
 marked as renamed. Entries recorded before this behavior name no event (ADR 0014).
 Occurrence decisions that found the destination already matching (`occurrence_current`,
-`occurrence_already_cancelled`) are listed as no change, like `projection_current`.
+`occurrence_already_cancelled`) are listed as no change, like `projection_current`. When an
+occurrence is missing from its destination series, the run checks the series before blocking; that
+series check is not recorded as a no-change entry of its own. The block's detail records how the
+series was found and the occurrence's original start instead.
 
 Decisions that answer no question an administrator would ask are counted in the run's ignored
 total but not recorded: `managed_projection_source` (loop prevention), `outside_source_calendar`,
@@ -179,7 +182,7 @@ Three consecutive scheduled failures open one deduplicated incident.
 
 ## Reconciliation
 
-Touched mappings reconcile before a run completes. A Full Reconciliation runs daily and through Reconcile Now. It derives expected projections from current sources, fetches managed destination state independently, and reports missing, unexpected, incorrect, or inconsistent mappings. Drift repairs automatically; conflicts require intervention.
+Touched mappings reconcile before a run completes. A Full Reconciliation runs daily and through Reconcile Now. It derives expected projections from current sources, fetches managed destination state independently, and reports missing, unexpected, incorrect, or inconsistent mappings. Drift repairs automatically. A conflict blocks writes to that one event and leaves the destination unchanged while the rest of the rule keeps synchronizing; the daily full pass decides the event again, and a block still there opens one `blocked:{rule}` Incident. It persists only when the event was already blocked before the pass began and the pass's own run blocked it again, so a retried attempt or a Sync Now interleaved with the pass is not earlier evidence, which a later daily pass without persisting blocks resolves. A rule's open blocks are those recorded since its latest successful daily pass began (SQLite migration 11); an older block that pass did not repeat, such as one of an occurrence whose series was deleted or of an event that ended before the sync window, is no longer open. Reconcile Now, and a scheduled run that lists both calendars in full because of a reprojection or a rejected cursor, count as that day's pass. Incident notifications are sent after the rule lock is released.
 
 For recurring projections, Full Reconciliation verifies each series and every Occurrence Mapping
 without expanding the series, and reports a managed exception of a mapped series that has no

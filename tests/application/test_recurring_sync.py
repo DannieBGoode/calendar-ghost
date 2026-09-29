@@ -499,6 +499,37 @@ def test_missing_destination_occurrence_after_repair_is_a_conflict() -> None:
     assert [kind for kind, _ in calendars.writes[len(before) :]] == []
 
 
+def test_missing_occurrence_block_is_one_entry_recording_the_series_check() -> None:
+    calendars, factory, destination = _synced()
+    calendars.expansions[destination] = ()
+    calendars.report(calendars.put(occurrence(series(), 2, moved_by=timedelta(hours=1))))
+    recorded = len(factory.state.audit)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    # The series check made only to repair this occurrence is evidence for the block, not an
+    # "already up to date" entry of its own beside it.
+    entries = factory.state.audit[recorded:]
+    assert [entry.reason for entry in entries] == [SyncReason.DESTINATION_OCCURRENCE_MISSING.value]
+    assert entries[0].detail == (
+        "Series check before blocking: projection_current. "
+        f"No destination occurrence originally starts at {week_start(2).isoformat()}."
+    )
+
+
+def test_series_repair_that_rewrites_the_series_is_still_recorded() -> None:
+    calendars, factory, destination = _synced()
+    calendars.events[destination] = replace(calendars.events[destination], title="Edited")
+    calendars.expansions[destination] = ()
+    calendars.report(calendars.put(occurrence(series(), 2, moved_by=timedelta(hours=1))))
+    recorded = len(factory.state.audit)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    reasons = [entry.reason for entry in factory.state.audit[recorded:]]
+    assert SyncReason.DESTINATION_DRIFT_REPAIRED.value in reasons
+
+
 def test_rule_change_during_a_run_stops_occurrence_writes(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
@@ -961,3 +992,18 @@ def test_exceptions_reported_with_their_new_series_are_applied_once() -> None:
         "cancel_occurrence",
     ]
     assert result.ignored == 0
+
+
+def test_daily_pass_decides_a_blocked_occurrence_again() -> None:
+    calendars, factory, destination = _synced()
+    calendars.expansions[destination] = ()
+    calendars.report(calendars.put(occurrence(series(), 2, moved_by=timedelta(hours=1))))
+    sync_use_case(factory, calendars).execute(rule().id)
+    recorded = len(factory.state.audit)
+
+    result = sync_use_case(factory, calendars).execute(rule().id, full=True)
+
+    # A block that persists is recorded again, by this run, so rule health can see it persisted.
+    again = [entry for entry in factory.state.audit[recorded:] if entry.run_id == result.run_id]
+    assert SyncReason.DESTINATION_OCCURRENCE_MISSING.value in [entry.reason for entry in again]
+    assert result.listed_in_full

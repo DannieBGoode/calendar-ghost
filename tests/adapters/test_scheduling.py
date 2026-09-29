@@ -14,7 +14,12 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import RuleRunOutcome, RunKind, UnitOfWorkFactory
+from calendar_sync.application.ports import (
+    AuditEntry,
+    RuleRunOutcome,
+    RunKind,
+    UnitOfWorkFactory,
+)
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import (
@@ -22,6 +27,7 @@ from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
 )
+from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
@@ -55,10 +61,22 @@ class RecordingExecuteRule:
 class RecordingHealth:
     def __init__(self) -> None:
         self.successes = 0
+        self.full_successes = 0
         self.failures: list[ProviderFailure] = []
 
-    def record_success(self, _rule: object) -> None:
+    def record_success(
+        self,
+        _rule: object,
+        *,
+        full_pass_floor: int | None = None,
+        full_pass_run: str | None = None,
+    ) -> None:
         self.successes += 1
+        self.full_successes += full_pass_floor is not None
+        self.full_pass_run = full_pass_run
+
+    def audit_floor(self) -> int:
+        return 0
 
     def record_failure(self, _rule: object, failure: ProviderFailure) -> None:
         self.failures.append(failure)
@@ -303,12 +321,308 @@ def test_daily_full_pass_is_due_per_rule_and_survives_a_restart() -> None:
         )
         uow.commit()
     execute = FullPassRecordingExecuteRule()
+    health = RecordingHealth()
 
     for _restart in range(2):
         scheduler = SyncScheduler(
-            cast(ExecuteSyncRule, execute), factory, cast(SqliteRuleHealth, RecordingHealth())
+            cast(ExecuteSyncRule, execute), factory, cast(SqliteRuleHealth, health)
         )
         asyncio.run(scheduler.run_once())
 
     # rule-1 finished today's full pass; rule-2 never did, so only it lists everything again.
     assert execute.full == [("rule-1", False), ("rule-2", True)] * 2
+    # Rule health learns which runs were full passes, where persisting blocks become incidents.
+    assert health.full_successes == 2
+
+
+def _block(
+    run_id: str, source_event_id: str = "occurrence", action: str = "conflict"
+) -> AuditEntry:
+    return AuditEntry(
+        occurred_at=datetime(2026, 9, 29, 17, 5, tzinfo=UTC),
+        rule_id=rule().id,
+        action=action,
+        outcome="blocked" if action == "conflict" else "completed",
+        source_event_id=source_event_id,
+        reason="destination_occurrence_missing" if action == "conflict" else "occurrence_changed",
+        run_id=run_id,
+    )
+
+
+def _health_with(tmp_path: Path, *entries: AuditEntry) -> tuple[Path, SqliteRuleHealth]:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    unit_of_work = SqliteUnitOfWorkFactory(database)
+    with unit_of_work() as uow:
+        uow.rules.add(rule())
+        for entry in entries:
+            uow.audit.append(entry)
+        uow.commit()
+    return database, SqliteRuleHealth(database, unit_of_work)
+
+
+def _incidents(database: Path) -> list[tuple[str, str, str, str]]:
+    with sqlite3.connect(database) as connection:
+        return connection.execute(
+            "SELECT deduplication_key, category, state, summary FROM incidents"
+        ).fetchall()
+
+
+def test_block_still_there_at_the_daily_pass_opens_an_incident(tmp_path: Path) -> None:
+    # The daily pass began after entry 1, so entry 2 is its decision.
+    database, health = _health_with(tmp_path, _block("incremental"), _block("daily"))
+
+    health.record_success(rule(), full_pass_floor=1)
+
+    assert _incidents(database) == [
+        (
+            "blocked:rule-1",
+            "conflict",
+            "open",
+            "1 event could not be synced and was still blocked at the daily check.",
+        )
+    ]
+
+
+def test_first_block_or_an_incremental_run_opens_no_incident(tmp_path: Path) -> None:
+    database, health = _health_with(tmp_path, _block("incremental"))
+
+    health.record_success(rule(), full_pass_floor=0)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, source_event_id,"
+            " reason, run_id, detail) VALUES ('2026-09-29', 'rule-1', 'conflict', 'blocked',"
+            " 'occurrence', 'destination_occurrence_missing', 'later', '')"
+        )
+    health.record_success(rule())
+
+    assert _incidents(database) == []
+
+
+def test_block_resolved_in_between_is_not_persisting(tmp_path: Path) -> None:
+    database, health = _health_with(
+        tmp_path, _block("first"), _block("fixed", action="update"), _block("daily")
+    )
+
+    health.record_success(rule(), full_pass_floor=2)
+
+    assert _incidents(database) == []
+
+
+def test_daily_pass_without_persisting_blocks_resolves_the_incident(tmp_path: Path) -> None:
+    database, health = _health_with(tmp_path, _block("incremental"), _block("daily"))
+    health.record_success(rule(), full_pass_floor=1)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, source_event_id,"
+            " reason, run_id, detail) VALUES ('2026-09-30', 'rule-1', 'update', 'completed',"
+            " 'occurrence', 'occurrence_changed', 'next-daily', '')"
+        )
+
+    health.record_success(rule(), full_pass_floor=2)
+
+    assert [(key, state) for key, _category, state, _summary in _incidents(database)] == [
+        ("blocked:rule-1", "resolved")
+    ]
+
+
+def test_a_block_the_daily_pass_did_not_decide_again_is_no_longer_open(tmp_path: Path) -> None:
+    # Two blocks of an occurrence whose series was then deleted: the deletion is recorded against
+    # the series, so nothing newer names the occurrence, and the daily pass never decides it again.
+    database, health = _health_with(
+        tmp_path,
+        _block("incremental"),
+        _block("daily-1"),
+        _block("deleted", source_event_id="series", action="delete"),
+    )
+    health.record_success(rule(), full_pass_floor=1)
+    assert [state for _key, _category, state, _summary in _incidents(database)] == ["open"]
+
+    health.record_success(rule(), full_pass_floor=3)
+
+    assert [state for _key, _category, state, _summary in _incidents(database)] == ["resolved"]
+    with sqlite3.connect(database) as connection:
+        assert open_blocks(connection) == []
+
+
+def test_unrelated_activity_never_hides_an_open_block(tmp_path: Path) -> None:
+    database, _health = _health_with(tmp_path, _block("incremental"))
+    other = replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.add(other)
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            "INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, source_event_id,"
+            " reason, run_id, detail) VALUES ('2026-09-30', 'rule-2', 'ignore', 'skipped', ?,"
+            " 'projection_current', 'busy', '')",
+            ((str(index),) for index in range(60_000)),
+        )
+        assert open_blocks(connection) == [(1, "rule-1")]
+
+
+def test_scheduler_passes_the_audit_floor_before_a_daily_pass(tmp_path: Path) -> None:
+    database, health = _health_with(tmp_path, _block("earlier"))
+
+    assert health.audit_floor() == 1
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM rule_block_checks").fetchone() == (0,)
+    health.record_success(rule(), full_pass_floor=1)
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT rule_id, audit_floor FROM rule_block_checks"
+        ).fetchall() == [("rule-1", 1)]
+
+
+def test_a_rule_removed_after_its_pass_gets_no_blocked_incident(tmp_path: Path) -> None:
+    database, health = _health_with(tmp_path, _block("incremental"), _block("daily"))
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.remove(rule().id)
+        uow.commit()
+
+    health.record_success(rule(), full_pass_floor=1)
+
+    assert _incidents(database) == []
+
+
+def test_block_health_waits_for_a_rule_removal_in_progress(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    unit_of_work = SqliteUnitOfWorkFactory(database)
+    with unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    locks = RuleLocks()
+    health = SqliteRuleHealth(database, unit_of_work, locks=locks)
+    removal = locks.for_rule(rule().id)
+    removal.acquire()
+    worker = Thread(target=health.record_full_pass, args=(rule().id, 0))
+    worker.start()
+    worker.join(0.1)
+    waited = worker.is_alive()
+    removal.release()
+    worker.join(2)
+
+    assert waited
+
+
+def test_a_scheduled_run_that_listed_everything_checks_blocks_as_the_daily_pass() -> None:
+    factory = InMemoryUnitOfWorkFactory()
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+
+    class ListingEverything:
+        """A reprojection or a rejected cursor lists both calendars in full."""
+
+        def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+            return SyncRunResult(rule_id, run_id="forced", listed_in_full=True)
+
+    health = RecordingHealth()
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, ListingEverything()), factory, cast(SqliteRuleHealth, health)
+    )
+
+    assert scheduler._execute_with_retry(rule(), full=False) is True
+    assert (health.full_successes, health.full_pass_run) == (1, "forced")
+
+
+def test_failing_to_record_health_never_reports_a_successful_run_as_failed() -> None:
+    class BrokenHealth(RecordingHealth):
+        def record_success(
+            self,
+            _rule: object,
+            *,
+            full_pass_floor: int | None = None,
+            full_pass_run: str | None = None,
+        ) -> None:
+            raise sqlite3.OperationalError("database is locked")
+
+        def audit_floor(self) -> int:
+            raise sqlite3.OperationalError("database is locked")
+
+    health = BrokenHealth()
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, RecordingExecuteRule([None])),
+        cast(UnitOfWorkFactory, None),
+        cast(SqliteRuleHealth, health),
+    )
+
+    assert scheduler._execute_with_retry(rule(), full=True) is True
+    assert health.failures == []
+
+
+def test_blocked_incident_is_notified_after_the_rule_lock_is_released(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    unit_of_work = SqliteUnitOfWorkFactory(database)
+    with unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.audit.append(_block("incremental"))
+        uow.audit.append(_block("daily"))
+        uow.commit()
+    locks = RuleLocks()
+    held: list[bool] = []
+
+    class LockCheckingChannel(NotificationChannel):
+        def send(self, incident: IncidentNotification) -> None:
+            held.append(locks.for_rule(rule().id).locked())
+
+    health = SqliteRuleHealth(
+        database, unit_of_work, IncidentNotifier([LockCheckingChannel()]), locks=locks
+    )
+
+    health.record_full_pass(rule().id, 1)
+
+    assert held == [False]
+
+
+def test_a_block_first_found_by_a_retried_daily_pass_is_not_persisting(tmp_path: Path) -> None:
+    # The first attempt recorded the block and then hit a retryable failure; the retry, a run of
+    # its own, recorded it again. Neither predates the pass.
+    database, health = _health_with(tmp_path, _block("attempt-1"), _block("attempt-2"))
+
+    health.record_full_pass(rule().id, 0, "attempt-2")
+
+    assert _incidents(database) == []
+
+
+def test_a_run_interleaved_with_the_daily_pass_does_not_decide_its_incident(
+    tmp_path: Path,
+) -> None:
+    # A block from before the pass, then a Sync Now that ran between the pass and its health
+    # check blocked the same event again. The pass itself did not decide it.
+    database, health = _health_with(tmp_path, _block("earlier"), _block("sync-now"))
+
+    health.record_full_pass(rule().id, 1, "daily")
+
+    assert _incidents(database) == []
+    with sqlite3.connect(database) as connection:
+        # The interleaved block is still the event's latest decision, so it stays open.
+        assert open_blocks(connection) == [(2, "rule-1")]
+
+
+def test_a_later_interleaved_decision_does_not_hide_the_daily_pass_verdict(
+    tmp_path: Path,
+) -> None:
+    # Blocked before the pass, blocked again by the pass, then a Sync Now that ran before the
+    # pass's health check decided the same event once more.
+    database, health = _health_with(
+        tmp_path, _block("earlier"), _block("daily"), _block("sync-now")
+    )
+
+    health.record_full_pass(rule().id, 1, "daily")
+
+    assert [(key, state) for key, _category, state, _summary in _incidents(database)] == [
+        ("blocked:rule-1", "open")
+    ]
+
+
+def test_a_legacy_recurring_skip_is_not_evidence_of_an_earlier_block(tmp_path: Path) -> None:
+    # Earlier releases recorded skipped recurring events as conflicts; they are skips.
+    legacy = replace(_block("upgrade"), reason="recurring_unsupported")
+    database, health = _health_with(tmp_path, legacy, _block("daily"))
+
+    health.record_full_pass(rule().id, 1, "daily")
+
+    assert _incidents(database) == []

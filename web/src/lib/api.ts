@@ -39,6 +39,10 @@ export type Dashboard = {
   stopped_rules: number
   open_incidents: number
   last_synced_at: string | null
+  /** Events of existing rules whose latest decision was a block; the newest one is named. */
+  blocked_events: number
+  blocked_entry_id: number | null
+  blocked_rule_id: string | null
 }
 export type Rule = {
   id: string
@@ -72,16 +76,11 @@ export type PreviewSummary = {
   occurrence_changes: number
 }
 export type RuleSummary = Rule & { last_sync: RunOutcome | null; latest_preview: PreviewSummary | null }
+/** One written event; an identical repair repeated among recent entries is counted on it. */
 export type RecentChange = {
-  run_key: string
-  rule_id: string
-  occurred_at: string
-  created: number
-  updated: number
-  deleted: number
-  repaired: number
-  blocked: number
-  entry_ids: number[]
+  entry: AuditEntry
+  repeats: number
+  first_occurred_at: string
 }
 export type RuleDetail = Rule & {
   initial_lookback_days: number
@@ -157,6 +156,8 @@ export type AuditEntry = {
   destination_event_id: string | null
   /** The source event as its run recorded it; null for entries recorded before names were kept. */
   event: RecordedEvent | null
+  /** A repair that redoes the same event's previous one, recorded by an earlier run. */
+  repeated: boolean
 }
 export type RecordedEvent = {
   title: string
@@ -166,6 +167,8 @@ export type RecordedEvent = {
   recurring: boolean
   cancelled: boolean
   renamed_from: string | null
+  /** The time the previous entry recorded, when this entry saw the event move. */
+  moved_from: { all_day: boolean; starts: string | null; ends: string | null } | null
 }
 export type ActivityFilters = {
   ruleId?: string

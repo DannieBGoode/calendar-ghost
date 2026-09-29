@@ -18,6 +18,7 @@ function entry(overrides: Partial<AuditEntry>): AuditEntry {
     source_event_id: "source-event",
     destination_event_id: null,
     event: null,
+    repeated: false,
     ...overrides,
   }
 }
@@ -31,6 +32,7 @@ function recorded(overrides: Partial<RecordedEvent> = {}): RecordedEvent {
     recurring: false,
     cancelled: false,
     renamed_from: null,
+    moved_from: null,
     ...overrides,
   }
 }
@@ -151,6 +153,17 @@ describe("event cells", () => {
     expect(cell.state === "event" && cell.note).toBeUndefined()
   })
 
+  it("says whether an entry was about a whole series or one occurrence", () => {
+    const weekly = recorded({ recurring: true })
+    expect(eventCell(entry({ reason: "projection_current", event: weekly }), names)).toMatchObject({ scope: "series" })
+    expect(eventCell(entry({ reason: "destination_occurrence_missing", event: weekly }), names)).toMatchObject({
+      scope: "occurrence",
+    })
+    expect(eventCell(entry({ reason: "all_day_excluded_removed", event: weekly }), names)).toMatchObject({ scope: null })
+    expect(eventCell(entry({ reason: "mapping_inconsistent", event: weekly }), names)).toMatchObject({ scope: null })
+    expect(eventCell(entry({ reason: "source_changed", event: recorded() }), names)).toMatchObject({ scope: null })
+  })
+
   it("names events of removed rules from what was recorded", () => {
     expect(eventCell(entry({ event: recorded() }), null)).toMatchObject({ state: "event", title: "Dentist" })
   })
@@ -170,7 +183,7 @@ describe("event cells", () => {
     expect(eventCell(entry({ event: recorded({ cancelled: true, starts: null, ends: null }) }), names)).toMatchObject({
       state: "event",
       title: "Dentist",
-      note: "Cancelled",
+      note: "Cancelled in Personal",
       when: "",
     })
     expect(eventCell(entry({ event: recorded({ cancelled: true, title: "" }) }), names)).toMatchObject({

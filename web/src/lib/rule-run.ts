@@ -1,4 +1,4 @@
-import type { RecentChange, RulePreview, RunOutcome, SyncResult } from "@/lib/api"
+import type { RulePreview, RunOutcome, SyncResult } from "@/lib/api"
 import { failureLabel, plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 
@@ -85,28 +85,3 @@ export function recoveryExplanation(outcome: RunOutcome | null, now: number = Da
   return `${cause} Nothing was lost. Preview it to check both calendars, then start syncing again.`
 }
 
-function listing(parts: string[]): string {
-  if (parts.length <= 1) return parts.join("")
-  return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`
-}
-
-/** One recent run in plain words, such as "Added 1 event and updated 2 in Family." */
-export function recentChangeSummary(
-  change: Pick<RecentChange, "created" | "updated" | "deleted" | "repaired" | "blocked">,
-  destination: string,
-): string {
-  const parts = [
-    change.created ? `added ${plural(change.created, "event")}` : null,
-    change.updated ? `updated ${change.updated}` : null,
-    change.deleted ? `removed ${change.deleted}` : null,
-  ].filter((part): part is string => part !== null)
-  const sentences = [
-    parts.length ? `${listing(parts)} in ${destination}` : null,
-    change.repaired ? `repaired ${plural(change.repaired, "event")} someone edited or deleted in ${destination}` : null,
-    change.blocked
-      ? `${plural(change.blocked, "change")} ${change.blocked === 1 ? "was" : "were"} blocked and ${change.blocked === 1 ? "needs" : "need"} a look`
-      : null,
-  ].filter((sentence): sentence is string => sentence !== null)
-  if (!sentences.length) return `No changes in ${destination}.`
-  return sentences.map((sentence) => `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`).join(" ")
-}

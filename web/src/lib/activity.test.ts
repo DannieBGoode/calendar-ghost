@@ -19,37 +19,95 @@ function entry(overrides: Partial<AuditEntry>): AuditEntry {
     source_event_id: "source-event",
     destination_event_id: null,
     event: null,
+    repeated: false,
     ...overrides,
   }
 }
 
+const names = { source: "Personal", destination: "Work" }
+
 describe("activity presentation", () => {
   it("explains skipped recurring events in calendar language", () => {
     const copy = describeEntry(entry({}))
-    expect(copy.happened).toBe("Skipped: recurring event")
+    expect(whatHappened(entry({}), names).text).toBe("Recurring event → skipped")
     expect(copy.explanation).toContain("Earlier versions")
   })
 
-  it("explains cancelled occurrences in calendar language", () => {
-    const copy = describeEntry(entry({ action: "delete", reason: "occurrence_cancelled" }))
-    expect(copy.happened).toBe("One occurrence removed from {destination}")
+  it("names what was observed and in which calendar, then what Calendar Sync did", () => {
+    const line = (reason: string, action = "update") =>
+      whatHappened(entry({ action, reason, category: "changed" }), names).text
+
+    expect(line("source_created", "create")).toBe("New in Personal → added to Work")
+    expect(line("source_cancelled", "delete")).toBe("Cancelled in Personal → removed from Work")
+    expect(line("occurrence_cancelled", "delete")).toBe("Cancelled in Personal → removed from Work")
+    expect(line("projection_missing", "create")).toBe("Missing from Work → put back")
+    expect(line("destination_drift_repaired")).toBe("Edited in Work → changed back to match Personal")
+  })
+
+  it("never claims who changed an event", () => {
+    for (const reason of ["projection_missing", "destination_drift_repaired", "occurrence_drift_repaired"]) {
+      const copy = describeEntry(entry({ reason }), names)
+      expect(`${copy.trigger} ${copy.effect} ${copy.explanation}`).not.toMatch(/someone|somebody/i)
+    }
+  })
+
+  it("says a write redoes the previous run's", () => {
+    expect(
+      whatHappened(entry({ action: "create", reason: "projection_missing", category: "changed", repeated: true }), names).text,
+    ).toBe("Missing from Work → put back again")
+  })
+
+  it("says when a changed event moved, and from when", () => {
+    const moved = whatHappened(
+      entry({
+        action: "update",
+        reason: "source_changed",
+        category: "changed",
+        event: {
+          title: "Dentist",
+          all_day: false,
+          starts: "2026-09-30T11:00:00",
+          ends: "2026-09-30T12:00:00",
+          recurring: false,
+          cancelled: false,
+          renamed_from: null,
+          moved_from: { all_day: false, starts: "2026-09-30T10:00:00", ends: "2026-09-30T11:00:00" },
+        },
+      }),
+      names,
+    )
+    expect(moved.trigger).toMatch(/^Moved from 10:00\sAM in Personal$/)
+    expect(moved.effect).toBe("updated in Work")
+  })
+
+  it("says what a block means for the destination and who acts", () => {
+    const blocked = entry({ action: "conflict", reason: "destination_occurrence_missing", category: "blocked" })
+    expect(whatHappened(blocked, names)).toMatchObject({
+      text: "Not found in the series in Work → blocked, Work left unchanged",
+      tone: "blocked",
+    })
+    const copy = describeEntry(blocked, names)
+    expect(copy.explanation).toContain("may be missing or out of date in Work")
+    expect(copy.next).toContain("daily check")
+    expect(describeEntry(entry({ action: "conflict", reason: "source_unverifiable" }), names).next).toContain("Settings")
+    expect(describeEntry(entry({ action: "create", reason: "source_created" }), names).next).toBeUndefined()
   })
 
   it("falls back to the recorded detail for entries without a reason code", () => {
     const copy = describeEntry(entry({ reason: null, detail: "excluded event has no managed projection" }))
-    expect(copy.happened).toBe("Skipped")
+    expect(copy.effect).toBe("skipped")
     expect(copy.explanation).toBe("excluded event has no managed projection")
   })
 
   it("says what happened to rule management entries without calling them event changes", () => {
-    const changed = (action: string) => whatHappened(entry({ action, reason: null, category: "changed" }), "Work")
+    const changed = (action: string) => whatHappened(entry({ action, reason: null, category: "changed" }), names)
 
-    expect(changed("policy_changed")).toEqual({ text: "Privacy setting changed", icon: "rule", tone: "change" })
-    expect(changed("rule_removed")).toEqual({ text: "Rule removed", icon: "rule", tone: "change" })
-    expect(changed("remove_projection")).toMatchObject({ text: "Removed from Work with the rule", icon: "removed" })
-    expect(changed("detach_projection")).toMatchObject({ text: "Kept in Work, no longer synced", icon: "kept" })
-    expect(whatHappened(entry({ action: "removal_conflict", reason: null, category: "blocked" }), "Work")).toEqual({
-      text: "Blocked: left in Work during Rule Removal",
+    expect(changed("policy_changed")).toMatchObject({ text: "Privacy setting changed", icon: "rule", tone: "change" })
+    expect(changed("rule_removed")).toMatchObject({ text: "Rule removed", icon: "rule", tone: "change" })
+    expect(changed("remove_projection")).toMatchObject({ text: "Rule removed → removed from Work", icon: "removed" })
+    expect(changed("detach_projection")).toMatchObject({ text: "Rule removed → kept in Work, no longer synced", icon: "kept" })
+    expect(whatHappened(entry({ action: "removal_conflict", reason: null, category: "blocked" }), names)).toMatchObject({
+      text: "Not verifiably written by this rule → left in Work during Rule Removal",
       icon: "blocked",
       tone: "blocked",
     })
@@ -78,24 +136,17 @@ describe("activity presentation", () => {
     )
   })
 
-  it("says what happened in calendar terms, reserving colour for blocked changes", () => {
-    expect(whatHappened(entry({ action: "conflict", category: "skipped" }), "Work")).toMatchObject({
+  it("reserves colour for blocked changes and names unknown calendars plainly", () => {
+    expect(whatHappened(entry({ action: "conflict", category: "skipped" }), names)).toMatchObject({
       icon: "skipped",
       tone: "quiet",
     })
     expect(
-      whatHappened(entry({ action: "conflict", reason: "destination_ownership_inconsistent", category: "blocked" }), "Work"),
-    ).toEqual({ text: "Blocked: not owned by this rule", icon: "blocked", tone: "blocked" })
-    expect(whatHappened(entry({ action: "delete", reason: "source_cancelled", category: "changed" }), "Work")).toEqual({
-      text: "Removed from Work",
-      icon: "removed",
-      tone: "change",
-    })
-    expect(
       whatHappened(entry({ action: "update", reason: "destination_drift_repaired", category: "changed" }), null),
-    ).toMatchObject({ text: "Edit in the destination undone", icon: "repaired" })
-    expect(whatHappened(entry({ reason: "projection_current", category: "unchanged" }), "Work")).toMatchObject({
+    ).toMatchObject({ text: "Edited in the destination calendar → changed back to match the source calendar", icon: "repaired" })
+    expect(whatHappened(entry({ reason: "projection_current", category: "unchanged" }), names)).toMatchObject({
       text: "Already up to date",
+      trigger: null,
       tone: "quiet",
     })
   })
@@ -126,19 +177,16 @@ describe("activity presentation", () => {
     ])
   })
 
-  it("describes decisions with Event Projection terminology", () => {
-    expect(whatHappened(entry({ action: "create", reason: "source_created", category: "changed" }), "Work").text).toBe(
-      "Added to Work",
-    )
+  it("explains that events Calendar Sync wrote are never synced again", () => {
     expect(describeEntry(entry({ reason: "managed_projection_source" })).explanation).toContain("never synced again")
   })
 
   it("explains series with no occurrence left to sync", () => {
     const skipped = entry({ reason: "series_without_occurrences" })
-    expect(describeEntry(skipped).happened).toBe("Skipped: no occurrence left to sync")
+    expect(whatHappened(skipped, names).text).toBe("Every occurrence cancelled in Personal → skipped")
     expect(describeEntry(skipped).explanation).toContain("synced again if an occurrence comes back")
     const removed = entry({ action: "delete", reason: "series_without_occurrences_removed", category: "changed" })
-    expect(whatHappened(removed, "Work").text).toBe("Removed from Work: no occurrence left to sync")
+    expect(whatHappened(removed, names).text).toBe("No occurrence left in Personal → removed from Work")
   })
 
   it("uses relative day names for recent runs", () => {

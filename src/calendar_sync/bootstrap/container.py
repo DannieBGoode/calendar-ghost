@@ -60,6 +60,7 @@ class Container:
     preview_sync_rule: PreviewSyncRule | None
     reconcile_sync_rule: ReconcileSyncRule | None
     scheduler: SyncScheduler | None
+    rule_health: SqliteRuleHealth | None = None
 
 
 def build_container(settings: Settings | None = None) -> Container:
@@ -152,4 +153,5 @@ def build_container(settings: Settings | None = None) -> Container:
         preview_sync_rule=preview_sync_rule,
         reconcile_sync_rule=reconcile_sync_rule,
         scheduler=scheduler,
+        rule_health=rule_health,
     )
