@@ -133,6 +133,7 @@ class ExecuteSyncRule:
                 reproject,
                 incremental=not source_listed and not destination_listed,
                 daily_pass=source_listed and previous_cursor is not None,
+                source_listed=source_listed,
             )
             if destination_listed:
                 # A full listing already holds each projection, so decisions need not re-read it.
@@ -295,6 +296,8 @@ class ExecuteSyncRule:
                 self._record_unverifiable(run, exception.reference, series_mapping.destination)
             return
         if series_mapping is None and series_ref not in run.handled:
+            # Creating the series replays its exceptions; this one is applied below.
+            run.handled.add(exception.reference)
             self._synchronize_event(
                 run, source_series, destination_loaded=False, actual_destination=None
             )
@@ -409,6 +412,15 @@ class ExecuteSyncRule:
             and (series_changed or (run.reproject and decision.action is SyncAction.IGNORE))
         ):
             self.occurrences.reverify(run, mapping, source_event)
+        if (
+            mapping is not None
+            and decision.action is SyncAction.CREATE
+            and source_event.recurrence is not None
+            and not run.source_listed
+        ):
+            # A new series starts from its recurrence alone. Exceptions this incremental feed did
+            # not report, and cancellations never recorded, come from the source itself.
+            self.occurrences.replay_exceptions(run, mapping, source_event)
 
     def _decide_and_write(
         self,

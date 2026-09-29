@@ -93,12 +93,22 @@ class CalendarProvider(Protocol):
         ...
 
     def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
-        """Whether a readable series has an occurrence that is not cancelled.
+        """Whether a series has an occurrence that is not cancelled.
 
         With `include_all_day` false, all-day occurrences do not count, because a rule that
-        excludes them cancels them in the destination. A series that cannot be read raises
-        instead, because `False` stops its projection from being created or restored and can
-        remove one left by an interrupted create.
+        excludes them cancels them in the destination. Only an answered lookup may return
+        `False`, because it stops a projection from being created or restored and can remove one
+        left by an interrupted create; a series whose occurrences cannot be listed counts as live.
+        """
+        ...
+
+    def occurrence_exceptions(
+        self, series: EventRef, not_ended_before: datetime
+    ) -> Sequence[CalendarEvent]:
+        """Occurrences of a series that are cancelled or moved, from `not_ended_before` on.
+
+        A series whose occurrences cannot be listed returns none; its exceptions are applied when
+        a later full listing reports them.
         """
 
     def write_occurrence(

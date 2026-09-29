@@ -116,12 +116,22 @@ recreates, indefinitely. Before creating or restoring a series projection, the a
 therefore asks the provider (`has_live_occurrences`, an `instances` listing without cancelled
 instances, cached per run) whether any source occurrence remains that the rule projects: under an
 all-day exclusion, all-day occurrences do not count, because they are cancelled in the destination
-as well. The adapter also checks each instance's status rather than relying on the filter alone. Only an answered lookup may
-report that none remain; a 404 or 410 is a temporary provider failure. A mapped series is kept
-dormant rather than deleted, because its `cancelled` Occurrence Mappings are what stop a later
-restore of one occurrence from resurrecting the others. Occurrence decisions against a dormant
-series are ignored instead of reported as `destination_occurrence_missing`, Full Reconciliation
-accepts it without a projection, and Rule Preview excludes it. For a series that was never mapped,
+as well. The adapter also checks each instance's status rather than relying on the filter alone.
+Only an answered lookup may report that none remain: a series Google cannot expand (400, 404, or
+410) counts as live and synchronizes as before, and a listing stops after a page limit, because it
+runs under the rule's write lock, without proving the series empty. A mapped series is kept dormant
+rather than deleted, keeping its `cancelled` Occurrence Mappings. Occurrence decisions against a
+dormant series are ignored instead of reported as `destination_occurrence_missing`, Full
+Reconciliation accepts it only after checking the mapping's identity and confirming the projection
+is gone, and Rule Preview excludes it.
+
+A series projection created from an incremental feed, including a restored dormant series, would
+otherwise start from its recurrence alone and show every occurrence the feed did not mention. The
+provider therefore lists the source series' cancelled and moved occurrences from the sync window on
+(`occurrence_exceptions`), and each is applied like a reported exception, after every Occurrence
+Mapping is re-applied. This also covers cancellations that were never recorded, such as those made
+while the series had no projection or whose provider response was lost. A full listing already
+contains every exception in the window, so the listing is skipped there. For a series that was never mapped,
 a projection created before an interrupted run recorded its mapping is found by its create
 Operation Key, verified like any mapped projection, and removed. A dormant mapped series does not
 look for one; a recreate interrupted in the same narrow window is left for Full Reconciliation to

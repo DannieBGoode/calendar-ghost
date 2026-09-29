@@ -18,7 +18,10 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
-from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.google.provider import (
+    OCCURRENCE_PAGE_LIMIT,
+    GoogleCalendarProvider,
+)
 from calendar_sync.infrastructure.google.translation import (
     RULE_PROPERTY,
     SOURCE_ACCOUNT_PROPERTY,
@@ -472,14 +475,86 @@ def test_has_live_occurrences_is_false_only_when_every_page_is_empty() -> None:
     assert provider.has_live_occurrences(SERIES, include_all_day=True) is False
 
 
-@pytest.mark.parametrize("status", [404, 410])
-def test_has_live_occurrences_of_an_unreadable_series_is_a_failure(status: int) -> None:
+@pytest.mark.parametrize("status", [400, 404, 410])
+def test_has_live_occurrences_of_a_series_google_cannot_expand_counts_as_live(status: int) -> None:
     events_api = MagicMock()
     events_api.instances.return_value = request_raising(status)
     provider = provider_with_events_api(events_api)
 
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+
+
+def test_has_live_occurrences_stops_at_the_page_limit_without_proving_the_series_empty() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [], "nextPageToken": "next"})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    assert events_api.instances.call_count == OCCURRENCE_PAGE_LIMIT
+
+
+def test_occurrence_exceptions_lists_cancelled_and_moved_instances_in_the_window() -> None:
+    moved = {
+        **_instance(),
+        "id": "projection-1_20260915T080000Z",
+        "originalStartTime": {"dateTime": "2026-09-15T08:00:00Z"},
+        "start": {"dateTime": "2026-09-15T10:00:00Z"},
+        "end": {"dateTime": "2026-09-15T11:00:00Z"},
+    }
+    cancelled = {
+        **_instance("cancelled"),
+        "id": "projection-1_20260922T080000Z",
+        "originalStartTime": {"dateTime": "2026-09-22T08:00:00Z"},
+    }
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning(
+        {"items": [_instance(), moved, cancelled]}
+    )
+    provider = provider_with_events_api(events_api)
+    window = datetime(2026, 8, 30, tzinfo=UTC)
+
+    exceptions = provider.occurrence_exceptions(SERIES, window)
+
+    assert [event.reference.event_id.value for event in exceptions] == [
+        "projection-1_20260915T080000Z",
+        "projection-1_20260922T080000Z",
+    ]
+    events_api.instances.assert_called_once_with(
+        calendarId="work-calendar",
+        eventId="projection-1",
+        showDeleted=True,
+        timeMin=window.isoformat(),
+        maxResults=2500,
+    )
+
+
+def test_occurrence_exceptions_counts_a_timed_occurrence_moved_to_all_day() -> None:
+    all_day = {**_instance(), "start": {"date": "2026-09-08"}, "end": {"date": "2026-09-09"}}
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [all_day]})
+    provider = provider_with_events_api(events_api)
+
+    exceptions = provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert len(exceptions) == 1
+
+
+@pytest.mark.parametrize("status", [400, 404, 410])
+def test_occurrence_exceptions_of_a_series_google_cannot_expand_are_none(status: int) -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_raising(status)
+    provider = provider_with_events_api(events_api)
+
+    assert provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC)) == ()
+
+
+def test_occurrence_exceptions_raise_other_failures() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_raising(503)
+    provider = provider_with_events_api(events_api)
+
     with pytest.raises(ProviderFailure) as failure:
-        provider.has_live_occurrences(SERIES, include_all_day=True)
+        provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
 
     assert failure.value.kind is ProviderFailureKind.TEMPORARY
 

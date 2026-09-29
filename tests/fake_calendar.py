@@ -63,6 +63,8 @@ class FakeCalendars:
     """Every single-event and single-occurrence lookup, in order."""
     operations: dict[str, EventRef] = field(default_factory=dict)
     created: int = 0
+    exception_listings: list[EventRef] = field(default_factory=list)
+    """Every series whose exceptions were listed, in order."""
 
     def put(
         self, event: CalendarEvent, *, starts: tuple[OccurrenceStart, ...] = ()
@@ -147,6 +149,34 @@ class FakeCalendars:
             include_all_day or not self._all_day(series, start)
             for start in self.live_starts(series)
         )
+
+    def occurrence_exceptions(
+        self, series: EventRef, not_ended_before: datetime
+    ) -> tuple[CalendarEvent, ...]:
+        self.exception_listings.append(series)
+        master = self.events.get(series)
+        if master is None or master.status is not EventStatus.CONFIRMED:
+            return ()
+        exceptions = []
+        for instance in self.instances_of(series):
+            assert instance.occurrence is not None
+            start = instance.occurrence.original_start
+            reference = EventRef(
+                series.calendar, EventId(instance_id(series.event_id.value, start))
+            )
+            expected = self._expand(master, start, reference)
+            moved = instance.status is EventStatus.CONFIRMED and instance.time != expected.time
+            if (instance.status is EventStatus.CANCELLED or moved) and self._not_ended_before(
+                start, not_ended_before
+            ):
+                exceptions.append(instance)
+        return tuple(exceptions)
+
+    @staticmethod
+    def _not_ended_before(start: OccurrenceStart, instant: datetime) -> bool:
+        if isinstance(start, datetime):
+            return start >= instant
+        return start >= instant.date()
 
     def _all_day(self, series: EventRef, start: OccurrenceStart) -> bool:
         stored = self.events.get(

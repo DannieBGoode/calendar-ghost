@@ -764,3 +764,109 @@ def test_daily_pass_of_a_projected_live_series_asks_for_no_live_lookup() -> None
     use_case.execute(rule().id, full=True)
 
     assert calendars.live_lookups == []
+
+
+def _states(calendars: FakeCalendars, destination: EventRef) -> list[EventStatus | None]:
+    return [
+        found.status if (found := calendars.get_occurrence(destination, start)) else None
+        for start in STARTS[:3]
+    ]
+
+
+def test_restoring_one_occurrence_of_a_never_projected_series_keeps_the_others_cancelled() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:3])
+    for week in range(3):
+        calendars.put(occurrence(master, week, status=EventStatus.CANCELLED))
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    assert factory.state.mappings == {}
+
+    calendars.report(calendars.put(occurrence(master, 1, revision="occurrence-revision-2")))
+    result = use_case.execute(rule().id)
+
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    cancelled, confirmed = EventStatus.CANCELLED, EventStatus.CONFIRMED
+    assert _states(calendars, destination) == [cancelled, confirmed, cancelled]
+    assert result.conflicts == 0
+
+
+@dataclass
+class _LostCancellationCalendars(FakeCalendars):
+    """Google applies the next occurrence cancellation, but its response never arrives."""
+
+    lose_next_cancellation: bool = False
+
+    def cancel_occurrence(
+        self,
+        destination_series: EventRef,
+        original_start: OccurrenceStart,
+        source_series: EventRef,
+        rule_id: SyncRuleId,
+        operation_key: str,
+    ) -> None:
+        super().cancel_occurrence(
+            destination_series, original_start, source_series, rule_id, operation_key
+        )
+        if self.lose_next_cancellation:
+            self.lose_next_cancellation = False
+            raise ProviderFailure(ProviderFailureKind.TEMPORARY, "response lost")
+
+
+def test_a_cancellation_whose_response_was_lost_survives_a_later_restore() -> None:
+    calendars = _LostCancellationCalendars()
+    master = calendars.put(series(), starts=STARTS[:2])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+    use_case.execute(rule().id)
+    # Cancelling the last occurrence cancels the destination series, but the run never hears.
+    last = calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED))
+    calendars.lose_next_cancellation = True
+    calendars.report(last)
+    with pytest.raises(ProviderFailure):
+        use_case.execute(rule().id)
+    calendars.report(last)
+    use_case.execute(rule().id)
+
+    calendars.report(calendars.put(occurrence(master, 0, revision="occurrence-revision-2")))
+    result = use_case.execute(rule().id)
+
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    assert _states(calendars, destination)[:2] == [EventStatus.CONFIRMED, EventStatus.CANCELLED]
+    assert result.conflicts == 0
+
+
+def test_cancellations_made_after_the_destination_series_was_deleted_survive_a_restore() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:2])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    deleted = factory.state.mappings[(rule().id, master.reference)].destination
+    calendars.events[deleted] = replace(calendars.events[deleted], status=EventStatus.CANCELLED)
+    calendars.report(
+        calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)),
+        calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED)),
+    )
+    use_case.execute(rule().id)
+
+    calendars.report(calendars.put(occurrence(master, 1, revision="occurrence-revision-2")))
+    result = use_case.execute(rule().id)
+
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    assert destination != deleted
+    assert _states(calendars, destination)[:2] == [EventStatus.CANCELLED, EventStatus.CONFIRMED]
+    assert result.conflicts == 0
+
+
+def test_series_created_from_a_full_listing_do_not_list_their_exceptions_again() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS)
+    calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED))
+
+    sync_use_case(enabled_rule_factory(), calendars).execute(rule().id)
+
+    assert calendars.exception_listings == []

@@ -117,18 +117,24 @@ single-occurrence remainder of a "this and following" split, therefore cannot be
 creating or restoring a series projection, the run asks the provider, once per series per run,
 whether the source series has any occurrence that is not cancelled, not counting all-day
 occurrences when the rule excludes all-day events, since those are cancelled in the destination
-too. If none remains, the series is
-ignored (`series_without_occurrences`) instead of being recreated on every run. A mapped series
-stays dormant: its Series Mapping and `cancelled` Occurrence Mappings are kept, so restoring one
-occurrence later recreates the series without resurrecting the others, and its occurrences are
-ignored rather than reported as a missing destination occurrence. Full Reconciliation accepts a
-dormant series without a projection, and Rule Preview excludes it. For a series that was never
-mapped, a projection that Google created before an interrupted run could record its mapping is
-found by its create Operation Key and removed
-(`series_without_occurrences_removed`). Only an answered lookup may report that none remain; an
-unreadable series is a temporary failure. A series that was never mapped has no Occurrence Mappings,
-so when an incremental run first creates it, only the exceptions that feed reports are applied; the
-next daily full pass applies the rest, such as other occurrences that stayed cancelled.
+too. If none remains, the series is ignored (`series_without_occurrences`) instead of being
+recreated on every run. A mapped series stays dormant: its Series Mapping and `cancelled`
+Occurrence Mappings are kept, and its occurrences are ignored rather than reported as a missing
+destination occurrence. Full Reconciliation accepts a dormant series once it confirms the
+projection is really gone, and Rule Preview excludes it. For a series that was never mapped, a
+projection that Google created before an interrupted run could record its mapping is found by its
+create Operation Key and removed (`series_without_occurrences_removed`). Only an answered lookup
+may report that none remain: a series Google cannot expand counts as live, and so does one whose
+occurrences run past the page limit.
+
+A series projection created from an incremental feed, including a dormant series restored when
+one of its occurrences comes back, starts from its recurrence alone. The run therefore lists the
+source series' cancelled and moved occurrences in the sync window and applies each one, besides
+re-applying every Occurrence Mapping. Occurrences cancelled while the series had no projection, or
+whose cancellation response was lost, therefore stay cancelled. A full listing already reports
+every exception in the window, so series it creates are not listed again. Edits to an occurrence's
+title, description, or location alone are not detected by this listing; the next full pass applies
+them.
 
 `recurring_unsupported` is no longer produced; it remains for audit entries recorded by earlier
 releases.

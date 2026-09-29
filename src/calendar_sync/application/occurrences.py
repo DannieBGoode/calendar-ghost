@@ -66,6 +66,24 @@ class SynchronizeOccurrences:
                 record_current=True,
             )
 
+    def replay_exceptions(
+        self, run: SyncRunContext, series_mapping: EventMapping, source_series: CalendarEvent
+    ) -> None:
+        """Apply every cancelled or moved source occurrence to a newly created series."""
+        for exception in self.provider.occurrence_exceptions(
+            source_series.reference, run.window_start
+        ):
+            if exception.reference in run.handled or exception.occurrence is None:
+                continue
+            self.apply(
+                run,
+                series_mapping,
+                source_series,
+                exception.occurrence.original_start,
+                exception,
+                record_current=True,
+            )
+
     def apply(
         self,
         run: SyncRunContext,

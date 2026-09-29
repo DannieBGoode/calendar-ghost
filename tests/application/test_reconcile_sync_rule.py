@@ -9,7 +9,9 @@ from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     DriftKind,
+    EventRef,
     EventStatus,
+    ReconciliationReport,
     TransformationPolicy,
 )
 from calendar_sync.domain.services import (
@@ -22,7 +24,7 @@ from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFa
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
 from tests.application.test_recurring_sync import _LiveLookupCalendars
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
-from tests.helpers import event, occurrence, rule, series, week_start
+from tests.helpers import endpoint, event, occurrence, rule, series, week_start
 
 
 def test_reconciliation_independently_proves_managed_projection() -> None:
@@ -272,3 +274,50 @@ def test_reconciliation_under_an_all_day_exclusion_accepts_a_series_left_with_al
 
     assert report.drift == ()
     assert report.checked_mappings == 1
+
+
+def _reconcile(
+    factory: InMemoryUnitOfWorkFactory, calendars: FakeCalendars
+) -> ReconciliationReport:
+    return ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+
+def test_reconciliation_reports_a_projection_that_lost_its_ownership_metadata() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0),))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    # Another tool strips the metadata; the projection is still there, though no longer listed.
+    calendars.events[destination] = replace(calendars.events[destination], managed_origin=None)
+    calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED))
+
+    report = _reconcile(factory, calendars)
+
+    assert DriftKind.MISSING in [item.kind for item in report.drift]
+
+
+def test_reconciliation_reports_an_inconsistent_mapping_even_when_its_series_is_dormant() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0),))
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+    use_case.execute(rule().id)
+    key = (rule().id, master.reference)
+    mapping = factory.state.mappings[key]
+    elsewhere = endpoint("work-account", "another-calendar")
+    factory.state.mappings[key] = replace(
+        mapping, destination=EventRef(elsewhere, mapping.destination.event_id)
+    )
+
+    report = _reconcile(factory, calendars)
+
+    assert [item.kind for item in report.drift] == [DriftKind.MAPPING_INCONSISTENCY]

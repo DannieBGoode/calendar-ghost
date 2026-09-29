@@ -151,6 +151,11 @@ class FakeCalendarProvider:
     ) -> CalendarEvent | None:
         return None
 
+    def occurrence_exceptions(
+        self, series: EventRef, not_ended_before: datetime
+    ) -> tuple[CalendarEvent, ...]:
+        return ()
+
     def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         return True
 

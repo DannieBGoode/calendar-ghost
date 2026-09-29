@@ -53,6 +53,8 @@ class SyncRunContext:
     """Both feeds report only changes since the previous run."""
     daily_pass: bool = False
     """A full re-listing of a rule whose calendars already synchronized incrementally."""
+    source_listed: bool = False
+    """The source feed listed every event in the window, including every occurrence exception."""
     listed_destinations: dict[EventRef, CalendarEvent] = field(default_factory=dict)
     """Destination events from this run's full listing, each usable once instead of a read."""
     handled: set[EventRef] = field(default_factory=set)
