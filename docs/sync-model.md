@@ -134,9 +134,10 @@ re-applying every Occurrence Mapping. Occurrences cancelled while the series had
 whose cancellation response was lost, therefore stay cancelled. The replay is recorded with the new
 Series Mapping and cleared only when it completes, so a run that fails midway leaves it for the
 retry, and an exception it already applied is not applied again when the feed reports it. A full listing already reports
-every exception in the window, so series it creates are not listed again. Edits to an occurrence's
-title, description, or location alone are not detected by this listing; the next full pass applies
-them.
+every exception in the window, so series it creates are not listed again. An exception is any
+occurrence that is cancelled or differs from the series' regular occurrence in start, length,
+title, description, or location. The listing stops after a page limit because it runs under the
+rule's write lock; exceptions of a series longer than that are applied by the next full listing.
 
 `recurring_unsupported` is no longer produced; it remains for audit entries recorded by earlier
 releases.

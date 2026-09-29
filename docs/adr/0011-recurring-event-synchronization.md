@@ -127,9 +127,12 @@ is gone, and Rule Preview excludes it.
 
 A series projection created from an incremental feed, including a restored dormant series, would
 otherwise start from its recurrence alone and show every occurrence the feed did not mention. The
-provider therefore lists the source series' cancelled and moved occurrences from the sync window on
+provider therefore lists the source series' occurrences from the sync window on that are cancelled
+or differ from the master's regular occurrence in start, length, or content
 (`occurrence_exceptions`), and each is applied like a reported exception, after every Occurrence
-Mapping is re-applied. This also covers cancellations that were never recorded, such as those made
+Mapping is re-applied. Google has no listing of exceptions alone, so the adapter expands the series
+with trimmed fields and stops at a page limit; a series longer than that leaves its remaining
+exceptions to the next full listing. This also covers cancellations that were never recorded, such as those made
 while the series had no projection or whose provider response was lost. A full listing already
 contains every exception in the window, so the listing is skipped there. The obligation is
 recorded in `pending_exception_replays` in the same commit as the new Series Mapping and cleared

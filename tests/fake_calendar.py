@@ -164,9 +164,14 @@ class FakeCalendars:
             reference = EventRef(
                 series.calendar, EventId(instance_id(series.event_id.value, start))
             )
-            expected = self._expand(master, start, reference)
-            moved = instance.status is EventStatus.CONFIRMED and instance.time != expected.time
-            if (instance.status is EventStatus.CANCELLED or moved) and self._not_ended_before(
+            regular = self._expand(master, start, reference)
+            edited = instance.status is EventStatus.CONFIRMED and (
+                instance.time,
+                instance.title,
+                instance.description,
+                instance.location,
+            ) != (regular.time, regular.title, regular.description, regular.location)
+            if (instance.status is EventStatus.CANCELLED or edited) and self._not_ended_before(
                 start, not_ended_before
             ):
                 exceptions.append(instance)

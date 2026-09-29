@@ -494,6 +494,18 @@ def test_has_live_occurrences_stops_at_the_page_limit_without_proving_the_series
     assert events_api.instances.call_count == OCCURRENCE_PAGE_LIMIT
 
 
+def _with_series_master(events_api: MagicMock) -> MagicMock:
+    """The source master every unmodified instance repeats: Busy, 08:00-09:00 weekly."""
+    master = {
+        **_instance(),
+        "id": "projection-1",
+        "recurrence": ["RRULE:FREQ=WEEKLY"],
+    }
+    del master["recurringEventId"], master["originalStartTime"]
+    events_api.get.return_value = request_returning(master)
+    return events_api
+
+
 def test_occurrence_exceptions_lists_cancelled_and_moved_instances_in_the_window() -> None:
     moved = {
         **_instance(),
@@ -507,7 +519,7 @@ def test_occurrence_exceptions_lists_cancelled_and_moved_instances_in_the_window
         "id": "projection-1_20260922T080000Z",
         "originalStartTime": {"dateTime": "2026-09-22T08:00:00Z"},
     }
-    events_api = MagicMock()
+    events_api = _with_series_master(MagicMock())
     events_api.instances.return_value = request_returning(
         {"items": [_instance(), moved, cancelled]}
     )
@@ -532,7 +544,7 @@ def test_occurrence_exceptions_lists_cancelled_and_moved_instances_in_the_window
 
 def test_occurrence_exceptions_counts_a_timed_occurrence_moved_to_all_day() -> None:
     all_day = {**_instance(), "start": {"date": "2026-09-08"}, "end": {"date": "2026-09-09"}}
-    events_api = MagicMock()
+    events_api = _with_series_master(MagicMock())
     events_api.instances.return_value = request_returning({"items": [all_day]})
     provider = provider_with_events_api(events_api)
 
@@ -543,7 +555,7 @@ def test_occurrence_exceptions_counts_a_timed_occurrence_moved_to_all_day() -> N
 
 @pytest.mark.parametrize("status", [400, 404, 410])
 def test_occurrence_exceptions_of_a_series_google_cannot_expand_are_none(status: int) -> None:
-    events_api = MagicMock()
+    events_api = _with_series_master(MagicMock())
     events_api.instances.return_value = request_raising(status)
     provider = provider_with_events_api(events_api)
 
@@ -551,7 +563,7 @@ def test_occurrence_exceptions_of_a_series_google_cannot_expand_are_none(status:
 
 
 def test_occurrence_exceptions_raise_other_failures() -> None:
-    events_api = MagicMock()
+    events_api = _with_series_master(MagicMock())
     events_api.instances.return_value = request_raising(503)
     provider = provider_with_events_api(events_api)
 
@@ -573,7 +585,7 @@ def test_occurrence_exceptions_raise_other_failures() -> None:
 def test_has_live_occurrences_classifies_other_failures_like_any_request(
     status: int, kind: ProviderFailureKind
 ) -> None:
-    events_api = MagicMock()
+    events_api = _with_series_master(MagicMock())
     events_api.instances.return_value = request_raising(status)
     provider = provider_with_events_api(events_api)
 
@@ -581,6 +593,27 @@ def test_has_live_occurrences_classifies_other_failures_like_any_request(
         provider.has_live_occurrences(SERIES, include_all_day=True)
 
     assert failure.value.kind is kind
+
+
+def test_occurrence_exceptions_count_changed_length_and_content_but_not_regular_instances() -> None:
+    longer = {**_instance(), "end": {"dateTime": "2026-09-08T11:00:00Z"}}
+    renamed = {**_instance(), "summary": "Dentist"}
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_returning({"items": [_instance(), longer, renamed]})
+    provider = provider_with_events_api(events_api)
+
+    exceptions = provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert len(exceptions) == 2
+
+
+def test_occurrence_exceptions_of_a_deleted_series_are_none() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_raising(404)
+    provider = provider_with_events_api(events_api)
+
+    assert provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC)) == ()
+    events_api.instances.assert_not_called()
 
 
 def test_write_occurrence_restores_a_cancelled_instance_without_notifications() -> None:

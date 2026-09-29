@@ -321,6 +321,10 @@ class GoogleCalendarProvider:
             "maxResults": 2500,
             "fields": OCCURRENCE_EXCEPTION_FIELDS,
         }
+        # The master is the regular occurrence every unmodified instance repeats.
+        master = self.get_event(series)
+        if master is None or master.status is EventStatus.CANCELLED:
+            return ()
         exceptions: list[CalendarEvent] = []
         try:
             events_api = self._service_for(series.calendar.connected_account_id).events()
@@ -328,7 +332,7 @@ class GoogleCalendarProvider:
                 response = events_api.instances(**parameters).execute()
                 for item in response.get("items", []):
                     instance = to_domain_event(item, series.calendar)
-                    if _is_exception(instance, series):
+                    if _is_exception(instance, master):
                         exceptions.append(instance)
                 page_token = response.get("nextPageToken")
                 if not page_token:
@@ -430,20 +434,31 @@ class GoogleCalendarProvider:
         return instance
 
 
-def _is_exception(instance: CalendarEvent, series: EventRef) -> bool:
-    """A cancelled or moved instance of the series; content-only edits are not detected."""
+def _is_exception(instance: CalendarEvent, master: CalendarEvent) -> bool:
+    """An instance that is cancelled or differs from the series' regular occurrence."""
     identity = instance.occurrence
-    if identity is None or identity.series_event_id != series.event_id:
+    if identity is None or identity.series_event_id != master.reference.event_id:
         return False
     if instance.status is EventStatus.CANCELLED:
         return True
-    time, original = instance.time, identity.original_start
-    if isinstance(time, TimedInterval):
-        return occurrence_start(time.starts_at) != original
-    # An all-day instance of a timed series moved to all-day; one of an all-day series may have
-    # moved to another day.
-    if isinstance(time, AllDayRange) and not isinstance(original, datetime):
-        return time.starts_on != original
+    if (instance.title, instance.description, instance.location) != (
+        master.title,
+        master.description,
+        master.location,
+    ):
+        return True
+    time, regular, original = instance.time, master.time, identity.original_start
+    if isinstance(time, TimedInterval) and isinstance(regular, TimedInterval):
+        return (
+            occurrence_start(time.starts_at) != original
+            or time.ends_at - time.starts_at != regular.ends_at - regular.starts_at
+        )
+    if isinstance(time, AllDayRange) and isinstance(regular, AllDayRange):
+        return (
+            time.starts_on != original
+            or time.ends_before - time.starts_on != regular.ends_before - regular.starts_on
+        )
+    # The occurrence switched between timed and all-day.
     return True
 
 
