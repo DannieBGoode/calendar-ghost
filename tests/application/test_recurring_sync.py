@@ -138,6 +138,53 @@ def test_cancelled_series_deletes_the_destination_series_and_its_occurrence_mapp
     assert factory.state.mappings == {}
     assert factory.state.occurrences == {}
     assert ("delete", destination.event_id.value) in calendars.writes
+
+
+def _report_destination(calendars: FakeCalendars) -> None:
+    calendars.report(
+        *(
+            event
+            for event in calendars.events.values()
+            if event.reference.calendar == rule().destination
+        )
+    )
+
+
+def test_series_whose_only_occurrence_is_cancelled_is_never_projected() -> None:
+    # A "this and following" split can leave a series whose single occurrence is cancelled.
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED))
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+
+    use_case.execute(rule().id)
+    use_case.execute(rule().id, full=True)
+
+    assert calendars.writes == []
+    assert factory.state.mappings == {}
+
+
+def test_series_whose_last_occurrence_is_cancelled_is_retired_once() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+    use_case.execute(rule().id)
+    writes = list(calendars.writes)
+
+    # Google cancels a series once its last instance is cancelled and reports that back.
+    for _ in range(3):
+        _report_destination(calendars)
+        use_case.execute(rule().id)
+    use_case.execute(rule().id, full=True)
+
+    assert [kind for kind, _ in writes] == ["create", "cancel_occurrence"]
+    assert calendars.writes == writes
+    assert factory.state.mappings == {}
+    assert factory.state.occurrences == {}
     assert not any(kind == "delete" and "_" in ref for kind, ref in calendars.writes)
 
 

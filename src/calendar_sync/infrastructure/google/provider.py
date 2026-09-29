@@ -273,6 +273,33 @@ class GoogleCalendarProvider:
                 return candidate
         return None
 
+    def has_live_occurrences(self, series: EventRef) -> bool:
+        parameters: dict[str, Any] = {
+            "calendarId": series.calendar.calendar_id.value,
+            "eventId": series.event_id.value,
+            "showDeleted": False,
+            "maxResults": 1,
+        }
+        try:
+            events_api = self._service_for(series.calendar.connected_account_id).events()
+            while True:
+                response = events_api.instances(**parameters).execute()
+                if response.get("items"):
+                    return True
+                # A filtered page may be empty while later pages still hold live instances.
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    return False
+                parameters["pageToken"] = page_token
+        except Exception as error:
+            # Like an occurrence lookup, only an answered lookup may report that none remain.
+            if _status_code(error) in {404, 410}:
+                raise ProviderFailure(
+                    ProviderFailureKind.TEMPORARY,
+                    "Google series could not be read while listing its occurrences",
+                ) from error
+            raise _provider_failure(error) from error
+
     def write_occurrence(
         self,
         destination_series: EventRef,

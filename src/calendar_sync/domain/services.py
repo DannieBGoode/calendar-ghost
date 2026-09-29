@@ -110,6 +110,7 @@ class SyncDecisionService:
         actual_destination: CalendarEvent | None,
         *,
         window_start: datetime | None = None,
+        has_live_occurrences: bool = True,
     ) -> SyncDecision:
         if source_event.reference.calendar != rule.source:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
@@ -150,6 +151,11 @@ class SyncDecisionService:
             if mapping is None:
                 return SyncDecision(SyncAction.IGNORE, SyncReason.ALL_DAY_EXCLUDED)
             return SyncDecision(SyncAction.DELETE, SyncReason.ALL_DAY_EXCLUDED_REMOVED)
+        # A projected series with no live occurrence is cancelled by the provider, so skip it.
+        if source_event.recurrence is not None and not has_live_occurrences:
+            if mapping is None:
+                return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
+            return SyncDecision(SyncAction.DELETE, SyncReason.SERIES_WITHOUT_OCCURRENCES_REMOVED)
 
         # Incremental feeds report changes to any event, however old; only mapped ones stay current.
         if mapping is None and window_start is not None and source_event.ended_before(window_start):

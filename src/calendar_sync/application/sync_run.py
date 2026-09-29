@@ -30,7 +30,11 @@ UNRECORDED_REASONS = frozenset(
 # Skips that explain a missing projection. A daily pass re-lists unchanged events, so only the
 # run that first saw the event, or saw it change, records why it was skipped.
 UNRECORDED_ON_DAILY_PASS = frozenset(
-    {SyncReason.ALL_DAY_EXCLUDED, SyncReason.SERIES_NOT_SYNCHRONIZED}
+    {
+        SyncReason.ALL_DAY_EXCLUDED,
+        SyncReason.SERIES_NOT_SYNCHRONIZED,
+        SyncReason.SERIES_WITHOUT_OCCURRENCES,
+    }
 )
 
 

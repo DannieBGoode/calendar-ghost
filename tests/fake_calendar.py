@@ -136,6 +136,13 @@ class FakeCalendars:
         stored = self.events.get(reference)
         return stored if stored is not None else self._expand(master, original_start, reference)
 
+    def has_live_occurrences(self, series: EventRef) -> bool:
+        self.reads.append(series)
+        master = self.events.get(series)
+        if master is None:
+            raise ProviderFailure(ProviderFailureKind.TEMPORARY, "series could not be read")
+        return master.status is EventStatus.CONFIRMED and bool(self.live_starts(series))
+
     @staticmethod
     def _expand(
         master: CalendarEvent, start: OccurrenceStart, reference: EventRef
@@ -163,7 +170,9 @@ class FakeCalendars:
         self, destination: CalendarEndpoint, operation_key: str
     ) -> CalendarEvent | None:
         reference = self.operations.get(operation_key)
-        return None if reference is None else self.events.get(reference)
+        found = None if reference is None else self.events.get(reference)
+        # Like Google's showDeleted=False lookup, a cancelled projection is not found.
+        return found if found is not None and found.status is EventStatus.CONFIRMED else None
 
     def create_projection(
         self,
@@ -295,6 +304,20 @@ class FakeCalendars:
             revision=f"{instance.revision}+",
         )
         self.writes.append(("cancel_occurrence", instance.reference.event_id.value))
+        # Like Google, cancelling the last live instance cancels the whole series.
+        if not self.live_starts(destination_series):
+            master = self.events[destination_series]
+            self.events[destination_series] = replace(
+                master, status=EventStatus.CANCELLED, revision=f"{master.revision}+"
+            )
+
+    def live_starts(self, series: EventRef) -> tuple[OccurrenceStart, ...]:
+        cancelled = {
+            instance.occurrence.original_start
+            for instance in self.instances_of(series)
+            if instance.occurrence is not None and instance.status is EventStatus.CANCELLED
+        }
+        return tuple(start for start in self.expansions.get(series, ()) if start not in cancelled)
 
     def _owned_occurrence(
         self,

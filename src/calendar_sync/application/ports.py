@@ -90,6 +90,13 @@ class CalendarProvider(Protocol):
         `None` means the series answered and has no occurrence at that start. A series that cannot
         be read raises instead, because absence can authorize cancelling a destination occurrence.
         """
+        ...
+
+    def has_live_occurrences(self, series: EventRef) -> bool:
+        """Whether a readable series has at least one occurrence that is not cancelled.
+
+        A series that cannot be read raises instead, because `False` retires its Series Mapping.
+        """
 
     def write_occurrence(
         self,

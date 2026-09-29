@@ -107,6 +107,15 @@ run stops with `RuleNotExecutable` and the cursors do not advance.
 | Moved or edited occurrence | Update the matching destination instance |
 | Cancelled occurrence | Cancel the matching destination instance and retain a `cancelled` Occurrence Mapping |
 | Cancelled series | Delete the destination master, removing its instances, and delete the Series Mapping and its Occurrence Mappings |
+| Every occurrence cancelled | Do not create or restore the destination master; an unmapped series is ignored, and a mapped series is deleted with its Series Mapping and Occurrence Mappings |
+
+Google cancels a series once its last live instance is cancelled, and `showDeleted=false` lookups no
+longer find it. Creating a series whose every source occurrence is cancelled and then cancelling
+those occurrences would leave a cancelled projection that the next run reads as missing and
+recreates, indefinitely. Before creating or restoring a series projection, the application
+therefore asks the provider (`has_live_occurrences`, an `instances` listing without cancelled
+instances) whether any source occurrence remains. Only an answered lookup may report that none
+remain; a 404 or 410 is a temporary provider failure.
 
 A destination occurrence is cancelled only when the source proves the occurrence is cancelled or
 no longer part of an existing source series. When the source series cannot be verified, the
@@ -183,6 +192,8 @@ instance identifiers only. New reasons:
 | `occurrence_retired` | ignore | The occurrence no longer exists on either side; its mapping was removed |
 | `series_not_synchronized` | ignore | The occurrence belongs to a series this rule does not project |
 | `destination_occurrence_missing` | conflict | The destination series has no matching occurrence after repair |
+| `series_without_occurrences` | ignore | Every occurrence of an unmapped source series is cancelled |
+| `series_without_occurrences_removed` | delete | Every occurrence of a mapped source series is cancelled; its projection and mappings were removed |
 
 Existing reasons are reused where the meaning is identical (`source_unverifiable`,
 `destination_ownership_inconsistent`, `mapping_inconsistent`, `all_day_excluded_removed`).

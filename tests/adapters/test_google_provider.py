@@ -419,6 +419,49 @@ def test_get_occurrence_of_an_unreadable_series_is_a_failure_not_an_absence(stat
     assert failure.value.kind is ProviderFailureKind.TEMPORARY
 
 
+def test_has_live_occurrences_lists_instances_without_cancelled_ones() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES) is True
+    events_api.instances.assert_called_once_with(
+        calendarId="work-calendar", eventId="projection-1", showDeleted=False, maxResults=1
+    )
+
+
+def test_has_live_occurrences_reads_past_empty_pages_before_answering() -> None:
+    events_api = MagicMock()
+    events_api.instances.side_effect = [
+        request_returning({"items": [], "nextPageToken": "page-2"}),
+        request_returning({"items": [_instance()]}),
+    ]
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES) is True
+    assert events_api.instances.call_args.kwargs["pageToken"] == "page-2"
+
+
+def test_has_live_occurrences_is_false_only_when_every_page_is_empty() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": []})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES) is False
+
+
+@pytest.mark.parametrize("status", [404, 410])
+def test_has_live_occurrences_of_an_unreadable_series_is_a_failure(status: int) -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_raising(status)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.has_live_occurrences(SERIES)
+
+    assert failure.value.kind is ProviderFailureKind.TEMPORARY
+
+
 def test_write_occurrence_restores_a_cancelled_instance_without_notifications() -> None:
     events_api = MagicMock()
     events_api.instances.return_value = request_returning({"items": [_instance("cancelled")]})

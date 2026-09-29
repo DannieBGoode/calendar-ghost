@@ -100,6 +100,7 @@ become sources of a reverse rule. A mapped series that the source no longer retu
 | Moved or edited occurrence | Update the matching destination occurrence |
 | Cancelled occurrence | Cancel the matching destination occurrence and keep a `cancelled` Occurrence Mapping |
 | Deleted series | Delete the destination series with its occurrences |
+| Every occurrence cancelled | Do not create or restore the destination series; retire its Series Mapping and Occurrence Mappings |
 
 A destination occurrence is cancelled only when the source proves it cancelled or absent from an
 existing series; an unverifiable source series is a Conflict. When the destination series has no
@@ -109,6 +110,15 @@ source, and a recreated destination series re-applies every Occurrence Mapping. 
 Change re-decides every Series Mapping and each of its Occurrence Mappings, including exceptions
 outside the Initial Sync Window. Rule Preview reports recurring series and changed occurrences with
 their planned actions.
+
+Google cancels a whole series once its last live occurrence is cancelled, and a cancelled
+projection reads as missing. A source series whose every occurrence is cancelled, such as the
+single-occurrence remainder of a "this and following" split, therefore cannot be projected: before
+creating or restoring a series projection, the run asks the provider whether the source series has
+any occurrence that is not cancelled. If none remains, an unmapped series is ignored
+(`series_without_occurrences`) and a mapped one is deleted with its mappings
+(`series_without_occurrences_removed`) instead of being recreated on every run. Only an answered
+lookup may report that none remain; an unreadable series is a temporary failure.
 
 `recurring_unsupported` is no longer produced; it remains for audit entries recorded by earlier
 releases.
@@ -127,7 +137,8 @@ Occurrence decisions that found the destination already matching (`occurrence_cu
 Decisions that answer no question an administrator would ask are counted in the run's ignored
 total but not recorded: `managed_projection_source` (loop prevention), `outside_source_calendar`,
 `cancelled_without_projection`, `before_sync_window`, and `occurrence_retired` (bookkeeping with no
-provider write). `all_day_excluded` and `series_not_synchronized` are recorded by the first run and
+provider write). `all_day_excluded`, `series_not_synchronized`, and `series_without_occurrences`
+are recorded by the first run and
 by incremental runs that saw the event change, but not by the daily full pass, which would repeat
 them for every unchanged event each day. Entries with the unrecorded reasons written by earlier
 releases are hidden from Activity. See

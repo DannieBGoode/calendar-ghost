@@ -374,6 +374,8 @@ class SyncReason(StrEnum):
     OCCURRENCE_RETIRED = "occurrence_retired"
     SERIES_NOT_SYNCHRONIZED = "series_not_synchronized"
     DESTINATION_OCCURRENCE_MISSING = "destination_occurrence_missing"
+    SERIES_WITHOUT_OCCURRENCES = "series_without_occurrences"
+    SERIES_WITHOUT_OCCURRENCES_REMOVED = "series_without_occurrences_removed"
 
 
 @dataclass(frozen=True, slots=True)

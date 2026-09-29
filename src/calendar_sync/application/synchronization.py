@@ -438,6 +438,15 @@ class ExecuteSyncRule:
             # Google acknowledged this create before an interrupted run could record its
             # mapping; complete it idempotently instead of orphaning the projection.
             decision = self.decisions.decide(rule, source_event, mapping, actual)
+        if (
+            decision.action is SyncAction.CREATE
+            and source_event.recurrence is not None
+            and not self.provider.has_live_occurrences(source_event.reference)
+        ):
+            # Creating it would only be cancelled again by its occurrences, on every run.
+            decision = self.decisions.decide(
+                rule, source_event, mapping, actual, has_live_occurrences=False
+            )
         run.counts[decision.action] += 1
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action
