@@ -5,8 +5,11 @@ import logging
 import smtplib
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from email.message import EmailMessage
 from urllib.request import Request, urlopen
+
+from calendar_sync.application.ports import IncidentReport
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,13 @@ class IncidentNotifier:
 
     def __init__(self, channels: Sequence[NotificationChannel]) -> None:
         self._channels = tuple(channels)
+
+    def incident_opened(self, incident: IncidentReport, at: datetime) -> None:
+        self.notify(
+            IncidentNotification(
+                incident.rule_id.value, incident.category, incident.summary, at.isoformat()
+            )
+        )
 
     def notify(self, incident: IncidentNotification) -> None:
         for channel in self._channels:

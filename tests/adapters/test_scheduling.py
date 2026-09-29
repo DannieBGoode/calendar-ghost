@@ -13,11 +13,13 @@ from calendar_sync.application.errors import (
     ProviderFailureKind,
     RuleNotExecutable,
 )
+from calendar_sync.application.health import RuleHealth, RunHealth
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    IncidentReport,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
@@ -30,12 +32,16 @@ from calendar_sync.infrastructure.notifications import (
     NotificationChannel,
 )
 from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
+from calendar_sync.infrastructure.persistence.health import (
+    SqliteIncidentRepository,
+    SqliteRuleHealthRecords,
+)
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
-from calendar_sync.infrastructure.scheduling import SqliteRuleHealth, SyncScheduler
+from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
 from tests.helpers import endpoint, rule
 
 
@@ -84,6 +90,23 @@ class RecordingHealth:
         self.failures.append(failure)
 
 
+def _rule_health(
+    database: Path,
+    unit_of_work: UnitOfWorkFactory,
+    notifier: IncidentNotifier | None = None,
+    *,
+    locks: RuleLocks | None = None,
+) -> RuleHealth:
+    return RuleHealth(
+        unit_of_work,
+        SqliteRuleHealthRecords(database),
+        SqliteIncidentRepository(database),
+        SystemClock(),
+        locks or RuleLocks(),
+        notifier,
+    )
+
+
 def test_three_temporary_failures_open_one_incident(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
@@ -91,7 +114,7 @@ def test_three_temporary_failures_open_one_incident(tmp_path: Path) -> None:
     with unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
-    health = SqliteRuleHealth(database, unit_of_work)
+    health = _rule_health(database, unit_of_work)
     failure = ProviderFailure(ProviderFailureKind.TEMPORARY, "synthetic provider outage")
 
     health.record_failure(rule(), failure)
@@ -110,7 +133,7 @@ def test_authentication_failure_degrades_rule_immediately(tmp_path: Path) -> Non
     with unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
-    health = SqliteRuleHealth(database, unit_of_work)
+    health = _rule_health(database, unit_of_work)
 
     health.record_failure(
         rule(), ProviderFailure(ProviderFailureKind.AUTHENTICATION, "synthetic expiry")
@@ -130,7 +153,7 @@ def test_open_incident_notification_is_deduplicated(tmp_path: Path) -> None:
         uow.rules.add(rule())
         uow.commit()
     channel = RecordingChannel()
-    health = SqliteRuleHealth(database, unit_of_work, IncidentNotifier([channel]))
+    health = _rule_health(database, unit_of_work, IncidentNotifier([channel]))
     failure = ProviderFailure(ProviderFailureKind.PERMANENT, "synthetic rejection")
 
     health.record_failure(rule(), failure)
@@ -147,7 +170,7 @@ def test_success_resolves_existing_incident_and_resets_failure_count(tmp_path: P
     with unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
-    health = SqliteRuleHealth(database, unit_of_work)
+    health = _rule_health(database, unit_of_work)
     health.record_failure(rule(), ProviderFailure(ProviderFailureKind.PERMANENT, "rejected"))
 
     health.record_success(rule())
@@ -169,7 +192,7 @@ def test_scheduler_retries_temporary_failure_then_records_success(
     scheduler = SyncScheduler(
         cast(ExecuteSyncRule, execute),
         cast(UnitOfWorkFactory, None),
-        cast(SqliteRuleHealth, health),
+        cast(RunHealth, health),
     )
 
     successful = scheduler._execute_with_retry(rule())
@@ -187,7 +210,7 @@ def test_scheduler_does_not_retry_permanent_failure() -> None:
     scheduler = SyncScheduler(
         cast(ExecuteSyncRule, execute),
         cast(UnitOfWorkFactory, None),
-        cast(SqliteRuleHealth, health),
+        cast(RunHealth, health),
     )
 
     successful = scheduler._execute_with_retry(rule())
@@ -203,7 +226,7 @@ def test_scheduler_isolates_unexpected_rule_failure() -> None:
     scheduler = SyncScheduler(
         cast(ExecuteSyncRule, execute),
         cast(UnitOfWorkFactory, None),
-        cast(SqliteRuleHealth, health),
+        cast(RunHealth, health),
     )
 
     successful = scheduler._execute_with_retry(rule())
@@ -220,7 +243,7 @@ def test_rule_removed_or_edited_during_a_pass_is_skipped_without_an_incident() -
     scheduler = SyncScheduler(
         cast(ExecuteSyncRule, execute),
         cast(UnitOfWorkFactory, None),
-        cast(SqliteRuleHealth, health),
+        cast(RunHealth, health),
     )
 
     successful = scheduler._execute_with_retry(rule())
@@ -241,7 +264,7 @@ def test_degrading_after_an_authorization_failure_waits_for_a_concurrent_rule_ch
         uow.rules.add(rule())
         uow.commit()
     locks = RuleLocks()
-    health = SqliteRuleHealth(database, unit_of_work, locks=locks)
+    health = _rule_health(database, unit_of_work, locks=locks)
     held = locks.for_writes(rule().id)
     held.acquire()
     worker = Thread(
@@ -271,7 +294,7 @@ def test_blocked_removal_opens_one_incident_that_completed_removal_resolves(
         uow.rules.add(rule(state=SyncRuleState.DISABLED))
         uow.commit()
     channel = RecordingChannel()
-    health = SqliteRuleHealth(database, unit_of_work, IncidentNotifier([channel]))
+    health = _rule_health(database, unit_of_work, IncidentNotifier([channel]))
     failure = ProviderFailure(ProviderFailureKind.AUTHORIZATION, "synthetic denial")
 
     health.removal_blocked(rule().id, failure)
@@ -327,9 +350,7 @@ def test_daily_full_pass_is_due_per_rule_and_survives_a_restart() -> None:
     health = RecordingHealth()
 
     for _restart in range(2):
-        scheduler = SyncScheduler(
-            cast(ExecuteSyncRule, execute), factory, cast(SqliteRuleHealth, health)
-        )
+        scheduler = SyncScheduler(cast(ExecuteSyncRule, execute), factory, cast(RunHealth, health))
         asyncio.run(scheduler.run_once())
 
     # rule-1 finished today's full pass; rule-2 never did, so only it lists everything again.
@@ -354,7 +375,7 @@ def _block(
     )
 
 
-def _health_with(tmp_path: Path, *entries: AuditEntry) -> tuple[Path, SqliteRuleHealth]:
+def _health_with(tmp_path: Path, *entries: AuditEntry) -> tuple[Path, RuleHealth]:
     database = tmp_path / "test.db"
     initialize_database(database)
     unit_of_work = SqliteUnitOfWorkFactory(database)
@@ -363,7 +384,7 @@ def _health_with(tmp_path: Path, *entries: AuditEntry) -> tuple[Path, SqliteRule
         for entry in entries:
             uow.audit.append(entry)
         uow.commit()
-    return database, SqliteRuleHealth(database, unit_of_work)
+    return database, _rule_health(database, unit_of_work)
 
 
 def _incidents(database: Path) -> list[tuple[str, str, str, str]]:
@@ -498,7 +519,7 @@ def test_block_health_waits_for_a_rule_removal_in_progress(tmp_path: Path) -> No
         uow.rules.add(rule())
         uow.commit()
     locks = RuleLocks()
-    health = SqliteRuleHealth(database, unit_of_work, locks=locks)
+    health = _rule_health(database, unit_of_work, locks=locks)
     removal = locks.for_rule(rule().id)
     removal.acquire()
     worker = Thread(target=health.record_full_pass, args=(rule().id, 0))
@@ -525,7 +546,7 @@ def test_a_scheduled_run_that_listed_everything_checks_blocks_as_the_daily_pass(
 
     health = RecordingHealth()
     scheduler = SyncScheduler(
-        cast(ExecuteSyncRule, ListingEverything()), factory, cast(SqliteRuleHealth, health)
+        cast(ExecuteSyncRule, ListingEverything()), factory, cast(RunHealth, health)
     )
 
     assert scheduler._execute_with_retry(rule(), full=False) is True
@@ -550,7 +571,7 @@ def test_failing_to_record_health_never_reports_a_successful_run_as_failed() -> 
     scheduler = SyncScheduler(
         cast(ExecuteSyncRule, RecordingExecuteRule([None])),
         cast(UnitOfWorkFactory, None),
-        cast(SqliteRuleHealth, health),
+        cast(RunHealth, health),
     )
 
     assert scheduler._execute_with_retry(rule(), full=True) is True
@@ -573,7 +594,7 @@ def test_blocked_incident_is_notified_after_the_rule_lock_is_released(tmp_path: 
         def send(self, incident: IncidentNotification) -> None:
             held.append(locks.for_rule(rule().id).locked())
 
-    health = SqliteRuleHealth(
+    health = _rule_health(
         database, unit_of_work, IncidentNotifier([LockCheckingChannel()]), locks=locks
     )
 
@@ -631,3 +652,28 @@ def test_a_legacy_recurring_skip_is_not_evidence_of_an_earlier_block(tmp_path: P
     health.record_full_pass(rule().id, 1, "daily")
 
     assert _incidents(database) == []
+
+
+def test_incidents_open_once_refresh_while_open_and_reopen_after_resolving(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    incidents = SqliteIncidentRepository(database)
+    report = IncidentReport("provider:rule-1", rule().id, "temporary", "first summary")
+    opened_at = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
+    later = datetime(2026, 9, 29, 10, 0, tzinfo=UTC)
+
+    opened = incidents.open(report, opened_at)
+    refreshed = incidents.open(replace(report, summary="second summary"), later)
+    incidents.resolve(report.key, later)
+    reopened = incidents.open(report, later)
+
+    assert (opened, refreshed, reopened) == (True, False, True)
+    with sqlite3.connect(database) as connection:
+        rows = connection.execute(
+            "SELECT deduplication_key, state, summary, opened_at, updated_at FROM incidents"
+        ).fetchall()
+    assert rows == [
+        ("provider:rule-1", "open", "first summary", opened_at.isoformat(), later.isoformat())
+    ]

@@ -4,15 +4,23 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
-from typing import cast
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
+    AuthorizationFailed,
+    CalendarPermissionRequired,
+    ConnectedAccountNotFound,
+    ProviderFailure,
+    ProviderFailureKind,
+)
 from calendar_sync.application.locking import RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
+    AccountAccess,
     AuditAction,
     AuditEntry,
     AuditOutcome,
@@ -22,11 +30,17 @@ from calendar_sync.application.ports import (
     RunKind,
 )
 from calendar_sync.application.preview import PreviewSyncRule
-from calendar_sync.application.reconciliation import ReconcileSyncRule
+from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import Container, build_container
+from calendar_sync.bootstrap.container import (
+    Adapters,
+    Container,
+    build_adapters,
+    build_container,
+    compose,
+)
 from calendar_sync.domain.model import (
     CalendarEvent,
     ConnectedAccountId,
@@ -49,14 +63,7 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
-from calendar_sync.infrastructure.google.oauth import (
-    ConnectedGoogleAccountNotFound,
-    CredentialCipher,
-    GoogleAccountAccess,
-    GoogleAccountAccessCheckFailed,
-    GoogleCalendarPermissionRequired,
-    GoogleOAuthCompletionFailed,
-)
+from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import all_day_event, endpoint, event, occurrence, rule, series, week_start
@@ -94,6 +101,7 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
 
 def test_create_cross_account_rule_through_api(tmp_path: Path) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
+    _connect_accounts(tmp_path / "test.db", "personal", "work")
 
     with TestClient(app) as client:
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
@@ -122,8 +130,8 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
     tmp_path: Path,
 ) -> None:
     database = tmp_path / "test.db"
-    container = build_container(Settings(database))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(database))
+    with adapters.unit_of_work() as uow:
         uow.audit.append(
             AuditEntry(
                 occurred_at=datetime(2026, 8, 30, tzinfo=UTC),
@@ -209,6 +217,7 @@ def test_rule_validation_rejects_unknown_policy_same_endpoint_and_duplicate(
     tmp_path: Path,
 ) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
+    _connect_accounts(tmp_path / "test.db", "personal", "work")
     base_payload = {
         "source": {"connected_account_id": "personal", "calendar_id": "calendar"},
         "destination": {"connected_account_id": "work", "calendar_id": "calendar"},
@@ -236,6 +245,28 @@ def test_rule_validation_rejects_unknown_policy_same_endpoint_and_duplicate(
         assert same_endpoint.status_code == 422
         assert first.status_code == 201
         assert duplicate.status_code == 409
+
+
+def test_rules_are_refused_for_accounts_this_installation_does_not_have(
+    tmp_path: Path,
+) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+    _connect_accounts(tmp_path / "test.db", "personal")
+    payload = {
+        "source": {"connected_account_id": "personal", "calendar_id": "calendar"},
+        "destination": {"connected_account_id": "deleted", "calendar_id": "calendar"},
+        "privacy_policy": "busy_only",
+        "sync_all_day_events": True,
+    }
+
+    with TestClient(app) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        refused = client.post("/api/v1/rules", json=payload)
+        rules = client.get("/api/v1/rules").json()
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "connect both Google accounts before creating a rule"
+    assert rules == []
 
 
 def test_google_routes_report_unconfigured_installation(tmp_path: Path) -> None:
@@ -277,18 +308,17 @@ def test_google_configuration_reports_redirect_uri_to_administrators(tmp_path: P
 
 def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
-    container = replace(
-        build_container(Settings(database, master_key=CredentialCipher.generate_key())),
-        scheduler=None,
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
     )
-    assert container.connected_accounts is not None
-    account = container.connected_accounts.save(
+    assert adapters.accounts is not None
+    account = adapters.accounts.save(
         "Personal",
         "person@example.test",
         '{"refresh_token":"synthetic-secret"}',
         avatar_url="https://lh3.googleusercontent.com/a/synthetic=s96-c",
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.rules.add(
             SyncRule(
@@ -368,11 +398,11 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
     # rule-1, validated-rule, and destination-rule degrade; the paused rule stays paused.
     assert dashboard.json()["stopped_rules"] == 3
     assert dashboard.json()["health"] == "attention"
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         disconnected_rule = uow.rules.get(SyncRuleId("rule-1"))
     assert disconnected_rule is not None
     assert disconnected_rule.state is SyncRuleState.DEGRADED
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         paused_rule = uow.rules.get(SyncRuleId("paused-rule"))
         validated_rule = uow.rules.get(SyncRuleId("validated-rule"))
         unrelated_rule = uow.rules.get(SyncRuleId("unrelated-rule"))
@@ -393,15 +423,14 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
     tmp_path: Path,
 ) -> None:
     database = tmp_path / "test.db"
-    container = replace(
-        build_container(Settings(database, master_key=CredentialCipher.generate_key())),
-        scheduler=None,
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
     )
-    assert container.connected_accounts is not None
-    account = container.connected_accounts.save(
+    assert adapters.accounts is not None
+    account = adapters.accounts.save(
         "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
     )
-    unrelated_account = container.connected_accounts.save(
+    unrelated_account = adapters.accounts.save(
         "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
     )
     affected_rule = SyncRule(
@@ -422,7 +451,7 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
         destination=endpoint("third-account", "third-calendar"),
         state=SyncRuleState.PAUSED,
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(affected_rule)
         uow.rules.add(destination_affected_rule)
         uow.rules.add(unrelated_rule)
@@ -554,15 +583,14 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
 
 def test_disconnected_account_without_rules_can_be_permanently_deleted(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
-    container = replace(
-        build_container(Settings(database, master_key=CredentialCipher.generate_key())),
-        scheduler=None,
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
     )
-    assert container.connected_accounts is not None
-    account = container.connected_accounts.save(
+    assert adapters.accounts is not None
+    account = adapters.accounts.save(
         "Unused", "unused@example.test", '{"refresh_token":"synthetic-secret"}'
     )
-    container.connected_accounts.disconnect(account.id)
+    adapters.accounts.disconnect(account.id)
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -570,19 +598,64 @@ def test_disconnected_account_without_rules_can_be_permanently_deleted(tmp_path:
         deleted = client.delete(f"/api/v1/accounts/{account.id.value}")
 
     assert deleted.status_code == 204
-    assert container.connected_accounts.list() == ()
+    assert adapters.accounts.list() == ()
+
+
+def test_account_deletion_waits_for_an_in_flight_run_of_an_affected_rule(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
+    )
+    assert adapters.accounts is not None
+    account = adapters.accounts.save(
+        "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
+    )
+    adapters.accounts.disconnect(account.id)
+    with adapters.unit_of_work() as uow:
+        uow.rules.add(
+            SyncRule(
+                rule().id,
+                endpoint(account.id.value, "personal-calendar"),
+                endpoint("work", "work-calendar"),
+                state=SyncRuleState.DEGRADED,
+            )
+        )
+        uow.commit()
+    responses: list[int] = []
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        running = adapters.locks.for_rule(rule().id)
+        running.acquire()
+        worker = Thread(
+            target=lambda: responses.append(
+                client.delete(f"/api/v1/accounts/{account.id.value}").status_code
+            )
+        )
+        worker.start()
+        worker.join(0.2)
+        blocked_while_running = worker.is_alive()
+        with adapters.unit_of_work() as uow:
+            kept_while_running = uow.rules.get(rule().id) is not None
+        running.release()
+        worker.join(2)
+
+    assert blocked_while_running
+    assert kept_while_running
+    assert responses == [204]
+    with adapters.unit_of_work() as uow:
+        assert uow.rules.get(rule().id) is None
 
 
 def test_connected_account_access_can_be_verified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    container = replace(
-        build_container(Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())),
-        scheduler=None,
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.google_oauth is not None
-    verify_access = Mock(return_value=GoogleAccountAccess(3, 2))
-    monkeypatch.setattr(container.google_oauth, "verify_access", verify_access)
+    assert adapters.google_oauth is not None
+    verify_access = Mock(return_value=AccountAccess(3, 2))
+    monkeypatch.setattr(adapters.google_oauth, "verify_access", verify_access)
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -604,8 +677,8 @@ def test_connected_account_access_can_be_verified(
 @pytest.mark.parametrize(
     ("failure", "expected_status"),
     [
-        (ConnectedGoogleAccountNotFound("missing account"), 404),
-        (GoogleAccountAccessCheckFailed("provider unavailable"), 424),
+        (ConnectedAccountNotFound("missing account"), 404),
+        (AccountAccessCheckFailed("provider unavailable"), 424),
     ],
 )
 def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
@@ -614,12 +687,11 @@ def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
     failure: Exception,
     expected_status: int,
 ) -> None:
-    container = replace(
-        build_container(Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())),
-        scheduler=None,
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.google_oauth is not None
-    monkeypatch.setattr(container.google_oauth, "verify_access", Mock(side_effect=failure))
+    assert adapters.google_oauth is not None
+    monkeypatch.setattr(adapters.google_oauth, "verify_access", Mock(side_effect=failure))
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -633,12 +705,12 @@ def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
 def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.google_oauth is not None
+    assert adapters.google_oauth is not None
     complete = Mock()
-    monkeypatch.setattr(container.google_oauth, "complete", complete)
+    monkeypatch.setattr(adapters.google_oauth, "complete", complete)
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -653,11 +725,11 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
 
 
 def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Path) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.google_oauth is not None
-    container.google_oauth._store_state("synthetic-state")
+    assert adapters.google_oauth is not None
+    adapters.google_oauth._store_state("synthetic-state")
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -676,11 +748,11 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
 
 
 def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.google_oauth is not None
-    container.google_oauth._store_state("synthetic-state")
+    assert adapters.google_oauth is not None
+    adapters.google_oauth._store_state("synthetic-state")
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -712,12 +784,12 @@ def test_google_oauth_callback_requires_an_authorization_result(tmp_path: Path) 
 def test_google_oauth_missing_calendar_permission_returns_to_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.google_oauth is not None
-    complete = Mock(side_effect=GoogleCalendarPermissionRequired("permission required"))
-    monkeypatch.setattr(container.google_oauth, "complete", complete)
+    assert adapters.google_oauth is not None
+    complete = Mock(side_effect=CalendarPermissionRequired("permission required"))
+    monkeypatch.setattr(adapters.google_oauth, "complete", complete)
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -734,12 +806,12 @@ def test_google_oauth_missing_calendar_permission_returns_to_settings(
 def test_google_oauth_completion_failure_returns_to_settings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.google_oauth is not None
-    complete = Mock(side_effect=GoogleOAuthCompletionFailed("token exchange failed"))
-    monkeypatch.setattr(container.google_oauth, "complete", complete)
+    assert adapters.google_oauth is not None
+    complete = Mock(side_effect=AuthorizationFailed("token exchange failed"))
+    monkeypatch.setattr(adapters.google_oauth, "complete", complete)
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -778,8 +850,8 @@ def test_frontend_fallback_serves_each_application_section(tmp_path: Path, path:
 
 
 def test_enabled_rule_can_be_paused_through_api(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
     app = create_app(container)
@@ -797,12 +869,41 @@ def test_enabled_rule_can_be_paused_through_api(tmp_path: Path) -> None:
 PASSWORD = {"password": "correct horse battery staple"}
 
 
+def _reconcile_now(container: Container) -> ReconcileNow:
+    assert container.reconcile_now is not None
+    return container.reconcile_now
+
+
+def _installation(settings: Settings, **substitutes: Any) -> tuple[Container, Adapters]:
+    """The container under test, and the adapters it was composed from to arrange state.
+
+    The scheduler never runs, so no test reaches Google in the background.
+    """
+    adapters = replace(build_adapters(settings), **substitutes)
+    return replace(compose(settings, adapters), scheduler=None), adapters
+
+
 def _client_with_rule(tmp_path: Path, state: SyncRuleState = SyncRuleState.ENABLED) -> TestClient:
-    container = build_container(Settings(tmp_path / "test.db"))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    _connect_accounts(tmp_path / "test.db", "personal-account", "work-account")
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=state))
         uow.commit()
     return TestClient(create_app(container))
+
+
+def _connect_accounts(database: Path, *account_ids: str) -> None:
+    """Connected Account records, without credentials, for rules that name them."""
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO connected_accounts (
+                id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at
+            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01')
+            """,
+            [(account, account, f"{account}@example.test") for account in account_ids],
+        )
 
 
 @pytest.mark.parametrize(
@@ -896,16 +997,15 @@ def test_rule_removal_requires_an_explicit_choice_and_detach_removes_the_rule(
 
 
 def test_delete_removal_is_blocked_for_a_disconnected_destination(tmp_path: Path) -> None:
-    container = replace(
-        build_container(Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())),
-        scheduler=None,
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.connected_accounts is not None
-    account = container.connected_accounts.save(
+    assert adapters.accounts is not None
+    account = adapters.accounts.save(
         "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
     )
-    container.connected_accounts.disconnect(account.id)
-    with container.unit_of_work() as uow:
+    adapters.accounts.disconnect(account.id)
+    with adapters.unit_of_work() as uow:
         uow.rules.add(
             SyncRule(
                 SyncRuleId("rule-1"),
@@ -953,11 +1053,10 @@ def test_replacement_creates_a_new_draft_and_rejects_invalid_calendars(tmp_path:
 
 
 def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path) -> None:
-    container = replace(
-        build_container(Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())),
-        scheduler=None,
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.PAUSED))
         uow.commit()
 
@@ -971,29 +1070,35 @@ def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path
 
 
 def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Path) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.commit()
-    _append_audit(container, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
+    _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
 
     def full_pass(rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
         assert full
         # The pass decides the blocked event again and finds it still blocked.
         _append_audit(
-            container, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
+            adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
         )
         return SyncRunResult(rule_id, conflicts=1, run_id="run-2", listed_in_full=True)
 
     container = replace(
         container,
-        scheduler=None,
-        execute_sync_rule=cast(ExecuteSyncRule, Mock(execute=full_pass)),
-        reconcile_sync_rule=cast(
-            ReconcileSyncRule,
-            Mock(execute=Mock(return_value=Mock(is_consistent=True, checked_mappings=0, drift=[]))),
+        reconcile_now=replace(
+            _reconcile_now(container),
+            synchronize=cast(ExecuteSyncRule, Mock(execute=full_pass)),
+            reconcile=cast(
+                ReconcileSyncRule,
+                Mock(
+                    execute=Mock(
+                        return_value=Mock(is_consistent=True, checked_mappings=0, drift=[])
+                    )
+                ),
+            ),
         ),
     )
 
@@ -1010,10 +1115,10 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
 def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
     tmp_path: Path, failing: str
 ) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.commit()
     execute = Mock(return_value=SyncRunResult(SyncRuleId("rule-1"), run_id="run-1"))
@@ -1022,10 +1127,11 @@ def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
     getattr(health, failing).side_effect = sqlite3.OperationalError("database is locked")
     container = replace(
         container,
-        scheduler=None,
-        execute_sync_rule=cast(ExecuteSyncRule, Mock(execute=execute)),
-        reconcile_sync_rule=cast(ReconcileSyncRule, Mock(execute=reconcile)),
-        rule_health=health,
+        reconcile_now=ReconcileNow(
+            cast(ExecuteSyncRule, Mock(execute=execute)),
+            cast(ReconcileSyncRule, Mock(execute=reconcile)),
+            health,
+        ),
     )
 
     with TestClient(create_app(container)) as client:
@@ -1041,26 +1147,28 @@ def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
 def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
     tmp_path: Path,
 ) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.commit()
-    _append_audit(container, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
+    _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
 
     def full_pass(rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
         _append_audit(
-            container, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
+            adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
         )
         return SyncRunResult(rule_id, conflicts=1, run_id="run-2", listed_in_full=True)
 
     failure = ProviderFailure(ProviderFailureKind.TEMPORARY, "synthetic outage")
     container = replace(
         container,
-        scheduler=None,
-        execute_sync_rule=cast(ExecuteSyncRule, Mock(execute=full_pass)),
-        reconcile_sync_rule=cast(ReconcileSyncRule, Mock(execute=Mock(side_effect=failure))),
+        reconcile_now=replace(
+            _reconcile_now(container),
+            synchronize=cast(ExecuteSyncRule, Mock(execute=full_pass)),
+            reconcile=cast(ReconcileSyncRule, Mock(execute=Mock(side_effect=failure))),
+        ),
     )
 
     with TestClient(create_app(container), raise_server_exceptions=False) as client:
@@ -1072,8 +1180,8 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
 
 
 def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Path) -> None:
-    container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.rules.add(
             SyncRule(
@@ -1121,8 +1229,8 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
 def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
     tmp_path: Path,
 ) -> None:
-    container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.DISABLED))
         uow.commit()
     started = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
@@ -1130,7 +1238,7 @@ def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
 
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
-        with container.rule_locks.working(SyncRuleId("rule-1"), work):
+        with adapters.locks.working(SyncRuleId("rule-1"), work):
             (listed,) = client.get("/api/v1/rules").json()
             detail = client.get("/api/v1/rules/rule-1").json()
         (finished,) = client.get("/api/v1/rules").json()
@@ -1148,8 +1256,8 @@ def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
 
 
 def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
-    container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         succeeded = RuleRunOutcome(
             SyncRuleId("rule-1"), RunKind.SYNC, datetime(2026, 9, 28, 9, 0, tzinfo=UTC), True
@@ -1176,9 +1284,9 @@ def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
 
 
 def test_activity_searches_recorded_event_titles(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit(
             "create",
             "source_created",
@@ -1226,10 +1334,10 @@ def test_activity_searches_recorded_event_titles(tmp_path: Path) -> None:
 
 
 def test_recent_changes_list_each_written_event_newest_first(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     dentist = RecordedEvent.of(event(title="Dentist"))
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created", run_id="run-1", event=dentist),
         _audit("ignore", "projection_current", run_id="run-2", event=dentist),
         _audit("update", "source_changed", run_id="run-3", source_event_id="b"),
@@ -1257,7 +1365,7 @@ def test_recent_changes_list_each_written_event_newest_first(tmp_path: Path) -> 
 
 
 def test_recent_changes_collapse_an_identical_repeated_write(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     weekly = RecordedEvent.of(
         replace(event(title="Stand-up"), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)))
     )
@@ -1270,7 +1378,7 @@ def test_recent_changes_collapse_an_identical_repeated_write(tmp_path: Path) -> 
         ),
     )
     _append_audit(
-        container,
+        adapters,
         *(
             _audit("create", "projection_missing", run_id=f"loop-{index}", event=weekly)
             for index in range(3)
@@ -1286,7 +1394,7 @@ def test_recent_changes_collapse_an_identical_repeated_write(tmp_path: Path) -> 
             event=RecordedEvent.of(moved),
         ),
     )
-    with sqlite3.connect(container.settings.database_path) as connection:
+    with sqlite3.connect(tmp_path / "test.db") as connection:
         connection.execute(
             "UPDATE audit_entries SET occurred_at = '2026-09-29T14:00:00+00:00' WHERE id = 1"
         )
@@ -1307,9 +1415,9 @@ def test_recent_changes_collapse_an_identical_repeated_write(tmp_path: Path) -> 
 
 
 def test_recent_changes_look_past_a_long_repeated_repair(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created", run_id="older", source_event_id="dentist"),
         *(_audit("create", "projection_missing", run_id=f"loop-{index}") for index in range(1200)),
     )
@@ -1325,12 +1433,12 @@ def test_recent_changes_look_past_a_long_repeated_repair(tmp_path: Path) -> None
 
 
 def test_dashboard_reports_events_whose_latest_decision_was_blocked(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
     _append_audit(
-        container,
+        adapters,
         _audit("conflict", "destination_occurrence_missing", run_id="run-1", source_event_id="a"),
         _audit("conflict", "mapping_inconsistent", run_id="run-1", source_event_id="b"),
         _audit("update", "source_changed", run_id="run-2", source_event_id="b"),
@@ -1349,15 +1457,15 @@ def test_dashboard_reports_events_whose_latest_decision_was_blocked(tmp_path: Pa
 
 
 def test_dashboard_names_no_rule_when_blocks_span_rules(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.rules.add(
             replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
         )
         uow.commit()
     _append_audit(
-        container,
+        adapters,
         _audit("conflict", "mapping_inconsistent", source_event_id="a"),
         _audit("conflict", "mapping_inconsistent", rule_id="rule-2", source_event_id="b"),
     )
@@ -1372,8 +1480,8 @@ def test_dashboard_names_no_rule_when_blocks_span_rules(tmp_path: Path) -> None:
     assert dashboard["health"] == "healthy"
 
 
-def _append_audit(container: Container, *entries: AuditEntry) -> None:
-    with container.unit_of_work() as uow:
+def _append_audit(adapters: Adapters, *entries: AuditEntry) -> None:
+    with adapters.unit_of_work() as uow:
         for entry in entries:
             uow.audit.append(entry)
         uow.commit()
@@ -1405,9 +1513,9 @@ def _audit(
 
 
 def test_removal_conflicts_are_blocked_activity_scoped_by_rule(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("remove_projection", None, run_id=None),
         _audit("removal_conflict", None, run_id=None),
         _audit("removal_conflict", None, rule_id="rule-2", run_id=None),
@@ -1427,9 +1535,9 @@ def test_removal_conflicts_are_blocked_activity_scoped_by_rule(tmp_path: Path) -
 
 
 def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created", destination_event_id="copy-1"),
         _audit("ignore", "projection_current"),
         _audit("ignore", "recurring_unsupported"),
@@ -1493,13 +1601,13 @@ def test_activity_event_is_read_live_without_persisting_content(tmp_path: Path) 
         web_link="https://calendar.google.com/event?eid=synthetic",
     )
     provider = FakeInspectionProvider({"source-event": source})
-    container = replace(
-        build_container(Settings(database)), calendar_provider=cast(CalendarProvider, provider)
+    container, adapters = _installation(
+        Settings(database), calendar_provider=cast(CalendarProvider, provider)
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
-    _append_audit(container, _audit("delete", "source_cancelled", destination_event_id="gone"))
+    _append_audit(adapters, _audit("delete", "source_cancelled", destination_event_id="gone"))
 
     with TestClient(create_app(container)) as client:
         assert client.get("/api/v1/audit-entries/1/event").status_code == 401
@@ -1545,18 +1653,21 @@ def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
     failing = FakeInspectionProvider(
         {}, ProviderFailure(ProviderFailureKind.AUTHENTICATION, "token expired")
     )
-    container = build_container(Settings(database))
-    with container.unit_of_work() as uow:
+    settings = Settings(database)
+    container, adapters = _installation(settings)
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
-    _append_audit(container, _audit("create", "source_created"))
+    _append_audit(adapters, _audit("create", "source_created"))
 
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
         assert client.get("/api/v1/audit-entries/1/event").status_code == 503
 
     with TestClient(
-        create_app(replace(container, calendar_provider=cast(CalendarProvider, failing)))
+        create_app(
+            compose(settings, replace(adapters, calendar_provider=cast(CalendarProvider, failing)))
+        )
     ) as client:
         client.post("/api/v1/session", json={"password": "correct horse battery staple"})
         response = client.get("/api/v1/audit-entries/1/event")
@@ -1565,9 +1676,9 @@ def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
 
 
 def test_rule_management_entries_are_listed_as_changes(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("policy_changed", None, run_id=None),
         _audit("remove_projection", None, run_id=None),
         _audit("detach_projection", None, run_id=None),
@@ -1589,9 +1700,9 @@ def test_rule_management_entries_are_listed_as_changes(tmp_path: Path) -> None:
 
 
 def test_no_change_runs_count_whole_runs_that_a_page_boundary_splits(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("ignore", "projection_current", run_id="run-1"),
         _audit("ignore", "projection_current", run_id="run-1"),
         # The oldest entry on the loaded page; the run's checks above sit below the boundary.
@@ -1607,9 +1718,9 @@ def test_no_change_runs_count_whole_runs_that_a_page_boundary_splits(tmp_path: P
 
 
 def test_activity_lists_runs_with_no_change_checks_including_quiet_runs(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("ignore", "projection_current", run_id="run-1"),
         _audit("ignore", "occurrence_current", run_id="run-1"),
         _audit("create", "source_created", run_id="run-1"),
@@ -1646,9 +1757,9 @@ def test_activity_lists_runs_with_no_change_checks_including_quiet_runs(tmp_path
 
 
 def test_activity_filters_combine_several_categories(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created"),
         _audit("ignore", "projection_current"),
         _audit("ignore", "all_day_excluded"),
@@ -1671,9 +1782,9 @@ def test_activity_filters_combine_several_categories(tmp_path: Path) -> None:
 
 
 def test_occurrences_that_already_match_are_listed_as_no_change(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("ignore", "occurrence_current"),
         _audit("ignore", "occurrence_already_cancelled"),
         _audit("ignore", "series_not_synchronized"),
@@ -1694,8 +1805,8 @@ def test_occurrences_that_already_match_are_listed_as_no_change(tmp_path: Path) 
 
 
 def test_single_activity_entry_can_be_opened_directly(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    _append_audit(container, _audit("create", "source_created", destination_event_id="copy-1"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    _append_audit(adapters, _audit("create", "source_created", destination_event_id="copy-1"))
 
     with TestClient(create_app(container)) as client:
         assert client.get("/api/v1/audit-entries/1").status_code == 401
@@ -1713,13 +1824,13 @@ def test_single_activity_entry_can_be_opened_directly(tmp_path: Path) -> None:
 def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     # No provider is configured: Activity names events without asking Google.
-    container = build_container(Settings(database))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(database))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
     renamed = event(title="Dentist (moved)")
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created", event=RecordedEvent.of(event(title="Dentist"))),
         _audit("ignore", "projection_current", event=RecordedEvent.of(event(title="Dentist"))),
         _audit("update", "source_changed", event=RecordedEvent.of(renamed)),
@@ -1771,7 +1882,7 @@ def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> Non
 
 
 def test_activity_shows_the_time_an_event_moved_from(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     dentist = event(title="Dentist")
     assert isinstance(dentist.time, TimedInterval)
     moved_time = TimedInterval(
@@ -1779,7 +1890,7 @@ def test_activity_shows_the_time_an_event_moved_from(tmp_path: Path) -> None:
     )
     later = replace(dentist, time=moved_time)
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created", event=RecordedEvent.of(dentist)),
         _audit("update", "source_changed", event=RecordedEvent.of(later)),
         _audit("update", "destination_drift_repaired", event=RecordedEvent.of(later)),
@@ -1821,9 +1932,9 @@ def test_activity_shows_the_time_an_event_moved_from(tmp_path: Path) -> None:
 
 
 def test_activity_marks_a_write_that_repeats_the_previous_run(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("create", "projection_missing", run_id="run-1"),
         _audit("create", "projection_missing", run_id="run-2"),
         _audit("ignore", "projection_current", run_id="run-3"),
@@ -1847,9 +1958,9 @@ def test_activity_marks_a_write_that_repeats_the_previous_run(tmp_path: Path) ->
 def test_activity_never_calls_a_source_change_a_repeat(tmp_path: Path) -> None:
     # A Details Projection's location can change while its recorded title and time stay the same,
     # so matching summaries do not prove a source change repeated the previous one.
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit(
             "update", "source_changed", run_id="run-1", event=RecordedEvent.of(event(title="A"))
         ),
@@ -1880,10 +1991,10 @@ def test_activity_never_calls_a_source_change_a_repeat(tmp_path: Path) -> None:
 def test_activity_keeps_an_observed_empty_title_but_names_untitled_cancellations(
     tmp_path: Path,
 ) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     offsite = RecordedEvent.of(replace(event(title="Offsite"), recurrence=None))
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created", event=RecordedEvent.of(event(title="Dentist"))),
         _audit("update", "source_changed", event=RecordedEvent.of(event(title=""))),
         _audit("ignore", "projection_current", event=RecordedEvent.of(event(title=""))),
@@ -1921,10 +2032,10 @@ def test_activity_keeps_an_observed_empty_title_but_names_untitled_cancellations
 
 
 def test_activity_shows_the_recurrence_each_entry_saw(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     weekly = RecordedEvent.of(replace(event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",))))
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created", event=weekly),
         # The series became a single event under the same identifier.
         _audit("update", "source_changed", event=RecordedEvent.of(event())),
@@ -1947,9 +2058,9 @@ def _untitled_stub() -> RecordedEvent:
 
 
 def test_activity_does_not_carry_names_across_rules(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
-        container,
+        adapters,
         _audit("create", "source_created", event=RecordedEvent.of(event(title="Dentist"))),
         _audit("remove_projection", None, rule_id="rule-2"),
     )
@@ -1968,14 +2079,13 @@ def _day_off() -> RecordedEvent:
 def test_cancelled_source_events_keep_their_title_for_display(tmp_path: Path) -> None:
     cancelled = replace(event(title="Dentist"), status=EventStatus.CANCELLED)
     provider = FakeInspectionProvider({"source-event": cancelled})
-    container = replace(
-        build_container(Settings(tmp_path / "test.db")),
-        calendar_provider=cast(CalendarProvider, provider),
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db"), calendar_provider=cast(CalendarProvider, provider)
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
-    _append_audit(container, _audit("delete", "source_cancelled"))
+    _append_audit(adapters, _audit("delete", "source_cancelled"))
 
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
@@ -1986,27 +2096,27 @@ def test_cancelled_source_events_keep_their_title_for_display(tmp_path: Path) ->
 
 
 def test_sync_reconciliation_and_removal_share_one_rule_lock(tmp_path: Path) -> None:
-    container = build_container(
+    container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
 
     assert container.execute_sync_rule is not None
-    assert container.reconcile_sync_rule is not None
-    assert container.execute_sync_rule.locks is container.rule_locks
-    assert container.reconcile_sync_rule.locks is container.rule_locks
-    assert container.remove_sync_rule.locks is container.rule_locks
+    assert container.reconcile_now is not None
+    assert container.execute_sync_rule.locks is adapters.locks
+    assert container.reconcile_now.reconcile.locks is adapters.locks
+    assert container.remove_sync_rule.locks is adapters.locks
 
 
 def test_pause_waits_for_an_in_flight_provider_write(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
     responses: list[int] = []
 
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
-        writing = container.rule_locks.for_writes(rule().id)
+        writing = adapters.locks.for_writes(rule().id)
         writing.acquire()
         worker = Thread(
             target=lambda: responses.append(client.post("/api/v1/rules/rule-1/pause").status_code)
@@ -2025,12 +2135,13 @@ def test_activity_event_of_a_removed_rule_reports_gone_without_provider_reads(
     tmp_path: Path,
 ) -> None:
     provider = FakeInspectionProvider({"source-event": event()})
-    container = build_container(Settings(tmp_path / "test.db"))
-    _append_audit(container, _audit("detach_projection", None, run_id=None))
+    settings = Settings(tmp_path / "test.db")
+    container, adapters = _installation(settings)
+    _append_audit(adapters, _audit("detach_projection", None, run_id=None))
 
     for candidate in (
         container,
-        replace(container, calendar_provider=cast(CalendarProvider, provider)),
+        compose(settings, replace(adapters, calendar_provider=cast(CalendarProvider, provider))),
     ):
         with TestClient(create_app(candidate)) as client:
             client.post("/api/v1/setup/admin", json=PASSWORD)
@@ -2041,11 +2152,13 @@ def test_activity_event_of_a_removed_rule_reports_gone_without_provider_reads(
     assert provider.requested == []
 
 
-def _waits_for_rule_writes(container: Container, request: Callable[[TestClient], int]) -> int:
+def _waits_for_rule_writes(
+    container: Container, adapters: Adapters, request: Callable[[TestClient], int]
+) -> int:
     responses: list[int] = []
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
-        writing = container.rule_locks.for_writes(rule().id)
+        writing = adapters.locks.for_writes(rule().id)
         writing.acquire()
         worker = Thread(target=lambda: responses.append(request(client)))
         worker.start()
@@ -2058,28 +2171,27 @@ def _waits_for_rule_writes(container: Container, request: Callable[[TestClient],
 
 
 def test_enable_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.DRY_RUN_VALIDATED))
         uow.commit()
 
     status_code = _waits_for_rule_writes(
-        container, lambda client: client.post("/api/v1/rules/rule-1/enable").status_code
+        container, adapters, lambda client: client.post("/api/v1/rules/rule-1/enable").status_code
     )
 
     assert status_code == 200
 
 
 def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
-    container = replace(
-        build_container(Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())),
-        scheduler=None,
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    assert container.connected_accounts is not None
-    account = container.connected_accounts.save(
+    assert adapters.accounts is not None
+    account = adapters.accounts.save(
         "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(
             SyncRule(
                 rule().id,
@@ -2092,19 +2204,20 @@ def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
 
     status_code = _waits_for_rule_writes(
         container,
+        adapters,
         lambda client: client.post(f"/api/v1/accounts/{account.id.value}/disconnect").status_code,
     )
 
     assert status_code == 200
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         degraded = uow.rules.get(rule().id)
     assert degraded is not None
     assert degraded.state is SyncRuleState.DEGRADED
 
 
 def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    with container.unit_of_work() as uow:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.DRAFT))
         uow.commit()
     calendars = FakeCalendars()
@@ -2112,7 +2225,7 @@ def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) ->
     calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED))
     fingerprinter = ProjectionFingerprinter()
     preview = PreviewSyncRule(
-        container.unit_of_work,
+        adapters.unit_of_work,
         calendars,
         EventProjector(),
         FixedClock(),
@@ -2143,18 +2256,18 @@ def test_delete_removal_reports_events_left_because_ownership_was_not_proven(
 ) -> None:
     calendars = FakeCalendars()
     calendars.put(event("native", calendar=rule().destination))
-    container = build_container(Settings(tmp_path / "test.db"))
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
     container = replace(
         container,
         remove_sync_rule=RemoveSyncRule(
-            container.unit_of_work,
+            adapters.unit_of_work,
             calendars,
             _ConnectedAccounts(),
             FixedClock(),
-            container.rule_locks,
+            adapters.locks,
         ),
     )
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.mappings.save(
             EventMapping(

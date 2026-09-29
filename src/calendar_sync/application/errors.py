@@ -43,6 +43,14 @@ class ProviderFailureKind(StrEnum):
     INFRASTRUCTURE = "infrastructure"
 
 
+# Failures that only reauthorizing the Connected Account can resolve.
+AUTHORIZATION_FAILURES = frozenset(
+    {ProviderFailureKind.AUTHENTICATION, ProviderFailureKind.AUTHORIZATION}
+)
+# Failures a later attempt can resolve, so they are retried with backoff.
+TRANSIENT_FAILURES = frozenset({ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY})
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderFailure(ApplicationError):
     kind: ProviderFailureKind
@@ -51,7 +59,11 @@ class ProviderFailure(ApplicationError):
 
     @property
     def retryable(self) -> bool:
-        return self.kind in {ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY}
+        return self.kind in TRANSIENT_FAILURES
+
+    @property
+    def requires_authorization(self) -> bool:
+        return self.kind in AUTHORIZATION_FAILURES
 
     def __str__(self) -> str:
         return self.detail
@@ -97,3 +109,59 @@ class ReplacementInterrupted(ApplicationError):
 
 class InfrastructureFailure(ApplicationError):
     """A local adapter failed to fulfill its contract."""
+
+
+class AdminAlreadyConfigured(ApplicationError):
+    """The Installation Administrator already exists."""
+
+
+class PasswordPolicyViolation(ApplicationError):
+    """A proposed administrator password is too weak."""
+
+
+class ConnectedAccountNotFound(ApplicationError):
+    """The requested Connected Account does not exist."""
+
+
+class ConnectedAccountDisconnected(ApplicationError):
+    """The Connected Account has no stored credentials until it is reauthorized."""
+
+
+class ConnectedAccountRequired(ApplicationError):
+    """A new rule names a Connected Account this installation does not have."""
+
+
+class ConnectedAccountMustBeDisconnected(ApplicationError):
+    """Only a Disconnected Account can be permanently deleted."""
+
+
+class AuthorizationNotConfigured(ApplicationError):
+    """The provider OAuth client is not configured for this installation."""
+
+
+class InvalidAuthorizationState(ApplicationError):
+    """An authorization callback's state is missing, expired, or already used."""
+
+
+class AuthorizationFailed(ApplicationError):
+    """The provider did not complete an authorization."""
+
+
+class CalendarPermissionRequired(AuthorizationFailed):
+    """An authorization was completed without the calendar permissions synchronization needs."""
+
+
+class AccountAccessCheckFailed(ApplicationError):
+    """The provider did not confirm a Connected Account's calendar access."""
+
+
+class ActivityEventNotFound(ApplicationError):
+    """The Activity entry does not exist or names no source event."""
+
+
+class ActivityRuleRemoved(ApplicationError):
+    """The Activity entry's rule was removed, so its calendars are no longer known."""
+
+
+class EventInspectionUnavailable(ApplicationError):
+    """Events cannot be read live without a configured calendar provider."""

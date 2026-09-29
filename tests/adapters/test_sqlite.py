@@ -3,20 +3,27 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
+from threading import Thread
 
 import pytest
 
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.errors import (
+    ConnectedAccountRequired,
+    DuplicateDirectionalRelationship,
+)
 from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    ConnectedAccountState,
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.rules import CreateSyncRule
 from calendar_sync.domain.model import (
+    ConnectedAccountId,
     EventId,
     EventMapping,
     EventMappingId,
@@ -27,15 +34,18 @@ from calendar_sync.domain.model import (
     PrivacyPolicy,
     ProjectionFingerprint,
     SyncReason,
+    SyncRule,
     SyncRuleId,
     SyncRuleState,
     TransformationPolicy,
 )
+from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
+from calendar_sync.infrastructure.security import CredentialCipher
 from tests.helpers import NOW, endpoint, event, rule, week_start
 
 
@@ -385,6 +395,152 @@ def test_rule_removal_cascades_resolves_incidents_and_keeps_audit(tmp_path: Path
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT state FROM incidents").fetchone()[0] == "resolved"
         assert connection.execute("SELECT COUNT(*) FROM audit_entries").fetchone()[0] == 1
+
+
+def test_rule_purge_deletes_its_audit_entries_and_incidents_but_no_other_rules(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    other = replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
+    with factory() as uow:
+        for kept_or_purged in (rule(), other):
+            uow.rules.add(kept_or_purged)
+            uow.audit.append(
+                AuditEntry(
+                    datetime(2026, 9, 1, tzinfo=UTC),
+                    kept_or_purged.id,
+                    AuditAction.CREATE,
+                    AuditOutcome.COMPLETED,
+                )
+            )
+        uow.mappings.save(_mapping())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at)
+            VALUES (?, ?, ?, 'temporary', 'open', 's', 't', 't')
+            """,
+            [("i-1", "provider:rule-1", "rule-1"), ("i-2", "provider:rule-2", "rule-2")],
+        )
+
+    with factory() as uow:
+        uow.rules.purge(rule().id)
+        uow.commit()
+
+    with factory() as uow:
+        assert [kept.id for kept in uow.rules.list()] == [other.id]
+        assert uow.mappings.count_for_rule(rule().id) == 0
+    with sqlite3.connect(database) as connection:
+        for table in ("audit_entries", "incidents"):
+            assert connection.execute(f"SELECT rule_id FROM {table}").fetchall() == [("rule-2",)]
+
+
+def test_account_deletion_holds_the_write_lock_so_reauthorization_waits_for_it(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    disconnected = store.save("Personal", "person@example.test", "{}")
+    store.disconnect(disconnected.id)
+    connected = store.save("Work", "work@example.test", "{}")
+    factory = SqliteUnitOfWorkFactory(database)
+    reauthorize = Thread(target=store.save, args=("Personal", "person@example.test", "{}"))
+
+    with factory() as uow:
+        assert uow.accounts.delete_disconnected(connected.id) is False
+        assert uow.accounts.delete_disconnected(disconnected.id) is True
+        reauthorize.start()
+        reauthorize.join(0.2)
+        waited_for_deletion = reauthorize.is_alive()
+        uow.commit()
+    reauthorize.join(2)
+
+    assert waited_for_deletion
+    # Reauthorizing after the deletion connects the identity afresh.
+    assert {account.email: account.id for account in store.list()}["work@example.test"] == (
+        connected.id
+    )
+    assert store.get(disconnected.id) is None
+
+
+def test_a_rule_creation_waiting_behind_account_deletion_is_refused_afterwards(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    deleted = store.save("Personal", "person@example.test", "{}")
+    store.disconnect(deleted.id)
+    kept = store.save("Work", "work@example.test", "{}")
+    factory = SqliteUnitOfWorkFactory(database)
+    late_rule = SyncRule(
+        SyncRuleId("late"),
+        endpoint(deleted.id.value, "personal-calendar"),
+        endpoint(kept.id.value, "work-calendar"),
+    )
+    refused: list[Exception] = []
+
+    def create() -> None:
+        try:
+            CreateSyncRule(factory).execute(late_rule)
+        except ConnectedAccountRequired as error:
+            refused.append(error)
+
+    creating = Thread(target=create)
+    with factory() as uow:
+        assert uow.accounts.delete_disconnected(deleted.id)
+        creating.start()
+        creating.join(0.2)
+        waited_for_deletion = creating.is_alive()
+        uow.commit()
+    creating.join(2)
+
+    assert waited_for_deletion
+    assert len(refused) == 1
+    with factory() as uow:
+        assert uow.rules.list() == ()
+
+
+def test_account_records_report_state_inside_the_unit_of_work(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    account = store.save("Work", "work@example.test", "{}")
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        assert uow.accounts.state(account.id) is ConnectedAccountState.CONNECTED
+        assert uow.accounts.state(ConnectedAccountId("missing")) is None
+
+
+def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
+    factory = InMemoryUnitOfWorkFactory()
+    other = replace(rule(), id=SyncRuleId("rule-2"))
+    with factory() as uow:
+        for kept_or_purged in (rule(), other):
+            uow.rules.add(kept_or_purged)
+            uow.audit.append(
+                AuditEntry(
+                    datetime(2026, 9, 1, tzinfo=UTC),
+                    kept_or_purged.id,
+                    AuditAction.CREATE,
+                    AuditOutcome.COMPLETED,
+                )
+            )
+        uow.mappings.save(_mapping())
+        uow.commit()
+
+    with factory() as uow:
+        uow.rules.purge(rule().id)
+        uow.commit()
+
+    assert list(factory.state.rules) == [other.id]
+    assert factory.state.mappings == {}
+    assert [entry.rule_id for entry in factory.state.audit] == [other.id]
 
 
 def test_memory_adapter_supports_removal_counts_and_outcomes() -> None:

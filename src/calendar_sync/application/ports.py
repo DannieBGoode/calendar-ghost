@@ -7,7 +7,7 @@ from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 
-from calendar_sync.application.errors import ProviderFailure
+from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -172,6 +172,9 @@ class SyncRuleRepository(Protocol):
 
     def remove(self, rule_id: SyncRuleId) -> None:
         """Delete the rule with its mappings, cursors, and outcomes; resolve its incidents."""
+
+    def purge(self, rule_id: SyncRuleId) -> None:
+        """Delete the rule like `remove`, and its audit entries and incidents with it."""
 
 
 class EventMappingRepository(Protocol):
@@ -342,7 +345,22 @@ class RulePreviewRepository(Protocol):
     def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None: ...
 
 
+class ConnectedAccountRecords(Protocol):
+    """Connected Account records inside a unit of work, without their credentials."""
+
+    def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None: ...
+
+    def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
+        """Delete the account if it is disconnected; whether it was.
+
+        Once this deletes, no other writer can change the installation until the unit of work
+        ends, so a reauthorization or new rule cannot slip in before it commits.
+        """
+        ...
+
+
 class UnitOfWork(Protocol):
+    accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
@@ -381,7 +399,148 @@ class AccountAuthorizations(Protocol):
     def is_connected(self, account_id: ConnectedAccountId) -> bool: ...
 
 
+@dataclass(frozen=True, slots=True)
+class IncidentReport:
+    """An Incident to open or refresh; repeated reports under one key update one Incident."""
+
+    key: str
+    rule_id: SyncRuleId
+    category: str
+    summary: str
+    """Operational wording only; never an event title or other event content."""
+
+
+class IncidentRepository(Protocol):
+    def open(self, incident: IncidentReport, at: datetime) -> bool:
+        """Open or refresh the Incident under its key; whether it was newly opened."""
+        ...
+
+    def resolve(self, key: str, at: datetime) -> None:
+        """Resolve the Incident under this key, if it is open."""
+        ...
+
+
+class IncidentNotifications(Protocol):
+    def incident_opened(self, incident: IncidentReport, at: datetime) -> None:
+        """Deliver an Incident Notification; best-effort, so it never raises."""
+        ...
+
+
+class RuleHealthRecords(Protocol):
+    """What rule health remembers between runs: failure streaks and daily block checks."""
+
+    def record_failure(self, rule_id: SyncRuleId, kind: ProviderFailureKind, at: datetime) -> int:
+        """Count one more consecutive failure; how many there are now."""
+        ...
+
+    def clear_failures(self, rule_id: SyncRuleId) -> None: ...
+
+    def audit_floor(self) -> int:
+        """The newest audit entry now, taken before a full pass so its decisions lie above it."""
+        ...
+
+    def record_block_check(
+        self, rule_id: SyncRuleId, floor: int, run_id: str | None, at: datetime
+    ) -> int | None:
+        """Record a full pass that began after entry `floor`; how many blocks it found persisting.
+
+        A block persists when it was its event's latest decision before the pass began and the
+        pass decided it again. `None` when the rule no longer exists.
+        """
+        ...
+
+
 class RemovalIncidents(Protocol):
     def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
         """Open or refresh the one Incident for a removal stopped by lost authorization."""
+        ...
+
+
+class ConnectedAccountState(StrEnum):
+    CONNECTED = "connected"
+    DISCONNECTED = "disconnected"
+
+
+@dataclass(frozen=True, slots=True)
+class ConnectedAccount:
+    id: ConnectedAccountId
+    display_name: str
+    email: str
+    state: ConnectedAccountState
+    avatar_url: str | None = None
+
+
+class ConnectedAccountRepository(AccountAuthorizations, Protocol):
+    def list(self) -> Sequence[ConnectedAccount]:
+        """Every Connected and Disconnected Account, ordered by email."""
+        ...
+
+    def get(self, account_id: ConnectedAccountId) -> ConnectedAccount | None: ...
+
+    def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
+        """Discard the account's credentials, keeping its identity for Reauthorization."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveredCalendar:
+    id: str
+    summary: str
+    access_role: str
+    primary: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AccountAccess:
+    calendars_visible: int
+    writable_calendars: int
+
+
+class AccountAuthorization(Protocol):
+    """The provider's state-protected OAuth flow that connects or reauthorizes an account."""
+
+    def authorization_url(self) -> str: ...
+
+    def complete(self, state: str, code: str) -> ConnectedAccount: ...
+
+    def cancel(self, state: str) -> None: ...
+
+
+class AccountCalendars(Protocol):
+    def calendars(self, account_id: ConnectedAccountId) -> Sequence[DiscoveredCalendar]: ...
+
+    def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
+        """Prove the account can list calendars and read events, or raise why it cannot."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class AdministratorSession:
+    token: str
+    expires_at: datetime
+
+
+class AdministratorAccess(Protocol):
+    """The Installation Administrator's password and sessions."""
+
+    def is_configured(self) -> bool: ...
+
+    def create_admin(self, password: str) -> None: ...
+
+    def authenticate(self, password: str) -> AdministratorSession | None: ...
+
+    def session_is_valid(self, token: str | None) -> bool: ...
+
+    def revoke(self, token: str | None) -> None: ...
+
+
+class FullPassRecords(Protocol):
+    """Bookkeeping that lets a successful full pass stand in for a rule's daily one."""
+
+    def audit_floor(self) -> int:
+        """The newest audit entry now, taken before a full pass so its decisions lie above it."""
+        ...
+
+    def record_full_pass(self, rule_id: SyncRuleId, floor: int, run_id: str | None = None) -> None:
+        """A full pass that began after audit entry `floor` decided every blocked event again."""
         ...

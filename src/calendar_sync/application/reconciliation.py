@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
@@ -8,10 +9,12 @@ from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     CalendarReader,
     Clock,
+    FullPassRecords,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEvent,
@@ -27,6 +30,8 @@ from calendar_sync.domain.model import (
     SyncRuleId,
 )
 from calendar_sync.domain.services import EventProjector, ReconciliationService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -157,3 +162,45 @@ def _eligible(source: CalendarEvent, rule: SyncRule) -> bool:
         and source.managed_origin is None
         and not (source.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE)
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ReconcileNowResult:
+    sync: SyncRunResult
+    report: ReconciliationReport
+
+
+@dataclass(slots=True)
+class ReconcileNow:
+    """Reconcile Now: a full pass, standing in for that day's scheduled one, then reconciliation.
+
+    Like the scheduler's, the full-pass bookkeeping is best-effort and never aborts the run.
+    """
+
+    synchronize: ExecuteSyncRule
+    reconcile: ReconcileSyncRule
+    full_passes: FullPassRecords | None = None
+
+    def execute(self, rule_id: SyncRuleId) -> ReconcileNowResult:
+        floor = self._audit_floor()
+        result = self.synchronize.execute(rule_id, full=True)
+        # The full pass succeeded and counts as today's; reconciliation can still fail after.
+        if floor is not None:
+            self._record_full_pass(rule_id, floor, result.run_id)
+        return ReconcileNowResult(result, self.reconcile.execute(rule_id))
+
+    def _audit_floor(self) -> int | None:
+        if self.full_passes is None:
+            return None
+        try:
+            return self.full_passes.audit_floor()
+        except Exception:
+            logger.exception("Could not read the audit position before Reconcile Now")
+            return None
+
+    def _record_full_pass(self, rule_id: SyncRuleId, floor: int, run_id: str | None) -> None:
+        assert self.full_passes is not None
+        try:
+            self.full_passes.record_full_pass(rule_id, floor, run_id)
+        except Exception:
+            logger.exception("Could not record block health for rule %s", rule_id.value)

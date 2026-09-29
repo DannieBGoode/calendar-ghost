@@ -5,23 +5,42 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-class AdminAlreadyConfigured(ValueError):
+from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
+from calendar_sync.application.ports import AdministratorSession
+
+
+class InvalidMasterKey(ValueError):
     pass
 
 
-class PasswordPolicyViolation(ValueError):
-    pass
+class CredentialCipher:
+    """Encrypts provider credentials at rest with the Installation Master Key."""
 
+    def __init__(self, encoded_key: str) -> None:
+        try:
+            key = base64.urlsafe_b64decode(encoded_key.encode())
+        except Exception as error:
+            raise InvalidMasterKey("master key must be URL-safe base64") from error
+        if len(key) != 32:
+            raise InvalidMasterKey("master key must decode to exactly 32 bytes")
+        self._cipher = AESGCM(key)
 
-@dataclass(frozen=True, slots=True)
-class Session:
-    token: str
-    expires_at: datetime
+    def encrypt(self, plaintext: str) -> bytes:
+        nonce = secrets.token_bytes(12)
+        return nonce + self._cipher.encrypt(nonce, plaintext.encode(), None)
+
+    def decrypt(self, ciphertext: bytes) -> str:
+        nonce, encrypted = ciphertext[:12], ciphertext[12:]
+        return self._cipher.decrypt(nonce, encrypted, None).decode()
+
+    @staticmethod
+    def generate_key() -> str:
+        return base64.urlsafe_b64encode(AESGCM.generate_key(bit_length=256)).decode()
 
 
 class SqliteAdminAuth:
@@ -55,7 +74,7 @@ class SqliteAdminAuth:
         except sqlite3.IntegrityError as error:
             raise AdminAlreadyConfigured("installation administrator already exists") from error
 
-    def authenticate(self, password: str) -> Session | None:
+    def authenticate(self, password: str) -> AdministratorSession | None:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT password_hash FROM installation_admin WHERE singleton = 1"
@@ -74,7 +93,7 @@ class SqliteAdminAuth:
             connection.execute(
                 "DELETE FROM admin_sessions WHERE expires_at <= ?", (now.isoformat(),)
             )
-            return Session(token, expires)
+            return AdministratorSession(token, expires)
 
     def session_is_valid(self, token: str | None) -> bool:
         if not token:

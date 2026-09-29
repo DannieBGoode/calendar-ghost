@@ -74,3 +74,7 @@ Permanent deletion is available only after a Connected Account is disconnected. 
 the account and every Directional Sync Rule that references it, including those rules' Event
 Mappings, cursors, incidents, and audit activity. It does not issue provider writes: existing
 Managed Projections remain in Google Calendar but are no longer managed.
+Deletion first waits for any run, provider write, or lifecycle change of each affected rule to
+finish, as Rule Removal does, so no in-flight work outlives the records it depends on. The account
+and its rules are then deleted in one transaction that also rechecks the account is disconnected,
+so a reauthorization or a new rule for the account cannot interleave with it.

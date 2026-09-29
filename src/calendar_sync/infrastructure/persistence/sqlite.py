@@ -12,6 +12,8 @@ from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
+    ConnectedAccountRecords,
+    ConnectedAccountState,
     EventMappingRepository,
     ExceptionReplayRepository,
     OccurrenceMappingRepository,
@@ -88,6 +90,25 @@ def initialize_database(path: Path) -> None:
             )
 
 
+class SqliteConnectedAccountRecords:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None:
+        row = self._connection.execute(
+            "SELECT state FROM connected_accounts WHERE id = ?", (account_id.value,)
+        ).fetchone()
+        return ConnectedAccountState(str(row["state"])) if row else None
+
+    def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
+        # The first write of the transaction takes SQLite's write lock until commit or rollback.
+        cursor = self._connection.execute(
+            "DELETE FROM connected_accounts WHERE id = ? AND state = ?",
+            (account_id.value, ConnectedAccountState.DISCONNECTED.value),
+        )
+        return cursor.rowcount == 1
+
+
 class SqliteSyncRuleRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self._connection = connection
@@ -144,6 +165,12 @@ class SqliteSyncRuleRepository:
             """,
             (now, now, rule_id.value),
         )
+        self._connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule_id.value,))
+
+    def purge(self, rule_id: SyncRuleId) -> None:
+        # Neither table references sync_rules, so nothing cascades to them.
+        self._connection.execute("DELETE FROM audit_entries WHERE rule_id = ?", (rule_id.value,))
+        self._connection.execute("DELETE FROM incidents WHERE rule_id = ?", (rule_id.value,))
         self._connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule_id.value,))
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
@@ -576,6 +603,7 @@ class SqliteRulePreviewRepository:
 
 
 class SqliteUnitOfWork:
+    accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
@@ -595,6 +623,7 @@ class SqliteUnitOfWork:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         self._connection = connection
+        self.accounts = SqliteConnectedAccountRecords(connection)
         self.rules = SqliteSyncRuleRepository(connection)
         self.mappings = SqliteEventMappingRepository(connection)
         self.occurrences = SqliteOccurrenceMappingRepository(connection)

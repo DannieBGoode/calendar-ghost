@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -9,7 +8,6 @@ from dataclasses import dataclass, field
 from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
-    ProviderFailureKind,
     RemovalInterrupted,
     RemovalRequiresAuthorization,
     RemovalRequiresProvider,
@@ -26,10 +24,8 @@ from calendar_sync.application.ports import (
     RemovalIncidents,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.retry import with_retries
 from calendar_sync.domain.model import EventMapping, ProjectionHandling, SyncRule, SyncRuleId
-
-DELETE_ATTEMPTS = 3
-_AUTHORIZATION_FAILURES = {ProviderFailureKind.AUTHENTICATION, ProviderFailureKind.AUTHORIZATION}
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +80,7 @@ class RemoveSyncRule:
                         owned = False
                         conflicts += 1
                     except ProviderFailure as failure:
-                        if failure.kind in _AUTHORIZATION_FAILURES and self.incidents is not None:
+                        if failure.requires_authorization and self.incidents is not None:
                             self.incidents.removal_blocked(rule.id, failure)
                         raise RemovalInterrupted(
                             deleted + conflicts, len(mappings) - deleted - conflicts, failure
@@ -115,22 +111,15 @@ class RemoveSyncRule:
         return RemovalResult(deleted, detached, conflicts)
 
     def _delete_with_retry(self, mapping: EventMapping) -> None:
-        assert self.provider is not None
+        provider = self.provider
+        assert provider is not None
         operation_key = _operation_key(mapping)
-        for attempt in range(DELETE_ATTEMPTS):
-            try:
-                self.provider.delete_projection(
-                    mapping.destination, mapping.source, mapping.rule_id, operation_key
-                )
-                return
-            except ProjectionOwnershipMismatch:
-                raise
-            except ProviderFailure as failure:
-                if not failure.retryable or attempt == DELETE_ATTEMPTS - 1:
-                    raise
-                delay = failure.retry_after_seconds or 2**attempt
-                # Backoff jitter, not a secret.
-                self.sleep(delay + random.uniform(0, 0.25))  # noqa: S311
+        with_retries(
+            lambda: provider.delete_projection(
+                mapping.destination, mapping.source, mapping.rule_id, operation_key
+            ),
+            self.sleep,
+        )
 
     def _require_possible(
         self, rule: SyncRule | None, rule_id: SyncRuleId, handling: ProjectionHandling
