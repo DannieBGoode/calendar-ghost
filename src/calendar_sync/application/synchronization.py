@@ -12,7 +12,7 @@ from calendar_sync.application.errors import (
     ProviderFailureKind,
     RuleNotExecutable,
 )
-from calendar_sync.application.locking import RuleLocks
+from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.occurrences import SynchronizeOccurrences
 from calendar_sync.application.ports import (
     AuditEntry,
@@ -83,7 +83,10 @@ class ExecuteSyncRule:
         )
 
     def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
-        with self.locks.for_rule(rule_id):
+        with (
+            self.locks.for_rule(rule_id),
+            self.locks.working(rule_id, RuleWork(RuleWorkKind.SYNC, self.clock.now())),
+        ):
             try:
                 return self._execute_serialized(rule_id, full=full)
             except RuleNotExecutable:

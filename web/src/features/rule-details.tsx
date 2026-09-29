@@ -4,12 +4,13 @@ import { useEffect, useRef, useState, type FormEvent, type RefObject } from "rea
 
 import { PageSkeleton } from "@/components/page-skeleton"
 import {
-  EnableReview,
   LiveAnnouncement,
+  PreviewReadyNote,
   RuleCommandMenu,
   RuleFeedbackNote,
   RuleNextAction,
   RuleStatusBadge,
+  RuleWorkNote,
 } from "@/components/rule-commands"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Button } from "@/components/ui/button"
@@ -53,12 +54,14 @@ import {
   removalMutationKey,
   removalProgress,
   REMOVAL_REFRESH_MS,
+  reportedRemoval,
   useActiveRemoval,
   type ActiveRemoval,
   type RemovalRequest,
 } from "@/lib/rule-removal"
 import { relativeTime } from "@/lib/relative-time"
 import { recoveryExplanation } from "@/lib/rule-run"
+import { busyCommand, ruleWork, WORK_REFRESH_MS } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
 import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 
@@ -77,14 +80,18 @@ export function RuleDetailsView({
 }) {
   const now = useNow()
   const commands = useRuleCommands()
-  const removal = useActiveRemoval(ruleId)
+  const sessionRemoval = useActiveRemoval(ruleId)
   const rule = useQuery({
     queryKey: ["rule", ruleId],
     queryFn: () => api.rule(ruleId),
     retry: false,
     // A removal commits each projection it deletes, so refresh quickly to show its progress.
-    refetchInterval: removal ? REMOVAL_REFRESH_MS : 60_000,
+    refetchInterval: (query) =>
+      sessionRemoval ? REMOVAL_REFRESH_MS : query.state.data?.running ? WORK_REFRESH_MS : 60_000,
   })
+  // A failed refresh keeps stale data, which must not keep a finished removal on screen.
+  const reported = rule.error ? undefined : reportedRemoval(rule.data?.running, rule.data?.mapping_count ?? 0)
+  const removal = reported ?? sessionRemoval
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const heading = useRef<HTMLHeadingElement>(null)
   const loadedRuleId = rule.data?.id
@@ -127,16 +134,20 @@ export function RuleDetailsView({
 
   if (rule.isPending || accounts.isPending) return <PageSkeleton label="Loading rule" />
   // The last refresh of a finishing removal can find the rule gone before the removal returns.
-  if (!rule.data || (rule.error && !removal) || accounts.error) {
+  if (!rule.data || (rule.error && !sessionRemoval) || accounts.error) {
     const missing = rule.error instanceof ApiError && rule.error.status === 404
+    // Stale data still describes the removal this page was showing when the rule disappeared.
+    const removed = missing && rule.data?.running?.kind === "removal"
     return (
       <section className="page-section" role="alert">
         {back}
-        <h1>{missing ? "This rule no longer exists" : "Rule details could not load"}</h1>
+        <h1>{removed ? "Rule removed" : missing ? "This rule no longer exists" : "Rule details could not load"}</h1>
         <p className="page-intro">
-          {missing
-            ? "It may have been removed or replaced. Return to the rules list to continue."
-            : "Check that the local service is running, then try again."}
+          {removed
+            ? "Its removal finished. Activity lists what happened to each of its events."
+            : missing
+              ? "It may have been removed or replaced. Return to the rules list to continue."
+              : "Check that the local service is running, then try again."}
         </p>
         {!missing && (
           <Button
@@ -173,7 +184,13 @@ export function RuleDetailsView({
   ).calendar
   const removing = removal !== undefined || detail.state === "disabled"
   const displayState = removal ? "removing" : detail.state
-  const pending = commands.pending[detail.id]
+  const work = ruleWork({
+    pending: commands.pending[detail.id],
+    pendingSince: commands.pendingSince[detail.id],
+    running: detail.running,
+    removing: removal !== undefined,
+  })
+  const pending = busyCommand(commands.pending[detail.id], work)
   const run = (command: Parameters<typeof commands.run>[1]) =>
     void commands.run(detail.id, command, destinationName, () => heading.current)
   const notify = (feedback: RuleFeedback) => commands.notify(detail.id, feedback)
@@ -210,11 +227,16 @@ export function RuleDetailsView({
           </div>
         </div>
         <div className="rule-actions">
-          <RuleStatusBadge state={displayState} stopped={detail.state === "degraded" || disconnected} />
+          <RuleStatusBadge
+            state={displayState}
+            stopped={detail.state === "degraded" || disconnected}
+            working={work?.kind}
+          />
           <RuleNextAction
             state={displayState}
             disconnected={disconnected}
             pending={pending}
+            describedBy={displayState === "dry_run_validated" ? "rule-preview-ready" : undefined}
             onRun={run}
             onViewChange={onViewChange}
           />
@@ -236,16 +258,14 @@ export function RuleDetailsView({
         </div>
       )}
       {displayState === "dry_run_validated" && (
-        <EnableReview
-          preview={detail.latest_preview}
-          source={sourceName}
-          destination={destinationName}
-          privacy={detail.privacy_policy}
-          pending={pending}
-          onEnable={() => run("enable")}
-        />
+        <PreviewReadyNote id="rule-preview-ready" preview={detail.latest_preview} destination={destinationName} />
       )}
-      <RuleFeedbackNote pending={pending} feedback={commands.feedback[detail.id]} />
+      {/* Removal shows its own progress in the removal section. */}
+      {work && work.kind !== "removal" ? (
+        <RuleWorkNote work={work} source={sourceName} destination={destinationName} />
+      ) : (
+        <RuleFeedbackNote feedback={commands.feedback[detail.id]} />
+      )}
 
       {detail.reprojection_required && PREVIEWABLE_STATES.includes(displayState) && (
         <div className="rule-recovery-note">
@@ -913,7 +933,9 @@ function RuleRemoval({
   const firstField = useRef<HTMLInputElement>(null)
   const confirm = useRef<HTMLButtonElement>(null)
   const progress = useRef<HTMLDivElement>(null)
-  const active = useActiveRemoval(detail.id)
+  const sessionRemoval = useActiveRemoval(detail.id)
+  // The service's report outlives a reload; this session's request covers the moment before it.
+  const active = reportedRemoval(detail.running, detail.mapping_count) ?? sessionRemoval
   const interrupted = detail.state === "disabled" && !active
   const [open, setOpen] = useState(false)
   const expanded = open || interrupted
@@ -1036,7 +1058,7 @@ function RemovalProgress({
   return (
     <div ref={ref} tabIndex={-1} className="removal-progress">
       <p className="removal-progress-label">
-        <LoaderCircle aria-hidden="true" className="removal-spinner" />
+        <LoaderCircle aria-hidden="true" className="work-spinner" />
         <span>{label}</span>
       </p>
       {done !== null && (

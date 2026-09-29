@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 import calendar_sync.interfaces.api.app as api_module
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.locking import RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AuditEntry,
     CalendarProvider,
@@ -34,6 +35,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     ProjectionFingerprint,
+    ProjectionHandling,
     Recurrence,
     SyncRule,
     SyncRuleId,
@@ -1113,6 +1115,35 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
     assert rules["rule-2"]["last_sync"]["failure_kind"] == "rate_limit"
 
 
+def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
+    tmp_path: Path,
+) -> None:
+    container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.DISABLED))
+        uow.commit()
+    started = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
+    work = RuleWork(RuleWorkKind.REMOVAL, started, ProjectionHandling.DELETE, total=4, done=1)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        with container.rule_locks.working(SyncRuleId("rule-1"), work):
+            (listed,) = client.get("/api/v1/rules").json()
+            detail = client.get("/api/v1/rules/rule-1").json()
+        (finished,) = client.get("/api/v1/rules").json()
+
+    expected = {
+        "kind": "removal",
+        "started_at": "2026-09-29T09:00:00+00:00",
+        "handling": "delete",
+        "total": 4,
+        "done": 1,
+    }
+    assert listed["running"] == expected
+    assert detail["running"] == expected
+    assert finished["running"] is None
+
+
 def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
     container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
     with container.unit_of_work() as uow:
@@ -1139,6 +1170,56 @@ def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
     assert dashboard["last_synced_at"] == "2026-09-28T09:00:00+00:00"
     assert listed["last_sync"]["succeeded"] is False
     assert listed["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
+
+
+def test_activity_searches_recorded_event_titles(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit(
+            "create",
+            "source_created",
+            source_event_id="a",
+            event=RecordedEvent.of(event(title="Dentist")),
+        ),
+        _audit(
+            "create",
+            "source_created",
+            source_event_id="b",
+            event=RecordedEvent.of(event(title="Team lunch")),
+        ),
+        _audit(
+            "create",
+            "source_created",
+            source_event_id="c",
+            event=RecordedEvent.of(event(title="100% focus")),
+        ),
+        _audit("update", "source_changed", source_event_id="d"),
+        _audit(
+            "create",
+            "source_created",
+            source_event_id="e",
+            event=RecordedEvent.of(event(title="Reunión")),
+        ),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+
+        def found(query: str) -> list[str | None]:
+            entries = client.get("/api/v1/audit-entries", params={"q": query}).json()
+            return [entry["source_event_id"] for entry in entries]
+
+        assert found("DENT") == ["a"]
+        assert found("reunion") == found("REUNIÓN") == ["e"]
+        assert found(" lunch ") == ["b"]
+        # Wildcards are literal text, so they never match every title.
+        assert found("%") == ["c"]
+        assert found("_") == []
+        assert found("  ") == ["e", "d", "c", "b", "a"]
+        too_long = client.get("/api/v1/audit-entries", params={"q": "x" * 201})
+
+    assert too_long.status_code == 422
 
 
 def test_recent_changes_list_each_written_event_newest_first(tmp_path: Path) -> None:

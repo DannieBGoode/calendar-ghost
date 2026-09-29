@@ -1,6 +1,6 @@
 import { useMutationState } from "@tanstack/react-query"
 
-import { ApiError, type ProjectionHandling } from "@/lib/api"
+import { ApiError, type ProjectionHandling, type RunningWork } from "@/lib/api"
 import { plural } from "@/lib/rule-change"
 
 /**
@@ -10,7 +10,8 @@ import { plural } from "@/lib/rule-change"
 export const REMOVAL_REFRESH_MS = 2_000
 
 export type RemovalRequest = { handling: ProjectionHandling; total: number }
-export type ActiveRemoval = RemovalRequest & { startedAt: number }
+/** `done` is the service's own count; without it, progress comes from the mapping count. */
+export type ActiveRemoval = RemovalRequest & { startedAt: number; done?: number }
 
 const REMOVAL_KEY = "rule-removal"
 
@@ -30,17 +31,34 @@ export function useActiveRemoval(ruleId: string): ActiveRemoval | undefined {
   return active
 }
 
-/** Rules with a removal running in this browser session, for list badges. */
-export function useRemovingRuleIds(): ReadonlySet<string> {
+/**
+ * The removal the service reports for a rule. It is how a removal started before a reload, or in
+ * another tab, stays visible, and it counts detached projections that the mapping count cannot.
+ */
+export function reportedRemoval(
+  running: RunningWork | null | undefined,
+  mappingCount: number,
+): ActiveRemoval | undefined {
+  if (running?.kind !== "removal") return undefined
+  return {
+    handling: running.handling ?? "delete",
+    total: running.total ?? mappingCount,
+    done: running.total === null ? undefined : running.done,
+    startedAt: Date.parse(running.started_at),
+  }
+}
+
+/** Rules with a removal running, for list badges: started in this session or reported running. */
+export function useRemovingRuleIds(rules: { id: string; running: RunningWork | null }[] = []): ReadonlySet<string> {
   const ids = useMutationState({
     filters: { mutationKey: [REMOVAL_KEY], status: "pending" },
     select: (mutation) => String(mutation.options.mutationKey?.[1]),
   })
-  return new Set(ids)
+  return new Set([...ids, ...rules.filter((rule) => rule.running?.kind === "removal").map((rule) => rule.id)])
 }
 
 export function removalProgress(
-  request: RemovalRequest,
+  request: RemovalRequest & { done?: number },
   remaining: number,
   destination: string,
 ): { done: number | null; label: string } {
@@ -51,7 +69,7 @@ export function removalProgress(
       label: `Keeping ${plural(request.total, "event")} in ${destination} as ordinary events…`,
     }
   }
-  const done = Math.min(request.total, Math.max(0, request.total - remaining))
+  const done = Math.min(request.total, Math.max(0, request.done ?? request.total - remaining))
   // Conflicted events leave the count too, but stay in Google, so this is not a deletion count.
   return { done, label: `Handled ${done} of ${plural(request.total, "projection")} in ${destination}` }
 }

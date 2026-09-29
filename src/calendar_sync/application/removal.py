@@ -15,7 +15,7 @@ from calendar_sync.application.errors import (
     RemovalRequiresProvider,
     RuleNotFound,
 )
-from calendar_sync.application.locking import RuleLocks
+from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AccountAuthorizations,
     AuditEntry,
@@ -56,7 +56,12 @@ class RemoveSyncRule:
         self._require_possible(rule, rule_id, handling)
 
     def execute(self, rule_id: SyncRuleId, handling: ProjectionHandling) -> RemovalResult:
-        with self.locks.for_rule(rule_id), self.unit_of_work() as uow:
+        work = RuleWork(RuleWorkKind.REMOVAL, self.clock.now(), handling=handling)
+        with (
+            self.locks.for_rule(rule_id),
+            self.locks.working(rule_id, work),
+            self.unit_of_work() as uow,
+        ):
             with self.locks.for_writes(rule_id):
                 rule = self._require_possible(uow.rules.get(rule_id), rule_id, handling)
                 uow.rules.save(rule.begin_removal())
@@ -64,6 +69,7 @@ class RemoveSyncRule:
             deleting = handling is ProjectionHandling.DELETE
 
             mappings = uow.mappings.for_rule(rule.id)
+            work.total = len(mappings)
             deleted = 0
             conflicts = 0
             for mapping in mappings:
@@ -87,6 +93,7 @@ class RemoveSyncRule:
                 uow.audit.append(self._projection_entry(mapping, deleting, owned))
                 if deleting:
                     uow.commit()
+                work.done += 1
 
             detached = len(mappings) - deleted - conflicts
             uow.rules.remove(rule.id)

@@ -28,6 +28,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - SQLite migration 6 keeps the counts of each rule's latest preview, so "Start syncing" always restates how many events will appear. Rules and Rule Details expose them as `latest_preview`. It also keeps each rule's last successful run time across later failures (`last_succeeded_at`), so the Overview's last sync never disappears after a failed run.
 - Activity filters live in the address (`/activity?rule=…`), and Rule Details links to that rule's activity.
 - Recurring series and single-occurrence changes synchronize under the same ownership, privacy, drift-repair, reprojection, and removal guarantees as single events, and Rule Preview reports recurring series and changed occurrences with their planned actions.
+- Rules, Rule Details, and the Overview show a rule's preview, sync, reconciliation, or removal while it runs, including runs the scheduler started and work that began before the page was reloaded. `GET /api/v1/rules` and `GET /api/v1/rules/{id}` add `running` (kind, start time, and a removal's handled and total projections), kept in memory by the single service process. A removal that is still running is never shown as incomplete, and Rule Details says when it finished.
+- A rule whose preview passed shows **Start syncing** inline with one line saying how many events will appear and how many are excluded, replacing the review panel.
+- The Activity rule filter has a clear button, and Delete or Backspace on the picker clears it.
+- Overview rules show each calendar's account photo, list running rules first, and come before recent changes.
+- Activity searches event titles as each run recorded them (`GET /api/v1/audit-entries?q=…`), ignoring case and accents so “reunion” finds “Reunión”. The search lives in the address as `q` and lists matching entries only, without per-run counts of no-change checks.
 
 ### Changed
 

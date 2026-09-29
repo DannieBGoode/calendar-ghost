@@ -1131,34 +1131,43 @@ p {
   color: var(--success-foreground);
 }
 
-.rule-feedback-pending {
+.rule-work {
+  display: grid;
+  max-width: 52rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem 0.625rem;
+  align-items: start;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.rule-work > svg {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.1875rem;
+  color: var(--primary);
+}
+
+.rule-work p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+  max-width: 66ch;
+}
+
+.rule-work-meta {
   color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rule-work .removal-bar {
+  grid-column: 2;
+  max-width: 32rem;
 }
 
 .rule-feedback-error {
   color: var(--destructive-soft-foreground);
-}
-
-.enable-review {
-  display: flex;
-  max-width: 52rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem 1.5rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  background: var(--surface);
-  line-height: 1.5;
-}
-
-.enable-review p {
-  max-width: 62ch;
-  font-size: 0.875rem;
-}
-
-.enable-review button {
-  flex: none;
 }
 
 .rule-summary {
@@ -1233,7 +1242,7 @@ p {
 }
 
 .rule-run svg,
-.rule-feedback-error svg {
+.rule-feedback svg {
   display: inline;
   width: 0.875rem;
   height: 0.875rem;
@@ -1427,11 +1436,30 @@ a.recent-change-rule:focus-visible {
   white-space: nowrap;
 }
 
-.overview-rule-name svg {
+.overview-rule-name > svg {
   width: 1rem;
   height: 1rem;
   flex: none;
   color: var(--muted-foreground);
+}
+
+.overview-rule-endpoint {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.overview-rule-endpoint > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-rule-endpoint .account-mark-compact {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.6rem;
 }
 
 .overview-rule-run {
@@ -1787,11 +1815,11 @@ a.recent-change-rule:focus-visible {
   color: var(--muted-foreground);
 }
 
-.removal-spinner {
-  animation: removal-spin 1.2s linear infinite;
+.work-spinner {
+  animation: work-spin 1.2s linear infinite;
 }
 
-@keyframes removal-spin {
+@keyframes work-spin {
   to {
     transform: rotate(360deg);
   }
@@ -1929,8 +1957,67 @@ a.recent-change-rule:focus-visible {
 
 .activity-filters {
   display: grid;
-  grid-template-columns: minmax(14rem, 22rem) minmax(12rem, 15.5rem);
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 22rem) minmax(12rem, 15.5rem);
   gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.activity-search {
+  position: relative;
+}
+
+.activity-search input {
+  padding-right: 2.25rem;
+  padding-left: 2.25rem;
+}
+
+/* The field has its own clear button, the same in every browser. */
+.activity-search input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.activity-search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.75rem;
+  width: 1rem;
+  height: 1rem;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.activity-search-clear {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+
+.activity-search-clear:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.activity-search-clear:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.activity-search-clear svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 .activity-run-meta {
@@ -2234,6 +2321,44 @@ thead + .activity-day th {
 
 .rule-picker-chevron[data-open="true"] {
   transform: rotate(180deg);
+}
+
+/* Room for the clear button, which sits over the trigger just before the chevron. */
+.rule-picker[data-clearable] .rule-picker-chevron {
+  margin-left: 1.75rem;
+}
+
+.rule-picker-clear {
+  position: absolute;
+  top: 50%;
+  right: 2rem;
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+
+.rule-picker-clear:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.rule-picker-clear:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.rule-picker-clear svg {
+  width: 1rem;
+  height: 1rem;
 }
 
 /* A temporary layer, so it may lift above the page. */
@@ -2747,8 +2872,7 @@ thead + .activity-day th {
     display: none;
   }
 
-  .heading-action,
-  .enable-review {
+  .heading-action {
     align-items: flex-start;
     flex-direction: column;
   }

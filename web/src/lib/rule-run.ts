@@ -36,28 +36,15 @@ export function reconcileResultMessage(result: SyncResult): string {
     : base
 }
 
-/** What enabling will write, restated at the moment of the first write. */
-export function enableSummary({
-  preview,
-  source,
-  destination,
-  privacy,
-}: {
-  preview: Pick<RulePreview, "eligible_events" | "excluded_events"> | undefined
-  source: string
-  destination: string
-  privacy: "busy_only" | "copy_details"
-}): string {
-  const events = preview ? plural(preview.eligible_events, "event") : "Events"
-  const content =
-    privacy === "busy_only"
-      ? `as “Busy”. Titles, descriptions, and locations stay private.`
-      : `with their titles, descriptions, and locations. Attendees, conferencing, and attachments are never copied.`
-  const excluded =
-    preview && preview.excluded_events > 0
-      ? ` ${plural(preview.excluded_events, "event")} ${preview.excluded_events === 1 ? "is" : "are"} excluded by this rule.`
-      : ""
-  return `${events} from ${source} will appear in ${destination} ${content}${excluded}`
+/** What the latest preview found, beside the Start syncing button. The policy line names the privacy. */
+export function previewReadyLabel(
+  preview: Pick<RulePreview, "eligible_events" | "excluded_events"> & { completed_at: string } | null | undefined,
+  destination: string,
+  now: number = Date.now(),
+): string {
+  if (!preview) return `Start syncing to show events in ${destination}.`
+  const excluded = preview.excluded_events > 0 ? `, ${preview.excluded_events} excluded` : ""
+  return `Previewed ${relativeTime(preview.completed_at, now)}: ${plural(preview.eligible_events, "event")} will appear in ${destination}${excluded}.`
 }
 
 export function enabledMessage(destination: string): string {

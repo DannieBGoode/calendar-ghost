@@ -123,6 +123,28 @@ def test_delete_removes_each_mapped_projection_then_the_rule() -> None:
     ]
 
 
+def test_running_removal_reports_its_handling_and_progress() -> None:
+    unit_of_work = _with_mappings(3)
+    locks = RuleLocks()
+    seen: list[tuple[str | None, int | None, int]] = []
+
+    class ObservingProvider(RecordingProvider):
+        def delete_projection(
+            self, destination: EventRef, source: EventRef, rule_id: SyncRuleId, operation_key: str
+        ) -> None:
+            work = locks.current_work(rule_id)
+            assert work is not None
+            seen.append((work.handling, work.total, work.done))
+            super().delete_projection(destination, source, rule_id, operation_key)
+
+    RemoveSyncRule(unit_of_work, ObservingProvider(), Accounts(), FixedClock(), locks).execute(
+        rule().id, ProjectionHandling.DELETE
+    )
+
+    assert seen == [("delete", 3, 0), ("delete", 3, 1), ("delete", 3, 2)]
+    assert locks.current_work(rule().id) is None
+
+
 def test_detach_makes_no_provider_calls_even_without_google_configured() -> None:
     unit_of_work = _with_mappings(2)
 

@@ -6,17 +6,32 @@ import { Button } from "@/components/ui/button"
 import type { PreviewSummary } from "@/lib/api"
 import { appPathForView, isPlainLeftClick, type AppView } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
-import { enableSummary } from "@/lib/rule-run"
+import { elapsedLabel } from "@/lib/rule-removal"
+import { previewReadyLabel } from "@/lib/rule-run"
+import { workDescription, workLabel, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
+import { useNow } from "@/lib/use-now"
 import { PENDING_LABELS, type RuleCommand, type RuleFeedback } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
-/** `removing` is a display state for a Rule Removal running in this session, not a stored one. */
-export function RuleStatusBadge({ state, stopped }: { state: string; stopped: boolean }) {
-  if (state === "removing") {
+/**
+ * `removing` is a display state for a running Rule Removal, not a stored one. `working` names
+ * other work running now, which says more than the stored state while it lasts.
+ */
+export function RuleStatusBadge({
+  state,
+  stopped,
+  working,
+}: {
+  state: string
+  stopped: boolean
+  working?: RuleWorkKind
+}) {
+  if (state === "removing" || working) {
     return (
       <Badge variant="neutral">
-        <LoaderCircle aria-hidden="true" className="removal-spinner" /> {ruleStateLabel(state)}
+        <LoaderCircle aria-hidden="true" className="work-spinner" />{" "}
+        {working ? workLabel(working) : ruleStateLabel(state)}
       </Badge>
     )
   }
@@ -79,6 +94,23 @@ export function RuleNextAction({
       </Button>
     )
   }
+  if (state === "dry_run_validated") {
+    return (
+      <Button
+        aria-disabled={pending !== undefined || undefined}
+        aria-describedby={describedBy}
+        onClick={() => pending === undefined && onRun("enable")}
+      >
+        {pending === "enable" ? (
+          <>
+            <LoaderCircle aria-hidden="true" className="work-spinner" /> {PENDING_LABELS.enable}
+          </>
+        ) : (
+          "Start syncing"
+        )}
+      </Button>
+    )
+  }
   if (!PREVIEWABLE_STATES.includes(state)) return null
   return (
     <Button
@@ -87,7 +119,8 @@ export function RuleNextAction({
       aria-describedby={describedBy}
       onClick={() => pending === undefined && onRun("preview")}
     >
-      {pending === "preview" ? PENDING_LABELS.preview : state === "degraded" ? "Preview to restart" : "Preview rule"}
+      {/* The badge and work note say it is previewing; the label stays so it does not echo them. */}
+      {state === "degraded" ? "Preview to restart" : "Preview rule"}
     </Button>
   )
 }
@@ -143,49 +176,61 @@ export function RuleCommandMenu({
   return <OverflowMenu label={`More actions for ${source} to ${destination}`} items={items} />
 }
 
-export function EnableReview({
+/** What the latest preview found, which the Start syncing button refers to. */
+export function PreviewReadyNote({
+  id,
   preview,
+  destination,
+}: {
+  id: string
+  preview: PreviewSummary | null | undefined
+  destination: string
+}) {
+  const now = useNow()
+  return (
+    <p id={id} className="rule-note">
+      {previewReadyLabel(preview, destination, now)}
+    </p>
+  )
+}
+
+/**
+ * What a working rule is doing and for how long. It replaces the result line while it lasts; the
+ * result is announced separately, so this is not a live region.
+ */
+export function RuleWorkNote({
+  work,
   source,
   destination,
-  privacy,
-  pending,
-  describedBy,
-  onEnable,
 }: {
-  preview: Pick<PreviewSummary, "eligible_events" | "excluded_events"> | null | undefined
+  work: RuleWork
   source: string
   destination: string
-  privacy: "busy_only" | "copy_details"
-  pending: RuleCommand | undefined
-  describedBy?: string
-  onEnable: () => void
 }) {
+  const now = useNow(1_000)
   return (
-    <div className="enable-review">
+    <div className="rule-work">
+      <LoaderCircle aria-hidden="true" className="work-spinner" />
       <p>
-        <strong>Preview passed.</strong> {enableSummary({ preview: preview ?? undefined, source, destination, privacy })}
+        <span>{workDescription(work, source, destination)}</span>
+        <span className="rule-work-meta">
+          {work.startedAt !== null && `Running for ${elapsedLabel(now - work.startedAt)} · `}
+          It keeps running if you leave this page.
+        </span>
       </p>
-      <Button
-        aria-disabled={pending !== undefined || undefined}
-        aria-describedby={describedBy}
-        onClick={() => pending === undefined && onEnable()}
-      >
-        {pending === "enable" ? PENDING_LABELS.enable : "Start syncing"}
-      </Button>
+      {work.progress && (
+        <progress
+          className="removal-bar"
+          value={work.progress.done}
+          max={work.progress.total}
+          aria-label={workDescription(work, source, destination)}
+        />
+      )}
     </div>
   )
 }
 
-export function RuleFeedbackNote({
-  pending,
-  feedback,
-}: {
-  pending: RuleCommand | undefined
-  feedback: RuleFeedback | undefined
-}) {
-  if (pending && pending !== "preview" && pending !== "enable") {
-    return <p className="rule-feedback rule-feedback-pending">{PENDING_LABELS[pending]}</p>
-  }
+export function RuleFeedbackNote({ feedback }: { feedback: RuleFeedback | undefined }) {
   if (!feedback) return null
   if (feedback.tone === "error") {
     return (
@@ -194,7 +239,11 @@ export function RuleFeedbackNote({
       </p>
     )
   }
-  return <p className="rule-feedback">{feedback.text}</p>
+  return (
+    <p className="rule-feedback">
+      <CheckCircle2 aria-hidden="true" /> {feedback.text}
+    </p>
+  )
 }
 
 /** Always mounted so assistive technology reliably hears each command result. */

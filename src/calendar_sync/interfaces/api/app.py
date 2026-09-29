@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import sqlite3
+import unicodedata
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager, suppress
+from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -29,6 +31,7 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
     RuleNotFound,
 )
+from calendar_sync.application.locking import RuleWork
 from calendar_sync.application.ports import RulePreviewSummary, RuleRunOutcome, RunKind
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.bootstrap.container import Container, build_container
@@ -94,6 +97,7 @@ from calendar_sync.interfaces.api.schemas import (
     RuleReplacementResponse,
     RuleResponse,
     RuleSummaryResponse,
+    RuleWorkResponse,
     RunOutcomeResponse,
     SessionResponse,
     SetupStatusResponse,
@@ -454,6 +458,7 @@ def create_app(container: Container | None = None) -> FastAPI:
                     **_rule_response(rule).model_dump(),
                     last_sync=_outcome_response(uow.run_outcomes.latest(rule.id, RunKind.SYNC)),
                     latest_preview=_preview_response(uow.previews.latest(rule.id)),
+                    running=_work_response(resolved.rule_locks.current_work(rule.id)),
                 )
                 for rule in uow.rules.list()
             ]
@@ -469,9 +474,14 @@ def create_app(container: Container | None = None) -> FastAPI:
         category: Annotated[list[ActivityCategory] | None, Query()] = None,
         before: Annotated[int | None, Query(ge=1)] = None,
         limit: Annotated[int, Query(ge=1, le=200)] = 100,
+        q: Annotated[str | None, Query(max_length=200)] = None,
     ) -> list[AuditEntryResponse]:
         conditions = [f"COALESCE(reason, '') NOT IN ({_UNRECORDED_SQL})"]
         parameters: list[object] = []
+        if q is not None and q.strip():
+            # Matches the title each run recorded, ignoring case and accents.
+            conditions.append("search_fold(event_title) LIKE ? ESCAPE '\\'")
+            parameters.append(f"%{_like_escape(_search_fold(q.strip()))}%")
         if rule_id is not None:
             conditions.append("rule_id = ?")
             parameters.append(rule_id)
@@ -487,6 +497,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         where = f"WHERE {' AND '.join(conditions)}"
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
+            connection.create_function("search_fold", 1, _search_fold_column, deterministic=True)
             rows = connection.execute(
                 f"""
                 SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS}
@@ -856,6 +867,7 @@ def create_app(container: Container | None = None) -> FastAPI:
             last_sync=_outcome_response(details.last_sync),
             last_reconciliation=_outcome_response(details.last_reconciliation),
             latest_preview=_preview_response(details.latest_preview),
+            running=_work_response(resolved.rule_locks.current_work(details.rule.id)),
         )
 
     @app.patch(
@@ -1018,6 +1030,21 @@ _AUDIT_ENTRY_KEYS = tuple(column.strip() for column in _AUDIT_ENTRY_COLUMNS.spli
 _RECORDED_EVENT_COLUMNS = (
     "event_title, event_starts, event_ends, event_all_day, event_recurring, event_cancelled"
 )
+
+
+@lru_cache(maxsize=4096)
+def _search_fold(text: str) -> str:
+    """Text without case or accents, so "reunion" finds "Reunión". Repeated titles hit the cache."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(char for char in decomposed if not unicodedata.combining(char)).casefold()
+
+
+def _search_fold_column(text: str | None) -> str | None:
+    return None if text is None else _search_fold(text)
+
+
+def _like_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _recent_runs_sql(*, with_rule: bool) -> str:
@@ -1268,6 +1295,18 @@ def _privacy(value: str) -> PrivacyPolicy:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown privacy policy"
         ) from error
+
+
+def _work_response(work: RuleWork | None) -> RuleWorkResponse | None:
+    if work is None:
+        return None
+    return RuleWorkResponse(
+        kind=work.kind.value,
+        started_at=work.started_at.isoformat(),
+        handling=work.handling.value if work.handling else None,
+        total=work.total,
+        done=work.done,
+    )
 
 
 def _outcome_response(outcome: RuleRunOutcome | None) -> RunOutcomeResponse | None:

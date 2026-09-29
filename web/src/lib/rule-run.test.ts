@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import type { RunOutcome, SyncResult } from "./api"
 import {
-  enableSummary,
   lastRunLabel,
+  previewReadyLabel,
   recoveryExplanation,
   reconcileResultMessage,
   syncResultMessage,
@@ -56,24 +56,18 @@ describe("run results", () => {
   })
 })
 
-describe("enableSummary", () => {
-  it("restates the privacy consequence with preview counts", () => {
+describe("previewReadyLabel", () => {
+  it("states what the preview found in one line", () => {
     expect(
-      enableSummary({
-        preview: { eligible_events: 37, excluded_events: 4 },
-        source: "Family",
-        destination: "Work",
-        privacy: "busy_only",
-      }),
-    ).toBe(
-      "37 events from Family will appear in Work as “Busy”. Titles, descriptions, and locations stay private. 4 events are excluded by this rule.",
-    )
+      previewReadyLabel({ eligible_events: 73, excluded_events: 47, completed_at: "2026-09-28T11:58:00Z" }, "Work", now),
+    ).toBe("Previewed 2 minutes ago: 73 events will appear in Work, 47 excluded.")
+    expect(
+      previewReadyLabel({ eligible_events: 1, excluded_events: 0, completed_at: "2026-09-28T11:58:00Z" }, "Work", now),
+    ).toBe("Previewed 2 minutes ago: 1 event will appear in Work.")
   })
 
-  it("still names the consequence when the preview is no longer in memory", () => {
-    expect(
-      enableSummary({ preview: undefined, source: "Family", destination: "Work", privacy: "copy_details" }),
-    ).toMatch(/^Events from Family will appear in Work with their titles/)
+  it("still names the destination when the preview counts are not known", () => {
+    expect(previewReadyLabel(null, "Work", now)).toBe("Start syncing to show events in Work.")
   })
 })
 
