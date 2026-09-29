@@ -559,6 +559,26 @@ def test_non_enabled_rule_is_rejected(state: SyncRuleState) -> None:
         use_case.execute(rule().id)
 
 
+def test_a_missing_rule_is_rejected_without_reading_or_recording() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    provider = FakeCalendarProvider(event())
+    fingerprinter = ProjectionFingerprinter()
+    use_case = ExecuteSyncRule(
+        unit_of_work,
+        provider,
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        FixedClock(),
+        UuidRunIdGenerator(),
+    )
+
+    with pytest.raises(RuleNotExecutable, match="does not exist"):
+        use_case.execute(rule().id)
+
+    assert provider.requested_endpoints == []
+    assert unit_of_work.state.outcomes == {}
+
+
 def test_provider_failure_does_not_advance_cursor_or_write_audit() -> None:
     unit_of_work = InMemoryUnitOfWorkFactory()
     unit_of_work.state.rules[rule().id] = rule()
