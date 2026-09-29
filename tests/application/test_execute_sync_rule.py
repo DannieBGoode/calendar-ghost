@@ -645,7 +645,9 @@ def test_policy_change_reprojects_mappings_outside_the_window_and_clears_the_fla
     assert provider.destination.title == "Private appointment"
     assert unit_of_work.state.rules[rule().id].reprojection_required is False
     outcome = unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)]
-    assert outcome.succeeded and outcome.full_run and outcome.updated == 1
+    assert outcome.succeeded
+    assert outcome.full_run
+    assert outcome.updated == 1
 
 
 def test_unverifiable_source_during_reprojection_is_a_conflict_not_a_deletion() -> None:

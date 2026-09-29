@@ -138,7 +138,7 @@ _ACTIVITY_CATEGORY_SQL: dict[ActivityCategory, str] = {
 }
 
 
-def create_app(container: Container | None = None) -> FastAPI:
+def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PLR0915
     resolved = container or build_container()
 
     @asynccontextmanager
@@ -1328,6 +1328,7 @@ def run() -> None:
     uvicorn.run(
         "calendar_sync.interfaces.api.app:create_app",
         factory=True,
-        host="0.0.0.0",
+        # The container publishes this port; Compose decides which host interface exposes it.
+        host="0.0.0.0",  # noqa: S104
         port=8000,
     )

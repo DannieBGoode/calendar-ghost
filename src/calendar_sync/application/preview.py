@@ -63,7 +63,7 @@ class PreviewSyncRule:
     decisions: SyncDecisionService
     locks: RuleLocks = field(default_factory=RuleLocks)
 
-    def execute(self, rule_id: SyncRuleId) -> RulePreview:
+    def execute(self, rule_id: SyncRuleId) -> RulePreview:  # noqa: C901
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
         if rule is None:

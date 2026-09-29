@@ -393,7 +393,8 @@ def test_get_occurrence_resolves_through_instances_and_verifies_the_start() -> N
     resolved = provider.get_occurrence(SERIES, START)
 
     assert resolved is not None
-    assert resolved.occurrence is not None and resolved.occurrence.original_start == START
+    assert resolved.occurrence is not None
+    assert resolved.occurrence.original_start == START
     events_api.instances.assert_called_once_with(
         calendarId="work-calendar",
         eventId="projection-1",

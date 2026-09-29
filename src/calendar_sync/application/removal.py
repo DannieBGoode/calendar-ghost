@@ -120,7 +120,8 @@ class RemoveSyncRule:
                 if not failure.retryable or attempt == DELETE_ATTEMPTS - 1:
                     raise
                 delay = failure.retry_after_seconds or 2**attempt
-                self.sleep(delay + random.uniform(0, 0.25))
+                # Backoff jitter, not a secret.
+                self.sleep(delay + random.uniform(0, 0.25))  # noqa: S311
 
     def _require_possible(
         self, rule: SyncRule | None, rule_id: SyncRuleId, handling: ProjectionHandling

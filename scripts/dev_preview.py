@@ -196,7 +196,7 @@ def build_preview_container(
     return container
 
 
-def _seed(container: Container, path: Path, now: datetime) -> None:
+def _seed(container: Container, path: Path, now: datetime) -> None:  # noqa: C901
     rules = (
         SyncRule(
             id=SyncRuleId("preview-personal-work"),
@@ -214,7 +214,7 @@ def _seed(container: Container, path: Path, now: datetime) -> None:
     entries: list[AuditEntry] = []
     calendar = PreviewCalendar(now)
 
-    def record(
+    def record(  # noqa: PLR0913
         minutes_ago: int,
         rule: str,
         run: str | None,

@@ -250,9 +250,11 @@ def test_migration_6_backfills_the_last_successful_run(tmp_path: Path) -> None:
     with SqliteUnitOfWorkFactory(database)() as uow:
         sync = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
         reconciliation = uow.run_outcomes.latest(rule().id, RunKind.RECONCILIATION)
-    assert sync is not None and sync.last_succeeded_at == datetime(2026, 9, 1, tzinfo=UTC)
+    assert sync is not None
+    assert sync.last_succeeded_at == datetime(2026, 9, 1, tzinfo=UTC)
     # A failure-only history stays empty rather than inventing a success.
-    assert reconciliation is not None and reconciliation.last_succeeded_at is None
+    assert reconciliation is not None
+    assert reconciliation.last_succeeded_at is None
 
 
 def test_reprojection_flag_round_trips(tmp_path: Path) -> None:
@@ -308,12 +310,14 @@ def test_a_later_success_replaces_the_last_successful_run(tmp_path: Path) -> Non
     with factory() as uow:
         # A rule that has only ever failed has no successful run to report.
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
-        assert latest is not None and latest.last_succeeded_at is None
+        assert latest is not None
+        assert latest.last_succeeded_at is None
         uow.run_outcomes.record(succeeded)
         uow.commit()
     with factory() as uow:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
-        assert latest is not None and latest.last_succeeded_at == succeeded.completed_at
+        assert latest is not None
+        assert latest.last_succeeded_at == succeeded.completed_at
 
 
 def test_rule_previews_keep_the_latest_counts_and_cascade_with_the_rule(tmp_path: Path) -> None:
@@ -547,7 +551,8 @@ def test_run_outcomes_keep_the_last_full_run_across_later_runs(
 
     with factory() as uow:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
-    assert latest is not None and latest.last_full_succeeded_at == full.completed_at
+    assert latest is not None
+    assert latest.last_full_succeeded_at == full.completed_at
 
 
 def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
@@ -567,7 +572,8 @@ def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
 
     with SqliteUnitOfWorkFactory(database)() as uow:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
-    assert latest is not None and latest.last_full_succeeded_at == completed
+    assert latest is not None
+    assert latest.last_full_succeeded_at == completed
 
 
 def _replay_factory(backend: str, tmp_path: Path) -> UnitOfWorkFactory:

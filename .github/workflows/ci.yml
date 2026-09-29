@@ -21,6 +21,7 @@ jobs:
       - run: ruff format --check .
       - run: ruff check .
       - run: mypy
+      - run: lint-imports
       - run: pytest --cov --cov-report=term-missing --cov-fail-under=80
 
   frontend:

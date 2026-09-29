@@ -1030,7 +1030,8 @@ def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
 
     # Incident bookkeeping is best-effort; the requested sync and reconciliation still run.
     assert response.status_code == 200
-    assert execute.call_count == 1 and reconcile.call_count == 1
+    assert execute.call_count == 1
+    assert reconcile.call_count == 1
 
 
 def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
@@ -2030,7 +2031,8 @@ def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
     assert status_code == 200
     with container.unit_of_work() as uow:
         degraded = uow.rules.get(rule().id)
-    assert degraded is not None and degraded.state is SyncRuleState.DEGRADED
+    assert degraded is not None
+    assert degraded.state is SyncRuleState.DEGRADED
 
 
 def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) -> None:

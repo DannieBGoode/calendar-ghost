@@ -85,7 +85,7 @@ class SynchronizeOccurrences:
                 record_current=True,
             )
 
-    def apply(
+    def apply(  # noqa: C901, PLR0912
         self,
         run: SyncRunContext,
         series_mapping: EventMapping | None,
@@ -152,7 +152,8 @@ class SynchronizeOccurrences:
             destination_ref = destination.reference if destination is not None else None
 
             if decision.action is SyncAction.UPDATE and decision.projection is not None:
-                assert series_mapping is not None and source_occurrence is not None
+                assert series_mapping is not None
+                assert source_occurrence is not None
                 written = self.provider.write_occurrence(
                     series_mapping.destination,
                     original_start,
@@ -252,7 +253,7 @@ class SynchronizeOccurrences:
             # Commit before the next provider call so no write lock spans network requests.
             run.uow.commit()
 
-    def _decide(
+    def _decide(  # noqa: PLR0913
         self,
         run: SyncRunContext,
         series_mapping: EventMapping | None,
@@ -289,7 +290,7 @@ class SynchronizeOccurrences:
         return decision, destination
 
     @staticmethod
-    def _record(
+    def _record(  # noqa: PLR0913
         run: SyncRunContext,
         recorded: OccurrenceMapping | None,
         series_mapping: EventMapping,

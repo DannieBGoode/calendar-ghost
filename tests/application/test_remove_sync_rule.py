@@ -342,7 +342,8 @@ def test_detaching_a_series_keeps_it_ignored_by_a_reverse_rule() -> None:
     assert factory.state.occurrences == {}
     assert result.created == result.updated == result.deleted == 0
     cancelled = calendars.get_occurrence(destination, week_start(1))
-    assert cancelled is not None and cancelled.managed_origin is None
+    assert cancelled is not None
+    assert cancelled.managed_origin is None
 
 
 def test_deleting_one_of_two_reverse_rules_removes_only_its_own_projections() -> None:
@@ -495,7 +496,8 @@ def test_temporary_failures_retry_with_backoff_using_the_same_operation_key() ->
 
     assert result.deleted == 2
     first_attempts = [key for event_id, key in provider.attempts if event_id == "destination-0"]
-    assert len(first_attempts) == 3 and len(set(first_attempts)) == 1
+    assert len(first_attempts) == 3
+    assert len(set(first_attempts)) == 1
     assert len(sleeps.delays) == 2
     assert 1 <= sleeps.delays[0] < 1.25
     assert 7 <= sleeps.delays[1] < 7.25
