@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
@@ -31,6 +32,7 @@ from calendar_sync.domain.model import (
     NoProjectionExpected,
     OccurrenceCheck,
     OccurrenceMapping,
+    OccurrenceStart,
     ReconciliationReport,
     SyncRule,
     SyncRuleId,
@@ -136,33 +138,84 @@ class ReconcileSyncRule:
         mappings: Sequence[EventMapping],
         recorded: Mapping[EventMappingId, Sequence[OccurrenceMapping]],
     ) -> ReconciliationReport:
-        actual_events = self.provider.managed_events(rule.destination, rule.id)
-        actual = {event.reference: event for event in actual_events}
+        """Verify the mappings whose source or projection reaches the rule's sync window.
+
+        That is the range the daily pass keeps current, from the Initial Sync Window's start
+        onward; an event that ended before it is past and is neither read nor reported. A series
+        reaches the window while any of its occurrences does, however long ago it began.
+        """
+        window_start = self.clock.now() - timedelta(days=rule.initial_lookback_days)
+        listed = {
+            event.reference: event for event in self.provider.list_events(rule.source, window_start)
+        }
+        actual = {
+            event.reference: event
+            for event in self.provider.managed_events(rule.destination, rule.id, window_start)
+        }
+        checked: list[EventMapping] = []
         expected: dict[EventRef, EventProjection | NoProjectionExpected] = {}
         dormant: set[EventMappingId] = set()
         for mapping in mappings:
-            source = self.provider.get_event(mapping.source)
+            source = listed.get(mapping.source)
+            if source is None and mapping.destination not in actual:
+                continue  # neither the source nor its projection reaches the window
+            checked.append(mapping)
+            if source is None:
+                # Listed only in the destination: moved out of the window, or gone for good.
+                source = self.provider.get_event(mapping.source)
             if source is None:
                 continue  # an unreadable source is a Conflict, never permission to delete
-            if source.managed_origin is not None:
-                expected[mapping.source] = NoProjectionExpected.MANAGED_SOURCE
-                continue
-            if not _eligible(source, rule):
-                expected[mapping.source] = NoProjectionExpected.INELIGIBLE
-                continue
-            if self._dormant(rule, mapping, source, actual):
+            expectation = self._expectation(source, rule)
+            if isinstance(expectation, EventProjection) and self._dormant(
+                rule, mapping, source, actual
+            ):
                 # A series with no occurrence left to project has no projection to verify.
                 dormant.add(mapping.id)
                 continue
-            expected[mapping.source] = self.projector.project(source, rule)
-        verified = [mapping for mapping in mappings if mapping.id not in dormant]
+            expected[mapping.source] = expectation
+        verified = [mapping for mapping in checked if mapping.id not in dormant]
+        checks = self._occurrence_checks(
+            rule, verified, expected, recorded, _Window(window_start, listed, actual)
+        )
+        report = self.reconciliation.reconcile(rule, verified, expected, actual, checks)
+        return replace(report, checked_mappings=len(checked))
 
+    def _expectation(
+        self, source: CalendarEvent, rule: SyncRule
+    ) -> EventProjection | NoProjectionExpected:
+        if source.managed_origin is not None:
+            return NoProjectionExpected.MANAGED_SOURCE
+        if not _eligible(source, rule):
+            return NoProjectionExpected.INELIGIBLE
+        return self.projector.project(source, rule)
+
+    def _occurrence_checks(
+        self,
+        rule: SyncRule,
+        verified: Sequence[EventMapping],
+        expected: Mapping[EventRef, EventProjection | NoProjectionExpected],
+        recorded: Mapping[EventMappingId, Sequence[OccurrenceMapping]],
+        window: _Window,
+    ) -> list[OccurrenceCheck]:
+        """Checks for the recorded occurrences in the window, reusing the listings' exceptions."""
         checks: list[OccurrenceCheck] = []
         for mapping in verified:
             if not isinstance(expected.get(mapping.source), EventProjection):
                 continue  # the series' own finding already covers its occurrences
             for occurrence in recorded.get(mapping.id, ()):
-                source = self.provider.get_occurrence(mapping.source, occurrence.original_start)
+                start = occurrence.original_start
+                listed = window.source_exceptions.get((mapping.source, start))
+                if not (
+                    listed is not None
+                    or window.starts_within(start)
+                    or (mapping.destination, start) in window.destination_exceptions
+                ):
+                    continue  # a past occurrence of a series that is still current
+                source = (
+                    listed
+                    if listed is not None
+                    else self.provider.get_occurrence(mapping.source, start)
+                )
                 checks.append(
                     OccurrenceCheck(
                         occurrence,
@@ -171,13 +224,12 @@ class ReconcileSyncRule:
                         if source is not None and _eligible(source, rule)
                         else None,
                         # A missing destination series is already reported for its mapping.
-                        self.provider.get_occurrence(mapping.destination, occurrence.original_start)
-                        if mapping.destination in actual
+                        self.provider.get_occurrence(mapping.destination, start)
+                        if mapping.destination in window.destinations
                         else None,
                     )
                 )
-        report = self.reconciliation.reconcile(rule, verified, expected, actual, checks)
-        return replace(report, checked_mappings=len(mappings))
+        return checks
 
     def _dormant(
         self,
@@ -202,6 +254,40 @@ class ReconcileSyncRule:
             return False
         destination = self.provider.get_event(mapping.destination)
         return destination is None or destination.status is EventStatus.CANCELLED
+
+
+class _Window:
+    """What the reconciliation listed from the rule's sync window onward."""
+
+    def __init__(
+        self,
+        start: datetime,
+        sources: Mapping[EventRef, CalendarEvent],
+        destinations: Mapping[EventRef, CalendarEvent],
+    ) -> None:
+        self.start = start
+        self.destinations = destinations
+        self.source_exceptions = _exceptions(sources.values())
+        self.destination_exceptions = _exceptions(destinations.values())
+
+    def starts_within(self, original_start: OccurrenceStart) -> bool:
+        if isinstance(original_start, datetime):
+            return original_start >= self.start
+        return original_start >= self.start.date()
+
+
+def _exceptions(
+    events: Iterable[CalendarEvent],
+) -> dict[tuple[EventRef, OccurrenceStart], CalendarEvent]:
+    """Listed occurrence exceptions, keyed by their series and original start."""
+    return {
+        (
+            EventRef(event.reference.calendar, event.occurrence.series_event_id),
+            event.occurrence.original_start,
+        ): event
+        for event in events
+        if event.occurrence is not None
+    }
 
 
 def _eligible(source: CalendarEvent, rule: SyncRule) -> bool:

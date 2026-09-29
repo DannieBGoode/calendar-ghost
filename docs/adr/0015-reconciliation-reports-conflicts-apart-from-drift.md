@@ -52,5 +52,5 @@ run, so it is an identity question, not a content difference.
   reconciliation rows, and the `projection_unmapped` entries fall back to generic "blocked" copy.
 - A reconciliation block counts as an open block until the next daily pass and as earlier evidence
   for that pass's `blocked:{rule}` check. It does not open an Incident by itself.
-- Drift in events that ended before the sync window is reported but still not repaired by any run
-  except a reprojection.
+- Drift in events that ended before the sync window was reported but not repaired by any run;
+  [ADR 0016](0016-reconcile-within-the-sync-window.md) stops checking those events.

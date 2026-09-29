@@ -328,7 +328,7 @@ export function RuleDetailsView({
           />
           <OutcomeFact
             label="Last reconciliation"
-            explanation={`Compares every event this rule wrote to ${destinationName} with its source and reports any that differ, without changing them. Runs when you choose Reconcile now.`}
+            explanation={`Compares the events this rule wrote to ${destinationName} from the past ${plural(detail.initial_lookback_days, "day")} onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now.`}
             outcome={detail.last_reconciliation}
             kind="reconciliation"
             now={now}

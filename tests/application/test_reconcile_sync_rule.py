@@ -1,18 +1,21 @@
-from dataclasses import replace
-from datetime import timedelta
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 from threading import Thread
 
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import AuditAction, AuditOutcome, RunKind
+from calendar_sync.application.ports import AuditAction, AuditOutcome, Clock, RunKind
 from calendar_sync.application.reconciliation import ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     DriftKind,
+    EventId,
     EventRef,
     EventStatus,
+    ManagedOrigin,
     ReconciliationReport,
     SyncReason,
+    TimedInterval,
     TransformationPolicy,
 )
 from calendar_sync.domain.services import (
@@ -36,7 +39,7 @@ from tests.fake_calendar import (
     enabled_rule_factory,
     sync_use_case,
 )
-from tests.helpers import endpoint, event, occurrence, rule, series, week_start
+from tests.helpers import NOW, endpoint, event, occurrence, rule, series, week_start
 
 
 def test_reconciliation_independently_proves_managed_projection() -> None:
@@ -343,16 +346,28 @@ def test_reconciliation_under_an_all_day_exclusion_accepts_a_series_left_with_al
 
 
 def _reconcile(
-    factory: InMemoryUnitOfWorkFactory, calendars: FakeCalendars
+    factory: InMemoryUnitOfWorkFactory, calendars: FakeCalendars, clock: Clock | None = None
 ) -> ReconciliationReport:
     return ReconcileSyncRule(
         factory,
         calendars,
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
-        FixedClock(),
+        clock or FixedClock(),
         UuidRunIdGenerator(),
     ).execute(rule().id)
+
+
+@dataclass(frozen=True)
+class _ClockAt:
+    at: datetime
+
+    def now(self) -> datetime:
+        return self.at
+
+
+# Ten weeks into a weekly series, so its first weeks ended before the 30-day sync window.
+LATER = _ClockAt(week_start(9) + timedelta(days=1))
 
 
 def test_reconciliation_reports_a_projection_that_lost_its_ownership_metadata() -> None:
@@ -416,3 +431,101 @@ def test_reconciliation_runs_against_a_calendar_that_can_only_read() -> None:
     assert not any(hasattr(reader, name) for name in WRITE_OPERATIONS)
     assert [item.kind for item in report.drift] == [DriftKind.INCORRECT_PROJECTION]
     assert calendars.writes == writes
+
+
+def _edit_destination_occurrence(
+    factory: InMemoryUnitOfWorkFactory, calendars: FakeCalendars, master_ref: EventRef, week: int
+) -> None:
+    destination = factory.state.mappings[(rule().id, master_ref)].destination
+    edited = calendars.get_occurrence(destination, week_start(week))
+    assert edited is not None
+    calendars.put(replace(edited, title="Edited"))
+
+
+def test_reconciliation_checks_a_current_series_but_not_its_past_occurrences() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(10)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    upcoming = calendars.put(occurrence(master, 8, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _edit_destination_occurrence(factory, calendars, master.reference, 1)
+    _edit_destination_occurrence(factory, calendars, master.reference, 8)
+
+    report = _reconcile(factory, calendars, LATER)
+
+    # The series began before the window but still repeats, so it and its later weeks are
+    # checked; the edit to week 1, long past, is not.
+    assert report.checked_mappings == 1
+    assert [(item.kind, item.source) for item in report.drift] == [
+        (DriftKind.INCORRECT_PROJECTION, upcoming.reference)
+    ]
+
+
+def test_reconciliation_checks_a_past_occurrence_moved_into_the_window() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(10)))
+    moved = calendars.put(occurrence(master, 1, moved_by=timedelta(weeks=7, hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    _edit_destination_occurrence(factory, calendars, master.reference, 1)
+
+    report = _reconcile(factory, calendars, LATER)
+
+    # Its original week ended long ago, but the source now shows it inside the window.
+    assert [(item.kind, item.source) for item in report.drift] == [
+        (DriftKind.INCORRECT_PROJECTION, moved.reference)
+    ]
+
+
+def test_reconciliation_verifies_listed_sources_without_reading_each_one() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    calendars.put(event("second-event"))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    calendars.reads.clear()
+
+    report = _reconcile(factory, calendars)
+
+    assert report.checked_mappings == 2
+    assert report.is_consistent
+    assert calendars.listings == [rule().source]
+    assert calendars.reads == []
+
+
+def test_reconciliation_reads_a_source_moved_out_of_the_window_with_a_current_projection() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    long_ago = TimedInterval(NOW - timedelta(days=60), NOW - timedelta(days=60, hours=-1))
+    calendars.put(replace(event(), time=long_ago, revision="revision-2"))
+
+    report = _reconcile(factory, calendars)
+
+    assert [(item.kind, item.source) for item in report.drift] == [
+        (DriftKind.INCORRECT_PROJECTION, event().reference)
+    ]
+    assert event().reference in calendars.reads
+
+
+def test_reconciliation_ignores_an_unmapped_projection_that_ended_before_the_window() -> None:
+    calendars = FakeCalendars()
+    factory = enabled_rule_factory()
+    origin = ManagedOrigin(rule().id, EventRef(rule().source, EventId("gone")))
+    past = calendars.put(
+        replace(
+            event("past-orphan", calendar=rule().destination),
+            time=TimedInterval(NOW - timedelta(days=60), NOW - timedelta(days=60, hours=-1)),
+            managed_origin=origin,
+        )
+    )
+    current = calendars.put(
+        replace(event("current-orphan", calendar=rule().destination), managed_origin=origin)
+    )
+
+    report = _reconcile(factory, calendars)
+
+    assert [item.destination for item in report.conflicts] == [current.reference]
+    assert past.reference not in [item.destination for item in report.conflicts]
