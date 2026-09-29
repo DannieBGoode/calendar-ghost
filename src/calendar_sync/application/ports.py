@@ -92,6 +92,28 @@ class CalendarProvider(Protocol):
         `None` means the series answered and has no occurrence at that start. A series that cannot
         be read raises instead, because absence can authorize cancelling a destination occurrence.
         """
+        ...
+
+    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
+        """Whether a series has an occurrence that is not cancelled.
+
+        With `include_all_day` false, all-day occurrences do not count, because a rule that
+        excludes them cancels them in the destination. Only an answered lookup may return
+        `False`, because it stops a projection from being created or restored and can remove one
+        left by an interrupted create; a series whose occurrences cannot be listed counts as live.
+        """
+        ...
+
+    def occurrence_exceptions(
+        self, series: EventRef, not_ended_before: datetime
+    ) -> Sequence[CalendarEvent]:
+        """Occurrences of a series that are cancelled or differ from its regular occurrence.
+
+        Only occurrences whose original slot or current time reaches `not_ended_before` count.
+
+        A series whose occurrences cannot be listed returns none; its exceptions are applied when
+        a later full listing reports them.
+        """
 
     def write_occurrence(
         self,
@@ -158,6 +180,16 @@ class OccurrenceMappingRepository(Protocol):
     def save(self, mapping: OccurrenceMapping) -> None: ...
 
     def delete(self, mapping: OccurrenceMapping) -> None: ...
+
+
+class ExceptionReplayRepository(Protocol):
+    """Series projections whose source exceptions have not all been applied yet."""
+
+    def pending(self, rule_id: SyncRuleId) -> Sequence[EventMapping]: ...
+
+    def add(self, series_mapping_id: EventMappingId) -> None: ...
+
+    def remove(self, series_mapping_id: EventMappingId) -> None: ...
 
 
 class SyncCursorRepository(Protocol):
@@ -261,6 +293,7 @@ class UnitOfWork(Protocol):
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
+    replays: ExceptionReplayRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository

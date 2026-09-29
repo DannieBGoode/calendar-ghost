@@ -61,6 +61,15 @@ time; existing entries are not backfilled and appear in Activity without an even
 works with the same database: earlier releases ignore the columns and index and look titles up from
 Google again, but recorded titles stay in the database until their entries are deleted.
 
+Migration 10 adds the `pending_exception_replays` table, which stores only the identifier of each
+Series Mapping whose source Occurrence Exceptions still have to be applied after an incremental run
+created or restored its series. Rows are removed once the replay completes, and with their Series
+Mapping. No state is rewritten: a recurring series that earlier releases kept restoring and
+removing because every occurrence was cancelled settles on the first run after upgrading. Rolling
+back works with the same database: earlier releases ignore the table, leave unfinished replays to
+their daily full pass, and resume recreating such series on every run. Upgrading again finishes or
+clears any remaining rows.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

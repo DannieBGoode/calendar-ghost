@@ -18,7 +18,11 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
-from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.google.provider import (
+    OCCURRENCE_EXCEPTION_FIELDS,
+    OCCURRENCE_PAGE_LIMIT,
+    GoogleCalendarProvider,
+)
 from calendar_sync.infrastructure.google.translation import (
     RULE_PROPERTY,
     SOURCE_ACCOUNT_PROPERTY,
@@ -419,6 +423,198 @@ def test_get_occurrence_of_an_unreadable_series_is_a_failure_not_an_absence(stat
     assert failure.value.kind is ProviderFailureKind.TEMPORARY
 
 
+def test_has_live_occurrences_lists_instances_without_cancelled_ones() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    events_api.instances.assert_called_once_with(
+        calendarId="work-calendar",
+        eventId="projection-1",
+        showDeleted=False,
+        maxResults=250,
+        fields="items(status,start),nextPageToken",
+    )
+
+
+def test_has_live_occurrences_never_counts_a_cancelled_instance() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance("cancelled")]})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is False
+
+
+def test_has_live_occurrences_skips_all_day_instances_a_rule_excludes() -> None:
+    all_day = {**_instance(), "start": {"date": "2026-09-08"}, "end": {"date": "2026-09-09"}}
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [all_day]})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=False) is False
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+
+
+def test_has_live_occurrences_reads_past_empty_pages_before_answering() -> None:
+    events_api = MagicMock()
+    events_api.instances.side_effect = [
+        request_returning({"items": [], "nextPageToken": "page-2"}),
+        request_returning({"items": [_instance()]}),
+    ]
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    assert events_api.instances.call_args.kwargs["pageToken"] == "page-2"
+
+
+def test_has_live_occurrences_is_false_only_when_every_page_is_empty() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": []})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is False
+
+
+@pytest.mark.parametrize("status", [400, 404, 410])
+def test_has_live_occurrences_of_a_series_google_cannot_expand_counts_as_live(status: int) -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_raising(status)
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+
+
+def test_has_live_occurrences_stops_at_the_page_limit_without_proving_the_series_empty() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [], "nextPageToken": "next"})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    assert events_api.instances.call_count == OCCURRENCE_PAGE_LIMIT
+
+
+def _with_series_master(events_api: MagicMock) -> MagicMock:
+    """The source master every unmodified instance repeats: Busy, 08:00-09:00 weekly."""
+    master = {
+        **_instance(),
+        "id": "projection-1",
+        "recurrence": ["RRULE:FREQ=WEEKLY"],
+    }
+    del master["recurringEventId"], master["originalStartTime"]
+    events_api.get.return_value = request_returning(master)
+    return events_api
+
+
+def test_occurrence_exceptions_lists_cancelled_and_moved_instances_in_the_window() -> None:
+    moved = {
+        **_instance(),
+        "id": "projection-1_20260915T080000Z",
+        "originalStartTime": {"dateTime": "2026-09-15T08:00:00Z"},
+        "start": {"dateTime": "2026-09-15T10:00:00Z"},
+        "end": {"dateTime": "2026-09-15T11:00:00Z"},
+    }
+    cancelled = {
+        **_instance("cancelled"),
+        "id": "projection-1_20260922T080000Z",
+        "originalStartTime": {"dateTime": "2026-09-22T08:00:00Z"},
+    }
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_returning(
+        {"items": [_instance(), moved, cancelled]}
+    )
+    provider = provider_with_events_api(events_api)
+    window = datetime(2026, 8, 30, tzinfo=UTC)
+
+    exceptions = provider.occurrence_exceptions(SERIES, window)
+
+    assert [event.reference.event_id.value for event in exceptions] == [
+        "projection-1_20260915T080000Z",
+        "projection-1_20260922T080000Z",
+    ]
+    events_api.instances.assert_called_once_with(
+        calendarId="work-calendar",
+        eventId="projection-1",
+        showDeleted=True,
+        maxResults=2500,
+        fields=OCCURRENCE_EXCEPTION_FIELDS,
+    )
+
+
+def test_occurrence_exceptions_counts_a_timed_occurrence_moved_to_all_day() -> None:
+    all_day = {**_instance(), "start": {"date": "2026-09-08"}, "end": {"date": "2026-09-09"}}
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_returning({"items": [all_day]})
+    provider = provider_with_events_api(events_api)
+
+    exceptions = provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert len(exceptions) == 1
+
+
+@pytest.mark.parametrize("status", [400, 404, 410])
+def test_occurrence_exceptions_of_a_series_google_cannot_expand_are_none(status: int) -> None:
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_raising(status)
+    provider = provider_with_events_api(events_api)
+
+    assert provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC)) == ()
+
+
+def test_occurrence_exceptions_raise_other_failures() -> None:
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_raising(503)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert failure.value.kind is ProviderFailureKind.TEMPORARY
+
+
+@pytest.mark.parametrize(
+    ("status", "kind"),
+    [
+        (401, ProviderFailureKind.AUTHENTICATION),
+        (403, ProviderFailureKind.AUTHORIZATION),
+        (429, ProviderFailureKind.RATE_LIMIT),
+        (503, ProviderFailureKind.TEMPORARY),
+    ],
+)
+def test_has_live_occurrences_classifies_other_failures_like_any_request(
+    status: int, kind: ProviderFailureKind
+) -> None:
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_raising(status)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.has_live_occurrences(SERIES, include_all_day=True)
+
+    assert failure.value.kind is kind
+
+
+def test_occurrence_exceptions_count_changed_length_and_content_but_not_regular_instances() -> None:
+    longer = {**_instance(), "end": {"dateTime": "2026-09-08T11:00:00Z"}}
+    renamed = {**_instance(), "summary": "Dentist"}
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_returning({"items": [_instance(), longer, renamed]})
+    provider = provider_with_events_api(events_api)
+
+    exceptions = provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert len(exceptions) == 2
+
+
+def test_occurrence_exceptions_of_a_deleted_series_are_none() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_raising(404)
+    provider = provider_with_events_api(events_api)
+
+    assert provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC)) == ()
+    events_api.instances.assert_not_called()
+
+
 def test_write_occurrence_restores_a_cancelled_instance_without_notifications() -> None:
     events_api = MagicMock()
     events_api.instances.return_value = request_returning({"items": [_instance("cancelled")]})
@@ -478,3 +674,30 @@ def test_cancel_occurrence_deletes_only_the_instance_and_skips_cancelled_ones() 
     events_api.delete.assert_called_once_with(
         calendarId="work-calendar", eventId="projection-1_20260908T080000Z", sendUpdates="none"
     )
+
+
+def test_occurrence_exceptions_keep_occurrences_moved_out_of_the_window_but_not_older_ones() -> (
+    None
+):
+    moved_out = {
+        **_instance(),
+        "id": "projection-1_20260915T080000Z",
+        "originalStartTime": {"dateTime": "2026-09-15T08:00:00Z"},
+        "start": {"dateTime": "2026-07-01T08:00:00Z"},
+        "end": {"dateTime": "2026-07-01T09:00:00Z"},
+    }
+    older = {
+        **_instance("cancelled"),
+        "id": "projection-1_20260707T080000Z",
+        "originalStartTime": {"dateTime": "2026-07-07T08:00:00Z"},
+    }
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_returning({"items": [moved_out, older]})
+    provider = provider_with_events_api(events_api)
+
+    exceptions = provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert [event.reference.event_id.value for event in exceptions] == [
+        "projection-1_20260915T080000Z"
+    ]
+    assert "timeMin" not in events_api.instances.call_args.kwargs

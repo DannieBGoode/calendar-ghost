@@ -22,7 +22,7 @@ def test_fake_cancelled_instances_lose_their_metadata() -> None:
     origin = ManagedOrigin(rule().id, series().reference)
     master = calendars.put(
         series("projection-1", calendar=rule().destination, managed_origin=origin),
-        starts=(week_start(1),),
+        starts=(week_start(1), week_start(2)),
     )
 
     calendars.cancel_occurrence(master.reference, week_start(1), series().reference, rule().id, "k")
@@ -31,3 +31,16 @@ def test_fake_cancelled_instances_lose_their_metadata() -> None:
     assert cancelled is not None
     assert cancelled.status is EventStatus.CANCELLED
     assert cancelled.managed_origin is None
+
+
+def test_fake_cancelling_the_last_live_instance_cancels_the_series() -> None:
+    calendars = FakeCalendars()
+    origin = ManagedOrigin(rule().id, series().reference)
+    master = calendars.put(
+        series("projection-1", calendar=rule().destination, managed_origin=origin),
+        starts=(week_start(1),),
+    )
+
+    calendars.cancel_occurrence(master.reference, week_start(1), series().reference, rule().id, "k")
+
+    assert calendars.events[master.reference].status is EventStatus.CANCELLED

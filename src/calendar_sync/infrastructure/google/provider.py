@@ -14,6 +14,7 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.ports import CreatedProjection, ProviderChangeSet
 from calendar_sync.domain.model import (
+    AllDayRange,
     CalendarEndpoint,
     CalendarEvent,
     ConnectedAccountId,
@@ -23,6 +24,8 @@ from calendar_sync.domain.model import (
     ManagedOrigin,
     OccurrenceStart,
     SyncRuleId,
+    TimedInterval,
+    occurrence_start,
 )
 from calendar_sync.infrastructure.google.translation import (
     OPERATION_PROPERTY,
@@ -273,6 +276,77 @@ class GoogleCalendarProvider:
                 return candidate
         return None
 
+    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
+        parameters: dict[str, Any] = {
+            "calendarId": series.calendar.calendar_id.value,
+            "eventId": series.event_id.value,
+            "showDeleted": False,
+            "maxResults": LIVE_OCCURRENCE_PAGE_SIZE,
+            "fields": "items(status,start),nextPageToken",
+        }
+        try:
+            events_api = self._service_for(series.calendar.connected_account_id).events()
+            for _ in range(OCCURRENCE_PAGE_LIMIT):
+                response = events_api.instances(**parameters).execute()
+                # showDeleted=False should omit cancelled instances; the status is checked anyway,
+                # because counting one as live would recreate a series that can only be cancelled.
+                if any(
+                    item.get("status") != "cancelled"
+                    and (include_all_day or "date" not in item.get("start", {}))
+                    for item in response.get("items", [])
+                ):
+                    return True
+                # A filtered page may be empty while later pages still hold live instances.
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    return False
+                parameters["pageToken"] = page_token
+        except Exception as error:
+            # Only an answered lookup may report that none remain. A series Google cannot expand
+            # counts as live, so it synchronizes as before instead of failing the whole rule.
+            if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
+                return True
+            raise _provider_failure(error) from error
+        # Pages beyond the limit were not read, so the series is not proven empty.
+        return True
+
+    def occurrence_exceptions(
+        self, series: EventRef, not_ended_before: datetime
+    ) -> Sequence[CalendarEvent]:
+        parameters: dict[str, Any] = {
+            "calendarId": series.calendar.calendar_id.value,
+            "eventId": series.event_id.value,
+            "showDeleted": True,
+            # timeMin filters by where an instance is now, which would drop an occurrence moved
+            # out of the window whose original slot is still in it; the window is applied below.
+            "maxResults": 2500,
+            "fields": OCCURRENCE_EXCEPTION_FIELDS,
+        }
+        # The master is the regular occurrence every unmodified instance repeats.
+        master = self.get_event(series)
+        if master is None or master.status is EventStatus.CANCELLED:
+            return ()
+        exceptions: list[CalendarEvent] = []
+        try:
+            events_api = self._service_for(series.calendar.connected_account_id).events()
+            for _ in range(OCCURRENCE_PAGE_LIMIT):
+                response = events_api.instances(**parameters).execute()
+                for item in response.get("items", []):
+                    instance = to_domain_event(item, series.calendar)
+                    if _is_exception(instance, master) and instance.occurrence_reaches(
+                        not_ended_before
+                    ):
+                        exceptions.append(instance)
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    break
+                parameters["pageToken"] = page_token
+        except Exception as error:
+            if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
+                return ()
+            raise _provider_failure(error) from error
+        return tuple(exceptions)
+
     def write_occurrence(
         self,
         destination_series: EventRef,
@@ -363,6 +437,34 @@ class GoogleCalendarProvider:
         return instance
 
 
+def _is_exception(instance: CalendarEvent, master: CalendarEvent) -> bool:
+    """An instance that is cancelled or differs from the series' regular occurrence."""
+    identity = instance.occurrence
+    if identity is None or identity.series_event_id != master.reference.event_id:
+        return False
+    if instance.status is EventStatus.CANCELLED:
+        return True
+    if (instance.title, instance.description, instance.location) != (
+        master.title,
+        master.description,
+        master.location,
+    ):
+        return True
+    time, regular, original = instance.time, master.time, identity.original_start
+    if isinstance(time, TimedInterval) and isinstance(regular, TimedInterval):
+        return (
+            occurrence_start(time.starts_at) != original
+            or time.ends_at - time.starts_at != regular.ends_at - regular.starts_at
+        )
+    if isinstance(time, AllDayRange) and isinstance(regular, AllDayRange):
+        return (
+            time.starts_on != original
+            or time.ends_before - time.starts_on != regular.ends_before - regular.starts_on
+        )
+    # The occurrence switched between timed and all-day.
+    return True
+
+
 def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:
     return origin is not None and origin.rule_id == rule_id and origin.source == source
 
@@ -383,6 +485,19 @@ def _provider_failure(error: Exception) -> ProviderFailure:
     else:
         kind = ProviderFailureKind.PERMANENT
     return ProviderFailure(kind, detail, _retry_after_seconds(error))
+
+
+# Instances are read only for their status and start, so one page covers most series.
+LIVE_OCCURRENCE_PAGE_SIZE = 250
+# Instance listings run under the rule's write lock, so a long expansion is read only this far.
+OCCURRENCE_PAGE_LIMIT = 20
+# Only what translation reads; attendees and conferencing are never needed for a projection.
+OCCURRENCE_EXCEPTION_FIELDS = (
+    "items(id,etag,updated,status,start,end,summary,description,location,recurringEventId,"
+    "originalStartTime,extendedProperties,htmlLink),nextPageToken"
+)
+# Answers meaning Google cannot expand this series, rather than that the request failed.
+UNLISTABLE_SERIES_STATUSES = frozenset({400, 404, 410})
 
 
 # Retries wait in-process while holding the rule lock, so a longer provider hint is bounded; the

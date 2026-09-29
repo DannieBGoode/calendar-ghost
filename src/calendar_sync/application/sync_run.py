@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.ports import AuditEntry, UnitOfWork
+from calendar_sync.application.ports import AuditEntry, CalendarProvider, UnitOfWork
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
@@ -30,7 +30,11 @@ UNRECORDED_REASONS = frozenset(
 # Skips that explain a missing projection. A daily pass re-lists unchanged events, so only the
 # run that first saw the event, or saw it change, records why it was skipped.
 UNRECORDED_ON_DAILY_PASS = frozenset(
-    {SyncReason.ALL_DAY_EXCLUDED, SyncReason.SERIES_NOT_SYNCHRONIZED}
+    {
+        SyncReason.ALL_DAY_EXCLUDED,
+        SyncReason.SERIES_NOT_SYNCHRONIZED,
+        SyncReason.SERIES_WITHOUT_OCCURRENCES,
+    }
 )
 
 
@@ -49,11 +53,24 @@ class SyncRunContext:
     """Both feeds report only changes since the previous run."""
     daily_pass: bool = False
     """A full re-listing of a rule whose calendars already synchronized incrementally."""
+    source_listed: bool = False
+    """The source feed listed every event in the window, including every occurrence exception."""
     listed_destinations: dict[EventRef, CalendarEvent] = field(default_factory=dict)
     """Destination events from this run's full listing, each usable once instead of a read."""
     handled: set[EventRef] = field(default_factory=set)
     repaired: set[EventRef] = field(default_factory=set)
     """Source series already repaired this run, so a repair never recurses."""
+    live_series: dict[EventRef, bool] = field(default_factory=dict)
+    """Whether each source series looked up this run still has an occurrence this rule projects."""
+
+
+def has_live_occurrences(run: SyncRunContext, provider: CalendarProvider, series: EventRef) -> bool:
+    """Ask once per run whether a source series still has an occurrence this rule projects."""
+    if series not in run.live_series:
+        run.live_series[series] = provider.has_live_occurrences(
+            series, include_all_day=run.rule.transformation.includes_all_day
+        )
+    return run.live_series[series]
 
 
 def require_unchanged(run: SyncRunContext) -> None:

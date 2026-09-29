@@ -100,7 +100,7 @@ def test_avatar_migration_upgrades_an_existing_installation(tmp_path: Path) -> N
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     with sqlite3.connect(database) as connection:
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     assert [(account.id.value, account.avatar_url) for account in store.list()] == [
         ("existing", None)
     ]

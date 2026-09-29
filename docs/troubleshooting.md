@@ -14,6 +14,10 @@ recorded it, the event as it is in Google now, and a link to open it in Google C
   run after upgrading projects the series.
 - **Skipped an occurrence**: the occurrence belongs to a series this rule does not project, such as
   a Managed Projection or an all-day series under a timed-only rule.
+- **Skipped: no occurrence left to sync**: every occurrence of the recurring event is cancelled in
+  the source, or is an all-day occurrence the rule excludes, so there is nothing to show in the
+  destination calendar. This is common for the remainder of a "this and following" split. The
+  series is synchronized again once one of its occurrences is restored.
 - **Blocked: the occurrence was not found in the destination series**: the destination series no
   longer expands to the source occurrence even after repair. Run **Reconcile now**; if it persists,
   remove the rule and create it again.
@@ -105,6 +109,18 @@ Pause the rule before changing a destination projection that should temporarily 
 
 Deleting a Managed Projection is Drift while its source remains eligible. Synchronization recreates
 it on the next destination change poll. Delete or exclude the source, or pause the rule instead.
+
+## A recurring event keeps being restored and removed
+
+Earlier releases showed a recurring event in Activity as added to the destination and then removed
+on every run when every occurrence of its Event Series was cancelled in the source, often after a
+"this and following" split. Google cancels a series once its last occurrence is cancelled, so the
+next run found no Event Projection and created it again. Upgrade to a release that includes
+migration 10 (see [Deployment](deployment.md#docker-compose)): the next run stops recreating the
+series, may record **Skipped: no occurrence left to sync** for it, and keeps the Series Mapping
+dormant until an occurrence is restored. An entry such as **Removed from Work: no occurrence left
+to sync** means the run removed a projection that an interrupted run had created; no action is
+needed.
 
 ## Incremental cursor expired
 

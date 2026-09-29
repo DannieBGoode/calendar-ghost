@@ -9,6 +9,7 @@ from calendar_sync.application.ports import AuditEntry, CalendarProvider, Clock,
 from calendar_sync.application.sync_run import (
     OUTCOMES,
     SyncRunContext,
+    has_live_occurrences,
     record,
     require_unchanged,
 )
@@ -65,6 +66,24 @@ class SynchronizeOccurrences:
                 record_current=True,
             )
 
+    def replay_exceptions(
+        self, run: SyncRunContext, series_mapping: EventMapping, source_series: CalendarEvent
+    ) -> None:
+        """Apply every cancelled or moved source occurrence to a newly created series."""
+        for exception in self.provider.occurrence_exceptions(
+            source_series.reference, run.window_start
+        ):
+            if exception.reference in run.handled or exception.occurrence is None:
+                continue
+            self.apply(
+                run,
+                series_mapping,
+                source_series,
+                exception.occurrence.original_start,
+                exception,
+                record_current=True,
+            )
+
     def apply(
         self,
         run: SyncRunContext,
@@ -89,11 +108,14 @@ class SynchronizeOccurrences:
             destination_reported,
         )
         if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
-            # The repair re-verifies the series' other occurrences; this one is re-decided below.
-            if source_occurrence is not None:
-                run.handled.add(source_occurrence.reference)
-            self.repair_series(run, source_series)
-            series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
+            # A dormant series has no projection to repair, so nothing is missing.
+            live = has_live_occurrences(run, self.provider, source_series.reference)
+            if live:
+                # The repair re-verifies the series' other occurrences; this one is re-decided.
+                if source_occurrence is not None:
+                    run.handled.add(source_occurrence.reference)
+                self.repair_series(run, source_series)
+                series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
             decision, destination = self._decide(
                 run,
                 series_mapping,
@@ -102,6 +124,7 @@ class SynchronizeOccurrences:
                 source_occurrence,
                 recorded,
                 destination_reported,
+                has_live_occurrences=live,
             )
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
@@ -232,6 +255,8 @@ class SynchronizeOccurrences:
         source_occurrence: CalendarEvent | None,
         recorded: OccurrenceMapping | None,
         destination_reported: bool,
+        *,
+        has_live_occurrences: bool = True,
     ) -> tuple[SyncDecision, CalendarEvent | None]:
         destination_series = destination = None
         if series_mapping is not None and source_series.managed_origin is None:
@@ -253,6 +278,7 @@ class SynchronizeOccurrences:
             destination_series,
             destination,
             destination_reported=destination_reported,
+            has_live_occurrences=has_live_occurrences,
         )
         return decision, destination
 

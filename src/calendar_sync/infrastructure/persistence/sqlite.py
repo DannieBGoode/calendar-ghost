@@ -13,6 +13,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
     EventMappingRepository,
+    ExceptionReplayRepository,
     OccurrenceMappingRepository,
     RulePreviewRepository,
     RulePreviewSummary,
@@ -55,6 +56,7 @@ _FORWARD_MIGRATIONS = (
     (7, "0007_audit_run_index.sql"),
     (8, "0008_last_full_sync.sql"),
     (9, "0009_audit_event_titles.sql"),
+    (10, "0010_pending_exception_replays.sql"),
 )
 
 
@@ -240,6 +242,35 @@ class SqliteEventMappingRepository:
             "SELECT COUNT(*) FROM event_mappings WHERE rule_id = ?", (rule_id.value,)
         ).fetchone()
         return int(row[0])
+
+
+class SqliteExceptionReplayRepository:
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self._connection = connection
+
+    def pending(self, rule_id: SyncRuleId) -> Sequence[EventMapping]:
+        rows = self._connection.execute(
+            """
+            SELECT event_mappings.* FROM event_mappings
+            JOIN pending_exception_replays
+              ON pending_exception_replays.series_mapping_id = event_mappings.id
+            WHERE event_mappings.rule_id = ? ORDER BY event_mappings.id
+            """,
+            (rule_id.value,),
+        ).fetchall()
+        return tuple(_mapping_from_row(row) for row in rows)
+
+    def add(self, series_mapping_id: EventMappingId) -> None:
+        self._connection.execute(
+            "INSERT OR IGNORE INTO pending_exception_replays (series_mapping_id) VALUES (?)",
+            (series_mapping_id.value,),
+        )
+
+    def remove(self, series_mapping_id: EventMappingId) -> None:
+        self._connection.execute(
+            "DELETE FROM pending_exception_replays WHERE series_mapping_id = ?",
+            (series_mapping_id.value,),
+        )
 
 
 class SqliteOccurrenceMappingRepository:
@@ -547,6 +578,7 @@ class SqliteUnitOfWork:
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
+    replays: ExceptionReplayRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
@@ -565,6 +597,7 @@ class SqliteUnitOfWork:
         self.rules = SqliteSyncRuleRepository(connection)
         self.mappings = SqliteEventMappingRepository(connection)
         self.occurrences = SqliteOccurrenceMappingRepository(connection)
+        self.replays = SqliteExceptionReplayRepository(connection)
         self.cursors = SqliteSyncCursorRepository(connection)
         self.destination_cursors = SqliteDestinationSyncCursorRepository(connection)
         self.audit = SqliteAuditRepository(connection)

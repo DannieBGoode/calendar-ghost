@@ -63,6 +63,8 @@ class FakeCalendars:
     """Every single-event and single-occurrence lookup, in order."""
     operations: dict[str, EventRef] = field(default_factory=dict)
     created: int = 0
+    exception_listings: list[EventRef] = field(default_factory=list)
+    """Every series whose exceptions were listed, in order."""
 
     def put(
         self, event: CalendarEvent, *, starts: tuple[OccurrenceStart, ...] = ()
@@ -136,6 +138,52 @@ class FakeCalendars:
         stored = self.events.get(reference)
         return stored if stored is not None else self._expand(master, original_start, reference)
 
+    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
+        self.reads.append(series)
+        master = self.events.get(series)
+        if master is None:
+            raise ProviderFailure(ProviderFailureKind.TEMPORARY, "series could not be read")
+        if master.status is not EventStatus.CONFIRMED:
+            return False
+        return any(
+            include_all_day or not self._all_day(series, start)
+            for start in self.live_starts(series)
+        )
+
+    def occurrence_exceptions(
+        self, series: EventRef, not_ended_before: datetime
+    ) -> tuple[CalendarEvent, ...]:
+        self.exception_listings.append(series)
+        master = self.events.get(series)
+        if master is None or master.status is not EventStatus.CONFIRMED:
+            return ()
+        exceptions = []
+        for instance in self.instances_of(series):
+            assert instance.occurrence is not None
+            start = instance.occurrence.original_start
+            reference = EventRef(
+                series.calendar, EventId(instance_id(series.event_id.value, start))
+            )
+            regular = self._expand(master, start, reference)
+            edited = instance.status is EventStatus.CONFIRMED and (
+                instance.time,
+                instance.title,
+                instance.description,
+                instance.location,
+            ) != (regular.time, regular.title, regular.description, regular.location)
+            if (instance.status is EventStatus.CANCELLED or edited) and instance.occurrence_reaches(
+                not_ended_before
+            ):
+                exceptions.append(instance)
+        return tuple(exceptions)
+
+    def _all_day(self, series: EventRef, start: OccurrenceStart) -> bool:
+        stored = self.events.get(
+            EventRef(series.calendar, EventId(instance_id(series.event_id.value, start)))
+        )
+        time = stored.time if stored is not None else self.events[series].time
+        return isinstance(time, AllDayRange)
+
     @staticmethod
     def _expand(
         master: CalendarEvent, start: OccurrenceStart, reference: EventRef
@@ -163,7 +211,9 @@ class FakeCalendars:
         self, destination: CalendarEndpoint, operation_key: str
     ) -> CalendarEvent | None:
         reference = self.operations.get(operation_key)
-        return None if reference is None else self.events.get(reference)
+        found = None if reference is None else self.events.get(reference)
+        # Like Google's showDeleted=False lookup, a cancelled projection is not found.
+        return found if found is not None and found.status is EventStatus.CONFIRMED else None
 
     def create_projection(
         self,
@@ -295,6 +345,20 @@ class FakeCalendars:
             revision=f"{instance.revision}+",
         )
         self.writes.append(("cancel_occurrence", instance.reference.event_id.value))
+        # Like Google, cancelling the last live instance cancels the whole series.
+        if not self.live_starts(destination_series):
+            master = self.events[destination_series]
+            self.events[destination_series] = replace(
+                master, status=EventStatus.CANCELLED, revision=f"{master.revision}+"
+            )
+
+    def live_starts(self, series: EventRef) -> tuple[OccurrenceStart, ...]:
+        cancelled = {
+            instance.occurrence.original_start
+            for instance in self.instances_of(series)
+            if instance.occurrence is not None and instance.status is EventStatus.CANCELLED
+        }
+        return tuple(start for start in self.expansions.get(series, ()) if start not in cancelled)
 
     def _owned_occurrence(
         self,

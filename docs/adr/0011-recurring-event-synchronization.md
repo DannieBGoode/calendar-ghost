@@ -107,6 +107,45 @@ run stops with `RuleNotExecutable` and the cursors do not advance.
 | Moved or edited occurrence | Update the matching destination instance |
 | Cancelled occurrence | Cancel the matching destination instance and retain a `cancelled` Occurrence Mapping |
 | Cancelled series | Delete the destination master, removing its instances, and delete the Series Mapping and its Occurrence Mappings |
+| No occurrence left to project (all cancelled, or all-day under an exclusion) | Do not create or restore the destination master; the series is ignored, and a mapped series keeps its Series Mapping and Occurrence Mappings as a dormant series |
+
+Google cancels a series once its last live instance is cancelled, and `showDeleted=false` lookups no
+longer find it. Creating a series whose every source occurrence is cancelled and then cancelling
+those occurrences would leave a cancelled projection that the next run reads as missing and
+recreates, indefinitely. Before creating or restoring a series projection, the application
+therefore asks the provider (`has_live_occurrences`, an `instances` listing without cancelled
+instances, cached per run) whether any source occurrence remains that the rule projects: under an
+all-day exclusion, all-day occurrences do not count, because they are cancelled in the destination
+as well. The adapter also checks each instance's status rather than relying on the filter alone.
+Only an answered lookup may report that none remain: a series Google cannot expand (400, 404, or
+410) counts as live and synchronizes as before, and a listing stops after a page limit, because it
+runs under the rule's write lock, without proving the series empty. A mapped series is kept dormant
+rather than deleted, keeping its `cancelled` Occurrence Mappings. Occurrence decisions against a
+dormant series are ignored instead of reported as `destination_occurrence_missing`, Full
+Reconciliation accepts it only after checking the mapping's identity and confirming the projection
+is gone, and Rule Preview excludes it.
+
+A series projection created from an incremental feed, including a restored dormant series, would
+otherwise start from its recurrence alone and show every occurrence the feed did not mention. The
+provider therefore lists the source series' occurrences whose original slot or current time
+reaches the sync window and that are cancelled
+or differ from the master's regular occurrence in start, length, or content
+(`occurrence_exceptions`), and each is applied like a reported exception, after every Occurrence
+Mapping is re-applied. Google's `timeMin` filters instances by where they are now, which would
+drop an occurrence moved out of the window, so the window is applied to each instance instead.
+Google has no listing of exceptions alone, so the adapter expands the series
+with trimmed fields and stops at a page limit; a series longer than that leaves its remaining
+exceptions to the next full listing. This also covers cancellations that were never recorded, such as those made
+while the series had no projection or whose provider response was lost. A full listing already
+contains every exception in the window, so the listing is skipped there. The obligation is
+recorded in `pending_exception_replays` in the same commit as the new Series Mapping and cleared
+only once every exception was applied, so a run that fails midway leaves it for the retry to
+finish. An exception already applied in the run, by the replay or by re-verification, is not
+applied again when the feed reports it. For a series that was never mapped,
+a projection created before an interrupted run recorded its mapping is found by its create
+Operation Key, verified like any mapped projection, and removed. A dormant mapped series does not
+look for one; a recreate interrupted in the same narrow window is left for Full Reconciliation to
+report as unexpected.
 
 A destination occurrence is cancelled only when the source proves the occurrence is cancelled or
 no longer part of an existing source series. When the source series cannot be verified, the
@@ -183,6 +222,8 @@ instance identifiers only. New reasons:
 | `occurrence_retired` | ignore | The occurrence no longer exists on either side; its mapping was removed |
 | `series_not_synchronized` | ignore | The occurrence belongs to a series this rule does not project |
 | `destination_occurrence_missing` | conflict | The destination series has no matching occurrence after repair |
+| `series_without_occurrences` | ignore | No occurrence of the source series remains that the rule projects; no projection is created |
+| `series_without_occurrences_removed` | delete | No occurrence remains that the rule projects; a projection left by an interrupted first create was removed |
 
 Existing reasons are reused where the meaning is identical (`source_unverifiable`,
 `destination_ownership_inconsistent`, `mapping_inconsistent`, `all_day_excluded_removed`).
@@ -196,6 +237,10 @@ and commits atomically with its `schema_migrations` row. It creates `occurrence_
 referencing `event_mappings(id)` with `ON DELETE CASCADE`, unique per series mapping and
 Occurrence Start. It stores identities, the Occurrence Start, state, revision, and fingerprint
 only. The in-memory repositories mirror the cascade on mapping deletion and rule removal.
+
+Forward-only migration `0010_pending_exception_replays.sql` creates `pending_exception_replays`,
+one row per Series Mapping whose source exceptions still have to be applied, referencing
+`event_mappings(id)` with `ON DELETE CASCADE`. It stores identities only.
 
 The same migration deletes all source and destination incremental cursors, so each rule's next
 run reads its full Initial Sync Window and backfills recurring series. Cursor deletion is used

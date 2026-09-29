@@ -184,6 +184,10 @@ class TransformationPolicy:
         if self.privacy is PrivacyPolicy.BUSY_ONLY:
             _require_non_empty(self.busy_title, "busy title")
 
+    @property
+    def includes_all_day(self) -> bool:
+        return self.all_day is not AllDaySyncPolicy.EXCLUDE
+
 
 @dataclass(frozen=True, slots=True)
 class CalendarEvent:
@@ -215,6 +219,18 @@ class CalendarEvent:
         if isinstance(self.time, AllDayRange):
             return self.time.ends_before < instant.date()
         return self.time.ends_at < instant
+
+    def occurrence_reaches(self, instant: datetime) -> bool:
+        """Whether an occurrence's original slot, or the time it was moved to, reaches an instant.
+
+        Either one inside the sync window matters: a destination series shows the original slot
+        until the exception is applied, and a moved occurrence belongs where it now is.
+        """
+        if self.occurrence is None:
+            raise DomainValidationError("only an occurrence has an original slot")
+        original = self.occurrence.original_start
+        boundary: date | datetime = instant if isinstance(original, datetime) else instant.date()
+        return original >= boundary or (self.time is not None and not self.ended_before(instant))
 
 
 @dataclass(frozen=True, slots=True)
@@ -374,6 +390,8 @@ class SyncReason(StrEnum):
     OCCURRENCE_RETIRED = "occurrence_retired"
     SERIES_NOT_SYNCHRONIZED = "series_not_synchronized"
     DESTINATION_OCCURRENCE_MISSING = "destination_occurrence_missing"
+    SERIES_WITHOUT_OCCURRENCES = "series_without_occurrences"
+    SERIES_WITHOUT_OCCURRENCES_REMOVED = "series_without_occurrences_removed"
 
 
 @dataclass(frozen=True, slots=True)

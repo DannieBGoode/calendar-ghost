@@ -78,11 +78,25 @@ class PreviewSyncRule:
         cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
         events = self.provider.changes(rule.source, None, cutoff).events
         masters = {event.reference: event for event in events if event.occurrence is None}
+        live: dict[EventRef, bool] = {}
+
+        def skipped(master: CalendarEvent) -> bool:
+            if _excluded(master, rule):
+                return True
+            if master.recurrence is None:
+                return False
+            # Like a Sync Run, a series whose every occurrence is cancelled is not projected.
+            if master.reference not in live:
+                live[master.reference] = self.provider.has_live_occurrences(
+                    master.reference, include_all_day=rule.transformation.includes_all_day
+                )
+            return not live[master.reference]
+
         eligible: list[tuple[CalendarEvent, CalendarEvent | None]] = []
         excluded = series_count = occurrence_changes = 0
         for event in events:
             if event.occurrence is None:
-                if _excluded(event, rule):
+                if skipped(event):
                     excluded += 1
                     continue
                 series_count += event.recurrence is not None
@@ -90,7 +104,7 @@ class PreviewSyncRule:
                 continue
             parent_ref = EventRef(rule.source, event.occurrence.series_event_id)
             parent = masters.get(parent_ref) or self.provider.get_event(parent_ref)
-            if parent is None or _excluded(parent, rule):
+            if parent is None or skipped(parent):
                 excluded += 1
                 continue
             occurrence_changes += 1

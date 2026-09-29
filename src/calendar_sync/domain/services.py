@@ -110,6 +110,7 @@ class SyncDecisionService:
         actual_destination: CalendarEvent | None,
         *,
         window_start: datetime | None = None,
+        has_live_occurrences: bool = True,
     ) -> SyncDecision:
         if source_event.reference.calendar != rule.source:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
@@ -150,6 +151,13 @@ class SyncDecisionService:
             if mapping is None:
                 return SyncDecision(SyncAction.IGNORE, SyncReason.ALL_DAY_EXCLUDED)
             return SyncDecision(SyncAction.DELETE, SyncReason.ALL_DAY_EXCLUDED_REMOVED)
+        # A projected series with no live occurrence is cancelled by the provider, so none is
+        # created. A mapping stays dormant with its cancelled occurrences, so restoring one
+        # occurrence later cannot resurrect the others; only a live projection is removed.
+        if source_event.recurrence is not None and not has_live_occurrences:
+            if actual_destination is None:
+                return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
+            return SyncDecision(SyncAction.DELETE, SyncReason.SERIES_WITHOUT_OCCURRENCES_REMOVED)
 
         # Incremental feeds report changes to any event, however old; only mapped ones stay current.
         if mapping is None and window_start is not None and source_event.ended_before(window_start):
@@ -183,6 +191,7 @@ class SyncDecisionService:
         destination_occurrence: CalendarEvent | None,
         *,
         destination_reported: bool = False,
+        has_live_occurrences: bool = True,
     ) -> SyncDecision:
         """Decide one occurrence of a mapped series; `None` means no such occurrence exists."""
         if source_series.reference.calendar != rule.source:
@@ -215,6 +224,11 @@ class SyncDecisionService:
             or destination_series.status is EventStatus.CANCELLED
             or destination_series.reference != series_mapping.destination
         ):
+            # A dormant series has no projection until one of its occurrences is restored.
+            if not has_live_occurrences and (
+                destination_series is None or destination_series.status is EventStatus.CANCELLED
+            ):
+                return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
             return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
         if not _owned_by(destination_series.managed_origin, rule, source_series.reference):
             return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT)

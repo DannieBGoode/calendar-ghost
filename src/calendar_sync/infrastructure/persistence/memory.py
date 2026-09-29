@@ -9,6 +9,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
     EventMappingRepository,
+    ExceptionReplayRepository,
     OccurrenceMappingRepository,
     RulePreviewRepository,
     RulePreviewSummary,
@@ -38,6 +39,7 @@ class MemoryState:
     occurrences: dict[tuple[EventMappingId, OccurrenceStart], OccurrenceMapping] = field(
         default_factory=dict
     )
+    pending_replays: set[EventMappingId] = field(default_factory=set)
     cursors: dict[SyncRuleId, str] = field(default_factory=dict)
     destination_cursors: dict[SyncRuleId, str] = field(default_factory=dict)
     audit: list[AuditEntry] = field(default_factory=list)
@@ -76,6 +78,7 @@ class InMemorySyncRuleRepository:
         self._state.mappings = {
             key: mapping for key, mapping in self._state.mappings.items() if key[0] != rule_id
         }
+        self._state.pending_replays -= removed
         self._state.cursors.pop(rule_id, None)
         self._state.destination_cursors.pop(rule_id, None)
         self._state.outcomes = {
@@ -124,6 +127,7 @@ class InMemoryEventMappingRepository:
 
     def delete(self, mapping: EventMapping) -> None:
         self._state.mappings.pop((mapping.rule_id, mapping.source), None)
+        self._state.pending_replays.discard(mapping.id)
         self._state.occurrences = {
             key: occurrence
             for key, occurrence in self._state.occurrences.items()
@@ -132,6 +136,32 @@ class InMemoryEventMappingRepository:
 
     def count_for_rule(self, rule_id: SyncRuleId) -> int:
         return sum(1 for key in self._state.mappings if key[0] == rule_id)
+
+
+class InMemoryExceptionReplayRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def pending(self, rule_id: SyncRuleId) -> tuple[EventMapping, ...]:
+        return tuple(
+            sorted(
+                (
+                    mapping
+                    for key, mapping in self._state.mappings.items()
+                    if key[0] == rule_id and mapping.id in self._state.pending_replays
+                ),
+                key=lambda mapping: mapping.id.value,
+            )
+        )
+
+    def add(self, series_mapping_id: EventMappingId) -> None:
+        # Mirror the SQLite foreign key to event_mappings.
+        if not any(m.id == series_mapping_id for m in self._state.mappings.values()):
+            raise KeyError(series_mapping_id)
+        self._state.pending_replays.add(series_mapping_id)
+
+    def remove(self, series_mapping_id: EventMappingId) -> None:
+        self._state.pending_replays.discard(series_mapping_id)
 
 
 class InMemoryOccurrenceMappingRepository:
@@ -222,6 +252,7 @@ class InMemoryUnitOfWork:
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
+    replays: ExceptionReplayRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
@@ -238,6 +269,7 @@ class InMemoryUnitOfWork:
         self.rules = InMemorySyncRuleRepository(self._working)
         self.mappings = InMemoryEventMappingRepository(self._working)
         self.occurrences = InMemoryOccurrenceMappingRepository(self._working)
+        self.replays = InMemoryExceptionReplayRepository(self._working)
         self.cursors = InMemorySyncCursorRepository(self._working.cursors)
         self.destination_cursors = InMemorySyncCursorRepository(self._working.destination_cursors)
         self.audit = InMemoryAuditRepository(self._working)
@@ -258,6 +290,7 @@ class InMemoryUnitOfWork:
         self._target.rules = self._working.rules
         self._target.mappings = self._working.mappings
         self._target.occurrences = self._working.occurrences
+        self._target.pending_replays = self._working.pending_replays
         self._target.cursors = self._working.cursors
         self._target.destination_cursors = self._working.destination_cursors
         self._target.audit = self._working.audit

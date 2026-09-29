@@ -38,6 +38,11 @@ modified occurrences) a Projection Fingerprint.
 - Occurrence Mappings are not counted as managed projections; a series counts once.
 - Writing an occurrence requires the Series Mapping, a destination series carrying this rule's
   Managed Origin, and an occurrence whose parent is exactly that series.
+- When no occurrence of the source series remains that the rule would project, the Series Mapping
+  stays dormant without a destination series and keeps its `cancelled` Occurrence Mappings, so
+  restoring one occurrence cannot bring back the others.
+- A Series Mapping created by an incremental run carries a pending exception replay until every
+  source Occurrence Exception has been applied; the replay is removed with its Series Mapping.
 
 ## Calendar Event values
 

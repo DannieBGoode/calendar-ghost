@@ -133,6 +133,14 @@ describe("activity presentation", () => {
     expect(describeEntry(entry({ reason: "managed_projection_source" })).explanation).toContain("never synced again")
   })
 
+  it("explains series with no occurrence left to sync", () => {
+    const skipped = entry({ reason: "series_without_occurrences" })
+    expect(describeEntry(skipped).happened).toBe("Skipped: no occurrence left to sync")
+    expect(describeEntry(skipped).explanation).toContain("synced again if an occurrence comes back")
+    const removed = entry({ action: "delete", reason: "series_without_occurrences_removed", category: "changed" })
+    expect(whatHappened(removed, "Work").text).toBe("Removed from Work: no occurrence left to sync")
+  })
+
   it("uses relative day names for recent runs", () => {
     const now = new Date(2026, 8, 28, 18, 0)
     expect(formatRunTime(new Date(2026, 8, 28, 15, 18).toISOString(), now)).toMatch(/^Today at /)

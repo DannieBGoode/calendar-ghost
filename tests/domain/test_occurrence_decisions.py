@@ -87,6 +87,7 @@ def decide(
     occurrence_mapping: OccurrenceMapping | None = None,
     destination_series: CalendarEvent | None = DESTINATION,
     destination_reported: bool = False,
+    has_live_occurrences: bool = True,
 ) -> SyncDecision:
     return service().decide_occurrence(
         sync_rule or rule(),
@@ -98,6 +99,7 @@ def decide(
         destination_series,
         destination_occurrence,
         destination_reported=destination_reported,
+        has_live_occurrences=has_live_occurrences,
     )
 
 
@@ -281,6 +283,45 @@ def test_occurrence_mapping_of_another_series_is_inconsistent() -> None:
 
 def test_missing_destination_occurrence_is_a_conflict_not_a_guess() -> None:
     decision = decide(occurrence(SOURCE, 1), None)
+
+    assert decision.action is SyncAction.CONFLICT
+    assert decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING
+
+
+@pytest.mark.parametrize(
+    "destination_series",
+    [None, replace(DESTINATION, status=EventStatus.CANCELLED, time=None)],
+)
+def test_occurrence_of_a_dormant_series_without_a_projection_is_skipped(
+    destination_series: CalendarEvent | None,
+) -> None:
+    cancelled = occurrence(SOURCE, 1, status=EventStatus.CANCELLED)
+
+    dormant = decide(
+        cancelled, None, destination_series=destination_series, has_live_occurrences=False
+    )
+    live = decide(cancelled, None, destination_series=destination_series)
+
+    assert (dormant.action, dormant.reason) == (
+        SyncAction.IGNORE,
+        SyncReason.SERIES_WITHOUT_OCCURRENCES,
+    )
+    # A series that still has live occurrences must have its projection repaired instead.
+    assert (live.action, live.reason) == (
+        SyncAction.CONFLICT,
+        SyncReason.DESTINATION_OCCURRENCE_MISSING,
+    )
+
+
+def test_dormant_series_mapped_to_another_destination_series_is_still_a_conflict() -> None:
+    other = replace(DESTINATION, reference=EventRef(rule().destination, EventId("unrelated")))
+
+    decision = decide(
+        occurrence(SOURCE, 1, status=EventStatus.CANCELLED),
+        None,
+        destination_series=other,
+        has_live_occurrences=False,
+    )
 
     assert decision.action is SyncAction.CONFLICT
     assert decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING

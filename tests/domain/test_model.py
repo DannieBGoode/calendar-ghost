@@ -9,6 +9,7 @@ from calendar_sync.domain.model import (
     EventId,
     EventMappingId,
     EventRef,
+    EventStatus,
     OccurrenceIdentity,
     OccurrenceMapping,
     OccurrenceMappingId,
@@ -21,7 +22,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     occurrence_start,
 )
-from tests.helpers import NOW, endpoint, rule
+from tests.helpers import NOW, endpoint, occurrence, rule, series, week_start
 
 
 def test_rule_can_cross_connected_accounts() -> None:
@@ -189,3 +190,17 @@ def test_only_modified_occurrence_mappings_carry_a_fingerprint() -> None:
             "r-1",
             ProjectionFingerprint("f"),
         )
+
+
+def test_an_occurrence_reaches_the_window_through_its_original_slot_or_its_new_time() -> None:
+    window = week_start(2)
+    master = series()
+    moved_out = occurrence(master, 3, moved_by=-timedelta(weeks=3))
+    moved_in = occurrence(master, 1, moved_by=timedelta(weeks=3))
+    stayed_before = occurrence(master, 1)
+    cancelled_before = occurrence(master, 1, status=EventStatus.CANCELLED)
+
+    assert moved_out.occurrence_reaches(window)
+    assert moved_in.occurrence_reaches(window)
+    assert not stayed_before.occurrence_reaches(window)
+    assert not cancelled_before.occurrence_reaches(window)

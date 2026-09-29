@@ -26,6 +26,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.sync_run import (
     OUTCOMES,
     SyncRunContext,
+    has_live_occurrences,
     record,
     require_unchanged,
 )
@@ -133,6 +134,7 @@ class ExecuteSyncRule:
                 reproject,
                 incremental=not source_listed and not destination_listed,
                 daily_pass=source_listed and previous_cursor is not None,
+                source_listed=source_listed,
             )
             if destination_listed:
                 # A full listing already holds each projection, so decisions need not re-read it.
@@ -186,6 +188,7 @@ class ExecuteSyncRule:
 
             if reproject:
                 self._reproject_remaining(run)
+            self._finish_pending_replays(run)
 
             uow.cursors.save(rule.id, changes.next_cursor)
             uow.destination_cursors.save(rule.id, destination_changes.next_cursor)
@@ -285,6 +288,9 @@ class ExecuteSyncRule:
     def _synchronize_source_exception(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         identity = exception.occurrence
         assert identity is not None
+        if exception.reference in run.handled:
+            # A replay or re-verification already applied it this run from a fresher read.
+            return
         series_ref = EventRef(run.rule.source, identity.series_event_id)
         source_series = self.provider.get_event(series_ref)
         series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
@@ -295,6 +301,8 @@ class ExecuteSyncRule:
                 self._record_unverifiable(run, exception.reference, series_mapping.destination)
             return
         if series_mapping is None and series_ref not in run.handled:
+            # Creating the series replays its exceptions; this one is applied below.
+            run.handled.add(exception.reference)
             self._synchronize_event(
                 run, source_series, destination_loaded=False, actual_destination=None
             )
@@ -410,6 +418,37 @@ class ExecuteSyncRule:
             and (series_changed or (run.reproject and decision.action is SyncAction.IGNORE))
         ):
             self.occurrences.reverify(run, mapping, source_event)
+        if (
+            mapping is not None
+            and decision.action is SyncAction.CREATE
+            and source_event.recurrence is not None
+            and not run.source_listed
+        ):
+            self._replay_exceptions(run, mapping, source_event)
+
+    def _replay_exceptions(
+        self, run: SyncRunContext, mapping: EventMapping, source_series: CalendarEvent
+    ) -> None:
+        """A new series starts from its recurrence alone; its exceptions come from the source.
+
+        This covers exceptions the incremental feed did not report and cancellations that were
+        never recorded. The pending replay is cleared only after every exception was applied.
+        """
+        self.occurrences.replay_exceptions(run, mapping, source_series)
+        run.uow.replays.remove(mapping.id)
+        run.uow.commit()
+
+    def _finish_pending_replays(self, run: SyncRunContext) -> None:
+        """Complete replays an earlier failed run left unfinished."""
+        for mapping in run.uow.replays.pending(run.rule.id):
+            source_series = None if run.source_listed else self.provider.get_event(mapping.source)
+            if source_series is None or source_series.recurrence is None:
+                # A full listing already applied every exception in the window, and a series
+                # that is gone or no longer recurring is decided by its own change.
+                run.uow.replays.remove(mapping.id)
+                run.uow.commit()
+                continue
+            self._replay_exceptions(run, mapping, source_series)
 
     def _decide_and_write(
         self,
@@ -440,6 +479,17 @@ class ExecuteSyncRule:
             # Google acknowledged this create before an interrupted run could record its
             # mapping; complete it idempotently instead of orphaning the projection.
             decision = self.decisions.decide(rule, source_event, mapping, actual)
+        if (
+            decision.action is SyncAction.CREATE
+            and source_event.recurrence is not None
+            and not has_live_occurrences(run, self.provider, source_event.reference)
+        ):
+            # Creating it would only be cancelled again by its occurrences, on every run.
+            if mapping is None:
+                mapping, actual = self._acknowledged_series(run, source_event)
+            decision = self.decisions.decide(
+                rule, source_event, mapping, actual, has_live_occurrences=False
+            )
         run.counts[decision.action] += 1
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action
@@ -462,6 +512,9 @@ class ExecuteSyncRule:
                 projection_fingerprint=self.fingerprinter.fingerprint(decision.projection),
             )
             uow.mappings.save(mapping)
+            if source_event.recurrence is not None and not run.source_listed:
+                # Committed with the mapping, so a retry finishes a replay a failed run began.
+                uow.replays.add(mapping.id)
         elif decision.action is SyncAction.UPDATE and decision.projection is not None:
             assert mapping is not None
             updated = self.provider.update_projection(
@@ -506,6 +559,31 @@ class ExecuteSyncRule:
         )
         uow.commit()
         return mapping, decision
+
+    def _acknowledged_series(
+        self, run: SyncRunContext, source_event: CalendarEvent
+    ) -> tuple[EventMapping | None, CalendarEvent | None]:
+        """Find a series Google created before an interrupted run could record its mapping.
+
+        Its ownership is then verified like any mapped projection before it is removed.
+        """
+        key = self._operation_key(
+            run.rule.id, source_event.reference, source_event.revision, SyncAction.CREATE
+        )
+        found = self.provider.find_projection(run.rule.destination, key)
+        if found is None or found.status is not EventStatus.CONFIRMED or found.occurrence:
+            return None, None
+        mapping = EventMapping(
+            id=EventMappingId(key),
+            rule_id=run.rule.id,
+            source=source_event.reference,
+            destination=found.reference,
+            source_revision=source_event.revision,
+            projection_fingerprint=self.fingerprinter.fingerprint(
+                SyncDecisionService.as_projection(found)
+            ),
+        )
+        return mapping, found
 
     @staticmethod
     def _operation_key(
