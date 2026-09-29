@@ -419,10 +419,16 @@ class SyncDecision:
 
 
 class DriftKind(StrEnum):
+    """What a Full Reconciliation found for one mapping.
+
+    MAPPING_CONFLICT is a Conflict, not Drift: the mapping cannot be proven against its rule or
+    source. It is reported beside drift under its original payload value.
+    """
+
     MISSING = "missing"
     UNEXPECTED = "unexpected"
     INCORRECT_PROJECTION = "incorrect_projection"
-    MAPPING_INCONSISTENCY = "mapping_inconsistency"
+    MAPPING_CONFLICT = "mapping_inconsistency"
 
 
 @dataclass(frozen=True, slots=True)

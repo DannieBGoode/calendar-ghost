@@ -331,7 +331,7 @@ class ReconciliationService:
             if not mapping.belongs_to(rule):
                 drift.append(
                     ReconciliationDrift(
-                        DriftKind.MAPPING_INCONSISTENCY,
+                        DriftKind.MAPPING_CONFLICT,
                         mapping.source,
                         mapping.destination,
                         "mapping is outside this directional relationship",
@@ -345,7 +345,7 @@ class ReconciliationService:
             if expected is None:
                 drift.append(
                     ReconciliationDrift(
-                        DriftKind.MAPPING_INCONSISTENCY,
+                        DriftKind.MAPPING_CONFLICT,
                         mapping.source,
                         mapping.destination,
                         "source event is unavailable for this mapping",
