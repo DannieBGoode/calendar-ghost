@@ -123,8 +123,8 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 
 **Activity** is a table of what each rule did, grouped by day: the time, the event and when it
 happens, what happened in plain words (such as "Added to Work" or "Blocked: not owned by this
-rule"), and the rule. Event titles and times are read live from Google for the rows on screen and are
-never stored. By default each run shows how many events it found already up to date in one row you
+rule"), and the rule. Each entry records its event's title and time when the run makes the decision,
+so Activity names events without asking Google and shows when an event was renamed. By default each run shows how many events it found already up to date in one row you
 can expand, and runs that found nothing else to do share one summary row; **All decisions** lists
 every check. Choose a rule from the picker, which shows each
 rule's calendars and accounts, or select a row's rule to filter to it. Select an entry to open its
@@ -185,8 +185,10 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
 
 ## Privacy and security model
 
-- Event titles, descriptions, and locations are processed in memory and are not stored in SQLite
-  or audit entries.
+- Event descriptions, locations, and attendees are processed in memory and are not stored in
+  SQLite or audit entries. Audit entries do store each source event's title and time, in plain
+  text, so Activity can name events; treat the database and its backups as sensitive
+  ([ADR 0014](docs/adr/0014-record-event-titles-on-audit-entries.md)).
 - Mappings retain provider IDs, revisions, and a non-reversible projection fingerprint.
 - Google access and refresh credentials are encrypted at rest with AES-256-GCM using the separate
   installation master key.

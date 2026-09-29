@@ -18,6 +18,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     CalendarProvider,
     Clock,
+    RecordedEvent,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
@@ -372,6 +373,7 @@ class ExecuteSyncRule:
                 source_event_id=exception.reference.event_id.value,
                 reason=SyncReason.SERIES_NOT_SYNCHRONIZED.value,
                 run_id=run.run_id,
+                event=RecordedEvent.of(exception),
             ),
         )
 
@@ -552,6 +554,7 @@ class ExecuteSyncRule:
                 destination_event_id=mapping.destination.event_id.value if mapping else None,
                 reason=decision.reason.value,
                 run_id=run.run_id,
+                event=RecordedEvent.of(source_event),
             ),
         )
         uow.commit()

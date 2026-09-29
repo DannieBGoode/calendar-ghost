@@ -37,8 +37,9 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
 - Preview is side-effect-free and required before enabling a new or materially changed rule.
 - Pausing preserves mappings and projections. Reauthorization and resume begin with validation and
   reconciliation.
-- Event titles, descriptions, and locations must not be persisted in SQLite, audit entries,
-  incidents, or logs.
+- Event descriptions, locations, attendees, and conferencing data must not be persisted in SQLite,
+  audit entries, incidents, or logs. Audit Entries record only the source event's title, time,
+  recurrence, and cancellation for Activity (ADR 0014); titles still never reach logs or incidents.
 
 Use the exact terms defined in `CONTEXT.md`. In particular, do not use “sync pair,” “event copy,” or
 “conflict” when Directional Sync Rule, Event Projection, or Drift is the intended concept.

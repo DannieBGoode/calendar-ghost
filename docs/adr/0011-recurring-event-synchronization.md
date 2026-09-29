@@ -235,7 +235,7 @@ referencing `event_mappings(id)` with `ON DELETE CASCADE`, unique per series map
 Occurrence Start. It stores identities, the Occurrence Start, state, revision, and fingerprint
 only. The in-memory repositories mirror the cascade on mapping deletion and rule removal.
 
-Forward-only migration `0009_pending_exception_replays.sql` creates `pending_exception_replays`,
+Forward-only migration `0010_pending_exception_replays.sql` creates `pending_exception_replays`,
 one row per Series Mapping whose source exceptions still have to be applied, referencing
 `event_mappings(id)` with `ON DELETE CASCADE`. It stores identities only.
 

@@ -152,6 +152,18 @@ class DiscoveredCalendarResponse(BaseModel):
     primary: bool
 
 
+class RecordedEventResponse(BaseModel):
+    """The source event as its run recorded it; see ADR 0014."""
+
+    title: str
+    all_day: bool = False
+    starts: str | None = None
+    ends: str | None = None
+    recurring: bool = False
+    cancelled: bool = False
+    renamed_from: str | None = None
+
+
 class AuditEntryResponse(BaseModel):
     id: int
     run_id: str | None
@@ -164,6 +176,7 @@ class AuditEntryResponse(BaseModel):
     detail: str
     source_event_id: str | None
     destination_event_id: str | None
+    event: RecordedEventResponse | None = None
 
 
 class EventSnapshotResponse(BaseModel):
@@ -188,12 +201,6 @@ class NoChangeRunResponse(BaseModel):
     newest_id: int
     occurred_at: str
     count: int
-
-
-class ActivityEventSummaryResponse(BaseModel):
-    entry_id: int
-    lookup: Literal["found", "rule_removed", "unavailable"]
-    source: EventSnapshotResponse | None = None
 
 
 class IncidentResponse(BaseModel):

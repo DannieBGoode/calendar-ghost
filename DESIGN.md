@@ -217,7 +217,7 @@ A single horizontal summary combines an icon, a plain-language state, one senten
 
 ### Recent Changes
 
-The Overview lists the latest runs that changed events, newest first: a relative time, the rule, and one sentence in calendar language ("Added 1 event and updated 2 in Family."). Blocked changes use Attention Ochre text and link to that rule's Activity. Event titles appear only on request, looked up live and labelled as not saved.
+The Overview lists the latest runs that changed events, newest first: a relative time, the rule, and one sentence in calendar language ("Added 1 event and updated 2 in Family."). Blocked changes use Attention Ochre text and link to that rule's Activity. Event titles appear only on request, as each run recorded them.
 
 ### Rule Rows
 

@@ -156,12 +156,15 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         rows = connection.execute(
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
         ("ignore", "completed", None, None),
     ]
+    # Earlier entries are not backfilled with event names (ADR 0014).
+    assert titles == [(None,)]
 
 
 def test_audit_entries_persist_reason_and_run(tmp_path: Path) -> None:
