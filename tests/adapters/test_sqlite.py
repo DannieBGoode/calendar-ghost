@@ -3,6 +3,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
+from threading import Thread
 
 import pytest
 
@@ -11,12 +12,14 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    ConnectedAccountState,
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.model import (
+    ConnectedAccountId,
     EventId,
     EventMapping,
     EventMappingId,
@@ -31,11 +34,13 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TransformationPolicy,
 )
+from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
+from calendar_sync.infrastructure.security import CredentialCipher
 from tests.helpers import NOW, endpoint, event, rule, week_start
 
 
@@ -427,6 +432,46 @@ def test_rule_purge_deletes_its_audit_entries_and_incidents_but_no_other_rules(
     with sqlite3.connect(database) as connection:
         for table in ("audit_entries", "incidents"):
             assert connection.execute(f"SELECT rule_id FROM {table}").fetchall() == [("rule-2",)]
+
+
+def test_account_deletion_holds_the_write_lock_so_reauthorization_waits_for_it(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    disconnected = store.save("Personal", "person@example.test", "{}")
+    store.disconnect(disconnected.id)
+    connected = store.save("Work", "work@example.test", "{}")
+    factory = SqliteUnitOfWorkFactory(database)
+    reauthorize = Thread(target=store.save, args=("Personal", "person@example.test", "{}"))
+
+    with factory() as uow:
+        assert uow.accounts.delete_disconnected(connected.id) is False
+        assert uow.accounts.delete_disconnected(disconnected.id) is True
+        reauthorize.start()
+        reauthorize.join(0.2)
+        waited_for_deletion = reauthorize.is_alive()
+        uow.commit()
+    reauthorize.join(2)
+
+    assert waited_for_deletion
+    # Reauthorizing after the deletion connects the identity afresh.
+    assert {account.email: account.id for account in store.list()}["work@example.test"] == (
+        connected.id
+    )
+    assert store.get(disconnected.id) is None
+
+
+def test_account_records_report_state_inside_the_unit_of_work(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    account = store.save("Work", "work@example.test", "{}")
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        assert uow.accounts.state(account.id) is ConnectedAccountState.CONNECTED
+        assert uow.accounts.state(ConnectedAccountId("missing")) is None
 
 
 def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:

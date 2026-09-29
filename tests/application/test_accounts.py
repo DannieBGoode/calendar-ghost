@@ -42,7 +42,6 @@ def _rule(rule_id: str, account: str) -> SyncRule:
 class RecordingAccounts:
     def __init__(self, *accounts: ConnectedAccount) -> None:
         self.accounts = {account.id: account for account in accounts}
-        self.deleted: list[ConnectedAccountId] = []
 
     def list(self) -> tuple[ConnectedAccount, ...]:
         return tuple(self.accounts.values())
@@ -62,10 +61,6 @@ class RecordingAccounts:
     def get(self, account_id: ConnectedAccountId) -> ConnectedAccount | None:
         return self.accounts.get(account_id)
 
-    def delete(self, account_id: ConnectedAccountId) -> None:
-        del self.accounts[account_id]
-        self.deleted.append(account_id)
-
 
 def _with_rules(*rules: SyncRule) -> InMemoryUnitOfWorkFactory:
     unit_of_work = InMemoryUnitOfWorkFactory()
@@ -76,10 +71,14 @@ def _with_rules(*rules: SyncRule) -> InMemoryUnitOfWorkFactory:
     return unit_of_work
 
 
-def _use_case(*rules: SyncRule) -> tuple[DeleteConnectedAccount, RecordingAccounts, RuleLocks]:
-    accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
+def _deletion(
+    *rules: SyncRule, state: ConnectedAccountState | None = ConnectedAccountState.DISCONNECTED
+) -> tuple[DeleteConnectedAccount, InMemoryUnitOfWorkFactory, RuleLocks]:
+    unit_of_work = _with_rules(*rules)
+    if state is not None:
+        unit_of_work.state.accounts[ACCOUNT] = state
     locks = RuleLocks()
-    return DeleteConnectedAccount(_with_rules(*rules), accounts, locks), accounts, locks
+    return DeleteConnectedAccount(unit_of_work, locks), unit_of_work, locks
 
 
 def _blocked_while_held(lock: Lock, delete: Callable[[], object]) -> bool:
@@ -96,12 +95,12 @@ def _blocked_while_held(lock: Lock, delete: Callable[[], object]) -> bool:
 
 def test_deletion_waits_for_an_in_flight_run_of_an_affected_rule() -> None:
     affected = _rule("affected", ACCOUNT.value)
-    delete, accounts, locks = _use_case(affected)
+    delete, unit_of_work, locks = _deletion(affected)
 
     blocked = _blocked_while_held(locks.for_rule(affected.id), lambda: delete.execute(ACCOUNT))
 
     assert blocked
-    assert accounts.deleted == [ACCOUNT]
+    assert ACCOUNT not in unit_of_work.state.accounts
 
 
 def test_deletion_waits_for_an_in_flight_write_of_an_affected_rule() -> None:
@@ -109,22 +108,22 @@ def test_deletion_waits_for_an_in_flight_write_of_an_affected_rule() -> None:
     affected = SyncRule(
         affected.id, affected.source, endpoint(ACCOUNT.value, "destination"), state=affected.state
     )
-    delete, accounts, locks = _use_case(affected)
+    delete, unit_of_work, locks = _deletion(affected)
 
     blocked = _blocked_while_held(locks.for_writes(affected.id), lambda: delete.execute(ACCOUNT))
 
     assert blocked
-    assert accounts.deleted == [ACCOUNT]
+    assert ACCOUNT not in unit_of_work.state.accounts
 
 
 def test_deletion_does_not_wait_for_rules_of_other_accounts() -> None:
     unrelated = _rule("unrelated", "other")
-    delete, accounts, locks = _use_case(unrelated)
+    delete, unit_of_work, locks = _deletion(unrelated)
 
     blocked = _blocked_while_held(locks.for_rule(unrelated.id), lambda: delete.execute(ACCOUNT))
 
     assert not blocked
-    assert accounts.deleted == [ACCOUNT]
+    assert ACCOUNT not in unit_of_work.state.accounts
 
 
 def _account(
@@ -202,44 +201,40 @@ def test_disconnecting_waits_for_an_in_flight_write_of_an_affected_rule() -> Non
 def test_deletion_purges_every_rule_using_the_account_and_then_the_account() -> None:
     affected = _rule("affected", ACCOUNT.value)
     unrelated = _rule("unrelated", "other")
-    unit_of_work = _with_rules(affected, unrelated)
+    delete, unit_of_work, _ = _deletion(affected, unrelated)
     with unit_of_work() as uow:
         for recorded in (affected, unrelated):
             uow.audit.append(
                 AuditEntry(NOW, recorded.id, AuditAction.CREATE, AuditOutcome.COMPLETED)
             )
         uow.commit()
-    accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
 
-    deleted = DeleteConnectedAccount(unit_of_work, accounts, RuleLocks()).execute(ACCOUNT)
+    deleted = delete.execute(ACCOUNT)
 
     assert deleted == 1
-    assert accounts.deleted == [ACCOUNT]
+    assert ACCOUNT not in unit_of_work.state.accounts
     assert list(unit_of_work.state.rules) == [unrelated.id]
     assert [entry.rule_id for entry in unit_of_work.state.audit] == [unrelated.id]
 
 
 def test_deletion_is_refused_for_a_connected_or_unknown_account() -> None:
     affected = _rule("affected", ACCOUNT.value)
-    unit_of_work = _with_rules(affected)
-    connected = RecordingAccounts(_account())
+    connected, unit_of_work, _ = _deletion(affected, state=ConnectedAccountState.CONNECTED)
+    unknown, _, _ = _deletion(affected, state=None)
 
     with pytest.raises(ConnectedAccountMustBeDisconnected):
-        DeleteConnectedAccount(unit_of_work, connected, RuleLocks()).execute(ACCOUNT)
+        connected.execute(ACCOUNT)
     with pytest.raises(ConnectedAccountNotFound):
-        DeleteConnectedAccount(unit_of_work, RecordingAccounts(), RuleLocks()).execute(ACCOUNT)
+        unknown.execute(ACCOUNT)
 
-    assert connected.deleted == []
+    assert unit_of_work.state.accounts == {ACCOUNT: ConnectedAccountState.CONNECTED}
     assert list(unit_of_work.state.rules) == [affected.id]
 
 
 def test_deletion_also_locks_and_purges_a_rule_created_while_it_waited() -> None:
     affected = _rule("affected", ACCOUNT.value)
     late = _rule("late", ACCOUNT.value)
-    unit_of_work = _with_rules(affected)
-    accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
-    locks = RuleLocks()
-    delete = DeleteConnectedAccount(unit_of_work, accounts, locks)
+    delete, unit_of_work, locks = _deletion(affected)
     running = locks.for_rule(affected.id)
     running.acquire()
     worker = Thread(target=delete.execute, args=(ACCOUNT,))
@@ -258,19 +253,17 @@ def test_deletion_also_locks_and_purges_a_rule_created_while_it_waited() -> None
 
     assert waited_for_the_late_rule
     assert unit_of_work.state.rules == {}
-    assert accounts.deleted == [ACCOUNT]
+    assert ACCOUNT not in unit_of_work.state.accounts
 
 
 def test_deletion_is_refused_when_the_account_is_reauthorized_while_it_waited() -> None:
     affected = _rule("affected", ACCOUNT.value)
-    unit_of_work = _with_rules(affected)
-    accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
-    locks = RuleLocks()
+    deletion, unit_of_work, locks = _deletion(affected)
     errors: list[Exception] = []
 
     def delete() -> None:
         try:
-            DeleteConnectedAccount(unit_of_work, accounts, locks).execute(ACCOUNT)
+            deletion.execute(ACCOUNT)
         except ConnectedAccountMustBeDisconnected as error:
             errors.append(error)
 
@@ -279,10 +272,10 @@ def test_deletion_is_refused_when_the_account_is_reauthorized_while_it_waited() 
     worker = Thread(target=delete)
     worker.start()
     worker.join(0.1)
-    accounts.accounts[ACCOUNT] = _account()
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     running.release()
     worker.join(2)
 
     assert len(errors) == 1
-    assert accounts.deleted == []
+    assert unit_of_work.state.accounts == {ACCOUNT: ConnectedAccountState.CONNECTED}
     assert list(unit_of_work.state.rules) == [affected.id]

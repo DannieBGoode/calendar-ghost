@@ -132,10 +132,6 @@ class SqliteConnectedAccountStore:
             _optional_text(row["avatar_url"]),
         )
 
-    def delete(self, account_id: ConnectedAccountId) -> None:
-        with self._connect() as connection:
-            connection.execute("DELETE FROM connected_accounts WHERE id = ?", (account_id.value,))
-
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._database_path)
         connection.row_factory = sqlite3.Row

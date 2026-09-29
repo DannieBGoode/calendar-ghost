@@ -345,7 +345,22 @@ class RulePreviewRepository(Protocol):
     def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None: ...
 
 
+class ConnectedAccountRecords(Protocol):
+    """Connected Account records inside a unit of work, without their credentials."""
+
+    def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None: ...
+
+    def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
+        """Delete the account if it is disconnected; whether it was.
+
+        Once this deletes, no other writer can change the installation until the unit of work
+        ends, so a reauthorization or new rule cannot slip in before it commits.
+        """
+        ...
+
+
 class UnitOfWork(Protocol):
+    accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
@@ -464,10 +479,6 @@ class ConnectedAccountRepository(AccountAuthorizations, Protocol):
 
     def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
         """Discard the account's credentials, keeping its identity for Reauthorization."""
-        ...
-
-    def delete(self, account_id: ConnectedAccountId) -> None:
-        """Delete the account record only; its rules are the caller's to delete first."""
         ...
 
 

@@ -50,7 +50,9 @@ class DisconnectConnectedAccount:
     def execute(self, account_id: ConnectedAccountId) -> ConnectedAccountSummary:
         if not any(account.id == account_id for account in self.accounts.list()):
             raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
-        for rule_id in _affected_rules(self.unit_of_work, account_id):
+        with self.unit_of_work() as uow:
+            affected = _affected_rules(uow.rules.list(), account_id)
+        for rule_id in affected:
             # Waiting for an in-flight write means none happens with the account once degraded.
             with self.locks.for_writes(rule_id), self.unit_of_work() as uow:
                 rule = uow.rules.get(rule_id)
@@ -70,16 +72,17 @@ class DeleteConnectedAccount:
     The rules go with their mappings, cursors, incidents, and audit activity. Their Managed
     Projections stay in Google, no longer managed. Every affected rule is locked first, as Rule
     Removal locks its rule, so no run, write, or lifecycle change of those rules is in flight
-    while their records are deleted.
+    while their records are deleted. The state check, the rules it selects, and every deletion
+    commit in one transaction, so a reauthorization or a new rule cannot interleave with them.
     """
 
     unit_of_work: UnitOfWorkFactory
-    accounts: ConnectedAccountRepository
     locks: RuleLocks
 
     def execute(self, account_id: ConnectedAccountId) -> int:
-        self._require_disconnected(account_id)
-        affected = _affected_rules(self.unit_of_work, account_id)
+        with self.unit_of_work() as uow:
+            _require_disconnected(uow.accounts.state(account_id), account_id)
+            affected = _affected_rules(uow.rules.list(), account_id)
         while True:
             with ExitStack() as held:
                 # One order for every caller, whole-run locks before write locks, as RuleLocks
@@ -88,37 +91,43 @@ class DeleteConnectedAccount:
                     held.enter_context(self.locks.for_rule(rule_id))
                 for rule_id in affected:
                     held.enter_context(self.locks.for_writes(rule_id))
-                # The account may have been reauthorized, or a rule created for it, while waiting.
-                self._require_disconnected(account_id)
-                current = _affected_rules(self.unit_of_work, account_id)
-                if set(current) <= set(affected):
-                    return self._delete(account_id, current)
-            affected = _ordered({*affected, *current})
+                deleted = self._delete(account_id, affected)
+                if deleted is not None:
+                    return deleted
+            # A rule was created for the account while waiting; lock it as well and try again.
+            with self.unit_of_work() as uow:
+                affected = _ordered({*affected, *_affected_rules(uow.rules.list(), account_id)})
 
-    def _require_disconnected(self, account_id: ConnectedAccountId) -> None:
-        account = self.accounts.get(account_id)
-        if account is None:
-            raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
-        if account.state is not ConnectedAccountState.DISCONNECTED:
-            raise ConnectedAccountMustBeDisconnected(
-                "disconnect this Google account before deleting it permanently"
-            )
-
-    def _delete(self, account_id: ConnectedAccountId, rules: Sequence[SyncRuleId]) -> int:
+    def _delete(self, account_id: ConnectedAccountId, locked: Sequence[SyncRuleId]) -> int | None:
+        """Delete everything in one transaction; `None`, with nothing deleted, to retry."""
         with self.unit_of_work() as uow:
+            # Deleting first holds the database's write lock for the rest of the transaction.
+            if not uow.accounts.delete_disconnected(account_id):
+                # Reauthorized, or deleted by another request, while waiting for the locks.
+                _require_disconnected(uow.accounts.state(account_id), account_id)
+            rules = _affected_rules(uow.rules.list(), account_id)
+            if not set(rules) <= set(locked):
+                return None
             for rule_id in rules:
                 uow.rules.purge(rule_id)
             uow.commit()
-        # Last, so an interrupted deletion leaves a Disconnected Account to delete again.
-        self.accounts.delete(account_id)
         return len(rules)
 
 
+def _require_disconnected(
+    state: ConnectedAccountState | None, account_id: ConnectedAccountId
+) -> None:
+    if state is None:
+        raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
+    if state is not ConnectedAccountState.DISCONNECTED:
+        raise ConnectedAccountMustBeDisconnected(
+            "disconnect this Google account before deleting it permanently"
+        )
+
+
 def _affected_rules(
-    unit_of_work: UnitOfWorkFactory, account_id: ConnectedAccountId
+    rules: Sequence[SyncRule], account_id: ConnectedAccountId
 ) -> tuple[SyncRuleId, ...]:
-    with unit_of_work() as uow:
-        rules = uow.rules.list()
     return _ordered(rule.id for rule in rules if _uses_account(rule, account_id))
 
 

@@ -42,7 +42,7 @@ state-protected OAuth flow, configured by an `OAuthClientConfig` value that boot
 Settings. Connected Accounts and their credentials, encrypted by the `CredentialCipher` in
 `infrastructure/security.py`, live in `infrastructure/persistence/accounts.py`, which implements the
 `ConnectedAccountRepository` port. Deleting an account and its rules is the `DeleteConnectedAccount`
-use case; the adapters only delete their own records.
+use case, which deletes both in one unit of work; the adapters only delete their own records.
 
 Rule health follows the same direction. `application/health.py` holds the `RuleHealthPolicy`: which
 failures require intervention and degrade the rule, the three-failure Provider Incident threshold,

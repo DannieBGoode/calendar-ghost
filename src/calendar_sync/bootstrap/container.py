@@ -253,7 +253,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             DisconnectConnectedAccount(unit_of_work, accounts, locks) if accounts else None
         ),
         delete_connected_account=(
-            DeleteConnectedAccount(unit_of_work, accounts, locks) if accounts else None
+            DeleteConnectedAccount(unit_of_work, locks) if accounts else None
         ),
         authorization=adapters.google_oauth,
         account_calendars=adapters.google_oauth,

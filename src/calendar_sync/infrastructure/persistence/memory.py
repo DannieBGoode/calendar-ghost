@@ -8,6 +8,8 @@ from typing import Self
 from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
+    ConnectedAccountRecords,
+    ConnectedAccountState,
     EventMappingRepository,
     ExceptionReplayRepository,
     OccurrenceMappingRepository,
@@ -22,6 +24,7 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.domain.model import (
     CalendarEndpoint,
+    ConnectedAccountId,
     EventMapping,
     EventMappingId,
     EventRef,
@@ -34,6 +37,7 @@ from calendar_sync.domain.model import (
 
 @dataclass(slots=True)
 class MemoryState:
+    accounts: dict[ConnectedAccountId, ConnectedAccountState] = field(default_factory=dict)
     rules: dict[SyncRuleId, SyncRule] = field(default_factory=dict)
     mappings: dict[tuple[SyncRuleId, EventRef], EventMapping] = field(default_factory=dict)
     occurrences: dict[tuple[EventMappingId, OccurrenceStart], OccurrenceMapping] = field(
@@ -45,6 +49,20 @@ class MemoryState:
     audit: list[AuditEntry] = field(default_factory=list)
     outcomes: dict[tuple[SyncRuleId, RunKind], RuleRunOutcome] = field(default_factory=dict)
     previews: dict[SyncRuleId, RulePreviewSummary] = field(default_factory=dict)
+
+
+class InMemoryConnectedAccountRecords:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None:
+        return self._state.accounts.get(account_id)
+
+    def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
+        if self._state.accounts.get(account_id) is not ConnectedAccountState.DISCONNECTED:
+            return False
+        del self._state.accounts[account_id]
+        return True
 
 
 class InMemorySyncRuleRepository:
@@ -253,6 +271,7 @@ class InMemoryRulePreviewRepository:
 
 
 class InMemoryUnitOfWork:
+    accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
@@ -270,6 +289,7 @@ class InMemoryUnitOfWork:
 
     def __enter__(self) -> Self:
         self._working = deepcopy(self._target)
+        self.accounts = InMemoryConnectedAccountRecords(self._working)
         self.rules = InMemorySyncRuleRepository(self._working)
         self.mappings = InMemoryEventMappingRepository(self._working)
         self.occurrences = InMemoryOccurrenceMappingRepository(self._working)
@@ -291,6 +311,7 @@ class InMemoryUnitOfWork:
 
     def commit(self) -> None:
         assert self._working is not None
+        self._target.accounts = self._working.accounts
         self._target.rules = self._working.rules
         self._target.mappings = self._working.mappings
         self._target.occurrences = self._working.occurrences

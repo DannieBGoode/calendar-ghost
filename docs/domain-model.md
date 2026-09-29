@@ -75,6 +75,6 @@ the account and every Directional Sync Rule that references it, including those 
 Mappings, cursors, incidents, and audit activity. It does not issue provider writes: existing
 Managed Projections remain in Google Calendar but are no longer managed.
 Deletion first waits for any run, provider write, or lifecycle change of each affected rule to
-finish, as Rule Removal does, so no in-flight work outlives the records it depends on. The rules
-are deleted before the account, so an interrupted deletion leaves a Disconnected Account that can
-be deleted again.
+finish, as Rule Removal does, so no in-flight work outlives the records it depends on. The account
+and its rules are then deleted in one transaction that also rechecks the account is disconnected,
+so a reauthorization or a new rule for the account cannot interleave with it.
