@@ -336,13 +336,13 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def delete_account(account_id: str) -> None:
-        if resolved.connected_accounts is None:
+        if resolved.delete_connected_account is None:
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "configure the installation master key before managing Google accounts",
             )
         try:
-            resolved.connected_accounts.delete(ConnectedAccountId(account_id))
+            resolved.delete_connected_account.execute(ConnectedAccountId(account_id))
         except ConnectedGoogleAccountNotFound as error:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
         except ConnectedGoogleAccountMustBeDisconnected as error:

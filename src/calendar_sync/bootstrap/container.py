@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from calendar_sync.application.accounts import DeleteConnectedAccount
 from calendar_sync.application.activity import ActivityQueries, OperationsQueries
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import CalendarProvider, UnitOfWorkFactory
@@ -61,6 +62,7 @@ class Container:
     activity: ActivityQueries
     operations: OperationsQueries
     connected_accounts: SqliteConnectedAccountStore | None
+    delete_connected_account: DeleteConnectedAccount | None
     google_oauth: GoogleOAuthService | None
     calendar_provider: CalendarProvider | None
     execute_sync_rule: ExecuteSyncRule | None
@@ -156,6 +158,9 @@ def build_container(settings: Settings | None = None) -> Container:
         activity=SqliteActivityQueries(resolved.database_path),
         operations=SqliteOperationsQueries(resolved.database_path),
         connected_accounts=accounts,
+        delete_connected_account=(
+            DeleteConnectedAccount(unit_of_work, accounts, rule_locks) if accounts else None
+        ),
         google_oauth=google_oauth,
         calendar_provider=provider,
         execute_sync_rule=execute_sync_rule,

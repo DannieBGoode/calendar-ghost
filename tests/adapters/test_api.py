@@ -570,6 +570,53 @@ def test_disconnected_account_without_rules_can_be_permanently_deleted(tmp_path:
     assert container.connected_accounts.list() == ()
 
 
+def test_account_deletion_waits_for_an_in_flight_run_of_an_affected_rule(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    container = replace(
+        build_container(Settings(database, master_key=CredentialCipher.generate_key())),
+        scheduler=None,
+    )
+    assert container.connected_accounts is not None
+    account = container.connected_accounts.save(
+        "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
+    )
+    container.connected_accounts.disconnect(account.id)
+    with container.unit_of_work() as uow:
+        uow.rules.add(
+            SyncRule(
+                rule().id,
+                endpoint(account.id.value, "personal-calendar"),
+                endpoint("work", "work-calendar"),
+                state=SyncRuleState.DEGRADED,
+            )
+        )
+        uow.commit()
+    responses: list[int] = []
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        running = container.rule_locks.for_rule(rule().id)
+        running.acquire()
+        worker = Thread(
+            target=lambda: responses.append(
+                client.delete(f"/api/v1/accounts/{account.id.value}").status_code
+            )
+        )
+        worker.start()
+        worker.join(0.2)
+        blocked_while_running = worker.is_alive()
+        with container.unit_of_work() as uow:
+            kept_while_running = uow.rules.get(rule().id) is not None
+        running.release()
+        worker.join(2)
+
+    assert blocked_while_running
+    assert kept_while_running
+    assert responses == [204]
+    with container.unit_of_work() as uow:
+        assert uow.rules.get(rule().id) is None
+
+
 def test_connected_account_access_can_be_verified(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

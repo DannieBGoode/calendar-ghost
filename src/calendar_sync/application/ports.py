@@ -332,3 +332,9 @@ class RemovalIncidents(Protocol):
     def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
         """Open or refresh the one Incident for a removal stopped by lost authorization."""
         ...
+
+
+class ConnectedAccountDeletion(Protocol):
+    def delete(self, account_id: ConnectedAccountId) -> int:
+        """Delete a Disconnected Account with its rules, their incidents and audit entries."""
+        ...
