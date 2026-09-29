@@ -519,6 +519,7 @@ function ActivityTableRow({
   onToggleRun: () => void
   onLoadMore: () => void
 }) {
+  const toggleRef = useRef<HTMLButtonElement>(null)
   if (row.kind === "folded") {
     const label = row.expanded
       ? `Hide ${row.count} no-change ${row.count === 1 ? "check" : "checks"}`
@@ -528,19 +529,28 @@ function ActivityTableRow({
         <td role="cell" className="activity-col-time" />
         <td role="cell" colSpan={showRuleColumn ? 3 : 2}>
           <div className="activity-fold-actions">
-            <button type="button" className="activity-fold" aria-expanded={row.expanded} onClick={onToggleRun}>
+            <button
+              ref={toggleRef}
+              type="button"
+              className="activity-fold"
+              aria-expanded={row.expanded}
+              onClick={onToggleRun}
+            >
               <Check aria-hidden="true" />
               {label}
               <ChevronDown aria-hidden="true" data-open={row.expanded} />
             </button>
-            {/* The button stays while loading so keyboard focus is not lost; the status says why. */}
+            {/* Show more goes away once every check is loaded, so focus moves to the fold toggle
+                beside it first and is never lost; the status says what is loading. */}
             {row.more && (
               <button
                 type="button"
                 className="activity-fold"
                 aria-disabled={loadingChecks || undefined}
                 onClick={() => {
-                  if (!loadingChecks) onLoadMore()
+                  if (loadingChecks) return
+                  toggleRef.current?.focus()
+                  onLoadMore()
                 }}
               >
                 Show more
