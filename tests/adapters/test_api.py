@@ -1551,6 +1551,7 @@ def test_activity_keeps_an_observed_empty_title_but_names_untitled_cancellations
         _audit("update", "source_changed", event=RecordedEvent.of(event(title=""))),
         _audit("ignore", "projection_current", event=RecordedEvent.of(event(title=""))),
         _audit("delete", "source_cancelled", event=RecordedEvent(title="", cancelled=True)),
+        _audit("update", "source_changed", event=RecordedEvent.of(event(title="Dentist"))),
         _audit("update", "occurrence_changed", source_event_id="occurrence", event=offsite),
         _audit(
             "delete",
@@ -1575,10 +1576,11 @@ def test_activity_keeps_an_observed_empty_title_but_names_untitled_cancellations
         2: ("", "Dentist", False),
         3: ("", None, False),
         4: ("", None, True),
-        5: ("Offsite", None, False),
-        6: ("Offsite", None, True),
+        5: ("Dentist", "", False),
+        6: ("Offsite", None, False),
+        7: ("Offsite", None, True),
     }
-    assert entries[6]["starts"] == entries[5]["starts"]
+    assert entries[7]["starts"] == entries[6]["starts"]
 
 
 def test_activity_does_not_carry_names_across_rules(tmp_path: Path) -> None:

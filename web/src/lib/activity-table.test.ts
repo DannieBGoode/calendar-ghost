@@ -160,6 +160,10 @@ describe("event cells", () => {
       title: "Dentist (moved)",
       note: "Renamed from “Dentist”",
     })
+    expect(eventCell(entry({ event: recorded({ renamed_from: "" }) }), names)).toMatchObject({
+      title: "Dentist",
+      note: "Renamed from “(No title)”",
+    })
   })
 
   it("keeps the title of a cancelled event and says it was cancelled", () => {

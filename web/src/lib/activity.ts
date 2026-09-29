@@ -359,7 +359,8 @@ export function eventCell(entry: Pick<AuditEntry, "source_event_id" | "event">, 
     title: event.title || "(No title)",
     when,
     recurring: event.recurring,
-    ...(event.renamed_from ? { note: `Renamed from “${event.renamed_from}”` } : {}),
+    // An empty former title is a real one: the event was untitled before.
+    ...(event.renamed_from !== null ? { note: `Renamed from “${event.renamed_from || "(No title)"}”` } : {}),
   }
 }
 

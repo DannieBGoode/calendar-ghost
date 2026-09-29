@@ -1073,7 +1073,7 @@ def _recorded_event(row: sqlite3.Row, previous: sqlite3.Row | None) -> RecordedE
         recurring=any(bool(item["event_recurring"]) for item in (own, previous) if item),
         cancelled=cancelled,
         renamed_from=earlier
-        if observed and not cancelled and earlier and earlier != title
+        if observed and not cancelled and earlier is not None and earlier != title
         else None,
     )
 
