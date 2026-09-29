@@ -291,7 +291,7 @@ def test_blocked_removal_opens_one_incident_that_completed_removal_resolves(
     initialize_database(database)
     unit_of_work = SqliteUnitOfWorkFactory(database)
     with unit_of_work() as uow:
-        uow.rules.add(rule(state=SyncRuleState.DISABLED))
+        uow.rules.add(rule(state=SyncRuleState.REMOVING))
         uow.commit()
     channel = RecordingChannel()
     health = _rule_health(database, unit_of_work, IncidentNotifier([channel]))

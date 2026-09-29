@@ -217,7 +217,7 @@ def test_interrupted_delete_leaves_rule_inert_and_retry_completes() -> None:
 
     assert (interrupted.value.processed, interrupted.value.remaining) == (1, 2)
     assert "retry" in str(interrupted.value)
-    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DISABLED
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.REMOVING
     assert len(unit_of_work.state.mappings) == 2
 
     result = _remover(unit_of_work).execute(rule().id, ProjectionHandling.DETACH)
@@ -350,7 +350,7 @@ def test_interrupted_replacement_keeps_the_new_draft_and_a_retryable_old_rule() 
     assert interrupted.value.replacement_rule_id == SyncRuleId("replacement-rule")
     assert "retry" in str(interrupted.value)
     assert unit_of_work.state.rules[SyncRuleId("replacement-rule")].state is SyncRuleState.DRAFT
-    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DISABLED
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.REMOVING
 
 
 def _synced_series() -> tuple[FakeCalendars, InMemoryUnitOfWorkFactory, EventRef]:
@@ -574,7 +574,7 @@ def test_exhausted_temporary_retries_interrupt_without_an_incident() -> None:
     assert (interrupted.value.processed, interrupted.value.remaining) == (1, 1)
     assert len(sleeps.delays) == 2
     assert incidents.blocked == []
-    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DISABLED
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.REMOVING
     assert len(unit_of_work.state.mappings) == 1
 
 
@@ -597,7 +597,7 @@ def test_authorization_failure_stops_at_once_and_opens_an_incident(
     assert len(provider.attempts) == 1
     assert sleeps.delays == []
     assert incidents.blocked == [(rule().id, kind)]
-    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DISABLED
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.REMOVING
     assert len(unit_of_work.state.mappings) == 2
 
 

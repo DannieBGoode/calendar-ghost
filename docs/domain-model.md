@@ -57,13 +57,13 @@ Draft -> Previewed ----> Enabled -> Paused
              |              |
              -> Degraded <--|
 
-any state -> Disabled (Rule Removal incomplete) -> removed
+any state -> Removing (Rule Removal incomplete) -> removed
 ```
 
 Only a successfully previewed configuration can become Enabled. An Enabled Rule can be Paused from
 the Web UI. A Material Rule Change returns Enabled and Paused rules to Paused, Draft and
 Previewed rules to Draft, and keeps Degraded rules Degraded, so the rule must pass a new
-preview. Rule Removal first moves the rule to Disabled, which cannot synchronize, preview, change
+preview. Rule Removal first moves the rule to Removing, which cannot synchronize, preview, change
 policy, or enable; the rule is deleted once every mapping is deleted, detached, or left in place
 because its ownership could not be verified, and a failed removal can be retried in either mode. Disconnecting an account moves affected Enabled and Previewed rules to Degraded,
 preventing a previously validated rule from being enabled without authorization. A Degraded Rule

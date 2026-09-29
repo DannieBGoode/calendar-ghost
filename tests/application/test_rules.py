@@ -60,7 +60,7 @@ def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
 
 def test_policy_change_is_blocked_for_missing_or_removing_rules() -> None:
     unit_of_work = InMemoryUnitOfWorkFactory()
-    unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.DISABLED)
+    unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.REMOVING)
     use_case = ChangeSyncRulePolicy(unit_of_work, FixedClock())
 
     with pytest.raises(RuleNotFound):

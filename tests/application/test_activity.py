@@ -91,7 +91,7 @@ def test_dashboard_is_healthy_without_incidents_or_stopped_rules() -> None:
 
 @pytest.mark.parametrize(
     ("states", "incidents"),
-    [((SyncRuleState.DEGRADED,), 0), ((SyncRuleState.DISABLED,), 0), ((), 1)],
+    [((SyncRuleState.DEGRADED,), 0), ((SyncRuleState.REMOVING,), 0), ((), 1)],
 )
 def test_dashboard_needs_attention_for_stopped_rules_or_open_incidents(
     states: tuple[SyncRuleState, ...], incidents: int

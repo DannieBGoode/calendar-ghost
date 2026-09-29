@@ -120,7 +120,7 @@ def test_policy_change_preserves_endpoints_and_lookback() -> None:
 
 def test_rule_with_incomplete_removal_cannot_change_policy() -> None:
     with pytest.raises(InvalidStateTransition):
-        rule(state=SyncRuleState.DISABLED).change_policy(DETAILS)
+        rule(state=SyncRuleState.REMOVING).change_policy(DETAILS)
 
 
 def test_changed_rule_cannot_be_enabled_until_previewed_again() -> None:
@@ -141,7 +141,7 @@ def test_completed_reprojection_clears_the_flag() -> None:
 def test_removal_can_begin_from_every_state_and_is_inert(state: SyncRuleState) -> None:
     removing = rule(state=state).begin_removal()
 
-    assert removing.state is SyncRuleState.DISABLED
+    assert removing.state is SyncRuleState.REMOVING
     with pytest.raises(InvalidStateTransition):
         removing.enable()
     with pytest.raises(InvalidStateTransition):

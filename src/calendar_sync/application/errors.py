@@ -78,7 +78,7 @@ class ProjectionOwnershipMismatch(ProviderFailure):
 
 @dataclass(frozen=True, slots=True)
 class RemovalInterrupted(ApplicationError):
-    """Rule Removal stopped partway; the rule stays Disabled with its remaining mappings."""
+    """Rule Removal stopped partway; the rule stays in Removing with its remaining mappings."""
 
     processed: int
     remaining: int

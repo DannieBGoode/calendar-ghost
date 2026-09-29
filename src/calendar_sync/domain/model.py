@@ -177,7 +177,7 @@ class SyncRuleState(StrEnum):
     ENABLED = "enabled"
     PAUSED = "paused"
     DEGRADED = "degraded"
-    DISABLED = "disabled"
+    REMOVING = "disabled"
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,7 +301,7 @@ class SyncRule:
 
     def change_policy(self, transformation: TransformationPolicy) -> Self:
         """Apply a Material Rule Change; the rule must pass a new Rule Preview afterwards."""
-        if self.state is SyncRuleState.DISABLED:
+        if self.state is SyncRuleState.REMOVING:
             raise InvalidStateTransition("cannot change a rule while its removal is incomplete")
         if transformation == self.transformation:
             return self
@@ -317,8 +317,8 @@ class SyncRule:
         return replace(self, reprojection_required=False)
 
     def begin_removal(self) -> Self:
-        """Disabled marks a Rule Removal that started and has not finished."""
-        return replace(self, state=SyncRuleState.DISABLED)
+        """Removing marks a Rule Removal that started and has not finished."""
+        return replace(self, state=SyncRuleState.REMOVING)
 
 
 @dataclass(frozen=True, slots=True)
