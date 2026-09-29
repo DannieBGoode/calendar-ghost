@@ -1,5 +1,5 @@
 import { activitySearch } from "@/lib/activity-location"
-import type { Dashboard } from "@/lib/api"
+import type { Dashboard, RunningWork } from "@/lib/api"
 import type { AppView } from "@/lib/navigation"
 import { relativeTime } from "@/lib/relative-time"
 
@@ -31,6 +31,19 @@ export function withoutRunningRemovals(
     stopped_rules: stopped,
     health: stopped === 0 && dashboard.open_incidents === 0 ? "healthy" : dashboard.health,
   }
+}
+
+/**
+ * The rules the Overview lists: those working right now first, then enabled ones, the rest in
+ * their order. Sorting precedes the limit so running work is never cut off.
+ */
+export function overviewRules<T extends { id: string; state: string; running: RunningWork | null }>(
+  rules: T[],
+  removing: ReadonlySet<string>,
+  limit: number,
+): T[] {
+  const rank = (rule: T) => (rule.running || removing.has(rule.id) ? 0 : rule.state === "enabled" ? 1 : 2)
+  return [...rules].sort((a, b) => rank(a) - rank(b)).slice(0, limit)
 }
 
 /** The rule an attention state is about, so the Overview can name it and link straight to it. */

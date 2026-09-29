@@ -27,7 +27,7 @@ import {
   type OpenRule,
   type ViewChange,
 } from "@/lib/navigation"
-import { overviewHealth, withoutRunningRemovals, type AttentionRule } from "@/lib/overview-health"
+import { overviewHealth, overviewRules, withoutRunningRemovals, type AttentionRule } from "@/lib/overview-health"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
@@ -310,11 +310,8 @@ function OverviewRules({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
-  // Rules that are running lead; the rest keep their order.
-  const shown = [...rules]
-    .sort((a, b) => Number(b.state === "enabled") - Number(a.state === "enabled"))
-    .slice(0, OVERVIEW_RULE_LIMIT)
   const removingIds = useRemovingRuleIds(rules)
+  const shown = overviewRules(rules, removingIds, OVERVIEW_RULE_LIMIT)
   return (
     <section className="workflow" aria-labelledby="overview-rules-title">
       <div className="section-heading section-heading-inline">
