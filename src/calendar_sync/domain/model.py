@@ -152,9 +152,11 @@ class EventStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class PrivacyPolicy(StrEnum):
+class ProjectionContent(StrEnum):
+    """Whether a rule writes Busy-Only or Details Projections; stored and sent as privacy_policy."""
+
     BUSY_ONLY = "busy_only"
-    COPY_DETAILS = "copy_details"
+    DETAILS = "copy_details"
 
 
 class AllDaySyncPolicy(StrEnum):
@@ -180,12 +182,12 @@ class SyncRuleState(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class TransformationPolicy:
-    privacy: PrivacyPolicy = PrivacyPolicy.BUSY_ONLY
+    content: ProjectionContent = ProjectionContent.BUSY_ONLY
     all_day: AllDaySyncPolicy = AllDaySyncPolicy.INCLUDE
     busy_title: str = "Busy"
 
     def __post_init__(self) -> None:
-        if self.privacy is PrivacyPolicy.BUSY_ONLY:
+        if self.content is ProjectionContent.BUSY_ONLY:
             _require_non_empty(self.busy_title, "busy title")
 
     @property

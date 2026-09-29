@@ -26,7 +26,7 @@ from calendar_sync.application.removal import RemovalResult, RemoveSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEndpoint,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionHandling,
     SyncRule,
     SyncRuleId,
@@ -127,7 +127,7 @@ class ChangeSyncRulePolicy:
     locks: RuleLocks = field(default_factory=RuleLocks)
 
     def execute(
-        self, rule_id: SyncRuleId, privacy: PrivacyPolicy, all_day: AllDaySyncPolicy
+        self, rule_id: SyncRuleId, content: ProjectionContent, all_day: AllDaySyncPolicy
     ) -> SyncRule:
         # Waiting for any in-flight provider write means none happens under the old policy
         # once this returns; the run's next stop check then sees the paused rule.
@@ -136,7 +136,7 @@ class ChangeSyncRulePolicy:
             if rule is None:
                 raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
             changed = rule.change_policy(
-                replace(rule.transformation, privacy=privacy, all_day=all_day)
+                replace(rule.transformation, content=content, all_day=all_day)
             )
             if changed == rule:
                 return rule
@@ -147,7 +147,7 @@ class ChangeSyncRulePolicy:
                     rule_id=rule.id,
                     action=AuditAction.POLICY_CHANGED,
                     outcome=AuditOutcome.COMPLETED,
-                    detail=f"privacy={privacy.value}, all_day={all_day.value}",
+                    detail=f"privacy={content.value}, all_day={all_day.value}",
                 )
             )
             uow.commit()

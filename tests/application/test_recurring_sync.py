@@ -19,7 +19,7 @@ from calendar_sync.domain.model import (
     ManagedOrigin,
     OccurrenceStart,
     OccurrenceState,
-    PrivacyPolicy,
+    ProjectionContent,
     Recurrence,
     SyncAction,
     SyncReason,
@@ -285,7 +285,7 @@ def test_policy_change_leaves_a_dormant_series_without_writes_or_conflicts() -> 
     master, factory = _dormant(calendars)
     writes = list(calendars.writes)
 
-    _change_policy(factory, TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS))
+    _change_policy(factory, TransformationPolicy(content=ProjectionContent.DETAILS))
     result = sync_use_case(factory, calendars).execute(rule().id)
 
     assert calendars.writes == writes
@@ -625,7 +625,7 @@ def test_occurrence_removed_from_its_series_records_no_title_of_its_own() -> Non
 
 
 def test_details_to_busy_change_rewrites_the_master_and_exceptions_outside_the_window() -> None:
-    details = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+    details = TransformationPolicy(content=ProjectionContent.DETAILS)
     calendars = FakeCalendars()
     master = calendars.put(replace(series(), title="Weekly private sync"), starts=STARTS)
     factory = enabled_rule_factory(replace(rule(), transformation=details))
@@ -641,7 +641,7 @@ def test_details_to_busy_change_rewrites_the_master_and_exceptions_outside_the_w
     sync_use_case(factory, calendars).execute(rule().id)
     assert calendars.get_occurrence(destination, early).title == "Old secret"  # type: ignore[union-attr]
 
-    _change_policy(factory, TransformationPolicy(privacy=PrivacyPolicy.BUSY_ONLY))
+    _change_policy(factory, TransformationPolicy(content=ProjectionContent.BUSY_ONLY))
     sync_use_case(factory, calendars).execute(rule().id)
 
     assert calendars.events[destination].title == "Busy"

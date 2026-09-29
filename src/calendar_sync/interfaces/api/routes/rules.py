@@ -38,7 +38,7 @@ from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarId,
     ConnectedAccountId,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionHandling,
     SyncRule,
     SyncRuleId,
@@ -116,7 +116,7 @@ def list_rules(services: Services) -> list[RuleSummaryResponse]:
 )
 def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
     transformation = TransformationPolicy(
-        privacy=_privacy(request.privacy_policy),
+        content=_projection_content(request.privacy_policy),
         all_day=_all_day(request.sync_all_day_events),
     )
     try:
@@ -259,10 +259,10 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
 def change_rule_policy(
     rule_id: str, request: UpdateRulePolicyRequest, services: Services
 ) -> RuleResponse:
-    privacy = _privacy(request.privacy_policy)
+    content = _projection_content(request.privacy_policy)
     all_day = _all_day(request.sync_all_day_events)
     try:
-        rule = services.change_sync_rule_policy.execute(SyncRuleId(rule_id), privacy, all_day)
+        rule = services.change_sync_rule_policy.execute(SyncRuleId(rule_id), content, all_day)
     except RuleNotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except InvalidStateTransition as error:
@@ -358,7 +358,7 @@ def _rule_response(rule: SyncRule) -> RuleResponse:
             connected_account_id=rule.destination.connected_account_id.value,
             calendar_id=rule.destination.calendar_id.value,
         ),
-        privacy_policy=rule.transformation.privacy.value,
+        privacy_policy=rule.transformation.content.value,
         sync_all_day_events=rule.transformation.all_day is AllDaySyncPolicy.INCLUDE,
         state=rule.state.value,
         reprojection_required=rule.reprojection_required,
@@ -369,9 +369,9 @@ def _all_day(sync_all_day_events: bool) -> AllDaySyncPolicy:
     return AllDaySyncPolicy.INCLUDE if sync_all_day_events else AllDaySyncPolicy.EXCLUDE
 
 
-def _privacy(value: str) -> PrivacyPolicy:
+def _projection_content(value: str) -> ProjectionContent:
     try:
-        return PrivacyPolicy(value)
+        return ProjectionContent(value)
     except ValueError as error:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown privacy policy"

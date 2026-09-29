@@ -33,7 +33,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     ManagedOrigin,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     ProjectionHandling,
     SyncRule,
@@ -259,7 +259,7 @@ def test_replacement_rejects_unchanged_calendars() -> None:
 
 def test_replacement_removes_the_rule_and_creates_a_draft_with_the_same_policy() -> None:
     unit_of_work = _with_mappings(1)
-    details = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+    details = TransformationPolicy(content=ProjectionContent.DETAILS)
     unit_of_work.state.rules[rule().id] = replace(rule(), transformation=details)
     new_destination = endpoint("work-account", "other-calendar")
     replace_rule = ReplaceSyncRuleCalendars(

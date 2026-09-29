@@ -18,7 +18,7 @@ from calendar_sync.domain.model import (
     OccurrenceCheck,
     OccurrenceMapping,
     OccurrenceStart,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     ReconciliationDrift,
     ReconciliationReport,
@@ -37,7 +37,7 @@ class EventProjector:
         if event.time is None:
             raise DomainValidationError("cancelled events cannot be projected")
         policy = rule.transformation
-        if policy.privacy is PrivacyPolicy.BUSY_ONLY:
+        if policy.content is ProjectionContent.BUSY_ONLY:
             title = policy.busy_title
             description = ""
             location = ""

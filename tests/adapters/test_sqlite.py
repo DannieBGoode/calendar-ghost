@@ -31,7 +31,7 @@ from calendar_sync.domain.model import (
     OccurrenceMapping,
     OccurrenceMappingId,
     OccurrenceState,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     SyncReason,
     SyncRule,
@@ -274,7 +274,7 @@ def test_reprojection_flag_round_trips(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     factory = SqliteUnitOfWorkFactory(database)
-    changed = rule().change_policy(TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS))
+    changed = rule().change_policy(TransformationPolicy(content=ProjectionContent.DETAILS))
     with factory() as uow:
         uow.rules.add(rule())
         uow.rules.save(changed)

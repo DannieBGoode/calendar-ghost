@@ -17,7 +17,7 @@ from calendar_sync.domain.model import (
     OccurrenceMapping,
     OccurrenceMappingId,
     OccurrenceState,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     SyncRule,
     SyncRuleId,
@@ -79,7 +79,7 @@ def test_all_day_range_uses_exclusive_end_date() -> None:
         AllDayRange(date(2026, 8, 30), date(2026, 8, 30))
 
 
-DETAILS = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+DETAILS = TransformationPolicy(content=ProjectionContent.DETAILS)
 
 
 @pytest.mark.parametrize(

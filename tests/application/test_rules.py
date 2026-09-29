@@ -20,7 +20,7 @@ from calendar_sync.application.rules import (
 from calendar_sync.domain.errors import InvalidStateTransition
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
-    PrivacyPolicy,
+    ProjectionContent,
     SyncRuleId,
     SyncRuleState,
     TransformationPolicy,
@@ -35,7 +35,7 @@ def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
 
     changed = ChangeSyncRulePolicy(unit_of_work, FixedClock()).execute(
-        rule().id, PrivacyPolicy.COPY_DETAILS, AllDaySyncPolicy.INCLUDE
+        rule().id, ProjectionContent.DETAILS, AllDaySyncPolicy.INCLUDE
     )
 
     stored = unit_of_work.state.rules[rule().id]
@@ -51,7 +51,7 @@ def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
 
     unchanged = ChangeSyncRulePolicy(unit_of_work, FixedClock()).execute(
-        rule().id, PrivacyPolicy.BUSY_ONLY, AllDaySyncPolicy.INCLUDE
+        rule().id, ProjectionContent.BUSY_ONLY, AllDaySyncPolicy.INCLUDE
     )
 
     assert unchanged.state is SyncRuleState.ENABLED
@@ -64,9 +64,11 @@ def test_policy_change_is_blocked_for_missing_or_removing_rules() -> None:
     use_case = ChangeSyncRulePolicy(unit_of_work, FixedClock())
 
     with pytest.raises(RuleNotFound):
-        use_case.execute(SyncRuleId("missing"), PrivacyPolicy.BUSY_ONLY, AllDaySyncPolicy.INCLUDE)
+        use_case.execute(
+            SyncRuleId("missing"), ProjectionContent.BUSY_ONLY, AllDaySyncPolicy.INCLUDE
+        )
     with pytest.raises(InvalidStateTransition):
-        use_case.execute(rule().id, PrivacyPolicy.COPY_DETAILS, AllDaySyncPolicy.INCLUDE)
+        use_case.execute(rule().id, ProjectionContent.DETAILS, AllDaySyncPolicy.INCLUDE)
 
 
 def test_details_report_mapping_count_and_latest_outcomes() -> None:
@@ -94,7 +96,7 @@ def test_policy_change_waits_for_an_in_flight_provider_write() -> None:
     writing.acquire()
     worker = Thread(
         target=change.execute,
-        args=(rule().id, PrivacyPolicy.COPY_DETAILS, AllDaySyncPolicy.INCLUDE),
+        args=(rule().id, ProjectionContent.DETAILS, AllDaySyncPolicy.INCLUDE),
     )
     worker.start()
     worker.join(0.1)
@@ -171,7 +173,7 @@ def test_new_rules_are_drafts_under_a_generated_identity() -> None:
         unit_of_work.state.accounts[endpoint_.connected_account_id] = (
             ConnectedAccountState.CONNECTED
         )
-    details = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+    details = TransformationPolicy(content=ProjectionContent.DETAILS)
 
     created = CreateDraftSyncRule(CreateSyncRule(unit_of_work), GeneratedIds("new-rule")).execute(
         rule().source, rule().destination, details
