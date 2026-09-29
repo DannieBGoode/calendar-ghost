@@ -54,7 +54,10 @@ Occurrence Start. The Google adapter uses `events.instances(eventId, originalSta
 and never constructs instance identifiers. "No such occurrence" is distinct from "cancelled
 occurrence", and only an answered lookup may report absence: a series that cannot be read during
 the lookup (404 or 410) is a temporary provider failure, because absence can authorize cancelling
-a destination occurrence.
+a destination occurrence. The lookup sets no `maxResults` and follows `nextPageToken`: Google
+applies a page size before the `originalStart` filter, so a one-result page is empty for a moved
+occurrence. Only a final page without a match reports absence; a lookup still unanswered at the
+page limit is a temporary provider failure.
 
 ### Ownership and loop prevention
 

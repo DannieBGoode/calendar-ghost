@@ -400,8 +400,53 @@ def test_get_occurrence_resolves_through_instances_and_verifies_the_start() -> N
         eventId="projection-1",
         originalStart="2026-09-08T08:00:00Z",
         showDeleted=True,
-        maxResults=1,
     )
+
+
+def _moved_instance() -> dict[str, object]:
+    return {
+        **_instance(),
+        "start": {"dateTime": "2026-09-10T07:00:00Z"},
+        "end": {"dateTime": "2026-09-10T08:00:00Z"},
+    }
+
+
+def test_get_occurrence_finds_a_moved_occurrence_that_a_one_result_page_hides() -> None:
+    # Observed in Google: with maxResults=1 a moved occurrence's originalStart lookup is empty.
+    events_api = MagicMock()
+    events_api.instances.side_effect = lambda **parameters: request_returning(
+        {"items": [] if parameters.get("maxResults") == 1 else [_moved_instance()]}
+    )
+    provider = provider_with_events_api(events_api)
+
+    resolved = provider.get_occurrence(SERIES, START)
+
+    assert resolved is not None
+    assert resolved.occurrence is not None and resolved.occurrence.original_start == START
+
+
+def test_get_occurrence_reads_past_empty_pages_before_reporting_absence() -> None:
+    events_api = MagicMock()
+    events_api.instances.side_effect = [
+        request_returning({"items": [], "nextPageToken": "page-2"}),
+        request_returning({"items": [_moved_instance()]}),
+    ]
+    provider = provider_with_events_api(events_api)
+
+    assert provider.get_occurrence(SERIES, START) is not None
+    assert events_api.instances.call_args.kwargs["pageToken"] == "page-2"
+
+
+def test_get_occurrence_unanswered_within_the_page_limit_is_a_failure_not_an_absence() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [], "nextPageToken": "next"})
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.get_occurrence(SERIES, START)
+
+    assert failure.value.kind is ProviderFailureKind.TEMPORARY
+    assert events_api.instances.call_count == OCCURRENCE_PAGE_LIMIT
 
 
 def test_get_occurrence_returns_none_only_when_the_series_has_no_such_occurrence() -> None:

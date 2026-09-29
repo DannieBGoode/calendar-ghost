@@ -244,19 +244,31 @@ class GoogleCalendarProvider:
     def get_occurrence(
         self, series: EventRef, original_start: OccurrenceStart
     ) -> CalendarEvent | None:
+        # No maxResults: Google pages before it filters by originalStart, so a one-result page
+        # comes back empty for an occurrence that was moved and absence would be reported.
+        parameters: dict[str, Any] = {
+            "calendarId": series.calendar.calendar_id.value,
+            "eventId": series.event_id.value,
+            "originalStart": format_occurrence_start(original_start),
+            "showDeleted": True,
+        }
         try:
-            response = (
-                self._service_for(series.calendar.connected_account_id)
-                .events()
-                .instances(
-                    calendarId=series.calendar.calendar_id.value,
-                    eventId=series.event_id.value,
-                    originalStart=format_occurrence_start(original_start),
-                    showDeleted=True,
-                    maxResults=1,
-                )
-                .execute()
-            )
+            events_api = self._service_for(series.calendar.connected_account_id).events()
+            for _ in range(OCCURRENCE_PAGE_LIMIT):
+                response = events_api.instances(**parameters).execute()
+                for item in response.get("items", []):
+                    candidate = to_domain_event(item, series.calendar)
+                    # Never trust a positional result: the instance must name the requested start.
+                    if (
+                        candidate.occurrence is not None
+                        and candidate.occurrence.series_event_id == series.event_id
+                        and candidate.occurrence.original_start == original_start
+                    ):
+                        return candidate
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    return None
+                parameters["pageToken"] = page_token
         except Exception as error:
             # A missing series proves nothing about its occurrences; only an answered lookup may
             # report absence, because absence can authorize cancelling a destination occurrence.
@@ -266,16 +278,11 @@ class GoogleCalendarProvider:
                     "Google series could not be read while resolving an occurrence",
                 ) from error
             raise _provider_failure(error) from error
-        for item in response.get("items", []):
-            candidate = to_domain_event(item, series.calendar)
-            # Never trust a positional result: the instance must name the requested start.
-            if (
-                candidate.occurrence is not None
-                and candidate.occurrence.series_event_id == series.event_id
-                and candidate.occurrence.original_start == original_start
-            ):
-                return candidate
-        return None
+        # Pages beyond the limit were not read, so the occurrence is not proven absent.
+        raise ProviderFailure(
+            ProviderFailureKind.TEMPORARY,
+            "Google did not finish resolving an occurrence within the page limit",
+        )
 
     def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         parameters: dict[str, Any] = {
