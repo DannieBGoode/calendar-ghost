@@ -5,7 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import AuditEntry, CalendarProvider, Clock
+from calendar_sync.application.ports import AuditEntry, CalendarProvider, Clock, RecordedEvent
 from calendar_sync.application.sync_run import (
     OUTCOMES,
     SyncRunContext,
@@ -217,6 +217,7 @@ class SynchronizeOccurrences:
                     else None,
                     reason=decision.reason.value,
                     run_id=run.run_id,
+                    event=_recorded_event(source_series, source_occurrence),
                 ),
             )
             # Commit before the next provider call so no write lock spans network requests.
@@ -279,6 +280,16 @@ class SynchronizeOccurrences:
                 projection_fingerprint=fingerprint,
             )
         )
+
+
+def _recorded_event(
+    source_series: CalendarEvent, source_occurrence: CalendarEvent | None
+) -> RecordedEvent:
+    if source_occurrence is not None:
+        return RecordedEvent.of(source_occurrence)
+    # An occurrence absent from its series has no time of its own; Activity shows the time it
+    # last recorded for that occurrence.
+    return RecordedEvent(title=source_series.title, recurring=True, cancelled=True)
 
 
 def occurrence_operation_key(

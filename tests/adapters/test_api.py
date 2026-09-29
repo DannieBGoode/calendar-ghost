@@ -12,7 +12,13 @@ from fastapi.testclient import TestClient
 
 import calendar_sync.interfaces.api.app as api_module
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.ports import AuditEntry, CalendarProvider, RuleRunOutcome, RunKind
+from calendar_sync.application.ports import (
+    AuditEntry,
+    CalendarProvider,
+    RecordedEvent,
+    RuleRunOutcome,
+    RunKind,
+)
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.bootstrap.config import Settings
@@ -46,7 +52,7 @@ from calendar_sync.infrastructure.google.oauth import (
 )
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_calendar import FakeCalendars, FixedClock
-from tests.helpers import endpoint, event, occurrence, rule, series, week_start
+from tests.helpers import all_day_event, endpoint, event, occurrence, rule, series, week_start
 
 
 def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
@@ -146,7 +152,7 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
         incidents = client.get("/api/v1/incidents").json()
 
         assert activity[0]["action"] == "create"
-        assert "event" not in activity[0]
+        assert activity[0]["event"] is None
         assert incidents[0]["summary"] == "Google authorization expired"
 
 
@@ -1113,6 +1119,7 @@ def _audit(
     run_id: str | None = "run-1",
     source_event_id: str | None = "source-event",
     destination_event_id: str | None = None,
+    event: RecordedEvent | None = None,
 ) -> AuditEntry:
     return AuditEntry(
         occurred_at=datetime(2026, 9, 28, 15, 18, tzinfo=UTC),
@@ -1123,6 +1130,7 @@ def _audit(
         destination_event_id=destination_event_id,
         reason=reason,
         run_id=run_id,
+        event=event,
     )
 
 
@@ -1474,81 +1482,81 @@ def test_single_activity_entry_can_be_opened_directly(tmp_path: Path) -> None:
     assert missing.status_code == 404
 
 
-def test_activity_event_summaries_read_each_source_event_once(tmp_path: Path) -> None:
+def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
-    provider = FakeInspectionProvider(
-        {"source-event": event(title="Dentist"), "other-event": event("other-event")}
-    )
-    container = replace(
-        build_container(Settings(database)), calendar_provider=cast(CalendarProvider, provider)
-    )
+    # No provider is configured: Activity names events without asking Google.
+    container = build_container(Settings(database))
     with container.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
+    renamed = event(title="Dentist (moved)")
     _append_audit(
         container,
-        _audit("create", "source_created", destination_event_id="copy-1"),
-        _audit("ignore", "projection_current", run_id="run-2"),
-        _audit("ignore", "projection_current", source_event_id="other-event"),
-        _audit("policy_changed", None, run_id=None, source_event_id=None),
-        _audit("create", "source_created", rule_id="removed-rule"),
-        _audit("ignore", "projection_current", source_event_id="deleted-event"),
+        _audit("create", "source_created", event=RecordedEvent.of(event(title="Dentist"))),
+        _audit("ignore", "projection_current", event=RecordedEvent.of(event(title="Dentist"))),
+        _audit("update", "source_changed", event=RecordedEvent.of(renamed)),
+        # Google reports a deleted event without its title or time.
+        _audit("delete", "source_cancelled", event=RecordedEvent(title="", cancelled=True)),
+        # Removing a rule reads no event at all.
+        _audit("remove_projection", None, run_id=None),
+        _audit("create", "source_created", source_event_id="recorded-before-upgrade"),
+        _audit("create", "source_created", source_event_id="all-day", event=_day_off()),
+        _audit("policy_changed", None, source_event_id=None),
     )
 
     with TestClient(create_app(container)) as client:
-        assert client.get("/api/v1/audit-entries/events", params={"ids": 1}).status_code == 401
         client.post("/api/v1/setup/admin", json=PASSWORD)
-        response = client.get(
-            "/api/v1/audit-entries/events", params=[("ids", i) for i in (1, 2, 3, 4, 5, 6, 99)]
-        )
-        too_many = client.get(
-            "/api/v1/audit-entries/events", params=[("ids", i) for i in range(1, 27)]
-        )
+        entries = {
+            entry["id"]: entry["event"] for entry in client.get("/api/v1/audit-entries").json()
+        }
+        opened = client.get("/api/v1/audit-entries/4").json()["event"]
 
-    assert response.status_code == 200
-    summaries = {item["entry_id"]: item for item in response.json()}
-    assert sorted(summaries) == [1, 2, 3, 5, 6]
-    assert summaries[1]["lookup"] == "found"
-    assert summaries[1]["source"]["title"] == "Dentist"
-    assert summaries[2] == summaries[1] | {"entry_id": 2}
-    assert summaries[3]["source"]["title"] == "Private appointment"
-    assert summaries[5] == {"entry_id": 5, "lookup": "rule_removed", "source": None}
-    assert summaries[6]["lookup"] == "found"
-    assert summaries[6]["source"]["found"] is False
-    assert sorted(reference.event_id.value for reference in provider.requested) == [
-        "deleted-event",
-        "other-event",
-        "source-event",
-    ]
-    assert too_many.status_code == 422
+    dentist = {
+        "title": "Dentist",
+        "all_day": False,
+        "starts": "2026-08-30T10:00:00+00:00",
+        "ends": "2026-08-30T11:00:00+00:00",
+        "recurring": False,
+        "cancelled": False,
+        "renamed_from": None,
+    }
+    assert entries[1] == entries[2] == dentist
+    assert entries[3] == dentist | {"title": "Dentist (moved)", "renamed_from": "Dentist"}
+    assert entries[4] == opened == dentist | {"title": "Dentist (moved)", "cancelled": True}
+    assert entries[5] == dentist | {"title": "Dentist (moved)"}
+    assert entries[6] is None
+    assert entries[7] == {
+        "title": "Day off",
+        "all_day": True,
+        "starts": "2026-08-30",
+        "ends": "2026-08-31",
+        "recurring": False,
+        "cancelled": False,
+        "renamed_from": None,
+    }
+    assert entries[8] is None
     with sqlite3.connect(database) as connection:
         dump = "\n".join(connection.iterdump())
-    assert "Dentist" not in dump
+    assert "Sensitive" not in dump
 
 
-def test_activity_event_summaries_report_failures_per_event(tmp_path: Path) -> None:
-    failing = FakeInspectionProvider(
-        {}, ProviderFailure(ProviderFailureKind.AUTHENTICATION, "token expired")
-    )
+def test_activity_does_not_carry_names_across_rules(tmp_path: Path) -> None:
     container = build_container(Settings(tmp_path / "test.db"))
-    with container.unit_of_work() as uow:
-        uow.rules.add(rule())
-        uow.commit()
-    _append_audit(container, _audit("create", "source_created"))
+    _append_audit(
+        container,
+        _audit("create", "source_created", event=RecordedEvent.of(event(title="Dentist"))),
+        _audit("remove_projection", None, rule_id="rule-2"),
+    )
 
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
-        unconfigured = client.get("/api/v1/audit-entries/events", params={"ids": 1})
+        entries = client.get("/api/v1/audit-entries").json()
 
-    with TestClient(
-        create_app(replace(container, calendar_provider=cast(CalendarProvider, failing)))
-    ) as client:
-        client.post("/api/v1/session", json=PASSWORD)
-        response = client.get("/api/v1/audit-entries/events", params={"ids": 1})
+    assert [entry["event"] and entry["event"]["title"] for entry in entries] == [None, "Dentist"]
 
-    assert unconfigured.status_code == 503
-    assert response.status_code == 200
-    assert response.json() == [{"entry_id": 1, "lookup": "unavailable", "source": None}]
+
+def _day_off() -> RecordedEvent:
+    return RecordedEvent.of(all_day_event())
 
 
 def test_cancelled_source_events_keep_their_title_for_display(tmp_path: Path) -> None:

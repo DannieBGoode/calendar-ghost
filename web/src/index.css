@@ -1375,12 +1375,6 @@ a.recent-change-rule:focus-visible,
   color: var(--muted-foreground);
 }
 
-.recent-event-note {
-  margin-top: 0.625rem;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-}
-
 .recent-loading {
   display: flex;
   flex-direction: column;
@@ -2184,15 +2178,6 @@ thead + .activity-day th {
 .activity-event-cell-muted .activity-event-title {
   color: var(--muted-foreground);
   font-weight: 500;
-}
-
-.activity-event-placeholder {
-  display: block;
-  width: min(14rem, 80%);
-  height: 0.9rem;
-  margin: 0.2rem 0 0.35rem;
-  border-radius: 0.25rem;
-  background: var(--muted);
 }
 
 .activity-rule-name {

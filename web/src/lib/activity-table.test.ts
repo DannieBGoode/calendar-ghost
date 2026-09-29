@@ -1,9 +1,8 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it } from "vitest"
 
 import { activityRows, eventCell, formatClockTime, formatDay, formatEventTime, groupRuns, showCategories, SHOW_FILTERS } from "./activity"
 import { activitySearch, activityStateFromSearch } from "./activity-location"
-import type { ActivityEventSummary, AuditEntry, EventSnapshot } from "./api"
-import { createBatchLoader } from "./batch-loader"
+import type { AuditEntry, RecordedEvent } from "./api"
 
 function entry(overrides: Partial<AuditEntry>): AuditEntry {
   return {
@@ -18,26 +17,22 @@ function entry(overrides: Partial<AuditEntry>): AuditEntry {
     detail: "",
     source_event_id: "source-event",
     destination_event_id: null,
+    event: null,
     ...overrides,
   }
 }
 
-function snapshot(overrides: Partial<EventSnapshot> = {}): EventSnapshot {
+function recorded(overrides: Partial<RecordedEvent> = {}): RecordedEvent {
   return {
-    found: true,
-    cancelled: false,
     title: "Dentist",
     all_day: false,
     starts: "2026-09-30T10:00:00+00:00",
     ends: "2026-09-30T11:00:00+00:00",
     recurring: false,
-    web_link: null,
+    cancelled: false,
+    renamed_from: null,
     ...overrides,
   }
-}
-
-function found(source: EventSnapshot): { status: "success"; data: ActivityEventSummary } {
-  return { status: "success", data: { entry_id: 1, lookup: "found", source } }
 }
 
 describe("activity location", () => {
@@ -149,41 +144,48 @@ describe("event cells", () => {
   const names = { source: "Personal", destination: "Work" }
 
   it("names the event and when it happens", () => {
-    const cell = eventCell(entry({}), names, found(snapshot({ recurring: true })))
+    const cell = eventCell(entry({ event: recorded({ recurring: true }) }), names)
 
     expect(cell).toMatchObject({ state: "event", title: "Dentist", recurring: true })
     expect(cell.state === "event" && cell.when).toContain("30")
+    expect(cell.state === "event" && cell.note).toBeUndefined()
+  })
+
+  it("names events of removed rules from what was recorded", () => {
+    expect(eventCell(entry({ event: recorded() }), null)).toMatchObject({ state: "event", title: "Dentist" })
+  })
+
+  it("says when the event was renamed", () => {
+    expect(eventCell(entry({ event: recorded({ title: "Dentist (moved)", renamed_from: "Dentist" }) }), names)).toMatchObject({
+      title: "Dentist (moved)",
+      note: "Renamed from “Dentist”",
+    })
   })
 
   it("keeps the title of a cancelled event and says it was cancelled", () => {
-    expect(eventCell(entry({}), names, found(snapshot({ cancelled: true, starts: null, ends: null })))).toMatchObject({
+    expect(eventCell(entry({ event: recorded({ cancelled: true, starts: null, ends: null }) }), names)).toMatchObject({
       state: "event",
       title: "Dentist",
       note: "Cancelled",
       when: "",
     })
-    expect(eventCell(entry({}), names, found(snapshot({ cancelled: true, title: "" })))).toMatchObject({
+    expect(eventCell(entry({ event: recorded({ cancelled: true, title: "" }) }), names)).toMatchObject({
       title: "Cancelled event",
     })
   })
 
-  it("explains events that cannot be named in terms of their calendars", () => {
-    expect(eventCell(entry({ source_event_id: null }), names, { status: "pending" })).toEqual({
+  it("explains entries that name no event", () => {
+    expect(eventCell(entry({ source_event_id: null }), names)).toEqual({
       state: "unavailable",
       label: "Personal → Work rule",
       note: "Applies to the whole rule",
     })
-    expect(eventCell(entry({ source_event_id: null }), null, { status: "pending" })).toMatchObject({
-      label: "Removed rule",
+    expect(eventCell(entry({ source_event_id: null }), null)).toMatchObject({ label: "Removed rule" })
+    expect(eventCell(entry({}), names)).toMatchObject({
+      state: "unavailable",
+      label: "Event name not recorded",
     })
-    expect(eventCell(entry({}), null, { status: "pending" })).toMatchObject({ label: "Event from a removed rule" })
-    expect(eventCell(entry({}), names, { status: "pending" })).toEqual({ state: "loading" })
-    expect(eventCell(entry({}), names, { status: "error" })).toMatchObject({ label: "Event name unavailable" })
-    expect(eventCell(entry({}), names, found(snapshot({ found: false })))).toMatchObject({
-      label: "Event deleted from Personal",
-      note: "Its name is no longer available",
-    })
-    expect(eventCell(entry({}), names, found(snapshot({ title: "" })))).toMatchObject({ title: "(No title)" })
+    expect(eventCell(entry({ event: recorded({ title: "" }) }), names)).toMatchObject({ title: "(No title)" })
   })
 })
 
@@ -196,27 +198,5 @@ describe("event times", () => {
     expect(thisYear).not.toContain("2026")
     expect(thisYear).toContain("all day")
     expect(nextYear).toContain("2027")
-  })
-})
-
-describe("batch loader", () => {
-  it("combines loads from the same moment into bounded requests", async () => {
-    const fetchMany = vi.fn(async (ids: number[]) => new Map(ids.map((id) => [id, id * 10])))
-    const loader = createBatchLoader(fetchMany, 2)
-
-    const values = await Promise.all([loader.load(1), loader.load(2), loader.load(3), loader.load(1)])
-
-    expect(values).toEqual([10, 20, 30, 10])
-    expect(fetchMany.mock.calls).toEqual([[[1, 2]], [[3]]])
-  })
-
-  it("answers null for keys the service omitted and rejects every load of a failed request", async () => {
-    const loader = createBatchLoader(async () => new Map<number, string>(), 5)
-    await expect(loader.load(4)).resolves.toBeNull()
-
-    const failing = createBatchLoader<string>(async () => {
-      throw new Error("offline")
-    }, 5)
-    await expect(Promise.all([failing.load(1), failing.load(2)])).rejects.toThrow("offline")
   })
 })

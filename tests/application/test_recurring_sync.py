@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind, RuleNotExecutable
-from calendar_sync.application.ports import ProviderChangeSet
+from calendar_sync.application.ports import ProviderChangeSet, RecordedEvent
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEndpoint,
@@ -302,19 +302,18 @@ def test_rule_change_during_a_run_stops_occurrence_writes(tmp_path: Path) -> Non
         assert uow.cursors.get(rule().id) == cursor_before
 
 
-def test_every_occurrence_audit_entry_has_a_run_id_and_reason_but_no_content() -> None:
+def test_every_occurrence_audit_entry_names_its_event_but_keeps_no_other_content() -> None:
     calendars, factory, _destination = _synced()
-    calendars.report(
-        calendars.put(occurrence(series(), 1, title="Secret offsite", moved_by=timedelta(hours=1)))
-    )
+    moved = occurrence(series(), 1, title="Secret offsite", moved_by=timedelta(hours=1))
+    calendars.report(calendars.put(moved))
 
     sync_use_case(factory, calendars).execute(rule().id)
 
     assert all(entry.run_id and entry.reason for entry in factory.state.audit)
-    assert all(
-        "Secret" not in repr(entry) and "Sensitive" not in repr(entry)
-        for entry in factory.state.audit
-    )
+    written = factory.state.audit[-1]
+    assert written.source_event_id == moved.reference.event_id.value
+    assert written.event == RecordedEvent(title="Secret offsite", time=moved.time, recurring=True)
+    assert all("Sensitive" not in repr(entry) for entry in factory.state.audit)
 
 
 def _change_policy(factory: InMemoryUnitOfWorkFactory, policy: TransformationPolicy) -> None:

@@ -54,6 +54,13 @@ works with the same database: earlier releases ignore the column and return to r
 pass after every restart. Audit entries are unchanged; entries with reasons that are no longer
 recorded stay in the database and are hidden from Activity.
 
+Migration 9 adds nullable `event_title`, `event_starts`, and `event_ends` columns and zero-default
+`event_all_day`, `event_recurring`, and `event_cancelled` columns to `audit_entries`, plus an index
+on `audit_entries(rule_id, source_event_id, id)`. New entries record their source event's title and
+time; existing entries are not backfilled and appear in Activity without an event name. Rolling back
+works with the same database: earlier releases ignore the columns and index and look titles up from
+Google again, but recorded titles stay in the database until their entries are deleted.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

@@ -17,7 +17,7 @@ import { RuleStatusBadge } from "@/components/rule-commands"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RedirectMismatchNotice } from "@/features/settings"
-import { formatEventTime, eventLookupFailure } from "@/lib/activity"
+import { eventCell } from "@/lib/activity"
 import { api, type Dashboard, type Incident, type RecentChange, type RuleSummary } from "@/lib/api"
 import {
   activitySearch,
@@ -295,37 +295,39 @@ function RecentChangeItem({
   )
 }
 
-/** Looks events up live from Google on request; titles are shown, never stored. */
+/** Names each changed event as its run recorded it, without asking Google. */
 function RecentChangeEvents({ id, entryIds }: { id: string; entryIds: number[] }) {
-  const events = useQueries({
+  const entries = useQueries({
     queries: entryIds.map((entryId) => ({
-      queryKey: ["activity-event", entryId],
-      queryFn: () => api.activityEvent(entryId),
-      staleTime: 60_000,
+      queryKey: ["activity-entry", entryId],
+      queryFn: () => api.activityEntry(entryId),
+      staleTime: Infinity,
       retry: false,
     })),
   })
   return (
     <div className="recent-change-events" id={id}>
       <ul>
-        {events.map((event, index) => (
-          <li key={entryIds[index]}>
-            {event.isPending ? (
-              <span className="recent-event-status">Looking up in Google…</span>
-            ) : event.error ? (
-              <span className="recent-event-status">{eventLookupFailure(event.error)}</span>
-            ) : !event.data.source.found || event.data.source.cancelled ? (
-              <span className="recent-event-status">Removed from the source calendar.</span>
-            ) : (
-              <>
-                <strong>{event.data.source.title || "(No title)"}</strong>
-                <span>{formatEventTime(event.data.source)}</span>
-              </>
-            )}
-          </li>
-        ))}
+        {entries.map((entry, index) => {
+          const cell = entry.data ? eventCell(entry.data, null) : null
+          return (
+            <li key={entryIds[index]}>
+              {entry.isPending ? (
+                <span className="recent-event-status">Loading…</span>
+              ) : !cell ? (
+                <span className="recent-event-status">This change could not be loaded.</span>
+              ) : cell.state === "unavailable" ? (
+                <span className="recent-event-status">{cell.label}</span>
+              ) : (
+                <>
+                  <strong>{cell.title}</strong>
+                  <span>{[cell.note, cell.when].filter(Boolean).join(" · ")}</span>
+                </>
+              )}
+            </li>
+          )
+        })}
       </ul>
-      <p className="recent-event-note">Looked up in Google just now; titles are not saved.</p>
     </div>
   )
 }

@@ -18,6 +18,7 @@ function entry(overrides: Partial<AuditEntry>): AuditEntry {
     detail: "",
     source_event_id: "source-event",
     destination_event_id: null,
+    event: null,
     ...overrides,
   }
 }

@@ -250,9 +250,9 @@ A non-reversible digest of the normalized event projection used to compare expec
 _Avoid_: Event snapshot, content hash
 
 **Operational Record**:
-Persisted synchronization evidence limited to identities, revisions, recurrence relationships, occurrence starts, operation state, timestamps, and projection fingerprints. Event titles, descriptions, locations, attendee data, and conferencing data are not retained or included in audit entries or incident notifications.
+Persisted synchronization evidence limited to identities, revisions, recurrence relationships, occurrence starts, operation state, timestamps, and projection fingerprints, plus the source event's title and time on Audit Entries. Event descriptions, locations, attendee data, and conferencing data are not retained, and event titles are not included in incident notifications.
 _Avoid_: Event history, cached event
 
 **Audit Entry**:
-An Operational Record of one synchronization decision worth explaining: a write, a block, a no-change check, or a skip that explains why an expected projection is absent. Loop-prevention and bookkeeping decisions are counted on the run instead. It carries the rule, run, source and destination event identities, the action, and a stable reason code explaining why. Activity may read an entry's event title and time live from the provider for display, but that content is never persisted.
+An Operational Record of one synchronization decision worth explaining: a write, a block, a no-change check, or a skip that explains why an expected projection is absent. Loop-prevention and bookkeeping decisions are counted on the run instead. It carries the rule, run, source and destination event identities, the action, and a stable reason code explaining why. It also records the source event's title, time, recurrence, and cancellation as the run saw them, so Activity names events without asking the provider and can show renames. Entries recorded before that decision name no event.
 _Avoid_: Event log, history item
