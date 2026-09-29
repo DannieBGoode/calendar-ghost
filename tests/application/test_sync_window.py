@@ -20,6 +20,7 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, rule
 
@@ -123,6 +124,7 @@ def test_create_acknowledged_before_a_crash_is_adopted_after_it_leaves_the_windo
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         clock,
+        UuidRunIdGenerator(),
     )
     sync.execute(rule().id)
     edge = replace(

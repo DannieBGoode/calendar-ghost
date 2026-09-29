@@ -12,7 +12,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import CreatedProjection, ProviderChangeSet
+from calendar_sync.application.ports import Clock, CreatedProjection, ProviderChangeSet
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
@@ -34,6 +34,7 @@ from calendar_sync.infrastructure.google.translation import (
     projection_payload,
     to_domain_event,
 )
+from calendar_sync.infrastructure.scheduling import SystemClock
 
 GoogleServiceFactory = Callable[[ConnectedAccountId], Any]
 
@@ -41,8 +42,9 @@ GoogleServiceFactory = Callable[[ConnectedAccountId], Any]
 class GoogleCalendarProvider:
     """Google Calendar implementation of every application calendar role (CalendarProvider)."""
 
-    def __init__(self, service_for: GoogleServiceFactory) -> None:
+    def __init__(self, service_for: GoogleServiceFactory, clock: Clock | None = None) -> None:
         self._service_for = service_for
+        self._clock = clock or SystemClock()
 
     def changes(
         self,
@@ -82,7 +84,7 @@ class GoogleCalendarProvider:
         except Exception as error:
             if cursor is not None and _status_code(error) == 410:
                 return self.changes(source, None, not_ended_before)
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
 
     def get_event(self, reference: EventRef) -> CalendarEvent | None:
         try:
@@ -99,7 +101,7 @@ class GoogleCalendarProvider:
         except Exception as error:
             if _status_code(error) == 404:
                 return None
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
 
     def find_projection(
         self, destination: CalendarEndpoint, operation_key: str
@@ -118,7 +120,7 @@ class GoogleCalendarProvider:
                 .get("items", [])
             )
         except Exception as error:
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
         return to_domain_event(existing[0], destination) if existing else None
 
     def create_projection(
@@ -145,7 +147,7 @@ class GoogleCalendarProvider:
             )
             return CreatedProjection(to_domain_event(payload, destination))
         except Exception as error:
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
 
     def update_projection(
         self,
@@ -180,7 +182,7 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, destination.calendar)
         except Exception as error:
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
 
     def delete_projection(
         self,
@@ -214,7 +216,7 @@ class GoogleCalendarProvider:
             )
         except Exception as error:
             if _status_code(error) not in {404, 410}:
-                raise _provider_failure(error) from error
+                raise self._failure(error) from error
 
     def managed_events(
         self, destination: CalendarEndpoint, rule_id: SyncRuleId
@@ -239,7 +241,7 @@ class GoogleCalendarProvider:
                     return tuple(items)
                 parameters["pageToken"] = page_token
         except Exception as error:
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
 
     def get_occurrence(
         self, series: EventRef, original_start: OccurrenceStart
@@ -277,7 +279,7 @@ class GoogleCalendarProvider:
                     ProviderFailureKind.TEMPORARY,
                     "Google series could not be read while resolving an occurrence",
                 ) from error
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
         # Pages beyond the limit were not read, so the occurrence is not proven absent.
         raise ProviderFailure(
             ProviderFailureKind.TEMPORARY,
@@ -314,7 +316,7 @@ class GoogleCalendarProvider:
             # counts as live, so it synchronizes as before instead of failing the whole rule.
             if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
                 return True
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
         # Pages beyond the limit were not read, so the series is not proven empty.
         return True
 
@@ -352,7 +354,7 @@ class GoogleCalendarProvider:
         except Exception as error:
             if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
                 return ()
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
         return tuple(exceptions)
 
     def write_occurrence(
@@ -389,7 +391,7 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, destination_series.calendar)
         except Exception as error:
-            raise _provider_failure(error) from error
+            raise self._failure(error) from error
 
     def cancel_occurrence(
         self,
@@ -418,7 +420,11 @@ class GoogleCalendarProvider:
             )
         except Exception as error:
             if _status_code(error) not in {404, 410}:
-                raise _provider_failure(error) from error
+                raise self._failure(error) from error
+
+    def _failure(self, error: Exception) -> ProviderFailure:
+        # The clock turns a Retry-After date into the seconds the retry helper waits.
+        return _provider_failure(error, self._clock.now())
 
     def _owned_occurrence(
         self,
@@ -478,7 +484,7 @@ def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) 
     return origin is not None and origin.rule_id == rule_id and origin.source == source
 
 
-def _provider_failure(error: Exception) -> ProviderFailure:
+def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
     status = _status_code(error)
     detail = str(error) or error.__class__.__name__
     if status == 401:
@@ -493,7 +499,7 @@ def _provider_failure(error: Exception) -> ProviderFailure:
         kind = ProviderFailureKind.TEMPORARY
     else:
         kind = ProviderFailureKind.PERMANENT
-    return ProviderFailure(kind, detail, _retry_after_seconds(error))
+    return ProviderFailure(kind, detail, _retry_after_seconds(error, now))
 
 
 # Instances are read only for their status and start, so one page covers most series.
@@ -514,7 +520,7 @@ UNLISTABLE_SERIES_STATUSES = frozenset({400, 404, 410})
 MAX_RETRY_AFTER_SECONDS = 60
 
 
-def _retry_after_seconds(error: Exception) -> int | None:
+def _retry_after_seconds(error: Exception, now: datetime) -> int | None:
     """Read Google's Retry-After header, given either as seconds or as an HTTP date."""
     response = getattr(error, "resp", None)
     value = response.get("retry-after") if isinstance(response, Mapping) else None
@@ -529,12 +535,8 @@ def _retry_after_seconds(error: Exception) -> int | None:
             return None
         if moment.tzinfo is None:
             moment = moment.replace(tzinfo=UTC)
-        seconds = max(0, math.ceil((moment - _now()).total_seconds()))
+        seconds = max(0, math.ceil((moment - now).total_seconds()))
     return min(seconds, MAX_RETRY_AFTER_SECONDS)
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 def _status_code(error: Exception) -> int | None:

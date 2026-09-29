@@ -5,13 +5,16 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
-from calendar_sync.application.ports import AdministratorSession
+from calendar_sync.application.ports import AdministratorSession, Clock
+from calendar_sync.infrastructure.scheduling import SystemClock
+
+SESSION_LIFETIME = timedelta(days=7)
 
 
 class InvalidMasterKey(ValueError):
@@ -44,8 +47,9 @@ class CredentialCipher:
 
 
 class SqliteAdminAuth:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, clock: Clock | None = None) -> None:
         self._database_path = database_path
+        self._clock = clock or SystemClock()
 
     def is_configured(self) -> bool:
         with self._connect() as connection:
@@ -69,7 +73,7 @@ class SqliteAdminAuth:
                     INSERT INTO installation_admin(singleton, password_hash, created_at)
                     VALUES (1, ?, ?)
                     """,
-                    (encoded, datetime.now(UTC).isoformat()),
+                    (encoded, self._clock.now().isoformat()),
                 )
         except sqlite3.IntegrityError as error:
             raise AdminAlreadyConfigured("installation administrator already exists") from error
@@ -84,8 +88,8 @@ class SqliteAdminAuth:
 
             token = secrets.token_urlsafe(32)
             token_hash = _token_hash(token)
-            now = datetime.now(UTC)
-            expires = now + timedelta(days=7)
+            now = self._clock.now()
+            expires = now + SESSION_LIFETIME
             connection.execute(
                 "INSERT INTO admin_sessions(token_hash, created_at, expires_at) VALUES (?, ?, ?)",
                 (token_hash, now.isoformat(), expires.isoformat()),
@@ -98,7 +102,7 @@ class SqliteAdminAuth:
     def session_is_valid(self, token: str | None) -> bool:
         if not token:
             return False
-        now = datetime.now(UTC)
+        now = self._clock.now()
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT expires_at FROM admin_sessions WHERE token_hash = ?",

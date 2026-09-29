@@ -395,6 +395,15 @@ class IdGenerator(Protocol):
     def new(self) -> str: ...
 
 
+class RunIdGenerator(Protocol):
+    """Identifies one Sync Run's Audit Entries.
+
+    Run identifiers are persisted and shown in Activity, so they stay 32 lowercase hex characters.
+    """
+
+    def new_run_id(self) -> str: ...
+
+
 class AccountAuthorizations(Protocol):
     def is_connected(self, account_id: ConnectedAccountId) -> bool: ...
 

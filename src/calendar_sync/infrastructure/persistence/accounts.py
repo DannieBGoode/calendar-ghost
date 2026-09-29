@@ -1,25 +1,38 @@
 from __future__ import annotations
 
 import sqlite3
-import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 
 from calendar_sync.application.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
 )
-from calendar_sync.application.ports import ConnectedAccount, ConnectedAccountState
+from calendar_sync.application.ports import (
+    Clock,
+    ConnectedAccount,
+    ConnectedAccountState,
+    IdGenerator,
+)
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.infrastructure.identifiers import UuidIdGenerator
+from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import CredentialCipher
 
 
 class SqliteConnectedAccountStore:
     """Connected Accounts with their provider credentials, encrypted by the Master Key."""
 
-    def __init__(self, database_path: Path, cipher: CredentialCipher) -> None:
+    def __init__(
+        self,
+        database_path: Path,
+        cipher: CredentialCipher,
+        clock: Clock | None = None,
+        ids: IdGenerator | None = None,
+    ) -> None:
         self._database_path = database_path
         self._cipher = cipher
+        self._clock = clock or SystemClock()
+        self._ids = ids or UuidIdGenerator()
 
     def list(self) -> tuple[ConnectedAccount, ...]:
         with self._connect() as connection:
@@ -55,8 +68,8 @@ class SqliteConnectedAccountStore:
         avatar_url: str | None = None,
     ) -> ConnectedAccount:
         """Connect an account, or reauthorize the one with this email under its identity."""
-        now = datetime.now(UTC).isoformat()
-        account_id = str(uuid.uuid4())
+        now = self._clock.now().isoformat()
+        account_id = self._ids.new()
         encrypted = self._cipher.encrypt(credential_json)
         with self._connect() as connection:
             connection.execute(
@@ -100,7 +113,7 @@ class SqliteConnectedAccountStore:
         return self._cipher.decrypt(bytes(row["encrypted_credentials"]))
 
     def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
-        now = datetime.now(UTC).isoformat()
+        now = self._clock.now().isoformat()
         cleared_credentials = self._cipher.encrypt("{}")
         with self._connect() as connection:
             row = connection.execute(

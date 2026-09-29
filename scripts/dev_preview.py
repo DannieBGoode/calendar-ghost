@@ -21,9 +21,10 @@ from __future__ import annotations
 import argparse
 import os
 import sqlite3
+from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
@@ -205,9 +206,9 @@ def build_preview_container(
         # The marker table name is a constant.
         connection.execute(
             f"INSERT INTO {MARKER_TABLE} VALUES (?)",  # noqa: S608
-            (datetime.now(UTC).isoformat(),),
+            (adapters.clock.now().isoformat(),),
         )
-    moment = now or datetime.now(UTC)
+    moment = now or adapters.clock.now()
     google = PreviewGoogle()
     # Only reads are substituted: without a master key nothing synchronizes or writes.
     container = replace(
@@ -228,100 +229,114 @@ def build_preview_container(
     return container
 
 
-def _seed(adapters: Adapters, path: Path, now: datetime) -> None:  # noqa: C901
-    rules = (
-        SyncRule(
-            id=SyncRuleId("preview-personal-work"),
-            source=PERSONAL,
-            destination=WORK,
-            state=SyncRuleState.ENABLED,
-        ),
-        SyncRule(
-            id=SyncRuleId("preview-family-work"),
-            source=FAMILY,
-            destination=WORK,
-            state=SyncRuleState.ENABLED,
-        ),
-    )
-    entries: list[AuditEntry] = []
-    calendar = PreviewCalendar(now)
+PREVIEW_RULES = (
+    SyncRule(
+        id=SyncRuleId("preview-personal-work"),
+        source=PERSONAL,
+        destination=WORK,
+        state=SyncRuleState.ENABLED,
+    ),
+    SyncRule(
+        id=SyncRuleId("preview-family-work"),
+        source=FAMILY,
+        destination=WORK,
+        state=SyncRuleState.ENABLED,
+    ),
+)
 
-    def record(  # noqa: PLR0913
-        minutes_ago: int,
-        rule: str,
-        run: str | None,
-        action: str,
-        reason: str | None,
-        event: str | None,
-        projection: bool = True,
-        title: str | None = None,
-    ) -> None:
-        # Entries of the removed rule predate recorded events, as an upgraded installation's do.
-        found = (
-            calendar.get_event(EventRef(PERSONAL, EventId(event)))
-            if event and rule != "preview-removed-rule"
-            else None
-        )
-        recorded = RecordedEvent.of(found) if found else None
-        if recorded is not None and title is not None:
-            recorded = replace(recorded, title=title)
-        entries.append(
-            AuditEntry(
-                occurred_at=now - timedelta(minutes=minutes_ago),
-                rule_id=SyncRuleId(rule),
-                action=AuditAction(action),
-                outcome={"ignore": AuditOutcome.SKIPPED, "conflict": AuditOutcome.BLOCKED}.get(
-                    action, AuditOutcome.COMPLETED
-                ),
-                source_event_id=event,
-                destination_event_id=f"copy-{event}" if event and projection else None,
-                reason=SyncReason(reason) if reason is not None else None,
-                run_id=run,
-                event=recorded,
-            )
-        )
 
+@dataclass(frozen=True)
+class SeededEntry:
+    """One synthetic Audit Entry, described by the values that vary across the history."""
+
+    minutes_ago: int
+    rule: str
+    run: str | None
+    action: str
+    reason: str | None
+    event: str | None
+    projection: bool = True
+    title: str | None = None
+    """Overrides the recorded title, as Google's reports of renamed or deleted events do."""
+
+
+def _history() -> Iterator[SeededEntry]:
     personal, family = "preview-personal-work", "preview-family-work"
+    entry = SeededEntry
     # Oldest first, so identifiers ascend with time like a real history.
-    record(60 * 30, "preview-removed-rule", None, "create", "source_created", "standup")
-    record(60 * 29, "preview-removed-rule", None, "rule_removed", None, None)
+    yield entry(60 * 30, "preview-removed-rule", None, "create", "source_created", "standup")
+    yield entry(60 * 29, "preview-removed-rule", None, "rule_removed", None, None)
     for event in ("dentist", "gym", "school", "piano", "pta", "vet", "dinner"):
-        record(60 * 26, personal, "preview-run-1", "create", "source_created", event)
-    record(60 * 26, personal, "preview-run-1", "create", "source_created", "flight", title="Flight")
-    record(60 * 26, personal, "preview-run-1", "ignore", "all_day_excluded", "holiday", False)
+        yield entry(60 * 26, personal, "preview-run-1", "create", "source_created", event)
+    yield entry(
+        60 * 26, personal, "preview-run-1", "create", "source_created", "flight", title="Flight"
+    )
+    yield entry(60 * 26, personal, "preview-run-1", "ignore", "all_day_excluded", "holiday", False)
     for event in ("dentist", "gym", "school", "piano", "pta"):
-        record(60 * 5, personal, "preview-run-2", "ignore", "projection_current", event)
-    record(60 * 5, personal, "preview-run-2", "update", "source_changed", "flight")
-    record(60 * 4, family, "preview-run-3", "create", "source_created", "yoga")
-    record(60 * 4, family, "preview-run-3", "ignore", "occurrence_current", "yoga")
-    record(60 * 4, family, "preview-run-3", "update", "occurrence_changed", "piano")
+        yield entry(60 * 5, personal, "preview-run-2", "ignore", "projection_current", event)
+    yield entry(60 * 5, personal, "preview-run-2", "update", "source_changed", "flight")
+    yield entry(60 * 4, family, "preview-run-3", "create", "source_created", "yoga")
+    yield entry(60 * 4, family, "preview-run-3", "ignore", "occurrence_current", "yoga")
+    yield entry(60 * 4, family, "preview-run-3", "update", "occurrence_changed", "piano")
     for event in ("gym", "school", "piano", "dentist"):
-        record(60, personal, "preview-run-4", "ignore", "projection_current", event)
-    record(60, personal, "preview-run-4", "update", "destination_drift_repaired", "flight")
-    record(60, personal, "preview-run-4", "conflict", "destination_ownership_inconsistent", "vet")
+        yield entry(60, personal, "preview-run-4", "ignore", "projection_current", event)
+    yield entry(60, personal, "preview-run-4", "update", "destination_drift_repaired", "flight")
+    yield entry(
+        60, personal, "preview-run-4", "conflict", "destination_ownership_inconsistent", "vet"
+    )
     # Runs that only confirmed events were up to date, as scheduled checks usually do.
     for minutes, run in ((50, "preview-quiet-1"), (40, "preview-quiet-2")):
         for event in ("dentist", "gym", "school"):
-            record(minutes, personal, run, "ignore", "projection_current", event)
+            yield entry(minutes, personal, run, "ignore", "projection_current", event)
     # A reconciliation large enough that its no-change checks load in pages.
     for _ in range(150):
-        record(30, family, "preview-reconcile", "ignore", "projection_current", "yoga")
-    record(30, family, "preview-reconcile", "update", "occurrence_drift_repaired", "piano")
+        yield entry(30, family, "preview-reconcile", "ignore", "projection_current", "yoga")
+    yield entry(30, family, "preview-reconcile", "update", "occurrence_drift_repaired", "piano")
     # Google reports a deleted event without its title; Activity names it from earlier entries.
-    record(20, personal, "preview-run-5", "delete", "source_cancelled", "dinner", title="")
-    record(20, personal, "preview-run-5", "delete", "source_cancelled", "deleted-event")
-    record(20, personal, "preview-run-5", "ignore", "projection_current", "gym")
+    yield entry(20, personal, "preview-run-5", "delete", "source_cancelled", "dinner", title="")
+    yield entry(20, personal, "preview-run-5", "delete", "source_cancelled", "deleted-event")
+    yield entry(20, personal, "preview-run-5", "ignore", "projection_current", "gym")
     # The same repair on consecutive runs, which Recent changes counts on one line.
     for minutes, run in ((15, "preview-run-6"), (10, "preview-run-7")):
-        record(minutes, personal, run, "create", "projection_missing", "gym")
+        yield entry(minutes, personal, run, "create", "projection_missing", "gym")
     # An occurrence the destination series does not have, blocked after checking the series.
-    record(8, family, "preview-run-8", "conflict", "destination_occurrence_missing", "piano")
-    record(5, personal, None, "policy_changed", None, None)
+    yield entry(8, family, "preview-run-8", "conflict", "destination_occurrence_missing", "piano")
+    yield entry(5, personal, None, "policy_changed", None, None)
+
+
+def _audit_entry(seeded: SeededEntry, calendar: PreviewCalendar, now: datetime) -> AuditEntry:
+    event = seeded.event
+    # Entries of the removed rule predate recorded events, as an upgraded installation's do.
+    found = (
+        calendar.get_event(EventRef(PERSONAL, EventId(event)))
+        if event and seeded.rule != "preview-removed-rule"
+        else None
+    )
+    recorded = RecordedEvent.of(found) if found else None
+    if recorded is not None and seeded.title is not None:
+        recorded = replace(recorded, title=seeded.title)
+    return AuditEntry(
+        occurred_at=now - timedelta(minutes=seeded.minutes_ago),
+        rule_id=SyncRuleId(seeded.rule),
+        action=AuditAction(seeded.action),
+        outcome={"ignore": AuditOutcome.SKIPPED, "conflict": AuditOutcome.BLOCKED}.get(
+            seeded.action, AuditOutcome.COMPLETED
+        ),
+        source_event_id=event,
+        destination_event_id=f"copy-{event}" if event and seeded.projection else None,
+        reason=SyncReason(seeded.reason) if seeded.reason is not None else None,
+        run_id=seeded.run,
+        event=recorded,
+    )
+
+
+def _seed(adapters: Adapters, path: Path, now: datetime) -> None:
+    calendar = PreviewCalendar(now)
     with adapters.unit_of_work() as uow:
-        for rule in rules:
+        for rule in PREVIEW_RULES:
             uow.rules.add(rule)
-        for entry in entries:
-            uow.audit.append(entry)
+        for seeded in _history():
+            uow.audit.append(_audit_entry(seeded, calendar, now))
         uow.commit()
     with closing(sqlite3.connect(path)) as connection, connection:
         # Records only, so the preview's accounts can be used by new rules; no credentials.
@@ -353,7 +368,7 @@ def _seed(adapters: Adapters, path: Path, now: datetime) -> None:  # noqa: C901
             (
                 "preview-incident",
                 "preview-incident",
-                personal,
+                "preview-personal-work",
                 "ownership",
                 "A projection in Work is not owned by this rule, so it was left unchanged.",
                 (now - timedelta(hours=1)).isoformat(),
