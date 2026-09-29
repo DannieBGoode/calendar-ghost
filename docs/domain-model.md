@@ -44,6 +44,17 @@ modified occurrences) a Projection Fingerprint.
 - A Series Mapping created by an incremental run carries a pending exception replay until every
   source Occurrence Exception has been applied; the replay is removed with its Series Mapping.
 
+## Reconciliation report
+
+A Full Reconciliation produces a `ReconciliationReport` for one rule: the number of mappings it
+checked, the Drift it found, and the Conflicts it found. Drift is a content difference between a
+mapped projection and what its source calls for (`missing`, `unexpected`, `incorrect_projection`).
+A Conflict carries a `SyncReason`: `mapping_inconsistent` for a mapping outside the rule's
+relationship or whose source is itself a managed projection, `source_unverifiable` for a mapping
+whose source cannot be read, and `projection_unmapped` for a managed event with no mapping. A report
+is consistent only when both are empty, so a Conflict leaves the rule inconsistent without counting
+as Drift. The report never implies a repair; see [ADR 0015](adr/0015-reconciliation-reports-conflicts-apart-from-drift.md).
+
 ## Calendar Event values
 
 A Calendar Event is a transient provider-neutral representation. Its time is either a timezone-aware Timed Interval or an All-Day Range with an exclusive end date. Recurring events retain Event Series, Occurrence, and Occurrence Exception identity. An occurrence's original start is normalized to a UTC instant (timed series) or a date (all-day series) so both calendars identify it identically, and a timed series keeps its IANA time zone so its recurrence expands at the same local times across daylight-saving changes.

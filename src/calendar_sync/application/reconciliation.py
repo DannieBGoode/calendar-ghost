@@ -2,15 +2,20 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
     CalendarReader,
     Clock,
     FullPassRecords,
     RuleRunOutcome,
+    RunIdGenerator,
     RunKind,
     UnitOfWorkFactory,
 )
@@ -23,6 +28,7 @@ from calendar_sync.domain.model import (
     EventProjection,
     EventRef,
     EventStatus,
+    NoProjectionExpected,
     OccurrenceCheck,
     OccurrenceMapping,
     ReconciliationReport,
@@ -41,14 +47,30 @@ class ReconcileSyncRule:
     projector: EventProjector
     reconciliation: ReconciliationService
     clock: Clock
+    run_ids: RunIdGenerator
     locks: RuleLocks = field(default_factory=RuleLocks)
 
-    def execute(self, rule_id: SyncRuleId) -> ReconciliationReport:
+    def execute(
+        self,
+        rule_id: SyncRuleId,
+        *,
+        run_id: str | None = None,
+        already_blocked: AbstractSet[EventRef] = frozenset(),
+    ) -> ReconciliationReport:
+        """Verify every mapping and record each conflict found as a blocked Audit Entry.
+
+        `already_blocked` names sources a Sync Run just blocked, so none is reported twice, and
+        `run_id` files the entries under that run.
+        """
         work = RuleWork(RuleWorkKind.RECONCILIATION, self.clock.now())
         with self.locks.for_rule(rule_id), self.locks.working(rule_id, work):
-            return self._execute_serialized(rule_id)
+            return self._execute_serialized(
+                rule_id, run_id or self.run_ids.new_run_id(), already_blocked
+            )
 
-    def _execute_serialized(self, rule_id: SyncRuleId) -> ReconciliationReport:
+    def _execute_serialized(
+        self, rule_id: SyncRuleId, run_id: str, already_blocked: AbstractSet[EventRef]
+    ) -> ReconciliationReport:
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
             if rule is None:
@@ -70,6 +92,7 @@ class ReconcileSyncRule:
                 )
             )
             raise
+        report = report.excluding(already_blocked)
         self._record(
             RuleRunOutcome(
                 rule.id,
@@ -77,14 +100,33 @@ class ReconcileSyncRule:
                 self.clock.now(),
                 True,
                 full_run=True,
+                conflicts=len(report.conflicts),
                 checked_mappings=report.checked_mappings,
                 drift=len(report.drift),
-            )
+            ),
+            [
+                AuditEntry(
+                    occurred_at=self.clock.now(),
+                    rule_id=rule.id,
+                    action=AuditAction.CONFLICT,
+                    outcome=AuditOutcome.BLOCKED,
+                    source_event_id=conflict.source.event_id.value if conflict.source else None,
+                    destination_event_id=(
+                        conflict.destination.event_id.value if conflict.destination else None
+                    ),
+                    detail=conflict.detail,
+                    reason=conflict.reason,
+                    run_id=run_id,
+                )
+                for conflict in report.conflicts
+            ],
         )
         return report
 
-    def _record(self, outcome: RuleRunOutcome) -> None:
+    def _record(self, outcome: RuleRunOutcome, entries: Sequence[AuditEntry] = ()) -> None:
         with self.unit_of_work() as uow:
+            for entry in entries:
+                uow.audit.append(entry)
             uow.run_outcomes.record(outcome)
             uow.commit()
 
@@ -96,11 +138,17 @@ class ReconcileSyncRule:
     ) -> ReconciliationReport:
         actual_events = self.provider.managed_events(rule.destination, rule.id)
         actual = {event.reference: event for event in actual_events}
-        expected: dict[EventRef, EventProjection] = {}
+        expected: dict[EventRef, EventProjection | NoProjectionExpected] = {}
         dormant: set[EventMappingId] = set()
         for mapping in mappings:
             source = self.provider.get_event(mapping.source)
-            if source is None or not _eligible(source, rule):
+            if source is None:
+                continue  # an unreadable source is a Conflict, never permission to delete
+            if source.managed_origin is not None:
+                expected[mapping.source] = NoProjectionExpected.MANAGED_SOURCE
+                continue
+            if not _eligible(source, rule):
+                expected[mapping.source] = NoProjectionExpected.INELIGIBLE
                 continue
             if self._dormant(rule, mapping, source, actual):
                 # A series with no occurrence left to project has no projection to verify.
@@ -111,8 +159,8 @@ class ReconcileSyncRule:
 
         checks: list[OccurrenceCheck] = []
         for mapping in verified:
-            if mapping.source not in expected:
-                continue  # the series' own inconsistency is already reported
+            if not isinstance(expected.get(mapping.source), EventProjection):
+                continue  # the series' own finding already covers its occurrences
             for occurrence in recorded.get(mapping.id, ()):
                 source = self.provider.get_occurrence(mapping.source, occurrence.original_start)
                 checks.append(
@@ -174,7 +222,10 @@ class ReconcileNowResult:
 class ReconcileNow:
     """Reconcile Now: a full pass, standing in for that day's scheduled one, then reconciliation.
 
-    Like the scheduler's, the full-pass bookkeeping is best-effort and never aborts the run.
+    The full pass repairs the drift it reaches; the reconciliation after it only reports what is
+    still different, and records its conflicts under the pass's run, leaving out any event the
+    pass already blocked. Like the scheduler's, the full-pass bookkeeping is best-effort and never
+    aborts the run.
     """
 
     synchronize: ExecuteSyncRule
@@ -187,7 +238,10 @@ class ReconcileNow:
         # The full pass succeeded and counts as today's; reconciliation can still fail after.
         if floor is not None:
             self._record_full_pass(rule_id, floor, result.run_id)
-        return ReconcileNowResult(result, self.reconcile.execute(rule_id))
+        report = self.reconcile.execute(
+            rule_id, run_id=result.run_id, already_blocked=result.blocked
+        )
+        return ReconcileNowResult(result, report)
 
     def _audit_floor(self) -> int | None:
         if self.full_passes is None:

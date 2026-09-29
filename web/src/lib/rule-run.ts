@@ -11,29 +11,46 @@ export function lastRunLabel(outcome: RunOutcome | null, now: number = Date.now(
     : `Last sync failed ${when}: ${failureLabel(outcome.failure_kind)}`
 }
 
-export function syncResultMessage(result: SyncResult): string {
+function syncedChanges(result: SyncResult): string | null {
   const changes = [
     result.created ? `${result.created} created` : null,
     result.updated ? `${result.updated} updated` : null,
     result.deleted ? `${result.deleted} deleted` : null,
   ].filter(Boolean)
-  const base = changes.length
-    ? `Synced: ${changes.join(", ")}.`
-    : "Up to date. Nothing changed since the last run."
-  return result.conflicts
-    ? `${base} ${plural(result.conflicts, "conflict")} blocked; see Activity.`
-    : base
+  return changes.length ? `Synced: ${changes.join(", ")}.` : null
 }
 
+function withBlocked(base: string, blocked: number): string {
+  return blocked ? `${base} ${plural(blocked, "conflict")} blocked; see Activity.` : base
+}
+
+export function syncResultMessage(result: SyncResult): string {
+  return withBlocked(
+    syncedChanges(result) ?? "Up to date. Nothing changed since the last run.",
+    result.conflicts,
+  )
+}
+
+/**
+ * Reconcile Now syncs first, which is where repairs happen, then checks every projection. The
+ * check only reports: whatever still differs was left as it is.
+ */
 export function reconcileResultMessage(result: SyncResult): string {
-  const checked = plural(result.checked_mappings ?? 0, "projection")
+  const checked = `Checked ${plural(result.checked_mappings ?? 0, "projection")}`
   const drift = result.drift?.length ?? 0
-  const base = drift
-    ? `Checked ${checked}: ${plural(drift, "difference")} repaired from the source.`
-    : `Checked ${checked}: every one matches its source event.`
-  return result.conflicts
-    ? `${base} ${plural(result.conflicts, "conflict")} blocked; see Activity.`
-    : base
+  const differ =
+    drift === 1
+      ? "1 still differs from its source event and was left as it is"
+      : `${drift} still differ from their source events and were left as they are`
+  const blocked = result.conflicts + (result.reconciliation_conflicts?.length ?? 0)
+  // A blocked projection could not be verified, so only a check without blocks says all match.
+  const check = drift
+    ? `${checked}: ${differ}. The next sync puts back any that changed during the check.`
+    : blocked
+      ? `${checked}.`
+      : `${checked}: every one matches its source event.`
+  const synced = syncedChanges(result)
+  return withBlocked(synced ? `${synced} ${check}` : check, blocked)
 }
 
 /** What the latest preview found, beside the Start syncing button. The policy line names the privacy. */

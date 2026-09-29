@@ -221,6 +221,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
                 projector,
                 ReconciliationService(fingerprinter),
                 clock,
+                adapters.run_ids,
                 locks,
             ),
             rule_health,

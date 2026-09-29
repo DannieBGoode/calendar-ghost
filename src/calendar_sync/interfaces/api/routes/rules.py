@@ -176,7 +176,12 @@ async def reconcile_now(rule_id: str, services: Services) -> dict[str, object]:
         "conflicts": result.conflicts,
         "consistent": report.is_consistent,
         "checked_mappings": report.checked_mappings,
+        # What is still different after the sync; reported, not repaired.
         "drift": [{"kind": item.kind.value, "detail": item.detail} for item in report.drift],
+        # Blocked by the reconciliation itself, beside the sync's own `conflicts`.
+        "reconciliation_conflicts": [
+            {"reason": item.reason.value, "detail": item.detail} for item in report.conflicts
+        ],
     }
 
 

@@ -15,11 +15,13 @@ from calendar_sync.domain.model import (
     EventProjection,
     EventRef,
     EventStatus,
+    NoProjectionExpected,
     OccurrenceCheck,
     OccurrenceMapping,
     OccurrenceStart,
     ProjectionContent,
     ProjectionFingerprint,
+    ReconciliationConflict,
     ReconciliationDrift,
     ReconciliationReport,
     SyncAction,
@@ -348,63 +350,86 @@ class ReconciliationService:
         self,
         rule: SyncRule,
         mappings: Iterable[EventMapping],
-        expected_by_source: Mapping[EventRef, EventProjection],
+        expected_by_source: Mapping[EventRef, EventProjection | NoProjectionExpected],
         actual_by_destination: Mapping[EventRef, CalendarEvent],
         occurrences: Iterable[OccurrenceCheck] = (),
     ) -> ReconciliationReport:
+        """Compare each mapping's expected and actual state; a source absent from
+        `expected_by_source` could not be read."""
         mapping_list = tuple(mappings)
-        drift: list[ReconciliationDrift] = []
+        findings: list[ReconciliationDrift | ReconciliationConflict | None] = []
         managed_destinations: set[EventRef] = set()
 
         for mapping in mapping_list:
             if mapping.belongs_to(rule):
                 managed_destinations.add(mapping.destination)
-            found = self._mapping_drift(
-                rule,
-                mapping,
-                expected_by_source.get(mapping.source),
-                actual_by_destination.get(mapping.destination),
+            findings.append(
+                self._mapping_finding(
+                    rule,
+                    mapping,
+                    expected_by_source.get(mapping.source),
+                    actual_by_destination.get(mapping.destination),
+                )
             )
-            if found is not None:
-                drift.append(found)
 
         checked_occurrences: set[tuple[EventRef, OccurrenceStart]] = set()
         for check in occurrences:
             checked_occurrences.add((check.destination_series, check.mapping.original_start))
-            drift.extend(self._occurrence_drift(check))
+            findings.extend(self._occurrence_drift(check))
 
-        for destination in actual_by_destination.keys() - managed_destinations:
-            found = _unmapped_drift(
+        findings.extend(
+            _unmapped_finding(
                 destination,
                 actual_by_destination[destination],
                 managed_destinations,
                 checked_occurrences,
             )
-            if found is not None:
-                drift.append(found)
+            for destination in actual_by_destination.keys() - managed_destinations
+        )
 
-        return ReconciliationReport(rule.id, len(mapping_list), tuple(drift))
+        return ReconciliationReport(
+            rule.id,
+            len(mapping_list),
+            tuple(item for item in findings if isinstance(item, ReconciliationDrift)),
+            tuple(item for item in findings if isinstance(item, ReconciliationConflict)),
+        )
 
-    def _mapping_drift(
+    def _mapping_finding(
         self,
         rule: SyncRule,
         mapping: EventMapping,
-        expected: EventProjection | None,
+        expected: EventProjection | NoProjectionExpected | None,
         actual: CalendarEvent | None,
-    ) -> ReconciliationDrift | None:
+    ) -> ReconciliationDrift | ReconciliationConflict | None:
         if not mapping.belongs_to(rule):
-            return ReconciliationDrift(
-                DriftKind.MAPPING_CONFLICT,
+            return ReconciliationConflict(
+                SyncReason.MAPPING_INCONSISTENT,
                 mapping.source,
                 mapping.destination,
                 "mapping is outside this directional relationship",
             )
         if expected is None:
-            return ReconciliationDrift(
-                DriftKind.MAPPING_CONFLICT,
+            return ReconciliationConflict(
+                SyncReason.SOURCE_UNVERIFIABLE,
                 mapping.source,
                 mapping.destination,
-                "source event is unavailable for this mapping",
+                "source event could not be read for this mapping",
+            )
+        if expected is NoProjectionExpected.MANAGED_SOURCE:
+            return ReconciliationConflict(
+                SyncReason.MAPPING_INCONSISTENT,
+                mapping.source,
+                mapping.destination,
+                "mapped source event is itself a managed projection",
+            )
+        if expected is NoProjectionExpected.INELIGIBLE:
+            if actual is None:
+                return None
+            return ReconciliationDrift(
+                DriftKind.UNEXPECTED,
+                mapping.source,
+                mapping.destination,
+                "managed projection remains for a cancelled or excluded source",
             )
         if actual is None:
             return ReconciliationDrift(
@@ -444,12 +469,12 @@ class ReconciliationService:
         return [ReconciliationDrift(kind, check.mapping.source, check.mapping.destination, detail)]
 
 
-def _unmapped_drift(
+def _unmapped_finding(
     destination: EventRef,
     event: CalendarEvent,
     managed_destinations: set[EventRef],
     checked_occurrences: set[tuple[EventRef, OccurrenceStart]],
-) -> ReconciliationDrift | None:
+) -> ReconciliationDrift | ReconciliationConflict | None:
     """A managed provider event no mapping accounts for, unless a checked occurrence is it."""
     parent = event.occurrence
     if parent is not None:
@@ -463,6 +488,10 @@ def _unmapped_drift(
                 destination,
                 "managed occurrence has no occurrence mapping",
             )
-    return ReconciliationDrift(
-        DriftKind.UNEXPECTED, None, destination, "managed provider event has no mapping"
+    # No mapping proves ownership, so nothing may change or delete it.
+    return ReconciliationConflict(
+        SyncReason.PROJECTION_UNMAPPED,
+        event.managed_origin.source if event.managed_origin else None,
+        destination,
+        "managed provider event has no mapping",
     )

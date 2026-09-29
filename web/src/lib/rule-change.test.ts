@@ -136,7 +136,17 @@ describe("state and outcome labels", () => {
     )
     expect(runOutcomeSummary(base, "reconciliation")).toBe("All 42 projections matched their sources")
     expect(runOutcomeSummary({ ...base, drift: 3 }, "reconciliation")).toBe(
-      "3 differences found in 42 projections and repaired",
+      "3 of 42 projections differed from their sources; none were changed",
+    )
+    expect(runOutcomeSummary({ ...base, drift: 1 }, "reconciliation")).toBe(
+      "1 of 42 projections differed from its source; it was not changed",
+    )
+    // A conflict is not drift: nothing was compared wrongly, one event was blocked.
+    expect(runOutcomeSummary({ ...base, conflicts: 1 }, "reconciliation")).toBe(
+      "Checked 42 projections: 1 conflict blocked",
+    )
+    expect(runOutcomeSummary({ ...base, drift: 2, conflicts: 1 }, "reconciliation")).toBe(
+      "2 of 42 projections differed from their sources; none were changed. 1 conflict blocked",
     )
     expect(
       runOutcomeSummary({ ...base, succeeded: false, failure_kind: "authentication" }, "sync"),

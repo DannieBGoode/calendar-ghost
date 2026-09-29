@@ -60,6 +60,14 @@ class SyncRunContext:
     """Source series already repaired this run, so a repair never recurses."""
     live_series: dict[EventRef, bool] = field(default_factory=dict)
     """Whether each source series looked up this run still has an occurrence this rule projects."""
+    blocked: set[EventRef] = field(default_factory=set)
+    """Source events and occurrences this run blocked as a Conflict."""
+
+    def count(self, action: SyncAction, source: EventRef) -> None:
+        """Count one decision about `source`, remembering it when it is a block."""
+        self.counts[action] += 1
+        if action is SyncAction.CONFLICT:
+            self.blocked.add(source)
 
 
 def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: EventRef) -> bool:
