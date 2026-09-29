@@ -34,9 +34,11 @@ recorded it, the event as it is in Google now, and a link to open it in Google C
   event carrying this rule's marker that no mapping owns, so Calendar Sync will never change or
   delete it. Delete it in the destination calendar if you don't want it.
 - **Reconcile now says projections still differ**: the check after the sync only reports; it
-  changes nothing. A difference in an event from the past 30 days onward that changed during the
-  check is put back by the next sync. One in an event that ended earlier stays until you edit that
-  event in the source calendar or change the rule's policy.
+  changes nothing. A difference that appeared during the check is put back by the next sync.
+- **An old event looks different in the destination calendar**: Reconcile now and the daily check
+  cover events from the rule's starting point onward (the past 30 days by default), plus every
+  recurring event that still has occurrences in that range. Older events are not checked. Editing
+  the event in the source calendar still updates it.
 
 ## A rule removal stopped or left events behind
 

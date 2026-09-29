@@ -71,6 +71,8 @@ class FakeCalendars:
     operations: dict[str, EventRef] = field(default_factory=dict)
     created: int = 0
     exception_listings: list[EventRef] = field(default_factory=list)
+    listings: list[CalendarEndpoint] = field(default_factory=list)
+    """Calendars listed in full by `list_events`, in order."""
     """Every series whose exceptions were listed, in order."""
 
     def put(
@@ -387,8 +389,20 @@ class FakeCalendars:
             raise _denied()
         return instance
 
+    def list_events(
+        self, calendar: CalendarEndpoint, not_ended_before: datetime
+    ) -> tuple[CalendarEvent, ...]:
+        self.listings.append(calendar)
+        return tuple(
+            event
+            for event in self.events.values()
+            if event.reference.calendar == calendar
+            and event.reference not in self.unreadable
+            and self._in_window(event, not_ended_before)
+        )
+
     def managed_events(
-        self, destination: CalendarEndpoint, rule_id: SyncRuleId
+        self, destination: CalendarEndpoint, rule_id: SyncRuleId, not_ended_before: datetime
     ) -> tuple[CalendarEvent, ...]:
         return tuple(
             event
@@ -397,6 +411,7 @@ class FakeCalendars:
             and event.status is EventStatus.CONFIRMED
             and event.managed_origin is not None
             and event.managed_origin.rule_id == rule_id
+            and self._in_window(event, not_ended_before)
         )
 
 
@@ -449,10 +464,15 @@ class ReaderOnlyCalendar:
     ) -> CalendarEvent | None:
         return self._calendar.find_projection(destination, operation_key)
 
-    def managed_events(
-        self, destination: CalendarEndpoint, rule_id: SyncRuleId
+    def list_events(
+        self, calendar: CalendarEndpoint, not_ended_before: datetime
     ) -> Sequence[CalendarEvent]:
-        return self._calendar.managed_events(destination, rule_id)
+        return self._calendar.list_events(calendar, not_ended_before)
+
+    def managed_events(
+        self, destination: CalendarEndpoint, rule_id: SyncRuleId, not_ended_before: datetime
+    ) -> Sequence[CalendarEvent]:
+        return self._calendar.managed_events(destination, rule_id, not_ended_before)
 
     def get_occurrence(
         self, series: EventRef, original_start: OccurrenceStart

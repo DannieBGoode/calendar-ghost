@@ -30,7 +30,7 @@ from calendar_sync.infrastructure.google.translation import (
     SOURCE_CALENDAR_PROPERTY,
     SOURCE_EVENT_PROPERTY,
 )
-from tests.helpers import endpoint, event
+from tests.helpers import NOW, endpoint, event
 
 
 class GoogleResponse(dict[str, str]):
@@ -294,13 +294,35 @@ def test_managed_event_listing_paginates() -> None:
     ]
     provider = provider_with_events_api(events_api)
 
-    managed = provider.managed_events(endpoint("work", "destination"), SyncRuleId("rule-1"))
+    managed = provider.managed_events(
+        endpoint("work", "destination"), SyncRuleId("rule-1"), NOW - timedelta(days=30)
+    )
 
     assert [item.reference.event_id.value for item in managed] == [
         "managed-one",
         "managed-two",
     ]
     assert events_api.list.call_args_list[1].kwargs["pageToken"] == "page-2"
+    # Only projections that reach the sync window are listed.
+    assert events_api.list.call_args.kwargs["timeMin"] == (NOW - timedelta(days=30)).isoformat()
+
+
+def test_window_listing_includes_cancellations_and_reads_no_sync_token() -> None:
+    events_api = MagicMock()
+    events_api.list.side_effect = [
+        request_returning({"items": [google_event_payload("one")], "nextPageToken": "page-2"}),
+        # A listing that never asks for a synchronization token need not receive one.
+        request_returning({"items": [google_event_payload("two")]}),
+    ]
+    provider = provider_with_events_api(events_api)
+
+    listed = provider.list_events(endpoint("personal", "source"), NOW - timedelta(days=30))
+
+    assert [item.reference.event_id.value for item in listed] == ["one", "two"]
+    first = events_api.list.call_args_list[0].kwargs
+    assert first["showDeleted"] is True
+    assert first["timeMin"] == (NOW - timedelta(days=30)).isoformat()
+    assert "syncToken" not in first
 
 
 def _managed_payload(event_id: str, source_event_id: str) -> dict[str, object]:
