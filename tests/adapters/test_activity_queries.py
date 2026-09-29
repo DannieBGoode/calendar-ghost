@@ -142,7 +142,7 @@ def test_entries_filter_by_category(
     assert {entry.category for entry in listed} == categories
 
 
-def test_entries_filter_by_rule_run_and_title(database: Path) -> None:
+def test_entries_filter_by_rule_and_title(database: Path) -> None:
     _append(
         database,
         _entry("create", "source_created", title="Reunión semanal"),
@@ -156,7 +156,6 @@ def test_entries_filter_by_rule_run_and_title(database: Path) -> None:
 
     assert ids(ActivityFilter()) == [3, 2, 1]
     assert ids(ActivityFilter(rule_id="rule-1")) == [3, 1]
-    assert ids(ActivityFilter(run_id="run-2")) == [3]
     # Search ignores case, accents, and surrounding space.
     assert ids(ActivityFilter(search="  REUNION ")) == [2, 1]
     assert ids(ActivityFilter(rule_id="rule-2", search="reunión")) == [2]
@@ -205,50 +204,6 @@ def test_entry_events_name_the_rule_and_events(database: Path) -> None:
 
     assert queries.entry_events(1) == EntryEvents("rule-1", "source-event", None)
     assert queries.entry_events(3) is None
-
-
-def test_no_change_runs_group_checks_by_run(database: Path) -> None:
-    _append(
-        database,
-        _entry("ignore", "projection_current", run_id="run-1"),
-        _entry("ignore", "occurrence_already_cancelled", run_id="run-1"),
-        _entry("create", "source_created", run_id="run-1"),
-        _entry("ignore", "all_day_excluded", run_id="run-2"),
-        _entry("ignore", "projection_current", rule_id="rule-2", run_id="run-3"),
-        _entry("ignore", "projection_current", run_id=None),
-    )
-    queries = SqliteActivityQueries(database)
-
-    everything = queries.no_change_runs(None, 0)
-    one_rule = queries.no_change_runs("rule-1", 0)
-
-    assert [(run.run_id, run.rule_id, run.newest_id, run.count) for run in everything] == [
-        ("run-3", "rule-2", 5, 1),
-        ("run-1", "rule-1", 2, 2),
-    ]
-    assert [run.run_id for run in one_rule] == ["run-1"]
-    # A run with any entry newer than `after` is counted whole.
-    assert [(run.run_id, run.count) for run in queries.no_change_runs(None, 2)] == [
-        ("run-3", 1),
-        ("run-1", 2),
-    ]
-    assert queries.no_change_runs(None, 5) == []
-    assert queries.no_change_runs("rule-3", 0) == []
-
-
-def test_no_change_runs_find_recent_runs_by_entry_range_not_by_run_index(database: Path) -> None:
-    with sqlite3.connect(database) as connection:
-        plans = [
-            " ".join(str(row[3]) for row in connection.execute(f"EXPLAIN QUERY PLAN {sql}", args))
-            for sql, args in (
-                (activity_queries._recent_runs_sql(with_rule=False), (0, 500)),
-                (activity_queries._recent_runs_sql(with_rule=True), ("rule-1", 0, 500)),
-            )
-        ]
-
-    assert "INTEGER PRIMARY KEY (rowid>?)" in plans[0]
-    assert "audit_entries_rule_id (rule_id=? AND id>?)" in plans[1]
-    assert all("audit_entries_run_id" not in plan for plan in plans)
 
 
 def test_recent_changes_count_a_repair_repeated_by_later_runs_once(database: Path) -> None:

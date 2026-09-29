@@ -95,22 +95,12 @@ class ActivityEntry:
 @dataclass(frozen=True, slots=True)
 class ActivityFilter:
     rule_id: str | None = None
-    run_id: str | None = None
     categories: frozenset[ActivityCategory] = frozenset()
     before: int | None = None
     """Only entries older than this one, for the next page."""
     limit: int = 100
     search: str | None = None
     """Matches recorded titles, ignoring case and accents."""
-
-
-@dataclass(frozen=True, slots=True)
-class NoChangeRun:
-    run_id: str
-    rule_id: str
-    newest_id: int
-    occurred_at: str
-    count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,10 +129,6 @@ class ActivityQueries(Protocol):
     def entry(self, entry_id: int) -> ActivityEntry | None: ...
 
     def entry_events(self, entry_id: int) -> EntryEvents | None: ...
-
-    def no_change_runs(self, rule_id: str | None, after: int) -> Sequence[NoChangeRun]:
-        """Runs newer than entry `after` that made no-change checks, with how many each made."""
-        ...
 
     def recent_changes(self, limit: int) -> Sequence[RecentChange]:
         """The newest written events, each repeated repair counted on its newest write."""

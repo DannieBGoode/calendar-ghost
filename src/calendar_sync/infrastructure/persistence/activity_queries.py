@@ -18,7 +18,6 @@ from calendar_sync.application.activity import (
     ActivityFilter,
     EntryEvents,
     IncidentSummary,
-    NoChangeRun,
     OpenBlock,
     OperationsOverview,
     RecentChange,
@@ -124,9 +123,6 @@ _CATEGORY_SQL = f"""(CASE
 END)"""
 # Earlier releases recorded these skips; Activity no longer lists them.
 _UNRECORDED_SQL = _sql_list(frozenset(reason.value for reason in UNRECORDED_REASONS))
-# No-change summaries cover at most this many recent runs and audit entries.
-_NO_CHANGE_RUN_LIMIT = 500
-_NO_CHANGE_SCAN_LIMIT = 50_000
 
 _WRITES = frozenset({"create", "update", "delete", "remove_projection"})
 # Writes that put a destination event back to match its source.
@@ -177,9 +173,6 @@ class SqliteActivityQueries:
         if selection.rule_id is not None:
             conditions.append("rule_id = ?")
             parameters.append(selection.rule_id)
-        if selection.run_id is not None:
-            conditions.append("run_id = ?")
-            parameters.append(selection.run_id)
         if selection.categories:
             chosen = sorted(selection.categories)
             conditions.append(f"{_CATEGORY_SQL} IN ({', '.join('?' for _ in chosen)})")
@@ -223,39 +216,6 @@ class SqliteActivityQueries:
             source_event_id=_text(row["source_event_id"]),
             destination_event_id=_text(row["destination_event_id"]),
         )
-
-    def no_change_runs(self, rule_id: str | None, after: int) -> list[NoChangeRun]:
-        """The default Activity view hides these checks, including runs that made nothing else."""
-        with _reading(self._database_path) as connection:
-            newest = connection.execute(
-                "SELECT COALESCE(MAX(id), 0) FROM audit_entries"
-            ).fetchone()[0]
-            # Only recent history is summarized, so the scan stays bounded as history grows.
-            lower = max(after, int(newest) - _NO_CHANGE_SCAN_LIMIT)
-            recent = connection.execute(
-                _recent_runs_sql(with_rule=rule_id is not None),
-                (*([rule_id] if rule_id is not None else []), lower, _NO_CHANGE_RUN_LIMIT),
-            ).fetchall()
-            # Count each run whole, even where the page boundary splits it.
-            run_ids = [row[0] for row in recent]
-            if not run_ids:
-                return []
-            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-            rows = connection.execute(
-                f"""
-                SELECT run_id, rule_id, MAX(id), MAX(occurred_at), COUNT(*) FROM audit_entries
-                WHERE run_id IN ({", ".join("?" for _ in run_ids)})
-                    AND {_CATEGORY_SQL} = 'unchanged'
-                GROUP BY run_id ORDER BY MAX(id) DESC
-                """,  # noqa: S608
-                run_ids,
-            ).fetchall()
-        return [
-            NoChangeRun(
-                run_id=row[0], rule_id=row[1], newest_id=row[2], occurred_at=row[3], count=row[4]
-            )
-            for row in rows
-        ]
 
     def recent_changes(self, limit: int) -> list[RecentChange]:
         # The newest written events. A repair identical to a newer one, the same repair of the
@@ -347,24 +307,6 @@ def _search_fold_column(text: str | None) -> str | None:
 
 def _like_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _recent_runs_sql(*, with_rule: bool) -> str:
-    """Runs with any entry newer than a bound, newest first.
-
-    Grouping by run would otherwise lead SQLite to walk the run index across the whole history
-    before applying the bound, so the scan is pinned to the entry range or the rule's range.
-    """
-    source = (
-        "audit_entries INDEXED BY audit_entries_rule_id WHERE rule_id = ? AND id > ?"
-        if with_rule
-        else "audit_entries NOT INDEXED WHERE id > ?"
-    )
-    # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-    return f"""
-        SELECT run_id FROM {source} AND run_id IS NOT NULL
-        GROUP BY run_id ORDER BY MAX(id) DESC LIMIT ?
-    """  # noqa: S608
 
 
 def _recent_write_groups(connection: sqlite3.Connection, limit: int) -> list[list[sqlite3.Row]]:

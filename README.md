@@ -126,9 +126,8 @@ happens, what happened as what Calendar Sync observed and what it did about it (
 "Cancelled in Personal → removed from Work" or "Missing from Work → put back again"), and the rule.
 Recurring events say whether the entry was about the whole series or one occurrence. A blocked
 entry says what is now different in the destination calendar and whether anything needs doing. Each entry records its event's title and time when the run makes the decision,
-so Activity names events without asking Google and shows when an event was renamed. By default each run shows how many events it found already up to date in one row you
-can expand, and runs that found nothing else to do share one summary row; **All decisions** lists
-every check. Choose a rule from the picker, which shows each
+so Activity names events without asking Google and shows when an event was renamed. By default Activity lists changes, skips, and blocks; **All decisions** and **No change needed** also list
+the checks that found an event already up to date. Choose a rule from the picker, which shows each
 rule's calendars and accounts, or select a row's rule to filter to it. Select an entry to open its
 details beside the table: the event, what happened and why, the copy in the destination calendar,
 and technical identifiers on demand. The rule, filter, and open entry are kept in the address, so

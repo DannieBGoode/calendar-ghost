@@ -32,8 +32,9 @@ prevention and bookkeeping, and each echo cost a provider read.
 
 - Keeping every decision and hiding the noise in the Web UI would still grow the database without
   bound and spend a provider read on every echo.
-- Dropping no-change checks too would remove the per-run "up to date" counts that Activity expands.
-  With echoes skipped, those checks come mainly from the daily pass, once per mapped event.
+- Dropping no-change checks too would leave no way to confirm in Activity that a run looked at an
+  event and found it already matching. With echoes skipped, those checks come mainly from the daily
+  pass, once per mapped event.
 - Deleting earlier noisy entries in a migration would reclaim space but destroy recorded evidence;
   hiding them is reversible.
 

@@ -186,7 +186,6 @@ export type RecordedEvent = {
 }
 export type ActivityFilters = {
   ruleId?: string
-  runId?: string
   categories?: ActivityCategory[]
   before?: number
   /** Matches recorded event titles, ignoring case. */
@@ -203,14 +202,6 @@ export type EventSnapshot = {
   web_link: string | null
 }
 export type ActivityEvent = { source: EventSnapshot; destination: EventSnapshot | null }
-/** A run that made no-change checks, which the default Activity view counts instead of listing. */
-export type NoChangeRun = {
-  run_id: string
-  rule_id: string
-  newest_id: number
-  occurred_at: string
-  count: number
-}
 export type Incident = {
   id: string
   rule_id: string | null
@@ -304,19 +295,13 @@ export const api = {
     request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
       method: "POST",
     }),
-  activity: ({ ruleId, runId, categories, before, query }: ActivityFilters = {}) => {
+  activity: ({ ruleId, categories, before, query }: ActivityFilters = {}) => {
     const params = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) })
     if (ruleId) params.set("rule_id", ruleId)
-    if (runId) params.set("run_id", runId)
     for (const category of categories ?? []) params.append("category", category)
     if (before) params.set("before", String(before))
     if (query?.trim()) params.set("q", query.trim())
     return request<AuditEntry[]>(`/api/v1/audit-entries?${params}`)
-  },
-  noChangeRuns: ({ ruleId, after }: { ruleId?: string; after: number }) => {
-    const params = new URLSearchParams({ after: String(after) })
-    if (ruleId) params.set("rule_id", ruleId)
-    return request<NoChangeRun[]>(`/api/v1/audit-entries/no-change-runs?${params}`)
   },
   activityEntry: (entryId: number) => request<AuditEntry>(`/api/v1/audit-entries/${entryId}`),
   activityEvent: (entryId: number) =>

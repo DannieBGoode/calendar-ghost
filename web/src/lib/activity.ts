@@ -1,5 +1,5 @@
 import type { ActivityShow } from "@/lib/activity-location"
-import { ApiError, type ActivityCategory, type AuditEntry, type NoChangeRun, type RecordedEvent } from "@/lib/api"
+import { ApiError, type ActivityCategory, type AuditEntry, type RecordedEvent } from "@/lib/api"
 
 /**
  * What Calendar Sync observed (`trigger`) and what it did about it (`effect`), never who caused
@@ -365,75 +365,18 @@ export function groupRuns(entries: AuditEntry[]): ActivityRun[] {
   return [...runs.values()]
 }
 
-export type ActivityRow =
-  | { kind: "entry"; entry: AuditEntry }
-  | { kind: "folded"; count: number; expanded: boolean; more: boolean }
+/** A run and the day heading above it, if it is the first run of its day. */
+export type ActivityGroup = { key: string; day: string | null; run: ActivityRun }
 
-/** A run with its rows, or several consecutive runs that only found events already up to date. */
-export type ActivityGroup =
-  | { kind: "run"; key: string; day: string | null; run: ActivityRun; rows: ActivityRow[] }
-  | { kind: "quiet"; key: string; day: string | null; runs: number; checks: number; newest: string; oldest: string }
-
-export type ExpandedChecks = { entries: AuditEntry[]; complete: boolean }
-
-/**
- * Lays out the table newest first and names the day above its first group. With `noChangeRuns`,
- * each run ends in one row counting its hidden no-change checks, and consecutive runs that made
- * nothing but those checks collapse into a single quiet row. An expanded run lists the checks
- * loaded for it in place and keeps its row so they can be hidden again or loaded further.
- */
-export function activityRows(
-  runs: ActivityRun[],
-  {
-    noChangeRuns,
-    expanded = new Map(),
-    now = new Date(),
-  }: {
-    noChangeRuns?: readonly NoChangeRun[]
-    expanded?: ReadonlyMap<string, ExpandedChecks>
-    now?: Date
-  },
-): ActivityGroup[] {
-  const counts = new Map((noChangeRuns ?? []).map((item) => [item.run_id, item]))
-  const shown = new Set(runs.map((run) => run.key))
-  const ordered: ({ at: number; run: ActivityRun } | { at: number; quiet: NoChangeRun })[] = [
-    ...runs.map((run) => ({
-      at: Math.max(...run.entries.map((item) => item.id), counts.get(run.key)?.newest_id ?? 0),
-      run,
-    })),
-    ...(noChangeRuns ?? []).filter((item) => !shown.has(item.run_id)).map((item) => ({ at: item.newest_id, quiet: item })),
-  ].sort((a, b) => b.at - a.at)
-
-  const groups: ActivityGroup[] = []
+/** Lays out the runs newest first and names the day above its first run. */
+export function activityRows(runs: ActivityRun[], { now = new Date() }: { now?: Date } = {}): ActivityGroup[] {
   let previousDay: string | null = null
-  const dayOf = (value: string) => {
-    const label = formatDay(value, now)
+  return runs.map((run) => {
+    const label = formatDay(run.occurredAt, now)
     const day = label === previousDay ? null : label
     previousDay = label
-    return day
-  }
-  for (const item of ordered) {
-    if ("quiet" in item) {
-      const last = groups.at(-1)
-      if (last?.kind === "quiet" && formatDay(item.quiet.occurred_at, now) === previousDay) {
-        last.runs += 1
-        last.checks += item.quiet.count
-        last.oldest = item.quiet.occurred_at
-        continue
-      }
-      const at = item.quiet.occurred_at
-      groups.push({ kind: "quiet", key: `quiet-${item.quiet.run_id}`, day: dayOf(at), runs: 1, checks: item.quiet.count, newest: at, oldest: at })
-      continue
-    }
-    const { run } = item
-    const count = counts.get(run.key)?.count ?? 0
-    const checks = expanded.get(run.key)
-    const entries = checks ? [...run.entries, ...checks.entries].sort((a, b) => b.id - a.id) : run.entries
-    const rows: ActivityRow[] = entries.map((entry) => ({ kind: "entry", entry }))
-    if (count > 0) rows.push({ kind: "folded", count, expanded: checks !== undefined, more: checks !== undefined && !checks.complete })
-    groups.push({ kind: "run", key: run.key, day: dayOf(run.occurredAt), run, rows })
-  }
-  return groups
+    return { key: run.key, day, run }
+  })
 }
 
 /** Which part of a recurring event an entry was about; null for single events or when unknown. */

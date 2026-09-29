@@ -1699,63 +1699,6 @@ def test_rule_management_entries_are_listed_as_changes(tmp_path: Path) -> None:
     assert {entry["category"] for entry in changed} == {"changed"}
 
 
-def test_no_change_runs_count_whole_runs_that_a_page_boundary_splits(tmp_path: Path) -> None:
-    container, adapters = _installation(Settings(tmp_path / "test.db"))
-    _append_audit(
-        adapters,
-        _audit("ignore", "projection_current", run_id="run-1"),
-        _audit("ignore", "projection_current", run_id="run-1"),
-        # The oldest entry on the loaded page; the run's checks above sit below the boundary.
-        _audit("create", "source_created", run_id="run-1"),
-        _audit("update", "source_changed", run_id="run-2"),
-    )
-
-    with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
-        runs = client.get("/api/v1/audit-entries/no-change-runs", params={"after": 2}).json()
-
-    assert [(item["run_id"], item["count"]) for item in runs] == [("run-1", 2)]
-
-
-def test_activity_lists_runs_with_no_change_checks_including_quiet_runs(tmp_path: Path) -> None:
-    container, adapters = _installation(Settings(tmp_path / "test.db"))
-    _append_audit(
-        adapters,
-        _audit("ignore", "projection_current", run_id="run-1"),
-        _audit("ignore", "occurrence_current", run_id="run-1"),
-        _audit("create", "source_created", run_id="run-1"),
-        # A run that only confirmed events were up to date has no other entries to show.
-        _audit("ignore", "projection_current", run_id="run-2"),
-        _audit("ignore", "all_day_excluded", run_id="run-3"),
-        _audit("ignore", "projection_current", rule_id="rule-2", run_id="run-4"),
-    )
-
-    with TestClient(create_app(container)) as client:
-        assert client.get("/api/v1/audit-entries/no-change-runs").status_code == 401
-        client.post("/api/v1/setup/admin", json=PASSWORD)
-        everything = client.get("/api/v1/audit-entries/no-change-runs").json()
-        one_rule = client.get(
-            "/api/v1/audit-entries/no-change-runs", params={"rule_id": "rule-1"}
-        ).json()
-        newer = client.get("/api/v1/audit-entries/no-change-runs", params={"after": 3}).json()
-        one_run = client.get(
-            "/api/v1/audit-entries", params={"run_id": "run-1", "category": "unchanged"}
-        )
-
-    assert [(item["run_id"], item["count"], item["newest_id"]) for item in everything] == [
-        ("run-4", 1, 6),
-        ("run-2", 1, 4),
-        ("run-1", 2, 2),
-    ]
-    assert everything[0]["rule_id"] == "rule-2"
-    assert [item["run_id"] for item in one_rule] == ["run-2", "run-1"]
-    assert [item["run_id"] for item in newer] == ["run-4", "run-2"]
-    assert [entry["reason"] for entry in one_run.json()] == [
-        "occurrence_current",
-        "projection_current",
-    ]
-
-
 def test_activity_filters_combine_several_categories(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
     _append_audit(
