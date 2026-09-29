@@ -123,7 +123,9 @@ ignored rather than reported as a missing destination occurrence. Full Reconcili
 dormant series without a projection, and Rule Preview excludes it. A projection that Google created
 before an interrupted run could record its mapping is found by its create Operation Key and removed
 (`series_without_occurrences_removed`). Only an answered lookup may report that none remain; an
-unreadable series is a temporary failure.
+unreadable series is a temporary failure. A series that was never mapped has no Occurrence Mappings,
+so when an incremental run first creates it, only the exceptions that feed reports are applied; the
+next daily full pass applies the rest, such as other occurrences that stayed cancelled.
 
 `recurring_unsupported` is no longer produced; it remains for audit entries recorded by earlier
 releases.
