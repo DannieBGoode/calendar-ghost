@@ -37,6 +37,15 @@ route returns; never a concrete adapter, the unit of work, or the rule locks. Te
 development preview substitute adapters before `compose`, or use cases after it. Use cases that
 need the installation master key are absent without it, and one route guard answers 503 for them.
 
+`interfaces/api/app.py` is only the factory: it installs the container, registers the routers, and
+serves the compiled Web UI after checking each requested file against the resolved static root. The
+routes live in one `APIRouter` module per resource under `interfaces/api/routes/` (session, setup,
+accounts, rules, activity, incidents, health). Each module declares a small protocol for the
+container services it reads, since interfaces cannot import bootstrap, and the factory's typed
+assignment lets mypy prove the container satisfies every one. `interfaces/api/dependencies.py` holds
+the shared `require_admin` session guard; `tests/adapters/test_api_authorization.py` fails if any
+`/api/` route other than setup, the session routes, and the OAuth callback lacks it.
+
 Google authorization is split the same way. `infrastructure/google/oauth.py` holds only the
 state-protected OAuth flow, configured by an `OAuthClientConfig` value that bootstrap builds from
 Settings. Connected Accounts and their credentials, encrypted by the `CredentialCipher` in

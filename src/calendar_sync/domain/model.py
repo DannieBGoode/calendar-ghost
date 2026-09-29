@@ -152,9 +152,11 @@ class EventStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-class PrivacyPolicy(StrEnum):
+class ProjectionContent(StrEnum):
+    """Whether a rule writes Busy-Only or Details Projections; stored and sent as privacy_policy."""
+
     BUSY_ONLY = "busy_only"
-    COPY_DETAILS = "copy_details"
+    DETAILS = "copy_details"
 
 
 class AllDaySyncPolicy(StrEnum):
@@ -171,21 +173,21 @@ class ProjectionHandling(StrEnum):
 
 class SyncRuleState(StrEnum):
     DRAFT = "draft"
-    DRY_RUN_VALIDATED = "dry_run_validated"
+    PREVIEWED = "dry_run_validated"
     ENABLED = "enabled"
     PAUSED = "paused"
     DEGRADED = "degraded"
-    DISABLED = "disabled"
+    REMOVING = "disabled"
 
 
 @dataclass(frozen=True, slots=True)
 class TransformationPolicy:
-    privacy: PrivacyPolicy = PrivacyPolicy.BUSY_ONLY
+    content: ProjectionContent = ProjectionContent.BUSY_ONLY
     all_day: AllDaySyncPolicy = AllDaySyncPolicy.INCLUDE
     busy_title: str = "Busy"
 
     def __post_init__(self) -> None:
-        if self.privacy is PrivacyPolicy.BUSY_ONLY:
+        if self.content is ProjectionContent.BUSY_ONLY:
             _require_non_empty(self.busy_title, "busy title")
 
     @property
@@ -262,21 +264,28 @@ class SyncRule:
         if self.initial_lookback_days < 0:
             raise DomainValidationError("initial lookback days cannot be negative")
 
+    def uses_account(self, account_id: ConnectedAccountId) -> bool:
+        """Whether either calendar of this rule belongs to the Connected Account."""
+        return account_id in {
+            self.source.connected_account_id,
+            self.destination.connected_account_id,
+        }
+
     @property
     def material_signature(self) -> tuple[object, ...]:
         return (self.source, self.destination, self.transformation, self.initial_lookback_days)
 
-    def mark_dry_run_validated(self) -> Self:
+    def mark_previewed(self) -> Self:
         if self.state not in {
             SyncRuleState.DRAFT,
             SyncRuleState.PAUSED,
             SyncRuleState.DEGRADED,
         }:
             raise InvalidStateTransition(f"cannot validate a rule in state {self.state}")
-        return replace(self, state=SyncRuleState.DRY_RUN_VALIDATED)
+        return replace(self, state=SyncRuleState.PREVIEWED)
 
     def enable(self) -> Self:
-        if self.state is not SyncRuleState.DRY_RUN_VALIDATED:
+        if self.state is not SyncRuleState.PREVIEWED:
             raise InvalidStateTransition(f"cannot enable a rule in state {self.state}")
         return replace(self, state=SyncRuleState.ENABLED)
 
@@ -286,13 +295,13 @@ class SyncRule:
         return replace(self, state=SyncRuleState.PAUSED)
 
     def degrade(self) -> Self:
-        if self.state not in {SyncRuleState.DRY_RUN_VALIDATED, SyncRuleState.ENABLED}:
+        if self.state not in {SyncRuleState.PREVIEWED, SyncRuleState.ENABLED}:
             raise InvalidStateTransition(f"cannot degrade a rule in state {self.state}")
         return replace(self, state=SyncRuleState.DEGRADED)
 
     def change_policy(self, transformation: TransformationPolicy) -> Self:
         """Apply a Material Rule Change; the rule must pass a new Rule Preview afterwards."""
-        if self.state is SyncRuleState.DISABLED:
+        if self.state is SyncRuleState.REMOVING:
             raise InvalidStateTransition("cannot change a rule while its removal is incomplete")
         if transformation == self.transformation:
             return self
@@ -308,8 +317,8 @@ class SyncRule:
         return replace(self, reprojection_required=False)
 
     def begin_removal(self) -> Self:
-        """Disabled marks a Rule Removal that started and has not finished."""
-        return replace(self, state=SyncRuleState.DISABLED)
+        """Removing marks a Rule Removal that started and has not finished."""
+        return replace(self, state=SyncRuleState.REMOVING)
 
 
 @dataclass(frozen=True, slots=True)
@@ -410,10 +419,16 @@ class SyncDecision:
 
 
 class DriftKind(StrEnum):
+    """What a Full Reconciliation found for one mapping.
+
+    MAPPING_CONFLICT is a Conflict, not Drift: the mapping cannot be proven against its rule or
+    source. It is reported beside drift under its original payload value.
+    """
+
     MISSING = "missing"
     UNEXPECTED = "unexpected"
     INCORRECT_PROJECTION = "incorrect_projection"
-    MAPPING_INCONSISTENCY = "mapping_inconsistency"
+    MAPPING_CONFLICT = "mapping_inconsistency"
 
 
 @dataclass(frozen=True, slots=True)

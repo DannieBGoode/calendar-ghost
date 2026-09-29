@@ -18,7 +18,7 @@ from calendar_sync.domain.model import (
     OccurrenceMapping,
     OccurrenceMappingId,
     OccurrenceState,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     SyncAction,
     SyncDecision,
@@ -136,7 +136,7 @@ def test_moved_occurrence_updates_destination_with_busy_title_only() -> None:
 
 def test_details_rule_copies_occurrence_details() -> None:
     details = replace(
-        rule(), transformation=TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+        rule(), transformation=TransformationPolicy(content=ProjectionContent.DETAILS)
     )
     moved = occurrence(SOURCE, 1, title="Offsite")
 

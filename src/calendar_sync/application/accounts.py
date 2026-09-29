@@ -18,7 +18,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 # States that could still write, or be enabled, without the account's authorization.
-_DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.DRY_RUN_VALIDATED, SyncRuleState.ENABLED})
+_DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.PREVIEWED, SyncRuleState.ENABLED})
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +128,7 @@ def _require_disconnected(
 def _affected_rules(
     rules: Sequence[SyncRule], account_id: ConnectedAccountId
 ) -> tuple[SyncRuleId, ...]:
-    return _ordered(rule.id for rule in rules if _uses_account(rule, account_id))
+    return _ordered(rule.id for rule in rules if rule.uses_account(account_id))
 
 
 def _ordered(rule_ids: Iterable[SyncRuleId]) -> tuple[SyncRuleId, ...]:
@@ -137,9 +137,5 @@ def _ordered(rule_ids: Iterable[SyncRuleId]) -> tuple[SyncRuleId, ...]:
 
 def _summary(account: ConnectedAccount, rules: Sequence[SyncRule]) -> ConnectedAccountSummary:
     return ConnectedAccountSummary(
-        account, sum(1 for rule in rules if _uses_account(rule, account.id))
+        account, sum(1 for rule in rules if rule.uses_account(account.id))
     )
-
-
-def _uses_account(rule: SyncRule, account_id: ConnectedAccountId) -> bool:
-    return account_id in {rule.source.connected_account_id, rule.destination.connected_account_id}

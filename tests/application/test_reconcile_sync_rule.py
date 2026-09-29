@@ -233,7 +233,7 @@ def test_reconciliation_reports_a_mapping_whose_source_is_no_longer_eligible() -
         FixedClock(),
     ).execute(rule().id)
 
-    assert [item.kind for item in report.drift] == [DriftKind.MAPPING_INCONSISTENCY]
+    assert [item.kind for item in report.drift] == [DriftKind.MAPPING_CONFLICT]
 
 
 def test_reconciliation_of_a_projected_series_asks_for_no_live_lookup() -> None:
@@ -326,7 +326,7 @@ def test_reconciliation_reports_an_inconsistent_mapping_even_when_its_series_is_
 
     report = _reconcile(factory, calendars)
 
-    assert [item.kind for item in report.drift] == [DriftKind.MAPPING_INCONSISTENCY]
+    assert [item.kind for item in report.drift] == [DriftKind.MAPPING_CONFLICT]
 
 
 def test_reconciliation_runs_against_a_calendar_that_can_only_read() -> None:

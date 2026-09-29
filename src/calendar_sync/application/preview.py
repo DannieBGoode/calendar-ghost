@@ -122,7 +122,7 @@ class PreviewSyncRule:
             current = uow.rules.get(rule.id)
             if current is None or current.material_signature != rule.material_signature:
                 raise RuleNotExecutable("sync rule changed while preview was running")
-            uow.rules.save(current.mark_dry_run_validated())
+            uow.rules.save(current.mark_previewed())
             uow.previews.record(
                 RulePreviewSummary(
                     rule.id,

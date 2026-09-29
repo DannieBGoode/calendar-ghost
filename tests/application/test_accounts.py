@@ -152,7 +152,7 @@ def test_accounts_are_listed_with_the_number_of_rules_using_them() -> None:
 def test_disconnecting_degrades_validated_and_enabled_rules_only() -> None:
     states = {
         "enabled": SyncRuleState.ENABLED,
-        "validated": SyncRuleState.DRY_RUN_VALIDATED,
+        "validated": SyncRuleState.PREVIEWED,
         "paused": SyncRuleState.PAUSED,
         "draft": SyncRuleState.DRAFT,
     }

@@ -16,7 +16,7 @@ from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionHandling,
     SyncRuleState,
     TransformationPolicy,
@@ -59,7 +59,7 @@ def test_preview_validation_waits_for_the_rule_write_lock() -> None:
     )
 
     assert _blocks_until_released(locks, lambda: preview.execute(rule().id))
-    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DRY_RUN_VALIDATED
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.PREVIEWED
 
 
 def test_removal_start_waits_for_the_rule_write_lock() -> None:
@@ -76,7 +76,7 @@ def test_removal_start_waits_for_the_rule_write_lock() -> None:
 
 def test_clearing_reprojection_waits_for_the_rule_write_lock() -> None:
     unit_of_work = InMemoryUnitOfWorkFactory()
-    changed = rule().change_policy(TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS))
+    changed = rule().change_policy(TransformationPolicy(content=ProjectionContent.DETAILS))
     unit_of_work.state.rules[rule().id] = replace(changed, state=SyncRuleState.ENABLED)
     provider = FakeCalendarProvider(event())
     provider.source_changes = ()

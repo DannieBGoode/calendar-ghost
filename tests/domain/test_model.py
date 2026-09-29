@@ -6,6 +6,7 @@ from calendar_sync.domain.errors import DomainValidationError, InvalidStateTrans
 from calendar_sync.domain.model import (
     AllDayRange,
     AllDaySyncPolicy,
+    ConnectedAccountId,
     EventId,
     EventMapping,
     EventMappingId,
@@ -16,7 +17,7 @@ from calendar_sync.domain.model import (
     OccurrenceMapping,
     OccurrenceMappingId,
     OccurrenceState,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     SyncRule,
     SyncRuleId,
@@ -36,6 +37,14 @@ def test_rule_can_cross_connected_accounts() -> None:
     )
 
 
+def test_rule_uses_the_accounts_of_its_source_and_destination() -> None:
+    cross_account = rule()
+
+    assert cross_account.uses_account(ConnectedAccountId("personal-account"))
+    assert cross_account.uses_account(ConnectedAccountId("work-account"))
+    assert not cross_account.uses_account(ConnectedAccountId("other-account"))
+
+
 def test_rule_cannot_target_its_source_endpoint() -> None:
     same = endpoint("account", "calendar")
 
@@ -49,11 +58,11 @@ def test_rule_requires_preview_before_enablement() -> None:
     with pytest.raises(InvalidStateTransition):
         draft.enable()
 
-    assert draft.mark_dry_run_validated().enable().state is SyncRuleState.ENABLED
+    assert draft.mark_previewed().enable().state is SyncRuleState.ENABLED
 
 
 def test_validated_rule_can_be_degraded_before_enablement() -> None:
-    validated = rule(state=SyncRuleState.DRY_RUN_VALIDATED)
+    validated = rule(state=SyncRuleState.PREVIEWED)
 
     assert validated.degrade().state is SyncRuleState.DEGRADED
 
@@ -70,14 +79,14 @@ def test_all_day_range_uses_exclusive_end_date() -> None:
         AllDayRange(date(2026, 8, 30), date(2026, 8, 30))
 
 
-DETAILS = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+DETAILS = TransformationPolicy(content=ProjectionContent.DETAILS)
 
 
 @pytest.mark.parametrize(
     ("before", "after"),
     [
         (SyncRuleState.DRAFT, SyncRuleState.DRAFT),
-        (SyncRuleState.DRY_RUN_VALIDATED, SyncRuleState.DRAFT),
+        (SyncRuleState.PREVIEWED, SyncRuleState.DRAFT),
         (SyncRuleState.ENABLED, SyncRuleState.PAUSED),
         (SyncRuleState.PAUSED, SyncRuleState.PAUSED),
         (SyncRuleState.DEGRADED, SyncRuleState.DEGRADED),
@@ -111,7 +120,7 @@ def test_policy_change_preserves_endpoints_and_lookback() -> None:
 
 def test_rule_with_incomplete_removal_cannot_change_policy() -> None:
     with pytest.raises(InvalidStateTransition):
-        rule(state=SyncRuleState.DISABLED).change_policy(DETAILS)
+        rule(state=SyncRuleState.REMOVING).change_policy(DETAILS)
 
 
 def test_changed_rule_cannot_be_enabled_until_previewed_again() -> None:
@@ -119,7 +128,7 @@ def test_changed_rule_cannot_be_enabled_until_previewed_again() -> None:
 
     with pytest.raises(InvalidStateTransition):
         changed.enable()
-    assert changed.mark_dry_run_validated().enable().state is SyncRuleState.ENABLED
+    assert changed.mark_previewed().enable().state is SyncRuleState.ENABLED
 
 
 def test_completed_reprojection_clears_the_flag() -> None:
@@ -132,11 +141,11 @@ def test_completed_reprojection_clears_the_flag() -> None:
 def test_removal_can_begin_from_every_state_and_is_inert(state: SyncRuleState) -> None:
     removing = rule(state=state).begin_removal()
 
-    assert removing.state is SyncRuleState.DISABLED
+    assert removing.state is SyncRuleState.REMOVING
     with pytest.raises(InvalidStateTransition):
         removing.enable()
     with pytest.raises(InvalidStateTransition):
-        removing.mark_dry_run_validated()
+        removing.mark_previewed()
 
 
 def test_occurrence_start_normalizes_offsets_to_one_utc_instant() -> None:

@@ -333,7 +333,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
                 id=SyncRuleId("validated-rule"),
                 source=endpoint(account.id.value, "validated-calendar"),
                 destination=endpoint("work-account", "validated-destination"),
-                state=SyncRuleState.DRY_RUN_VALIDATED,
+                state=SyncRuleState.PREVIEWED,
             )
         )
         uow.rules.add(
@@ -965,7 +965,7 @@ def test_policy_edit_pauses_rule_and_blocks_enable_until_previewed(tmp_path: Pat
 
 
 def test_policy_edit_is_rejected_while_removal_is_incomplete(tmp_path: Path) -> None:
-    with _client_with_rule(tmp_path, SyncRuleState.DISABLED) as client:
+    with _client_with_rule(tmp_path, SyncRuleState.REMOVING) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
         response = client.patch(
             "/api/v1/rules/rule-1",
@@ -1231,7 +1231,7 @@ def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
 ) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
     with adapters.unit_of_work() as uow:
-        uow.rules.add(rule(state=SyncRuleState.DISABLED))
+        uow.rules.add(rule(state=SyncRuleState.REMOVING))
         uow.commit()
     started = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
     work = RuleWork(RuleWorkKind.REMOVAL, started, ProjectionHandling.DELETE, total=4, done=1)
@@ -2173,7 +2173,7 @@ def _waits_for_rule_writes(
 def test_enable_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
     with adapters.unit_of_work() as uow:
-        uow.rules.add(rule(state=SyncRuleState.DRY_RUN_VALIDATED))
+        uow.rules.add(rule(state=SyncRuleState.PREVIEWED))
         uow.commit()
 
     status_code = _waits_for_rule_writes(

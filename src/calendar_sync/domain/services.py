@@ -18,7 +18,7 @@ from calendar_sync.domain.model import (
     OccurrenceCheck,
     OccurrenceMapping,
     OccurrenceStart,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     ReconciliationDrift,
     ReconciliationReport,
@@ -37,7 +37,7 @@ class EventProjector:
         if event.time is None:
             raise DomainValidationError("cancelled events cannot be projected")
         policy = rule.transformation
-        if policy.privacy is PrivacyPolicy.BUSY_ONLY:
+        if policy.content is ProjectionContent.BUSY_ONLY:
             title = policy.busy_title
             description = ""
             location = ""
@@ -331,7 +331,7 @@ class ReconciliationService:
             if not mapping.belongs_to(rule):
                 drift.append(
                     ReconciliationDrift(
-                        DriftKind.MAPPING_INCONSISTENCY,
+                        DriftKind.MAPPING_CONFLICT,
                         mapping.source,
                         mapping.destination,
                         "mapping is outside this directional relationship",
@@ -345,7 +345,7 @@ class ReconciliationService:
             if expected is None:
                 drift.append(
                     ReconciliationDrift(
-                        DriftKind.MAPPING_INCONSISTENCY,
+                        DriftKind.MAPPING_CONFLICT,
                         mapping.source,
                         mapping.destination,
                         "source event is unavailable for this mapping",

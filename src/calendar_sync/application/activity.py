@@ -185,7 +185,7 @@ class OperationsQueries(Protocol):
 
 
 # Rules that stopped synchronizing until the administrator acts.
-_STOPPED = frozenset({SyncRuleState.DEGRADED, SyncRuleState.DISABLED})
+_STOPPED = frozenset({SyncRuleState.DEGRADED, SyncRuleState.REMOVING})
 
 
 @dataclass(frozen=True, slots=True)

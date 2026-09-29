@@ -28,7 +28,7 @@ from calendar_sync.domain.model import (
     EventStatus,
     ManagedOrigin,
     OccurrenceStart,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     SyncReason,
     SyncRuleId,
@@ -594,7 +594,7 @@ def test_concurrent_requests_for_the_same_rule_are_serialized() -> None:
     assert len(unit_of_work.state.mappings) == 1
 
 
-DETAILS = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+DETAILS = TransformationPolicy(content=ProjectionContent.DETAILS)
 
 
 def _use_case(unit_of_work: UnitOfWorkFactory, provider: FakeCalendarProvider) -> ExecuteSyncRule:

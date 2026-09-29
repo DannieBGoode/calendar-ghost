@@ -17,7 +17,7 @@ from calendar_sync.domain.model import (
     OccurrenceMapping,
     OccurrenceMappingId,
     OccurrenceState,
-    PrivacyPolicy,
+    ProjectionContent,
     ProjectionFingerprint,
     Recurrence,
     SyncAction,
@@ -70,7 +70,7 @@ def test_busy_only_projection_omits_private_content() -> None:
 
 def test_details_policy_is_rule_wide() -> None:
     details_rule = replace(
-        rule(), transformation=TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
+        rule(), transformation=TransformationPolicy(content=ProjectionContent.DETAILS)
     )
 
     projection = projector.project(event(), details_rule)
