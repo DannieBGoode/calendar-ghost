@@ -20,10 +20,11 @@ titles are never persisted in SQLite made the live read the only option.
 - Titles are stored in plain text, not encrypted with the installation master key. Decrypting a
   title is cheap, but plain text keeps them searchable in SQL, and the operator accepted that anyone
   who can read the database or a backup can read the recorded titles.
-- Activity shows the recorded event. When an entry recorded no event, such as a projection removed
-  with its rule or a cancellation Google reported without a title, it shows the latest earlier
-  recorded event of the same rule and source event. When the recorded title differs from that
-  earlier one, Activity shows the event as renamed.
+- Activity shows the recorded event. When an entry saw no title, such as a projection removed with
+  its rule, a cancellation Google reported without a title, or an occurrence removed from its
+  series, it shows the latest earlier entry of the same rule and source event that saw one. A
+  confirmed event's empty title is kept as seen. When the recorded title differs from that earlier
+  one, Activity shows the event as renamed.
 - Entries recorded before this change keep no event and are not backfilled; Activity shows them
   without a name. Opening an entry still reads its source event and projection live from Google,
   one entry at a time.

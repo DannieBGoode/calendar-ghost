@@ -1540,6 +1540,47 @@ def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> Non
     assert "Sensitive" not in dump
 
 
+def test_activity_keeps_an_observed_empty_title_but_names_untitled_cancellations(
+    tmp_path: Path,
+) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    offsite = RecordedEvent.of(replace(event(title="Offsite"), recurrence=None))
+    _append_audit(
+        container,
+        _audit("create", "source_created", event=RecordedEvent.of(event(title="Dentist"))),
+        _audit("update", "source_changed", event=RecordedEvent.of(event(title=""))),
+        _audit("ignore", "projection_current", event=RecordedEvent.of(event(title=""))),
+        _audit("delete", "source_cancelled", event=RecordedEvent(title="", cancelled=True)),
+        _audit("update", "occurrence_changed", source_event_id="occurrence", event=offsite),
+        _audit(
+            "delete",
+            "occurrence_removed_from_series",
+            source_event_id="occurrence",
+            event=RecordedEvent(title="", recurring=True, cancelled=True),
+        ),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        entries = {
+            entry["id"]: entry["event"] for entry in client.get("/api/v1/audit-entries").json()
+        }
+
+    names = {
+        entry_id: (event["title"], event["renamed_from"], event["cancelled"])
+        for entry_id, event in entries.items()
+    }
+    assert names == {
+        1: ("Dentist", None, False),
+        2: ("", "Dentist", False),
+        3: ("", None, False),
+        4: ("", None, True),
+        5: ("Offsite", None, False),
+        6: ("Offsite", None, True),
+    }
+    assert entries[6]["starts"] == entries[5]["starts"]
+
+
 def test_activity_does_not_carry_names_across_rules(tmp_path: Path) -> None:
     container = build_container(Settings(tmp_path / "test.db"))
     _append_audit(

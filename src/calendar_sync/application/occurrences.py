@@ -217,7 +217,7 @@ class SynchronizeOccurrences:
                     else None,
                     reason=decision.reason.value,
                     run_id=run.run_id,
-                    event=_recorded_event(source_series, source_occurrence),
+                    event=_recorded_event(source_occurrence),
                 ),
             )
             # Commit before the next provider call so no write lock spans network requests.
@@ -282,14 +282,12 @@ class SynchronizeOccurrences:
         )
 
 
-def _recorded_event(
-    source_series: CalendarEvent, source_occurrence: CalendarEvent | None
-) -> RecordedEvent:
+def _recorded_event(source_occurrence: CalendarEvent | None) -> RecordedEvent:
     if source_occurrence is not None:
         return RecordedEvent.of(source_occurrence)
-    # An occurrence absent from its series has no time of its own; Activity shows the time it
-    # last recorded for that occurrence.
-    return RecordedEvent(title=source_series.title, recurring=True, cancelled=True)
+    # An occurrence absent from its series has no title or time of its own, and may have had a
+    # title other than the series'; Activity names it from what it last recorded for it.
+    return RecordedEvent(title="", recurring=True, cancelled=True)
 
 
 def occurrence_operation_key(

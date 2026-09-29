@@ -994,6 +994,8 @@ _AUDIT_ENTRY_COLUMNS = (
     "id, run_id, occurred_at, rule_id, action, outcome, reason, detail,"
     " source_event_id, destination_event_id"
 )
+# An entry observed its event's title unless Google reported a cancellation without one.
+_TITLE_OBSERVED = "event_title IS NOT NULL AND (event_title <> '' OR NOT event_cancelled)"
 _AUDIT_ENTRY_KEYS = tuple(column.strip() for column in _AUDIT_ENTRY_COLUMNS.split(","))
 _RECORDED_EVENT_COLUMNS = (
     "event_title, event_starts, event_ends, event_all_day, event_recurring, event_cancelled"
@@ -1033,7 +1035,7 @@ def _audit_entry_responses(
                 FROM audit_entries a JOIN audit_entries p ON p.id = (
                     SELECT id FROM audit_entries
                     WHERE rule_id = a.rule_id AND source_event_id = a.source_event_id
-                        AND id < a.id AND event_title <> ''
+                        AND id < a.id AND {_TITLE_OBSERVED}
                     ORDER BY id DESC LIMIT 1
                 )
                 WHERE a.id IN ({", ".join("?" for _ in ids)})
@@ -1055,20 +1057,24 @@ def _recorded_event(row: sqlite3.Row, previous: sqlite3.Row | None) -> RecordedE
     own = row if row["event_title"] is not None else None
     if own is None and previous is None:
         return None
-    # A cancellation Google reported without a title, or an entry that read no event, such as a
-    # projection removed with its rule, is named by the event's last recorded title and time.
-    title = own["event_title"] if own is not None else ""
-    timed = own if own is not None and own["event_starts"] is not None else previous
     cancelled = own is not None and bool(own["event_cancelled"])
+    # A confirmed event's empty title is what the run saw; only a cancellation reported without a
+    # title, or an entry that read no event, such as a projection removed with its rule, is named
+    # by the event's last observed title.
+    observed = own is not None and (bool(own["event_title"]) or not cancelled)
     earlier = previous["event_title"] if previous is not None else None
+    title = own["event_title"] if observed and own is not None else earlier or ""
+    timed = own if own is not None and own["event_starts"] is not None else previous
     return RecordedEventResponse(
-        title=title or earlier or "",
+        title=title,
         all_day=bool(timed["event_all_day"]) if timed is not None else False,
         starts=timed["event_starts"] if timed is not None else None,
         ends=timed["event_ends"] if timed is not None else None,
         recurring=any(bool(item["event_recurring"]) for item in (own, previous) if item),
         cancelled=cancelled,
-        renamed_from=earlier if title and earlier and earlier != title and not cancelled else None,
+        renamed_from=earlier
+        if observed and not cancelled and earlier and earlier != title
+        else None,
     )
 
 

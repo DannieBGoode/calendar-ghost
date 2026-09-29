@@ -324,6 +324,37 @@ def _change_policy(factory: InMemoryUnitOfWorkFactory, policy: TransformationPol
         uow.commit()
 
 
+def test_occurrence_removed_from_its_series_records_no_title_of_its_own() -> None:
+    calendars, factory, destination = _synced()
+    moved = occurrence(series(), 3, title="Secret offsite", moved_by=timedelta(hours=1))
+    calendars.report(calendars.put(moved))
+    sync_use_case(factory, calendars).execute(rule().id)
+    edited = calendars.get_occurrence(destination, week_start(3))
+    assert edited is not None
+    calendars.report(calendars.put(replace(edited, title="Edited")))
+
+    class RemovedFromSeries(FakeCalendars):
+        def get_occurrence(
+            self, series: EventRef, original_start: OccurrenceStart
+        ) -> CalendarEvent | None:
+            if series.calendar == rule().source and original_start == week_start(3):
+                return None
+            return super().get_occurrence(series, original_start)
+
+    removed_source = RemovedFromSeries(calendars.events, calendars.expansions, calendars.feeds)
+    sync_use_case(factory, removed_source).execute(rule().id)
+
+    removed = [
+        entry
+        for entry in factory.state.audit
+        if entry.reason == SyncReason.OCCURRENCE_REMOVED_FROM_SERIES
+    ]
+    # The series title is not the occurrence's; Activity names it from its earlier entry.
+    assert [(entry.source_event_id, entry.event) for entry in removed] == [
+        (moved.reference.event_id.value, RecordedEvent(title="", recurring=True, cancelled=True))
+    ]
+
+
 def test_details_to_busy_change_rewrites_the_master_and_exceptions_outside_the_window() -> None:
     details = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
     calendars = FakeCalendars()
