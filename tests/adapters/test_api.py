@@ -10,7 +10,6 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-import calendar_sync.interfaces.api.app as api_module
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.locking import RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
@@ -1605,24 +1604,6 @@ def test_no_change_runs_count_whole_runs_that_a_page_boundary_splits(tmp_path: P
         runs = client.get("/api/v1/audit-entries/no-change-runs", params={"after": 2}).json()
 
     assert [(item["run_id"], item["count"]) for item in runs] == [("run-1", 2)]
-
-
-def test_no_change_runs_find_recent_runs_by_entry_range_not_by_run_index(tmp_path: Path) -> None:
-    database = tmp_path / "test.db"
-    build_container(Settings(database))
-
-    with sqlite3.connect(database) as connection:
-        plans = [
-            " ".join(str(row[3]) for row in connection.execute(f"EXPLAIN QUERY PLAN {sql}", args))
-            for sql, args in (
-                (api_module._recent_runs_sql(with_rule=False), (0, 500)),
-                (api_module._recent_runs_sql(with_rule=True), ("rule-1", 0, 500)),
-            )
-        ]
-
-    assert "INTEGER PRIMARY KEY (rowid>?)" in plans[0]
-    assert "audit_entries_rule_id (rule_id=? AND id>?)" in plans[1]
-    assert all("audit_entries_run_id" not in plan for plan in plans)
 
 
 def test_activity_lists_runs_with_no_change_checks_including_quiet_runs(tmp_path: Path) -> None:

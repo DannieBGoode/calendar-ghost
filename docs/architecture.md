@@ -29,6 +29,12 @@ React UI / FastAPI / Scheduler
 The domain imports only Python's standard library and provider-neutral domain modules. Application services depend on protocols. The composition root constructs concrete adapters explicitly.
 `lint-imports` enforces this direction through the contracts in `pyproject.toml`.
 
+Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
+`application/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
+results to HTTP payloads and never opens the database itself. The rule that sorts Audit Entries
+into changed, unchanged, skipped, and blocked lives there once, and the adapter's SQL mirrors it
+under a test that proves they agree.
+
 ## Calendar provider roles
 
 `application/ports.py` splits the calendar provider port by role, and each use case receives only
