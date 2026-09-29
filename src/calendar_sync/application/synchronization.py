@@ -252,8 +252,7 @@ class ExecuteSyncRule:
             run.incremental
             and destination.status is EventStatus.CONFIRMED
             and origin is not None
-            and origin.rule_id == run.rule.id
-            and origin.source == mapping.source
+            and origin.owns(run.rule, mapping.source)
             and self.fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
             == mapping.projection_fingerprint
         )
@@ -273,8 +272,7 @@ class ExecuteSyncRule:
         return (
             destination.status is EventStatus.CONFIRMED
             and origin is not None
-            and origin.rule_id == run.rule.id
-            and origin.source == series_mapping.source
+            and origin.owns(run.rule, series_mapping.source)
             and self.fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
             == recorded.projection_fingerprint
         )

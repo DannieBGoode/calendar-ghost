@@ -7,9 +7,11 @@ from calendar_sync.domain.model import (
     AllDayRange,
     AllDaySyncPolicy,
     EventId,
+    EventMapping,
     EventMappingId,
     EventRef,
     EventStatus,
+    ManagedOrigin,
     OccurrenceIdentity,
     OccurrenceMapping,
     OccurrenceMappingId,
@@ -17,6 +19,7 @@ from calendar_sync.domain.model import (
     PrivacyPolicy,
     ProjectionFingerprint,
     SyncRule,
+    SyncRuleId,
     SyncRuleState,
     TimedInterval,
     TransformationPolicy,
@@ -204,3 +207,38 @@ def test_an_occurrence_reaches_the_window_through_its_original_slot_or_its_new_t
     assert moved_in.occurrence_reaches(window)
     assert not stayed_before.occurrence_reaches(window)
     assert not cancelled_before.occurrence_reaches(window)
+
+
+def _mapping(rule_id: str = "rule-1", destination_calendar: str = "work-calendar") -> EventMapping:
+    return EventMapping(
+        EventMappingId("mapping-1"),
+        SyncRuleId(rule_id),
+        EventRef(rule().source, EventId("source-event")),
+        EventRef(endpoint("work-account", destination_calendar), EventId("projection")),
+        "revision-1",
+        ProjectionFingerprint("fingerprint"),
+    )
+
+
+def test_mapping_belongs_to_the_rule_whose_destination_it_points_into() -> None:
+    assert _mapping().belongs_to(rule())
+
+
+@pytest.mark.parametrize(
+    "mapping",
+    [_mapping(rule_id="rule-2"), _mapping(destination_calendar="family-calendar")],
+    ids=["another rule", "another destination calendar"],
+)
+def test_mapping_outside_the_directional_relationship_does_not_belong(
+    mapping: EventMapping,
+) -> None:
+    assert not mapping.belongs_to(rule())
+
+
+def test_managed_origin_owns_only_its_rule_and_source() -> None:
+    source = EventRef(rule().source, EventId("source-event"))
+    origin = ManagedOrigin(rule().id, source)
+
+    assert origin.owns(rule(), source)
+    assert not origin.owns(rule(), EventRef(rule().source, EventId("other-event")))
+    assert not ManagedOrigin(SyncRuleId("rule-2"), source).owns(rule(), source)
