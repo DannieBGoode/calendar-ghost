@@ -1,177 +1,242 @@
 import type { ActivityShow } from "@/lib/activity-location"
-import { ApiError, type ActivityCategory, type AuditEntry, type NoChangeRun } from "@/lib/api"
+import { ApiError, type ActivityCategory, type AuditEntry, type NoChangeRun, type RecordedEvent } from "@/lib/api"
 
-/** `happened` answers "what happened?" in a few words; `{destination}` names the destination calendar. */
-type ReasonCopy = { happened: string; explanation: string }
+/**
+ * What Calendar Sync observed (`trigger`) and what it did about it (`effect`), never who caused
+ * it. `{source}` and `{destination}` name the rule's calendars. A block says what to do next.
+ */
+type ReasonCopy = { trigger?: string; effect: string; explanation: string; next?: string }
+
+/** Blocks nobody can clear by hand: the daily check decides the event again and escalates. */
+const RECHECKED =
+  "Nothing to do now. Calendar Sync decides this event again at the daily check, and opens an incident if it is still blocked then."
 
 // Keep in sync with SyncReason in src/calendar_sync/domain/model.py.
 const REASONS: Record<string, ReasonCopy> = {
   source_created: {
-    happened: "Added to {destination}",
-    explanation: "The source event had no projection in the destination calendar yet.",
+    trigger: "New in {source}",
+    effect: "added to {destination}",
+    explanation: "The event was new to Calendar Sync, so it was added to {destination}.",
   },
   projection_missing: {
-    happened: "Restored in {destination}",
-    explanation: "The projection was deleted from the destination calendar, so it was restored from the source.",
+    trigger: "Missing from {destination}",
+    effect: "put back",
+    explanation:
+      "The event Calendar Sync wrote to {destination} was no longer there, so it was written again from {source}.",
   },
   source_changed: {
-    happened: "Updated in {destination}",
-    explanation: "The source event changed, so its projection was updated to match.",
+    trigger: "Changed in {source}",
+    effect: "updated in {destination}",
+    explanation: "The event changed in {source}, so {destination} was updated to match.",
   },
   destination_drift_repaired: {
-    happened: "Edit in {destination} undone",
+    trigger: "Edited in {destination}",
+    effect: "changed back to match {source}",
     explanation:
-      "The projection was edited directly in the destination calendar. The source is authoritative, so the edit was replaced.",
+      "The event in {destination} no longer matched {source}. {source} decides what the event looks like, so the edit was replaced.",
   },
   source_cancelled: {
-    happened: "Removed from {destination}",
-    explanation: "The source event was cancelled or deleted.",
+    trigger: "Cancelled in {source}",
+    effect: "removed from {destination}",
+    explanation: "The event was cancelled or deleted in {source}, so it was removed from {destination}.",
   },
   all_day_excluded_removed: {
-    happened: "Removed from {destination}: all-day event",
-    explanation: "This rule syncs timed events only, so the existing all-day projection was removed.",
+    trigger: "All-day, which this rule leaves out",
+    effect: "removed from {destination}",
+    explanation: "This rule syncs timed events only, so the all-day event it had written was removed.",
   },
   projection_current: {
-    happened: "Already up to date",
-    explanation: "The projection already matches the source event.",
+    effect: "already up to date",
+    explanation: "The event in {destination} already matches {source}.",
   },
   outside_source_calendar: {
-    happened: "Skipped: from another calendar",
-    explanation: "The event does not belong to this rule's source calendar.",
+    trigger: "From another calendar",
+    effect: "skipped",
+    explanation: "The event does not belong to {source}.",
   },
   managed_projection_source: {
-    happened: "Skipped: a managed projection",
+    trigger: "Written by Calendar Sync",
+    effect: "skipped",
     explanation:
-      "Projections created by Calendar Sync are never synced again. This prevents events from looping between calendars.",
+      "Events Calendar Sync wrote are never synced again. This prevents events from looping between calendars.",
   },
   recurring_unsupported: {
-    happened: "Skipped: recurring event",
-    explanation:
-      "Earlier versions did not sync recurring events. No projection was created or changed.",
+    trigger: "Recurring event",
+    effect: "skipped",
+    explanation: "Earlier versions did not sync recurring events. Nothing was written.",
   },
   cancelled_without_projection: {
-    happened: "Skipped: already cancelled",
-    explanation: "The event was cancelled before a projection existed, so there was nothing to remove.",
+    trigger: "Cancelled in {source}",
+    effect: "nothing to remove",
+    explanation: "The event was cancelled before it was ever added to {destination}.",
   },
   all_day_excluded: {
-    happened: "Skipped: all-day event",
+    trigger: "All-day event",
+    effect: "skipped",
     explanation: "This rule syncs timed events only. Edit the rule to include all-day events.",
   },
   before_sync_window: {
-    happened: "Skipped: ended before the sync window",
+    trigger: "Ended before the sync window",
+    effect: "skipped",
     explanation:
-      "The event changed, but it ended before this rule's sync window and was never synced, so no projection was created.",
+      "The event changed, but it ended before this rule's sync window and was never synced, so it was not added.",
   },
   mapping_inconsistent: {
-    happened: "Blocked: the event mapping does not match",
+    trigger: "Calendar Sync's link to this event doesn't match",
+    effect: "blocked, {destination} left unchanged",
     explanation:
-      "The stored mapping between this event and its projection points somewhere unexpected. Nothing was written. Reconcile the rule to investigate.",
+      "Calendar Sync keeps a record of which event in {destination} belongs to which event in {source}. For this event the record points somewhere unexpected, so nothing was written rather than risk changing the wrong event.",
+    next: RECHECKED,
   },
   destination_identity_inconsistent: {
-    happened: "Blocked: the projection in {destination} changed",
+    trigger: "A different event is linked in {destination}",
+    effect: "blocked, {destination} left unchanged",
     explanation:
-      "The destination event no longer matches the mapped projection. Nothing was written. Reconcile the rule to investigate.",
+      "The event in {destination} is no longer the one Calendar Sync wrote for this event, so nothing was written rather than risk changing the wrong event.",
+    next: RECHECKED,
   },
   destination_ownership_inconsistent: {
-    happened: "Blocked: not owned by this rule",
+    trigger: "Not marked as written by this rule in {destination}",
+    effect: "blocked, left alone",
     explanation:
-      "The destination event is missing this rule's ownership marker, so Calendar Sync will not change or delete it.",
+      "The event in {destination} does not carry this rule's marker, so Calendar Sync will not change or delete it.",
+    next: RECHECKED,
   },
   source_unverifiable: {
-    happened: "Blocked: the source could not be read",
+    trigger: "Couldn't be read in {source}",
+    effect: "blocked, {destination} left unchanged",
     explanation:
-      "The projection was edited, but the source event could not be read to repair it. The projection was left unchanged rather than risk deleting it.",
+      "The event in {destination} was edited, but its source event could not be read to put it back, so it was left as it is rather than risk deleting it.",
+    next: "If this repeats, check in Settings that the Google account for {source} is still connected.",
   },
   occurrence_changed: {
-    happened: "One occurrence updated in {destination}",
-    explanation: "One occurrence of a recurring event was moved or edited in the source, so its projection was updated.",
+    trigger: "Changed in {source}",
+    effect: "updated in {destination}",
+    explanation:
+      "This occurrence was moved or edited in {source}, so it was updated in {destination}. The rest of the series is unchanged.",
   },
   occurrence_cancelled: {
-    happened: "One occurrence removed from {destination}",
-    explanation: "One occurrence of a recurring event was cancelled in the source. The rest of the series is unchanged.",
+    trigger: "Cancelled in {source}",
+    effect: "removed from {destination}",
+    explanation:
+      "This occurrence was cancelled in {source}, so it was removed from {destination}. The rest of the series is unchanged.",
   },
   occurrence_removed_from_series: {
-    happened: "Occurrence removed from {destination}",
-    explanation: "The source series no longer includes this occurrence, so its projection was removed.",
+    trigger: "No longer in the series in {source}",
+    effect: "removed from {destination}",
+    explanation: "The series in {source} no longer includes this occurrence, so it was removed from {destination}.",
   },
   occurrence_drift_repaired: {
-    happened: "Occurrence edit in {destination} undone",
+    trigger: "Edited or deleted in {destination}",
+    effect: "put back to match {source}",
     explanation:
-      "One occurrence was edited or deleted directly in the destination calendar. The source is authoritative, so it was restored.",
+      "This occurrence in {destination} no longer matched {source}. {source} decides what the event looks like, so it was restored.",
   },
   occurrence_current: {
-    happened: "Already up to date",
-    explanation: "The occurrence already matches the source.",
+    effect: "already up to date",
+    explanation: "This occurrence in {destination} already matches {source}.",
   },
   occurrence_already_cancelled: {
-    happened: "Already up to date",
-    explanation: "The occurrence is cancelled in both calendars.",
+    effect: "already up to date",
+    explanation: "This occurrence is cancelled in both calendars.",
   },
   occurrence_retired: {
-    happened: "Cleaned up: occurrence no longer exists",
+    trigger: "Gone from both calendars",
+    effect: "cleaned up",
     explanation: "The occurrence no longer exists in either calendar, so its record was removed. Nothing was written.",
   },
   series_not_synchronized: {
-    happened: "Skipped: series not synced",
-    explanation: "The occurrence belongs to a recurring event this rule does not sync.",
+    trigger: "Its series isn't synced",
+    effect: "skipped",
+    explanation: "This occurrence belongs to a recurring event this rule does not sync.",
   },
   destination_occurrence_missing: {
-    happened: "Blocked: occurrence missing in {destination}",
+    trigger: "Not found in the series in {destination}",
+    effect: "blocked, {destination} left unchanged",
     explanation:
-      "The destination series has no matching occurrence, even after repairing the series. Nothing was written. Reconcile the rule to investigate.",
+      "The series in {destination} has no occurrence at this time, even after Calendar Sync checked the series itself. Nothing was written, so this occurrence may be missing or out of date in {destination}. The rest of the series is unaffected.",
+    next: RECHECKED,
   },
   series_without_occurrences: {
-    happened: "Skipped: no occurrence left to sync",
+    trigger: "Every occurrence cancelled in {source}",
+    effect: "skipped",
     explanation:
-      "Every occurrence of this recurring event is cancelled in the source, or is an all-day occurrence this rule excludes, so there is nothing to show in the destination calendar. It is synced again if an occurrence comes back.",
+      "Every occurrence of this recurring event is cancelled in {source}, or is an all-day occurrence this rule leaves out, so there is nothing to show in {destination}. It is synced again if an occurrence comes back.",
   },
   series_without_occurrences_removed: {
-    happened: "Removed from {destination}: no occurrence left to sync",
+    trigger: "No occurrence left in {source}",
+    effect: "removed from {destination}",
     explanation:
-      "Every occurrence of this recurring event is cancelled in the source, or is an all-day occurrence this rule excludes, so a projection left from an interrupted run was removed.",
+      "Every occurrence of this recurring event is cancelled in {source}, or is an all-day occurrence this rule leaves out, so the series left from an interrupted run was removed.",
   },
 }
 
 const ACTION_FALLBACK: Record<string, string> = {
-  create: "Added to {destination}",
-  update: "Updated in {destination}",
-  delete: "Removed from {destination}",
-  ignore: "Skipped",
-  conflict: "Blocked",
+  create: "added to {destination}",
+  update: "updated in {destination}",
+  delete: "removed from {destination}",
+  ignore: "skipped",
+  conflict: "blocked",
 }
 
 // Rule management entries carry no SyncReason; keep in sync with application/rules.py and removal.py.
 const RULE_ACTIONS: Record<string, ReasonCopy> = {
   policy_changed: {
-    happened: "Privacy setting changed",
+    effect: "privacy setting changed",
     explanation:
-      "This is a Material Rule Change. The rule needs a new preview, and existing projections are rewritten on the next run after it is enabled.",
+      "The rule needs a new preview, and the events it wrote are rewritten on the next run after it is enabled.",
   },
   remove_projection: {
-    happened: "Removed from {destination} with the rule",
-    explanation: "The administrator chose to delete this rule's projections when removing it.",
+    trigger: "Rule removed",
+    effect: "removed from {destination}",
+    explanation: "The administrator chose to delete the events this rule wrote when removing it.",
   },
   detach_projection: {
-    happened: "Kept in {destination}, no longer synced",
-    explanation: "The event stays in the destination calendar and is no longer updated or deleted.",
+    trigger: "Rule removed",
+    effect: "kept in {destination}, no longer synced",
+    explanation: "The event stays in {destination} and is no longer updated or deleted.",
   },
   removal_conflict: {
-    happened: "Blocked: left in {destination} during Rule Removal",
+    trigger: "Not verifiably written by this rule",
+    effect: "left in {destination} during Rule Removal",
     explanation:
-      "The event's ownership could not be verified, so it was not deleted. It stays in the destination calendar and is no longer managed.",
+      "The event's ownership could not be verified, so it was not deleted. It stays in {destination} and is no longer managed.",
   },
   rule_removed: {
-    happened: "Rule removed",
-    explanation: "The rule and its Event Mappings were removed. Its activity history is kept.",
+    effect: "rule removed",
+    explanation: "The rule and its records of which events it wrote were removed. Its activity history is kept.",
   },
 }
 
-export function describeEntry(entry: Pick<AuditEntry, "reason" | "action" | "detail">): ReasonCopy {
+/** Calendar names of the entry's rule, or null once the rule is removed. */
+export type RuleNames = { source: string; destination: string }
+
+const UNNAMED: RuleNames = { source: "the source calendar", destination: "the destination calendar" }
+
+function named(text: string, names: RuleNames | null): string {
+  const { source, destination } = names ?? UNNAMED
+  return text.replaceAll("{source}", source).replaceAll("{destination}", destination)
+}
+
+function capitalized(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+}
+
+/** The entry's copy with the rule's calendars named. */
+export function describeEntry(
+  entry: Pick<AuditEntry, "reason" | "action" | "detail">,
+  names: RuleNames | null = null,
+): ReasonCopy {
   const known = entry.reason ? REASONS[entry.reason] : RULE_ACTIONS[entry.action]
-  if (known) return known
-  return {
-    happened: ACTION_FALLBACK[entry.action] ?? entry.action.replaceAll("_", " "),
+  const copy = known ?? {
+    effect: ACTION_FALLBACK[entry.action] ?? entry.action.replaceAll("_", " "),
     explanation: entry.detail,
+  }
+  return {
+    effect: named(copy.effect, names),
+    explanation: named(copy.explanation, names),
+    ...(copy.trigger ? { trigger: named(copy.trigger, names) } : {}),
+    ...(copy.next ? { next: named(copy.next, names) } : {}),
   }
 }
 
@@ -206,25 +271,56 @@ export type HappenedIcon =
   | "skipped"
   | "blocked"
   | "rule"
-export type Happened = { text: string; icon: HappenedIcon; tone: "change" | "quiet" | "blocked" }
+export type Happened = {
+  /** The whole line, such as "Cancelled in Work → removed from Family". */
+  text: string
+  trigger: string | null
+  effect: string
+  icon: HappenedIcon
+  tone: "change" | "quiet" | "blocked"
+}
 
 const REPAIRS = new Set(["projection_missing", "destination_drift_repaired", "occurrence_drift_repaired"])
+const MOVES = new Set(["source_changed", "occurrence_changed"])
 
-/** The What happened column: a short phrase in calendar terms, with an icon that carries its meaning. */
+/** The What happened column: what was observed, then what Calendar Sync did, with an icon for the outcome. */
 export function whatHappened(
-  entry: Pick<AuditEntry, "reason" | "action" | "detail" | "category">,
-  destination: string | null,
+  entry: Pick<AuditEntry, "reason" | "action" | "detail" | "category"> &
+    Partial<Pick<AuditEntry, "event" | "repeated">>,
+  names: RuleNames | null,
 ): Happened {
-  const text = describeEntry(entry).happened.replaceAll("{destination}", destination ?? "the destination")
-  if (entry.category === "blocked") return { text, icon: "blocked", tone: "blocked" }
-  if (entry.category === "skipped") return { text, icon: "skipped", tone: "quiet" }
-  if (entry.category === "unchanged") return { text, icon: "current", tone: "quiet" }
-  if (entry.action === "policy_changed" || entry.action === "rule_removed") return { text, icon: "rule", tone: "change" }
-  if (entry.reason && REPAIRS.has(entry.reason)) return { text, icon: "repaired", tone: "change" }
-  if (entry.action === "create") return { text, icon: "added", tone: "change" }
-  if (entry.action === "delete" || entry.action === "remove_projection") return { text, icon: "removed", tone: "change" }
-  if (entry.action === "detach_projection") return { text, icon: "kept", tone: "change" }
-  return { text, icon: "updated", tone: "change" }
+  const copy = describeEntry(entry, names)
+  const moved = entry.reason && MOVES.has(entry.reason) && entry.event?.moved_from
+  const trigger = moved && entry.event ? movedTrigger(entry.event, names) : (copy.trigger ?? null)
+  const effect = entry.repeated ? `${copy.effect} again` : copy.effect
+  const text = trigger ? `${capitalized(trigger)} → ${effect}` : capitalized(effect)
+  const line = { text, trigger: trigger ? capitalized(trigger) : null, effect: trigger ? effect : capitalized(effect) }
+  if (entry.category === "blocked") return { ...line, icon: "blocked", tone: "blocked" }
+  if (entry.category === "skipped") return { ...line, icon: "skipped", tone: "quiet" }
+  if (entry.category === "unchanged") return { ...line, icon: "current", tone: "quiet" }
+  if (entry.action === "policy_changed" || entry.action === "rule_removed") return { ...line, icon: "rule", tone: "change" }
+  if (entry.reason && REPAIRS.has(entry.reason)) return { ...line, icon: "repaired", tone: "change" }
+  if (entry.action === "create") return { ...line, icon: "added", tone: "change" }
+  if (entry.action === "delete" || entry.action === "remove_projection") return { ...line, icon: "removed", tone: "change" }
+  if (entry.action === "detach_projection") return { ...line, icon: "kept", tone: "change" }
+  return { ...line, icon: "updated", tone: "change" }
+}
+
+/** "Moved from 10:00 AM in Work": the earlier start, with its date only when the day changed. */
+function movedTrigger(event: RecordedEvent, names: RuleNames | null): string {
+  const before = event.moved_from
+  if (!before?.starts) return named("Changed in {source}", names)
+  const { source } = names ?? UNNAMED
+  if (before.all_day) {
+    const day = new Date(`${before.starts}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
+    return `Moved from ${day} in ${source}`
+  }
+  const start = new Date(before.starts)
+  const sameDay = event.starts !== null && !event.all_day && new Date(event.starts).toDateString() === start.toDateString()
+  const when = sameDay
+    ? start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    : start.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+  return `Moved from ${when} in ${source}`
 }
 
 export const SHOW_FILTERS: { value: ActivityShow; label: string }[] = [
@@ -340,15 +436,46 @@ export function activityRows(
   return groups
 }
 
+/** Which part of a recurring event an entry was about; null for single events or when unknown. */
+export type EventScope = "series" | "occurrence" | null
+
 export type EventCell =
-  | { state: "event"; title: string; when: string; recurring: boolean; note?: string }
+  | { state: "event"; title: string; when: string; recurring: boolean; scope: EventScope; note?: string }
   | { state: "unavailable"; label: string; note?: string }
 
-/** Calendar names of the entry's rule, or null once the rule is removed. */
-export type RuleNames = { source: string; destination: string }
+// Decisions about one occurrence of a series; other decisions about a recurring event are about the
+// whole series. Reasons recorded for both, such as all-day removals and identity blocks, leave the
+// scope unknown.
+const OCCURRENCE_REASONS = new Set([
+  "occurrence_changed",
+  "occurrence_cancelled",
+  "occurrence_removed_from_series",
+  "occurrence_drift_repaired",
+  "occurrence_current",
+  "occurrence_already_cancelled",
+  "occurrence_retired",
+  "series_not_synchronized",
+  "destination_occurrence_missing",
+])
+
+const EITHER_SCOPE_REASONS = new Set([
+  "all_day_excluded_removed",
+  "mapping_inconsistent",
+  "destination_identity_inconsistent",
+  "destination_ownership_inconsistent",
+  "source_unverifiable",
+])
+
+function eventScope(reason: string | null | undefined, recurring: boolean): EventScope {
+  if (!recurring || !reason || EITHER_SCOPE_REASONS.has(reason)) return null
+  return OCCURRENCE_REASONS.has(reason) ? "occurrence" : "series"
+}
 
 /** What the Event column shows: the source event as the entry's run recorded it. */
-export function eventCell(entry: Pick<AuditEntry, "source_event_id" | "event">, names: RuleNames | null): EventCell {
+export function eventCell(
+  entry: Pick<AuditEntry, "source_event_id" | "event"> & Partial<Pick<AuditEntry, "reason">>,
+  names: RuleNames | null,
+): EventCell {
   if (!entry.source_event_id) {
     return {
       state: "unavailable",
@@ -361,14 +488,16 @@ export function eventCell(entry: Pick<AuditEntry, "source_event_id" | "event">, 
     return { state: "unavailable", label: "Event name not recorded", note: "Recorded before event names were kept" }
   }
   const when = formatEventTime(event)
+  const scope = eventScope(entry.reason, event.recurring)
   if (event.cancelled) {
-    return { state: "event", title: event.title || "Cancelled event", when, recurring: event.recurring, note: "Cancelled" }
+    return { state: "event", title: event.title || "Cancelled event", when, recurring: event.recurring, scope, note: `Cancelled in ${(names ?? UNNAMED).source}` }
   }
   return {
     state: "event",
     title: event.title || "(No title)",
     when,
     recurring: event.recurring,
+    scope,
     // An empty former title is a real one: the event was untitled before.
     ...(event.renamed_from !== null ? { note: `Renamed from “${event.renamed_from || "(No title)"}”` } : {}),
   }

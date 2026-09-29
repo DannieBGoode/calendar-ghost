@@ -1,15 +1,13 @@
-import { useQueries, useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
   Check,
   CheckCircle2,
-  ChevronDown,
   CircleDot,
   ExternalLink,
   KeyRound,
   ShieldAlert,
 } from "lucide-react"
-import { useId, useState } from "react"
 
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -17,10 +15,11 @@ import { RuleStatusBadge } from "@/components/rule-commands"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RedirectMismatchNotice } from "@/features/settings"
-import { eventCell } from "@/lib/activity"
+import { EventWhen, HappenedLine } from "@/components/activity-event"
+import { eventCell, formatClockTime, formatRunTime, whatHappened } from "@/lib/activity"
+import { activitySearch } from "@/lib/activity-location"
 import { api, type Dashboard, type Incident, type RecentChange, type RuleSummary } from "@/lib/api"
 import {
-  activitySearch,
   appPathForRule,
   appPathForView,
   isPlainLeftClick,
@@ -31,7 +30,7 @@ import { overviewHealth, withoutRunningRemovals, type AttentionRule } from "@/li
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
-import { lastRunLabel, recentChangeSummary } from "@/lib/rule-run"
+import { lastRunLabel } from "@/lib/rule-run"
 import { useNow } from "@/lib/use-now"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 import { cn } from "@/lib/utils"
@@ -103,12 +102,12 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
         {action && health.tone !== "setup" && (
           <Button asChild>
             <a
-              href={action.ruleId ? appPathForRule(action.ruleId) : appPathForView(action.view)}
+              href={action.ruleId ? appPathForRule(action.ruleId) : `${appPathForView(action.view)}${action.search ?? ""}`}
               onClick={(event) => {
                 if (!isPlainLeftClick(event)) return
                 event.preventDefault()
                 if (action.ruleId) onOpenRule(action.ruleId)
-                else onViewChange(action.view)
+                else onViewChange(action.view, action.search ? { search: action.search } : undefined)
               }}
             >
               {action.label} <ArrowRight aria-hidden="true" />
@@ -207,10 +206,10 @@ function RecentChanges({
       ) : (
         <ol className="recent-changes">
           {changes.data.map((change) => {
-            const rule = rulesById.get(change.rule_id)
+            const rule = rulesById.get(change.entry.rule_id)
             return (
               <RecentChangeItem
-                key={change.run_key}
+                key={change.entry.id}
                 change={change}
                 rule={rule}
                 endpoints={rule ? endpoints(rule) : null}
@@ -241,15 +240,36 @@ function RecentChangeItem({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
-  const [open, setOpen] = useState(false)
-  const eventsId = useId()
-  const destination = endpoints?.destination.name ?? "a removed rule's calendar"
+  const names = endpoints ? { source: endpoints.source.name, destination: endpoints.destination.name } : null
+  // A collapsed repeat says how often instead of "again".
+  const entry = change.repeats > 1 ? { ...change.entry, repeated: false } : change.entry
+  const cell = eventCell(entry, names)
+  const since = new Date(change.first_occurred_at).toDateString() === new Date(now).toDateString()
+    ? formatClockTime(change.first_occurred_at)
+    : formatRunTime(change.first_occurred_at, new Date(now))
+  const search = activitySearch({ ruleId: entry.rule_id, show: "", entryId: entry.id })
   return (
     <li>
-      <time dateTime={change.occurred_at} title={new Date(change.occurred_at).toLocaleString()}>
-        {relativeTime(change.occurred_at, now)}
+      <time dateTime={entry.occurred_at} title={new Date(entry.occurred_at).toLocaleString()}>
+        {relativeTime(entry.occurred_at, now)}
       </time>
       <div className="recent-change-body">
+        <a
+          className="recent-change-event"
+          href={`${appPathForView("activity")}${search}`}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return
+            event.preventDefault()
+            onViewChange("activity", { search })
+          }}
+        >
+          {cell.state === "event" ? cell.title : cell.label}
+        </a>
+        {cell.state === "event" ? <EventWhen cell={cell} /> : cell.note && <span className="activity-event-when">{cell.note}</span>}
+        <HappenedLine
+          happened={whatHappened(entry, names)}
+          suffix={change.repeats > 1 ? `${change.repeats} times since ${since}` : undefined}
+        />
         {rule && endpoints ? (
           <a
             className="recent-change-rule"
@@ -266,70 +286,8 @@ function RecentChangeItem({
         ) : (
           <span className="recent-change-rule">Removed rule</span>
         )}
-        <p data-blocked={change.blocked > 0 || undefined}>{recentChangeSummary(change, destination)}</p>
-        <div className="recent-change-actions">
-          {/* Recorded names need no rule, so a removed rule's changes can show theirs too. */}
-          {change.entry_ids.length > 0 && (
-            <button
-              type="button"
-              className="disclosure-button"
-              aria-expanded={open}
-              aria-controls={eventsId}
-              onClick={() => setOpen((value) => !value)}
-            >
-              {open ? "Hide events" : `Show ${change.entry_ids.length === 1 ? "event" : "events"}`}
-              <ChevronDown aria-hidden="true" data-open={open} />
-            </button>
-          )}
-          {change.blocked > 0 && (
-            <SectionLink
-              href={`${appPathForView("activity")}${activitySearch(change.rule_id)}`}
-              onClick={() => onViewChange("activity", { search: activitySearch(change.rule_id) })}
-            >
-              Review in Activity
-            </SectionLink>
-          )}
-        </div>
-        {open && <RecentChangeEvents id={eventsId} entryIds={change.entry_ids} />}
       </div>
     </li>
-  )
-}
-
-/** Names each changed event as its run recorded it, without asking Google. */
-function RecentChangeEvents({ id, entryIds }: { id: string; entryIds: number[] }) {
-  const entries = useQueries({
-    queries: entryIds.map((entryId) => ({
-      queryKey: ["activity-entry", entryId],
-      queryFn: () => api.activityEntry(entryId),
-      staleTime: Infinity,
-      retry: false,
-    })),
-  })
-  return (
-    <div className="recent-change-events" id={id}>
-      <ul>
-        {entries.map((entry, index) => {
-          const cell = entry.data ? eventCell(entry.data, null) : null
-          return (
-            <li key={entryIds[index]}>
-              {entry.isPending ? (
-                <span className="recent-event-status">Loading…</span>
-              ) : !cell ? (
-                <span className="recent-event-status">This change could not be loaded.</span>
-              ) : cell.state === "unavailable" ? (
-                <span className="recent-event-status">{cell.label}</span>
-              ) : (
-                <>
-                  <strong>{cell.title}</strong>
-                  <span>{[cell.note, cell.when].filter(Boolean).join(" · ")}</span>
-                </>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-    </div>
   )
 }
 

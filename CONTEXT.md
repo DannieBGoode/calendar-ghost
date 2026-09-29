@@ -109,7 +109,7 @@ _Avoid_: Full clone, exact copy
 ## Integrity
 
 **Conflict**:
-An ambiguous or corrupted identity relationship, such as two source events claiming the same managed projection. Content differences are drift, not conflicts; a conflict pauses automatic changes until repaired.
+An ambiguous or corrupted identity relationship, such as two source events claiming the same managed projection. Content differences are drift, not conflicts. A conflict blocks writes to that one event and leaves the destination unchanged; the rest of the rule keeps synchronizing. A conflict that persists to the next daily Full Reconciliation opens an Incident.
 _Avoid_: Destination edit, synchronization difference
 
 ## Synchronization Progress
@@ -242,6 +242,9 @@ diagnostics keep the glossary terms above.
 | Reconciliation | "Reconcile now", always with its explanation: checks every event the rule wrote and repairs any edited or deleted there |
 | Connected Account | "Google account" |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
+| Audit Entry, in Activity | one line per event: what was observed, then what Calendar Sync did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
+| Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the administrator's step when one exists, otherwise that Calendar Sync checks again daily |
+| Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
 
 ## Data Minimization
 

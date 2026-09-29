@@ -1,7 +1,7 @@
 import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
 from typing import cast
@@ -20,7 +20,9 @@ from calendar_sync.application.ports import (
     RunKind,
 )
 from calendar_sync.application.preview import PreviewSyncRule
+from calendar_sync.application.reconciliation import ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
+from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.model import (
@@ -36,6 +38,7 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
     SyncRuleState,
+    TimedInterval,
 )
 from calendar_sync.domain.services import (
     EventProjector,
@@ -79,6 +82,9 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
             "stopped_rules": 0,
             "open_incidents": 0,
             "last_synced_at": None,
+            "blocked_events": 0,
+            "blocked_entry_id": None,
+            "blocked_rule_id": None,
         }
 
 
@@ -960,6 +966,42 @@ def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path
     assert reconciled.status_code == 409
 
 
+def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Path) -> None:
+    container = build_container(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+    _append_audit(container, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
+
+    def full_pass(rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+        assert full
+        # The pass decides the blocked event again and finds it still blocked.
+        _append_audit(
+            container, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
+        )
+        return SyncRunResult(rule_id, conflicts=1)
+
+    container = replace(
+        container,
+        scheduler=None,
+        execute_sync_rule=cast(ExecuteSyncRule, Mock(execute=full_pass)),
+        reconcile_sync_rule=cast(
+            ReconcileSyncRule,
+            Mock(execute=Mock(return_value=Mock(is_consistent=True, checked_mappings=0, drift=[]))),
+        ),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        assert client.post("/api/v1/rules/rule-1/reconcile").status_code == 200
+        incidents = client.get("/api/v1/incidents").json()
+
+    assert [(item["rule_id"], item["state"]) for item in incidents] == [("rule-1", "open")]
+    assert incidents[0]["summary"].startswith("1 event could not be synced")
+
+
 def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Path) -> None:
     container = replace(build_container(Settings(tmp_path / "test.db")), scheduler=None)
     with container.unit_of_work() as uow:
@@ -1035,17 +1077,16 @@ def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
     assert listed["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
 
 
-def test_recent_changes_summarize_runs_that_wrote_or_were_blocked(tmp_path: Path) -> None:
+def test_recent_changes_list_each_written_event_newest_first(tmp_path: Path) -> None:
     container = build_container(Settings(tmp_path / "test.db"))
+    dentist = RecordedEvent.of(event(title="Dentist"))
     _append_audit(
         container,
-        _audit("create", "source_created", run_id="run-1", destination_event_id="copy-1"),
-        _audit("ignore", "projection_current", run_id="run-2"),
-        _audit("update", "source_changed", run_id="run-3", destination_event_id="copy-1"),
-        _audit("update", "destination_drift_repaired", run_id="run-3"),
-        _audit("create", "projection_missing", run_id="run-3"),
-        _audit("delete", "source_cancelled", run_id="run-3"),
-        _audit("conflict", "mapping_inconsistent", rule_id="rule-2", run_id="run-4"),
+        _audit("create", "source_created", run_id="run-1", event=dentist),
+        _audit("ignore", "projection_current", run_id="run-2", event=dentist),
+        _audit("update", "source_changed", run_id="run-3", source_event_id="b"),
+        _audit("conflict", "mapping_inconsistent", run_id="run-4", source_event_id="c"),
+        _audit("delete", "source_cancelled", run_id="run-5", source_event_id="d"),
     )
 
     with TestClient(create_app(container)) as client:
@@ -1054,54 +1095,93 @@ def test_recent_changes_summarize_runs_that_wrote_or_were_blocked(tmp_path: Path
         changes = client.get("/api/v1/recent-changes").json()
         limited = client.get("/api/v1/recent-changes", params={"limit": 1}).json()
 
-    # The run that only confirmed a current projection is quiet, so it is not listed.
-    assert [change["run_key"] for change in changes] == ["run-4", "run-3", "run-1"]
-    blocked, mixed, created = changes
-    assert (blocked["rule_id"], blocked["blocked"]) == ("rule-2", 1)
-    assert {key: mixed[key] for key in ("created", "updated", "deleted", "repaired")} == {
-        "created": 0,
-        "updated": 1,
-        "deleted": 1,
-        "repaired": 2,
-    }
-    assert len(mixed["entry_ids"]) == 4
-    assert created["created"] == 1
-    assert [change["run_key"] for change in limited] == ["run-4"]
-
-
-def test_recent_changes_count_large_runs_in_full(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    # An initial sync audits every decision; its writes must not be sliced by the scan window,
-    # nor hidden behind a newer run that only confirmed current projections.
-    _append_audit(
-        container,
-        *(_audit("update", "source_changed", run_id="initial") for _ in range(2100)),
-        *(_audit("ignore", "projection_current", run_id="quiet") for _ in range(2100)),
-    )
-
-    with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
-        changes = client.get("/api/v1/recent-changes").json()
-
-    assert [(change["run_key"], change["updated"]) for change in changes] == [("initial", 2100)]
-
-
-def test_recent_changes_list_older_runs_behind_a_very_large_run(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    _append_audit(
-        container,
-        _audit("create", "source_created", run_id="older"),
-        *(_audit("update", "source_changed", run_id="initial") for _ in range(2100)),
-    )
-
-    with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
-        changes = client.get("/api/v1/recent-changes").json()
-
-    assert [(change["run_key"], change["created"], change["updated"]) for change in changes] == [
-        ("initial", 0, 2100),
-        ("older", 1, 0),
+    # No-change checks are quiet and blocks belong to the health strip, so neither is listed.
+    assert [change["entry"]["reason"] for change in changes] == [
+        "source_cancelled",
+        "source_changed",
+        "source_created",
     ]
+    assert changes[2]["entry"]["event"]["title"] == "Dentist"
+    assert [(change["repeats"], change["first_occurred_at"]) for change in changes] == [
+        (1, "2026-09-28T15:18:00+00:00")
+    ] * 3
+    assert [change["entry"]["reason"] for change in limited] == ["source_cancelled"]
+
+
+def test_recent_changes_collapse_an_identical_repeated_write(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    weekly = RecordedEvent.of(
+        replace(event(title="Stand-up"), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)))
+    )
+    moved = event(title="Stand-up")
+    assert isinstance(moved.time, TimedInterval)
+    moved = replace(
+        moved,
+        time=TimedInterval(
+            moved.time.starts_at + timedelta(hours=1), moved.time.ends_at + timedelta(hours=1)
+        ),
+    )
+    _append_audit(
+        container,
+        *(
+            _audit("create", "projection_missing", run_id=f"loop-{index}", event=weekly)
+            for index in range(3)
+        ),
+        _audit("update", "source_changed", run_id="edit-1", source_event_id="other"),
+        # Two edits of the same event are changes of their own, even when their summaries match.
+        _audit("update", "source_changed", run_id="edit-0", source_event_id="other"),
+        _audit(
+            "update",
+            "source_changed",
+            run_id="edit-2",
+            source_event_id="other",
+            event=RecordedEvent.of(moved),
+        ),
+    )
+    with sqlite3.connect(container.settings.database_path) as connection:
+        connection.execute(
+            "UPDATE audit_entries SET occurred_at = '2026-09-29T14:00:00+00:00' WHERE id = 1"
+        )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = client.get("/api/v1/recent-changes").json()
+
+    assert [
+        (change["entry"]["id"], change["repeats"], change["first_occurred_at"])
+        for change in changes
+    ] == [
+        (6, 1, "2026-09-28T15:18:00+00:00"),
+        (5, 1, "2026-09-28T15:18:00+00:00"),
+        (4, 1, "2026-09-28T15:18:00+00:00"),
+        (3, 3, "2026-09-29T14:00:00+00:00"),
+    ]
+
+
+def test_dashboard_reports_events_whose_latest_decision_was_blocked(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    _append_audit(
+        container,
+        _audit("conflict", "destination_occurrence_missing", run_id="run-1", source_event_id="a"),
+        _audit("conflict", "mapping_inconsistent", run_id="run-1", source_event_id="b"),
+        _audit("update", "source_changed", run_id="run-2", source_event_id="b"),
+        # Blocks of a removed rule and old recurring exclusions are not open blocks.
+        _audit("conflict", "mapping_inconsistent", rule_id="removed", source_event_id="c"),
+        _audit("conflict", "recurring_unsupported", source_event_id="d"),
+        _audit("removal_conflict", None, source_event_id="e"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        dashboard = client.get("/api/v1/dashboard").json()
+
+    assert (dashboard["blocked_events"], dashboard["blocked_entry_id"]) == (1, 1)
+    assert dashboard["blocked_rule_id"] == "rule-1"
+    # A block alone is reported, not an incident: the health stays healthy until it persists.
+    assert dashboard["health"] == "healthy"
 
 
 def _append_audit(container: Container, *entries: AuditEntry) -> None:
@@ -1154,30 +1234,6 @@ def test_removal_conflicts_are_blocked_activity_scoped_by_rule(tmp_path: Path) -
     assert [(entry["action"], entry["rule_id"]) for entry in blocked] == [
         ("removal_conflict", "rule-1")
     ]
-
-
-def test_recent_changes_report_rule_removal_conflicts_as_blocked(tmp_path: Path) -> None:
-    container = build_container(Settings(tmp_path / "test.db"))
-    _append_audit(
-        container,
-        _audit("remove_projection", None, run_id="removal"),
-        _audit("removal_conflict", None, run_id="removal"),
-        _audit("removal_conflict", None, rule_id="rule-2", run_id="conflict-only"),
-    )
-
-    with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
-        changes = {
-            change["run_key"]: change for change in client.get("/api/v1/recent-changes").json()
-        }
-
-    # Activity files these under Blocked, so a run that only left events in place still appears.
-    assert (changes["removal"]["deleted"], changes["removal"]["blocked"]) == (1, 1)
-    assert len(changes["removal"]["entry_ids"]) == 2
-    assert (changes["conflict-only"]["blocked"], len(changes["conflict-only"]["entry_ids"])) == (
-        1,
-        1,
-    )
 
 
 def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None:
@@ -1519,6 +1575,7 @@ def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> Non
         "recurring": False,
         "cancelled": False,
         "renamed_from": None,
+        "moved_from": None,
     }
     assert entries[1] == entries[2] == dentist
     assert entries[3] == dentist | {"title": "Dentist (moved)", "renamed_from": "Dentist"}
@@ -1533,11 +1590,107 @@ def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> Non
         "recurring": False,
         "cancelled": False,
         "renamed_from": None,
+        "moved_from": None,
     }
     assert entries[8] is None
     with sqlite3.connect(database) as connection:
         dump = "\n".join(connection.iterdump())
     assert "Sensitive" not in dump
+
+
+def test_activity_shows_the_time_an_event_moved_from(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    dentist = event(title="Dentist")
+    assert isinstance(dentist.time, TimedInterval)
+    later = replace(
+        dentist,
+        time=TimedInterval(
+            dentist.time.starts_at + timedelta(hours=1), dentist.time.ends_at + timedelta(hours=1)
+        ),
+    )
+    _append_audit(
+        container,
+        _audit("create", "source_created", event=RecordedEvent.of(dentist)),
+        _audit("update", "source_changed", event=RecordedEvent.of(later)),
+        _audit("update", "destination_drift_repaired", event=RecordedEvent.of(later)),
+        # Google reports a deleted event without its time; it did not move.
+        _audit("delete", "source_cancelled", event=RecordedEvent(title="", cancelled=True)),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        moved = {
+            entry["id"]: entry["event"]["moved_from"]
+            for entry in client.get("/api/v1/audit-entries").json()
+        }
+
+    assert moved == {
+        1: None,
+        2: {
+            "all_day": False,
+            "starts": "2026-08-30T10:00:00+00:00",
+            "ends": "2026-08-30T11:00:00+00:00",
+        },
+        3: None,
+        4: None,
+    }
+
+
+def test_activity_marks_a_write_that_repeats_the_previous_run(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("create", "projection_missing", run_id="run-1"),
+        _audit("create", "projection_missing", run_id="run-2"),
+        _audit("ignore", "projection_current", run_id="run-3"),
+        _audit("ignore", "projection_current", run_id="run-4"),
+        _audit("update", "source_changed", run_id="run-5"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        repeated = {
+            entry["id"]: entry["repeated"]
+            for entry in client.get(
+                "/api/v1/audit-entries", params={"category": ["changed", "unchanged"]}
+            ).json()
+        }
+
+    # Checks repeat by design; only a write that redoes the previous run's write is marked.
+    assert repeated == {1: False, 2: True, 3: False, 4: False, 5: False}
+
+
+def test_activity_never_calls_a_source_change_a_repeat(tmp_path: Path) -> None:
+    # A Details Projection's location can change while its recorded title and time stay the same,
+    # so matching summaries do not prove a source change repeated the previous one.
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit(
+            "update", "source_changed", run_id="run-1", event=RecordedEvent.of(event(title="A"))
+        ),
+        _audit(
+            "update", "source_changed", run_id="run-2", event=RecordedEvent.of(event(title="B"))
+        ),
+        _audit(
+            "update", "source_changed", run_id="run-3", event=RecordedEvent.of(event(title="B"))
+        ),
+        # The same title and time, but the event became a series: a change of its own.
+        _audit(
+            "update",
+            "source_changed",
+            run_id="run-4",
+            event=replace(RecordedEvent.of(event(title="B")), recurring=True),
+        ),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        repeated = {
+            entry["id"]: entry["repeated"] for entry in client.get("/api/v1/audit-entries").json()
+        }
+
+    assert repeated == {1: False, 2: False, 3: False, 4: False}
 
 
 def test_activity_keeps_an_observed_empty_title_but_names_untitled_cancellations(

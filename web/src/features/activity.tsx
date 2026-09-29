@@ -5,21 +5,15 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  CircleSlash,
   ExternalLink,
-  Pin,
-  Plus,
   RefreshCw,
   Repeat,
-  Settings2,
   ShieldAlert,
-  Trash2,
-  Undo2,
   X,
-  type LucideIcon,
 } from "lucide-react"
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react"
 
+import { EventWhen, HappenedLine } from "@/components/activity-event"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { RulePicker, type RulePickerOption } from "@/components/rule-picker"
@@ -46,7 +40,6 @@ import {
   type ActivityRow,
   type EventCell,
   type ExpandedChecks,
-  type HappenedIcon,
   type RuleNames,
 } from "@/lib/activity"
 import {
@@ -286,7 +279,7 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
       <ActivityHeading />
       {incidents.data.length > 0 && (
         <section className="workflow activity-section">
-          <div className="section-heading"><div><h2>Incidents</h2><p>Authorization and repeated provider failures that may require attention.</p></div></div>
+          <div className="section-heading"><div><h2>Incidents</h2><p>Authorization problems, repeated provider failures, and events still blocked at the daily check.</p></div></div>
           <div className="rule-list">
             {incidents.data.map((incident) => (
               <div className="rule-row" key={incident.id}>
@@ -540,15 +533,22 @@ function ActivityTableRow({
               {label}
               <ChevronDown aria-hidden="true" data-open={row.expanded} />
             </button>
-            {loadingChecks ? (
-              <span className="activity-fold-status" role="status">Loading…</span>
-            ) : (
-              row.more && (
-                <button type="button" className="activity-fold" onClick={onLoadMore}>
-                  Show more
-                </button>
-              )
+            {/* The button stays while loading so keyboard focus is not lost; the status says why. */}
+            {row.more && (
+              <button
+                type="button"
+                className="activity-fold"
+                aria-disabled={loadingChecks || undefined}
+                onClick={() => {
+                  if (!loadingChecks) onLoadMore()
+                }}
+              >
+                Show more
+              </button>
             )}
+            <span className="activity-fold-status" role="status">
+              {loadingChecks ? "Loading…" : ""}
+            </span>
           </div>
         </td>
       </tr>
@@ -659,7 +659,7 @@ function EntryRow({
         </a>
       </td>
       <td role="cell" className="activity-col-happened">
-        <HappenedLabel entry={entry} destination={names?.destination ?? null} />
+        <HappenedLabel entry={entry} names={names} />
       </td>
       {showRuleColumn && (
         <td role="cell" className="activity-col-rule">
@@ -702,36 +702,8 @@ function EventCellContent({ cell }: { cell: EventCell }) {
   )
 }
 
-function EventWhen({ cell }: { cell: Extract<EventCell, { state: "event" }> }) {
-  return (
-    <span className="activity-event-when">
-      {[cell.note, cell.when].filter(Boolean).join(" · ")}
-      {cell.recurring && <span className="activity-recurring"><Repeat aria-hidden="true" /> Repeats</span>}
-    </span>
-  )
-}
-
-const HAPPENED_ICONS: Record<HappenedIcon, LucideIcon> = {
-  added: Plus,
-  updated: RefreshCw,
-  repaired: Undo2,
-  removed: Trash2,
-  kept: Pin,
-  current: Check,
-  skipped: CircleSlash,
-  blocked: ShieldAlert,
-  rule: Settings2,
-}
-
-function HappenedLabel({ entry, destination }: { entry: AuditEntry; destination: string | null }) {
-  const happened = whatHappened(entry, destination)
-  const Icon = HAPPENED_ICONS[happened.icon]
-  return (
-    <span className="activity-happened" data-tone={happened.tone}>
-      <Icon aria-hidden="true" />
-      <span>{happened.text}</span>
-    </span>
-  )
+function HappenedLabel({ entry, names }: { entry: AuditEntry; names: RuleNames | null }) {
+  return <HappenedLine happened={whatHappened(entry, names)} />
 }
 
 function ActivityDetail({
@@ -809,7 +781,7 @@ function EntryDetails({
   }, [entry, focusRef])
   const names = ruleNames(entry.rule_id, context)
   const cell = eventCell(entry, names)
-  const copy = describeEntry(entry)
+  const copy = describeEntry(entry, names)
   const exists = names !== null
   const inspection = entryInspection(entry, exists)
   return (
@@ -820,11 +792,17 @@ function EntryDetails({
           {cell.state === "event" ? cell.title : cell.label}
         </h2>
         {cell.state === "event" && <EventWhen cell={cell} />}
-        <HappenedLabel entry={entry} destination={names?.destination ?? null} />
+        <HappenedLabel entry={entry} names={names} />
         {copy.explanation && <p className="activity-explanation">{copy.explanation}</p>}
+        {copy.next && exists && (
+          <p className="activity-next">
+            <strong>What to do: </strong>
+            {copy.next}
+          </p>
+        )}
         {entry.category === "blocked" && exists && (
           <Button variant="outline" size="sm" onClick={() => onOpenRule(entry.rule_id)}>
-            Open rule to reconcile
+            Open rule
           </Button>
         )}
       </div>

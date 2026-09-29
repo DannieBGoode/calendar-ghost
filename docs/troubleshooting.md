@@ -10,6 +10,11 @@ Open **Activity**, filter by the rule, and choose **Skipped** or **Blocked**. Ea
 and why no Event Projection was written; select it to see the full explanation, the event as the run
 recorded it, the event as it is in Google now, and a link to open it in Google Calendar. Common reasons:
 
+- **Blocked**: Calendar Sync could not safely write this one event, so the destination was left
+  unchanged; the rest of the rule keeps synchronizing. The entry's **What to do** says whether you
+  need to act. Otherwise the daily check decides the event again, and a block still there opens an
+  Incident. For a missing occurrence, **Technical details** records how the series was found and the
+  occurrence's original start.
 - **Skipped a recurring event**: recorded by a release before recurring-event support. The next
   run after upgrading projects the series.
 - **Skipped an occurrence**: the occurrence belongs to a series this rule does not project, such as

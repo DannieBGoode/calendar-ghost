@@ -122,8 +122,10 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 3. Preview the rule, inspect the result, and enable it.
 
 **Activity** is a table of what each rule did, grouped by day: the time, the event and when it
-happens, what happened in plain words (such as "Added to Work" or "Blocked: not owned by this
-rule"), and the rule. Each entry records its event's title and time when the run makes the decision,
+happens, what happened as what Calendar Sync observed and what it did about it (such as
+"Cancelled in Personal → removed from Work" or "Missing from Work → put back again"), and the rule.
+Recurring events say whether the entry was about the whole series or one occurrence. A blocked
+entry says what is now different in the destination calendar and whether anything needs doing. Each entry records its event's title and time when the run makes the decision,
 so Activity names events without asking Google and shows when an event was renamed. By default each run shows how many events it found already up to date in one row you
 can expand, and runs that found nothing else to do share one summary row; **All decisions** lists
 every check. Choose a rule from the picker, which shows each

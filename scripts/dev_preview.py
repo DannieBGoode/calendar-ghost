@@ -277,6 +277,11 @@ def _seed(container: Container, path: Path, now: datetime) -> None:
     record(20, personal, "preview-run-5", "delete", "source_cancelled", "dinner", title="")
     record(20, personal, "preview-run-5", "delete", "source_cancelled", "deleted-event")
     record(20, personal, "preview-run-5", "ignore", "projection_current", "gym")
+    # The same repair on consecutive runs, which Recent changes counts on one line.
+    for minutes, run in ((15, "preview-run-6"), (10, "preview-run-7")):
+        record(minutes, personal, run, "create", "projection_missing", "gym")
+    # An occurrence the destination series does not have, blocked after checking the series.
+    record(8, family, "preview-run-8", "conflict", "destination_occurrence_missing", "piano")
     record(5, personal, None, "policy_changed", None, None)
     with container.unit_of_work() as uow:
         for rule in rules:

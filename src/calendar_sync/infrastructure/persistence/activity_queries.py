@@ -1,0 +1,72 @@
+"""Questions about recorded Activity that both the Web API and rule health ask."""
+
+from __future__ import annotations
+
+import sqlite3
+
+
+def open_blocks(
+    connection: sqlite3.Connection,
+    *,
+    rule_id: str | None = None,
+    after: int | None = None,
+    persisting: bool = False,
+) -> list[tuple[int, str]]:
+    """Entry and rule of each event whose latest decision was a block, newest first.
+
+    Only blocks decided since each rule's latest daily pass count: that pass decides every blocked
+    event again, so an older block it did not repeat, such as one of an occurrence whose series was
+    deleted, is no longer open. That includes a block of an event that ended before the rule's sync
+    window: the daily pass no longer lists it, and a past event no longer affects the destination
+    calendar, so its block retires with it. `after` replaces the recorded pass with an audit
+    identifier. A persisting block was also the event's latest decision in an earlier run.
+    """
+    rules = (
+        [rule_id]
+        if rule_id is not None
+        else [str(row[0]) for row in connection.execute("SELECT id FROM sync_rules")]
+    )
+    # Recurring exclusions were recorded as conflicts before reason codes existed, and Rule Removal
+    # conflicts belong to a rule that no longer exists.
+    conditions = [
+        "a.rule_id = ?",
+        "a.id > ?",
+        "a.action = 'conflict' AND COALESCE(a.reason, '') != 'recurring_unsupported'",
+        "a.source_event_id IS NOT NULL",
+        """NOT EXISTS (
+            SELECT 1 FROM audit_entries later
+            WHERE later.rule_id = a.rule_id AND later.source_event_id = a.source_event_id
+                AND later.id > a.id
+        )""",
+    ]
+    if persisting:
+        conditions.append(
+            """(
+                SELECT earlier.action FROM audit_entries earlier
+                WHERE earlier.rule_id = a.rule_id AND earlier.source_event_id = a.source_event_id
+                    AND earlier.id < a.id
+                    AND COALESCE(earlier.run_id, '') != COALESCE(a.run_id, '')
+                ORDER BY earlier.id DESC LIMIT 1
+            ) = 'conflict'"""
+        )
+    blocks: list[tuple[int, str]] = []
+    for rule in rules:
+        floor = after if after is not None else _checked_floor(connection, rule)
+        blocks.extend(
+            (int(row[0]), rule)
+            for row in connection.execute(
+                f"""
+                SELECT a.id FROM audit_entries a INDEXED BY audit_entries_rule_id
+                WHERE {" AND ".join(conditions)}
+                """,
+                (rule, floor),
+            )
+        )
+    return sorted(blocks, reverse=True)
+
+
+def _checked_floor(connection: sqlite3.Connection, rule_id: str) -> int:
+    row = connection.execute(
+        "SELECT audit_floor FROM rule_block_checks WHERE rule_id = ?", (rule_id,)
+    ).fetchone()
+    return int(row[0]) if row else 0

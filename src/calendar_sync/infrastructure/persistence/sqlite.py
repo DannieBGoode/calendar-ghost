@@ -57,6 +57,7 @@ _FORWARD_MIGRATIONS = (
     (8, "0008_last_full_sync.sql"),
     (9, "0009_audit_event_titles.sql"),
     (10, "0010_pending_exception_replays.sql"),
+    (11, "0011_rule_block_checks.sql"),
 )
 
 

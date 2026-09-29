@@ -351,14 +351,22 @@ class ExecuteSyncRule:
             destination_reported=True,
         )
 
-    def _repair_series(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
+    def _repair_series(
+        self, run: SyncRunContext, source_series: CalendarEvent
+    ) -> SyncReason | None:
+        """Repair a series for one of its occurrences; the reason is None if already repaired."""
         if source_series.reference in run.repaired:
-            return
+            return None
         run.repaired.add(source_series.reference)
         # Cascading re-applies every recorded occurrence if the repair recreated the series.
-        self._synchronize_event(
-            run, source_series, destination_loaded=False, actual_destination=None
-        )
+        # A series found current is evidence for the occurrence's decision, not an entry of its own.
+        return self._synchronize_event(
+            run,
+            source_series,
+            destination_loaded=False,
+            actual_destination=None,
+            record_current=False,
+        ).reason
 
     def _record_skipped_occurrence(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         """An exception of a series this rule never projected has nothing to protect."""
@@ -401,7 +409,8 @@ class ExecuteSyncRule:
         *,
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
-    ) -> None:
+        record_current: bool = True,
+    ) -> SyncDecision:
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
             mapping, decision = self._decide_and_write(
@@ -409,6 +418,7 @@ class ExecuteSyncRule:
                 source_event,
                 destination_loaded=destination_loaded,
                 actual_destination=actual_destination,
+                record_current=record_current,
             )
         # Occurrence re-verification takes the write lock per occurrence, so it runs outside it.
         series_changed = decision.action in {SyncAction.CREATE, SyncAction.UPDATE}
@@ -425,6 +435,7 @@ class ExecuteSyncRule:
             and not run.source_listed
         ):
             self._replay_exceptions(run, mapping, source_event)
+        return decision
 
     def _replay_exceptions(
         self, run: SyncRunContext, mapping: EventMapping, source_series: CalendarEvent
@@ -457,6 +468,7 @@ class ExecuteSyncRule:
         *,
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
+        record_current: bool = True,
     ) -> tuple[EventMapping | None, SyncDecision]:
         uow, rule = run.uow, run.rule
         mapping = uow.mappings.for_source(rule.id, source_event.reference)
@@ -543,20 +555,21 @@ class ExecuteSyncRule:
             )
             uow.mappings.delete(owned)
 
-        record(
-            run,
-            AuditEntry(
-                occurred_at=self.clock.now(),
-                rule_id=rule.id,
-                action=decision.action.value,
-                outcome=OUTCOMES.get(decision.action, "completed"),
-                source_event_id=source_event.reference.event_id.value,
-                destination_event_id=mapping.destination.event_id.value if mapping else None,
-                reason=decision.reason.value,
-                run_id=run.run_id,
-                event=RecordedEvent.of(source_event),
-            ),
-        )
+        if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:
+            record(
+                run,
+                AuditEntry(
+                    occurred_at=self.clock.now(),
+                    rule_id=rule.id,
+                    action=decision.action.value,
+                    outcome=OUTCOMES.get(decision.action, "completed"),
+                    source_event_id=source_event.reference.event_id.value,
+                    destination_event_id=mapping.destination.event_id.value if mapping else None,
+                    reason=decision.reason.value,
+                    run_id=run.run_id,
+                    event=RecordedEvent.of(source_event),
+                ),
+            )
         uow.commit()
         return mapping, decision
 

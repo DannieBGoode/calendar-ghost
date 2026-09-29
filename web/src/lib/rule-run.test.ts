@@ -4,7 +4,6 @@ import type { RunOutcome, SyncResult } from "./api"
 import {
   enableSummary,
   lastRunLabel,
-  recentChangeSummary,
   recoveryExplanation,
   reconcileResultMessage,
   syncResultMessage,
@@ -87,22 +86,3 @@ describe("recoveryExplanation", () => {
   })
 })
 
-describe("recentChangeSummary", () => {
-  const none = { created: 0, updated: 0, deleted: 0, repaired: 0, blocked: 0 }
-
-  it("describes a run in calendar language", () => {
-    expect(recentChangeSummary({ ...none, created: 1, updated: 2 }, "Family")).toBe(
-      "Added 1 event and updated 2 in Family.",
-    )
-    expect(recentChangeSummary({ ...none, deleted: 1, repaired: 2 }, "Work")).toBe(
-      "Removed 1 in Work. Repaired 2 events someone edited or deleted in Work.",
-    )
-  })
-
-  it("calls out blocked changes", () => {
-    expect(recentChangeSummary({ ...none, blocked: 1 }, "Work")).toBe("1 change was blocked and needs a look.")
-    expect(recentChangeSummary({ ...none, created: 3, blocked: 2 }, "Work")).toBe(
-      "Added 3 events in Work. 2 changes were blocked and need a look.",
-    )
-  })
-})

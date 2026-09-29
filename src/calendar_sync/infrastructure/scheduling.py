@@ -20,6 +20,7 @@ from calendar_sync.application.ports import RuleRunOutcome, RunKind, UnitOfWorkF
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import IncidentNotification, IncidentNotifier
+from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +55,70 @@ class SqliteRuleHealth:
         self._locks = locks or RuleLocks()
         self._notifier = notifier
 
-    def record_success(self, rule: SyncRule) -> None:
+    def audit_floor(self) -> int:
+        """The newest audit entry now, taken before a daily pass so its decisions lie above it."""
+        with sqlite3.connect(self._database_path) as connection:
+            return int(
+                connection.execute("SELECT COALESCE(MAX(id), 0) FROM audit_entries").fetchone()[0]
+            )
+
+    def record_success(self, rule: SyncRule, *, full_pass_floor: int | None = None) -> None:
+        """Record a successful run; a daily pass also names the audit entry it began after."""
         now = datetime.now(UTC).isoformat()
-        key = f"provider:{rule.id.value}"
         with sqlite3.connect(self._database_path) as connection:
             connection.execute("DELETE FROM rule_failures WHERE rule_id = ?", (rule.id.value,))
+        self._resolve(f"provider:{rule.id.value}", now)
+        if full_pass_floor is not None:
+            self.record_full_pass(rule.id, full_pass_floor)
+
+    def record_full_pass(self, rule_id: SyncRuleId, floor: int) -> None:
+        """A full pass that began after audit entry `floor` decided every blocked event again.
+
+        Blocks it repeated are persisting and open one Incident; blocks it did not repeat are no
+        longer open. Scheduled daily passes and Reconcile Now both report here.
+        """
+        # Rule Removal holds this lock throughout, so a rule removed after its pass finished is
+        # never given an incident no run could resolve.
+        with self._locks.for_rule(rule_id):
+            self._record_full_pass(rule_id, floor)
+
+    def _record_full_pass(self, rule_id: SyncRuleId, floor: int) -> None:
+        now = datetime.now(UTC).isoformat()
+        with sqlite3.connect(self._database_path) as connection:
+            if not connection.execute(
+                "SELECT 1 FROM sync_rules WHERE id = ?", (rule_id.value,)
+            ).fetchone():
+                return
+            persisting = len(
+                open_blocks(connection, rule_id=rule_id.value, after=floor, persisting=True)
+            )
+            connection.execute(
+                """
+                INSERT INTO rule_block_checks (rule_id, audit_floor, checked_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(rule_id) DO UPDATE SET
+                    audit_floor = excluded.audit_floor, checked_at = excluded.checked_at
+                """,
+                (rule_id.value, floor, now),
+            )
+        key = f"blocked:{rule_id.value}"
+        if persisting:
+            events = "1 event" if persisting == 1 else f"{persisting} events"
+            verb = "was" if persisting == 1 else "were"
+            self._open_incident(
+                rule_id,
+                "conflict",
+                now,
+                key=key,
+                summary=(
+                    f"{events} could not be synced and {verb} still blocked at the daily check."
+                ),
+            )
+        else:
+            self._resolve(key, now)
+
+    def _resolve(self, key: str, now: str) -> None:
+        with sqlite3.connect(self._database_path) as connection:
             connection.execute(
                 """
                 UPDATE incidents SET state = 'resolved', updated_at = ?, resolved_at = ?
@@ -97,7 +157,7 @@ class SqliteRuleHealth:
         if needs_intervention:
             self._degrade(rule)
         if needs_intervention or count >= 3:
-            self._open_incident(rule.id, failure.kind, now)
+            self._open_incident(rule.id, failure.kind.value, now)
 
     def _degrade(self, rule: SyncRule) -> None:
         if rule.state is not SyncRuleState.ENABLED:
@@ -111,7 +171,7 @@ class SqliteRuleHealth:
     def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
         self._open_incident(
             rule_id,
-            failure.kind,
+            failure.kind.value,
             datetime.now(UTC).isoformat(),
             key=f"removal:{rule_id.value}",
             summary=f"Rule Removal stopped: {_FAILURE_SUMMARIES[failure.kind]}",
@@ -120,14 +180,14 @@ class SqliteRuleHealth:
     def _open_incident(
         self,
         rule_id: SyncRuleId,
-        kind: ProviderFailureKind,
+        category: str,
         occurred_at: str,
         *,
         key: str | None = None,
         summary: str | None = None,
     ) -> None:
         key = key or f"provider:{rule_id.value}"
-        summary = summary or _FAILURE_SUMMARIES[kind]
+        summary = summary or _FAILURE_SUMMARIES[ProviderFailureKind(category)]
         with sqlite3.connect(self._database_path) as connection:
             existing = connection.execute(
                 "SELECT state FROM incidents WHERE deduplication_key = ?", (key,)
@@ -150,7 +210,7 @@ class SqliteRuleHealth:
                     str(uuid.uuid4()),
                     key,
                     rule_id.value,
-                    kind.value,
+                    category,
                     summary,
                     occurred_at,
                     occurred_at,
@@ -158,7 +218,7 @@ class SqliteRuleHealth:
             )
         if newly_opened and self._notifier is not None:
             self._notifier.notify(
-                IncidentNotification(rule_id.value, kind.value, summary, occurred_at)
+                IncidentNotification(rule_id.value, category, summary, occurred_at)
             )
 
 
@@ -194,10 +254,12 @@ class SyncScheduler:
             await asyncio.to_thread(self._execute_with_retry, rule, full)
 
     def _execute_with_retry(self, rule: SyncRule, full: bool = False) -> bool:
+        # Every decision of a daily pass, including its retries, is recorded above this entry.
+        floor = self._health.audit_floor() if full else None
         for attempt in range(3):
             try:
                 self._execute_rule.execute(rule.id, full=full)
-                self._health.record_success(rule)
+                self._health.record_success(rule, full_pass_floor=floor)
                 return True
             except RuleNotExecutable:
                 # The rule was paused, edited, or removed after this pass listed it.

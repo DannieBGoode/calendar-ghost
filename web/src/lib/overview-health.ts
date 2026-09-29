@@ -1,3 +1,4 @@
+import { activitySearch } from "@/lib/activity-location"
 import type { Dashboard } from "@/lib/api"
 import type { AppView } from "@/lib/navigation"
 import { relativeTime } from "@/lib/relative-time"
@@ -10,7 +11,7 @@ export type OverviewHealth = {
   title: string
   detail: string
   badge: string
-  action: { label: string; view: AppView; ruleId?: string } | null
+  action: { label: string; view: AppView; ruleId?: string; search?: string } | null
 }
 
 /**
@@ -130,13 +131,33 @@ export function overviewHealth(
       action: { label: "Review rules", view: "rules" },
     }
   }
+  const lastSync = dashboard.last_synced_at
+    ? `Last sync ${relativeTime(dashboard.last_synced_at, now)}.`
+    : "The first sync runs within five minutes."
+  // A block leaves the rule running; it becomes an incident only if the daily check still finds it.
+  if (dashboard.blocked_events > 0 && dashboard.blocked_entry_id !== null) {
+    return {
+      tone: "healthy",
+      headline: "Synchronization is healthy",
+      title: `${count(dashboard.enabled_rules, "rule")} running normally`,
+      detail: `${count(dashboard.blocked_events, "event")} couldn't be synced. ${lastSync}`,
+      badge: "Healthy",
+      action: {
+        label: dashboard.blocked_events === 1 ? "See the blocked event" : "See blocked events",
+        view: "activity",
+        search: activitySearch({
+          ruleId: dashboard.blocked_rule_id ?? "",
+          show: "blocked",
+          entryId: dashboard.blocked_entry_id,
+        }),
+      },
+    }
+  }
   return {
     tone: "healthy",
     headline: "Synchronization is healthy",
     title: `${count(dashboard.enabled_rules, "rule")} running normally`,
-    detail: dashboard.last_synced_at
-      ? `Last sync ${relativeTime(dashboard.last_synced_at, now)}. Calendar Sync checks for changes every five minutes.`
-      : "The first sync runs within five minutes.",
+    detail: dashboard.last_synced_at ? `${lastSync} Calendar Sync checks for changes every five minutes.` : lastSync,
     badge: "Healthy",
     action: null,
   }

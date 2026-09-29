@@ -68,18 +68,6 @@ class RuleSummaryResponse(RuleResponse):
     latest_preview: PreviewSummaryResponse | None
 
 
-class RecentChangeResponse(BaseModel):
-    run_key: str
-    rule_id: str
-    occurred_at: str
-    created: int
-    updated: int
-    deleted: int
-    repaired: int
-    blocked: int
-    entry_ids: list[int]
-
-
 class RuleDetailResponse(RuleResponse):
     initial_lookback_days: int
     mapping_count: int
@@ -121,6 +109,10 @@ class DashboardResponse(BaseModel):
     stopped_rules: int
     open_incidents: int
     last_synced_at: str | None
+    blocked_events: int = 0
+    """Events of existing rules whose latest decision was a block."""
+    blocked_entry_id: int | None = None
+    blocked_rule_id: str | None = None
 
 
 class GoogleConfigurationResponse(BaseModel):
@@ -152,6 +144,12 @@ class DiscoveredCalendarResponse(BaseModel):
     primary: bool
 
 
+class RecordedTimeResponse(BaseModel):
+    all_day: bool = False
+    starts: str | None = None
+    ends: str | None = None
+
+
 class RecordedEventResponse(BaseModel):
     """The source event as its run recorded it; see ADR 0014."""
 
@@ -162,6 +160,8 @@ class RecordedEventResponse(BaseModel):
     recurring: bool = False
     cancelled: bool = False
     renamed_from: str | None = None
+    moved_from: RecordedTimeResponse | None = None
+    """The time the previous entry for this event recorded, when this entry saw it move."""
 
 
 class AuditEntryResponse(BaseModel):
@@ -177,6 +177,8 @@ class AuditEntryResponse(BaseModel):
     source_event_id: str | None
     destination_event_id: str | None
     event: RecordedEventResponse | None = None
+    repeated: bool = False
+    """A repair that redoes the same event's previous one, recorded by an earlier run."""
 
 
 class EventSnapshotResponse(BaseModel):
@@ -211,3 +213,11 @@ class IncidentResponse(BaseModel):
     summary: str
     opened_at: str
     updated_at: str
+
+
+class RecentChangeResponse(BaseModel):
+    """One written event; an identical repair repeated among recent entries is counted on it."""
+
+    entry: AuditEntryResponse
+    repeats: int
+    first_occurred_at: str

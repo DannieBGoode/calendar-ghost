@@ -13,6 +13,9 @@ const healthy: Dashboard = {
   stopped_rules: 0,
   open_incidents: 0,
   last_synced_at: "2026-09-28T11:57:00Z",
+  blocked_events: 0,
+  blocked_entry_id: null,
+  blocked_rule_id: null,
 }
 
 describe("overviewHealth", () => {
@@ -23,6 +26,17 @@ describe("overviewHealth", () => {
     expect(health.title).toBe("2 rules running normally")
     expect(health.detail).toMatch(/^Last sync 3 minutes ago\./)
     expect(health.action).toBeNull()
+  })
+
+  it("stays healthy with a blocked event but says so and links to it", () => {
+    const health = overviewHealth({ ...healthy, blocked_events: 1, blocked_entry_id: 42, blocked_rule_id: "rule-1" }, now)
+    expect(health.tone).toBe("healthy")
+    expect(health.detail).toBe("1 event couldn't be synced. Last sync 3 minutes ago.")
+    expect(health.action).toEqual({
+      label: "See the blocked event",
+      view: "activity",
+      search: "?rule=rule-1&show=blocked&entry=42",
+    })
   })
 
   it("never calls an installation with open incidents healthy", () => {
