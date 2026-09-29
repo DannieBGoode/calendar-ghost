@@ -268,7 +268,8 @@ function RecentChangeItem({
         )}
         <p data-blocked={change.blocked > 0 || undefined}>{recentChangeSummary(change, destination)}</p>
         <div className="recent-change-actions">
-          {rule && change.entry_ids.length > 0 && (
+          {/* Recorded names need no rule, so a removed rule's changes can show theirs too. */}
+          {change.entry_ids.length > 0 && (
             <button
               type="button"
               className="disclosure-button"
