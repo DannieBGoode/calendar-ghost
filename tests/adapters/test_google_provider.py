@@ -536,7 +536,6 @@ def test_occurrence_exceptions_lists_cancelled_and_moved_instances_in_the_window
         calendarId="work-calendar",
         eventId="projection-1",
         showDeleted=True,
-        timeMin=window.isoformat(),
         maxResults=2500,
         fields=OCCURRENCE_EXCEPTION_FIELDS,
     )
@@ -675,3 +674,30 @@ def test_cancel_occurrence_deletes_only_the_instance_and_skips_cancelled_ones() 
     events_api.delete.assert_called_once_with(
         calendarId="work-calendar", eventId="projection-1_20260908T080000Z", sendUpdates="none"
     )
+
+
+def test_occurrence_exceptions_keep_occurrences_moved_out_of_the_window_but_not_older_ones() -> (
+    None
+):
+    moved_out = {
+        **_instance(),
+        "id": "projection-1_20260915T080000Z",
+        "originalStartTime": {"dateTime": "2026-09-15T08:00:00Z"},
+        "start": {"dateTime": "2026-07-01T08:00:00Z"},
+        "end": {"dateTime": "2026-07-01T09:00:00Z"},
+    }
+    older = {
+        **_instance("cancelled"),
+        "id": "projection-1_20260707T080000Z",
+        "originalStartTime": {"dateTime": "2026-07-07T08:00:00Z"},
+    }
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_returning({"items": [moved_out, older]})
+    provider = provider_with_events_api(events_api)
+
+    exceptions = provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert [event.reference.event_id.value for event in exceptions] == [
+        "projection-1_20260915T080000Z"
+    ]
+    assert "timeMin" not in events_api.instances.call_args.kwargs

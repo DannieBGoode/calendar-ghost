@@ -171,17 +171,11 @@ class FakeCalendars:
                 instance.description,
                 instance.location,
             ) != (regular.time, regular.title, regular.description, regular.location)
-            if (instance.status is EventStatus.CANCELLED or edited) and self._not_ended_before(
-                start, not_ended_before
+            if (instance.status is EventStatus.CANCELLED or edited) and instance.occurrence_reaches(
+                not_ended_before
             ):
                 exceptions.append(instance)
         return tuple(exceptions)
-
-    @staticmethod
-    def _not_ended_before(start: OccurrenceStart, instant: datetime) -> bool:
-        if isinstance(start, datetime):
-            return start >= instant
-        return start >= instant.date()
 
     def _all_day(self, series: EventRef, start: OccurrenceStart) -> bool:
         stored = self.events.get(

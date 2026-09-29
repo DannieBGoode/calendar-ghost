@@ -220,6 +220,18 @@ class CalendarEvent:
             return self.time.ends_before < instant.date()
         return self.time.ends_at < instant
 
+    def occurrence_reaches(self, instant: datetime) -> bool:
+        """Whether an occurrence's original slot, or the time it was moved to, reaches an instant.
+
+        Either one inside the sync window matters: a destination series shows the original slot
+        until the exception is applied, and a moved occurrence belongs where it now is.
+        """
+        if self.occurrence is None:
+            raise DomainValidationError("only an occurrence has an original slot")
+        original = self.occurrence.original_start
+        boundary: date | datetime = instant if isinstance(original, datetime) else instant.date()
+        return original >= boundary or (self.time is not None and not self.ended_before(instant))
+
 
 @dataclass(frozen=True, slots=True)
 class EventProjection:

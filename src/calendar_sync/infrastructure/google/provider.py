@@ -317,7 +317,8 @@ class GoogleCalendarProvider:
             "calendarId": series.calendar.calendar_id.value,
             "eventId": series.event_id.value,
             "showDeleted": True,
-            "timeMin": not_ended_before.isoformat(),
+            # timeMin filters by where an instance is now, which would drop an occurrence moved
+            # out of the window whose original slot is still in it; the window is applied below.
             "maxResults": 2500,
             "fields": OCCURRENCE_EXCEPTION_FIELDS,
         }
@@ -332,7 +333,9 @@ class GoogleCalendarProvider:
                 response = events_api.instances(**parameters).execute()
                 for item in response.get("items", []):
                     instance = to_domain_event(item, series.calendar)
-                    if _is_exception(instance, master):
+                    if _is_exception(instance, master) and instance.occurrence_reaches(
+                        not_ended_before
+                    ):
                         exceptions.append(instance)
                 page_token = response.get("nextPageToken")
                 if not page_token:

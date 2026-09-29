@@ -129,7 +129,8 @@ occurrences run past the page limit.
 
 A series projection created from an incremental feed, including a dormant series restored when
 one of its occurrences comes back, starts from its recurrence alone. The run therefore lists the
-source series' cancelled and moved occurrences in the sync window and applies each one, besides
+source series' cancelled and edited occurrences whose original slot or current time reaches the
+sync window, and applies each one, besides
 re-applying every Occurrence Mapping. Occurrences cancelled while the series had no projection, or
 whose cancellation response was lost, therefore stay cancelled. The replay is recorded with the new
 Series Mapping and cleared only when it completes, so a run that fails midway leaves it for the

@@ -107,7 +107,9 @@ class CalendarProvider(Protocol):
     def occurrence_exceptions(
         self, series: EventRef, not_ended_before: datetime
     ) -> Sequence[CalendarEvent]:
-        """Occurrences of a series that are cancelled or moved, from `not_ended_before` on.
+        """Occurrences of a series that are cancelled or differ from its regular occurrence.
+
+        Only occurrences whose original slot or current time reaches `not_ended_before` count.
 
         A series whose occurrences cannot be listed returns none; its exceptions are applied when
         a later full listing reports them.
