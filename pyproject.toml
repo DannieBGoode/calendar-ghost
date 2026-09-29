@@ -88,8 +88,6 @@ layers = [
 ignore_imports = [
   # The FastAPI factory is the process entry point and builds the container.
   "calendar_sync.interfaces.api.app -> calendar_sync.bootstrap.container",
-  # Known debt: these belong behind application ports. Do not add to this list.
-  "calendar_sync.infrastructure.google.oauth -> calendar_sync.bootstrap.config",
 ]
 
 [[tool.importlinter.contracts]]

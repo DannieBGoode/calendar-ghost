@@ -37,6 +37,7 @@ from calendar_sync.application.ports import (
     CalendarProvider,
     ConnectedAccount,
     ConnectedAccountRepository,
+    ConnectedAccountState,
     DiscoveredCalendar,
     RecordedEvent,
 )
@@ -90,10 +91,16 @@ FAMILY = CalendarEndpoint(ConnectedAccountId("preview-personal"), CalendarId("fa
 WORK = CalendarEndpoint(ConnectedAccountId("preview-work"), CalendarId("sam@work.example"))
 ACCOUNTS = (
     ConnectedAccount(
-        ConnectedAccountId("preview-personal"), "Sam Rivera", "sam@example.com", "connected"
+        ConnectedAccountId("preview-personal"),
+        "Sam Rivera",
+        "sam@example.com",
+        ConnectedAccountState.CONNECTED,
     ),
     ConnectedAccount(
-        ConnectedAccountId("preview-work"), "Sam Rivera", "sam@work.example", "connected"
+        ConnectedAccountId("preview-work"),
+        "Sam Rivera",
+        "sam@work.example",
+        ConnectedAccountState.CONNECTED,
     ),
 )
 CALENDARS = {

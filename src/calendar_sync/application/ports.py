@@ -153,6 +153,9 @@ class SyncRuleRepository(Protocol):
     def remove(self, rule_id: SyncRuleId) -> None:
         """Delete the rule with its mappings, cursors, and outcomes; resolve its incidents."""
 
+    def purge(self, rule_id: SyncRuleId) -> None:
+        """Delete the rule like `remove`, and its audit entries and incidents with it."""
+
 
 class EventMappingRepository(Protocol):
     def for_source(self, rule_id: SyncRuleId, source: EventRef) -> EventMapping | None: ...
@@ -334,12 +337,17 @@ class RemovalIncidents(Protocol):
         ...
 
 
+class ConnectedAccountState(StrEnum):
+    CONNECTED = "connected"
+    DISCONNECTED = "disconnected"
+
+
 @dataclass(frozen=True, slots=True)
 class ConnectedAccount:
     id: ConnectedAccountId
     display_name: str
     email: str
-    state: str
+    state: ConnectedAccountState
     avatar_url: str | None = None
 
 
@@ -348,12 +356,14 @@ class ConnectedAccountRepository(AccountAuthorizations, Protocol):
         """Every Connected and Disconnected Account, ordered by email."""
         ...
 
+    def get(self, account_id: ConnectedAccountId) -> ConnectedAccount | None: ...
+
     def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
         """Discard the account's credentials, keeping its identity for Reauthorization."""
         ...
 
-    def delete(self, account_id: ConnectedAccountId) -> int:
-        """Delete a Disconnected Account with its rules, their incidents and audit entries."""
+    def delete(self, account_id: ConnectedAccountId) -> None:
+        """Delete the account record only; its rules are the caller's to delete first."""
         ...
 
 

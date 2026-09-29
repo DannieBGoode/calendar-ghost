@@ -60,7 +60,7 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
-from calendar_sync.infrastructure.google.oauth import CredentialCipher
+from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import all_day_event, endpoint, event, occurrence, rule, series, week_start

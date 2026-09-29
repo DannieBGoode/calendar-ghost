@@ -11,12 +11,15 @@ from calendar_sync.application.accounts import (
     DisconnectConnectedAccount,
     ListConnectedAccounts,
 )
-from calendar_sync.application.errors import ConnectedAccountNotFound
+from calendar_sync.application.errors import (
+    ConnectedAccountMustBeDisconnected,
+    ConnectedAccountNotFound,
+)
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import ConnectedAccount
+from calendar_sync.application.ports import AuditEntry, ConnectedAccount, ConnectedAccountState
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
-from tests.helpers import endpoint
+from tests.helpers import NOW, endpoint
 
 ACCOUNT = ConnectedAccountId("personal")
 
@@ -40,17 +43,22 @@ class RecordingAccounts:
 
     def is_connected(self, account_id: ConnectedAccountId) -> bool:
         account = self.accounts.get(account_id)
-        return account is not None and account.state == "connected"
+        return account is not None and account.state is ConnectedAccountState.CONNECTED
 
     def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
         if account_id not in self.accounts:
             raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
-        self.accounts[account_id] = replace(self.accounts[account_id], state="disconnected")
+        self.accounts[account_id] = replace(
+            self.accounts[account_id], state=ConnectedAccountState.DISCONNECTED
+        )
         return self.accounts[account_id]
 
-    def delete(self, account_id: ConnectedAccountId) -> int:
+    def get(self, account_id: ConnectedAccountId) -> ConnectedAccount | None:
+        return self.accounts.get(account_id)
+
+    def delete(self, account_id: ConnectedAccountId) -> None:
+        del self.accounts[account_id]
         self.deleted.append(account_id)
-        return 1
 
 
 def _with_rules(*rules: SyncRule) -> InMemoryUnitOfWorkFactory:
@@ -63,7 +71,7 @@ def _with_rules(*rules: SyncRule) -> InMemoryUnitOfWorkFactory:
 
 
 def _use_case(*rules: SyncRule) -> tuple[DeleteConnectedAccount, RecordingAccounts, RuleLocks]:
-    accounts = RecordingAccounts()
+    accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
     locks = RuleLocks()
     return DeleteConnectedAccount(_with_rules(*rules), accounts, locks), accounts, locks
 
@@ -113,9 +121,11 @@ def test_deletion_does_not_wait_for_rules_of_other_accounts() -> None:
     assert accounts.deleted == [ACCOUNT]
 
 
-def _account(account_id: str = ACCOUNT.value) -> ConnectedAccount:
+def _account(
+    account_id: str = ACCOUNT.value, state: ConnectedAccountState = ConnectedAccountState.CONNECTED
+) -> ConnectedAccount:
     return ConnectedAccount(
-        ConnectedAccountId(account_id), "Personal", f"{account_id}@example.test", "connected"
+        ConnectedAccountId(account_id), "Personal", f"{account_id}@example.test", state
     )
 
 
@@ -148,7 +158,7 @@ def test_disconnecting_degrades_validated_and_enabled_rules_only() -> None:
 
     disconnected = DisconnectConnectedAccount(unit_of_work, accounts, RuleLocks()).execute(ACCOUNT)
 
-    assert disconnected.account.state == "disconnected"
+    assert disconnected.account.state is ConnectedAccountState.DISCONNECTED
     assert disconnected.rule_count == 4
     assert {rule_id.value: rule.state for rule_id, rule in unit_of_work.state.rules.items()} == {
         "enabled": SyncRuleState.DEGRADED,
@@ -181,3 +191,35 @@ def test_disconnecting_waits_for_an_in_flight_write_of_an_affected_rule() -> Non
 
     assert blocked
     assert unit_of_work.state.rules[affected.id].state is SyncRuleState.DEGRADED
+
+
+def test_deletion_purges_every_rule_using_the_account_and_then_the_account() -> None:
+    affected = _rule("affected", ACCOUNT.value)
+    unrelated = _rule("unrelated", "other")
+    unit_of_work = _with_rules(affected, unrelated)
+    with unit_of_work() as uow:
+        for recorded in (affected, unrelated):
+            uow.audit.append(AuditEntry(NOW, recorded.id, "create", "completed"))
+        uow.commit()
+    accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
+
+    deleted = DeleteConnectedAccount(unit_of_work, accounts, RuleLocks()).execute(ACCOUNT)
+
+    assert deleted == 1
+    assert accounts.deleted == [ACCOUNT]
+    assert list(unit_of_work.state.rules) == [unrelated.id]
+    assert [entry.rule_id for entry in unit_of_work.state.audit] == [unrelated.id]
+
+
+def test_deletion_is_refused_for_a_connected_or_unknown_account() -> None:
+    affected = _rule("affected", ACCOUNT.value)
+    unit_of_work = _with_rules(affected)
+    connected = RecordingAccounts(_account())
+
+    with pytest.raises(ConnectedAccountMustBeDisconnected):
+        DeleteConnectedAccount(unit_of_work, connected, RuleLocks()).execute(ACCOUNT)
+    with pytest.raises(ConnectedAccountNotFound):
+        DeleteConnectedAccount(unit_of_work, RecordingAccounts(), RuleLocks()).execute(ACCOUNT)
+
+    assert connected.deleted == []
+    assert list(unit_of_work.state.rules) == [affected.id]

@@ -37,6 +37,13 @@ route returns; never a concrete adapter, the unit of work, or the rule locks. Te
 development preview substitute adapters before `compose`, or use cases after it. Use cases that
 need the installation master key are absent without it, and one route guard answers 503 for them.
 
+Google authorization is split the same way. `infrastructure/google/oauth.py` holds only the
+state-protected OAuth flow, configured by an `OAuthClientConfig` value that bootstrap builds from
+Settings. Connected Accounts and their credentials, encrypted by the `CredentialCipher` in
+`infrastructure/security.py`, live in `infrastructure/persistence/accounts.py`, which implements the
+`ConnectedAccountRepository` port. Deleting an account and its rules is the `DeleteConnectedAccount`
+use case; the adapters only delete their own records.
+
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
 results to HTTP payloads and never opens the database itself. The rule that sorts Audit Entries

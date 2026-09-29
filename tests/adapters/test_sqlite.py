@@ -379,6 +379,64 @@ def test_rule_removal_cascades_resolves_incidents_and_keeps_audit(tmp_path: Path
         assert connection.execute("SELECT COUNT(*) FROM audit_entries").fetchone()[0] == 1
 
 
+def test_rule_purge_deletes_its_audit_entries_and_incidents_but_no_other_rules(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    other = replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
+    with factory() as uow:
+        for kept_or_purged in (rule(), other):
+            uow.rules.add(kept_or_purged)
+            uow.audit.append(
+                AuditEntry(datetime(2026, 9, 1, tzinfo=UTC), kept_or_purged.id, "create", "done")
+            )
+        uow.mappings.save(_mapping())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at)
+            VALUES (?, ?, ?, 'temporary', 'open', 's', 't', 't')
+            """,
+            [("i-1", "provider:rule-1", "rule-1"), ("i-2", "provider:rule-2", "rule-2")],
+        )
+
+    with factory() as uow:
+        uow.rules.purge(rule().id)
+        uow.commit()
+
+    with factory() as uow:
+        assert [kept.id for kept in uow.rules.list()] == [other.id]
+        assert uow.mappings.count_for_rule(rule().id) == 0
+    with sqlite3.connect(database) as connection:
+        for table in ("audit_entries", "incidents"):
+            assert connection.execute(f"SELECT rule_id FROM {table}").fetchall() == [("rule-2",)]
+
+
+def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
+    factory = InMemoryUnitOfWorkFactory()
+    other = replace(rule(), id=SyncRuleId("rule-2"))
+    with factory() as uow:
+        for kept_or_purged in (rule(), other):
+            uow.rules.add(kept_or_purged)
+            uow.audit.append(
+                AuditEntry(datetime(2026, 9, 1, tzinfo=UTC), kept_or_purged.id, "create", "done")
+            )
+        uow.mappings.save(_mapping())
+        uow.commit()
+
+    with factory() as uow:
+        uow.rules.purge(rule().id)
+        uow.commit()
+
+    assert list(factory.state.rules) == [other.id]
+    assert factory.state.mappings == {}
+    assert [entry.rule_id for entry in factory.state.audit] == [other.id]
+
+
 def test_memory_adapter_supports_removal_counts_and_outcomes() -> None:
     factory = InMemoryUnitOfWorkFactory()
     with factory() as uow:

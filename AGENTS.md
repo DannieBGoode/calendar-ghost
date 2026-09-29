@@ -75,8 +75,8 @@ web/ and interfaces/  ->  application/  ->  domain/
 - Prefer explicit constructor injection and small protocols. Do not introduce a dependency-injection
   framework, repository framework, event bus, or microservice boundary.
 - `lint-imports` enforces these boundaries through the contracts in `pyproject.toml`. Its
-  `ignore_imports` entries are known debt in `interfaces/api/app.py` and the Google OAuth adapter.
-  Remove entries as that debt is paid; never add one to make a change pass.
+  only `ignore_imports` entry lets the FastAPI factory in `interfaces/api/app.py` build the
+  container, because it is the process entry point. Never add one to make a change pass.
 - Ruff bounds function complexity and argument count. Existing `# noqa: C901`, `PLR0912`,
   `PLR0913`, and `PLR0915` markers are debt to shrink, not a pattern to copy: split new code
   instead of suppressing the rule.

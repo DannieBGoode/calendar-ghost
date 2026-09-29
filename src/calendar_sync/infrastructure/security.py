@@ -8,8 +8,39 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
 from calendar_sync.application.ports import AdministratorSession
+
+
+class InvalidMasterKey(ValueError):
+    pass
+
+
+class CredentialCipher:
+    """Encrypts provider credentials at rest with the Installation Master Key."""
+
+    def __init__(self, encoded_key: str) -> None:
+        try:
+            key = base64.urlsafe_b64decode(encoded_key.encode())
+        except Exception as error:
+            raise InvalidMasterKey("master key must be URL-safe base64") from error
+        if len(key) != 32:
+            raise InvalidMasterKey("master key must decode to exactly 32 bytes")
+        self._cipher = AESGCM(key)
+
+    def encrypt(self, plaintext: str) -> bytes:
+        nonce = secrets.token_bytes(12)
+        return nonce + self._cipher.encrypt(nonce, plaintext.encode(), None)
+
+    def decrypt(self, ciphertext: bytes) -> str:
+        nonce, encrypted = ciphertext[:12], ciphertext[12:]
+        return self._cipher.decrypt(nonce, encrypted, None).decode()
+
+    @staticmethod
+    def generate_key() -> str:
+        return base64.urlsafe_b64encode(AESGCM.generate_key(bit_length=256)).decode()
 
 
 class SqliteAdminAuth:

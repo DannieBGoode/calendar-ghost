@@ -934,7 +934,7 @@ def _account_response(summary: ConnectedAccountSummary) -> ConnectedAccountRespo
         display_name=account.display_name,
         email=account.email,
         avatar_url=account.avatar_url,
-        state=account.state,
+        state=account.state.value,
         rule_count=summary.rule_count,
     )
 

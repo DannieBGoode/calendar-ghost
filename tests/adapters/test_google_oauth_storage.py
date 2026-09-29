@@ -17,18 +17,34 @@ from calendar_sync.application.errors import (
     ConnectedAccountDisconnected,
     InvalidAuthorizationState,
 )
-from calendar_sync.bootstrap.config import Settings
+from calendar_sync.application.ports import ConnectedAccountState
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,
     OAUTH_SCOPES,
     PROFILE_SCOPES,
-    CredentialCipher,
     GoogleOAuthService,
-    InvalidMasterKey,
-    SqliteConnectedAccountStore,
+    OAuthClientConfig,
+)
+from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
+from calendar_sync.infrastructure.persistence.authorization_states import (
+    SqliteAuthorizationStates,
 )
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.security import CredentialCipher, InvalidMasterKey
+
+DEFAULT_REDIRECT_URI = "http://localhost:8000/api/v1/oauth/google/callback"
+UNCONFIGURED_CLIENT = OAuthClientConfig("", "", DEFAULT_REDIRECT_URI)
+
+
+def _oauth(
+    database: Path,
+    store: SqliteConnectedAccountStore,
+    client: OAuthClientConfig = UNCONFIGURED_CLIENT,
+    *,
+    master_key: str = "",
+) -> GoogleOAuthService:
+    return GoogleOAuthService(client, store, SqliteAuthorizationStates(database), master_key)
 
 
 def test_credential_cipher_round_trip_is_not_plaintext() -> None:
@@ -120,7 +136,7 @@ def test_disconnect_discards_credentials_and_reauthorization_preserves_identity(
 
     assert disconnected.state == "disconnected"
     with pytest.raises(ConnectedAccountDisconnected, match="reauthorize"):
-        store.credentials(account.id)
+        store.credential_json(account.id)
     with sqlite3.connect(database) as connection:
         cleared = bytes(
             connection.execute(
@@ -142,7 +158,7 @@ def test_oauth_state_is_single_use(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
+    oauth = _oauth(database, store)
 
     oauth._store_state("synthetic-state")
     oauth._consume_state("synthetic-state")
@@ -155,7 +171,7 @@ def test_expired_oauth_state_is_rejected(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
+    oauth = _oauth(database, store)
     oauth._store_state("expired-state")
     with sqlite3.connect(database) as connection:
         connection.execute(
@@ -172,14 +188,13 @@ def test_pkce_verifier_survives_oauth_flow_reconstruction(tmp_path: Path) -> Non
     initialize_database(database)
     master_key = CredentialCipher.generate_key()
     store = SqliteConnectedAccountStore(database, CredentialCipher(master_key))
-    oauth = GoogleOAuthService(
-        Settings(
-            database,
-            master_key=master_key,
-            google_client_id="synthetic.apps.googleusercontent.com",
-            google_client_secret="synthetic-secret",
-        ),
+    oauth = _oauth(
+        database,
         store,
+        OAuthClientConfig(
+            "synthetic.apps.googleusercontent.com", "synthetic-secret", DEFAULT_REDIRECT_URI
+        ),
+        master_key=master_key,
     )
     state = "synthetic-state"
 
@@ -240,7 +255,7 @@ def test_oauth_completion_exchanges_explicit_code_without_parsing_callback_url(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
+    oauth = _oauth(database, store)
     oauth._store_state("synthetic-state")
     flow = StubFlow()
 
@@ -304,7 +319,7 @@ def _complete_with_identity(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
+    oauth = _oauth(database, store)
     oauth._store_state("synthetic-state")
     monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
     monkeypatch.setattr(
@@ -404,7 +419,7 @@ def test_oauth_completion_rejects_a_grant_without_all_calendar_scopes(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
+    oauth = _oauth(database, store)
     oauth._store_state("synthetic-state")
     monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
 
@@ -456,8 +471,8 @@ def test_access_check_verifies_calendar_list_and_event_permissions(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
-    monkeypatch.setattr(store, "credentials", lambda _: object())
+    oauth = _oauth(database, store)
+    monkeypatch.setattr(oauth, "_credentials", lambda _: object())
     monkeypatch.setattr(
         "calendar_sync.infrastructure.google.oauth.build",
         lambda *args, **kwargs: StubCalendarService(),
@@ -490,8 +505,8 @@ def test_access_check_explains_calendar_api_permission_failure(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
-    monkeypatch.setattr(store, "credentials", lambda _: object())
+    oauth = _oauth(database, store)
+    monkeypatch.setattr(oauth, "_credentials", lambda _: object())
     monkeypatch.setattr(
         "calendar_sync.infrastructure.google.oauth.build",
         lambda *args, **kwargs: StubCalendarService(),
@@ -533,8 +548,8 @@ def test_access_check_classifies_expired_and_unexpected_provider_failures(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
-    monkeypatch.setattr(store, "credentials", lambda _: object())
+    oauth = _oauth(database, store)
+    monkeypatch.setattr(oauth, "_credentials", lambda _: object())
     monkeypatch.setattr(
         "calendar_sync.infrastructure.google.oauth.build",
         lambda *args, **kwargs: StubCalendarService(),
@@ -563,8 +578,8 @@ def test_access_check_rejects_an_account_without_visible_calendars(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    oauth = GoogleOAuthService(Settings(database), store)
-    monkeypatch.setattr(store, "credentials", lambda _: object())
+    oauth = _oauth(database, store)
+    monkeypatch.setattr(oauth, "_credentials", lambda _: object())
     monkeypatch.setattr(
         "calendar_sync.infrastructure.google.oauth.build",
         lambda *args, **kwargs: StubCalendarService(),
@@ -584,3 +599,18 @@ def test_connected_account_authorization_reflects_disconnection(tmp_path: Path) 
     store.disconnect(account.id)
     assert store.is_connected(account.id) is False
     assert store.is_connected(ConnectedAccountId("missing")) is False
+
+
+def test_account_state_is_stored_under_its_existing_values(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    account = store.save("Work", "work@example.test", "{}")
+    store.disconnect(account.id)
+
+    with sqlite3.connect(database) as connection:
+        stored = connection.execute("SELECT state FROM connected_accounts").fetchone()[0]
+    assert stored == "disconnected"
+    assert store.get(account.id) == store.list()[0]
+    assert store.list()[0].state is ConnectedAccountState.DISCONNECTED
+    assert store.get(ConnectedAccountId("missing")) is None

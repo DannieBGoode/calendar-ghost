@@ -44,11 +44,7 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
-from calendar_sync.infrastructure.google.oauth import (
-    CredentialCipher,
-    GoogleOAuthService,
-    SqliteConnectedAccountStore,
-)
+from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.notifications import (
@@ -57,16 +53,20 @@ from calendar_sync.infrastructure.notifications import (
     SmtpChannel,
     WebhookChannel,
 )
+from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteActivityQueries,
     SqliteOperationsQueries,
+)
+from calendar_sync.infrastructure.persistence.authorization_states import (
+    SqliteAuthorizationStates,
 )
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.scheduling import SqliteRuleHealth, SyncScheduler, SystemClock
-from calendar_sync.infrastructure.security import SqliteAdminAuth
+from calendar_sync.infrastructure.security import CredentialCipher, SqliteAdminAuth
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,7 +151,16 @@ def build_adapters(settings: Settings) -> Adapters:
     accounts = SqliteConnectedAccountStore(
         settings.database_path, CredentialCipher(settings.master_key)
     )
-    google_oauth = GoogleOAuthService(settings, accounts)
+    google_oauth = GoogleOAuthService(
+        OAuthClientConfig(
+            settings.google_client_id,
+            settings.google_client_secret,
+            settings.google_redirect_uri,
+        ),
+        accounts,
+        SqliteAuthorizationStates(settings.database_path),
+        verifier_key=settings.master_key,
+    )
     return replace(
         adapters,
         accounts=accounts,

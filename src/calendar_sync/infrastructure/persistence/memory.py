@@ -86,6 +86,10 @@ class InMemorySyncRuleRepository:
         }
         self._state.previews.pop(rule_id, None)
 
+    def purge(self, rule_id: SyncRuleId) -> None:
+        self.remove(rule_id)
+        self._state.audit = [entry for entry in self._state.audit if entry.rule_id != rule_id]
+
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         return any(
             rule.source == source and rule.destination == destination

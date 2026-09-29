@@ -146,6 +146,12 @@ class SqliteSyncRuleRepository:
         )
         self._connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule_id.value,))
 
+    def purge(self, rule_id: SyncRuleId) -> None:
+        # Neither table references sync_rules, so nothing cascades to them.
+        self._connection.execute("DELETE FROM audit_entries WHERE rule_id = ?", (rule_id.value,))
+        self._connection.execute("DELETE FROM incidents WHERE rule_id = ?", (rule_id.value,))
+        self._connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule_id.value,))
+
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         row = self._connection.execute(
             """
