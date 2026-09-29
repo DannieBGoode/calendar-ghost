@@ -334,7 +334,88 @@ class RemovalIncidents(Protocol):
         ...
 
 
-class ConnectedAccountDeletion(Protocol):
+@dataclass(frozen=True, slots=True)
+class ConnectedAccount:
+    id: ConnectedAccountId
+    display_name: str
+    email: str
+    state: str
+    avatar_url: str | None = None
+
+
+class ConnectedAccountRepository(AccountAuthorizations, Protocol):
+    def list(self) -> Sequence[ConnectedAccount]:
+        """Every Connected and Disconnected Account, ordered by email."""
+        ...
+
+    def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
+        """Discard the account's credentials, keeping its identity for Reauthorization."""
+        ...
+
     def delete(self, account_id: ConnectedAccountId) -> int:
         """Delete a Disconnected Account with its rules, their incidents and audit entries."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveredCalendar:
+    id: str
+    summary: str
+    access_role: str
+    primary: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AccountAccess:
+    calendars_visible: int
+    writable_calendars: int
+
+
+class AccountAuthorization(Protocol):
+    """The provider's state-protected OAuth flow that connects or reauthorizes an account."""
+
+    def authorization_url(self) -> str: ...
+
+    def complete(self, state: str, code: str) -> ConnectedAccount: ...
+
+    def cancel(self, state: str) -> None: ...
+
+
+class AccountCalendars(Protocol):
+    def calendars(self, account_id: ConnectedAccountId) -> Sequence[DiscoveredCalendar]: ...
+
+    def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
+        """Prove the account can list calendars and read events, or raise why it cannot."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class AdministratorSession:
+    token: str
+    expires_at: datetime
+
+
+class AdministratorAccess(Protocol):
+    """The Installation Administrator's password and sessions."""
+
+    def is_configured(self) -> bool: ...
+
+    def create_admin(self, password: str) -> None: ...
+
+    def authenticate(self, password: str) -> AdministratorSession | None: ...
+
+    def session_is_valid(self, token: str | None) -> bool: ...
+
+    def revoke(self, token: str | None) -> None: ...
+
+
+class FullPassRecords(Protocol):
+    """Bookkeeping that lets a successful full pass stand in for a rule's daily one."""
+
+    def audit_floor(self) -> int:
+        """The newest audit entry now, taken before a full pass so its decisions lie above it."""
+        ...
+
+    def record_full_pass(self, rule_id: SyncRuleId, floor: int, run_id: str | None = None) -> None:
+        """A full pass that began after audit entry `floor` decided every blocked event again."""
         ...

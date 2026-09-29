@@ -97,3 +97,55 @@ class ReplacementInterrupted(ApplicationError):
 
 class InfrastructureFailure(ApplicationError):
     """A local adapter failed to fulfill its contract."""
+
+
+class AdminAlreadyConfigured(ApplicationError):
+    """The Installation Administrator already exists."""
+
+
+class PasswordPolicyViolation(ApplicationError):
+    """A proposed administrator password is too weak."""
+
+
+class ConnectedAccountNotFound(ApplicationError):
+    """The requested Connected Account does not exist."""
+
+
+class ConnectedAccountDisconnected(ApplicationError):
+    """The Connected Account has no stored credentials until it is reauthorized."""
+
+
+class ConnectedAccountMustBeDisconnected(ApplicationError):
+    """Only a Disconnected Account can be permanently deleted."""
+
+
+class AuthorizationNotConfigured(ApplicationError):
+    """The provider OAuth client is not configured for this installation."""
+
+
+class InvalidAuthorizationState(ApplicationError):
+    """An authorization callback's state is missing, expired, or already used."""
+
+
+class AuthorizationFailed(ApplicationError):
+    """The provider did not complete an authorization."""
+
+
+class CalendarPermissionRequired(AuthorizationFailed):
+    """An authorization was completed without the calendar permissions synchronization needs."""
+
+
+class AccountAccessCheckFailed(ApplicationError):
+    """The provider did not confirm a Connected Account's calendar access."""
+
+
+class ActivityEventNotFound(ApplicationError):
+    """The Activity entry does not exist or names no source event."""
+
+
+class ActivityRuleRemoved(ApplicationError):
+    """The Activity entry's rule was removed, so its calendars are no longer known."""
+
+
+class EventInspectionUnavailable(ApplicationError):
+    """Events cannot be read live without a configured calendar provider."""

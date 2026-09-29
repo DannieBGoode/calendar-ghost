@@ -5,23 +5,11 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-
-class AdminAlreadyConfigured(ValueError):
-    pass
-
-
-class PasswordPolicyViolation(ValueError):
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class Session:
-    token: str
-    expires_at: datetime
+from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
+from calendar_sync.application.ports import AdministratorSession
 
 
 class SqliteAdminAuth:
@@ -55,7 +43,7 @@ class SqliteAdminAuth:
         except sqlite3.IntegrityError as error:
             raise AdminAlreadyConfigured("installation administrator already exists") from error
 
-    def authenticate(self, password: str) -> Session | None:
+    def authenticate(self, password: str) -> AdministratorSession | None:
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT password_hash FROM installation_admin WHERE singleton = 1"
@@ -74,7 +62,7 @@ class SqliteAdminAuth:
             connection.execute(
                 "DELETE FROM admin_sessions WHERE expires_at <= ?", (now.isoformat(),)
             )
-            return Session(token, expires)
+            return AdministratorSession(token, expires)
 
     def session_is_valid(self, token: str | None) -> bool:
         if not token:

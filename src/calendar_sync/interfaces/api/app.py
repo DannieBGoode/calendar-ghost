@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import logging
-import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Annotated
@@ -17,6 +15,7 @@ from starlette.routing import Match, Route
 from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
+from calendar_sync.application.accounts import ConnectedAccountSummary
 from calendar_sync.application.activity import (
     ActivityCategory,
     ActivityEntry,
@@ -25,9 +24,22 @@ from calendar_sync.application.activity import (
     RecordedTime,
 )
 from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
+    ActivityEventNotFound,
+    ActivityRuleRemoved,
+    AdminAlreadyConfigured,
     ApplicationError,
+    AuthorizationFailed,
+    AuthorizationNotConfigured,
+    CalendarPermissionRequired,
+    ConnectedAccountDisconnected,
+    ConnectedAccountMustBeDisconnected,
+    ConnectedAccountNotFound,
     DuplicateDirectionalRelationship,
+    EventInspectionUnavailable,
+    InvalidAuthorizationState,
     NotACalendarChange,
+    PasswordPolicyViolation,
     ProviderFailure,
     RemovalInterrupted,
     RemovalRequiresProvider,
@@ -36,7 +48,7 @@ from calendar_sync.application.errors import (
     RuleNotFound,
 )
 from calendar_sync.application.locking import RuleWork
-from calendar_sync.application.ports import RulePreviewSummary, RuleRunOutcome, RunKind
+from calendar_sync.application.ports import RulePreviewSummary, RuleRunOutcome
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
@@ -45,32 +57,13 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     CalendarId,
     ConnectedAccountId,
-    EventId,
-    EventRef,
     EventStatus,
     PrivacyPolicy,
     ProjectionHandling,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
     TimedInterval,
     TransformationPolicy,
-)
-from calendar_sync.infrastructure.google.oauth import (
-    ConnectedGoogleAccount,
-    ConnectedGoogleAccountDisconnected,
-    ConnectedGoogleAccountMustBeDisconnected,
-    ConnectedGoogleAccountNotFound,
-    GoogleAccountAccessCheckFailed,
-    GoogleCalendarPermissionRequired,
-    GoogleOAuthCompletionFailed,
-    GoogleOAuthNotConfigured,
-    InvalidOAuthState,
-)
-from calendar_sync.infrastructure.scheduling import SqliteRuleHealth
-from calendar_sync.infrastructure.security import (
-    AdminAlreadyConfigured,
-    PasswordPolicyViolation,
 )
 from calendar_sync.interfaces.api.schemas import (
     ActivityEventResponse,
@@ -105,7 +98,7 @@ from calendar_sync.interfaces.api.schemas import (
 )
 
 SESSION_COOKIE = "calendar_sync_session"
-logger = logging.getLogger(__name__)
+MANAGE_ACCOUNTS = "configure the installation master key before managing Google accounts"
 
 
 def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PLR0915
@@ -134,7 +127,7 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
     app.state.container = resolved
 
     def require_admin(session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None) -> None:
-        if not resolved.admin_auth.session_is_valid(session):
+        if not resolved.administrator.session_is_valid(session):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "administrator session required")
 
     @app.get("/health")
@@ -143,39 +136,39 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
 
     @app.get("/api/v1/setup", response_model=SetupStatusResponse)
     def setup_status() -> SetupStatusResponse:
-        return SetupStatusResponse(administrator_configured=resolved.admin_auth.is_configured())
+        return SetupStatusResponse(administrator_configured=resolved.administrator.is_configured())
 
     @app.post("/api/v1/setup/admin", response_model=SessionResponse)
     def create_admin(request: PasswordRequest, response: Response) -> SessionResponse:
         try:
-            resolved.admin_auth.create_admin(request.password)
+            resolved.administrator.create_admin(request.password)
         except (AdminAlreadyConfigured, PasswordPolicyViolation) as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
-        session = resolved.admin_auth.authenticate(request.password)
+        session = resolved.administrator.authenticate(request.password)
         assert session is not None
-        _set_session_cookie(response, session.token, resolved.settings.secure_cookies)
+        _set_session_cookie(response, session.token, resolved.secure_cookies)
         return SessionResponse(authenticated=True)
 
     @app.post("/api/v1/session", response_model=SessionResponse)
     def log_in(request: PasswordRequest, response: Response) -> SessionResponse:
-        session = resolved.admin_auth.authenticate(request.password)
+        session = resolved.administrator.authenticate(request.password)
         if session is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "incorrect password")
-        _set_session_cookie(response, session.token, resolved.settings.secure_cookies)
+        _set_session_cookie(response, session.token, resolved.secure_cookies)
         return SessionResponse(authenticated=True)
 
     @app.get("/api/v1/session", response_model=SessionResponse)
     def session_status(
         session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
     ) -> SessionResponse:
-        return SessionResponse(authenticated=resolved.admin_auth.session_is_valid(session))
+        return SessionResponse(authenticated=resolved.administrator.session_is_valid(session))
 
     @app.delete("/api/v1/session", status_code=status.HTTP_204_NO_CONTENT)
     def log_out(
         response: Response,
         session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
     ) -> None:
-        resolved.admin_auth.revoke(session)
+        resolved.administrator.revoke(session)
         response.delete_cookie(SESSION_COOKIE, path="/")
 
     @app.get(
@@ -184,26 +177,19 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def dashboard() -> DashboardResponse:
-        with resolved.unit_of_work() as uow:
-            states = [rule.state for rule in uow.rules.list()]
-        stopped = sum(state in {SyncRuleState.DEGRADED, SyncRuleState.DISABLED} for state in states)
-        overview = resolved.operations.overview()
-        blocks = overview.open_blocks
+        summary = resolved.get_dashboard.execute()
         return DashboardResponse(
-            health="attention" if overview.open_incidents or stopped else "healthy",
-            connected_accounts=overview.connected_accounts,
-            disconnected_accounts=overview.disconnected_accounts,
-            sync_rules=len(states),
-            enabled_rules=sum(state is SyncRuleState.ENABLED for state in states),
-            stopped_rules=stopped,
-            open_incidents=overview.open_incidents,
-            last_synced_at=overview.last_synced_at,
-            blocked_events=len(blocks),
-            blocked_entry_id=blocks[0].entry_id if blocks else None,
-            # Name the rule only when every open block belongs to it.
-            blocked_rule_id=(
-                blocks[0].rule_id if len({block.rule_id for block in blocks}) == 1 else None
-            ),
+            health="healthy" if summary.healthy else "attention",
+            connected_accounts=summary.connected_accounts,
+            disconnected_accounts=summary.disconnected_accounts,
+            sync_rules=summary.sync_rules,
+            enabled_rules=summary.enabled_rules,
+            stopped_rules=summary.stopped_rules,
+            open_incidents=summary.open_incidents,
+            last_synced_at=summary.last_synced_at,
+            blocked_events=summary.blocked_events,
+            blocked_entry_id=summary.blocked_entry_id,
+            blocked_rule_id=summary.blocked_rule_id,
         )
 
     @app.get(
@@ -212,14 +198,8 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def google_configuration() -> GoogleConfigurationResponse:
-        configured = bool(
-            resolved.google_oauth
-            and resolved.settings.google_client_id
-            and resolved.settings.google_client_secret
-        )
         return GoogleConfigurationResponse(
-            configured=configured,
-            redirect_uri=resolved.settings.google_redirect_uri if configured else None,
+            configured=resolved.google.configured, redirect_uri=resolved.google.redirect_uri
         )
 
     @app.get(
@@ -227,14 +207,13 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def start_google_oauth() -> RedirectResponse:
-        if resolved.google_oauth is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure the installation master key before connecting Google",
-            )
+        authorization = _available(
+            resolved.authorization,
+            "configure the installation master key before connecting Google",
+        )
         try:
-            return RedirectResponse(resolved.google_oauth.authorization_url(), status_code=302)
-        except GoogleOAuthNotConfigured as error:
+            return RedirectResponse(authorization.authorization_url(), status_code=302)
+        except AuthorizationNotConfigured as error:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
 
     @app.get("/api/v1/oauth/google/callback", include_in_schema=False)
@@ -243,14 +222,11 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         code: str | None = None,
         error: str | None = None,
     ) -> RedirectResponse:
-        if resolved.google_oauth is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth is not configured"
-            )
+        authorization = _available(resolved.authorization, "Google OAuth is not configured")
         if error is not None:
             try:
-                resolved.google_oauth.cancel(state)
-            except InvalidOAuthState as state_error:
+                authorization.cancel(state)
+            except InvalidAuthorizationState as state_error:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, str(state_error)) from state_error
             outcome = (
                 "calendar_permission_required"
@@ -264,14 +240,14 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
                 "Google OAuth callback did not include an authorization result",
             )
         try:
-            resolved.google_oauth.complete(state, code)
-        except InvalidOAuthState as state_error:
+            authorization.complete(state, code)
+        except InvalidAuthorizationState as state_error:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, str(state_error)) from state_error
-        except GoogleCalendarPermissionRequired:
+        except CalendarPermissionRequired:
             return RedirectResponse(
                 "/settings?google=calendar_permission_required", status_code=303
             )
-        except GoogleOAuthCompletionFailed:
+        except AuthorizationFailed:
             return RedirectResponse("/settings?google=authorization_failed", status_code=303)
         return RedirectResponse("/settings?google=connected", status_code=303)
 
@@ -281,11 +257,9 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def list_accounts() -> list[ConnectedAccountResponse]:
-        if resolved.connected_accounts is None:
+        if resolved.list_connected_accounts is None:
             return []
-        with resolved.unit_of_work() as uow:
-            rules = tuple(uow.rules.list())
-        return [_account_response(account, rules) for account in resolved.connected_accounts.list()]
+        return [_account_response(item) for item in resolved.list_connected_accounts.execute()]
 
     @app.post(
         "/api/v1/accounts/{account_id}/disconnect",
@@ -293,42 +267,11 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def disconnect_account(account_id: str) -> ConnectedAccountResponse:
-        if resolved.connected_accounts is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure the installation master key before managing Google accounts",
-            )
+        disconnect = _available(resolved.disconnect_connected_account, MANAGE_ACCOUNTS)
         try:
-            existing = next(
-                account
-                for account in resolved.connected_accounts.list()
-                if account.id == ConnectedAccountId(account_id)
-            )
-        except StopIteration as error:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND,
-                f"connected account {account_id} does not exist",
-            ) from error
-        with resolved.unit_of_work() as uow:
-            affected = [
-                rule.id for rule in uow.rules.list() if _rule_uses_account(rule, existing.id)
-            ]
-        for rule_id in affected:
-            with resolved.rule_locks.for_writes(rule_id), resolved.unit_of_work() as uow:
-                rule = uow.rules.get(rule_id)
-                if rule is not None and rule.state in {
-                    SyncRuleState.DRY_RUN_VALIDATED,
-                    SyncRuleState.ENABLED,
-                }:
-                    uow.rules.save(rule.degrade())
-                    uow.commit()
-        try:
-            account = resolved.connected_accounts.disconnect(ConnectedAccountId(account_id))
-        except ConnectedGoogleAccountNotFound as error:
+            return _account_response(disconnect.execute(ConnectedAccountId(account_id)))
+        except ConnectedAccountNotFound as error:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-        with resolved.unit_of_work() as uow:
-            rules = tuple(uow.rules.list())
-        return _account_response(account, rules)
 
     @app.delete(
         "/api/v1/accounts/{account_id}",
@@ -336,16 +279,12 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def delete_account(account_id: str) -> None:
-        if resolved.delete_connected_account is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure the installation master key before managing Google accounts",
-            )
+        delete = _available(resolved.delete_connected_account, MANAGE_ACCOUNTS)
         try:
-            resolved.delete_connected_account.execute(ConnectedAccountId(account_id))
-        except ConnectedGoogleAccountNotFound as error:
+            delete.execute(ConnectedAccountId(account_id))
+        except ConnectedAccountNotFound as error:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-        except ConnectedGoogleAccountMustBeDisconnected as error:
+        except ConnectedAccountMustBeDisconnected as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
 
     @app.get(
@@ -354,15 +293,12 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def discover_calendars(account_id: str) -> list[DiscoveredCalendarResponse]:
-        if resolved.google_oauth is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth is not configured"
-            )
+        calendars = _available(resolved.account_calendars, "Google OAuth is not configured")
         try:
-            calendars = resolved.google_oauth.calendars(ConnectedAccountId(account_id))
-        except ConnectedGoogleAccountNotFound as error:
+            discovered = calendars.calendars(ConnectedAccountId(account_id))
+        except ConnectedAccountNotFound as error:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-        except ConnectedGoogleAccountDisconnected as error:
+        except ConnectedAccountDisconnected as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return [
             DiscoveredCalendarResponse(
@@ -371,7 +307,7 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
                 access_role=calendar.access_role,
                 primary=calendar.primary,
             )
-            for calendar in calendars
+            for calendar in discovered
         ]
 
     @app.post(
@@ -380,17 +316,14 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def verify_account_access(account_id: str) -> GoogleAccountAccessResponse:
-        if resolved.google_oauth is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE, "Google OAuth is not configured"
-            )
+        calendars = _available(resolved.account_calendars, "Google OAuth is not configured")
         try:
-            access = resolved.google_oauth.verify_access(ConnectedAccountId(account_id))
-        except ConnectedGoogleAccountNotFound as error:
+            access = calendars.verify_access(ConnectedAccountId(account_id))
+        except ConnectedAccountNotFound as error:
             raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
-        except ConnectedGoogleAccountDisconnected as error:
+        except ConnectedAccountDisconnected as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
-        except GoogleAccountAccessCheckFailed as error:
+        except AccountAccessCheckFailed as error:
             raise HTTPException(status.HTTP_424_FAILED_DEPENDENCY, str(error)) from error
         return GoogleAccountAccessResponse(
             calendar_api=True,
@@ -406,16 +339,15 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def list_rules() -> list[RuleSummaryResponse]:
-        with resolved.unit_of_work() as uow:
-            return [
-                RuleSummaryResponse(
-                    **_rule_response(rule).model_dump(),
-                    last_sync=_outcome_response(uow.run_outcomes.latest(rule.id, RunKind.SYNC)),
-                    latest_preview=_preview_response(uow.previews.latest(rule.id)),
-                    running=_work_response(resolved.rule_locks.current_work(rule.id)),
-                )
-                for rule in uow.rules.list()
-            ]
+        return [
+            RuleSummaryResponse(
+                **_rule_response(summary.rule).model_dump(),
+                last_sync=_outcome_response(summary.last_sync),
+                latest_preview=_preview_response(summary.latest_preview),
+                running=_work_response(summary.running),
+            )
+            for summary in resolved.list_sync_rules.execute()
+        ]
 
     @app.get(
         "/api/v1/audit-entries",
@@ -498,45 +430,31 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     async def inspect_activity_event(entry_id: int) -> ActivityEventResponse:
-        events = resolved.activity.entry_events(entry_id)
-        if events is None or events.source_event_id is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry has no source event")
-        with resolved.unit_of_work() as uow:
-            rule = uow.rules.get(SyncRuleId(events.rule_id))
-        if rule is None:
-            # Retained history of a removed rule no longer names its calendars.
+        try:
+            inspected = await asyncio.to_thread(resolved.inspect_activity_event.execute, entry_id)
+        except ActivityEventNotFound as error:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, "activity entry has no source event"
+            ) from error
+        except ActivityRuleRemoved as error:
             raise HTTPException(
                 status.HTTP_410_GONE,
                 "the rule for this activity entry was removed, so its events cannot be looked up",
-            )
-        provider = resolved.calendar_provider
-        if provider is None:
+            ) from error
+        except EventInspectionUnavailable as error:
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "configure Google OAuth and the installation master key before inspecting events",
-            )
-        # Event content is read live for display only; it is never persisted or logged.
-        try:
-            source = await asyncio.to_thread(
-                provider.get_event, EventRef(rule.source, EventId(events.source_event_id))
-            )
-            destination = (
-                await asyncio.to_thread(
-                    provider.get_event,
-                    EventRef(rule.destination, EventId(events.destination_event_id)),
-                )
-                if events.destination_event_id is not None
-                else None
-            )
+            ) from error
         except ProviderFailure as error:
             raise HTTPException(
                 status.HTTP_424_FAILED_DEPENDENCY,
                 f"Google could not return this event: {error.kind.value}",
             ) from error
         return ActivityEventResponse(
-            source=_event_snapshot(source),
+            source=_event_snapshot(inspected.source),
             destination=(
-                _event_snapshot(destination) if events.destination_event_id is not None else None
+                _event_snapshot(inspected.destination) if inspected.destination_recorded else None
             ),
         )
 
@@ -566,25 +484,16 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def create_rule(request: CreateRuleRequest) -> RuleResponse:
-        privacy = _privacy(request.privacy_policy)
+        transformation = TransformationPolicy(
+            privacy=_privacy(request.privacy_policy),
+            all_day=_all_day(request.sync_all_day_events),
+        )
         try:
-            rule = SyncRule(
-                id=SyncRuleId(str(uuid.uuid4())),
-                source=_endpoint(request.source),
-                destination=_endpoint(request.destination),
-                transformation=TransformationPolicy(
-                    privacy=privacy,
-                    all_day=(
-                        AllDaySyncPolicy.INCLUDE
-                        if request.sync_all_day_events
-                        else AllDaySyncPolicy.EXCLUDE
-                    ),
-                ),
+            rule = resolved.create_draft_rule.execute(
+                _endpoint(request.source), _endpoint(request.destination), transformation
             )
         except DomainValidationError as error:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
-        try:
-            resolved.create_sync_rule.execute(rule)
         except DuplicateDirectionalRelationship as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return _rule_response(rule)
@@ -594,15 +503,12 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     async def sync_now(rule_id: str) -> dict[str, int | str]:
-        if resolved.execute_sync_rule is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure Google OAuth and the installation master key before synchronizing",
-            )
+        execute_sync_rule = _available(
+            resolved.execute_sync_rule,
+            "configure Google OAuth and the installation master key before synchronizing",
+        )
         try:
-            result = await asyncio.to_thread(
-                resolved.execute_sync_rule.execute, SyncRuleId(rule_id)
-            )
+            result = await asyncio.to_thread(execute_sync_rule.execute, SyncRuleId(rule_id))
         except RuleNotExecutable as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return {
@@ -619,29 +525,15 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     async def reconcile_now(rule_id: str) -> dict[str, object]:
-        if resolved.execute_sync_rule is None or resolved.reconcile_sync_rule is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure Google OAuth and the installation master key before reconciling",
-            )
-        health = resolved.rule_health
-        # Reconcile Now is a full pass, which also stands in for that day's scheduled one. Like the
-        # scheduler's, this bookkeeping is best-effort and never aborts the requested commands.
-        floor = await asyncio.to_thread(_audit_floor, health) if health is not None else None
+        reconcile = _available(
+            resolved.reconcile_now,
+            "configure Google OAuth and the installation master key before reconciling",
+        )
         try:
-            result = await asyncio.to_thread(
-                resolved.execute_sync_rule.execute, SyncRuleId(rule_id), full=True
-            )
-            # The full pass succeeded and counts as today's; reconciliation can still fail after.
-            if health is not None and floor is not None:
-                await asyncio.to_thread(
-                    _record_full_pass, health, SyncRuleId(rule_id), floor, result.run_id
-                )
-            report = await asyncio.to_thread(
-                resolved.reconcile_sync_rule.execute, SyncRuleId(rule_id)
-            )
+            reconciled = await asyncio.to_thread(reconcile.execute, SyncRuleId(rule_id))
         except RuleNotExecutable as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        result, report = reconciled.sync, reconciled.report
         return {
             "rule_id": result.rule_id.value,
             "created": result.created,
@@ -659,15 +551,12 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     async def preview_rule(rule_id: str) -> dict[str, object]:
-        if resolved.preview_sync_rule is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure Google OAuth and the installation master key before previewing",
-            )
+        preview_sync_rule = _available(
+            resolved.preview_sync_rule,
+            "configure Google OAuth and the installation master key before previewing",
+        )
         try:
-            preview = await asyncio.to_thread(
-                resolved.preview_sync_rule.execute, SyncRuleId(rule_id)
-            )
+            preview = await asyncio.to_thread(preview_sync_rule.execute, SyncRuleId(rule_id))
         except RuleNotExecutable as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return {
@@ -694,17 +583,7 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def enable_rule(rule_id: str) -> RuleResponse:
-        with resolved.rule_locks.for_writes(SyncRuleId(rule_id)), resolved.unit_of_work() as uow:
-            rule = uow.rules.get(SyncRuleId(rule_id))
-            if rule is None:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")
-            try:
-                enabled = rule.enable()
-            except InvalidStateTransition as error:
-                raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
-            uow.rules.save(enabled)
-            uow.commit()
-        return _rule_response(enabled)
+        return _rule_response(_lifecycle_change(resolved.enable_sync_rule.execute, rule_id))
 
     @app.post(
         "/api/v1/rules/{rule_id}/pause",
@@ -712,18 +591,7 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def pause_rule(rule_id: str) -> RuleResponse:
-        # Wait for any in-flight provider write so nothing is written after Pause returns.
-        with resolved.rule_locks.for_writes(SyncRuleId(rule_id)), resolved.unit_of_work() as uow:
-            rule = uow.rules.get(SyncRuleId(rule_id))
-            if rule is None:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist")
-            try:
-                paused = rule.pause()
-            except InvalidStateTransition as error:
-                raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
-            uow.rules.save(paused)
-            uow.commit()
-        return _rule_response(paused)
+        return _rule_response(_lifecycle_change(resolved.pause_sync_rule.execute, rule_id))
 
     @app.get(
         "/api/v1/rules/{rule_id}",
@@ -742,7 +610,7 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
             last_sync=_outcome_response(details.last_sync),
             last_reconciliation=_outcome_response(details.last_reconciliation),
             latest_preview=_preview_response(details.latest_preview),
-            running=_work_response(resolved.rule_locks.current_work(details.rule.id)),
+            running=_work_response(details.running),
         )
 
     @app.patch(
@@ -752,9 +620,7 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
     )
     def change_rule_policy(rule_id: str, request: UpdateRulePolicyRequest) -> RuleResponse:
         privacy = _privacy(request.privacy_policy)
-        all_day = (
-            AllDaySyncPolicy.INCLUDE if request.sync_all_day_events else AllDaySyncPolicy.EXCLUDE
-        )
+        all_day = _all_day(request.sync_all_day_events)
         try:
             rule = resolved.change_sync_rule_policy.execute(SyncRuleId(rule_id), privacy, all_day)
         except RuleNotFound as error:
@@ -838,21 +704,20 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
     return app
 
 
-def _audit_floor(health: SqliteRuleHealth) -> int | None:
-    try:
-        return health.audit_floor()
-    except Exception:
-        logger.exception("Could not read the audit position before Reconcile Now")
-        return None
+def _available[T](use_case: T | None, detail: str) -> T:
+    """The one guard for what needs the installation master key or Google OAuth."""
+    if use_case is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
+    return use_case
 
 
-def _record_full_pass(
-    health: SqliteRuleHealth, rule_id: SyncRuleId, floor: int, run_id: str | None
-) -> None:
+def _lifecycle_change(change: Callable[[SyncRuleId], SyncRule], rule_id: str) -> SyncRule:
     try:
-        health.record_full_pass(rule_id, floor, run_id)
-    except Exception:
-        logger.exception("Could not record block health for rule %s", rule_id.value)
+        return change(SyncRuleId(rule_id))
+    except RuleNotFound as error:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist") from error
+    except InvalidStateTransition as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
 
 
 def _preview_response(summary: RulePreviewSummary | None) -> PreviewSummaryResponse | None:
@@ -1004,6 +869,10 @@ def _rule_response(rule: SyncRule) -> RuleResponse:
     )
 
 
+def _all_day(sync_all_day_events: bool) -> AllDaySyncPolicy:
+    return AllDaySyncPolicy.INCLUDE if sync_all_day_events else AllDaySyncPolicy.EXCLUDE
+
+
 def _privacy(value: str) -> PrivacyPolicy:
     try:
         return PrivacyPolicy(value)
@@ -1058,25 +927,16 @@ def _rule_change_http_error(error: ApplicationError) -> HTTPException:
     return HTTPException(status.HTTP_409_CONFLICT, str(error))
 
 
-def _account_response(
-    account: ConnectedGoogleAccount, rules: tuple[SyncRule, ...]
-) -> ConnectedAccountResponse:
-    rule_count = sum(1 for rule in rules if _rule_uses_account(rule, account.id))
+def _account_response(summary: ConnectedAccountSummary) -> ConnectedAccountResponse:
+    account = summary.account
     return ConnectedAccountResponse(
         id=account.id.value,
         display_name=account.display_name,
         email=account.email,
         avatar_url=account.avatar_url,
         state=account.state,
-        rule_count=rule_count,
+        rule_count=summary.rule_count,
     )
-
-
-def _rule_uses_account(rule: SyncRule, account_id: ConnectedAccountId) -> bool:
-    return account_id in {
-        rule.source.connected_account_id,
-        rule.destination.connected_account_id,
-    }
 
 
 def run() -> None:

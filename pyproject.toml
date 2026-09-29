@@ -90,9 +90,6 @@ ignore_imports = [
   "calendar_sync.interfaces.api.app -> calendar_sync.bootstrap.container",
   # Known debt: these belong behind application ports. Do not add to this list.
   "calendar_sync.infrastructure.google.oauth -> calendar_sync.bootstrap.config",
-  "calendar_sync.interfaces.api.app -> calendar_sync.infrastructure.google.oauth",
-  "calendar_sync.interfaces.api.app -> calendar_sync.infrastructure.scheduling",
-  "calendar_sync.interfaces.api.app -> calendar_sync.infrastructure.security",
 ]
 
 [[tool.importlinter.contracts]]

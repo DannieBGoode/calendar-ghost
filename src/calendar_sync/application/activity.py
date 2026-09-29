@@ -10,7 +10,21 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from calendar_sync.domain.model import SyncAction, SyncReason
+from calendar_sync.application.errors import (
+    ActivityEventNotFound,
+    ActivityRuleRemoved,
+    EventInspectionUnavailable,
+)
+from calendar_sync.application.ports import CalendarProvider, UnitOfWorkFactory
+from calendar_sync.domain.model import (
+    CalendarEvent,
+    EventId,
+    EventRef,
+    SyncAction,
+    SyncReason,
+    SyncRuleId,
+    SyncRuleState,
+)
 
 ActivityCategory = Literal["changed", "unchanged", "skipped", "blocked"]
 
@@ -168,3 +182,93 @@ class OperationsQueries(Protocol):
     def incidents(self) -> Sequence[IncidentSummary]:
         """Open incidents first, then resolved ones, each most recently updated first."""
         ...
+
+
+# Rules that stopped synchronizing until the administrator acts.
+_STOPPED = frozenset({SyncRuleState.DEGRADED, SyncRuleState.DISABLED})
+
+
+@dataclass(frozen=True, slots=True)
+class Dashboard:
+    connected_accounts: int
+    disconnected_accounts: int
+    sync_rules: int
+    enabled_rules: int
+    stopped_rules: int
+    open_incidents: int
+    last_synced_at: str | None
+    blocked_events: int
+    blocked_entry_id: int | None
+    """The newest open block, which the dashboard links to."""
+    blocked_rule_id: str | None
+    """The rule every open block belongs to, when they all belong to one."""
+
+    @property
+    def healthy(self) -> bool:
+        return not (self.open_incidents or self.stopped_rules)
+
+
+@dataclass(slots=True)
+class GetDashboard:
+    unit_of_work: UnitOfWorkFactory
+    operations: OperationsQueries
+
+    def execute(self) -> Dashboard:
+        with self.unit_of_work() as uow:
+            states = [rule.state for rule in uow.rules.list()]
+        overview = self.operations.overview()
+        blocks = overview.open_blocks
+        return Dashboard(
+            connected_accounts=overview.connected_accounts,
+            disconnected_accounts=overview.disconnected_accounts,
+            sync_rules=len(states),
+            enabled_rules=sum(state is SyncRuleState.ENABLED for state in states),
+            stopped_rules=sum(state in _STOPPED for state in states),
+            open_incidents=overview.open_incidents,
+            last_synced_at=overview.last_synced_at,
+            blocked_events=len(blocks),
+            blocked_entry_id=blocks[0].entry_id if blocks else None,
+            blocked_rule_id=(
+                blocks[0].rule_id if len({block.rule_id for block in blocks}) == 1 else None
+            ),
+        )
+
+
+class EntryEventQueries(Protocol):
+    def entry_events(self, entry_id: int) -> EntryEvents | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class InspectedEvents:
+    source: CalendarEvent | None
+    destination: CalendarEvent | None
+    destination_recorded: bool
+    """Whether the entry named a destination event at all, found or not."""
+
+
+@dataclass(slots=True)
+class InspectActivityEvent:
+    """Read an entry's events live for display; their content is never persisted or logged."""
+
+    entries: EntryEventQueries
+    unit_of_work: UnitOfWorkFactory
+    provider: CalendarProvider | None
+
+    def execute(self, entry_id: int) -> InspectedEvents:
+        events = self.entries.entry_events(entry_id)
+        if events is None or events.source_event_id is None:
+            raise ActivityEventNotFound(f"activity entry {entry_id} has no source event")
+        with self.unit_of_work() as uow:
+            rule = uow.rules.get(SyncRuleId(events.rule_id))
+        if rule is None:
+            # Retained history of a removed rule no longer names its calendars.
+            raise ActivityRuleRemoved(f"sync rule {events.rule_id} was removed")
+        if self.provider is None:
+            raise EventInspectionUnavailable("no calendar provider is configured")
+        source = self.provider.get_event(EventRef(rule.source, EventId(events.source_event_id)))
+        if events.destination_event_id is None:
+            return InspectedEvents(source, None, destination_recorded=False)
+        destination = self.provider.get_event(
+            EventRef(rule.destination, EventId(events.destination_event_id))
+        )
+        return InspectedEvents(source, destination, destination_recorded=True)

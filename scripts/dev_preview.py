@@ -27,10 +27,21 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
+from calendar_sync.application.accounts import ListConnectedAccounts
+from calendar_sync.application.activity import InspectActivityEvent
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.ports import AuditEntry, CalendarProvider, RecordedEvent
+from calendar_sync.application.ports import (
+    AccountAuthorization,
+    AccountCalendars,
+    AuditEntry,
+    CalendarProvider,
+    ConnectedAccount,
+    ConnectedAccountRepository,
+    DiscoveredCalendar,
+    RecordedEvent,
+)
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import Container, build_container
+from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
@@ -46,7 +57,6 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
-from calendar_sync.infrastructure.google.oauth import ConnectedGoogleAccount, DiscoveredCalendar
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
@@ -79,10 +89,10 @@ PERSONAL = CalendarEndpoint(ConnectedAccountId("preview-personal"), CalendarId("
 FAMILY = CalendarEndpoint(ConnectedAccountId("preview-personal"), CalendarId("family@example.com"))
 WORK = CalendarEndpoint(ConnectedAccountId("preview-work"), CalendarId("sam@work.example"))
 ACCOUNTS = (
-    ConnectedGoogleAccount(
+    ConnectedAccount(
         ConnectedAccountId("preview-personal"), "Sam Rivera", "sam@example.com", "connected"
     ),
-    ConnectedGoogleAccount(
+    ConnectedAccount(
         ConnectedAccountId("preview-work"), "Sam Rivera", "sam@work.example", "connected"
     ),
 )
@@ -158,7 +168,7 @@ class PreviewCalendar:
 
 
 class PreviewAccounts:
-    def list(self) -> tuple[ConnectedGoogleAccount, ...]:
+    def list(self) -> tuple[ConnectedAccount, ...]:
         return ACCOUNTS
 
 
@@ -178,7 +188,8 @@ def build_preview_container(
 ) -> Container:
     reset_preview_database(path)
     # Explicit settings: nothing is read from the environment or .env.
-    base = build_container(Settings(path))
+    settings = Settings(path)
+    adapters = build_adapters(settings)
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute(f"CREATE TABLE {MARKER_TABLE} (created_at TEXT NOT NULL)")
         # The marker table name is a constant.
@@ -187,18 +198,27 @@ def build_preview_container(
             (datetime.now(UTC).isoformat(),),
         )
     moment = now or datetime.now(UTC)
+    google = PreviewGoogle()
+    # Only reads are substituted: without a master key nothing synchronizes or writes.
     container = replace(
-        base,
-        calendar_provider=cast(CalendarProvider, PreviewCalendar(moment)),
-        connected_accounts=cast(Any, PreviewAccounts()),
-        google_oauth=cast(Any, PreviewGoogle()),
+        compose(settings, adapters),
+        inspect_activity_event=InspectActivityEvent(
+            adapters.activity,
+            adapters.unit_of_work,
+            cast(CalendarProvider, PreviewCalendar(moment)),
+        ),
+        list_connected_accounts=ListConnectedAccounts(
+            adapters.unit_of_work, cast(ConnectedAccountRepository, PreviewAccounts())
+        ),
+        authorization=cast(AccountAuthorization, google),
+        account_calendars=cast(AccountCalendars, google),
     )
-    _seed(container, path, moment)
-    base.admin_auth.create_admin(PREVIEW_PASSWORD)
+    _seed(adapters, path, moment)
+    adapters.administrator.create_admin(PREVIEW_PASSWORD)
     return container
 
 
-def _seed(container: Container, path: Path, now: datetime) -> None:  # noqa: C901
+def _seed(adapters: Adapters, path: Path, now: datetime) -> None:  # noqa: C901
     rules = (
         SyncRule(
             id=SyncRuleId("preview-personal-work"),
@@ -285,7 +305,7 @@ def _seed(container: Container, path: Path, now: datetime) -> None:  # noqa: C90
     # An occurrence the destination series does not have, blocked after checking the series.
     record(8, family, "preview-run-8", "conflict", "destination_occurrence_missing", "piano")
     record(5, personal, None, "policy_changed", None, None)
-    with container.unit_of_work() as uow:
+    with adapters.unit_of_work() as uow:
         for rule in rules:
             uow.rules.add(rule)
         for entry in entries:

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.errors import (
@@ -8,7 +9,7 @@ from calendar_sync.application.errors import (
     ReplacementInterrupted,
     RuleNotFound,
 )
-from calendar_sync.application.locking import RuleLocks
+from calendar_sync.application.locking import RuleLocks, RuleWork
 from calendar_sync.application.ports import (
     AuditEntry,
     Clock,
@@ -26,6 +27,7 @@ from calendar_sync.domain.model import (
     ProjectionHandling,
     SyncRule,
     SyncRuleId,
+    TransformationPolicy,
 )
 
 
@@ -42,6 +44,68 @@ class CreateSyncRule:
             uow.rules.add(rule)
             uow.commit()
         return rule
+
+
+@dataclass(slots=True)
+class CreateDraftSyncRule:
+    """Creates a new rule as a Draft under a generated identity; it must pass a Rule Preview."""
+
+    create_rule: CreateSyncRule
+    ids: IdGenerator
+
+    def execute(
+        self,
+        source: CalendarEndpoint,
+        destination: CalendarEndpoint,
+        transformation: TransformationPolicy,
+    ) -> SyncRule:
+        return self.create_rule.execute(
+            SyncRule(
+                id=SyncRuleId(self.ids.new()),
+                source=source,
+                destination=destination,
+                transformation=transformation,
+            )
+        )
+
+
+@dataclass(slots=True)
+class EnableSyncRule:
+    """Enables a previewed rule; its next run reconciles before scheduled synchronization."""
+
+    unit_of_work: UnitOfWorkFactory
+    locks: RuleLocks
+
+    def execute(self, rule_id: SyncRuleId) -> SyncRule:
+        return _transition(self.unit_of_work, self.locks, rule_id, SyncRule.enable)
+
+
+@dataclass(slots=True)
+class PauseSyncRule:
+    """Pauses a rule, preserving its mappings and projections."""
+
+    unit_of_work: UnitOfWorkFactory
+    locks: RuleLocks
+
+    def execute(self, rule_id: SyncRuleId) -> SyncRule:
+        # Waiting for any in-flight provider write means nothing is written after this returns.
+        return _transition(self.unit_of_work, self.locks, rule_id, SyncRule.pause)
+
+
+def _transition(
+    unit_of_work: UnitOfWorkFactory,
+    locks: RuleLocks,
+    rule_id: SyncRuleId,
+    change: Callable[[SyncRule], SyncRule],
+) -> SyncRule:
+    with locks.for_writes(rule_id), unit_of_work() as uow:
+        rule = uow.rules.get(rule_id)
+        if rule is None:
+            raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
+        changed = change(rule)
+        uow.rules.save(changed)
+        uow.commit()
+    return changed
 
 
 @dataclass(slots=True)
@@ -81,17 +145,46 @@ class ChangeSyncRulePolicy:
 
 
 @dataclass(frozen=True, slots=True)
+class SyncRuleSummary:
+    rule: SyncRule
+    last_sync: RuleRunOutcome | None
+    latest_preview: RulePreviewSummary | None
+    running: RuleWork | None
+    """What runs for the rule in this process now, so a reloaded page can show it again."""
+
+
+@dataclass(slots=True)
+class ListSyncRules:
+    unit_of_work: UnitOfWorkFactory
+    locks: RuleLocks
+
+    def execute(self) -> tuple[SyncRuleSummary, ...]:
+        with self.unit_of_work() as uow:
+            return tuple(
+                SyncRuleSummary(
+                    rule=rule,
+                    last_sync=uow.run_outcomes.latest(rule.id, RunKind.SYNC),
+                    latest_preview=uow.previews.latest(rule.id),
+                    running=self.locks.current_work(rule.id),
+                )
+                for rule in uow.rules.list()
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class SyncRuleDetails:
     rule: SyncRule
     mapping_count: int
     last_sync: RuleRunOutcome | None
     last_reconciliation: RuleRunOutcome | None
     latest_preview: RulePreviewSummary | None = None
+    running: RuleWork | None = None
 
 
 @dataclass(slots=True)
 class GetSyncRuleDetails:
     unit_of_work: UnitOfWorkFactory
+    locks: RuleLocks = field(default_factory=RuleLocks)
 
     def execute(self, rule_id: SyncRuleId) -> SyncRuleDetails:
         with self.unit_of_work() as uow:
@@ -104,6 +197,7 @@ class GetSyncRuleDetails:
                 last_sync=uow.run_outcomes.latest(rule_id, RunKind.SYNC),
                 last_reconciliation=uow.run_outcomes.latest(rule_id, RunKind.RECONCILIATION),
                 latest_preview=uow.previews.latest(rule_id),
+                running=self.locks.current_work(rule_id),
             )
 
 

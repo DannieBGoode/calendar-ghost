@@ -29,6 +29,14 @@ React UI / FastAPI / Scheduler
 The domain imports only Python's standard library and provider-neutral domain modules. Application services depend on protocols. The composition root constructs concrete adapters explicitly.
 `lint-imports` enforces this direction through the contracts in `pyproject.toml`.
 
+Web API routes only parse input, call one use case or port, and map its result or application
+error to HTTP. `bootstrap/container.py` composes in two steps: `build_adapters` makes the SQLite and
+Google adapters from Settings, and `compose` wires the use cases from them into the `Container`
+the routes call. The `Container` holds use cases, query ports, and the few configuration values a
+route returns; never a concrete adapter, the unit of work, or the rule locks. Tests and the
+development preview substitute adapters before `compose`, or use cases after it. Use cases that
+need the installation master key are absent without it, and one route guard answers 503 for them.
+
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
 results to HTTP payloads and never opens the database itself. The rule that sorts Audit Entries

@@ -8,7 +8,6 @@ import os
 import secrets
 import sqlite3
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -19,6 +18,17 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
+from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
+    AuthorizationFailed,
+    AuthorizationNotConfigured,
+    CalendarPermissionRequired,
+    ConnectedAccountDisconnected,
+    ConnectedAccountMustBeDisconnected,
+    ConnectedAccountNotFound,
+    InvalidAuthorizationState,
+)
+from calendar_sync.application.ports import AccountAccess, ConnectedAccount, DiscoveredCalendar
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.domain.model import ConnectedAccountId
 
@@ -35,63 +45,8 @@ OAUTH_SCOPES = CALENDAR_SCOPES + PROFILE_SCOPES
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 
-class GoogleOAuthNotConfigured(RuntimeError):
-    pass
-
-
-class GoogleOAuthCompletionFailed(RuntimeError):
-    pass
-
-
-class GoogleCalendarPermissionRequired(GoogleOAuthCompletionFailed):
-    pass
-
-
-class InvalidOAuthState(ValueError):
-    pass
-
-
 class InvalidMasterKey(ValueError):
     pass
-
-
-class ConnectedGoogleAccountNotFound(LookupError):
-    pass
-
-
-class ConnectedGoogleAccountDisconnected(RuntimeError):
-    pass
-
-
-class ConnectedGoogleAccountMustBeDisconnected(RuntimeError):
-    pass
-
-
-class GoogleAccountAccessCheckFailed(RuntimeError):
-    pass
-
-
-@dataclass(frozen=True, slots=True)
-class ConnectedGoogleAccount:
-    id: ConnectedAccountId
-    display_name: str
-    email: str
-    state: str
-    avatar_url: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class DiscoveredCalendar:
-    id: str
-    summary: str
-    access_role: str
-    primary: bool
-
-
-@dataclass(frozen=True, slots=True)
-class GoogleAccountAccess:
-    calendars_visible: int
-    writable_calendars: int
 
 
 class CredentialCipher:
@@ -122,7 +77,7 @@ class SqliteConnectedAccountStore:
         self._database_path = database_path
         self._cipher = cipher
 
-    def list(self) -> tuple[ConnectedGoogleAccount, ...]:
+    def list(self) -> tuple[ConnectedAccount, ...]:
         with self._connect() as connection:
             rows = connection.execute(
                 """
@@ -146,7 +101,7 @@ class SqliteConnectedAccountStore:
         credential_json: str,
         *,
         avatar_url: str | None = None,
-    ) -> ConnectedGoogleAccount:
+    ) -> ConnectedAccount:
         now = datetime.now(UTC).isoformat()
         account_id = str(uuid.uuid4())
         encrypted = self._cipher.encrypt(credential_json)
@@ -183,11 +138,9 @@ class SqliteConnectedAccountStore:
                 (account_id.value,),
             ).fetchone()
         if row is None:
-            raise ConnectedGoogleAccountNotFound(
-                f"connected account {account_id.value} does not exist"
-            )
+            raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
         if str(row["state"]) != "connected":
-            raise ConnectedGoogleAccountDisconnected(
+            raise ConnectedAccountDisconnected(
                 "this Google account is disconnected; reauthorize it from Settings"
             )
         payload = json.loads(self._cipher.decrypt(bytes(row["encrypted_credentials"])))
@@ -196,7 +149,7 @@ class SqliteConnectedAccountStore:
         )
         return cast(Credentials, credentials)
 
-    def disconnect(self, account_id: ConnectedAccountId) -> ConnectedGoogleAccount:
+    def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
         now = datetime.now(UTC).isoformat()
         cleared_credentials = self._cipher.encrypt("{}")
         with self._connect() as connection:
@@ -205,7 +158,7 @@ class SqliteConnectedAccountStore:
                 (account_id.value,),
             ).fetchone()
             if row is None:
-                raise ConnectedGoogleAccountNotFound(
+                raise ConnectedAccountNotFound(
                     f"connected account {account_id.value} does not exist"
                 )
             connection.execute(
@@ -216,7 +169,7 @@ class SqliteConnectedAccountStore:
                 """,
                 (cleared_credentials, now, account_id.value),
             )
-        return ConnectedGoogleAccount(
+        return ConnectedAccount(
             ConnectedAccountId(str(row["id"])),
             str(row["display_name"]),
             str(row["email"]),
@@ -232,11 +185,11 @@ class SqliteConnectedAccountStore:
                 (account_id.value,),
             ).fetchone()
             if row is None:
-                raise ConnectedGoogleAccountNotFound(
+                raise ConnectedAccountNotFound(
                     f"connected account {account_id.value} does not exist"
                 )
             if str(row["state"]) != "disconnected":
-                raise ConnectedGoogleAccountMustBeDisconnected(
+                raise ConnectedAccountMustBeDisconnected(
                     "disconnect this Google account before deleting it permanently"
                 )
             rule_ids = tuple(
@@ -297,19 +250,17 @@ class GoogleOAuthService:
         )
         return str(url)
 
-    def complete(self, state: str, code: str) -> ConnectedGoogleAccount:
+    def complete(self, state: str, code: str) -> ConnectedAccount:
         self._consume_state(state)
         flow = self._flow(state)
         try:
             flow.fetch_token(code=code)
         except Exception as error:
-            raise GoogleOAuthCompletionFailed(
-                "Google authorization could not be completed"
-            ) from error
+            raise AuthorizationFailed("Google authorization could not be completed") from error
         credentials = flow.credentials
         granted_scopes = set(getattr(credentials, "granted_scopes", None) or ())
         if not set(CALENDAR_SCOPES).issubset(granted_scopes):
-            raise GoogleCalendarPermissionRequired(
+            raise CalendarPermissionRequired(
                 "Google Calendar permission is required to connect this account"
             )
         try:
@@ -317,18 +268,18 @@ class GoogleOAuthService:
             calendars = self._calendar_items(service)
         except Exception as error:
             if _google_status_code(error) in {401, 403}:
-                raise GoogleCalendarPermissionRequired(
+                raise CalendarPermissionRequired(
                     "Google Calendar permission is required to connect this account"
                 ) from error
-            raise GoogleOAuthCompletionFailed(
+            raise AuthorizationFailed(
                 "Google Calendar authorization could not be verified"
             ) from error
         primary = next((calendar for calendar in calendars if calendar.get("primary")), None)
         if primary is None:
-            raise GoogleOAuthCompletionFailed("Google account did not expose a primary calendar")
+            raise AuthorizationFailed("Google account did not expose a primary calendar")
         email = str(primary.get("id") or "")
         if not email:
-            raise GoogleOAuthCompletionFailed("Google primary calendar did not expose an identity")
+            raise AuthorizationFailed("Google primary calendar did not expose an identity")
         profile = _profile_claims(getattr(credentials, "id_token", None))
         display_name = _optional_text(profile.get("name")) or str(primary.get("summary") or email)
         return self._accounts.save(
@@ -355,7 +306,7 @@ class GoogleOAuthService:
             if isinstance(item.get("id"), str)
         )
 
-    def verify_access(self, account_id: ConnectedAccountId) -> GoogleAccountAccess:
+    def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
         credentials = self._accounts.credentials(account_id)
         try:
             service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
@@ -372,7 +323,7 @@ class GoogleOAuthService:
                 ),
             )
             if calendar_id is None:
-                raise GoogleAccountAccessCheckFailed(
+                raise AccountAccessCheckFailed(
                     "Google Calendar did not expose a calendar for permission verification"
                 )
             (
@@ -386,7 +337,7 @@ class GoogleOAuthService:
                 )
                 .execute()
             )
-        except GoogleAccountAccessCheckFailed:
+        except AccountAccessCheckFailed:
             raise
         except Exception as error:
             status_code = _google_status_code(error)
@@ -399,8 +350,8 @@ class GoogleOAuthService:
                 )
             else:
                 detail = "Google Calendar access could not be verified; try again"
-            raise GoogleAccountAccessCheckFailed(detail) from error
-        return GoogleAccountAccess(
+            raise AccountAccessCheckFailed(detail) from error
+        return AccountAccess(
             calendars_visible=len(calendars),
             writable_calendars=sum(
                 1 for item in calendars if item.get("accessRole") in {"owner", "writer"}
@@ -457,7 +408,7 @@ class GoogleOAuthService:
             and self._settings.google_client_secret
             and self._settings.google_redirect_uri
         ):
-            raise GoogleOAuthNotConfigured(
+            raise AuthorizationNotConfigured(
                 "configure the Google OAuth client ID, secret, and redirect URI"
             )
 
@@ -484,11 +435,11 @@ class GoogleOAuthService:
                 (now.isoformat(), _state_hash(state), now.isoformat()),
             )
         if cursor.rowcount != 1:
-            raise InvalidOAuthState("OAuth state is missing, expired, or already used")
+            raise InvalidAuthorizationState("OAuth state is missing, expired, or already used")
 
 
-def _account_from_row(row: sqlite3.Row) -> ConnectedGoogleAccount:
-    return ConnectedGoogleAccount(
+def _account_from_row(row: sqlite3.Row) -> ConnectedAccount:
+    return ConnectedAccount(
         ConnectedAccountId(str(row["id"])),
         str(row["display_name"]),
         str(row["email"]),

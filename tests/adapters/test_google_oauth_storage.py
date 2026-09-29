@@ -11,19 +11,21 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from oauthlib.oauth2 import WebApplicationClient  # type: ignore[import-untyped]
 
+from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
+    CalendarPermissionRequired,
+    ConnectedAccountDisconnected,
+    InvalidAuthorizationState,
+)
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,
     OAUTH_SCOPES,
     PROFILE_SCOPES,
-    ConnectedGoogleAccountDisconnected,
     CredentialCipher,
-    GoogleAccountAccessCheckFailed,
-    GoogleCalendarPermissionRequired,
     GoogleOAuthService,
     InvalidMasterKey,
-    InvalidOAuthState,
     SqliteConnectedAccountStore,
 )
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
@@ -117,7 +119,7 @@ def test_disconnect_discards_credentials_and_reauthorization_preserves_identity(
     disconnected = store.disconnect(account.id)
 
     assert disconnected.state == "disconnected"
-    with pytest.raises(ConnectedGoogleAccountDisconnected, match="reauthorize"):
+    with pytest.raises(ConnectedAccountDisconnected, match="reauthorize"):
         store.credentials(account.id)
     with sqlite3.connect(database) as connection:
         cleared = bytes(
@@ -145,7 +147,7 @@ def test_oauth_state_is_single_use(tmp_path: Path) -> None:
     oauth._store_state("synthetic-state")
     oauth._consume_state("synthetic-state")
 
-    with pytest.raises(InvalidOAuthState, match="already used"):
+    with pytest.raises(InvalidAuthorizationState, match="already used"):
         oauth._consume_state("synthetic-state")
 
 
@@ -161,7 +163,7 @@ def test_expired_oauth_state_is_rejected(tmp_path: Path) -> None:
             ("2000-01-01T00:00:00+00:00",),
         )
 
-    with pytest.raises(InvalidOAuthState, match="expired"):
+    with pytest.raises(InvalidAuthorizationState, match="expired"):
         oauth._consume_state("expired-state")
 
 
@@ -406,7 +408,7 @@ def test_oauth_completion_rejects_a_grant_without_all_calendar_scopes(
     oauth._store_state("synthetic-state")
     monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
 
-    with pytest.raises(GoogleCalendarPermissionRequired, match="Calendar permission"):
+    with pytest.raises(CalendarPermissionRequired, match="Calendar permission"):
         oauth.complete("synthetic-state", "synthetic-code")
 
     assert store.list() == ()
@@ -495,7 +497,7 @@ def test_access_check_explains_calendar_api_permission_failure(
         lambda *args, **kwargs: StubCalendarService(),
     )
 
-    with pytest.raises(GoogleAccountAccessCheckFailed, match="Calendar API is enabled"):
+    with pytest.raises(AccountAccessCheckFailed, match="Calendar API is enabled"):
         oauth.verify_access(ConnectedAccountId("account-1"))
 
 
@@ -538,7 +540,7 @@ def test_access_check_classifies_expired_and_unexpected_provider_failures(
         lambda *args, **kwargs: StubCalendarService(),
     )
 
-    with pytest.raises(GoogleAccountAccessCheckFailed, match=expected_detail):
+    with pytest.raises(AccountAccessCheckFailed, match=expected_detail):
         oauth.verify_access(ConnectedAccountId("account-1"))
 
 
@@ -568,7 +570,7 @@ def test_access_check_rejects_an_account_without_visible_calendars(
         lambda *args, **kwargs: StubCalendarService(),
     )
 
-    with pytest.raises(GoogleAccountAccessCheckFailed, match="did not expose a calendar"):
+    with pytest.raises(AccountAccessCheckFailed, match="did not expose a calendar"):
         oauth.verify_access(ConnectedAccountId("account-1"))
 
 
