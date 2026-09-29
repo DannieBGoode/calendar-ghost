@@ -319,6 +319,7 @@ class GoogleCalendarProvider:
             "showDeleted": True,
             "timeMin": not_ended_before.isoformat(),
             "maxResults": 2500,
+            "fields": OCCURRENCE_EXCEPTION_FIELDS,
         }
         exceptions: list[CalendarEvent] = []
         try:
@@ -472,6 +473,11 @@ def _provider_failure(error: Exception) -> ProviderFailure:
 LIVE_OCCURRENCE_PAGE_SIZE = 250
 # Instance listings run under the rule's write lock, so a long expansion is read only this far.
 OCCURRENCE_PAGE_LIMIT = 20
+# Only what translation reads; attendees and conferencing are never needed for a projection.
+OCCURRENCE_EXCEPTION_FIELDS = (
+    "items(id,etag,updated,status,start,end,summary,description,location,recurringEventId,"
+    "originalStartTime,extendedProperties,htmlLink),nextPageToken"
+)
 # Answers meaning Google cannot expand this series, rather than that the request failed.
 UNLISTABLE_SERIES_STATUSES = frozenset({400, 404, 410})
 

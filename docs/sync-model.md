@@ -131,7 +131,9 @@ A series projection created from an incremental feed, including a dormant series
 one of its occurrences comes back, starts from its recurrence alone. The run therefore lists the
 source series' cancelled and moved occurrences in the sync window and applies each one, besides
 re-applying every Occurrence Mapping. Occurrences cancelled while the series had no projection, or
-whose cancellation response was lost, therefore stay cancelled. A full listing already reports
+whose cancellation response was lost, therefore stay cancelled. The replay is recorded with the new
+Series Mapping and cleared only when it completes, so a run that fails midway leaves it for the
+retry, and an exception it already applied is not applied again when the feed reports it. A full listing already reports
 every exception in the window, so series it creates are not listed again. Edits to an occurrence's
 title, description, or location alone are not detected by this listing; the next full pass applies
 them.

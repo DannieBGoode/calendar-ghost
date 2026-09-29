@@ -870,3 +870,64 @@ def test_series_created_from_a_full_listing_do_not_list_their_exceptions_again()
     sync_use_case(enabled_rule_factory(), calendars).execute(rule().id)
 
     assert calendars.exception_listings == []
+
+
+@dataclass
+class _FailingExceptionListing(FakeCalendars):
+    """The next listing of a series' exceptions fails, as a temporary Google outage would."""
+
+    fail_next_listing: bool = False
+
+    def occurrence_exceptions(
+        self, series: EventRef, not_ended_before: datetime
+    ) -> tuple[CalendarEvent, ...]:
+        if self.fail_next_listing:
+            self.fail_next_listing = False
+            raise ProviderFailure(ProviderFailureKind.TEMPORARY, "Google unavailable")
+        return super().occurrence_exceptions(series, not_ended_before)
+
+
+def test_a_replay_interrupted_by_a_failed_run_is_finished_by_the_retry() -> None:
+    calendars = _FailingExceptionListing()
+    master = calendars.put(series(), starts=STARTS[:3])
+    for week in range(3):
+        calendars.put(occurrence(master, week, status=EventStatus.CANCELLED))
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    restored = calendars.put(occurrence(master, 1, revision="occurrence-revision-2"))
+    calendars.fail_next_listing = True
+    calendars.report(restored)
+    with pytest.raises(ProviderFailure):
+        use_case.execute(rule().id)
+
+    # The cursor did not advance, so the retry sees the same change.
+    calendars.report(restored)
+    use_case.execute(rule().id)
+
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    cancelled, confirmed = EventStatus.CANCELLED, EventStatus.CONFIRMED
+    assert _states(calendars, destination) == [cancelled, confirmed, cancelled]
+    assert factory.state.pending_replays == set()
+
+
+def test_exceptions_reported_with_their_new_series_are_applied_once() -> None:
+    calendars = FakeCalendars()
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    master = calendars.put(series(), starts=STARTS)
+    calendars.report(
+        master,
+        calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED)),
+        calendars.put(occurrence(master, 2, status=EventStatus.CANCELLED)),
+    )
+
+    result = use_case.execute(rule().id)
+
+    assert [kind for kind, _ in calendars.writes] == [
+        "create",
+        "cancel_occurrence",
+        "cancel_occurrence",
+    ]
+    assert result.ignored == 0

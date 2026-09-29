@@ -178,6 +178,16 @@ class OccurrenceMappingRepository(Protocol):
     def delete(self, mapping: OccurrenceMapping) -> None: ...
 
 
+class ExceptionReplayRepository(Protocol):
+    """Series projections whose source exceptions have not all been applied yet."""
+
+    def pending(self, rule_id: SyncRuleId) -> Sequence[EventMapping]: ...
+
+    def add(self, series_mapping_id: EventMappingId) -> None: ...
+
+    def remove(self, series_mapping_id: EventMappingId) -> None: ...
+
+
 class SyncCursorRepository(Protocol):
     def get(self, rule_id: SyncRuleId) -> str | None: ...
 
@@ -258,6 +268,7 @@ class UnitOfWork(Protocol):
     rules: SyncRuleRepository
     mappings: EventMappingRepository
     occurrences: OccurrenceMappingRepository
+    replays: ExceptionReplayRepository
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository

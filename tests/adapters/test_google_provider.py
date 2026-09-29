@@ -19,6 +19,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
 )
 from calendar_sync.infrastructure.google.provider import (
+    OCCURRENCE_EXCEPTION_FIELDS,
     OCCURRENCE_PAGE_LIMIT,
     GoogleCalendarProvider,
 )
@@ -525,6 +526,7 @@ def test_occurrence_exceptions_lists_cancelled_and_moved_instances_in_the_window
         showDeleted=True,
         timeMin=window.isoformat(),
         maxResults=2500,
+        fields=OCCURRENCE_EXCEPTION_FIELDS,
     )
 
 

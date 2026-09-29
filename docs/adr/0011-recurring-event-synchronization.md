@@ -131,7 +131,11 @@ provider therefore lists the source series' cancelled and moved occurrences from
 (`occurrence_exceptions`), and each is applied like a reported exception, after every Occurrence
 Mapping is re-applied. This also covers cancellations that were never recorded, such as those made
 while the series had no projection or whose provider response was lost. A full listing already
-contains every exception in the window, so the listing is skipped there. For a series that was never mapped,
+contains every exception in the window, so the listing is skipped there. The obligation is
+recorded in `pending_exception_replays` in the same commit as the new Series Mapping and cleared
+only once every exception was applied, so a run that fails midway leaves it for the retry to
+finish. An exception already applied in the run, by the replay or by re-verification, is not
+applied again when the feed reports it. For a series that was never mapped,
 a projection created before an interrupted run recorded its mapping is found by its create
 Operation Key, verified like any mapped projection, and removed. A dormant mapped series does not
 look for one; a recreate interrupted in the same narrow window is left for Full Reconciliation to
@@ -227,6 +231,10 @@ and commits atomically with its `schema_migrations` row. It creates `occurrence_
 referencing `event_mappings(id)` with `ON DELETE CASCADE`, unique per series mapping and
 Occurrence Start. It stores identities, the Occurrence Start, state, revision, and fingerprint
 only. The in-memory repositories mirror the cascade on mapping deletion and rule removal.
+
+Forward-only migration `0009_pending_exception_replays.sql` creates `pending_exception_replays`,
+one row per Series Mapping whose source exceptions still have to be applied, referencing
+`event_mappings(id)` with `ON DELETE CASCADE`. It stores identities only.
 
 The same migration deletes all source and destination incremental cursors, so each rule's next
 run reads its full Initial Sync Window and backfills recurring series. Cursor deletion is used

@@ -156,7 +156,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         rows = connection.execute(
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -565,3 +565,48 @@ def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
     with SqliteUnitOfWorkFactory(database)() as uow:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
     assert latest is not None and latest.last_full_succeeded_at == completed
+
+
+def _replay_factory(backend: str, tmp_path: Path) -> UnitOfWorkFactory:
+    if backend == "memory":
+        return InMemoryUnitOfWorkFactory()
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    return SqliteUnitOfWorkFactory(database)
+
+
+@pytest.mark.parametrize("backend", ["memory", "sqlite"])
+def test_pending_exception_replays_follow_their_series_mapping(
+    backend: str, tmp_path: Path
+) -> None:
+    factory = _replay_factory(backend, tmp_path)
+    kept, deleted = (
+        EventMapping(
+            EventMappingId(name),
+            rule().id,
+            EventRef(rule().source, EventId(f"source-{name}")),
+            EventRef(rule().destination, EventId(f"destination-{name}")),
+            "revision-1",
+            ProjectionFingerprint("fingerprint"),
+        )
+        for name in ("kept", "deleted")
+    )
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.mappings.save(kept)
+        uow.mappings.save(deleted)
+        uow.replays.add(kept.id)
+        uow.replays.add(kept.id)
+        uow.replays.add(deleted.id)
+        uow.commit()
+
+    with factory() as uow:
+        assert [mapping.id for mapping in uow.replays.pending(rule().id)] == [deleted.id, kept.id]
+        uow.mappings.delete(deleted)
+        uow.commit()
+    with factory() as uow:
+        assert uow.replays.pending(rule().id) == (kept,)
+        uow.replays.remove(kept.id)
+        uow.commit()
+    with factory() as uow:
+        assert uow.replays.pending(rule().id) == ()

@@ -187,6 +187,7 @@ class ExecuteSyncRule:
 
             if reproject:
                 self._reproject_remaining(run)
+            self._finish_pending_replays(run)
 
             uow.cursors.save(rule.id, changes.next_cursor)
             uow.destination_cursors.save(rule.id, destination_changes.next_cursor)
@@ -286,6 +287,9 @@ class ExecuteSyncRule:
     def _synchronize_source_exception(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         identity = exception.occurrence
         assert identity is not None
+        if exception.reference in run.handled:
+            # A replay or re-verification already applied it this run from a fresher read.
+            return
         series_ref = EventRef(run.rule.source, identity.series_event_id)
         source_series = self.provider.get_event(series_ref)
         series_mapping = run.uow.mappings.for_source(run.rule.id, series_ref)
@@ -418,9 +422,31 @@ class ExecuteSyncRule:
             and source_event.recurrence is not None
             and not run.source_listed
         ):
-            # A new series starts from its recurrence alone. Exceptions this incremental feed did
-            # not report, and cancellations never recorded, come from the source itself.
-            self.occurrences.replay_exceptions(run, mapping, source_event)
+            self._replay_exceptions(run, mapping, source_event)
+
+    def _replay_exceptions(
+        self, run: SyncRunContext, mapping: EventMapping, source_series: CalendarEvent
+    ) -> None:
+        """A new series starts from its recurrence alone; its exceptions come from the source.
+
+        This covers exceptions the incremental feed did not report and cancellations that were
+        never recorded. The pending replay is cleared only after every exception was applied.
+        """
+        self.occurrences.replay_exceptions(run, mapping, source_series)
+        run.uow.replays.remove(mapping.id)
+        run.uow.commit()
+
+    def _finish_pending_replays(self, run: SyncRunContext) -> None:
+        """Complete replays an earlier failed run left unfinished."""
+        for mapping in run.uow.replays.pending(run.rule.id):
+            source_series = None if run.source_listed else self.provider.get_event(mapping.source)
+            if source_series is None or source_series.recurrence is None:
+                # A full listing already applied every exception in the window, and a series
+                # that is gone or no longer recurring is decided by its own change.
+                run.uow.replays.remove(mapping.id)
+                run.uow.commit()
+                continue
+            self._replay_exceptions(run, mapping, source_series)
 
     def _decide_and_write(
         self,
@@ -484,6 +510,9 @@ class ExecuteSyncRule:
                 projection_fingerprint=self.fingerprinter.fingerprint(decision.projection),
             )
             uow.mappings.save(mapping)
+            if source_event.recurrence is not None and not run.source_listed:
+                # Committed with the mapping, so a retry finishes a replay a failed run began.
+                uow.replays.add(mapping.id)
         elif decision.action is SyncAction.UPDATE and decision.projection is not None:
             assert mapping is not None
             updated = self.provider.update_projection(
