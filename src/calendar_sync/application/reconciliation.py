@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
-    CalendarProvider,
+    CalendarReader,
     Clock,
     RuleRunOutcome,
     RunKind,
@@ -32,7 +32,7 @@ from calendar_sync.domain.services import EventProjector, ReconciliationService
 @dataclass(slots=True)
 class ReconcileSyncRule:
     unit_of_work: UnitOfWorkFactory
-    provider: CalendarProvider
+    provider: CalendarReader
     projector: EventProjector
     reconciliation: ReconciliationService
     clock: Clock

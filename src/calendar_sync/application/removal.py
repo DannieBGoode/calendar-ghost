@@ -19,8 +19,8 @@ from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AccountAuthorizations,
     AuditEntry,
-    CalendarProvider,
     Clock,
+    ProjectionDeleter,
     RemovalIncidents,
     UnitOfWorkFactory,
 )
@@ -42,7 +42,7 @@ class RemoveSyncRule:
     """Permanently removes a rule after deleting or detaching its mapped projections."""
 
     unit_of_work: UnitOfWorkFactory
-    provider: CalendarProvider | None
+    provider: ProjectionDeleter | None
     accounts: AccountAuthorizations | None
     clock: Clock
     locks: RuleLocks

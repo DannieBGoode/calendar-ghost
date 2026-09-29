@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.ports import AuditEntry, CalendarProvider, UnitOfWork
+from calendar_sync.application.ports import AuditEntry, CalendarReader, UnitOfWork
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
@@ -64,7 +64,7 @@ class SyncRunContext:
     """Whether each source series looked up this run still has an occurrence this rule projects."""
 
 
-def has_live_occurrences(run: SyncRunContext, provider: CalendarProvider, series: EventRef) -> bool:
+def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: EventRef) -> bool:
     """Ask once per run whether a source series still has an occurrence this rule projects."""
     if series not in run.live_series:
         run.live_series[series] = provider.has_live_occurrences(

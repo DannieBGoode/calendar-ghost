@@ -6,7 +6,7 @@ from datetime import timedelta
 from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
-    CalendarProvider,
+    CalendarReader,
     Clock,
     RulePreviewSummary,
     UnitOfWork,
@@ -57,7 +57,7 @@ def _excluded(event: CalendarEvent, rule: SyncRule) -> bool:
 @dataclass(slots=True)
 class PreviewSyncRule:
     unit_of_work: UnitOfWorkFactory
-    provider: CalendarProvider
+    provider: CalendarReader
     projector: EventProjector
     clock: Clock
     decisions: SyncDecisionService

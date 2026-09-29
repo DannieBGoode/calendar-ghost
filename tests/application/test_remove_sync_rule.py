@@ -17,7 +17,7 @@ from calendar_sync.application.errors import (
     ReplacementInterrupted,
 )
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import AccountAuthorizations, CalendarProvider
+from calendar_sync.application.ports import AccountAuthorizations, ProjectionDeleter
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.rules import CreateSyncRule, ReplaceSyncRuleCalendars
 from calendar_sync.domain.model import (
@@ -69,6 +69,18 @@ class RecordingProvider(FakeCalendarProvider):
         self.deleted_refs.append(destination)
 
 
+class DeleteOnlyCalendar:
+    """Implements only ProjectionDeleter, the one provider role Rule Removal receives."""
+
+    def __init__(self) -> None:
+        self.deleted: list[EventRef] = []
+
+    def delete_projection(
+        self, destination: EventRef, source: EventRef, rule_id: SyncRuleId, operation_key: str
+    ) -> None:
+        self.deleted.append(destination)
+
+
 class Ids:
     def new(self) -> str:
         return "replacement-rule"
@@ -94,7 +106,7 @@ def _with_mappings(
 
 def _remover(
     unit_of_work: InMemoryUnitOfWorkFactory,
-    provider: CalendarProvider | None = None,
+    provider: ProjectionDeleter | None = None,
     accounts: AccountAuthorizations | None = None,
 ) -> RemoveSyncRule:
     return RemoveSyncRule(
@@ -121,6 +133,17 @@ def test_delete_removes_each_mapped_projection_then_the_rule() -> None:
         "remove_projection",
         "rule_removed",
     ]
+
+
+def test_delete_needs_only_the_projection_deleter_role() -> None:
+    unit_of_work = _with_mappings(2)
+    calendar = DeleteOnlyCalendar()
+
+    result = _remover(unit_of_work, calendar).execute(rule().id, ProjectionHandling.DELETE)
+
+    assert (result.deleted, result.detached) == (2, 0)
+    assert len(calendar.deleted) == 2
+    assert unit_of_work.state.rules == {}
 
 
 def test_running_removal_reports_its_handling_and_progress() -> None:
@@ -449,7 +472,7 @@ class Sleeps:
 
 def _retrying_remover(
     unit_of_work: InMemoryUnitOfWorkFactory,
-    provider: CalendarProvider,
+    provider: ProjectionDeleter,
     incidents: Incidents | None = None,
     sleeps: Sleeps | None = None,
 ) -> RemoveSyncRule:

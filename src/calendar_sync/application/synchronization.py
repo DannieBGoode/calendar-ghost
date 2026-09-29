@@ -75,6 +75,7 @@ class ExecuteSyncRule:
     def __post_init__(self) -> None:
         self.occurrences = SynchronizeOccurrences(
             self.provider,
+            self.provider,
             self.decisions,
             self.fingerprinter,
             self.clock,

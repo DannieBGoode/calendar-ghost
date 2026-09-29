@@ -29,6 +29,21 @@ React UI / FastAPI / Scheduler
 The domain imports only Python's standard library and provider-neutral domain modules. Application services depend on protocols. The composition root constructs concrete adapters explicitly.
 `lint-imports` enforces this direction through the contracts in `pyproject.toml`.
 
+## Calendar provider roles
+
+`application/ports.py` splits the calendar provider port by role, and each use case receives only
+the roles it calls:
+
+| Role | Operations | Received by |
+| --- | --- | --- |
+| `CalendarReader` | change feeds, event and occurrence lookups, managed-event listing | Rule Preview, Full Reconciliation |
+| `ProjectionDeleter` | delete an owned projection | Rule Removal |
+| `ProjectionWriter` | create, update, and delete owned projections | Sync Run |
+| `OccurrenceWriter` | write and cancel single occurrences of an owned series | Sync Run |
+
+`CalendarProvider` combines every role for the Sync Run. Rule Preview is side-effect-free by type:
+it holds a `CalendarReader`, which declares no write. The Google adapter implements every role.
+
 ## Transaction boundary
 
 Google and SQLite cannot share an atomic transaction. A Sync Run therefore uses stable operation

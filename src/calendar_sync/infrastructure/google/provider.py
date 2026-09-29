@@ -39,7 +39,7 @@ GoogleServiceFactory = Callable[[ConnectedAccountId], Any]
 
 
 class GoogleCalendarProvider:
-    """Google Calendar implementation of the application CalendarProvider port."""
+    """Google Calendar implementation of every application calendar role (CalendarProvider)."""
 
     def __init__(self, service_for: GoogleServiceFactory) -> None:
         self._service_for = service_for
