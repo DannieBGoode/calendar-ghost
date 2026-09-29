@@ -135,6 +135,20 @@ export function failureLabel(failureKind: string | null): string {
   return FAILURE_LABELS[failureKind ?? ""] ?? "Local synchronization failed"
 }
 
+/** A reconciliation only reports; the sync before it made any repairs. */
+function reconciliationSummary(outcome: RunOutcome): string {
+  const checked = plural(outcome.checked_mappings, "projection")
+  const blocked = outcome.conflicts > 0 ? `${plural(outcome.conflicts, "conflict")} blocked` : null
+  if (outcome.drift === 0) {
+    return blocked ? `Checked ${checked}: ${blocked}` : `All ${checked} matched their sources`
+  }
+  const differed =
+    outcome.drift === 1
+      ? `1 of ${checked} differed from its source; it was not changed`
+      : `${outcome.drift} of ${checked} differed from their sources; none were changed`
+  return blocked ? `${differed}. ${blocked}` : differed
+}
+
 export function runOutcomeSummary(
   outcome: RunOutcome | null,
   kind: "sync" | "reconciliation",
@@ -143,11 +157,7 @@ export function runOutcomeSummary(
   if (!outcome.succeeded) {
     return `Failed: ${failureLabel(outcome.failure_kind)}`
   }
-  if (kind === "reconciliation") {
-    return outcome.drift === 0
-      ? `All ${plural(outcome.checked_mappings, "projection")} matched their sources`
-      : `${plural(outcome.drift, "difference")} found in ${plural(outcome.checked_mappings, "projection")} and repaired`
-  }
+  if (kind === "reconciliation") return reconciliationSummary(outcome)
   const counts = `${outcome.created} created, ${outcome.updated} updated, ${outcome.deleted} deleted`
   return outcome.conflicts > 0
     ? `Succeeded: ${counts}, ${plural(outcome.conflicts, "conflict")}`

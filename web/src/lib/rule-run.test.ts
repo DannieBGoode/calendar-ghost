@@ -41,18 +41,52 @@ describe("run results", () => {
     expect(syncResultMessage({ ...result, conflicts: 1 })).toContain("1 conflict blocked")
   })
 
-  it("summarizes a reconciliation by what it checked and repaired", () => {
-    expect(reconcileResultMessage({ ...result, consistent: true, checked_mappings: 12, drift: [] })).toBe(
+  it("summarizes a reconciliation by what its sync changed and what its check found", () => {
+    const checked = { ...result, checked_mappings: 12, drift: [], reconciliation_conflicts: [] }
+    expect(reconcileResultMessage({ ...checked, consistent: true })).toBe(
       "Checked 12 projections: every one matches its source event.",
+    )
+    expect(reconcileResultMessage({ ...checked, consistent: true, updated: 2 })).toBe(
+      "Synced: 2 updated. Checked 12 projections: every one matches its source event.",
+    )
+    expect(
+      reconcileResultMessage({ ...checked, consistent: false, drift: [{ kind: "missing", detail: "" }] }),
+    ).toBe(
+      "Checked 12 projections: 1 still differs from its source event and was left as it is. The next sync puts back any that changed during the check.",
     )
     expect(
       reconcileResultMessage({
-        ...result,
+        ...checked,
         consistent: false,
-        checked_mappings: 12,
-        drift: [{ kind: "missing", detail: "" }],
+        drift: [
+          { kind: "missing", detail: "" },
+          { kind: "incorrect_projection", detail: "" },
+        ],
       }),
-    ).toBe("Checked 12 projections: 1 difference repaired from the source.")
+    ).toContain("2 still differ from their source events and were left as they are.")
+  })
+
+  it("never calls what the check only reported repaired", () => {
+    const message = reconcileResultMessage({
+      ...result,
+      consistent: false,
+      checked_mappings: 3,
+      drift: [{ kind: "incorrect_projection", detail: "" }],
+    })
+    expect(message).not.toMatch(/repaired/)
+  })
+
+  it("counts the sync's blocks and the check's own conflicts together", () => {
+    expect(
+      reconcileResultMessage({
+        ...result,
+        conflicts: 1,
+        consistent: false,
+        checked_mappings: 4,
+        drift: [],
+        reconciliation_conflicts: [{ reason: "projection_unmapped", detail: "" }],
+      }),
+    ).toBe("Checked 4 projections: every one matches its source event. 2 conflicts blocked; see Activity.")
   })
 })
 

@@ -30,6 +30,13 @@ recorded it, the event as it is in Google now, and a link to open it in Google C
 - **Skipped a managed projection**: Managed Projections never become sources, which prevents loops.
 - **Blocked**: identity or ownership was ambiguous, so nothing was written. Run **Reconcile now**
   from Rules and review any incident.
+- **Blocked: marked as written by this rule, but not linked to an event**: Reconcile now found an
+  event carrying this rule's marker that no mapping owns, so Calendar Sync will never change or
+  delete it. Delete it in the destination calendar if you don't want it.
+- **Reconcile now says projections still differ**: the check after the sync only reports; it
+  changes nothing. A difference in an event from the past 30 days onward that changed during the
+  check is put back by the next sync. One in an event that ended earlier stays until you edit that
+  event in the source calendar or change the rule's policy.
 
 ## A rule removal stopped or left events behind
 

@@ -3,7 +3,7 @@ from datetime import timedelta
 from threading import Thread
 
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import RunKind
+from calendar_sync.application.ports import AuditAction, AuditOutcome, RunKind
 from calendar_sync.application.reconciliation import ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
@@ -12,6 +12,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     ReconciliationReport,
+    SyncReason,
     TransformationPolicy,
 )
 from calendar_sync.domain.services import (
@@ -218,7 +219,7 @@ def test_reconciliation_still_reports_a_deleted_live_series_beside_a_dormant_one
     assert report.checked_mappings == 2
 
 
-def test_reconciliation_reports_a_mapping_whose_source_is_no_longer_eligible() -> None:
+def test_reconciliation_reports_a_projection_left_for_a_cancelled_source_as_drift() -> None:
     calendars = FakeCalendars()
     calendars.put(event())
     factory = enabled_rule_factory()
@@ -233,7 +234,45 @@ def test_reconciliation_reports_a_mapping_whose_source_is_no_longer_eligible() -
         FixedClock(),
     ).execute(rule().id)
 
-    assert [item.kind for item in report.drift] == [DriftKind.MAPPING_CONFLICT]
+    # A verified cancellation authorizes the deletion a Sync Run would make; it is not a Conflict.
+    assert [item.kind for item in report.drift] == [DriftKind.UNEXPECTED]
+    assert report.conflicts == ()
+    assert not [entry for entry in factory.state.audit if entry.outcome is AuditOutcome.BLOCKED]
+
+
+def test_reconciliation_blocks_a_mapping_whose_source_cannot_be_read_without_drift() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    calendars.unreadable.add(event().reference)
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+        new_run_id=lambda: "reconciliation-run",
+    ).execute(rule().id)
+
+    assert report.drift == ()
+    assert [item.reason for item in report.conflicts] == [SyncReason.SOURCE_UNVERIFIABLE]
+    assert not report.is_consistent
+    outcome = factory.state.outcomes[(rule().id, RunKind.RECONCILIATION)]
+    assert (outcome.drift, outcome.conflicts) == (0, 1)
+    blocked = [entry for entry in factory.state.audit if entry.outcome is AuditOutcome.BLOCKED]
+    assert [
+        (entry.action, entry.reason, entry.source_event_id, entry.run_id) for entry in blocked
+    ] == [
+        (
+            AuditAction.CONFLICT,
+            SyncReason.SOURCE_UNVERIFIABLE,
+            event().reference.event_id.value,
+            "reconciliation-run",
+        )
+    ]
+    assert blocked[0].event is None
 
 
 def test_reconciliation_of_a_projected_series_asks_for_no_live_lookup() -> None:
@@ -326,7 +365,8 @@ def test_reconciliation_reports_an_inconsistent_mapping_even_when_its_series_is_
 
     report = _reconcile(factory, calendars)
 
-    assert [item.kind for item in report.drift] == [DriftKind.MAPPING_CONFLICT]
+    assert report.drift == ()
+    assert [item.reason for item in report.conflicts] == [SyncReason.MAPPING_INCONSISTENT]
 
 
 def test_reconciliation_runs_against_a_calendar_that_can_only_read() -> None:

@@ -157,7 +157,7 @@ export function RuleCommandMenu({
       {
         id: "reconcile",
         label: "Reconcile now",
-        description: `Check every event this rule wrote to ${destination} and repair any that were edited or deleted there. Runs by itself once a day.`,
+        description: `Sync in full, putting back events edited or deleted in ${destination}, then check every event this rule wrote there and report any that still differ.`,
         disabled: busy,
         onSelect: () => onRun("reconcile"),
       },

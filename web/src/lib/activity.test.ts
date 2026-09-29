@@ -90,6 +90,11 @@ describe("activity presentation", () => {
     expect(copy.explanation).toContain("may be missing or out of date in Work")
     expect(copy.next).toContain("daily check")
     expect(describeEntry(entry({ action: "conflict", reason: "source_unverifiable" }), names).next).toContain("Settings")
+    const unmapped = describeEntry(entry({ action: "conflict", reason: "projection_unmapped" }), names)
+    expect(unmapped.effect).toBe("blocked, left in Work")
+    expect(unmapped.next).toBe("If you don't want it in Work, delete it there yourself.")
+    const unreadable = describeEntry(entry({ action: "conflict", reason: "source_unverifiable" }), names)
+    expect(unreadable.explanation).not.toContain("edited")
     expect(describeEntry(entry({ action: "create", reason: "source_created" }), names).next).toBeUndefined()
   })
 

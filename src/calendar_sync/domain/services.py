@@ -15,11 +15,13 @@ from calendar_sync.domain.model import (
     EventProjection,
     EventRef,
     EventStatus,
+    NoProjectionExpected,
     OccurrenceCheck,
     OccurrenceMapping,
     OccurrenceStart,
     ProjectionContent,
     ProjectionFingerprint,
+    ReconciliationConflict,
     ReconciliationDrift,
     ReconciliationReport,
     SyncAction,
@@ -315,62 +317,34 @@ class ReconciliationService:
     def __init__(self, fingerprinter: ProjectionFingerprinter) -> None:
         self._fingerprinter = fingerprinter
 
-    def reconcile(  # noqa: C901
+    def reconcile(
         self,
         rule: SyncRule,
         mappings: Iterable[EventMapping],
-        expected_by_source: Mapping[EventRef, EventProjection],
+        expected_by_source: Mapping[EventRef, EventProjection | NoProjectionExpected],
         actual_by_destination: Mapping[EventRef, CalendarEvent],
         occurrences: Iterable[OccurrenceCheck] = (),
     ) -> ReconciliationReport:
+        """Compare each mapping's expected and actual state; a source absent from
+        `expected_by_source` could not be read."""
         mapping_list = tuple(mappings)
         drift: list[ReconciliationDrift] = []
+        conflicts: list[ReconciliationConflict] = []
         managed_destinations: set[EventRef] = set()
 
         for mapping in mapping_list:
-            if not mapping.belongs_to(rule):
-                drift.append(
-                    ReconciliationDrift(
-                        DriftKind.MAPPING_CONFLICT,
-                        mapping.source,
-                        mapping.destination,
-                        "mapping is outside this directional relationship",
-                    )
-                )
-                continue
-
-            managed_destinations.add(mapping.destination)
-            expected = expected_by_source.get(mapping.source)
-            actual = actual_by_destination.get(mapping.destination)
-            if expected is None:
-                drift.append(
-                    ReconciliationDrift(
-                        DriftKind.MAPPING_CONFLICT,
-                        mapping.source,
-                        mapping.destination,
-                        "source event is unavailable for this mapping",
-                    )
-                )
-            elif actual is None:
-                drift.append(
-                    ReconciliationDrift(
-                        DriftKind.MISSING,
-                        mapping.source,
-                        mapping.destination,
-                        "managed projection is missing",
-                    )
-                )
-            elif self._fingerprinter.fingerprint(expected) != self._fingerprinter.fingerprint(
-                SyncDecisionService.as_projection(actual)
-            ):
-                drift.append(
-                    ReconciliationDrift(
-                        DriftKind.INCORRECT_PROJECTION,
-                        mapping.source,
-                        mapping.destination,
-                        "managed projection differs from source authority",
-                    )
-                )
+            if mapping.belongs_to(rule):
+                managed_destinations.add(mapping.destination)
+            finding = self._mapping_finding(
+                rule,
+                mapping,
+                expected_by_source.get(mapping.source),
+                actual_by_destination.get(mapping.destination),
+            )
+            if isinstance(finding, ReconciliationConflict):
+                conflicts.append(finding)
+            elif finding is not None:
+                drift.append(finding)
 
         checked_occurrences: set[tuple[EventRef, OccurrenceStart]] = set()
         for check in occurrences:
@@ -378,7 +352,8 @@ class ReconciliationService:
             drift.extend(self._occurrence_drift(check))
 
         for destination in actual_by_destination.keys() - managed_destinations:
-            parent = actual_by_destination[destination].occurrence
+            event = actual_by_destination[destination]
+            parent = event.occurrence
             if parent is not None:
                 series_ref = EventRef(destination.calendar, parent.series_event_id)
                 if series_ref in managed_destinations:
@@ -392,16 +367,72 @@ class ReconciliationService:
                             )
                         )
                     continue
-            drift.append(
-                ReconciliationDrift(
-                    DriftKind.UNEXPECTED,
-                    None,
+            # No mapping proves ownership, so nothing may change or delete it.
+            conflicts.append(
+                ReconciliationConflict(
+                    SyncReason.PROJECTION_UNMAPPED,
+                    event.managed_origin.source if event.managed_origin else None,
                     destination,
                     "managed provider event has no mapping",
                 )
             )
 
-        return ReconciliationReport(rule.id, len(mapping_list), tuple(drift))
+        return ReconciliationReport(rule.id, len(mapping_list), tuple(drift), tuple(conflicts))
+
+    def _mapping_finding(
+        self,
+        rule: SyncRule,
+        mapping: EventMapping,
+        expected: EventProjection | NoProjectionExpected | None,
+        actual: CalendarEvent | None,
+    ) -> ReconciliationDrift | ReconciliationConflict | None:
+        if not mapping.belongs_to(rule):
+            return ReconciliationConflict(
+                SyncReason.MAPPING_INCONSISTENT,
+                mapping.source,
+                mapping.destination,
+                "mapping is outside this directional relationship",
+            )
+        if expected is None:
+            return ReconciliationConflict(
+                SyncReason.SOURCE_UNVERIFIABLE,
+                mapping.source,
+                mapping.destination,
+                "source event could not be read for this mapping",
+            )
+        if expected is NoProjectionExpected.MANAGED_SOURCE:
+            return ReconciliationConflict(
+                SyncReason.MAPPING_INCONSISTENT,
+                mapping.source,
+                mapping.destination,
+                "mapped source event is itself a managed projection",
+            )
+        if expected is NoProjectionExpected.INELIGIBLE:
+            if actual is None:
+                return None
+            return ReconciliationDrift(
+                DriftKind.UNEXPECTED,
+                mapping.source,
+                mapping.destination,
+                "managed projection remains for a cancelled or excluded source",
+            )
+        if actual is None:
+            return ReconciliationDrift(
+                DriftKind.MISSING,
+                mapping.source,
+                mapping.destination,
+                "managed projection is missing",
+            )
+        if self._fingerprinter.fingerprint(expected) != self._fingerprinter.fingerprint(
+            SyncDecisionService.as_projection(actual)
+        ):
+            return ReconciliationDrift(
+                DriftKind.INCORRECT_PROJECTION,
+                mapping.source,
+                mapping.destination,
+                "managed projection differs from source authority",
+            )
+        return None
 
     def _occurrence_drift(self, check: OccurrenceCheck) -> list[ReconciliationDrift]:
         actual = check.actual

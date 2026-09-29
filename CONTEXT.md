@@ -109,7 +109,7 @@ _Avoid_: Full clone, exact copy
 ## Integrity
 
 **Conflict**:
-An ambiguous or corrupted identity relationship, such as two source events claiming the same managed projection. Content differences are drift, not conflicts. A conflict blocks writes to that one event and leaves the destination unchanged; the rest of the rule keeps synchronizing. A conflict that persists to the next daily Full Reconciliation opens an Incident.
+An ambiguous or corrupted identity relationship, such as two source events claiming the same managed projection. Content differences are drift, not conflicts. A conflict blocks writes to that one event and leaves the destination unchanged; the rest of the rule keeps synchronizing. A conflict that persists to the next daily full pass, or to a Reconcile Now, opens an Incident.
 _Avoid_: Destination edit, synchronization difference
 
 ## Synchronization Progress
@@ -199,11 +199,11 @@ Verification of mappings affected by one synchronization run. It occurs before t
 _Avoid_: Sync verification, spot check
 
 **Full Reconciliation**:
-Daily or user-requested verification of every mapping under a rule. It repairs content drift and missing projections automatically but opens an incident for identity conflicts.
+Read-only verification of every mapping under a rule, of any age, against its current source and the managed events in the destination. It reports the Drift still present and records each Conflict it finds as a blocked Audit Entry; it repairs nothing itself. A mapping outside the rule's relationship, a mapping whose source cannot be read, and a managed event with no mapping are Conflicts, never Drift.
 _Avoid_: Full sync, rescan
 
 **Reconcile Now**:
-A user-requested full reconciliation that does not wait for the daily schedule.
+A user-requested full synchronization pass, which stands in for that day's daily pass and repairs the drift it reaches in the Initial Sync Window, followed by a Full Reconciliation. What the reconciliation still finds was left as it is; an event the pass already blocked is not reported again.
 _Avoid_: Repair sync, force reconcile
 
 ## Execution
@@ -239,7 +239,7 @@ diagnostics keep the glossary terms above.
 | Material Rule Change | "A change stops the rule from writing until you preview it again" |
 | Rule Preview, then enable | "Preview rule", then "Start syncing" |
 | Degraded Rule | "Stopped", with the cause and "Preview to restart" |
-| Reconciliation | "Reconcile now", always with its explanation: checks every event the rule wrote and repairs any edited or deleted there |
+| Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote and reports any that still differ; never "repaired" for what the check only reported |
 | Connected Account | "Google account" |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Sync did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |

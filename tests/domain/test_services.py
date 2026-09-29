@@ -13,6 +13,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     ManagedOrigin,
+    NoProjectionExpected,
     OccurrenceCheck,
     OccurrenceMapping,
     OccurrenceMappingId,
@@ -250,11 +251,13 @@ def test_update_reason_distinguishes_source_change_from_destination_drift() -> N
     assert changed.reason is SyncReason.SOURCE_CHANGED
 
 
-def test_reconciliation_reports_missing_and_unexpected_events() -> None:
+def test_reconciliation_reports_a_missing_projection_as_drift_and_an_unmapped_one_as_conflict() -> (
+    None
+):
     source = event()
     destination = _destination(source)
     mapping = _mapping(source, destination)
-    unexpected = replace(
+    unmapped = replace(
         destination,
         reference=EventRef(rule().destination, EventId("unexpected-managed")),
     )
@@ -264,10 +267,100 @@ def test_reconciliation_reports_missing_and_unexpected_events() -> None:
         rule(),
         [mapping],
         {source.reference: projector.project(source, rule())},
-        {unexpected.reference: unexpected},
+        {unmapped.reference: unmapped},
     )
 
-    assert {item.kind.value for item in report.drift} == {"missing", "unexpected"}
+    assert [item.kind for item in report.drift] == [DriftKind.MISSING]
+    # No mapping proves ownership of the managed event, so it is a Conflict, not Drift.
+    assert [(item.reason, item.source, item.destination) for item in report.conflicts] == [
+        (SyncReason.PROJECTION_UNMAPPED, source.reference, unmapped.reference)
+    ]
+
+
+def test_a_mapping_conflict_leaves_the_rule_inconsistent_without_counting_as_drift() -> None:
+    source = event()
+    destination = _destination(source)
+    service = ReconciliationService(fingerprinter)
+
+    # The source could not be read, so it has no expected entry.
+    report = service.reconcile(
+        rule(), [_mapping(source, destination)], {}, {destination.reference: destination}
+    )
+
+    assert report.drift == ()
+    assert [(item.reason, item.source, item.destination) for item in report.conflicts] == [
+        (SyncReason.SOURCE_UNVERIFIABLE, source.reference, destination.reference)
+    ]
+    assert not report.is_consistent
+
+
+def test_a_mapping_outside_the_relationship_or_to_a_managed_source_is_a_conflict() -> None:
+    source = event()
+    destination = _destination(source)
+    elsewhere = replace(
+        _mapping(source, destination),
+        destination=EventRef(rule().source, destination.reference.event_id),
+    )
+    service = ReconciliationService(fingerprinter)
+
+    outside = service.reconcile(
+        rule(), [elsewhere], {source.reference: projector.project(source, rule())}, {}
+    )
+    managed = service.reconcile(
+        rule(),
+        [_mapping(source, destination)],
+        {source.reference: NoProjectionExpected.MANAGED_SOURCE},
+        {destination.reference: destination},
+    )
+
+    for report in (outside, managed):
+        assert report.drift == ()
+        assert [item.reason for item in report.conflicts] == [SyncReason.MAPPING_INCONSISTENT]
+
+
+def test_a_projection_left_for_an_ineligible_source_is_unexpected_drift() -> None:
+    source = event()
+    destination = _destination(source)
+    mapping = _mapping(source, destination)
+    service = ReconciliationService(fingerprinter)
+    ineligible = {source.reference: NoProjectionExpected.INELIGIBLE}
+
+    left_behind = service.reconcile(
+        rule(), [mapping], ineligible, {destination.reference: destination}
+    )
+    already_gone = service.reconcile(rule(), [mapping], ineligible, {})
+
+    assert [item.kind for item in left_behind.drift] == [DriftKind.UNEXPECTED]
+    assert left_behind.conflicts == ()
+    assert already_gone.is_consistent
+
+
+def test_a_report_excluding_blocked_sources_keeps_findings_about_other_events() -> None:
+    source = event()
+    other = event("other-event")
+    destination = _destination(source)
+    report = ReconciliationService(fingerprinter).reconcile(
+        rule(),
+        [
+            _mapping(source, destination),
+            replace(
+                _mapping(other, destination),
+                id=EventMappingId("mapping-2"),
+                destination=EventRef(rule().destination, EventId("other-destination")),
+            ),
+        ],
+        {other.reference: projector.project(other, rule())},
+        {destination.reference: destination},
+    )
+
+    remaining = report.excluding({source.reference})
+
+    assert [item.source for item in report.conflicts] == [source.reference]
+    assert remaining.conflicts == ()
+    assert [(item.kind, item.source) for item in remaining.drift] == [
+        (DriftKind.MISSING, other.reference)
+    ]
+    assert remaining.checked_mappings == 2
 
 
 def test_fingerprint_compares_timed_bounds_as_instants() -> None:
