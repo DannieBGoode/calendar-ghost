@@ -288,79 +288,82 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
               : ""}
         </p>
 
-        {groups.length === 0 ? (
-          <EmptyActivity
-            ruleId={ruleId}
-            show={show}
-            query={query}
-            onShowAll={() => changeFilters({ show: "all" })}
-            onAllRules={() => changeFilters({ ruleId: "" })}
-            onClearSearch={() => changeFilters({ query: "" })}
-          />
-        ) : (
-          <div className="activity-layout" data-detail={detailOpen}>
-            <div className="activity-table-wrap" aria-busy={updating} data-updating={updating}>
-              {/* Explicit roles keep table semantics where narrow screens restyle the rows. */}
-              <table className="activity-table" role="table" onKeyDown={moveSelection}>
-                <caption className="sr-only">Synchronization history, newest first</caption>
-                <thead role="rowgroup">
-                  <tr role="row">
-                    <th scope="col" role="columnheader" className="activity-col-time">Time</th>
-                    <th scope="col" role="columnheader" className="activity-col-event">Event</th>
-                    <th scope="col" role="columnheader" className="activity-col-happened">What happened</th>
-                    {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
-                  </tr>
-                </thead>
-                {groups.flatMap((group) => [
-                  ...(group.day
-                    ? [
-                        <tbody key={`${group.key}-day`} role="rowgroup" className="activity-day">
-                          <tr role="row">
-                            <th scope="colgroup" role="rowheader" colSpan={columns}>{group.day}</th>
-                          </tr>
-                        </tbody>,
-                      ]
-                    : []),
-                  <tbody key={group.key} role="rowgroup" className="activity-run">
-                    {group.run.entries.map((entry) => (
-                      <EntryRow
-                        key={entry.id}
-                        entry={entry}
-                        context={context}
-                        state={state}
-                        selected={entryId === entry.id}
-                        showRuleColumn={showRuleColumn}
-                        onOpen={openEntry}
-                        onFilterRule={(value) => changeFilters({ ruleId: value })}
-                      />
-                    ))}
-                  </tbody>,
-                ])}
-              </table>
-              {activity.hasNextPage && (
-                <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
-                  {activity.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
-                </Button>
-              )}
-            </div>
-            {detailOpen && (
-              <ActivityDetail
-                entry={selected}
-                loading={selected === undefined && (directEntry.isPending || directEntry.isFetching)}
-                context={context}
-                focusRef={focusDetail}
-                onClose={closeDetail}
-                onOpenRule={onOpenRule}
-                onNewer={selectedIndex > 0 ? () => select(visibleEntries[selectedIndex - 1], "replace") : undefined}
-                onOlder={
-                  selectedIndex >= 0 && selectedIndex < visibleEntries.length - 1
-                    ? () => select(visibleEntries[selectedIndex + 1], "replace")
-                    : undefined
-                }
+        {/* A linked entry the filters hide still opens beside an empty table. */}
+        <div className="activity-layout" data-detail={detailOpen}>
+          <div className="activity-table-wrap" aria-busy={updating} data-updating={updating}>
+            {groups.length === 0 ? (
+              <EmptyActivity
+                ruleId={ruleId}
+                show={show}
+                query={query}
+                onShowAll={() => changeFilters({ show: "all" })}
+                onAllRules={() => changeFilters({ ruleId: "" })}
+                onClearSearch={() => changeFilters({ query: "" })}
               />
+            ) : (
+              <>
+                {/* Explicit roles keep table semantics where narrow screens restyle the rows. */}
+                <table className="activity-table" role="table" onKeyDown={moveSelection}>
+                  <caption className="sr-only">Synchronization history, newest first</caption>
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th scope="col" role="columnheader" className="activity-col-time">Time</th>
+                      <th scope="col" role="columnheader" className="activity-col-event">Event</th>
+                      <th scope="col" role="columnheader" className="activity-col-happened">What happened</th>
+                      {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
+                    </tr>
+                  </thead>
+                  {groups.flatMap((group) => [
+                    ...(group.day
+                      ? [
+                          <tbody key={`${group.key}-day`} role="rowgroup" className="activity-day">
+                            <tr role="row">
+                              <th scope="colgroup" role="rowheader" colSpan={columns}>{group.day}</th>
+                            </tr>
+                          </tbody>,
+                        ]
+                      : []),
+                    <tbody key={group.key} role="rowgroup" className="activity-run">
+                      {group.run.entries.map((entry) => (
+                        <EntryRow
+                          key={entry.id}
+                          entry={entry}
+                          context={context}
+                          state={state}
+                          selected={entryId === entry.id}
+                          showRuleColumn={showRuleColumn}
+                          onOpen={openEntry}
+                          onFilterRule={(value) => changeFilters({ ruleId: value })}
+                        />
+                      ))}
+                    </tbody>,
+                  ])}
+                </table>
+                {activity.hasNextPage && (
+                  <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
+                    {activity.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
+                  </Button>
+                )}
+              </>
             )}
           </div>
-        )}
+          {detailOpen && (
+            <ActivityDetail
+              entry={selected}
+              loading={selected === undefined && (directEntry.isPending || directEntry.isFetching)}
+              context={context}
+              focusRef={focusDetail}
+              onClose={closeDetail}
+              onOpenRule={onOpenRule}
+              onNewer={selectedIndex > 0 ? () => select(visibleEntries[selectedIndex - 1], "replace") : undefined}
+              onOlder={
+                selectedIndex >= 0 && selectedIndex < visibleEntries.length - 1
+                  ? () => select(visibleEntries[selectedIndex + 1], "replace")
+                  : undefined
+              }
+            />
+          )}
+        </div>
       </section>
     </div>
   )
