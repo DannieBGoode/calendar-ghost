@@ -616,3 +616,13 @@ def test_a_later_interleaved_decision_does_not_hide_the_daily_pass_verdict(
     assert [(key, state) for key, _category, state, _summary in _incidents(database)] == [
         ("blocked:rule-1", "open")
     ]
+
+
+def test_a_legacy_recurring_skip_is_not_evidence_of_an_earlier_block(tmp_path: Path) -> None:
+    # Earlier releases recorded skipped recurring events as conflicts; they are skips.
+    legacy = replace(_block("upgrade"), reason="recurring_unsupported")
+    database, health = _health_with(tmp_path, legacy, _block("daily"))
+
+    health.record_full_pass(rule().id, 1, "daily")
+
+    assert _incidents(database) == []

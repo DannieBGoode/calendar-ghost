@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import sqlite3
 
+# A synchronization block. Recurring exclusions were recorded as conflicts before reason codes
+# existed; they are skips.
+_BLOCK = "{t}.action = 'conflict' AND COALESCE({t}.reason, '') != 'recurring_unsupported'"
+
 
 def open_blocks(
     connection: sqlite3.Connection,
@@ -30,15 +34,14 @@ def open_blocks(
         if rule_id is not None
         else [str(row[0]) for row in connection.execute("SELECT id FROM sync_rules")]
     )
-    # Recurring exclusions were recorded as conflicts before reason codes existed, and Rule Removal
-    # conflicts belong to a rule that no longer exists.
     # With a named run, "latest" means that run's latest decision about the event, so a run
     # interleaved after it can neither hide nor supply the named run's verdict.
     same_run = "AND later.run_id = :run" if run_id is not None else ""
+    # Rule Removal conflicts belong to a rule that no longer exists, so they are not blocks here.
     conditions = [
         "a.rule_id = :rule",
         "a.id > :floor",
-        "a.action = 'conflict' AND COALESCE(a.reason, '') != 'recurring_unsupported'",
+        _BLOCK.format(t="a"),
         "a.source_event_id IS NOT NULL",
         f"""NOT EXISTS (
             SELECT 1 FROM audit_entries later
@@ -50,12 +53,12 @@ def open_blocks(
         conditions.append("a.run_id = :run")
     if persisting:
         conditions.append(
-            """(
-                SELECT earlier.action FROM audit_entries earlier
+            f"""(
+                SELECT {_BLOCK.format(t="earlier")} FROM audit_entries earlier
                 WHERE earlier.rule_id = a.rule_id AND earlier.source_event_id = a.source_event_id
                     AND earlier.id <= :floor
                 ORDER BY earlier.id DESC LIMIT 1
-            ) = 'conflict'"""
+            ) = 1"""
         )
     blocks: list[tuple[int, str]] = []
     for rule in rules:
