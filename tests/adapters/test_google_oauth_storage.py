@@ -2,6 +2,8 @@ import base64
 import hashlib
 import json
 import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from importlib.resources import files
 from pathlib import Path
 from types import SimpleNamespace
@@ -28,6 +30,7 @@ from calendar_sync.infrastructure.google.oauth import (
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
+    STATE_LIFETIME,
     SqliteAuthorizationStates,
 )
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
@@ -181,6 +184,41 @@ def test_expired_oauth_state_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(InvalidAuthorizationState, match="expired"):
         oauth._consume_state("expired-state")
+
+
+STORED = datetime(2026, 9, 30, 12, 0, tzinfo=UTC)
+
+
+@dataclass
+class MovableClock:
+    moment: datetime
+
+    def now(self) -> datetime:
+        return self.moment
+
+
+def _states(tmp_path: Path) -> tuple[SqliteAuthorizationStates, MovableClock]:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    clock = MovableClock(STORED)
+    return SqliteAuthorizationStates(database, clock), clock
+
+
+def test_an_oauth_state_is_consumed_once_within_its_lifetime(tmp_path: Path) -> None:
+    states, clock = _states(tmp_path)
+    states.store("synthetic-state")
+
+    clock.moment = STORED + STATE_LIFETIME - timedelta(seconds=1)
+    assert states.consume("synthetic-state") is True
+    assert states.consume("synthetic-state") is False
+
+
+def test_an_oauth_state_is_rejected_once_its_lifetime_ends(tmp_path: Path) -> None:
+    states, clock = _states(tmp_path)
+    states.store("synthetic-state")
+
+    clock.moment = STORED + STATE_LIFETIME
+    assert states.consume("synthetic-state") is False
 
 
 def test_pkce_verifier_survives_oauth_flow_reconstruction(tmp_path: Path) -> None:

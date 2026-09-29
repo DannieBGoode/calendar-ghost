@@ -23,7 +23,7 @@ import os
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
@@ -205,9 +205,9 @@ def build_preview_container(
         # The marker table name is a constant.
         connection.execute(
             f"INSERT INTO {MARKER_TABLE} VALUES (?)",  # noqa: S608
-            (datetime.now(UTC).isoformat(),),
+            (adapters.clock.now().isoformat(),),
         )
-    moment = now or datetime.now(UTC)
+    moment = now or adapters.clock.now()
     google = PreviewGoogle()
     # Only reads are substituted: without a master key nothing synchronizes or writes.
     container = replace(

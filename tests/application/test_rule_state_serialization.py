@@ -26,6 +26,7 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory
@@ -88,6 +89,7 @@ def test_clearing_reprojection_waits_for_the_rule_write_lock() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
         locks,
     )
 
@@ -107,6 +109,7 @@ def test_occurrence_writes_wait_for_the_rule_write_lock() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
         locks,
     )
     sync.execute(rule().id)

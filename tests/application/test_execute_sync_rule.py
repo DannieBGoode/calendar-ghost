@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -40,12 +41,21 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from tests.helpers import NOW, event, rule
+
+
+@dataclass
+class ScriptedRunIds:
+    ids: Iterator[str]
+
+    def new_run_id(self) -> str:
+        return next(self.ids)
 
 
 @dataclass
@@ -219,6 +229,7 @@ def test_complete_create_use_case_persists_mapping_cursor_and_audit() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     result = use_case.execute(rule().id)
@@ -247,6 +258,7 @@ def test_full_reconciliation_does_not_use_incremental_cursor() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     use_case.execute(rule().id, full=True)
@@ -284,6 +296,7 @@ def test_destination_drift_is_updated_and_mapping_revision_advances() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     result = use_case.execute(rule().id)
@@ -328,6 +341,7 @@ def test_destination_only_edit_is_repaired_on_the_next_incremental_sync() -> Non
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     result = use_case.execute(rule().id)
@@ -369,6 +383,7 @@ def test_destination_only_deletion_restores_projection_with_same_mapping_identit
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     result = use_case.execute(rule().id)
@@ -409,6 +424,7 @@ def test_destination_change_does_not_delete_when_source_cannot_be_verified() -> 
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     result = use_case.execute(rule().id)
@@ -446,6 +462,7 @@ def test_cancelled_source_deletes_only_its_owned_mapping() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     result = use_case.execute(rule().id)
@@ -470,6 +487,7 @@ def test_managed_source_is_ignored_without_destination_write() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     result = use_case.execute(rule().id)
@@ -487,14 +505,13 @@ def test_each_run_groups_its_audit_entries() -> None:
     provider = FakeCalendarProvider(event())
     provider.source_changes = (event(), managed)
     fingerprinter = ProjectionFingerprinter()
-    run_ids = iter(("run-1", "run-2"))
     use_case = ExecuteSyncRule(
         unit_of_work,
         provider,
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
-        new_run_id=lambda: next(run_ids),
+        ScriptedRunIds(iter(("run-1", "run-2"))),
     )
 
     first = use_case.execute(rule().id)
@@ -535,6 +552,7 @@ def test_non_enabled_rule_is_rejected(state: SyncRuleState) -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     with pytest.raises(RuleNotExecutable, match="not enabled"):
@@ -554,6 +572,7 @@ def test_provider_failure_does_not_advance_cursor_or_write_audit() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
     with pytest.raises(ProviderFailure, match="outage"):
@@ -574,6 +593,7 @@ def test_concurrent_requests_for_the_same_rule_are_serialized() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
     failures: list[BaseException] = []
 
@@ -605,6 +625,7 @@ def _use_case(unit_of_work: UnitOfWorkFactory, provider: FakeCalendarProvider) -
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
 
@@ -790,6 +811,7 @@ def test_provider_writes_hold_the_rule_write_lock() -> None:
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
         locks,
     ).execute(rule().id)
 

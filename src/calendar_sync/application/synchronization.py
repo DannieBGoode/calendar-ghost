@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import timedelta
-from uuid import uuid4
 
 from calendar_sync.application.errors import (
     ProviderFailure,
@@ -22,6 +20,7 @@ from calendar_sync.application.ports import (
     Clock,
     RecordedEvent,
     RuleRunOutcome,
+    RunIdGenerator,
     RunKind,
     UnitOfWorkFactory,
 )
@@ -69,8 +68,8 @@ class ExecuteSyncRule:
     decisions: SyncDecisionService
     fingerprinter: ProjectionFingerprinter
     clock: Clock
+    run_ids: RunIdGenerator
     locks: RuleLocks = field(default_factory=RuleLocks)
-    new_run_id: Callable[[], str] = field(default=lambda: uuid4().hex)
     occurrences: SynchronizeOccurrences = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -119,7 +118,7 @@ class ExecuteSyncRule:
             if rule.state is not SyncRuleState.ENABLED:
                 raise RuleNotExecutable(f"sync rule is {rule.state}, not enabled")
 
-            run_id = self.new_run_id()
+            run_id = self.run_ids.new_run_id()
             reproject = rule.reprojection_required
             full_run = full or reproject
             previous_cursor = uow.cursors.get(rule.id)

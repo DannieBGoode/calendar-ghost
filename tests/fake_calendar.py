@@ -38,6 +38,7 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW, instance_id, rule
 
@@ -415,6 +416,7 @@ def sync_use_case(factory: UnitOfWorkFactory, calendars: FakeCalendars) -> Execu
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
 
 
