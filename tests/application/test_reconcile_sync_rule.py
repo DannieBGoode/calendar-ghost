@@ -10,9 +10,12 @@ from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     DriftKind,
     EventId,
+    EventMapping,
+    EventMappingId,
     EventRef,
     EventStatus,
     ManagedOrigin,
+    ProjectionFingerprint,
     ReconciliationReport,
     SyncReason,
     TimedInterval,
@@ -529,3 +532,32 @@ def test_reconciliation_ignores_an_unmapped_projection_that_ended_before_the_win
 
     assert [item.destination for item in report.conflicts] == [current.reference]
     assert past.reference not in [item.destination for item in report.conflicts]
+
+
+def test_reconciliation_reports_an_inconsistent_mapping_of_a_past_event_without_reading_it() -> (
+    None
+):
+    calendars = FakeCalendars()
+    factory = enabled_rule_factory()
+    old = calendars.put(
+        replace(
+            event(),
+            time=TimedInterval(NOW - timedelta(days=60), NOW - timedelta(days=60, hours=-1)),
+        )
+    )
+    elsewhere = endpoint("work-account", "another-calendar")
+    factory.state.mappings[(rule().id, old.reference)] = EventMapping(
+        EventMappingId("mapping-1"),
+        rule().id,
+        old.reference,
+        EventRef(elsewhere, EventId("projection")),
+        old.revision,
+        ProjectionFingerprint("fingerprint"),
+    )
+
+    report = _reconcile(factory, calendars)
+
+    # Outside the window, but the mapping points outside the rule: that is a Conflict at any age.
+    assert report.checked_mappings == 1
+    assert [item.reason for item in report.conflicts] == [SyncReason.MAPPING_INCONSISTENT]
+    assert calendars.reads == []

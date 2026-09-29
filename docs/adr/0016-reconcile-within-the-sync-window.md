@@ -23,6 +23,9 @@ schedule; blocks on them already stop counting once the daily pass no longer lis
   exception, so an old occurrence moved into the window is checked and a past one is not.
 - A mapping neither listing reaches is not read, checked, counted in `checked_mappings`, or
   reported. An unmapped managed event that ended before the window is not reported either.
+- A mapping outside the rule's relationship is always checked and reported as a
+  `mapping_inconsistent` Conflict, whatever the event's age: it is identity corruption, not a past
+  event, and proving it needs no provider read.
 - `CalendarReader` gains `list_events`, a windowed listing that reads no incremental position, and
   `managed_events` takes the window start.
 

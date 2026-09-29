@@ -156,6 +156,10 @@ class ReconcileSyncRule:
         expected: dict[EventRef, EventProjection | NoProjectionExpected] = {}
         dormant: set[EventMappingId] = set()
         for mapping in mappings:
+            if not mapping.belongs_to(rule):
+                # A Conflict whatever the event's age, and proven without reading either side.
+                checked.append(mapping)
+                continue
             source = listed.get(mapping.source)
             if source is None and mapping.destination not in actual:
                 continue  # neither the source nor its projection reaches the window

@@ -195,7 +195,8 @@ one paginated request, then verifies every mapping whose source or projection ei
 returned. A listed source needs no further read; a source that only its projection's listing
 reached, such as one moved before the window or deleted, is read directly. A mapping neither
 listing reaches belongs to an event that ended before the window: it is not read, checked,
-counted, or reported. A series reaches the window while any occurrence does, however long ago it
+counted, or reported, unless it lies outside the rule's relationship, which is a
+`mapping_inconsistent` Conflict at any age and needs no read to prove. A series reaches the window while any occurrence does, however long ago it
 began, and its Occurrence Mappings are checked when their original start is in the window or
 either listing returned the occurrence as an exception, so an old occurrence moved into the window
 is checked and a past one is not. It never writes to Google, so the Web UI never calls what it
