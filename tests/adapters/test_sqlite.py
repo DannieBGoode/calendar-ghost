@@ -8,7 +8,9 @@ import pytest
 
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
+    AuditAction,
     AuditEntry,
+    AuditOutcome,
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
@@ -24,6 +26,7 @@ from calendar_sync.domain.model import (
     OccurrenceState,
     PrivacyPolicy,
     ProjectionFingerprint,
+    SyncReason,
     SyncRuleId,
     SyncRuleState,
     TransformationPolicy,
@@ -176,10 +179,10 @@ def test_audit_entries_persist_reason_and_run(tmp_path: Path) -> None:
             AuditEntry(
                 occurred_at=NOW,
                 rule_id=rule().id,
-                action="ignore",
-                outcome="skipped",
+                action=AuditAction.IGNORE,
+                outcome=AuditOutcome.SKIPPED,
                 source_event_id="weekly",
-                reason="recurring_unsupported",
+                reason=SyncReason.RECURRING_UNSUPPORTED,
                 run_id="run-1",
             )
         )
@@ -352,7 +355,12 @@ def test_rule_removal_cascades_resolves_incidents_and_keeps_audit(tmp_path: Path
             RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
         )
         uow.audit.append(
-            AuditEntry(datetime(2026, 9, 1, tzinfo=UTC), rule().id, "create", "completed")
+            AuditEntry(
+                datetime(2026, 9, 1, tzinfo=UTC),
+                rule().id,
+                AuditAction.CREATE,
+                AuditOutcome.COMPLETED,
+            )
         )
         uow.commit()
     with sqlite3.connect(database) as connection:

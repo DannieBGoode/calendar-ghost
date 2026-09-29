@@ -20,6 +20,8 @@ from calendar_sync.domain.model import (
     EventTime,
     OccurrenceMapping,
     OccurrenceStart,
+    SyncAction,
+    SyncReason,
     SyncRule,
     SyncRuleId,
 )
@@ -235,16 +237,49 @@ class RecordedEvent:
         )
 
 
+class AuditAction(StrEnum):
+    """What an Audit Entry records; the stored values are a compatibility surface."""
+
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+    IGNORE = "ignore"
+    CONFLICT = "conflict"
+    POLICY_CHANGED = "policy_changed"
+    REMOVE_PROJECTION = "remove_projection"
+    DETACH_PROJECTION = "detach_projection"
+    REMOVAL_CONFLICT = "removal_conflict"
+    RULE_REMOVED = "rule_removed"
+
+    @classmethod
+    def of(cls, action: SyncAction) -> AuditAction:
+        return cls(action.value)
+
+
+class AuditOutcome(StrEnum):
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+    BLOCKED = "blocked"
+
+    @classmethod
+    def of(cls, action: SyncAction) -> AuditOutcome:
+        if action is SyncAction.IGNORE:
+            return cls.SKIPPED
+        if action is SyncAction.CONFLICT:
+            return cls.BLOCKED
+        return cls.COMPLETED
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEntry:
     occurred_at: datetime
     rule_id: SyncRuleId
-    action: str
-    outcome: str
+    action: AuditAction
+    outcome: AuditOutcome
     source_event_id: str | None = None
     destination_event_id: str | None = None
     detail: str = ""
-    reason: str | None = None
+    reason: SyncReason | None = None
     run_id: str | None = None
     event: RecordedEvent | None = None
     """The source event's title and time; never its description, location, or attendees."""

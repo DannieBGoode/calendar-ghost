@@ -28,7 +28,13 @@ from pathlib import Path
 from typing import Any, NoReturn, cast
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.ports import AuditEntry, CalendarProvider, RecordedEvent
+from calendar_sync.application.ports import (
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
+    CalendarProvider,
+    RecordedEvent,
+)
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.model import (
@@ -41,6 +47,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     Recurrence,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
@@ -239,11 +246,13 @@ def _seed(container: Container, path: Path, now: datetime) -> None:  # noqa: C90
             AuditEntry(
                 occurred_at=now - timedelta(minutes=minutes_ago),
                 rule_id=SyncRuleId(rule),
-                action=action,
-                outcome={"ignore": "skipped", "conflict": "blocked"}.get(action, "completed"),
+                action=AuditAction(action),
+                outcome={"ignore": AuditOutcome.SKIPPED, "conflict": AuditOutcome.BLOCKED}.get(
+                    action, AuditOutcome.COMPLETED
+                ),
                 source_event_id=event,
                 destination_event_id=f"copy-{event}" if event and projection else None,
-                reason=reason,
+                reason=SyncReason(reason) if reason is not None else None,
                 run_id=run,
                 event=recorded,
             )

@@ -6,14 +6,15 @@ from dataclasses import dataclass
 
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
+    AuditAction,
     AuditEntry,
+    AuditOutcome,
     CalendarReader,
     Clock,
     OccurrenceWriter,
     RecordedEvent,
 )
 from calendar_sync.application.sync_run import (
-    OUTCOMES,
     SyncRunContext,
     has_live_occurrences,
     record,
@@ -245,14 +246,14 @@ class SynchronizeOccurrences:
                 AuditEntry(
                     occurred_at=self.clock.now(),
                     rule_id=run.rule.id,
-                    action=decision.action.value,
-                    outcome=OUTCOMES.get(decision.action, "completed"),
+                    action=AuditAction.of(decision.action),
+                    outcome=AuditOutcome.of(decision.action),
                     source_event_id=(source_ref or source_series.reference).event_id.value,
                     destination_event_id=destination_ref.event_id.value
                     if destination_ref
                     else None,
                     detail=detail,
-                    reason=decision.reason.value,
+                    reason=decision.reason,
                     run_id=run.run_id,
                     event=_recorded_event(source_occurrence),
                 ),

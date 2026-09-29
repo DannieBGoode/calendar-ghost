@@ -14,8 +14,6 @@ from calendar_sync.domain.model import (
     SyncRuleState,
 )
 
-OUTCOMES = {SyncAction.IGNORE: "skipped", SyncAction.CONFLICT: "blocked"}
-
 # Skips that answer no question a person would ask: loop prevention, bookkeeping, and events
 # that never were in scope. Runs count them but do not record them.
 UNRECORDED_REASONS = frozenset(
