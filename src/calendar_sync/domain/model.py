@@ -262,6 +262,13 @@ class SyncRule:
         if self.initial_lookback_days < 0:
             raise DomainValidationError("initial lookback days cannot be negative")
 
+    def uses_account(self, account_id: ConnectedAccountId) -> bool:
+        """Whether either calendar of this rule belongs to the Connected Account."""
+        return account_id in {
+            self.source.connected_account_id,
+            self.destination.connected_account_id,
+        }
+
     @property
     def material_signature(self) -> tuple[object, ...]:
         return (self.source, self.destination, self.transformation, self.initial_lookback_days)

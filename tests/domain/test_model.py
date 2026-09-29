@@ -6,6 +6,7 @@ from calendar_sync.domain.errors import DomainValidationError, InvalidStateTrans
 from calendar_sync.domain.model import (
     AllDayRange,
     AllDaySyncPolicy,
+    ConnectedAccountId,
     EventId,
     EventMapping,
     EventMappingId,
@@ -34,6 +35,14 @@ def test_rule_can_cross_connected_accounts() -> None:
     assert (
         cross_account.source.connected_account_id != cross_account.destination.connected_account_id
     )
+
+
+def test_rule_uses_the_accounts_of_its_source_and_destination() -> None:
+    cross_account = rule()
+
+    assert cross_account.uses_account(ConnectedAccountId("personal-account"))
+    assert cross_account.uses_account(ConnectedAccountId("work-account"))
+    assert not cross_account.uses_account(ConnectedAccountId("other-account"))
 
 
 def test_rule_cannot_target_its_source_endpoint() -> None:
