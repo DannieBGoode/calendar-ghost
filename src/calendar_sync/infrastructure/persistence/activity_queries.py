@@ -20,7 +20,8 @@ def open_blocks(
     deleted, is no longer open. That includes a block of an event that ended before the rule's sync
     window: the daily pass no longer lists it, and a past event no longer affects the destination
     calendar, so its block retires with it. `after` replaces the recorded pass with the audit
-    identifier a pass began after, and `run_id` keeps only that pass's own blocks. A persisting
+    identifier a pass began after, and `run_id` keeps only blocks that were that pass's own latest
+    decision about their event, whatever other runs decided after it. A persisting
     block was already the event's latest decision before the pass began, so neither a failed
     attempt of the same pass nor a run interleaved with it counts as earlier evidence.
     """
@@ -31,15 +32,18 @@ def open_blocks(
     )
     # Recurring exclusions were recorded as conflicts before reason codes existed, and Rule Removal
     # conflicts belong to a rule that no longer exists.
+    # With a named run, "latest" means that run's latest decision about the event, so a run
+    # interleaved after it can neither hide nor supply the named run's verdict.
+    same_run = "AND later.run_id = :run" if run_id is not None else ""
     conditions = [
         "a.rule_id = :rule",
         "a.id > :floor",
         "a.action = 'conflict' AND COALESCE(a.reason, '') != 'recurring_unsupported'",
         "a.source_event_id IS NOT NULL",
-        """NOT EXISTS (
+        f"""NOT EXISTS (
             SELECT 1 FROM audit_entries later
             WHERE later.rule_id = a.rule_id AND later.source_event_id = a.source_event_id
-                AND later.id > a.id
+                AND later.id > a.id {same_run}
         )""",
     ]
     if run_id is not None:

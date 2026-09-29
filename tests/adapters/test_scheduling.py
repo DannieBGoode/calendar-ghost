@@ -600,3 +600,19 @@ def test_a_run_interleaved_with_the_daily_pass_does_not_decide_its_incident(
     with sqlite3.connect(database) as connection:
         # The interleaved block is still the event's latest decision, so it stays open.
         assert open_blocks(connection) == [(2, "rule-1")]
+
+
+def test_a_later_interleaved_decision_does_not_hide_the_daily_pass_verdict(
+    tmp_path: Path,
+) -> None:
+    # Blocked before the pass, blocked again by the pass, then a Sync Now that ran before the
+    # pass's health check decided the same event once more.
+    database, health = _health_with(
+        tmp_path, _block("earlier"), _block("daily"), _block("sync-now")
+    )
+
+    health.record_full_pass(rule().id, 1, "daily")
+
+    assert [(key, state) for key, _category, state, _summary in _incidents(database)] == [
+        ("blocked:rule-1", "open")
+    ]
