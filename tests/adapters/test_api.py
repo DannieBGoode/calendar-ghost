@@ -1180,6 +1180,28 @@ def test_dashboard_reports_events_whose_latest_decision_was_blocked(tmp_path: Pa
 
     assert (dashboard["blocked_events"], dashboard["blocked_entry_id"]) == (1, 1)
     assert dashboard["blocked_rule_id"] == "rule-1"
+
+
+def test_dashboard_names_no_rule_when_blocks_span_rules(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.rules.add(
+            replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
+        )
+        uow.commit()
+    _append_audit(
+        container,
+        _audit("conflict", "mapping_inconsistent", source_event_id="a"),
+        _audit("conflict", "mapping_inconsistent", rule_id="rule-2", source_event_id="b"),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        dashboard = client.get("/api/v1/dashboard").json()
+
+    assert (dashboard["blocked_events"], dashboard["blocked_entry_id"]) == (2, 2)
+    assert dashboard["blocked_rule_id"] is None
     # A block alone is reported, not an incident: the health stays healthy until it persists.
     assert dashboard["health"] == "healthy"
 
@@ -1602,17 +1624,28 @@ def test_activity_shows_the_time_an_event_moved_from(tmp_path: Path) -> None:
     container = build_container(Settings(tmp_path / "test.db"))
     dentist = event(title="Dentist")
     assert isinstance(dentist.time, TimedInterval)
-    later = replace(
-        dentist,
-        time=TimedInterval(
-            dentist.time.starts_at + timedelta(hours=1), dentist.time.ends_at + timedelta(hours=1)
-        ),
+    moved_time = TimedInterval(
+        dentist.time.starts_at + timedelta(hours=1), dentist.time.ends_at + timedelta(hours=1)
     )
+    later = replace(dentist, time=moved_time)
     _append_audit(
         container,
         _audit("create", "source_created", event=RecordedEvent.of(dentist)),
         _audit("update", "source_changed", event=RecordedEvent.of(later)),
         _audit("update", "destination_drift_repaired", event=RecordedEvent.of(later)),
+        # Only the end changed: a longer event, not a moved one.
+        _audit(
+            "update",
+            "source_changed",
+            event=RecordedEvent.of(
+                replace(
+                    later,
+                    time=TimedInterval(
+                        moved_time.starts_at, moved_time.ends_at + timedelta(hours=1)
+                    ),
+                )
+            ),
+        ),
         # Google reports a deleted event without its time; it did not move.
         _audit("delete", "source_cancelled", event=RecordedEvent(title="", cancelled=True)),
     )
@@ -1633,6 +1666,7 @@ def test_activity_shows_the_time_an_event_moved_from(tmp_path: Path) -> None:
         },
         3: None,
         4: None,
+        5: None,
     }
 
 

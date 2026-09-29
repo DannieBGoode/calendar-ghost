@@ -497,3 +497,73 @@ def test_block_health_waits_for_a_rule_removal_in_progress(tmp_path: Path) -> No
     worker.join(2)
 
     assert waited
+
+
+def test_a_scheduled_run_that_listed_everything_checks_blocks_as_the_daily_pass() -> None:
+    factory = InMemoryUnitOfWorkFactory()
+    with factory() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+
+    class ListingEverything:
+        """A reprojection or a rejected cursor lists both calendars in full."""
+
+        def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+            with factory() as uow:
+                uow.run_outcomes.record(
+                    RuleRunOutcome(rule_id, RunKind.SYNC, datetime.now(UTC), True, full_run=True)
+                )
+                uow.commit()
+            return SyncRunResult(rule_id)
+
+    health = RecordingHealth()
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, ListingEverything()), factory, cast(SqliteRuleHealth, health)
+    )
+
+    assert scheduler._execute_with_retry(rule(), full=False) is True
+    assert health.full_successes == 1
+
+
+def test_failing_to_record_health_never_reports_a_successful_run_as_failed() -> None:
+    class BrokenHealth(RecordingHealth):
+        def record_success(self, _rule: object, *, full_pass_floor: int | None = None) -> None:
+            raise sqlite3.OperationalError("database is locked")
+
+        def audit_floor(self) -> int:
+            raise sqlite3.OperationalError("database is locked")
+
+    health = BrokenHealth()
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, RecordingExecuteRule([None])),
+        cast(UnitOfWorkFactory, None),
+        cast(SqliteRuleHealth, health),
+    )
+
+    assert scheduler._execute_with_retry(rule(), full=True) is True
+    assert health.failures == []
+
+
+def test_blocked_incident_is_notified_after_the_rule_lock_is_released(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    unit_of_work = SqliteUnitOfWorkFactory(database)
+    with unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.audit.append(_block("incremental"))
+        uow.audit.append(_block("daily"))
+        uow.commit()
+    locks = RuleLocks()
+    held: list[bool] = []
+
+    class LockCheckingChannel(NotificationChannel):
+        def send(self, incident: IncidentNotification) -> None:
+            held.append(locks.for_rule(rule().id).locked())
+
+    health = SqliteRuleHealth(
+        database, unit_of_work, IncidentNotifier([LockCheckingChannel()]), locks=locks
+    )
+
+    health.record_full_pass(rule().id, 1)
+
+    assert held == [False]

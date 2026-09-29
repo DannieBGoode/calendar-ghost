@@ -241,7 +241,8 @@ def create_app(container: Container | None = None) -> FastAPI:
             last_synced_at=last_synced_at,
             blocked_events=len(blocks),
             blocked_entry_id=blocks[0][0] if blocks else None,
-            blocked_rule_id=blocks[0][1] if blocks else None,
+            # Name the rule only when every open block belongs to it.
+            blocked_rule_id=blocks[0][1] if len({rule for _, rule in blocks}) == 1 else None,
         )
 
     @app.get(
@@ -1105,8 +1106,9 @@ def _moved_from(
         return None
     if previous["event_starts"] is None:
         return None
+    # Only a new start is a move; a change of end alone is a change of length.
     before = (previous["event_starts"], previous["event_ends"], bool(previous["event_all_day"]))
-    if before == (own["event_starts"], own["event_ends"], bool(own["event_all_day"])):
+    if before[0] == own["event_starts"] and before[2] == bool(own["event_all_day"]):
         return None
     return RecordedTimeResponse(
         all_day=before[2], starts=previous["event_starts"], ends=previous["event_ends"]
