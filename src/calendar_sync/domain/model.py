@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -409,6 +410,7 @@ class SyncReason(StrEnum):
     DESTINATION_OCCURRENCE_MISSING = "destination_occurrence_missing"
     SERIES_WITHOUT_OCCURRENCES = "series_without_occurrences"
     SERIES_WITHOUT_OCCURRENCES_REMOVED = "series_without_occurrences_removed"
+    PROJECTION_UNMAPPED = "projection_unmapped"
 
 
 @dataclass(frozen=True, slots=True)
@@ -419,16 +421,11 @@ class SyncDecision:
 
 
 class DriftKind(StrEnum):
-    """What a Full Reconciliation found for one mapping.
-
-    MAPPING_CONFLICT is a Conflict, not Drift: the mapping cannot be proven against its rule or
-    source. It is reported beside drift under its original payload value.
-    """
+    """How a mapped projection differs from what its source calls for; content, never identity."""
 
     MISSING = "missing"
     UNEXPECTED = "unexpected"
     INCORRECT_PROJECTION = "incorrect_projection"
-    MAPPING_CONFLICT = "mapping_inconsistency"
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,6 +434,28 @@ class ReconciliationDrift:
     source: EventRef | None
     destination: EventRef | None
     detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class ReconciliationConflict:
+    """A mapping or managed event whose identity a Full Reconciliation cannot prove.
+
+    Like a Sync Run's, it blocks writes to that one event, so it is never counted as drift.
+    """
+
+    reason: SyncReason
+    source: EventRef | None
+    destination: EventRef | None
+    detail: str
+
+
+class NoProjectionExpected(StrEnum):
+    """Why a mapped source that could be read calls for no projection."""
+
+    INELIGIBLE = "ineligible"
+    """Cancelled, or excluded by the rule's policy: a projection left behind is drift."""
+    MANAGED_SOURCE = "managed_source"
+    """The source is itself a Managed Projection, so the mapping is a Conflict."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -454,7 +473,16 @@ class ReconciliationReport:
     rule_id: SyncRuleId
     checked_mappings: int
     drift: tuple[ReconciliationDrift, ...]
+    conflicts: tuple[ReconciliationConflict, ...] = ()
 
     @property
     def is_consistent(self) -> bool:
-        return not self.drift
+        return not self.drift and not self.conflicts
+
+    def excluding(self, sources: AbstractSet[EventRef]) -> ReconciliationReport:
+        """This report without findings about `sources`, which were already reported elsewhere."""
+        return replace(
+            self,
+            drift=tuple(item for item in self.drift if item.source not in sources),
+            conflicts=tuple(item for item in self.conflicts if item.source not in sources),
+        )

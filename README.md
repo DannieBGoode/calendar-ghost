@@ -20,7 +20,7 @@ machine and creates only the destination representation selected by each rule.
 - **Directional by design:** one rule observes exactly one source calendar and manages exactly one
   destination calendar.
 - **Source authoritative:** destination edits, missing projections, and source cancellations are
-  repaired during synchronization and reconciliation.
+  repaired during synchronization; reconciliation reports anything still different.
 - **Privacy first:** new rules default to a `Busy` projection. Detail-copying remains opt-in and
   never copies attendees, organizer identity, conferencing data, attachments, or invitations.
 - **Cross-account:** source and destination calendars may belong to different Google identities.
@@ -36,7 +36,7 @@ machine and creates only the destination representation selected by each rule.
 | Events | Timed events, all-day events, recurring series, single-occurrence changes, and cancellations |
 | Policies | Busy-only or detail-copy projection; include or exclude all-day events per rule |
 | Scheduling | Source and destination incremental polling every five minutes plus **Sync Now** |
-| Reconciliation | Daily full pass plus **Reconcile Now**, with expected-versus-actual drift reporting |
+| Reconciliation | Daily full pass plus **Reconcile Now**, which reports remaining drift and records conflicts as blocked |
 | Loop prevention | Private managed-origin metadata prevents projections from becoming sources |
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Authenticated Activity view, deduplication, optional SMTP, and optional webhook delivery |

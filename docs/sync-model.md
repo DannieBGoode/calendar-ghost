@@ -182,8 +182,36 @@ Three consecutive scheduled failures open one deduplicated incident.
 
 ## Reconciliation
 
-Touched mappings reconcile before a run completes. A Full Reconciliation runs daily and through Reconcile Now. It derives expected projections from current sources, fetches managed destination state independently, and reports missing, unexpected, incorrect, or inconsistent mappings. Drift repairs automatically; an inconsistent mapping, one outside the rule's relationship or whose source is unavailable, is a Conflict rather than Drift. A conflict blocks writes to that one event and leaves the destination unchanged while the rest of the rule keeps synchronizing; the daily full pass decides the event again, and a block still there opens one `blocked:{rule}` Incident. It persists only when the event was already blocked before the pass began and the pass's own run blocked it again, so a retried attempt or a Sync Now interleaved with the pass is not earlier evidence, which a later daily pass without persisting blocks resolves. A rule's open blocks are those recorded since its latest successful daily pass began (SQLite migration 11); an older block that pass did not repeat, such as one of an occurrence whose series was deleted or of an event that ended before the sync window, is no longer open. Reconcile Now, and a scheduled run that lists both calendars in full because of a reprojection or a rejected cursor, count as that day's pass. Incident notifications are sent after the rule lock is released.
+Touched mappings reconcile before a run completes. The scheduler's daily full pass is a Sync Run
+that lists both calendars from the rolling window start; it repairs the drift it reaches and decides
+every blocked event in the window again. A conflict blocks writes to that one event and leaves the
+destination unchanged while the rest of the rule keeps synchronizing; a block still there at the
+daily pass opens one `blocked:{rule}` Incident. It persists only when the event was already blocked before the pass began and the pass's own run blocked it again, so a retried attempt or a Sync Now interleaved with the pass is not earlier evidence, which a later daily pass without persisting blocks resolves. A rule's open blocks are those recorded since its latest successful daily pass began (SQLite migration 11); an older block that pass did not repeat, such as one of an occurrence whose series was deleted or of an event that ended before the sync window, is no longer open. Reconcile Now, and a scheduled run that lists both calendars in full because of a reprojection or a rejected cursor, count as that day's pass. Incident notifications are sent after the rule lock is released.
+
+Reconcile Now runs that full pass and then a Full Reconciliation. The reconciliation is read-only:
+it derives expected projections from current sources for every mapping, of any age, fetches this
+rule's managed destination events independently, and reports what still differs. It never writes
+to Google, so the Web UI never calls what it found repaired.
+
+| Finding | Kind | Why it can remain after the full pass |
+| --- | --- | --- |
+| Projection missing | Drift `missing` | The event ended before the sync window, so the pass did not list it; or it was deleted after the pass |
+| Projection differs from its source | Drift `incorrect_projection` | As above, or either calendar changed after the pass |
+| Projection left for a source that is cancelled or excluded | Drift `unexpected` | The source's cancellation was not reported to any run that could reach it |
+| Mapping outside the rule's relationship, or whose source is itself a managed projection | Conflict `mapping_inconsistent` | No run writes through a mapping it cannot prove |
+| Mapping whose source cannot be read | Conflict `source_unverifiable` | An unverifiable source never authorizes deletion |
+| Managed event with this rule's marker but no mapping | Conflict `projection_unmapped` | No mapping proves ownership, so nothing changes or deletes it |
+
+Drift within the sync window that changed during the check is repaired by the next Sync Run. Drift
+in an event that ended before the window is not repaired by any run until a Material Rule Change
+reprojects it. Each Conflict the reconciliation finds appends one blocked Audit Entry with its
+reason code under the full pass's run, so Activity lists it under **Blocked**, and it counts as
+earlier evidence for the next daily pass's `blocked:{rule}` check. A finding about an event the full
+pass already blocked is left out, because that block is already recorded and counted. The Reconcile
+Now response keeps `conflicts` as the full pass's blocked count and lists the reconciliation's own
+in `reconciliation_conflicts`; the stored reconciliation outcome counts drift in `drift` and those
+conflicts in `conflicts` ([ADR 0015](adr/0015-reconciliation-reports-conflicts-apart-from-drift.md)).
 
 For recurring projections, Full Reconciliation verifies each series and every Occurrence Mapping
 without expanding the series, and reports a managed exception of a mapped series that has no
-Occurrence Mapping as an incorrect projection rather than an unexpected event.
+Occurrence Mapping as an incorrect projection rather than a `projection_unmapped` Conflict.

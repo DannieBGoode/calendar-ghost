@@ -106,7 +106,7 @@ const REASONS: Record<string, ReasonCopy> = {
     trigger: "Couldn't be read in {source}",
     effect: "blocked, {destination} left unchanged",
     explanation:
-      "The event in {destination} was edited, but its source event could not be read to put it back, so it was left as it is rather than risk deleting it.",
+      "Its source event in {source} could not be read, so the event in {destination} was left as it is rather than risk deleting it.",
     next: "If this repeats, check in Settings that the Google account for {source} is still connected.",
   },
   occurrence_changed: {
@@ -168,6 +168,13 @@ const REASONS: Record<string, ReasonCopy> = {
     effect: "removed from {destination}",
     explanation:
       "Every occurrence of this recurring event is cancelled in {source}, or is an all-day occurrence this rule leaves out, so the series left from an interrupted run was removed.",
+  },
+  projection_unmapped: {
+    trigger: "Marked as written by this rule in {destination}, but not linked to an event in {source}",
+    effect: "blocked, left in {destination}",
+    explanation:
+      "The event in {destination} carries this rule's marker, but Calendar Sync has no record of writing it, so it will not change or delete it. Reconcile now reports it again while it is there.",
+    next: "If you don't want it in {destination}, delete it there yourself.",
   },
 }
 
@@ -407,6 +414,7 @@ const EITHER_SCOPE_REASONS = new Set([
   "destination_identity_inconsistent",
   "destination_ownership_inconsistent",
   "source_unverifiable",
+  "projection_unmapped",
 ])
 
 function eventScope(reason: string | null | undefined, recurring: boolean): EventScope {

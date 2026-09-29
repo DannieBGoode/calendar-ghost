@@ -49,8 +49,10 @@ from calendar_sync.domain.model import (
     EventMappingId,
     EventRef,
     EventStatus,
+    ManagedOrigin,
     ProjectionFingerprint,
     ProjectionHandling,
+    ReconciliationReport,
     Recurrence,
     SyncReason,
     SyncRule,
@@ -61,8 +63,10 @@ from calendar_sync.domain.model import (
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
+    ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_calendar import FakeCalendars, FixedClock
@@ -1093,11 +1097,7 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
             synchronize=cast(ExecuteSyncRule, Mock(execute=full_pass)),
             reconcile=cast(
                 ReconcileSyncRule,
-                Mock(
-                    execute=Mock(
-                        return_value=Mock(is_consistent=True, checked_mappings=0, drift=[])
-                    )
-                ),
+                Mock(execute=Mock(return_value=ReconciliationReport(SyncRuleId("rule-1"), 0, ()))),
             ),
         ),
     )
@@ -1111,6 +1111,74 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
     assert incidents[0]["summary"].startswith("1 event could not be synced")
 
 
+def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_blocked(
+    tmp_path: Path,
+) -> None:
+    container, adapters = _installation(Settings(tmp_path / "test.db"))
+    with adapters.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+    calendars = FakeCalendars()
+    calendars.put(event())
+    fingerprinter = ProjectionFingerprinter()
+    synchronize = ExecuteSyncRule(
+        adapters.unit_of_work,
+        calendars,
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        FixedClock(),
+        UuidRunIdGenerator(),
+    )
+    synchronize.execute(rule().id)
+    # The source is gone for good, so the full pass blocks its projection; the check that
+    # follows finds an unmapped projection only it can see.
+    del calendars.events[event().reference]
+    calendars.put(
+        replace(
+            event("orphan", calendar=rule().destination),
+            managed_origin=ManagedOrigin(rule().id, EventRef(rule().source, EventId("gone"))),
+        )
+    )
+    reconcile = ReconcileSyncRule(
+        adapters.unit_of_work,
+        calendars,
+        EventProjector(),
+        ReconciliationService(fingerprinter),
+        FixedClock(),
+        UuidRunIdGenerator(),
+    )
+    container = replace(container, reconcile_now=ReconcileNow(synchronize, reconcile))
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        body = client.post("/api/v1/rules/rule-1/reconcile").json()
+        blocked = client.get(
+            "/api/v1/audit-entries", params={"category": "blocked", "rule_id": "rule-1"}
+        ).json()
+        outcome = client.get("/api/v1/rules/rule-1").json()["last_reconciliation"]
+
+    assert body == {
+        "rule_id": "rule-1",
+        "created": 0,
+        "updated": 0,
+        "deleted": 0,
+        "ignored": 0,
+        "conflicts": 1,
+        "consistent": False,
+        "checked_mappings": 1,
+        "drift": [],
+        "reconciliation_conflicts": [
+            {"reason": "projection_unmapped", "detail": "managed provider event has no mapping"}
+        ],
+    }
+    assert sorted((entry["reason"], entry["source_event_id"]) for entry in blocked) == [
+        ("projection_unmapped", "gone"),
+        ("source_unverifiable", "source-event"),
+    ]
+    assert len({entry["run_id"] for entry in blocked}) == 1
+    assert (outcome["drift"], outcome["conflicts"]) == (0, 1)
+
+
 @pytest.mark.parametrize("failing", ["audit_floor", "record_full_pass"])
 def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
     tmp_path: Path, failing: str
@@ -1122,7 +1190,7 @@ def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.commit()
     execute = Mock(return_value=SyncRunResult(SyncRuleId("rule-1"), run_id="run-1"))
-    reconcile = Mock(return_value=Mock(is_consistent=True, checked_mappings=0, drift=[]))
+    reconcile = Mock(return_value=ReconciliationReport(SyncRuleId("rule-1"), 0, ()))
     health = Mock(audit_floor=Mock(return_value=0), record_full_pass=Mock())
     getattr(health, failing).side_effect = sqlite3.OperationalError("database is locked")
     container = replace(

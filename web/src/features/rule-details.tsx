@@ -328,7 +328,7 @@ export function RuleDetailsView({
           />
           <OutcomeFact
             label="Last reconciliation"
-            explanation={`Checks every event this rule wrote to ${destinationName} and repairs any edited or deleted there. Runs once a day.`}
+            explanation={`Compares every event this rule wrote to ${destinationName} with its source and reports any that differ, without changing them. Runs when you choose Reconcile now.`}
             outcome={detail.last_reconciliation}
             kind="reconciliation"
             now={now}

@@ -62,6 +62,8 @@ class SyncRunResult:
     """Identifies this run's Audit Entries."""
     listed_in_full: bool = False
     """Both calendars were listed in full, so every event in the window was decided again."""
+    blocked: frozenset[EventRef] = frozenset()
+    """Source events and occurrences this run blocked, each already recorded as an Audit Entry."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,6 +159,7 @@ class ExecuteSyncRule:
             conflicts=counts[SyncAction.CONFLICT],
             run_id=run.run_id,
             listed_in_full=feeds.listed_in_full,
+            blocked=frozenset(run.blocked),
         )
 
     def _begin(
@@ -435,7 +438,7 @@ class ExecuteSyncRule:
     def _record_unverifiable(
         self, run: SyncRunContext, source: EventRef, destination: EventRef | None
     ) -> None:
-        run.counts[SyncAction.CONFLICT] += 1
+        run.count(SyncAction.CONFLICT, source)
         run.uow.audit.append(
             AuditEntry(
                 occurred_at=self.clock.now(),
@@ -549,7 +552,7 @@ class ExecuteSyncRule:
             decision = self.decisions.decide(
                 rule, source_event, mapping, actual, has_live_occurrences=False
             )
-        run.counts[decision.action] += 1
+        run.count(decision.action, source_event.reference)
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action
         )

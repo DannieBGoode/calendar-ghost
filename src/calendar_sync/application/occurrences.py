@@ -120,7 +120,7 @@ class SynchronizeOccurrences:
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
-            run.counts[decision.action] += 1
+            run.count(decision.action, occurrence.source_ref or source_series.reference)
             destination_ref = self._write(
                 run,
                 series_mapping,

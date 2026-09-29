@@ -153,7 +153,10 @@ export type SyncResult = {
   conflicts: number
   consistent?: boolean
   checked_mappings?: number
+  /** Reconcile Now only: what still differs after its sync. Reported, never repaired. */
   drift?: { kind: string; detail: string }[]
+  /** Reconcile Now only: blocks the check itself recorded, beside the sync's `conflicts`. */
+  reconciliation_conflicts?: { reason: string; detail: string }[]
 }
 export type ActivityCategory = "changed" | "unchanged" | "skipped" | "blocked"
 export type AuditEntry = {
