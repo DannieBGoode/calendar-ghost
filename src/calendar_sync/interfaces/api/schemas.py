@@ -63,9 +63,18 @@ class PreviewSummaryResponse(BaseModel):
     occurrence_changes: int
 
 
+class RuleWorkResponse(BaseModel):
+    kind: Literal["preview", "sync", "reconciliation", "removal"]
+    started_at: str
+    handling: Literal["delete", "detach"] | None
+    total: int | None
+    done: int
+
+
 class RuleSummaryResponse(RuleResponse):
     last_sync: RunOutcomeResponse | None
     latest_preview: PreviewSummaryResponse | None
+    running: RuleWorkResponse | None
 
 
 class RuleDetailResponse(RuleResponse):
@@ -74,6 +83,7 @@ class RuleDetailResponse(RuleResponse):
     last_sync: RunOutcomeResponse | None
     last_reconciliation: RunOutcomeResponse | None
     latest_preview: PreviewSummaryResponse | None
+    running: RuleWorkResponse | None
 
 
 class UpdateRulePolicyRequest(BaseModel):

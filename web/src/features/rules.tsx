@@ -5,12 +5,13 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import {
-  EnableReview,
   LiveAnnouncement,
+  PreviewReadyNote,
   RuleCommandMenu,
   RuleFeedbackNote,
   RuleNextAction,
   RuleStatusBadge,
+  RuleWorkNote,
 } from "@/components/rule-commands"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Button } from "@/components/ui/button"
@@ -20,6 +21,7 @@ import { api, type ConnectedAccount, type DiscoveredCalendar, type Rule } from "
 import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
+import { busyCommand, ruleWork, workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
 import { useRuleCommands } from "@/lib/use-rule-commands"
 import { useRuleEndpoints } from "@/lib/use-rule-endpoints"
@@ -39,10 +41,14 @@ export function RulesView({
   onOpenRule: OpenRule
 }) {
   const now = useNow()
-  const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules, refetchInterval: 60_000 })
+  const rules = useQuery({
+    queryKey: ["rules"],
+    queryFn: api.rules,
+    refetchInterval: (query) => workRefreshInterval(query.state.data, 60_000),
+  })
   const { accounts, endpoints } = useRuleEndpoints(rules.data ?? [])
   const commands = useRuleCommands()
-  const removingIds = useRemovingRuleIds()
+  const removingIds = useRemovingRuleIds(rules.data)
   const [builderChoice, setBuilderChoice] = useState<boolean | null>(null)
   const [noticeDismissed, setNoticeDismissed] = useState(false)
   const createButton = useRef<HTMLButtonElement>(null)
@@ -157,9 +163,17 @@ export function RulesView({
           {rules.data.map((rule) => {
             const { source, destination, disconnected } = endpoints(rule)
             const stopped = rule.state === "degraded" || disconnected.length > 0
-            const pending = commands.pending[rule.id]
-            const state = removingIds.has(rule.id) ? "removing" : rule.state
+            const removing = removingIds.has(rule.id)
+            const work = ruleWork({
+              pending: commands.pending[rule.id],
+              pendingSince: commands.pendingSince[rule.id],
+              running: rule.running,
+              removing,
+            })
+            const pending = busyCommand(commands.pending[rule.id], work)
+            const state = removing ? "removing" : rule.state
             const headingId = `rule-${rule.id}-name`
+            const previewId = `rule-${rule.id}-preview`
             const run = (command: Parameters<typeof commands.run>[1]) =>
               void commands.run(rule.id, command, destination.name, () => rows.current.get(rule.id) ?? null)
             return (
@@ -168,6 +182,7 @@ export function RulesView({
                 key={rule.id}
                 tabIndex={-1}
                 aria-labelledby={headingId}
+                aria-busy={work ? true : undefined}
                 ref={(element) => {
                   if (element) rows.current.set(rule.id, element)
                   else rows.current.delete(rule.id)
@@ -205,12 +220,12 @@ export function RulesView({
                     </p>
                   </div>
                   <div className="rule-actions">
-                    <RuleStatusBadge state={state} stopped={stopped} />
+                    <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} />
                     <RuleNextAction
                       state={state}
                       disconnected={disconnected.length > 0}
                       pending={pending}
-                      describedBy={headingId}
+                      describedBy={state === "dry_run_validated" ? `${headingId} ${previewId}` : headingId}
                       onRun={run}
                       onViewChange={onViewChange}
                     />
@@ -251,18 +266,14 @@ export function RulesView({
                       : "Synchronization stopped to protect your calendars. Nothing was lost; preview the rule to restart it."}
                   </p>
                 )}
-                {rule.state === "dry_run_validated" && (
-                  <EnableReview
-                    preview={rule.latest_preview}
-                    describedBy={headingId}
-                    source={source.name}
-                    destination={destination.name}
-                    privacy={rule.privacy_policy}
-                    pending={pending}
-                    onEnable={() => run("enable")}
-                  />
+                {state === "dry_run_validated" && (
+                  <PreviewReadyNote id={previewId} preview={rule.latest_preview} destination={destination.name} />
                 )}
-                <RuleFeedbackNote pending={pending} feedback={commands.feedback[rule.id]} />
+                {work ? (
+                  <RuleWorkNote work={work} source={source.name} destination={destination.name} />
+                ) : (
+                  <RuleFeedbackNote feedback={commands.feedback[rule.id]} />
+                )}
               </li>
             )
           })}

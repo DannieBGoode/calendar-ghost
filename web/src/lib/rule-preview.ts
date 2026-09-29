@@ -14,3 +14,4 @@ export function previewSummary(preview: PreviewCounts): string {
   ].filter(Boolean)
   return recurring.length ? `${base}, including ${recurring.join(" and ")}.` : `${base}.`
 }
+

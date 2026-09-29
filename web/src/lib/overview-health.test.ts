@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { Dashboard } from "./api"
-import { overviewHealth, withoutRunningRemovals } from "./overview-health"
+import { overviewHealth, overviewRules, withoutRunningRemovals } from "./overview-health"
 
 const now = Date.parse("2026-09-28T12:00:00Z")
 const healthy: Dashboard = {
@@ -122,5 +122,25 @@ describe("withoutRunningRemovals", () => {
   it("leaves a removal the dashboard has not seen start alone", () => {
     const shown = withoutRunningRemovals(healthy, [{ id: "rule-a", state: "enabled" }], removing)
     expect(shown).toBe(healthy)
+  })
+})
+
+describe("overviewRules", () => {
+  const rule = (id: string, state: string, running: "preview" | null = null) => ({
+    id,
+    state,
+    running: running && { kind: running, started_at: "2026-09-28T12:00:00Z", handling: null, total: null, done: 0 },
+  })
+
+  it("keeps working rules within the limit ahead of idle enabled ones", () => {
+    const rules = [
+      rule("a", "enabled"),
+      rule("b", "enabled"),
+      rule("c", "draft"),
+      rule("d", "paused", "preview"),
+      rule("e", "disabled"),
+    ]
+    expect(overviewRules(rules, new Set(["e"]), 3).map((item) => item.id)).toEqual(["d", "e", "a"])
+    expect(overviewRules(rules, new Set(), 5).map((item) => item.id)).toEqual(["d", "a", "b", "c", "e"])
   })
 })

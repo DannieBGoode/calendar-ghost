@@ -8,6 +8,7 @@ import {
   removalConnectionLost,
   removalErrorMessage,
   removalProgress,
+  reportedRemoval,
 } from "@/lib/rule-removal"
 
 describe("rule removal progress", () => {
@@ -19,6 +20,22 @@ describe("rule removal progress", () => {
     expect(removalProgress({ handling: "delete", total: 1 }, 1, "Family").label).toBe(
       "Handled 0 of 1 projection in Family",
     )
+  })
+
+  it("prefers the service's own count, which also covers a reload", () => {
+    expect(removalProgress({ handling: "delete", total: 10, done: 4 }, 10, "Family").done).toBe(4)
+    expect(
+      reportedRemoval(
+        { kind: "removal", started_at: "2026-09-29T09:00:00Z", handling: "delete", total: 10, done: 4 },
+        7,
+      ),
+    ).toEqual({ handling: "delete", total: 10, done: 4, startedAt: Date.parse("2026-09-29T09:00:00Z") })
+    expect(
+      reportedRemoval({ kind: "removal", started_at: "2026-09-29T09:00:00Z", handling: null, total: null, done: 0 }, 7),
+    ).toMatchObject({ handling: "delete", total: 7, done: undefined })
+    expect(
+      reportedRemoval({ kind: "sync", started_at: "2026-09-29T09:00:00Z", handling: null, total: null, done: 0 }, 7),
+    ).toBeUndefined()
   })
 
   it("clamps counts from a stale or newer mapping count", () => {
@@ -70,12 +87,17 @@ describe("rule removal presentation", () => {
   it("never reports a running removal as incomplete", () => {
     expect(detailsSource).toContain('const interrupted = detail.state === "disabled" && !active')
     expect(detailsSource).toContain('const displayState = removal ? "removing" : detail.state')
-    expect(detailsSource).toContain("<RuleStatusBadge state={displayState}")
+    expect(detailsSource).toContain("<RuleStatusBadge\n            state={displayState}")
+    // A removal started before a reload is still running, not incomplete.
+    expect(detailsSource).toContain("reportedRemoval(detail.running, detail.mapping_count) ?? sessionRemoval")
   })
 
   it("refreshes quickly while removing and keeps the page when the rule disappears", () => {
-    expect(detailsSource).toContain("refetchInterval: removal ? REMOVAL_REFRESH_MS : 60_000")
-    expect(detailsSource).toContain("(rule.error && !removal)")
+    expect(detailsSource).toContain(
+      "sessionRemoval ? REMOVAL_REFRESH_MS : query.state.data?.running ? WORK_REFRESH_MS : 60_000",
+    )
+    expect(detailsSource).toContain("(rule.error && !sessionRemoval)")
+    expect(detailsSource).toContain('const removed = missing && rule.data?.running?.kind === "removal"')
   })
 
   it("shares the running removal through the mutation cache and follows it with focus", () => {

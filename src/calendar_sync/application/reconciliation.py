@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
-from calendar_sync.application.locking import RuleLocks
+from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     CalendarProvider,
     Clock,
@@ -39,7 +39,8 @@ class ReconcileSyncRule:
     locks: RuleLocks = field(default_factory=RuleLocks)
 
     def execute(self, rule_id: SyncRuleId) -> ReconciliationReport:
-        with self.locks.for_rule(rule_id):
+        work = RuleWork(RuleWorkKind.RECONCILIATION, self.clock.now())
+        with self.locks.for_rule(rule_id), self.locks.working(rule_id, work):
             return self._execute_serialized(rule_id)
 
     def _execute_serialized(self, rule_id: SyncRuleId) -> ReconciliationReport:

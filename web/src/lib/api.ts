@@ -75,7 +75,20 @@ export type PreviewSummary = {
   recurring_series: number
   occurrence_changes: number
 }
-export type RuleSummary = Rule & { last_sync: RunOutcome | null; latest_preview: PreviewSummary | null }
+/** Work the service is running for a rule right now; it survives a page reload. */
+export type RunningWork = {
+  kind: "preview" | "sync" | "reconciliation" | "removal"
+  started_at: string
+  handling: ProjectionHandling | null
+  /** Projections a removal is handling, once it has counted them. */
+  total: number | null
+  done: number
+}
+export type RuleSummary = Rule & {
+  last_sync: RunOutcome | null
+  latest_preview: PreviewSummary | null
+  running: RunningWork | null
+}
 /** One written event; an identical repair repeated among recent entries is counted on it. */
 export type RecentChange = {
   entry: AuditEntry
@@ -88,6 +101,7 @@ export type RuleDetail = Rule & {
   last_sync: RunOutcome | null
   last_reconciliation: RunOutcome | null
   latest_preview: PreviewSummary | null
+  running: RunningWork | null
 }
 export type RulePolicyPayload = {
   privacy_policy: "busy_only" | "copy_details"
@@ -175,6 +189,8 @@ export type ActivityFilters = {
   runId?: string
   categories?: ActivityCategory[]
   before?: number
+  /** Matches recorded event titles, ignoring case. */
+  query?: string
 }
 export type EventSnapshot = {
   found: boolean
@@ -288,12 +304,13 @@ export const api = {
     request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
       method: "POST",
     }),
-  activity: ({ ruleId, runId, categories, before }: ActivityFilters = {}) => {
+  activity: ({ ruleId, runId, categories, before, query }: ActivityFilters = {}) => {
     const params = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) })
     if (ruleId) params.set("rule_id", ruleId)
     if (runId) params.set("run_id", runId)
     for (const category of categories ?? []) params.append("category", category)
     if (before) params.set("before", String(before))
+    if (query?.trim()) params.set("q", query.trim())
     return request<AuditEntry[]>(`/api/v1/audit-entries?${params}`)
   },
   noChangeRuns: ({ ruleId, after }: { ruleId?: string; after: number }) => {
