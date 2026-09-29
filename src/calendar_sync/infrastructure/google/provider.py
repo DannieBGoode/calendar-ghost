@@ -187,7 +187,8 @@ class GoogleCalendarProvider:
         destination: EventRef,
         source: EventRef,
         rule_id: SyncRuleId,
-        operation_key: str,
+        # Deleting is idempotent, so it needs no Operation Key.
+        operation_key: str,  # noqa: ARG002
     ) -> None:
         existing = self.get_event(destination)
         if existing is None or existing.status is EventStatus.CANCELLED:
@@ -396,7 +397,8 @@ class GoogleCalendarProvider:
         original_start: OccurrenceStart,
         source_series: EventRef,
         rule_id: SyncRuleId,
-        operation_key: str,
+        # Cancelling is idempotent, so it needs no Operation Key.
+        operation_key: str,  # noqa: ARG002
     ) -> None:
         instance = self._owned_occurrence(
             destination_series, original_start, source_series, rule_id

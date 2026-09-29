@@ -36,11 +36,15 @@ def test_work_ends_when_it_fails_and_snapshots_do_not_change_it() -> None:
     locks = RuleLocks()
     work = RuleWork(RuleWorkKind.REMOVAL, STARTED, total=3)
 
-    with pytest.raises(RuntimeError), locks.working(RULE, work):
-        snapshot = locks.current_work(RULE)
-        assert snapshot is not None
-        snapshot.done = 2
-        assert work.done == 0
-        raise RuntimeError("provider failed")
+    def fail_after_changing_a_snapshot() -> None:
+        with locks.working(RULE, work):
+            snapshot = locks.current_work(RULE)
+            assert snapshot is not None
+            snapshot.done = 2
+            assert work.done == 0
+            raise RuntimeError("provider failed")
+
+    with pytest.raises(RuntimeError):
+        fail_after_changing_a_snapshot()
 
     assert locks.current_work(RULE) is None

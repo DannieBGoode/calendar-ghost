@@ -95,7 +95,8 @@ def test_exception_without_its_series_in_the_batch_uses_the_existing_series_mapp
     sync_use_case(factory, calendars).execute(rule().id)
 
     written = calendars.get_occurrence(destination, week_start(2))
-    assert written is not None and written.time == moved.time
+    assert written is not None
+    assert written.time == moved.time
 
 
 def test_exception_of_an_unmapped_series_creates_the_series_first() -> None:
@@ -214,8 +215,10 @@ def test_restoring_one_occurrence_of_a_dormant_series_keeps_the_others_cancelled
     assert calendars.events[destination].status is EventStatus.CONFIRMED
     kept = calendars.get_occurrence(destination, week_start(0))
     back = calendars.get_occurrence(destination, week_start(1))
-    assert kept is not None and kept.status is EventStatus.CANCELLED
-    assert back is not None and back.status is EventStatus.CONFIRMED
+    assert kept is not None
+    assert kept.status is EventStatus.CANCELLED
+    assert back is not None
+    assert back.status is EventStatus.CONFIRMED
     assert result.conflicts == 0
 
 
@@ -451,7 +454,9 @@ def test_reverse_rule_ignores_managed_series_and_their_metadata_less_cancellatio
     result = sync_use_case(reverse_factory, calendars).execute(reverse.id)
 
     assert calendars.writes == before
-    assert result.created == 0 and result.updated == 0 and result.deleted == 0
+    assert result.created == 0
+    assert result.updated == 0
+    assert result.deleted == 0
     assert reverse_factory.state.mappings == {}
 
 
@@ -665,7 +670,8 @@ def test_all_day_exclusion_deletes_all_day_series_and_cancels_all_day_exceptions
 
     assert all_day_destination not in calendars.events
     excluded = calendars.get_occurrence(timed_destination, week_start(1))
-    assert excluded is not None and excluded.status is EventStatus.CANCELLED
+    assert excluded is not None
+    assert excluded.status is EventStatus.CANCELLED
     assert factory.state.rules[rule().id].reprojection_required is False
 
 
@@ -685,7 +691,8 @@ def test_unchanged_series_still_reverifies_exceptions_outside_the_window_on_poli
     sync_use_case(factory, calendars).execute(rule().id)
 
     cancelled = calendars.get_occurrence(destination, early)
-    assert cancelled is not None and cancelled.status is EventStatus.CANCELLED
+    assert cancelled is not None
+    assert cancelled.status is EventStatus.CANCELLED
     assert calendars.events[destination].status is EventStatus.CONFIRMED
 
 
@@ -704,12 +711,11 @@ def test_series_recreated_during_an_occurrence_repair_keeps_source_cancellations
     recreated = factory.state.mappings[(rule().id, series().reference)].destination
     assert recreated != destination
     cancelled = calendars.get_occurrence(recreated, week_start(1))
-    assert cancelled is not None and cancelled.status is EventStatus.CANCELLED
+    assert cancelled is not None
+    assert cancelled.status is EventStatus.CANCELLED
     moved = calendars.get_occurrence(recreated, week_start(2))
-    assert (
-        moved is not None
-        and moved.time == occurrence(series(), 2, moved_by=timedelta(hours=1)).time
-    )
+    assert moved is not None
+    assert moved.time == occurrence(series(), 2, moved_by=timedelta(hours=1)).time
 
 
 def test_occurrence_reverification_never_holds_the_database_write_lock(tmp_path: Path) -> None:

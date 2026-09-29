@@ -43,6 +43,8 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
 
 Use the exact terms defined in `CONTEXT.md`. In particular, do not use “sync pair,” “event copy,” or
 “conflict” when Directional Sync Rule, Event Projection, or Drift is the intended concept.
+`tests/test_ubiquitous_language.py` fails when code or documentation uses an avoided term that
+always names the wrong concept; extend its list when the glossary gains another.
 
 ## Architecture boundaries
 
@@ -72,6 +74,12 @@ web/ and interfaces/  ->  application/  ->  domain/
   SDK types into the application or domain.
 - Prefer explicit constructor injection and small protocols. Do not introduce a dependency-injection
   framework, repository framework, event bus, or microservice boundary.
+- `lint-imports` enforces these boundaries through the contracts in `pyproject.toml`. Its
+  `ignore_imports` entries are known debt in `interfaces/api/app.py` and the Google OAuth adapter.
+  Remove entries as that debt is paid; never add one to make a change pass.
+- Ruff bounds function complexity and argument count. Existing `# noqa: C901`, `PLR0912`,
+  `PLR0913`, and `PLR0915` markers are debt to shrink, not a pattern to copy: split new code
+  instead of suppressing the rule.
 
 ## Synchronization and persistence safety
 
@@ -140,6 +148,7 @@ Run the complete backend quality gate:
 .venv/bin/ruff format --check .
 .venv/bin/ruff check .
 .venv/bin/mypy
+.venv/bin/lint-imports
 .venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80
 ```
 

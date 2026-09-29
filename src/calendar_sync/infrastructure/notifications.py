@@ -52,13 +52,14 @@ class WebhookChannel(NotificationChannel):
                 "occurred_at": incident.occurred_at,
             }
         ).encode()
-        request = Request(
+        # The installation administrator configures this URL.
+        request = Request(  # noqa: S310
             self.url,
             data=body,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urlopen(request, timeout=10):
+        with urlopen(request, timeout=10):  # noqa: S310
             pass
 
 

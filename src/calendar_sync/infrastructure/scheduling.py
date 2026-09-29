@@ -293,7 +293,8 @@ class SyncScheduler:
                     self._health.record_failure(rule, failure)
                     return False
                 base_delay = failure.retry_after_seconds or 2**attempt
-                time.sleep(base_delay + random.uniform(0, 0.25))
+                # Backoff jitter, not a secret.
+                time.sleep(base_delay + random.uniform(0, 0.25))  # noqa: S311
             except Exception as error:
                 logger.exception("Unexpected synchronization failure for rule %s", rule.id.value)
                 self._health.record_failure(

@@ -255,7 +255,8 @@ def test_degrading_after_an_authorization_failure_waits_for_a_concurrent_rule_ch
     assert blocked
     with unit_of_work() as uow:
         degraded = uow.rules.get(rule().id)
-    assert degraded is not None and degraded.state is SyncRuleState.DEGRADED
+    assert degraded is not None
+    assert degraded.state is SyncRuleState.DEGRADED
 
 
 def test_blocked_removal_opens_one_incident_that_completed_removal_resolves(

@@ -393,7 +393,8 @@ def test_get_occurrence_resolves_through_instances_and_verifies_the_start() -> N
     resolved = provider.get_occurrence(SERIES, START)
 
     assert resolved is not None
-    assert resolved.occurrence is not None and resolved.occurrence.original_start == START
+    assert resolved.occurrence is not None
+    assert resolved.occurrence.original_start == START
     events_api.instances.assert_called_once_with(
         calendarId="work-calendar",
         eventId="projection-1",
@@ -421,7 +422,8 @@ def test_get_occurrence_finds_a_moved_occurrence_that_a_one_result_page_hides() 
     resolved = provider.get_occurrence(SERIES, START)
 
     assert resolved is not None
-    assert resolved.occurrence is not None and resolved.occurrence.original_start == START
+    assert resolved.occurrence is not None
+    assert resolved.occurrence.original_start == START
 
 
 def test_get_occurrence_reads_past_empty_pages_before_reporting_absence() -> None:

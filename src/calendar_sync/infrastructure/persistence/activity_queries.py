@@ -38,6 +38,7 @@ def open_blocks(
     # interleaved after it can neither hide nor supply the named run's verdict.
     same_run = "AND later.run_id = :run" if run_id is not None else ""
     # Rule Removal conflicts belong to a rule that no longer exists, so they are not blocks here.
+    # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
     conditions = [
         "a.rule_id = :rule",
         "a.id > :floor",
@@ -47,29 +48,31 @@ def open_blocks(
             SELECT 1 FROM audit_entries later
             WHERE later.rule_id = a.rule_id AND later.source_event_id = a.source_event_id
                 AND later.id > a.id {same_run}
-        )""",
+        )""",  # noqa: S608
     ]
     if run_id is not None:
         conditions.append("a.run_id = :run")
     if persisting:
+        # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
         conditions.append(
             f"""(
                 SELECT {_BLOCK.format(t="earlier")} FROM audit_entries earlier
                 WHERE earlier.rule_id = a.rule_id AND earlier.source_event_id = a.source_event_id
                     AND earlier.id <= :floor
                 ORDER BY earlier.id DESC LIMIT 1
-            ) = 1"""
+            ) = 1"""  # noqa: S608
         )
     blocks: list[tuple[int, str]] = []
     for rule in rules:
         floor = after if after is not None else _checked_floor(connection, rule)
         blocks.extend(
             (int(row[0]), rule)
+            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
             for row in connection.execute(
                 f"""
                 SELECT a.id FROM audit_entries a INDEXED BY audit_entries_rule_id
                 WHERE {" AND ".join(conditions)}
-                """,
+                """,  # noqa: S608
                 {"rule": rule, "floor": floor, "run": run_id},
             )
         )

@@ -67,7 +67,7 @@ class PreviewSyncRule:
         with self.locks.working(rule_id, RuleWork(RuleWorkKind.PREVIEW, self.clock.now())):
             return self._execute(rule_id)
 
-    def _execute(self, rule_id: SyncRuleId) -> RulePreview:
+    def _execute(self, rule_id: SyncRuleId) -> RulePreview:  # noqa: C901
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
         if rule is None:

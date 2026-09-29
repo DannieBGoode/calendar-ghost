@@ -43,6 +43,7 @@ development only:
 .venv/bin/ruff format --check .
 .venv/bin/ruff check .
 .venv/bin/mypy
+.venv/bin/lint-imports
 .venv/bin/pytest --cov
 cd web && npm run typecheck && npm run lint && npm run test && npm run build
 ```
@@ -50,6 +51,10 @@ cd web && npm run typecheck && npm run lint && npm run test && npm run build
 Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a personal account into the repository.
 
 ## Architecture rules
+
+`lint-imports` checks the import boundaries below through the contracts in `pyproject.toml`, and
+`tests/test_ubiquitous_language.py` checks that code and documentation avoid the terms `CONTEXT.md`
+rules out.
 
 - Domain code cannot import application, infrastructure, interfaces, or bootstrap modules.
 - Application code cannot import concrete adapters.

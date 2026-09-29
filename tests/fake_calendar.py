@@ -194,7 +194,8 @@ class FakeCalendars:
                 start, start + (master.time.ends_at - master.time.starts_at)
             )
         else:
-            assert isinstance(master.time, AllDayRange) and not isinstance(start, datetime)
+            assert isinstance(master.time, AllDayRange)
+            assert not isinstance(start, datetime)
             time = AllDayRange(start, start + (master.time.ends_before - master.time.starts_on))
         return CalendarEvent(
             reference=reference,

@@ -142,7 +142,7 @@ _ACTIVITY_CATEGORY_SQL: dict[ActivityCategory, str] = {
 }
 
 
-def create_app(container: Container | None = None) -> FastAPI:
+def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PLR0915
     resolved = container or build_container()
 
     @asynccontextmanager
@@ -498,11 +498,12 @@ def create_app(container: Container | None = None) -> FastAPI:
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
             connection.create_function("search_fold", 1, _search_fold_column, deterministic=True)
+            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
             rows = connection.execute(
                 f"""
                 SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS}
                 FROM audit_entries {where} ORDER BY id DESC LIMIT ?
-                """,
+                """,  # noqa: S608
                 (*parameters, limit),
             ).fetchall()
             return _audit_entry_responses(connection, rows)
@@ -534,12 +535,13 @@ def create_app(container: Container | None = None) -> FastAPI:
             run_ids = [row[0] for row in recent]
             placeholders = ", ".join("?" for _ in run_ids)
             rows = (
+                # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
                 connection.execute(
                     f"""
                     SELECT run_id, rule_id, MAX(id), MAX(occurred_at), COUNT(*) FROM audit_entries
                     WHERE run_id IN ({placeholders}) AND {_ACTIVITY_CATEGORY_SQL["unchanged"]}
                     GROUP BY run_id ORDER BY MAX(id) DESC
-                    """,
+                    """,  # noqa: S608
                     run_ids,
                 ).fetchall()
                 if run_ids
@@ -560,8 +562,9 @@ def create_app(container: Container | None = None) -> FastAPI:
     def get_activity_entry(entry_id: int) -> AuditEntryResponse:
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
+            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
             row = connection.execute(
-                f"SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS}"
+                f"SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS}"  # noqa: S608
                 " FROM audit_entries WHERE id = ?",
                 (entry_id,),
             ).fetchone()
@@ -587,13 +590,14 @@ def create_app(container: Container | None = None) -> FastAPI:
             # repeated on every run never hides older changes; the scan stays bounded.
             before: int | None = None
             for _ in range(_RECENT_WRITE_PAGES):
+                # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
                 rows = connection.execute(
                     f"""
                     SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS} FROM audit_entries
                     WHERE action IN ({_WRITE_ACTIONS}) AND source_event_id IS NOT NULL
                         {"AND id < ?" if before is not None else ""}
                     ORDER BY id DESC LIMIT ?
-                    """,
+                    """,  # noqa: S608
                     (*([before] if before is not None else []), _RECENT_WRITE_PAGE_SIZE),
                 ).fetchall()
                 for row in rows:
@@ -1058,10 +1062,11 @@ def _recent_runs_sql(*, with_rule: bool) -> str:
         if with_rule
         else "audit_entries NOT INDEXED WHERE id > ?"
     )
+    # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
     return f"""
         SELECT run_id FROM {source} AND run_id IS NOT NULL
         GROUP BY run_id ORDER BY MAX(id) DESC LIMIT ?
-    """
+    """  # noqa: S608
 
 
 def _audit_entry_responses(
@@ -1073,6 +1078,7 @@ def _audit_entry_responses(
     if ids:
         previous = {
             row["entry_id"]: row
+            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
             for row in connection.execute(
                 f"""
                 SELECT a.id AS entry_id, p.event_title, p.event_starts, p.event_ends,
@@ -1084,7 +1090,7 @@ def _audit_entry_responses(
                     ORDER BY id DESC LIMIT 1
                 )
                 WHERE a.id IN ({", ".join("?" for _ in ids)})
-                """,
+                """,  # noqa: S608
                 ids,
             )
         }
@@ -1094,6 +1100,7 @@ def _audit_entry_responses(
     repeated = (
         {
             int(row[0])
+            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
             for row in connection.execute(
                 f"""
                 SELECT a.id FROM audit_entries a JOIN audit_entries p ON p.id = (
@@ -1108,7 +1115,7 @@ def _audit_entry_responses(
                     AND p.event_recurring = a.event_recurring AND p.event_all_day = a.event_all_day
                     AND p.event_starts IS a.event_starts AND p.event_ends IS a.event_ends
                     AND COALESCE(p.run_id, '') != COALESCE(a.run_id, '')
-                """,
+                """,  # noqa: S608
                 written,
             )
         }
@@ -1367,6 +1374,7 @@ def run() -> None:
     uvicorn.run(
         "calendar_sync.interfaces.api.app:create_app",
         factory=True,
-        host="0.0.0.0",
+        # The container publishes this port; Compose decides which host interface exposes it.
+        host="0.0.0.0",  # noqa: S104
         port=8000,
     )

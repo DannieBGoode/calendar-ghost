@@ -102,7 +102,7 @@ class SyncDecisionService:
         self._projector = projector
         self._fingerprinter = fingerprinter
 
-    def decide(
+    def decide(  # noqa: C901, PLR0912
         self,
         rule: SyncRule,
         source_event: CalendarEvent,
@@ -179,7 +179,7 @@ class SyncDecisionService:
         )
         return SyncDecision(SyncAction.UPDATE, reason, projection)
 
-    def decide_occurrence(
+    def decide_occurrence(  # noqa: C901, PLR0912, PLR0913
         self,
         rule: SyncRule,
         source_series: CalendarEvent,
@@ -325,7 +325,7 @@ class ReconciliationService:
     def __init__(self, fingerprinter: ProjectionFingerprinter) -> None:
         self._fingerprinter = fingerprinter
 
-    def reconcile(
+    def reconcile(  # noqa: C901
         self,
         rule: SyncRule,
         mappings: Iterable[EventMapping],

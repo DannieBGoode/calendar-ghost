@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx>=0.28,<1",
+  "import-linter>=2.15,<3",
   "mypy>=1.15,<2",
   "pytest>=8.3,<9",
   "pytest-cov>=6,<8",
@@ -44,10 +45,93 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+select = [
+  "E", "F", "I", "UP", "B", "SIM", "RUF",
+  "C90", "PLR", "S", "TID", "PT", "ARG", "PERF",
+]
+ignore = [
+  # Magic-value comparisons flag HTTP statuses and test literals rather than hidden constants.
+  "PLR2004",
+  # Decisions are written as guard clauses that return as soon as the outcome is known.
+  "PLR0911",
+  # Keyword-only parameters are a style choice; PLR0913 already bounds the argument count.
+  "PLR0917",
+  # Assertions narrow types for mypy; the service never runs with `python -O`.
+  "S101",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Fakes implement whole ports; scenarios are long and use synthetic secrets, SQL, and paths.
+"tests/**" = ["ARG", "PLR0913", "PLR0915", "S105", "S106", "S108", "S608"]
+
+[tool.ruff.lint.pylint]
+# Use cases receive their ports and services through the constructor.
+max-args = 7
 
 [tool.ruff.lint.isort]
 known-first-party = ["calendar_sync", "scripts", "tests"]
+
+[tool.importlinter]
+root_package = "calendar_sync"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Dependencies point inward, and bootstrap composes adapters"
+type = "layers"
+containers = ["calendar_sync"]
+layers = [
+  "bootstrap",
+  "interfaces | infrastructure",
+  "application",
+  "domain",
+]
+ignore_imports = [
+  # The FastAPI factory is the process entry point and builds the container.
+  "calendar_sync.interfaces.api.app -> calendar_sync.bootstrap.container",
+  # Known debt: these belong behind application ports. Do not add to this list.
+  "calendar_sync.infrastructure.google.oauth -> calendar_sync.bootstrap.config",
+  "calendar_sync.interfaces.api.app -> calendar_sync.infrastructure.google.oauth",
+  "calendar_sync.interfaces.api.app -> calendar_sync.infrastructure.persistence.activity_queries",
+  "calendar_sync.interfaces.api.app -> calendar_sync.infrastructure.scheduling",
+  "calendar_sync.interfaces.api.app -> calendar_sync.infrastructure.security",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain and application stay free of frameworks, providers, and storage"
+type = "forbidden"
+source_modules = ["calendar_sync.domain", "calendar_sync.application"]
+forbidden_modules = [
+  "cryptography",
+  "fastapi",
+  "google",
+  "google_auth_oauthlib",
+  "googleapiclient",
+  "pydantic",
+  "smtplib",
+  "sqlite3",
+  "starlette",
+  "uvicorn",
+]
+
+[[tool.importlinter.contracts]]
+name = "Google SDK types stay in the Google adapter"
+type = "protected"
+protected_modules = ["google", "google_auth_oauthlib", "googleapiclient"]
+# Composing or calling the adapter is fine; importing SDK types directly is not.
+allowed_importers = ["calendar_sync.infrastructure.google"]
+
+[[tool.importlinter.contracts]]
+name = "Web framework stays in interfaces"
+type = "forbidden"
+source_modules = [
+  "calendar_sync.domain",
+  "calendar_sync.application",
+  "calendar_sync.infrastructure",
+  "calendar_sync.bootstrap",
+]
+forbidden_modules = ["fastapi", "pydantic", "starlette", "uvicorn"]
+# Bootstrap may compose the FastAPI app; only direct framework imports are ruled out.
+allow_indirect_imports = true
 
 [tool.mypy]
 python_version = "3.12"

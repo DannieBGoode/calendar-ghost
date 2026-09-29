@@ -213,7 +213,8 @@ def test_cancelled_occurrence_echoed_by_the_destination_feed_needs_no_reads() ->
     calendars.report(calendars.put(occurrence(series(), 1, status=EventStatus.CANCELLED)))
     sync.execute(rule().id)
     cancelled = calendars.get_occurrence(destination, week_start(1))
-    assert cancelled is not None and cancelled.status is EventStatus.CANCELLED
+    assert cancelled is not None
+    assert cancelled.status is EventStatus.CANCELLED
     calendars.report(cancelled)
     calendars.reads.clear()
 
@@ -244,7 +245,8 @@ def test_restored_occurrence_reported_by_the_destination_feed_is_cancelled_again
     sync.execute(rule().id)
 
     again = calendars.get_occurrence(destination, week_start(1))
-    assert again is not None and again.status is EventStatus.CANCELLED
+    assert again is not None
+    assert again.status is EventStatus.CANCELLED
 
 
 def test_retiring_an_occurrence_record_is_bookkeeping_not_activity() -> None:
@@ -343,5 +345,6 @@ def test_first_run_lists_everything_so_it_counts_as_the_days_full_pass() -> None
 
     with factory() as uow:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
-    assert latest is not None and latest.full_run
+    assert latest is not None
+    assert latest.full_run
     assert latest.last_full_succeeded_at == NOW

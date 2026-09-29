@@ -27,6 +27,7 @@ React UI / FastAPI / Scheduler
 ```
 
 The domain imports only Python's standard library and provider-neutral domain modules. Application services depend on protocols. The composition root constructs concrete adapters explicitly.
+`lint-imports` enforces this direction through the contracts in `pyproject.toml`.
 
 ## Transaction boundary
 

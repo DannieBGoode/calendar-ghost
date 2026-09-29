@@ -109,7 +109,7 @@ class ExecuteSyncRule:
                 )
                 uow.commit()
 
-    def _execute_serialized(self, rule_id: SyncRuleId, *, full: bool) -> SyncRunResult:
+    def _execute_serialized(self, rule_id: SyncRuleId, *, full: bool) -> SyncRunResult:  # noqa: C901, PLR0912, PLR0915
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
             if rule is None:
