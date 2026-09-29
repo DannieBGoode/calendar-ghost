@@ -18,7 +18,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 # States that could still write, or be enabled, without the account's authorization.
-_DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.DRY_RUN_VALIDATED, SyncRuleState.ENABLED})
+_DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.PREVIEWED, SyncRuleState.ENABLED})
 
 
 @dataclass(frozen=True, slots=True)

@@ -333,7 +333,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
                 id=SyncRuleId("validated-rule"),
                 source=endpoint(account.id.value, "validated-calendar"),
                 destination=endpoint("work-account", "validated-destination"),
-                state=SyncRuleState.DRY_RUN_VALIDATED,
+                state=SyncRuleState.PREVIEWED,
             )
         )
         uow.rules.add(
@@ -2173,7 +2173,7 @@ def _waits_for_rule_writes(
 def test_enable_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
     with adapters.unit_of_work() as uow:
-        uow.rules.add(rule(state=SyncRuleState.DRY_RUN_VALIDATED))
+        uow.rules.add(rule(state=SyncRuleState.PREVIEWED))
         uow.commit()
 
     status_code = _waits_for_rule_writes(

@@ -589,7 +589,7 @@ def _change_policy(factory: InMemoryUnitOfWorkFactory, policy: TransformationPol
     with factory() as uow:
         current = uow.rules.get(rule().id)
         assert current is not None
-        uow.rules.save(current.change_policy(policy).mark_dry_run_validated().enable())
+        uow.rules.save(current.change_policy(policy).mark_previewed().enable())
         uow.commit()
 
 

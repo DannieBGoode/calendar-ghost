@@ -112,7 +112,7 @@ def test_policy_change_waits_for_an_in_flight_provider_write() -> None:
 
 def test_enabling_a_previewed_rule_saves_it_enabled() -> None:
     unit_of_work = InMemoryUnitOfWorkFactory()
-    unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.DRY_RUN_VALIDATED)
+    unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.PREVIEWED)
 
     enabled = EnableSyncRule(unit_of_work, RuleLocks()).execute(rule().id)
 
@@ -150,7 +150,7 @@ def test_pausing_keeps_the_rule_and_is_blocked_unless_enabled() -> None:
 @pytest.mark.parametrize("change", ["enable", "pause"])
 def test_lifecycle_changes_wait_for_an_in_flight_provider_write(change: str) -> None:
     unit_of_work = InMemoryUnitOfWorkFactory()
-    starting = SyncRuleState.DRY_RUN_VALIDATED if change == "enable" else SyncRuleState.ENABLED
+    starting = SyncRuleState.PREVIEWED if change == "enable" else SyncRuleState.ENABLED
     unit_of_work.state.rules[rule().id] = rule(state=starting)
     locks = RuleLocks()
     use_case = (EnableSyncRule if change == "enable" else PauseSyncRule)(unit_of_work, locks)

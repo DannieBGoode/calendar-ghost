@@ -58,11 +58,11 @@ def test_rule_requires_preview_before_enablement() -> None:
     with pytest.raises(InvalidStateTransition):
         draft.enable()
 
-    assert draft.mark_dry_run_validated().enable().state is SyncRuleState.ENABLED
+    assert draft.mark_previewed().enable().state is SyncRuleState.ENABLED
 
 
 def test_validated_rule_can_be_degraded_before_enablement() -> None:
-    validated = rule(state=SyncRuleState.DRY_RUN_VALIDATED)
+    validated = rule(state=SyncRuleState.PREVIEWED)
 
     assert validated.degrade().state is SyncRuleState.DEGRADED
 
@@ -86,7 +86,7 @@ DETAILS = TransformationPolicy(content=ProjectionContent.DETAILS)
     ("before", "after"),
     [
         (SyncRuleState.DRAFT, SyncRuleState.DRAFT),
-        (SyncRuleState.DRY_RUN_VALIDATED, SyncRuleState.DRAFT),
+        (SyncRuleState.PREVIEWED, SyncRuleState.DRAFT),
         (SyncRuleState.ENABLED, SyncRuleState.PAUSED),
         (SyncRuleState.PAUSED, SyncRuleState.PAUSED),
         (SyncRuleState.DEGRADED, SyncRuleState.DEGRADED),
@@ -128,7 +128,7 @@ def test_changed_rule_cannot_be_enabled_until_previewed_again() -> None:
 
     with pytest.raises(InvalidStateTransition):
         changed.enable()
-    assert changed.mark_dry_run_validated().enable().state is SyncRuleState.ENABLED
+    assert changed.mark_previewed().enable().state is SyncRuleState.ENABLED
 
 
 def test_completed_reprojection_clears_the_flag() -> None:
@@ -145,7 +145,7 @@ def test_removal_can_begin_from_every_state_and_is_inert(state: SyncRuleState) -
     with pytest.raises(InvalidStateTransition):
         removing.enable()
     with pytest.raises(InvalidStateTransition):
-        removing.mark_dry_run_validated()
+        removing.mark_previewed()
 
 
 def test_occurrence_start_normalizes_offsets_to_one_utc_instant() -> None:

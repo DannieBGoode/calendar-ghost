@@ -173,7 +173,7 @@ class ProjectionHandling(StrEnum):
 
 class SyncRuleState(StrEnum):
     DRAFT = "draft"
-    DRY_RUN_VALIDATED = "dry_run_validated"
+    PREVIEWED = "dry_run_validated"
     ENABLED = "enabled"
     PAUSED = "paused"
     DEGRADED = "degraded"
@@ -275,17 +275,17 @@ class SyncRule:
     def material_signature(self) -> tuple[object, ...]:
         return (self.source, self.destination, self.transformation, self.initial_lookback_days)
 
-    def mark_dry_run_validated(self) -> Self:
+    def mark_previewed(self) -> Self:
         if self.state not in {
             SyncRuleState.DRAFT,
             SyncRuleState.PAUSED,
             SyncRuleState.DEGRADED,
         }:
             raise InvalidStateTransition(f"cannot validate a rule in state {self.state}")
-        return replace(self, state=SyncRuleState.DRY_RUN_VALIDATED)
+        return replace(self, state=SyncRuleState.PREVIEWED)
 
     def enable(self) -> Self:
-        if self.state is not SyncRuleState.DRY_RUN_VALIDATED:
+        if self.state is not SyncRuleState.PREVIEWED:
             raise InvalidStateTransition(f"cannot enable a rule in state {self.state}")
         return replace(self, state=SyncRuleState.ENABLED)
 
@@ -295,7 +295,7 @@ class SyncRule:
         return replace(self, state=SyncRuleState.PAUSED)
 
     def degrade(self) -> Self:
-        if self.state not in {SyncRuleState.DRY_RUN_VALIDATED, SyncRuleState.ENABLED}:
+        if self.state not in {SyncRuleState.PREVIEWED, SyncRuleState.ENABLED}:
             raise InvalidStateTransition(f"cannot degrade a rule in state {self.state}")
         return replace(self, state=SyncRuleState.DEGRADED)
 

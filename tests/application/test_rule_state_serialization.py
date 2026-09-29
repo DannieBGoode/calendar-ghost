@@ -59,7 +59,7 @@ def test_preview_validation_waits_for_the_rule_write_lock() -> None:
     )
 
     assert _blocks_until_released(locks, lambda: preview.execute(rule().id))
-    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.DRY_RUN_VALIDATED
+    assert unit_of_work.state.rules[rule().id].state is SyncRuleState.PREVIEWED
 
 
 def test_removal_start_waits_for_the_rule_write_lock() -> None:
