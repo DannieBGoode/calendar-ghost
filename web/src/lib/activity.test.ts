@@ -135,7 +135,7 @@ describe("activity presentation", () => {
   it("explains series with no occurrence left to sync", () => {
     const skipped = entry({ reason: "series_without_occurrences" })
     expect(describeEntry(skipped).happened).toBe("Skipped: no occurrence left to sync")
-    expect(describeEntry(skipped).explanation).toContain("synced again if an occurrence is restored")
+    expect(describeEntry(skipped).explanation).toContain("synced again if an occurrence comes back")
     const removed = entry({ action: "delete", reason: "series_without_occurrences_removed", category: "changed" })
     expect(whatHappened(removed, "Work").text).toBe("Removed from Work: no occurrence left to sync")
   })
