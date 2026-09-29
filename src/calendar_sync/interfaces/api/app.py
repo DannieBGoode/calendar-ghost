@@ -1064,13 +1064,20 @@ def _recorded_event(row: sqlite3.Row, previous: sqlite3.Row | None) -> RecordedE
     observed = own is not None and (bool(own["event_title"]) or not cancelled)
     earlier = previous["event_title"] if previous is not None else None
     title = own["event_title"] if observed and own is not None else earlier or ""
-    timed = own if own is not None and own["event_starts"] is not None else previous
+    # Time and recurrence come from one entry: this one if it saw the event's time, else the
+    # earlier one, so a series converted to a single event stops showing as repeating.
+    timed = (
+        own
+        if own is not None and (own["event_starts"] is not None or previous is None)
+        else previous
+    )
+    assert timed is not None
     return RecordedEventResponse(
         title=title,
-        all_day=bool(timed["event_all_day"]) if timed is not None else False,
-        starts=timed["event_starts"] if timed is not None else None,
-        ends=timed["event_ends"] if timed is not None else None,
-        recurring=any(bool(item["event_recurring"]) for item in (own, previous) if item),
+        all_day=bool(timed["event_all_day"]),
+        starts=timed["event_starts"],
+        ends=timed["event_ends"],
+        recurring=bool(timed["event_recurring"]),
         cancelled=cancelled,
         renamed_from=earlier
         if observed and not cancelled and earlier is not None and earlier != title

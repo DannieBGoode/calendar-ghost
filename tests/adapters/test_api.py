@@ -1583,6 +1583,32 @@ def test_activity_keeps_an_observed_empty_title_but_names_untitled_cancellations
     assert entries[7]["starts"] == entries[6]["starts"]
 
 
+def test_activity_shows_the_recurrence_each_entry_saw(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    weekly = RecordedEvent.of(replace(event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",))))
+    _append_audit(
+        container,
+        _audit("create", "source_created", event=weekly),
+        # The series became a single event under the same identifier.
+        _audit("update", "source_changed", event=RecordedEvent.of(event())),
+        _audit("create", "source_created", source_event_id="series", event=weekly),
+        _audit("delete", "source_cancelled", source_event_id="series", event=_untitled_stub()),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        recurring = {
+            entry["id"]: entry["event"]["recurring"]
+            for entry in client.get("/api/v1/audit-entries").json()
+        }
+
+    assert recurring == {1: True, 2: False, 3: True, 4: True}
+
+
+def _untitled_stub() -> RecordedEvent:
+    return RecordedEvent(title="", cancelled=True)
+
+
 def test_activity_does_not_carry_names_across_rules(tmp_path: Path) -> None:
     container = build_container(Settings(tmp_path / "test.db"))
     _append_audit(
