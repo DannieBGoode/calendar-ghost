@@ -110,3 +110,18 @@ def test_preview_of_an_occurrence_whose_destination_series_was_deleted_does_not_
     preview = _preview(factory, calendars).execute(rule().id)
 
     assert preview.occurrence_changes == 1
+
+
+def test_preview_excludes_a_series_whose_every_occurrence_is_cancelled() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0),))
+    calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED))
+    factory = enabled_rule_factory(rule(state=SyncRuleState.DRAFT))
+
+    preview = _preview(factory, calendars).execute(rule().id)
+
+    assert preview.eligible_events == 0
+    assert preview.recurring_series == 0
+    assert preview.occurrence_changes == 0
+    assert preview.excluded_events == 2
+    assert preview.sample == ()

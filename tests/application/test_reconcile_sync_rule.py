@@ -6,7 +6,7 @@ from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import RunKind
 from calendar_sync.application.reconciliation import ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
-from calendar_sync.domain.model import DriftKind
+from calendar_sync.domain.model import DriftKind, EventStatus
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
@@ -155,3 +155,24 @@ def test_reconciliation_reports_a_deleted_destination_series_without_failing() -
     ).execute(rule().id)
 
     assert DriftKind.MISSING in [item.kind for item in report.drift]
+
+
+def test_reconciliation_accepts_a_dormant_series_whose_every_occurrence_is_cancelled() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0),))
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+    use_case.execute(rule().id)
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert report.drift == ()
+    assert report.checked_mappings == 1

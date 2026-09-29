@@ -165,7 +165,7 @@ def test_series_whose_only_occurrence_is_cancelled_is_never_projected() -> None:
     assert factory.state.mappings == {}
 
 
-def test_series_whose_last_occurrence_is_cancelled_is_retired_once() -> None:
+def test_series_whose_last_occurrence_is_cancelled_stays_dormant_without_rewrites() -> None:
     calendars = FakeCalendars()
     master = calendars.put(series(), starts=STARTS[:1])
     factory = enabled_rule_factory()
@@ -176,15 +176,61 @@ def test_series_whose_last_occurrence_is_cancelled_is_retired_once() -> None:
     writes = list(calendars.writes)
 
     # Google cancels a series once its last instance is cancelled and reports that back.
+    results = []
     for _ in range(3):
         _report_destination(calendars)
-        use_case.execute(rule().id)
-    use_case.execute(rule().id, full=True)
+        results.append(use_case.execute(rule().id))
+    results.append(use_case.execute(rule().id, full=True))
 
     assert [kind for kind, _ in writes] == ["create", "cancel_occurrence"]
     assert calendars.writes == writes
+    assert all(result.conflicts == 0 for result in results)
+    assert (rule().id, master.reference) in factory.state.mappings
+    assert _occurrence_states(factory) == {week_start(0): OccurrenceState.CANCELLED}
+
+
+def test_restoring_one_occurrence_of_a_dormant_series_keeps_the_others_cancelled() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:2])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(
+        calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)),
+        calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED)),
+    )
+    use_case.execute(rule().id)
+    _report_destination(calendars)
+    use_case.execute(rule().id)
+
+    restored = calendars.put(occurrence(master, 1, revision="occurrence-revision-2"))
+    calendars.report(restored)
+    result = use_case.execute(rule().id)
+
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    assert calendars.events[destination].status is EventStatus.CONFIRMED
+    kept = calendars.get_occurrence(destination, week_start(0))
+    back = calendars.get_occurrence(destination, week_start(1))
+    assert kept is not None and kept.status is EventStatus.CANCELLED
+    assert back is not None and back.status is EventStatus.CONFIRMED
+    assert result.conflicts == 0
+
+
+def test_acknowledged_create_of_a_series_that_lost_every_occurrence_is_removed() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    orphan = factory.state.mappings.pop((rule().id, master.reference)).destination
+    # The create's response was lost; then the source cancelled its only occurrence.
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+
+    use_case.execute(rule().id, full=True)
+
+    assert orphan not in calendars.events
+    assert calendars.writes[-1] == ("delete", orphan.event_id.value)
     assert factory.state.mappings == {}
-    assert factory.state.occurrences == {}
     assert not any(kind == "delete" and "_" in ref for kind, ref in calendars.writes)
 
 

@@ -123,12 +123,12 @@ const REASONS: Record<string, ReasonCopy> = {
   series_without_occurrences: {
     happened: "Skipped: every occurrence is cancelled",
     explanation:
-      "Every occurrence of this recurring event is cancelled in the source, so there is nothing to show in the destination calendar.",
+      "Every occurrence of this recurring event is cancelled in the source, so there is nothing to show in the destination calendar. It is synced again if an occurrence is restored.",
   },
   series_without_occurrences_removed: {
     happened: "Removed from {destination}: every occurrence is cancelled",
     explanation:
-      "Every occurrence of this recurring event is cancelled in the source, so its projection and records were removed.",
+      "Every occurrence of this recurring event is cancelled in the source, so a projection left from an interrupted run was removed.",
   },
 }
 

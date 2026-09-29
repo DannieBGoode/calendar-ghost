@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks
@@ -88,16 +88,27 @@ class ReconcileSyncRule:
         mappings: Sequence[EventMapping],
         recorded: Mapping[EventMappingId, Sequence[OccurrenceMapping]],
     ) -> ReconciliationReport:
-        expected: dict[EventRef, EventProjection] = {}
-        for mapping in mappings:
-            source = self.provider.get_event(mapping.source)
-            if source is not None and _eligible(source, rule):
-                expected[mapping.source] = self.projector.project(source, rule)
         actual_events = self.provider.managed_events(rule.destination, rule.id)
         actual = {event.reference: event for event in actual_events}
+        expected: dict[EventRef, EventProjection] = {}
+        dormant: set[EventMappingId] = set()
+        for mapping in mappings:
+            source = self.provider.get_event(mapping.source)
+            if source is None or not _eligible(source, rule):
+                continue
+            if (
+                source.recurrence is not None
+                and mapping.destination not in actual
+                and not self.provider.has_live_occurrences(source.reference)
+            ):
+                # A series whose every occurrence is cancelled has no projection to verify.
+                dormant.add(mapping.id)
+                continue
+            expected[mapping.source] = self.projector.project(source, rule)
+        verified = [mapping for mapping in mappings if mapping.id not in dormant]
 
         checks: list[OccurrenceCheck] = []
-        for mapping in mappings:
+        for mapping in verified:
             if mapping.source not in expected:
                 continue  # the series' own inconsistency is already reported
             for occurrence in recorded.get(mapping.id, ()):
@@ -115,7 +126,8 @@ class ReconcileSyncRule:
                         else None,
                     )
                 )
-        return self.reconciliation.reconcile(rule, mappings, expected, actual, checks)
+        report = self.reconciliation.reconcile(rule, verified, expected, actual, checks)
+        return replace(report, checked_mappings=len(mappings))
 
 
 def _eligible(source: CalendarEvent, rule: SyncRule) -> bool:

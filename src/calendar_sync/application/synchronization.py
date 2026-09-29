@@ -25,6 +25,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.sync_run import (
     OUTCOMES,
     SyncRunContext,
+    has_live_occurrences,
     record,
     require_unchanged,
 )
@@ -441,9 +442,11 @@ class ExecuteSyncRule:
         if (
             decision.action is SyncAction.CREATE
             and source_event.recurrence is not None
-            and not self.provider.has_live_occurrences(source_event.reference)
+            and not has_live_occurrences(run, self.provider, source_event.reference)
         ):
             # Creating it would only be cancelled again by its occurrences, on every run.
+            if mapping is None:
+                mapping, actual = self._acknowledged_series(run, source_event)
             decision = self.decisions.decide(
                 rule, source_event, mapping, actual, has_live_occurrences=False
             )
@@ -512,6 +515,31 @@ class ExecuteSyncRule:
         )
         uow.commit()
         return mapping, decision
+
+    def _acknowledged_series(
+        self, run: SyncRunContext, source_event: CalendarEvent
+    ) -> tuple[EventMapping | None, CalendarEvent | None]:
+        """Find a series Google created before an interrupted run could record its mapping.
+
+        Its ownership is then verified like any mapped projection before it is removed.
+        """
+        key = self._operation_key(
+            run.rule.id, source_event.reference, source_event.revision, SyncAction.CREATE
+        )
+        found = self.provider.find_projection(run.rule.destination, key)
+        if found is None or found.status is not EventStatus.CONFIRMED or found.occurrence:
+            return None, None
+        mapping = EventMapping(
+            id=EventMappingId(key),
+            rule_id=run.rule.id,
+            source=source_event.reference,
+            destination=found.reference,
+            source_revision=source_event.revision,
+            projection_fingerprint=self.fingerprinter.fingerprint(
+                SyncDecisionService.as_projection(found)
+            ),
+        )
+        return mapping, found
 
     @staticmethod
     def _operation_key(

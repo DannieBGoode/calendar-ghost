@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.ports import AuditEntry, UnitOfWork
+from calendar_sync.application.ports import AuditEntry, CalendarProvider, UnitOfWork
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
@@ -58,6 +58,15 @@ class SyncRunContext:
     handled: set[EventRef] = field(default_factory=set)
     repaired: set[EventRef] = field(default_factory=set)
     """Source series already repaired this run, so a repair never recurses."""
+    live_series: dict[EventRef, bool] = field(default_factory=dict)
+    """Whether each source series looked up this run has an occurrence that is not cancelled."""
+
+
+def has_live_occurrences(run: SyncRunContext, provider: CalendarProvider, series: EventRef) -> bool:
+    """Ask the provider once per run whether a source series still has a live occurrence."""
+    if series not in run.live_series:
+        run.live_series[series] = provider.has_live_occurrences(series)
+    return run.live_series[series]
 
 
 def require_unchanged(run: SyncRunContext) -> None:

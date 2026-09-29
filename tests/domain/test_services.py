@@ -191,19 +191,21 @@ def test_recurring_series_is_created_as_a_series() -> None:
     assert decision.projection.recurrence == source.recurrence
 
 
-def test_series_without_live_occurrences_is_skipped_or_its_mapping_retired() -> None:
+def test_series_without_live_occurrences_is_never_projected() -> None:
     source = series()
-    mapping = _mapping(source, _destination(source))
+    destination = replace(_destination(source), recurrence=source.recurrence)
+    mapping = _mapping(source, destination)
 
     unmapped = decisions.decide(rule(), source, None, None, has_live_occurrences=False)
     missing = decisions.decide(rule(), source, mapping, None, has_live_occurrences=False)
+    live = decisions.decide(rule(), source, mapping, destination, has_live_occurrences=False)
     single = decisions.decide(rule(), event(), None, None, has_live_occurrences=False)
 
-    assert (unmapped.action, unmapped.reason) == (
-        SyncAction.IGNORE,
-        SyncReason.SERIES_WITHOUT_OCCURRENCES,
-    )
-    assert (missing.action, missing.reason) == (
+    dormant = (SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
+    assert (unmapped.action, unmapped.reason) == dormant
+    # The mapping is kept, so its cancelled occurrences survive a later restore.
+    assert (missing.action, missing.reason) == dormant
+    assert (live.action, live.reason) == (
         SyncAction.DELETE,
         SyncReason.SERIES_WITHOUT_OCCURRENCES_REMOVED,
     )

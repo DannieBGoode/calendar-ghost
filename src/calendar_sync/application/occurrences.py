@@ -9,6 +9,7 @@ from calendar_sync.application.ports import AuditEntry, CalendarProvider, Clock
 from calendar_sync.application.sync_run import (
     OUTCOMES,
     SyncRunContext,
+    has_live_occurrences,
     record,
     require_unchanged,
 )
@@ -102,6 +103,20 @@ class SynchronizeOccurrences:
                 source_occurrence,
                 recorded,
                 destination_reported,
+            )
+        if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING and not (
+            has_live_occurrences(run, self.provider, source_series.reference)
+        ):
+            # The repair left a dormant series without a projection; nothing is missing.
+            decision, destination = self._decide(
+                run,
+                series_mapping,
+                source_series,
+                original_start,
+                source_occurrence,
+                recorded,
+                destination_reported,
+                has_live=False,
             )
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
@@ -231,6 +246,8 @@ class SynchronizeOccurrences:
         source_occurrence: CalendarEvent | None,
         recorded: OccurrenceMapping | None,
         destination_reported: bool,
+        *,
+        has_live: bool = True,
     ) -> tuple[SyncDecision, CalendarEvent | None]:
         destination_series = destination = None
         if series_mapping is not None and source_series.managed_origin is None:
@@ -252,6 +269,7 @@ class SynchronizeOccurrences:
             destination_series,
             destination,
             destination_reported=destination_reported,
+            has_live_occurrences=has_live,
         )
         return decision, destination
 

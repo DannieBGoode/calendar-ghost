@@ -100,7 +100,7 @@ become sources of a reverse rule. A mapped series that the source no longer retu
 | Moved or edited occurrence | Update the matching destination occurrence |
 | Cancelled occurrence | Cancel the matching destination occurrence and keep a `cancelled` Occurrence Mapping |
 | Deleted series | Delete the destination series with its occurrences |
-| Every occurrence cancelled | Do not create or restore the destination series; retire its Series Mapping and Occurrence Mappings |
+| Every occurrence cancelled | Do not create or restore the destination series; keep its Series Mapping and Occurrence Mappings dormant |
 
 A destination occurrence is cancelled only when the source proves it cancelled or absent from an
 existing series; an unverifiable source series is a Conflict. When the destination series has no
@@ -114,11 +114,16 @@ their planned actions.
 Google cancels a whole series once its last live occurrence is cancelled, and a cancelled
 projection reads as missing. A source series whose every occurrence is cancelled, such as the
 single-occurrence remainder of a "this and following" split, therefore cannot be projected: before
-creating or restoring a series projection, the run asks the provider whether the source series has
-any occurrence that is not cancelled. If none remains, an unmapped series is ignored
-(`series_without_occurrences`) and a mapped one is deleted with its mappings
-(`series_without_occurrences_removed`) instead of being recreated on every run. Only an answered
-lookup may report that none remain; an unreadable series is a temporary failure.
+creating or restoring a series projection, the run asks the provider, once per series per run,
+whether the source series has any occurrence that is not cancelled. If none remains, the series is
+ignored (`series_without_occurrences`) instead of being recreated on every run. A mapped series
+stays dormant: its Series Mapping and `cancelled` Occurrence Mappings are kept, so restoring one
+occurrence later recreates the series without resurrecting the others, and its occurrences are
+ignored rather than reported as a missing destination occurrence. Full Reconciliation accepts a
+dormant series without a projection, and Rule Preview excludes it. A projection that Google created
+before an interrupted run could record its mapping is found by its create Operation Key and removed
+(`series_without_occurrences_removed`). Only an answered lookup may report that none remain; an
+unreadable series is a temporary failure.
 
 `recurring_unsupported` is no longer produced; it remains for audit entries recorded by earlier
 releases.
