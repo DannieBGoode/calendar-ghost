@@ -2,7 +2,6 @@ import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanst
 import {
   Activity,
   ArrowRight,
-  Check,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -38,10 +37,7 @@ import {
   SHOW_FILTERS,
   showCategories,
   whatHappened,
-  type ActivityGroup,
-  type ActivityRow,
   type EventCell,
-  type ExpandedChecks,
   type RuleNames,
 } from "@/lib/activity"
 import {
@@ -109,8 +105,6 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
   const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
   const query = state.query ?? ""
-  // Expanded runs and how many pages of their no-change checks are loaded.
-  const [expandedRuns, setExpandedRuns] = useState<ReadonlyMap<string, number>>(new Map())
   const focusDetail = useRef(false)
   const activity = useInfiniteQuery({
     queryKey: ["activity", ruleId, show, query],
@@ -142,18 +136,6 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
   })
   const entries = activity.data?.pages.flat() ?? []
   const runs = groupRuns(entries)
-  // The default view hides no-change checks; each run still says how many it made, including runs
-  // that made nothing else. Runs older than the loaded entries wait until older entries load.
-  // Per-run counts cannot say which checks match a search, so a search lists matches only.
-  const countsNoChange = show === "" && !query
-  const oldestLoaded = entries.at(-1)?.id
-  const noChangeAfter = activity.hasNextPage && oldestLoaded ? oldestLoaded - 1 : 0
-  const noChangeRuns = useQuery({
-    queryKey: ["activity-no-change-runs", ruleId, noChangeAfter],
-    queryFn: () => api.noChangeRuns({ ruleId: ruleId || undefined, after: noChangeAfter }),
-    enabled: countsNoChange && !activity.isPending,
-    placeholderData: keepPreviousData,
-  })
   const listedEntry = entries.find((item) => item.id === entryId)
   // A shared link or an older page can name an entry that is not loaded.
   const directEntry = useQuery({
@@ -163,20 +145,7 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
     retry: false,
   })
   const selected = listedEntry ?? (directEntry.data?.id === entryId ? directEntry.data : undefined)
-  // An open no-change check shows in the table by expanding its run.
-  const openRun = countsNoChange && selected?.category === "unchanged" ? selected.run_id : null
-  const expanded: [string, number][] = [
-    ...expandedRuns,
-    ...(openRun && !expandedRuns.has(openRun) ? [[openRun, 1] as [string, number]] : []),
-  ]
-  const expandedChecks = useQueries({
-    queries: expanded.map(([runKey, pages]) => ({
-      queryKey: ["activity-no-change-checks", runKey, pages],
-      queryFn: () => loadNoChangeChecks(runKey, pages),
-      enabled: countsNoChange,
-      placeholderData: keepPreviousData,
-    })),
-  })
+
   if (activity.isPending || incidents.isPending) return <PageSkeleton label="Loading activity" />
 
   if (activity.error || incidents.error) {
@@ -215,20 +184,8 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
     ),
     rulesLoaded: rules.data !== undefined,
   }
-  const loadedChecks = new Map<string, ExpandedChecks>()
-  const loadingRuns = new Set<string>()
-  expanded.forEach(([runKey], index) => {
-    const query = expandedChecks[index]
-    if (query?.data) loadedChecks.set(runKey, query.data)
-    if (!query?.data || query.isPlaceholderData) loadingRuns.add(runKey)
-  })
-  const groups = activityRows(runs, {
-    noChangeRuns: countsNoChange ? noChangeRuns.data : undefined,
-    expanded: loadedChecks,
-  })
-  const visibleEntries = groups.flatMap((group) =>
-    group.kind === "run" ? group.rows.flatMap((row) => (row.kind === "entry" ? [row.entry] : [])) : [],
-  )
+  const groups = activityRows(runs)
+  const visibleEntries = runs.flatMap((run) => run.entries)
   const selectedIndex = selected ? visibleEntries.findIndex((item) => item.id === selected.id) : -1
   const updating = activity.isPlaceholderData
   const detailOpen = entryId !== null
@@ -250,20 +207,7 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
   }
 
   function changeFilters(next: Partial<ActivityLocationState>) {
-    setExpandedRuns(new Map())
     update({ ...next, entryId: null }, "replace")
-  }
-
-  function toggleRun(runKey: string) {
-    setExpandedRuns((current) => {
-      const next = new Map(current)
-      if (!next.delete(runKey)) next.set(runKey, 1)
-      return next
-    })
-  }
-
-  function loadMoreChecks(runKey: string) {
-    setExpandedRuns((current) => new Map(current).set(runKey, (current.get(runKey) ?? 1) + 1))
   }
 
   function moveSelection(event: KeyboardEvent<HTMLTableElement>) {
@@ -344,86 +288,82 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
               : ""}
         </p>
 
-        {groups.length === 0 ? (
-          <EmptyActivity
-            ruleId={ruleId}
-            show={show}
-            query={query}
-            onShowAll={() => changeFilters({ show: "all" })}
-            onAllRules={() => changeFilters({ ruleId: "" })}
-            onClearSearch={() => changeFilters({ query: "" })}
-          />
-        ) : (
-          <div className="activity-layout" data-detail={detailOpen}>
-            <div className="activity-table-wrap" aria-busy={updating} data-updating={updating}>
-              {/* Explicit roles keep table semantics where narrow screens restyle the rows. */}
-              <table className="activity-table" role="table" onKeyDown={moveSelection}>
-                <caption className="sr-only">Synchronization history, newest first</caption>
-                <thead role="rowgroup">
-                  <tr role="row">
-                    <th scope="col" role="columnheader" className="activity-col-time">Time</th>
-                    <th scope="col" role="columnheader" className="activity-col-event">Event</th>
-                    <th scope="col" role="columnheader" className="activity-col-happened">What happened</th>
-                    {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
-                  </tr>
-                </thead>
-                {groups.flatMap((group) => [
-                  ...(group.day
-                    ? [
-                        <tbody key={`${group.key}-day`} role="rowgroup" className="activity-day">
-                          <tr role="row">
-                            <th scope="colgroup" role="rowheader" colSpan={columns}>{group.day}</th>
-                          </tr>
-                        </tbody>,
-                      ]
-                    : []),
-                  <tbody key={group.key} role="rowgroup" className="activity-run">
-                    {group.kind === "quiet" ? (
-                      <QuietRunsRow group={group} columns={columns} onShowAll={() => changeFilters({ show: "all" })} />
-                    ) : (
-                      group.rows.map((row) => (
-                        <ActivityTableRow
-                          key={row.kind === "entry" ? row.entry.id : `${group.key}-folded`}
-                          row={row}
-                          loadingChecks={row.kind === "folded" && loadingRuns.has(group.key)}
+        {/* A linked entry the filters hide still opens beside an empty table. */}
+        <div className="activity-layout" data-detail={detailOpen}>
+          <div className="activity-table-wrap" aria-busy={updating} data-updating={updating}>
+            {groups.length === 0 ? (
+              <EmptyActivity
+                ruleId={ruleId}
+                show={show}
+                query={query}
+                onShowAll={() => changeFilters({ show: "all" })}
+                onAllRules={() => changeFilters({ ruleId: "" })}
+                onClearSearch={() => changeFilters({ query: "" })}
+              />
+            ) : (
+              <>
+                {/* Explicit roles keep table semantics where narrow screens restyle the rows. */}
+                <table className="activity-table" role="table" onKeyDown={moveSelection}>
+                  <caption className="sr-only">Synchronization history, newest first</caption>
+                  <thead role="rowgroup">
+                    <tr role="row">
+                      <th scope="col" role="columnheader" className="activity-col-time">Time</th>
+                      <th scope="col" role="columnheader" className="activity-col-event">Event</th>
+                      <th scope="col" role="columnheader" className="activity-col-happened">What happened</th>
+                      {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
+                    </tr>
+                  </thead>
+                  {groups.flatMap((group) => [
+                    ...(group.day
+                      ? [
+                          <tbody key={`${group.key}-day`} role="rowgroup" className="activity-day">
+                            <tr role="row">
+                              <th scope="colgroup" role="rowheader" colSpan={columns}>{group.day}</th>
+                            </tr>
+                          </tbody>,
+                        ]
+                      : []),
+                    <tbody key={group.key} role="rowgroup" className="activity-run">
+                      {group.run.entries.map((entry) => (
+                        <EntryRow
+                          key={entry.id}
+                          entry={entry}
                           context={context}
                           state={state}
-                          selectedId={entryId}
+                          selected={entryId === entry.id}
                           showRuleColumn={showRuleColumn}
                           onOpen={openEntry}
                           onFilterRule={(value) => changeFilters({ ruleId: value })}
-                          onToggleRun={() => toggleRun(group.key)}
-                          onLoadMore={() => loadMoreChecks(group.key)}
                         />
-                      ))
-                    )}
-                  </tbody>,
-                ])}
-              </table>
-              {activity.hasNextPage && (
-                <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
-                  {activity.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
-                </Button>
-              )}
-            </div>
-            {detailOpen && (
-              <ActivityDetail
-                entry={selected}
-                loading={selected === undefined && (directEntry.isPending || directEntry.isFetching)}
-                context={context}
-                focusRef={focusDetail}
-                onClose={closeDetail}
-                onOpenRule={onOpenRule}
-                onNewer={selectedIndex > 0 ? () => select(visibleEntries[selectedIndex - 1], "replace") : undefined}
-                onOlder={
-                  selectedIndex >= 0 && selectedIndex < visibleEntries.length - 1
-                    ? () => select(visibleEntries[selectedIndex + 1], "replace")
-                    : undefined
-                }
-              />
+                      ))}
+                    </tbody>,
+                  ])}
+                </table>
+                {activity.hasNextPage && (
+                  <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
+                    {activity.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
+                  </Button>
+                )}
+              </>
             )}
           </div>
-        )}
+          {detailOpen && (
+            <ActivityDetail
+              entry={selected}
+              loading={selected === undefined && (directEntry.isPending || directEntry.isFetching)}
+              context={context}
+              focusRef={focusDetail}
+              onClose={closeDetail}
+              onOpenRule={onOpenRule}
+              onNewer={selectedIndex > 0 ? () => select(visibleEntries[selectedIndex - 1], "replace") : undefined}
+              onOlder={
+                selectedIndex >= 0 && selectedIndex < visibleEntries.length - 1
+                  ? () => select(visibleEntries[selectedIndex + 1], "replace")
+                  : undefined
+              }
+            />
+          )}
+        </div>
       </section>
     </div>
   )
@@ -589,128 +529,6 @@ function ActivitySearch({ query, onSearch }: { query: string; onSearch: (query: 
       </div>
     </div>
   )
-}
-
-function ActivityTableRow({
-  row,
-  loadingChecks,
-  context,
-  state,
-  selectedId,
-  showRuleColumn,
-  onOpen,
-  onFilterRule,
-  onToggleRun,
-  onLoadMore,
-}: {
-  row: ActivityRow
-  loadingChecks: boolean
-  context: RuleContext
-  state: ActivityLocationState
-  selectedId: number | null
-  showRuleColumn: boolean
-  onOpen: (entry: AuditEntry) => void
-  onFilterRule: (ruleId: string) => void
-  onToggleRun: () => void
-  onLoadMore: () => void
-}) {
-  const toggleRef = useRef<HTMLButtonElement>(null)
-  if (row.kind === "folded") {
-    const label = row.expanded
-      ? `Hide ${row.count} no-change ${row.count === 1 ? "check" : "checks"}`
-      : `${row.count} ${row.count === 1 ? "event" : "events"} already up to date`
-    return (
-      <tr role="row" className="activity-folded-row">
-        <td role="cell" className="activity-col-time" />
-        <td role="cell" colSpan={showRuleColumn ? 3 : 2}>
-          <div className="activity-fold-actions">
-            <button
-              ref={toggleRef}
-              type="button"
-              className="activity-fold"
-              aria-expanded={row.expanded}
-              onClick={onToggleRun}
-            >
-              <Check aria-hidden="true" />
-              {label}
-              <ChevronDown aria-hidden="true" data-open={row.expanded} />
-            </button>
-            {/* Show more goes away once every check is loaded, so focus moves to the fold toggle
-                beside it first and is never lost; the status says what is loading. */}
-            {row.more && (
-              <button
-                type="button"
-                className="activity-fold"
-                aria-disabled={loadingChecks || undefined}
-                onClick={() => {
-                  if (loadingChecks) return
-                  toggleRef.current?.focus()
-                  onLoadMore()
-                }}
-              >
-                Show more
-              </button>
-            )}
-            <span className="activity-fold-status" role="status">
-              {loadingChecks ? "Loading…" : ""}
-            </span>
-          </div>
-        </td>
-      </tr>
-    )
-  }
-  return (
-    <EntryRow
-      entry={row.entry}
-      context={context}
-      state={state}
-      selected={selectedId === row.entry.id}
-      showRuleColumn={showRuleColumn}
-      onOpen={onOpen}
-      onFilterRule={onFilterRule}
-    />
-  )
-}
-
-function QuietRunsRow({
-  group,
-  columns,
-  onShowAll,
-}: {
-  group: Extract<ActivityGroup, { kind: "quiet" }>
-  columns: number
-  onShowAll: () => void
-}) {
-  const events = `${group.checks} ${group.checks === 1 ? "event" : "events"} already up to date`
-  const scope = group.runs > 1 ? ` across ${group.runs} runs since ${formatClockTime(group.oldest)}` : ""
-  return (
-    <tr role="row" className="activity-folded-row activity-quiet-row">
-      <td role="cell" className="activity-col-time">
-        <time dateTime={group.newest}>{formatClockTime(group.newest)}</time>
-      </td>
-      <td role="cell" colSpan={columns - 1}>
-        <div className="activity-fold-actions">
-          <span className="activity-quiet"><Check aria-hidden="true" />{events}{scope}</span>
-          <button type="button" className="activity-fold" onClick={onShowAll}>
-            Show all decisions
-          </button>
-        </div>
-      </td>
-    </tr>
-  )
-}
-
-/** Loads the first `pages` pages of one run's no-change checks. */
-async function loadNoChangeChecks(runId: string, pages: number): Promise<ExpandedChecks> {
-  const entries: AuditEntry[] = []
-  let before: number | undefined
-  for (let page = 0; page < pages; page += 1) {
-    const batch = await api.activity({ runId, categories: ["unchanged"], before })
-    entries.push(...batch)
-    if (batch.length < ACTIVITY_PAGE_SIZE) return { entries, complete: true }
-    before = batch.at(-1)?.id
-  }
-  return { entries, complete: false }
 }
 
 function EntryRow({

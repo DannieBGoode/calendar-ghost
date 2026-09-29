@@ -2203,8 +2203,7 @@ thead + .activity-day th {
   text-decoration: none;
 }
 
-.activity-row-link:focus-visible,
-.activity-fold:focus-visible {
+.activity-row-link:focus-visible {
   outline: 3px solid var(--ring);
   outline-offset: 3px;
 }
@@ -2473,56 +2472,6 @@ thead + .activity-day th {
   height: 0.85rem;
   flex: none;
   color: var(--muted-foreground);
-}
-
-.activity-fold {
-  display: inline-flex;
-  min-height: 2rem;
-  align-items: center;
-  gap: 0.45rem;
-  border-radius: 0.375rem;
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  transition: color var(--motion-fast) var(--ease-out);
-}
-
-.activity-fold-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 1rem;
-}
-
-.activity-fold-status,
-.activity-quiet {
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
-}
-
-.activity-quiet {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.activity-quiet svg {
-  width: 0.9rem;
-  height: 0.9rem;
-}
-
-.activity-fold:hover {
-  color: var(--foreground);
-}
-
-.activity-fold svg {
-  width: 0.9rem;
-  height: 0.9rem;
-  transition: transform var(--motion-fast) var(--ease-out);
-}
-
-.activity-fold svg[data-open="true"] {
-  transform: rotate(180deg);
 }
 
 .activity-detail {
@@ -2899,8 +2848,7 @@ thead + .activity-day th {
     clip-path: inset(50%);
   }
 
-  .activity-table tr.activity-row,
-  .activity-table tr.activity-folded-row {
+  .activity-table tr.activity-row {
     display: grid;
     grid-template-areas:
       "happened time"
@@ -2909,11 +2857,6 @@ thead + .activity-day th {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 0.3rem 0.75rem;
     padding: 0.75rem 0;
-  }
-
-  .activity-table tr.activity-folded-row {
-    grid-template-areas: "fold fold";
-    padding: 0.35rem 0;
   }
 
   .activity-run tr + tr,
@@ -2931,14 +2874,6 @@ thead + .activity-day th {
 
   .activity-table td.activity-col-time {
     grid-area: time;
-  }
-
-  .activity-folded-row td.activity-col-time {
-    display: none;
-  }
-
-  .activity-folded-row td[colspan] {
-    grid-area: fold;
   }
 
   .activity-col-event {

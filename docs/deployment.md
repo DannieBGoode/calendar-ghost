@@ -43,8 +43,8 @@ later failures, backfilled from existing successful outcomes. Rolling back works
 database: earlier releases ignore the table and column, and a rule previewed on the newer release
 still enables normally. Rows are removed with their rule.
 
-Migration 7 adds an index on `audit_entries(run_id, id)` so Activity can count and expand each
-run's no-change checks without scanning the whole audit history. Rolling back works with the same
+Migration 7 adds an index on `audit_entries(run_id, id)` so reading one run's audit entries does
+not scan the whole audit history. Rolling back works with the same
 database: earlier releases ignore the index.
 
 Migration 8 adds `rule_run_outcomes.last_full_succeeded_at`, the time of each rule's last successful

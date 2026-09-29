@@ -28,7 +28,6 @@ from calendar_sync.interfaces.api.schemas import (
     AuditEntryResponse,
     DashboardResponse,
     EventSnapshotResponse,
-    NoChangeRunResponse,
     RecentChangeResponse,
     RecordedEventResponse,
     RecordedTimeResponse,
@@ -78,7 +77,6 @@ def dashboard(services: Services) -> DashboardResponse:
 def list_activity(
     services: Services,
     rule_id: str | None = None,
-    run_id: str | None = None,
     category: Annotated[list[ActivityCategory] | None, Query()] = None,
     before: Annotated[int | None, Query(ge=1)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
@@ -86,39 +84,12 @@ def list_activity(
 ) -> list[AuditEntryResponse]:
     selection = ActivityFilter(
         rule_id=rule_id,
-        run_id=run_id,
         categories=frozenset(category or ()),
         before=before,
         limit=limit,
         search=q,
     )
     return [_entry_response(entry) for entry in services.activity.entries(selection)]
-
-
-@router.get(
-    "/api/v1/audit-entries/no-change-runs",
-    response_model=list[NoChangeRunResponse],
-    dependencies=[Depends(require_admin)],
-)
-def list_no_change_runs(
-    services: Services,
-    rule_id: str | None = None,
-    after: Annotated[int, Query(ge=0)] = 0,
-) -> list[NoChangeRunResponse]:
-    """Runs newer than entry `after` that made no-change checks, with how many each made.
-
-    The default Activity view hides these checks, including runs that made nothing else.
-    """
-    return [
-        NoChangeRunResponse(
-            run_id=run.run_id,
-            rule_id=run.rule_id,
-            newest_id=run.newest_id,
-            occurred_at=run.occurred_at,
-            count=run.count,
-        )
-        for run in services.activity.no_change_runs(rule_id, after)
-    ]
 
 
 @router.get(
