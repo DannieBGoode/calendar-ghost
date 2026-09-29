@@ -101,6 +101,7 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
 
 def test_create_cross_account_rule_through_api(tmp_path: Path) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
+    _connect_accounts(tmp_path / "test.db", "personal", "work")
 
     with TestClient(app) as client:
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
@@ -216,6 +217,7 @@ def test_rule_validation_rejects_unknown_policy_same_endpoint_and_duplicate(
     tmp_path: Path,
 ) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
+    _connect_accounts(tmp_path / "test.db", "personal", "work")
     base_payload = {
         "source": {"connected_account_id": "personal", "calendar_id": "calendar"},
         "destination": {"connected_account_id": "work", "calendar_id": "calendar"},
@@ -243,6 +245,28 @@ def test_rule_validation_rejects_unknown_policy_same_endpoint_and_duplicate(
         assert same_endpoint.status_code == 422
         assert first.status_code == 201
         assert duplicate.status_code == 409
+
+
+def test_rules_are_refused_for_accounts_this_installation_does_not_have(
+    tmp_path: Path,
+) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+    _connect_accounts(tmp_path / "test.db", "personal")
+    payload = {
+        "source": {"connected_account_id": "personal", "calendar_id": "calendar"},
+        "destination": {"connected_account_id": "deleted", "calendar_id": "calendar"},
+        "privacy_policy": "busy_only",
+        "sync_all_day_events": True,
+    }
+
+    with TestClient(app) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        refused = client.post("/api/v1/rules", json=payload)
+        rules = client.get("/api/v1/rules").json()
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"] == "connect both Google accounts before creating a rule"
+    assert rules == []
 
 
 def test_google_routes_report_unconfigured_installation(tmp_path: Path) -> None:
@@ -861,10 +885,25 @@ def _installation(settings: Settings, **substitutes: Any) -> tuple[Container, Ad
 
 def _client_with_rule(tmp_path: Path, state: SyncRuleState = SyncRuleState.ENABLED) -> TestClient:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
+    _connect_accounts(tmp_path / "test.db", "personal-account", "work-account")
     with adapters.unit_of_work() as uow:
         uow.rules.add(rule(state=state))
         uow.commit()
     return TestClient(create_app(container))
+
+
+def _connect_accounts(database: Path, *account_ids: str) -> None:
+    """Connected Account records, without credentials, for rules that name them."""
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO connected_accounts (
+                id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at
+            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01')
+            """,
+            [(account, account, f"{account}@example.test") for account in account_ids],
+        )
 
 
 @pytest.mark.parametrize(

@@ -35,6 +35,7 @@ from calendar_sync.application.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
+    ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
     EventInspectionUnavailable,
     InvalidAuthorizationState,
@@ -494,7 +495,7 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
             )
         except DomainValidationError as error:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
-        except DuplicateDirectionalRelationship as error:
+        except (ConnectedAccountRequired, DuplicateDirectionalRelationship) as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
         return _rule_response(rule)
 

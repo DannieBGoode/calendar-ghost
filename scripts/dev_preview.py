@@ -324,6 +324,26 @@ def _seed(adapters: Adapters, path: Path, now: datetime) -> None:  # noqa: C901
             uow.audit.append(entry)
         uow.commit()
     with closing(sqlite3.connect(path)) as connection, connection:
+        # Records only, so the preview's accounts can be used by new rules; no credentials.
+        connection.executemany(
+            """
+            INSERT INTO connected_accounts (
+                id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at
+            ) VALUES (?, 'google', ?, ?, x'00', ?, ?, ?)
+            """,
+            [
+                (
+                    account.id.value,
+                    account.display_name,
+                    account.email,
+                    account.state.value,
+                    now.isoformat(),
+                    now.isoformat(),
+                )
+                for account in ACCOUNTS
+            ],
+        )
         connection.execute(
             """
             INSERT INTO incidents

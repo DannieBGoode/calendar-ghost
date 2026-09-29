@@ -7,7 +7,10 @@ from threading import Thread
 
 import pytest
 
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.errors import (
+    ConnectedAccountRequired,
+    DuplicateDirectionalRelationship,
+)
 from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
@@ -18,6 +21,7 @@ from calendar_sync.application.ports import (
     RunKind,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.rules import CreateSyncRule
 from calendar_sync.domain.model import (
     ConnectedAccountId,
     EventId,
@@ -30,6 +34,7 @@ from calendar_sync.domain.model import (
     PrivacyPolicy,
     ProjectionFingerprint,
     SyncReason,
+    SyncRule,
     SyncRuleId,
     SyncRuleState,
     TransformationPolicy,
@@ -461,6 +466,44 @@ def test_account_deletion_holds_the_write_lock_so_reauthorization_waits_for_it(
         connected.id
     )
     assert store.get(disconnected.id) is None
+
+
+def test_a_rule_creation_waiting_behind_account_deletion_is_refused_afterwards(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    deleted = store.save("Personal", "person@example.test", "{}")
+    store.disconnect(deleted.id)
+    kept = store.save("Work", "work@example.test", "{}")
+    factory = SqliteUnitOfWorkFactory(database)
+    late_rule = SyncRule(
+        SyncRuleId("late"),
+        endpoint(deleted.id.value, "personal-calendar"),
+        endpoint(kept.id.value, "work-calendar"),
+    )
+    refused: list[Exception] = []
+
+    def create() -> None:
+        try:
+            CreateSyncRule(factory).execute(late_rule)
+        except ConnectedAccountRequired as error:
+            refused.append(error)
+
+    creating = Thread(target=create)
+    with factory() as uow:
+        assert uow.accounts.delete_disconnected(deleted.id)
+        creating.start()
+        creating.join(0.2)
+        waited_for_deletion = creating.is_alive()
+        uow.commit()
+    creating.join(2)
+
+    assert waited_for_deletion
+    assert len(refused) == 1
+    with factory() as uow:
+        assert uow.rules.list() == ()
 
 
 def test_account_records_report_state_inside_the_unit_of_work(tmp_path: Path) -> None:

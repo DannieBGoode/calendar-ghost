@@ -3,6 +3,7 @@ from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.errors import (
     ApplicationError,
+    ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
     RemovalInterrupted,
@@ -44,6 +45,13 @@ class CreateSyncRule:
                     "a rule already exists for this source and destination"
                 )
             uow.rules.add(rule)
+            # Checked after the insert holds the write lock, so an account deleted meanwhile
+            # cannot be left with a rule that names it. Raising rolls the insert back.
+            for endpoint in (rule.source, rule.destination):
+                if uow.accounts.state(endpoint.connected_account_id) is None:
+                    raise ConnectedAccountRequired(
+                        "connect both Google accounts before creating a rule"
+                    )
             uow.commit()
         return rule
 

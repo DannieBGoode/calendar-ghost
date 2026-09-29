@@ -127,6 +127,10 @@ class ConnectedAccountDisconnected(ApplicationError):
     """The Connected Account has no stored credentials until it is reauthorized."""
 
 
+class ConnectedAccountRequired(ApplicationError):
+    """A new rule names a Connected Account this installation does not have."""
+
+
 class ConnectedAccountMustBeDisconnected(ApplicationError):
     """Only a Disconnected Account can be permanently deleted."""
 

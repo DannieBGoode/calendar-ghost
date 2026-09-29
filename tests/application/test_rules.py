@@ -5,9 +5,9 @@ from threading import Thread
 
 import pytest
 
-from calendar_sync.application.errors import RuleNotFound
+from calendar_sync.application.errors import ConnectedAccountRequired, RuleNotFound
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.ports import RuleRunOutcome, RunKind
+from calendar_sync.application.ports import ConnectedAccountState, RuleRunOutcome, RunKind
 from calendar_sync.application.rules import (
     ChangeSyncRulePolicy,
     CreateDraftSyncRule,
@@ -167,6 +167,10 @@ def test_lifecycle_changes_wait_for_an_in_flight_provider_write(change: str) -> 
 
 def test_new_rules_are_drafts_under_a_generated_identity() -> None:
     unit_of_work = InMemoryUnitOfWorkFactory()
+    for endpoint_ in (rule().source, rule().destination):
+        unit_of_work.state.accounts[endpoint_.connected_account_id] = (
+            ConnectedAccountState.CONNECTED
+        )
     details = TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS)
 
     created = CreateDraftSyncRule(CreateSyncRule(unit_of_work), GeneratedIds("new-rule")).execute(
@@ -207,3 +211,15 @@ class GeneratedIds:
 
     def new(self) -> str:
         return self.value
+
+
+@pytest.mark.parametrize("missing", ["source", "destination"])
+def test_new_rules_require_both_connected_accounts_to_exist(missing: str) -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    present = rule().destination if missing == "source" else rule().source
+    unit_of_work.state.accounts[present.connected_account_id] = ConnectedAccountState.CONNECTED
+
+    with pytest.raises(ConnectedAccountRequired):
+        CreateSyncRule(unit_of_work).execute(rule(state=SyncRuleState.DRAFT))
+
+    assert unit_of_work.state.rules == {}
