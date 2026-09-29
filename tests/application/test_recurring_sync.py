@@ -20,6 +20,7 @@ from calendar_sync.domain.model import (
     OccurrenceStart,
     OccurrenceState,
     ProjectionContent,
+    ProjectionFingerprint,
     Recurrence,
     SyncAction,
     SyncReason,
@@ -1013,3 +1014,26 @@ def test_daily_pass_decides_a_blocked_occurrence_again() -> None:
     again = [entry for entry in factory.state.audit[recorded:] if entry.run_id == result.run_id]
     assert SyncReason.DESTINATION_OCCURRENCE_MISSING.value in [entry.reason for entry in again]
     assert result.listed_in_full
+
+
+def test_reverifying_an_occurrence_already_recorded_as_current_leaves_its_mapping_alone() -> None:
+    calendars, factory, _destination = _synced()
+    moved = calendars.put(occurrence(series(), 1, moved_by=timedelta(hours=1)))
+    calendars.report(moved)
+    sync_use_case(factory, calendars).execute(rule().id)
+    key = next(key for key in factory.state.occurrences if key[1] == week_start(1))
+    recorded = replace(
+        factory.state.occurrences[key], projection_fingerprint=ProjectionFingerprint("before")
+    )
+    factory.state.occurrences[key] = recorded
+    renamed = calendars.put(series(revision="series-revision-2", title="Renamed"), starts=STARTS)
+    calendars.report(renamed)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    # The series update re-verified the occurrence, found it current, and kept the record as is.
+    assert [entry.reason for entry in factory.state.audit][-2:] == [
+        SyncReason.SOURCE_CHANGED,
+        SyncReason.OCCURRENCE_CURRENT,
+    ]
+    assert factory.state.occurrences[key] == recorded

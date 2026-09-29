@@ -1,6 +1,9 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+import pytest
+
+from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.ports import CalendarReader, UnitOfWorkFactory
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.domain.model import (
@@ -72,6 +75,28 @@ def test_preview_revalidates_a_degraded_rule_after_reauthorization() -> None:
     use_case.execute(degraded.id)
 
     assert unit_of_work.state.rules[degraded.id].state is SyncRuleState.PREVIEWED
+
+
+def test_preview_of_a_missing_rule_is_refused() -> None:
+    provider = FakeCalendarProvider(event())
+
+    with pytest.raises(RuleNotExecutable, match="does not exist"):
+        _preview(InMemoryUnitOfWorkFactory(), provider).execute(rule().id)
+
+    assert provider.requested_endpoints == []
+
+
+@pytest.mark.parametrize("state", [SyncRuleState.ENABLED, SyncRuleState.REMOVING])
+def test_preview_is_refused_for_an_enabled_or_removing_rule(state: SyncRuleState) -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[rule().id] = rule(state=state)
+    provider = FakeCalendarProvider(event())
+
+    with pytest.raises(RuleNotExecutable, match="cannot preview"):
+        _preview(unit_of_work, provider).execute(rule().id)
+
+    assert provider.requested_endpoints == []
+    assert unit_of_work.state.rules[rule().id].state is state
 
 
 def test_preview_counts_series_and_occurrence_changes_with_planned_actions() -> None:

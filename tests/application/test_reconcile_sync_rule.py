@@ -20,6 +20,7 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
 from tests.application.test_recurring_sync import _LiveLookupCalendars
@@ -45,6 +46,7 @@ def test_reconciliation_independently_proves_managed_projection() -> None:
         SyncDecisionService(projector, fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     report = ReconcileSyncRule(

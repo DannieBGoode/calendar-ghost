@@ -22,6 +22,7 @@ from calendar_sync.domain.model import (
     Recurrence,
     SyncAction,
     SyncReason,
+    SyncRuleId,
     TimedInterval,
     TransformationPolicy,
 )
@@ -248,6 +249,66 @@ def test_update_reason_distinguishes_source_change_from_destination_drift() -> N
     assert drift.reason is SyncReason.DESTINATION_DRIFT_REPAIRED
     assert changed.action is SyncAction.UPDATE
     assert changed.reason is SyncReason.SOURCE_CHANGED
+
+
+def test_event_outside_the_source_calendar_is_ignored() -> None:
+    elsewhere = event(calendar=rule().destination)
+
+    decision = decisions.decide(rule(), elsewhere, None, None)
+
+    assert (decision.action, decision.reason) == (
+        SyncAction.IGNORE,
+        SyncReason.OUTSIDE_SOURCE_CALENDAR,
+    )
+
+
+def test_mapping_of_another_rule_is_a_conflict_not_a_write() -> None:
+    source = event()
+    destination = _destination(source, title="Edited on destination")
+    foreign = replace(_mapping(source, destination), rule_id=SyncRuleId("rule-2"))
+
+    decision = decisions.decide(rule(), source, foreign, destination)
+
+    assert (decision.action, decision.reason) == (
+        SyncAction.CONFLICT,
+        SyncReason.MAPPING_INCONSISTENT,
+    )
+
+
+def test_destination_other_than_the_mapped_one_is_a_conflict() -> None:
+    source = event()
+    destination = _destination(source)
+    mapping = _mapping(source, destination)
+    other = replace(destination, reference=EventRef(rule().destination, EventId("other")))
+
+    decision = decisions.decide(rule(), source, mapping, other)
+
+    assert (decision.action, decision.reason) == (
+        SyncAction.CONFLICT,
+        SyncReason.DESTINATION_IDENTITY_INCONSISTENT,
+    )
+
+
+def test_reconciliation_reports_an_edited_projection_and_a_stray_occurrence() -> None:
+    source = event()
+    destination = _destination(source, title="Edited on destination")
+    stray = replace(
+        occurrence(series(calendar=rule().destination), 1),
+        managed_origin=ManagedOrigin(rule().id, series().reference),
+    )
+
+    report = ReconciliationService(fingerprinter).reconcile(
+        rule(),
+        [_mapping(source, destination)],
+        {source.reference: projector.project(source, rule())},
+        {destination.reference: destination, stray.reference: stray},
+    )
+
+    # An occurrence of a series no mapping owns is unexpected, not an incorrect projection.
+    assert [(item.kind, item.destination) for item in report.drift] == [
+        (DriftKind.INCORRECT_PROJECTION, destination.reference),
+        (DriftKind.UNEXPECTED, stray.reference),
+    ]
 
 
 def test_reconciliation_reports_missing_and_unexpected_events() -> None:

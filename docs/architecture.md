@@ -37,6 +37,13 @@ route returns; never a concrete adapter, the unit of work, or the rule locks. Te
 development preview substitute adapters before `compose`, or use cases after it. Use cases that
 need the installation master key are absent without it, and one route guard answers 503 for them.
 
+Time and identifiers come through ports too. `build_adapters` makes one `SystemClock`, one
+`UuidIdGenerator`, and one `UuidRunIdGenerator`, and passes them to each adapter and use case that
+reads the time or makes an identifier: sessions, OAuth states, Connected Accounts, incidents, rule
+removal, Google's Retry-After dates, and Sync Run identifiers. Only the schema migration
+bookkeeping in `initialize_database` reads the system clock directly. Tests pass a fixed clock to
+check expiry and retry waits without sleeping.
+
 `interfaces/api/app.py` is only the factory: it installs the container, registers the routers, and
 serves the compiled Web UI after checking each requested file against the resolved static root. The
 routes live in one `APIRouter` module per resource under `interfaces/api/routes/` (session, setup,
