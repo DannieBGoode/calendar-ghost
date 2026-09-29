@@ -348,6 +348,32 @@ def test_acknowledged_lookup_that_finds_a_cancelled_series_never_deletes_it() ->
     assert factory.state.mappings == {}
 
 
+def test_acknowledged_lookup_that_finds_another_rules_series_is_blocked_not_deleted() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    destination = factory.state.mappings.pop((rule().id, master.reference)).destination
+    # The projection found under the create Operation Key names a different rule.
+    calendars.events[destination] = replace(
+        calendars.events[destination],
+        managed_origin=ManagedOrigin(SyncRuleId("other-rule"), master.reference),
+    )
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+    before = list(calendars.writes)
+
+    result = use_case.execute(rule().id, full=True)
+
+    assert calendars.writes == before
+    assert destination in calendars.events
+    assert result.deleted == 0
+    assert any(
+        entry.reason == SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT.value
+        for entry in factory.state.audit
+    )
+
+
 def test_this_and_following_split_truncates_the_old_series_and_creates_the_new_one() -> None:
     calendars, factory, destination = _synced()
     calendars.report(calendars.put(occurrence(series(), 3, moved_by=timedelta(hours=1))))
