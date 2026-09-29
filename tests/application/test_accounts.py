@@ -223,3 +223,58 @@ def test_deletion_is_refused_for_a_connected_or_unknown_account() -> None:
 
     assert connected.deleted == []
     assert list(unit_of_work.state.rules) == [affected.id]
+
+
+def test_deletion_also_locks_and_purges_a_rule_created_while_it_waited() -> None:
+    affected = _rule("affected", ACCOUNT.value)
+    late = _rule("late", ACCOUNT.value)
+    unit_of_work = _with_rules(affected)
+    accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
+    locks = RuleLocks()
+    delete = DeleteConnectedAccount(unit_of_work, accounts, locks)
+    running = locks.for_rule(affected.id)
+    running.acquire()
+    worker = Thread(target=delete.execute, args=(ACCOUNT,))
+    worker.start()
+    worker.join(0.1)
+    with unit_of_work() as uow:
+        uow.rules.add(late)
+        uow.commit()
+    late_run = locks.for_rule(late.id)
+    late_run.acquire()
+    running.release()
+    worker.join(0.2)
+    waited_for_the_late_rule = worker.is_alive()
+    late_run.release()
+    worker.join(2)
+
+    assert waited_for_the_late_rule
+    assert unit_of_work.state.rules == {}
+    assert accounts.deleted == [ACCOUNT]
+
+
+def test_deletion_is_refused_when_the_account_is_reauthorized_while_it_waited() -> None:
+    affected = _rule("affected", ACCOUNT.value)
+    unit_of_work = _with_rules(affected)
+    accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
+    locks = RuleLocks()
+    errors: list[Exception] = []
+
+    def delete() -> None:
+        try:
+            DeleteConnectedAccount(unit_of_work, accounts, locks).execute(ACCOUNT)
+        except ConnectedAccountMustBeDisconnected as error:
+            errors.append(error)
+
+    running = locks.for_rule(affected.id)
+    running.acquire()
+    worker = Thread(target=delete)
+    worker.start()
+    worker.join(0.1)
+    accounts.accounts[ACCOUNT] = _account()
+    running.release()
+    worker.join(2)
+
+    assert len(errors) == 1
+    assert accounts.deleted == []
+    assert list(unit_of_work.state.rules) == [affected.id]

@@ -78,13 +78,7 @@ class DeleteConnectedAccount:
     locks: RuleLocks
 
     def execute(self, account_id: ConnectedAccountId) -> int:
-        account = self.accounts.get(account_id)
-        if account is None:
-            raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
-        if account.state is not ConnectedAccountState.DISCONNECTED:
-            raise ConnectedAccountMustBeDisconnected(
-                "disconnect this Google account before deleting it permanently"
-            )
+        self._require_disconnected(account_id)
         affected = _affected_rules(self.unit_of_work, account_id)
         while True:
             with ExitStack() as held:
@@ -94,11 +88,21 @@ class DeleteConnectedAccount:
                     held.enter_context(self.locks.for_rule(rule_id))
                 for rule_id in affected:
                     held.enter_context(self.locks.for_writes(rule_id))
+                # The account may have been reauthorized, or a rule created for it, while waiting.
+                self._require_disconnected(account_id)
                 current = _affected_rules(self.unit_of_work, account_id)
-                # A rule created for the account while waiting must be locked as well.
                 if set(current) <= set(affected):
                     return self._delete(account_id, current)
             affected = _ordered({*affected, *current})
+
+    def _require_disconnected(self, account_id: ConnectedAccountId) -> None:
+        account = self.accounts.get(account_id)
+        if account is None:
+            raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
+        if account.state is not ConnectedAccountState.DISCONNECTED:
+            raise ConnectedAccountMustBeDisconnected(
+                "disconnect this Google account before deleting it permanently"
+            )
 
     def _delete(self, account_id: ConnectedAccountId, rules: Sequence[SyncRuleId]) -> int:
         with self.unit_of_work() as uow:
