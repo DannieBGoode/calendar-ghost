@@ -15,7 +15,7 @@ from calendar_sync.application.errors import (
     ActivityRuleRemoved,
     EventInspectionUnavailable,
 )
-from calendar_sync.application.ports import CalendarProvider, UnitOfWorkFactory
+from calendar_sync.application.ports import CalendarReader, UnitOfWorkFactory
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventId,
@@ -252,7 +252,7 @@ class InspectActivityEvent:
 
     entries: EntryEventQueries
     unit_of_work: UnitOfWorkFactory
-    provider: CalendarProvider | None
+    provider: CalendarReader | None
 
     def execute(self, entry_id: int) -> InspectedEvents:
         events = self.entries.entry_events(entry_id)

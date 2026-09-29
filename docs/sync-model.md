@@ -146,8 +146,8 @@ releases.
 ## Audit evidence
 
 Every write, block, and meaningful skip in a run appends one Audit Entry carrying the run
-identifier, the action, and a stable reason code from `SyncReason` in `domain/model.py`, so the
-Activity view can explain what changed and why an expected event was not synchronized. Updates
+identifier, an `AuditAction` and `AuditOutcome` from `application/ports.py`, and a stable reason
+code from `SyncReason` in `domain/model.py`, so the Activity view can explain what changed and why an expected event was not synchronized. Updates
 distinguish a changed
 source (`source_changed`) from a repaired destination edit (`destination_drift_repaired`). Entries
 also record the source event's title, time, recurrence, and cancellation as the run saw them, never

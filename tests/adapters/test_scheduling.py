@@ -16,14 +16,16 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.health import RuleHealth, RunHealth
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
+    AuditAction,
     AuditEntry,
+    AuditOutcome,
     IncidentReport,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
 )
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
-from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import SyncReason, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import (
     IncidentNotification,
     IncidentNotifier,
@@ -363,10 +365,12 @@ def _block(
     return AuditEntry(
         occurred_at=datetime(2026, 9, 29, 17, 5, tzinfo=UTC),
         rule_id=rule().id,
-        action=action,
-        outcome="blocked" if action == "conflict" else "completed",
+        action=AuditAction(action),
+        outcome=AuditOutcome.BLOCKED if action == "conflict" else AuditOutcome.COMPLETED,
         source_event_id=source_event_id,
-        reason="destination_occurrence_missing" if action == "conflict" else "occurrence_changed",
+        reason=SyncReason.DESTINATION_OCCURRENCE_MISSING
+        if action == "conflict"
+        else SyncReason.OCCURRENCE_CHANGED,
         run_id=run_id,
     )
 
@@ -642,7 +646,7 @@ def test_a_later_interleaved_decision_does_not_hide_the_daily_pass_verdict(
 
 def test_a_legacy_recurring_skip_is_not_evidence_of_an_earlier_block(tmp_path: Path) -> None:
     # Earlier releases recorded skipped recurring events as conflicts; they are skips.
-    legacy = replace(_block("upgrade"), reason="recurring_unsupported")
+    legacy = replace(_block("upgrade"), reason=SyncReason.RECURRING_UNSUPPORTED)
     database, health = _health_with(tmp_path, legacy, _block("daily"))
 
     health.record_full_pass(rule().id, 1, "daily")

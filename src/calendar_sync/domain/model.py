@@ -142,6 +142,10 @@ class ManagedOrigin:
     rule_id: SyncRuleId
     source: EventRef
 
+    def owns(self, rule: SyncRule, source: EventRef) -> bool:
+        """Whether this origin marks the projection `rule` manages for `source`."""
+        return self.rule_id == rule.id and self.source == source
+
 
 class EventStatus(StrEnum):
     CONFIRMED = "confirmed"
@@ -327,6 +331,10 @@ class EventMapping:
 
     def __post_init__(self) -> None:
         _require_non_empty(self.source_revision, "mapped source revision")
+
+    def belongs_to(self, rule: SyncRule) -> bool:
+        """Whether this mapping lies within the rule's directional relationship."""
+        return self.rule_id == rule.id and self.destination.calendar == rule.destination
 
 
 class OccurrenceState(StrEnum):

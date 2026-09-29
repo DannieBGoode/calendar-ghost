@@ -16,7 +16,13 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
 )
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import AuditEntry, ConnectedAccount, ConnectedAccountState
+from calendar_sync.application.ports import (
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
+    ConnectedAccount,
+    ConnectedAccountState,
+)
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW, endpoint
@@ -199,7 +205,9 @@ def test_deletion_purges_every_rule_using_the_account_and_then_the_account() -> 
     unit_of_work = _with_rules(affected, unrelated)
     with unit_of_work() as uow:
         for recorded in (affected, unrelated):
-            uow.audit.append(AuditEntry(NOW, recorded.id, "create", "completed"))
+            uow.audit.append(
+                AuditEntry(NOW, recorded.id, AuditAction.CREATE, AuditOutcome.COMPLETED)
+            )
         uow.commit()
     accounts = RecordingAccounts(_account(state=ConnectedAccountState.DISCONNECTED))
 

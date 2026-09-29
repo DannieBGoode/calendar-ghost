@@ -13,7 +13,7 @@ from calendar_sync.application.activity import (
     OpenBlock,
     activity_category,
 )
-from calendar_sync.application.ports import AuditEntry, RecordedEvent
+from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import SyncAction, SyncReason, SyncRuleId, TimedInterval
 from calendar_sync.infrastructure.persistence import activity_queries
 from calendar_sync.infrastructure.persistence.activity_queries import (
@@ -64,10 +64,12 @@ def _entry(
     return AuditEntry(
         occurred_at=START + timedelta(minutes=minutes),
         rule_id=SyncRuleId(rule_id),
-        action=action,
-        outcome={"ignore": "skipped", "conflict": "blocked"}.get(action, "completed"),
+        action=AuditAction(action),
+        outcome={"ignore": AuditOutcome.SKIPPED, "conflict": AuditOutcome.BLOCKED}.get(
+            action, AuditOutcome.COMPLETED
+        ),
         source_event_id=source_event_id,
-        reason=reason,
+        reason=SyncReason(reason) if reason is not None else None,
         run_id=run_id,
         event=(
             RecordedEvent(title, TimedInterval(START, START + timedelta(hours=1)))

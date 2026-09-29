@@ -23,7 +23,13 @@ from calendar_sync.domain.services import (
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
 from tests.application.test_recurring_sync import _LiveLookupCalendars
-from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
+from tests.fake_calendar import (
+    WRITE_OPERATIONS,
+    FakeCalendars,
+    ReaderOnlyCalendar,
+    enabled_rule_factory,
+    sync_use_case,
+)
 from tests.helpers import endpoint, event, occurrence, rule, series, week_start
 
 
@@ -321,3 +327,29 @@ def test_reconciliation_reports_an_inconsistent_mapping_even_when_its_series_is_
     report = _reconcile(factory, calendars)
 
     assert [item.kind for item in report.drift] == [DriftKind.MAPPING_INCONSISTENCY]
+
+
+def test_reconciliation_runs_against_a_calendar_that_can_only_read() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    edited = calendars.get_occurrence(destination, week_start(1))
+    assert edited is not None
+    calendars.put(replace(edited, title="Edited"))
+    writes = list(calendars.writes)
+    reader = ReaderOnlyCalendar(calendars)
+
+    report = ReconcileSyncRule(
+        factory,
+        reader,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert not any(hasattr(reader, name) for name in WRITE_OPERATIONS)
+    assert [item.kind for item in report.drift] == [DriftKind.INCORRECT_PROJECTION]
+    assert calendars.writes == writes

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
-    CalendarProvider,
+    CalendarReader,
     Clock,
     FullPassRecords,
     RuleRunOutcome,
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 @dataclass(slots=True)
 class ReconcileSyncRule:
     unit_of_work: UnitOfWorkFactory
-    provider: CalendarProvider
+    provider: CalendarReader
     projector: EventProjector
     reconciliation: ReconciliationService
     clock: Clock
@@ -146,7 +146,7 @@ class ReconcileSyncRule:
         if (
             source.recurrence is None
             or mapping.destination in actual
-            or not _in_rule(mapping, rule)
+            or not mapping.belongs_to(rule)
             or self.provider.has_live_occurrences(
                 source.reference, include_all_day=rule.transformation.includes_all_day
             )
@@ -154,10 +154,6 @@ class ReconcileSyncRule:
             return False
         destination = self.provider.get_event(mapping.destination)
         return destination is None or destination.status is EventStatus.CANCELLED
-
-
-def _in_rule(mapping: EventMapping, rule: SyncRule) -> bool:
-    return mapping.rule_id == rule.id and mapping.destination.calendar == rule.destination
 
 
 def _eligible(source: CalendarEvent, rule: SyncRule) -> bool:

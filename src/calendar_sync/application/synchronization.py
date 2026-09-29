@@ -15,7 +15,9 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.occurrences import SynchronizeOccurrences
 from calendar_sync.application.ports import (
+    AuditAction,
     AuditEntry,
+    AuditOutcome,
     CalendarProvider,
     Clock,
     RecordedEvent,
@@ -24,7 +26,6 @@ from calendar_sync.application.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync_run import (
-    OUTCOMES,
     SyncRunContext,
     has_live_occurrences,
     record,
@@ -74,6 +75,7 @@ class ExecuteSyncRule:
 
     def __post_init__(self) -> None:
         self.occurrences = SynchronizeOccurrences(
+            self.provider,
             self.provider,
             self.decisions,
             self.fingerprinter,
@@ -251,8 +253,7 @@ class ExecuteSyncRule:
             run.incremental
             and destination.status is EventStatus.CONFIRMED
             and origin is not None
-            and origin.rule_id == run.rule.id
-            and origin.source == mapping.source
+            and origin.owns(run.rule, mapping.source)
             and self.fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
             == mapping.projection_fingerprint
         )
@@ -272,8 +273,7 @@ class ExecuteSyncRule:
         return (
             destination.status is EventStatus.CONFIRMED
             and origin is not None
-            and origin.rule_id == run.rule.id
-            and origin.source == series_mapping.source
+            and origin.owns(run.rule, series_mapping.source)
             and self.fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
             == recorded.projection_fingerprint
         )
@@ -385,10 +385,10 @@ class ExecuteSyncRule:
             AuditEntry(
                 occurred_at=self.clock.now(),
                 rule_id=run.rule.id,
-                action=SyncAction.IGNORE.value,
-                outcome=OUTCOMES[SyncAction.IGNORE],
+                action=AuditAction.IGNORE,
+                outcome=AuditOutcome.SKIPPED,
                 source_event_id=exception.reference.event_id.value,
-                reason=SyncReason.SERIES_NOT_SYNCHRONIZED.value,
+                reason=SyncReason.SERIES_NOT_SYNCHRONIZED,
                 run_id=run.run_id,
                 event=RecordedEvent.of(exception),
             ),
@@ -402,11 +402,11 @@ class ExecuteSyncRule:
             AuditEntry(
                 occurred_at=self.clock.now(),
                 rule_id=run.rule.id,
-                action=SyncAction.CONFLICT.value,
-                outcome="blocked",
+                action=AuditAction.CONFLICT,
+                outcome=AuditOutcome.BLOCKED,
                 source_event_id=source.event_id.value,
                 destination_event_id=destination.event_id.value if destination else None,
-                reason=SyncReason.SOURCE_UNVERIFIABLE.value,
+                reason=SyncReason.SOURCE_UNVERIFIABLE,
                 run_id=run.run_id,
             )
         )
@@ -570,11 +570,11 @@ class ExecuteSyncRule:
                 AuditEntry(
                     occurred_at=self.clock.now(),
                     rule_id=rule.id,
-                    action=decision.action.value,
-                    outcome=OUTCOMES.get(decision.action, "completed"),
+                    action=AuditAction.of(decision.action),
+                    outcome=AuditOutcome.of(decision.action),
                     source_event_id=source_event.reference.event_id.value,
                     destination_event_id=mapping.destination.event_id.value if mapping else None,
-                    reason=decision.reason.value,
+                    reason=decision.reason,
                     run_id=run.run_id,
                     event=RecordedEvent.of(source_event),
                 ),

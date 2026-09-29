@@ -11,7 +11,9 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.locking import RuleLocks, RuleWork
 from calendar_sync.application.ports import (
+    AuditAction,
     AuditEntry,
+    AuditOutcome,
     Clock,
     IdGenerator,
     RulePreviewSummary,
@@ -135,8 +137,8 @@ class ChangeSyncRulePolicy:
                 AuditEntry(
                     occurred_at=self.clock.now(),
                     rule_id=rule.id,
-                    action="policy_changed",
-                    outcome="completed",
+                    action=AuditAction.POLICY_CHANGED,
+                    outcome=AuditOutcome.COMPLETED,
                     detail=f"privacy={privacy.value}, all_day={all_day.value}",
                 )
             )

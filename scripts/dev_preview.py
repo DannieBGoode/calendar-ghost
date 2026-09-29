@@ -33,7 +33,9 @@ from calendar_sync.application.errors import ProviderFailure, ProviderFailureKin
 from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
+    AuditAction,
     AuditEntry,
+    AuditOutcome,
     CalendarProvider,
     ConnectedAccount,
     ConnectedAccountRepository,
@@ -53,6 +55,7 @@ from calendar_sync.domain.model import (
     EventRef,
     EventStatus,
     Recurrence,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
@@ -266,11 +269,13 @@ def _seed(adapters: Adapters, path: Path, now: datetime) -> None:  # noqa: C901
             AuditEntry(
                 occurred_at=now - timedelta(minutes=minutes_ago),
                 rule_id=SyncRuleId(rule),
-                action=action,
-                outcome={"ignore": "skipped", "conflict": "blocked"}.get(action, "completed"),
+                action=AuditAction(action),
+                outcome={"ignore": AuditOutcome.SKIPPED, "conflict": AuditOutcome.BLOCKED}.get(
+                    action, AuditOutcome.COMPLETED
+                ),
                 source_event_id=event,
                 destination_event_id=f"copy-{event}" if event and projection else None,
-                reason=reason,
+                reason=SyncReason(reason) if reason is not None else None,
                 run_id=run,
                 event=recorded,
             )

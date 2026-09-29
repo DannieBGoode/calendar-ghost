@@ -5,9 +5,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import AuditEntry, CalendarProvider, Clock, RecordedEvent
+from calendar_sync.application.ports import (
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
+    CalendarReader,
+    Clock,
+    OccurrenceWriter,
+    RecordedEvent,
+)
 from calendar_sync.application.sync_run import (
-    OUTCOMES,
     SyncRunContext,
     has_live_occurrences,
     record,
@@ -40,7 +47,8 @@ _RECORDED_WHEN_UNCHANGED = {
 class SynchronizeOccurrences:
     """Applies source authority to single occurrences of mapped series."""
 
-    provider: CalendarProvider
+    provider: CalendarReader
+    writer: OccurrenceWriter
     decisions: SyncDecisionService
     fingerprinter: ProjectionFingerprinter
     clock: Clock
@@ -154,7 +162,7 @@ class SynchronizeOccurrences:
             if decision.action is SyncAction.UPDATE and decision.projection is not None:
                 assert series_mapping is not None
                 assert source_occurrence is not None
-                written = self.provider.write_occurrence(
+                written = self.writer.write_occurrence(
                     series_mapping.destination,
                     original_start,
                     source_series.reference,
@@ -176,7 +184,7 @@ class SynchronizeOccurrences:
                 )
             elif decision.action is SyncAction.DELETE:
                 assert series_mapping is not None
-                self.provider.cancel_occurrence(
+                self.writer.cancel_occurrence(
                     series_mapping.destination,
                     original_start,
                     source_series.reference,
@@ -238,14 +246,14 @@ class SynchronizeOccurrences:
                 AuditEntry(
                     occurred_at=self.clock.now(),
                     rule_id=run.rule.id,
-                    action=decision.action.value,
-                    outcome=OUTCOMES.get(decision.action, "completed"),
+                    action=AuditAction.of(decision.action),
+                    outcome=AuditOutcome.of(decision.action),
                     source_event_id=(source_ref or source_series.reference).event_id.value,
                     destination_event_id=destination_ref.event_id.value
                     if destination_ref
                     else None,
                     detail=detail,
-                    reason=decision.reason.value,
+                    reason=decision.reason,
                     run_id=run.run_id,
                     event=_recorded_event(source_occurrence),
                 ),
