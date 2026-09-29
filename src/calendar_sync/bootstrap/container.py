@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from calendar_sync.application.activity import ActivityQueries, OperationsQueries
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import CalendarProvider, UnitOfWorkFactory
 from calendar_sync.application.preview import PreviewSyncRule
@@ -34,6 +35,10 @@ from calendar_sync.infrastructure.notifications import (
     SmtpChannel,
     WebhookChannel,
 )
+from calendar_sync.infrastructure.persistence.activity_queries import (
+    SqliteActivityQueries,
+    SqliteOperationsQueries,
+)
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
@@ -53,6 +58,8 @@ class Container:
     remove_sync_rule: RemoveSyncRule
     replace_sync_rule_calendars: ReplaceSyncRuleCalendars
     admin_auth: SqliteAdminAuth
+    activity: ActivityQueries
+    operations: OperationsQueries
     connected_accounts: SqliteConnectedAccountStore | None
     google_oauth: GoogleOAuthService | None
     calendar_provider: CalendarProvider | None
@@ -146,6 +153,8 @@ def build_container(settings: Settings | None = None) -> Container:
             unit_of_work, remove_sync_rule, create_sync_rule, UuidIdGenerator()
         ),
         admin_auth=SqliteAdminAuth(resolved.database_path),
+        activity=SqliteActivityQueries(resolved.database_path),
+        operations=SqliteOperationsQueries(resolved.database_path),
         connected_accounts=accounts,
         google_oauth=google_oauth,
         calendar_provider=provider,

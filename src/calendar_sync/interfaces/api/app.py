@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sqlite3
-import unicodedata
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
-from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
 
 import uvicorn
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
@@ -20,6 +17,13 @@ from starlette.routing import Match, Route
 from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
+from calendar_sync.application.activity import (
+    ActivityCategory,
+    ActivityEntry,
+    ActivityEvent,
+    ActivityFilter,
+    RecordedTime,
+)
 from calendar_sync.application.errors import (
     ApplicationError,
     DuplicateDirectionalRelationship,
@@ -33,7 +37,6 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.locking import RuleWork
 from calendar_sync.application.ports import RulePreviewSummary, RuleRunOutcome, RunKind
-from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import (
@@ -47,8 +50,6 @@ from calendar_sync.domain.model import (
     EventStatus,
     PrivacyPolicy,
     ProjectionHandling,
-    SyncAction,
-    SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
@@ -66,7 +67,6 @@ from calendar_sync.infrastructure.google.oauth import (
     GoogleOAuthNotConfigured,
     InvalidOAuthState,
 )
-from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
 from calendar_sync.infrastructure.scheduling import SqliteRuleHealth
 from calendar_sync.infrastructure.security import (
     AdminAlreadyConfigured,
@@ -106,40 +106,6 @@ from calendar_sync.interfaces.api.schemas import (
 
 SESSION_COOKIE = "calendar_sync_session"
 logger = logging.getLogger(__name__)
-
-ActivityCategory = Literal["changed", "unchanged", "skipped", "blocked"]
-
-# Ignored decisions that confirmed the destination already matches; other ignores are skips.
-_NO_CHANGE_REASONS = frozenset(
-    {
-        SyncReason.PROJECTION_CURRENT,
-        SyncReason.OCCURRENCE_CURRENT,
-        SyncReason.OCCURRENCE_ALREADY_CANCELLED,
-    }
-)
-_NO_CHANGE_SQL = ", ".join(f"'{reason.value}'" for reason in sorted(_NO_CHANGE_REASONS))
-# Earlier releases recorded these skips; Activity no longer lists them.
-_UNRECORDED_SQL = ", ".join(f"'{reason.value}'" for reason in sorted(UNRECORDED_REASONS))
-# No-change summaries cover at most this many recent runs and audit entries.
-_NO_CHANGE_RUN_LIMIT = 500
-_NO_CHANGE_SCAN_LIMIT = 50_000
-
-# Recurring exclusions were recorded as conflicts before reason codes existed; they are skips.
-_ACTIVITY_CATEGORY_SQL: dict[ActivityCategory, str] = {
-    "changed": (
-        "action IN ('create', 'update', 'delete', 'policy_changed', 'remove_projection',"
-        " 'detach_projection', 'rule_removed')"
-    ),
-    "unchanged": f"action = 'ignore' AND reason IN ({_NO_CHANGE_SQL})",
-    "skipped": (
-        f"((action = 'ignore' AND COALESCE(reason, '') NOT IN ({_NO_CHANGE_SQL}))"
-        " OR reason = 'recurring_unsupported')"
-    ),
-    "blocked": (
-        "((action = 'conflict' AND COALESCE(reason, '') != 'recurring_unsupported')"
-        " OR action = 'removal_conflict')"
-    ),
-}
 
 
 def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PLR0915
@@ -218,38 +184,26 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def dashboard() -> DashboardResponse:
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            account_states = dict(
-                connection.execute(
-                    "SELECT state, COUNT(*) FROM connected_accounts GROUP BY state"
-                ).fetchall()
-            )
-            incidents = int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM incidents WHERE state = 'open'"
-                ).fetchone()[0]
-            )
-            last_synced_at = connection.execute(
-                "SELECT MAX(last_succeeded_at) FROM rule_run_outcomes WHERE kind = 'sync'"
-            ).fetchone()[0]
         with resolved.unit_of_work() as uow:
             states = [rule.state for rule in uow.rules.list()]
         stopped = sum(state in {SyncRuleState.DEGRADED, SyncRuleState.DISABLED} for state in states)
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            blocks = open_blocks(connection)
+        overview = resolved.operations.overview()
+        blocks = overview.open_blocks
         return DashboardResponse(
-            health="attention" if incidents or stopped else "healthy",
-            connected_accounts=int(account_states.get("connected", 0)),
-            disconnected_accounts=int(account_states.get("disconnected", 0)),
+            health="attention" if overview.open_incidents or stopped else "healthy",
+            connected_accounts=overview.connected_accounts,
+            disconnected_accounts=overview.disconnected_accounts,
             sync_rules=len(states),
             enabled_rules=sum(state is SyncRuleState.ENABLED for state in states),
             stopped_rules=stopped,
-            open_incidents=incidents,
-            last_synced_at=last_synced_at,
+            open_incidents=overview.open_incidents,
+            last_synced_at=overview.last_synced_at,
             blocked_events=len(blocks),
-            blocked_entry_id=blocks[0][0] if blocks else None,
+            blocked_entry_id=blocks[0].entry_id if blocks else None,
             # Name the rule only when every open block belongs to it.
-            blocked_rule_id=blocks[0][1] if len({rule for _, rule in blocks}) == 1 else None,
+            blocked_rule_id=(
+                blocks[0].rule_id if len({block.rule_id for block in blocks}) == 1 else None
+            ),
         )
 
     @app.get(
@@ -476,37 +430,15 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         limit: Annotated[int, Query(ge=1, le=200)] = 100,
         q: Annotated[str | None, Query(max_length=200)] = None,
     ) -> list[AuditEntryResponse]:
-        conditions = [f"COALESCE(reason, '') NOT IN ({_UNRECORDED_SQL})"]
-        parameters: list[object] = []
-        if q is not None and q.strip():
-            # Matches the title each run recorded, ignoring case and accents.
-            conditions.append("search_fold(event_title) LIKE ? ESCAPE '\\'")
-            parameters.append(f"%{_like_escape(_search_fold(q.strip()))}%")
-        if rule_id is not None:
-            conditions.append("rule_id = ?")
-            parameters.append(rule_id)
-        if run_id is not None:
-            conditions.append("run_id = ?")
-            parameters.append(run_id)
-        if category:
-            chosen = " OR ".join(f"({_ACTIVITY_CATEGORY_SQL[item]})" for item in set(category))
-            conditions.append(f"({chosen})")
-        if before is not None:
-            conditions.append("id < ?")
-            parameters.append(before)
-        where = f"WHERE {' AND '.join(conditions)}"
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            connection.row_factory = sqlite3.Row
-            connection.create_function("search_fold", 1, _search_fold_column, deterministic=True)
-            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-            rows = connection.execute(
-                f"""
-                SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS}
-                FROM audit_entries {where} ORDER BY id DESC LIMIT ?
-                """,  # noqa: S608
-                (*parameters, limit),
-            ).fetchall()
-            return _audit_entry_responses(connection, rows)
+        selection = ActivityFilter(
+            rule_id=rule_id,
+            run_id=run_id,
+            categories=frozenset(category or ()),
+            before=before,
+            limit=limit,
+            search=q,
+        )
+        return [_entry_response(entry) for entry in resolved.activity.entries(selection)]
 
     @app.get(
         "/api/v1/audit-entries/no-change-runs",
@@ -521,37 +453,15 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
 
         The default Activity view hides these checks, including runs that made nothing else.
         """
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            newest = connection.execute(
-                "SELECT COALESCE(MAX(id), 0) FROM audit_entries"
-            ).fetchone()[0]
-            # Only recent history is summarized, so the scan stays bounded as history grows.
-            lower = max(after, int(newest) - _NO_CHANGE_SCAN_LIMIT)
-            recent = connection.execute(
-                _recent_runs_sql(with_rule=rule_id is not None),
-                (*([rule_id] if rule_id is not None else []), lower, _NO_CHANGE_RUN_LIMIT),
-            ).fetchall()
-            # Count each run whole, even where the page boundary splits it.
-            run_ids = [row[0] for row in recent]
-            placeholders = ", ".join("?" for _ in run_ids)
-            rows = (
-                # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-                connection.execute(
-                    f"""
-                    SELECT run_id, rule_id, MAX(id), MAX(occurred_at), COUNT(*) FROM audit_entries
-                    WHERE run_id IN ({placeholders}) AND {_ACTIVITY_CATEGORY_SQL["unchanged"]}
-                    GROUP BY run_id ORDER BY MAX(id) DESC
-                    """,  # noqa: S608
-                    run_ids,
-                ).fetchall()
-                if run_ids
-                else []
-            )
         return [
             NoChangeRunResponse(
-                run_id=row[0], rule_id=row[1], newest_id=row[2], occurred_at=row[3], count=row[4]
+                run_id=run.run_id,
+                rule_id=run.rule_id,
+                newest_id=run.newest_id,
+                occurred_at=run.occurred_at,
+                count=run.count,
             )
-            for row in rows
+            for run in resolved.activity.no_change_runs(rule_id, after)
         ]
 
     @app.get(
@@ -560,17 +470,10 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def get_activity_entry(entry_id: int) -> AuditEntryResponse:
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            connection.row_factory = sqlite3.Row
-            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-            row = connection.execute(
-                f"SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS}"  # noqa: S608
-                " FROM audit_entries WHERE id = ?",
-                (entry_id,),
-            ).fetchone()
-            if row is None:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry not found")
-            return _audit_entry_responses(connection, [row])[0]
+        entry = resolved.activity.entry(entry_id)
+        if entry is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry not found")
+        return _entry_response(entry)
 
     @app.get(
         "/api/v1/recent-changes",
@@ -580,44 +483,13 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
     def recent_changes(
         limit: Annotated[int, Query(ge=1, le=20)] = 5,
     ) -> list[RecentChangeResponse]:
-        # The newest written events. A repair identical to a newer one, the same repair of the
-        # same event as recorded at the same time, is counted on it rather than listed again, so a
-        # repair repeated on every run shows as one line.
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            connection.row_factory = sqlite3.Row
-            groups: dict[tuple[object, ...], list[sqlite3.Row]] = {}
-            # Page backwards until more distinct changes than requested are found, so a repair
-            # repeated on every run never hides older changes; the scan stays bounded.
-            before: int | None = None
-            for _ in range(_RECENT_WRITE_PAGES):
-                # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-                rows = connection.execute(
-                    f"""
-                    SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS} FROM audit_entries
-                    WHERE action IN ({_WRITE_ACTIONS}) AND source_event_id IS NOT NULL
-                        {"AND id < ?" if before is not None else ""}
-                    ORDER BY id DESC LIMIT ?
-                    """,  # noqa: S608
-                    (*([before] if before is not None else []), _RECENT_WRITE_PAGE_SIZE),
-                ).fetchall()
-                for row in rows:
-                    # Only repairs collapse; any other write is a change of its own.
-                    key = (
-                        tuple(row[column] for column in _IDENTICAL_WRITE)
-                        if row["reason"] in _REPAIRS
-                        else (row["id"],)
-                    )
-                    groups.setdefault(key, []).append(row)
-                if len(rows) < _RECENT_WRITE_PAGE_SIZE or len(groups) > limit:
-                    break
-                before = int(rows[-1]["id"])
-            chosen = list(groups.values())[:limit]
-            heads = _audit_entry_responses(connection, [group[0] for group in chosen])
         return [
             RecentChangeResponse(
-                entry=head, repeats=len(group), first_occurred_at=group[-1]["occurred_at"]
+                entry=_entry_response(change.entry),
+                repeats=change.repeats,
+                first_occurred_at=change.first_occurred_at,
             )
-            for head, group in zip(heads, chosen, strict=True)
+            for change in resolved.activity.recent_changes(limit)
         ]
 
     @app.get(
@@ -626,18 +498,11 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     async def inspect_activity_event(entry_id: int) -> ActivityEventResponse:
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            row = connection.execute(
-                """
-                SELECT rule_id, source_event_id, destination_event_id
-                FROM audit_entries WHERE id = ?
-                """,
-                (entry_id,),
-            ).fetchone()
-        if row is None or row[1] is None:
+        events = resolved.activity.entry_events(entry_id)
+        if events is None or events.source_event_id is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry has no source event")
         with resolved.unit_of_work() as uow:
-            rule = uow.rules.get(SyncRuleId(str(row[0])))
+            rule = uow.rules.get(SyncRuleId(events.rule_id))
         if rule is None:
             # Retained history of a removed rule no longer names its calendars.
             raise HTTPException(
@@ -653,13 +518,14 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         # Event content is read live for display only; it is never persisted or logged.
         try:
             source = await asyncio.to_thread(
-                provider.get_event, EventRef(rule.source, EventId(str(row[1])))
+                provider.get_event, EventRef(rule.source, EventId(events.source_event_id))
             )
             destination = (
                 await asyncio.to_thread(
-                    provider.get_event, EventRef(rule.destination, EventId(str(row[2])))
+                    provider.get_event,
+                    EventRef(rule.destination, EventId(events.destination_event_id)),
                 )
-                if row[2] is not None
+                if events.destination_event_id is not None
                 else None
             )
         except ProviderFailure as error:
@@ -669,7 +535,9 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
             ) from error
         return ActivityEventResponse(
             source=_event_snapshot(source),
-            destination=_event_snapshot(destination) if row[2] is not None else None,
+            destination=(
+                _event_snapshot(destination) if events.destination_event_id is not None else None
+            ),
         )
 
     @app.get(
@@ -678,15 +546,18 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
         dependencies=[Depends(require_admin)],
     )
     def list_incidents() -> list[IncidentResponse]:
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            connection.row_factory = sqlite3.Row
-            rows = connection.execute(
-                """
-                SELECT id, rule_id, category, state, summary, opened_at, updated_at
-                FROM incidents ORDER BY state ASC, updated_at DESC LIMIT 100
-                """
-            ).fetchall()
-        return [IncidentResponse(**dict(row)) for row in rows]
+        return [
+            IncidentResponse(
+                id=incident.id,
+                rule_id=incident.rule_id,
+                category=incident.category,
+                state=incident.state,
+                summary=incident.summary,
+                opened_at=incident.opened_at,
+                updated_at=incident.updated_at,
+            )
+            for incident in resolved.operations.incidents()
+        ]
 
     @app.post(
         "/api/v1/rules",
@@ -967,34 +838,6 @@ def create_app(container: Container | None = None) -> FastAPI:  # noqa: C901, PL
     return app
 
 
-_WRITES = ("create", "update", "delete", "remove_projection")
-# Writes that put a destination event back to match its source.
-_REPAIRS = frozenset(
-    {
-        SyncReason.PROJECTION_MISSING.value,
-        SyncReason.DESTINATION_DRIFT_REPAIRED.value,
-        SyncReason.OCCURRENCE_DRIFT_REPAIRED.value,
-    }
-)
-_WRITE_ACTIONS = ", ".join(f"'{action}'" for action in _WRITES)
-# Recent changes read writes in pages until they find more distinct changes than requested, at
-# most 10,000 writes; a repeated repair's count covers the writes read.
-_RECENT_WRITE_PAGE_SIZE = 500
-_RECENT_WRITE_PAGES = 20
-_IDENTICAL_WRITE = (
-    "rule_id",
-    "source_event_id",
-    "action",
-    "reason",
-    "event_title",
-    "event_starts",
-    "event_ends",
-    "event_all_day",
-    "event_recurring",
-    "event_cancelled",
-)
-
-
 def _audit_floor(health: SqliteRuleHealth) -> int | None:
     try:
         return health.audit_floor()
@@ -1024,173 +867,39 @@ def _preview_response(summary: RulePreviewSummary | None) -> PreviewSummaryRespo
     )
 
 
-_AUDIT_ENTRY_COLUMNS = (
-    "id, run_id, occurred_at, rule_id, action, outcome, reason, detail,"
-    " source_event_id, destination_event_id"
-)
-# An entry observed its event's title unless Google reported a cancellation without one.
-_TITLE_OBSERVED = "event_title IS NOT NULL AND (event_title <> '' OR NOT event_cancelled)"
-_AUDIT_ENTRY_KEYS = tuple(column.strip() for column in _AUDIT_ENTRY_COLUMNS.split(","))
-_RECORDED_EVENT_COLUMNS = (
-    "event_title, event_starts, event_ends, event_all_day, event_recurring, event_cancelled"
-)
-
-
-@lru_cache(maxsize=4096)
-def _search_fold(text: str) -> str:
-    """Text without case or accents, so "reunion" finds "Reunión". Repeated titles hit the cache."""
-    decomposed = unicodedata.normalize("NFKD", text)
-    return "".join(char for char in decomposed if not unicodedata.combining(char)).casefold()
-
-
-def _search_fold_column(text: str | None) -> str | None:
-    return None if text is None else _search_fold(text)
-
-
-def _like_escape(text: str) -> str:
-    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _recent_runs_sql(*, with_rule: bool) -> str:
-    """Runs with any entry newer than a bound, newest first.
-
-    Grouping by run would otherwise lead SQLite to walk the run index across the whole history
-    before applying the bound, so the scan is pinned to the entry range or the rule's range.
-    """
-    source = (
-        "audit_entries INDEXED BY audit_entries_rule_id WHERE rule_id = ? AND id > ?"
-        if with_rule
-        else "audit_entries NOT INDEXED WHERE id > ?"
+def _entry_response(entry: ActivityEntry) -> AuditEntryResponse:
+    return AuditEntryResponse(
+        id=entry.id,
+        run_id=entry.run_id,
+        occurred_at=entry.occurred_at,
+        rule_id=entry.rule_id,
+        action=entry.action,
+        outcome=entry.outcome,
+        category=entry.category,
+        reason=entry.reason,
+        detail=entry.detail,
+        source_event_id=entry.source_event_id,
+        destination_event_id=entry.destination_event_id,
+        event=_recorded_event_response(entry.event) if entry.event is not None else None,
+        repeated=entry.repeated,
     )
-    # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-    return f"""
-        SELECT run_id FROM {source} AND run_id IS NOT NULL
-        GROUP BY run_id ORDER BY MAX(id) DESC LIMIT ?
-    """  # noqa: S608
 
 
-def _audit_entry_responses(
-    connection: sqlite3.Connection, rows: Sequence[sqlite3.Row]
-) -> list[AuditEntryResponse]:
-    """Entries with the event each names, falling back to the event's previous recorded name."""
-    ids = [row["id"] for row in rows if row["source_event_id"] is not None]
-    previous: dict[int, sqlite3.Row] = {}
-    if ids:
-        previous = {
-            row["entry_id"]: row
-            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-            for row in connection.execute(
-                f"""
-                SELECT a.id AS entry_id, p.event_title, p.event_starts, p.event_ends,
-                    p.event_all_day, p.event_recurring
-                FROM audit_entries a JOIN audit_entries p ON p.id = (
-                    SELECT id FROM audit_entries
-                    WHERE rule_id = a.rule_id AND source_event_id = a.source_event_id
-                        AND id < a.id AND {_TITLE_OBSERVED}
-                    ORDER BY id DESC LIMIT 1
-                )
-                WHERE a.id IN ({", ".join("?" for _ in ids)})
-                """,  # noqa: S608
-                ids,
-            )
-        }
-    # Only repairs can be told to repeat: a source change that kept the recorded title and time,
-    # such as a new location, is a change of its own that the summary cannot distinguish.
-    written = [row["id"] for row in rows if row["id"] in ids and row["reason"] in _REPAIRS]
-    repeated = (
-        {
-            int(row[0])
-            # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
-            for row in connection.execute(
-                f"""
-                SELECT a.id FROM audit_entries a JOIN audit_entries p ON p.id = (
-                    SELECT id FROM audit_entries
-                    WHERE rule_id = a.rule_id AND source_event_id = a.source_event_id
-                        AND id < a.id
-                    ORDER BY id DESC LIMIT 1
-                )
-                WHERE a.id IN ({", ".join("?" for _ in written)})
-                    AND p.action = a.action AND p.reason IS a.reason
-                    AND p.event_title IS a.event_title AND p.event_cancelled = a.event_cancelled
-                    AND p.event_recurring = a.event_recurring AND p.event_all_day = a.event_all_day
-                    AND p.event_starts IS a.event_starts AND p.event_ends IS a.event_ends
-                    AND COALESCE(p.run_id, '') != COALESCE(a.run_id, '')
-                """,  # noqa: S608
-                written,
-            )
-        }
-        if written
-        else set()
-    )
-    return [
-        AuditEntryResponse(
-            **{key: row[key] for key in _AUDIT_ENTRY_KEYS},
-            category=_activity_category(row["action"], row["reason"]),
-            event=_recorded_event(row, previous.get(row["id"])),
-            repeated=row["id"] in repeated,
-        )
-        for row in rows
-    ]
-
-
-def _recorded_event(row: sqlite3.Row, previous: sqlite3.Row | None) -> RecordedEventResponse | None:
-    own = row if row["event_title"] is not None else None
-    if own is None and previous is None:
-        return None
-    cancelled = own is not None and bool(own["event_cancelled"])
-    # A confirmed event's empty title is what the run saw; only a cancellation reported without a
-    # title, or an entry that read no event, such as a projection removed with its rule, is named
-    # by the event's last observed title.
-    observed = own is not None and (bool(own["event_title"]) or not cancelled)
-    earlier = previous["event_title"] if previous is not None else None
-    title = own["event_title"] if observed and own is not None else earlier or ""
-    # Time and recurrence come from one entry: this one if it saw the event's time, else the
-    # earlier one, so a series converted to a single event stops showing as repeating.
-    timed = (
-        own
-        if own is not None and (own["event_starts"] is not None or previous is None)
-        else previous
-    )
-    assert timed is not None
+def _recorded_event_response(event: ActivityEvent) -> RecordedEventResponse:
     return RecordedEventResponse(
-        title=title,
-        all_day=bool(timed["event_all_day"]),
-        starts=timed["event_starts"],
-        ends=timed["event_ends"],
-        recurring=bool(timed["event_recurring"]),
-        cancelled=cancelled,
-        renamed_from=earlier
-        if observed and not cancelled and earlier is not None and earlier != title
-        else None,
-        moved_from=_moved_from(own, previous) if not cancelled else None,
+        title=event.title,
+        all_day=event.all_day,
+        starts=event.starts,
+        ends=event.ends,
+        recurring=event.recurring,
+        cancelled=event.cancelled,
+        renamed_from=event.renamed_from,
+        moved_from=_recorded_time_response(event.moved_from) if event.moved_from else None,
     )
 
 
-def _moved_from(
-    own: sqlite3.Row | None, previous: sqlite3.Row | None
-) -> RecordedTimeResponse | None:
-    """The previously recorded time, when this entry saw the event at a different one."""
-    if own is None or previous is None or own["event_starts"] is None:
-        return None
-    if previous["event_starts"] is None:
-        return None
-    # Only a new start is a move; a change of end alone is a change of length.
-    before = (previous["event_starts"], previous["event_ends"], bool(previous["event_all_day"]))
-    if before[0] == own["event_starts"] and before[2] == bool(own["event_all_day"]):
-        return None
-    return RecordedTimeResponse(
-        all_day=before[2], starts=previous["event_starts"], ends=previous["event_ends"]
-    )
-
-
-def _activity_category(action: str, reason: str | None) -> ActivityCategory:
-    if reason == SyncReason.RECURRING_UNSUPPORTED:
-        return "skipped"
-    if action in {SyncAction.CONFLICT, "removal_conflict"}:
-        return "blocked"
-    if action == SyncAction.IGNORE:
-        return "unchanged" if reason in _NO_CHANGE_REASONS else "skipped"
-    return "changed"
+def _recorded_time_response(time: RecordedTime) -> RecordedTimeResponse:
+    return RecordedTimeResponse(all_day=time.all_day, starts=time.starts, ends=time.ends)
 
 
 def _event_snapshot(event: CalendarEvent | None) -> EventSnapshotResponse:
