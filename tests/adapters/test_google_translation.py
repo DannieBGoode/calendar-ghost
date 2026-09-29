@@ -111,7 +111,7 @@ def _fixture(name: str) -> dict[str, object]:
 
 
 def test_series_master_keeps_its_time_zone_and_recurrence_lines() -> None:
-    translated = to_domain_event(_fixture("google_recurring_master.json"), endpoint("a", "c"))
+    translated = to_domain_event(_fixture("google_event_series.json"), endpoint("a", "c"))
 
     assert isinstance(translated.time, TimedInterval)
     assert translated.time.time_zone == "Europe/Madrid"

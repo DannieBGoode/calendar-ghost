@@ -50,7 +50,7 @@ from calendar_sync.infrastructure.google.oauth import ConnectedGoogleAccount, Di
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
-PREVIEW_PASSWORD = "preview-password"
+PREVIEW_PASSWORD = "preview-password"  # noqa: S105
 MARKER_TABLE = "dev_preview_marker"
 
 
@@ -181,8 +181,10 @@ def build_preview_container(
     base = build_container(Settings(path))
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute(f"CREATE TABLE {MARKER_TABLE} (created_at TEXT NOT NULL)")
+        # The marker table name is a constant.
         connection.execute(
-            f"INSERT INTO {MARKER_TABLE} VALUES (?)", (datetime.now(UTC).isoformat(),)
+            f"INSERT INTO {MARKER_TABLE} VALUES (?)",  # noqa: S608
+            (datetime.now(UTC).isoformat(),),
         )
     moment = now or datetime.now(UTC)
     container = replace(

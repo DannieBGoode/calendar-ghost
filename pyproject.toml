@@ -61,11 +61,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# These build SQL only from constant fragments and `?` placeholders; values are always bound.
-"src/calendar_sync/infrastructure/google/oauth.py" = ["S608"]
-"src/calendar_sync/infrastructure/persistence/activity_queries.py" = ["S608"]
-"src/calendar_sync/interfaces/api/app.py" = ["S608"]
-"scripts/dev_preview.py" = ["S105", "S608"]
 # Fakes implement whole ports; scenarios are long and use synthetic secrets, SQL, and paths.
 "tests/**" = ["ARG", "PLR0913", "PLR0915", "S105", "S106", "S108", "S608"]
 
@@ -120,21 +115,10 @@ forbidden_modules = [
 
 [[tool.importlinter.contracts]]
 name = "Google SDK types stay in the Google adapter"
-type = "forbidden"
-source_modules = [
-  "calendar_sync.domain",
-  "calendar_sync.application",
-  "calendar_sync.bootstrap",
-  "calendar_sync.interfaces",
-  "calendar_sync.infrastructure.identifiers",
-  "calendar_sync.infrastructure.notifications",
-  "calendar_sync.infrastructure.persistence",
-  "calendar_sync.infrastructure.scheduling",
-  "calendar_sync.infrastructure.security",
-]
-forbidden_modules = ["google", "google_auth_oauthlib", "googleapiclient"]
+type = "protected"
+protected_modules = ["google", "google_auth_oauthlib", "googleapiclient"]
 # Composing or calling the adapter is fine; importing SDK types directly is not.
-allow_indirect_imports = true
+allowed_importers = ["calendar_sync.infrastructure.google"]
 
 [[tool.importlinter.contracts]]
 name = "Web framework stays in interfaces"
@@ -146,6 +130,8 @@ source_modules = [
   "calendar_sync.bootstrap",
 ]
 forbidden_modules = ["fastapi", "pydantic", "starlette", "uvicorn"]
+# Bootstrap may compose the FastAPI app; only direct framework imports are ruled out.
+allow_indirect_imports = true
 
 [tool.mypy]
 python_version = "3.12"

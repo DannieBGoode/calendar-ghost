@@ -250,14 +250,20 @@ class SqliteConnectedAccountStore:
                 ).fetchall()
             )
             if rule_ids:
+                # Only `?` placeholders are interpolated; the rule identifiers stay bound.
                 placeholders = ", ".join("?" for _ in rule_ids)
                 connection.execute(
-                    f"DELETE FROM audit_entries WHERE rule_id IN ({placeholders})", rule_ids
+                    f"DELETE FROM audit_entries WHERE rule_id IN ({placeholders})",  # noqa: S608
+                    rule_ids,
                 )
                 connection.execute(
-                    f"DELETE FROM incidents WHERE rule_id IN ({placeholders})", rule_ids
+                    f"DELETE FROM incidents WHERE rule_id IN ({placeholders})",  # noqa: S608
+                    rule_ids,
                 )
-                connection.execute(f"DELETE FROM sync_rules WHERE id IN ({placeholders})", rule_ids)
+                connection.execute(
+                    f"DELETE FROM sync_rules WHERE id IN ({placeholders})",  # noqa: S608
+                    rule_ids,
+                )
             connection.execute(
                 "DELETE FROM connected_accounts WHERE id = ?",
                 (account_id.value,),
