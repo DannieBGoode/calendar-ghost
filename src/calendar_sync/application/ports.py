@@ -7,7 +7,7 @@ from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 
-from calendar_sync.application.errors import ProviderFailure
+from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -329,6 +329,57 @@ class IdGenerator(Protocol):
 
 class AccountAuthorizations(Protocol):
     def is_connected(self, account_id: ConnectedAccountId) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentReport:
+    """An Incident to open or refresh; repeated reports under one key update one Incident."""
+
+    key: str
+    rule_id: SyncRuleId
+    category: str
+    summary: str
+    """Operational wording only; never an event title or other event content."""
+
+
+class IncidentRepository(Protocol):
+    def open(self, incident: IncidentReport, at: datetime) -> bool:
+        """Open or refresh the Incident under its key; whether it was newly opened."""
+        ...
+
+    def resolve(self, key: str, at: datetime) -> None:
+        """Resolve the Incident under this key, if it is open."""
+        ...
+
+
+class IncidentNotifications(Protocol):
+    def incident_opened(self, incident: IncidentReport, at: datetime) -> None:
+        """Deliver an Incident Notification; best-effort, so it never raises."""
+        ...
+
+
+class RuleHealthRecords(Protocol):
+    """What rule health remembers between runs: failure streaks and daily block checks."""
+
+    def record_failure(self, rule_id: SyncRuleId, kind: ProviderFailureKind, at: datetime) -> int:
+        """Count one more consecutive failure; how many there are now."""
+        ...
+
+    def clear_failures(self, rule_id: SyncRuleId) -> None: ...
+
+    def audit_floor(self) -> int:
+        """The newest audit entry now, taken before a full pass so its decisions lie above it."""
+        ...
+
+    def record_block_check(
+        self, rule_id: SyncRuleId, floor: int, run_id: str | None, at: datetime
+    ) -> int | None:
+        """Record a full pass that began after entry `floor`; how many blocks it found persisting.
+
+        A block persists when it was its event's latest decision before the pass began and the
+        pass decided it again. `None` when the rule no longer exists.
+        """
+        ...
 
 
 class RemovalIncidents(Protocol):

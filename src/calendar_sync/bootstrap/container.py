@@ -13,6 +13,7 @@ from calendar_sync.application.activity import (
     InspectActivityEvent,
     OperationsQueries,
 )
+from calendar_sync.application.health import RuleHealth
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AccountAuthorization,
@@ -21,6 +22,9 @@ from calendar_sync.application.ports import (
     CalendarProvider,
     Clock,
     IdGenerator,
+    IncidentNotifications,
+    IncidentRepository,
+    RuleHealthRecords,
     UnitOfWorkFactory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
@@ -61,11 +65,15 @@ from calendar_sync.infrastructure.persistence.activity_queries import (
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
+from calendar_sync.infrastructure.persistence.health import (
+    SqliteIncidentRepository,
+    SqliteRuleHealthRecords,
+)
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
-from calendar_sync.infrastructure.scheduling import SqliteRuleHealth, SyncScheduler, SystemClock
+from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
 from calendar_sync.infrastructure.security import CredentialCipher, SqliteAdminAuth
 
 
@@ -122,10 +130,12 @@ class Adapters:
     administrator: SqliteAdminAuth
     activity: ActivityQueries
     operations: OperationsQueries
+    health_records: RuleHealthRecords
+    incidents: IncidentRepository
+    notifications: IncidentNotifications | None = None
     accounts: SqliteConnectedAccountStore | None = None
     google_oauth: GoogleOAuthService | None = None
     calendar_provider: CalendarProvider | None = None
-    rule_health: SqliteRuleHealth | None = None
 
 
 def build_container(settings: Settings | None = None) -> Container:
@@ -145,6 +155,8 @@ def build_adapters(settings: Settings) -> Adapters:
         administrator=SqliteAdminAuth(settings.database_path),
         activity=SqliteActivityQueries(settings.database_path),
         operations=SqliteOperationsQueries(settings.database_path),
+        health_records=SqliteRuleHealthRecords(settings.database_path),
+        incidents=SqliteIncidentRepository(settings.database_path),
     )
     if not settings.master_key:
         return adapters
@@ -166,9 +178,7 @@ def build_adapters(settings: Settings) -> Adapters:
         accounts=accounts,
         google_oauth=google_oauth,
         calendar_provider=GoogleCalendarProvider(google_oauth.service_for),
-        rule_health=SqliteRuleHealth(
-            settings.database_path, unit_of_work, _notifier(settings), locks=locks
-        ),
+        notifications=_notifier(settings),
     )
 
 
@@ -177,8 +187,16 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
     provider = adapters.calendar_provider
     accounts = adapters.accounts
     create_sync_rule = CreateSyncRule(unit_of_work)
+    rule_health = RuleHealth(
+        unit_of_work,
+        adapters.health_records,
+        adapters.incidents,
+        clock,
+        locks,
+        adapters.notifications,
+    )
     remove_sync_rule = RemoveSyncRule(
-        unit_of_work, provider, accounts, clock, locks, incidents=adapters.rule_health
+        unit_of_work, provider, accounts, clock, locks, incidents=rule_health
     )
     execute_sync_rule = preview_sync_rule = reconcile_now = scheduler = None
     if provider is not None and accounts is not None:
@@ -201,10 +219,9 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
                 clock,
                 locks,
             ),
-            adapters.rule_health,
+            rule_health,
         )
-        if adapters.rule_health is not None:
-            scheduler = SyncScheduler(execute_sync_rule, unit_of_work, adapters.rule_health)
+        scheduler = SyncScheduler(execute_sync_rule, unit_of_work, rule_health, clock=clock)
     google_configured = bool(
         adapters.google_oauth and settings.google_client_id and settings.google_client_secret
     )

@@ -842,6 +842,11 @@ def test_enabled_rule_can_be_paused_through_api(tmp_path: Path) -> None:
 PASSWORD = {"password": "correct horse battery staple"}
 
 
+def _reconcile_now(container: Container) -> ReconcileNow:
+    assert container.reconcile_now is not None
+    return container.reconcile_now
+
+
 def _installation(settings: Settings, **substitutes: Any) -> tuple[Container, Adapters]:
     """The container under test, and the adapters it was composed from to arrange state.
 
@@ -1041,9 +1046,10 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
 
     container = replace(
         container,
-        reconcile_now=ReconcileNow(
-            cast(ExecuteSyncRule, Mock(execute=full_pass)),
-            cast(
+        reconcile_now=replace(
+            _reconcile_now(container),
+            synchronize=cast(ExecuteSyncRule, Mock(execute=full_pass)),
+            reconcile=cast(
                 ReconcileSyncRule,
                 Mock(
                     execute=Mock(
@@ -1051,7 +1057,6 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
                     )
                 ),
             ),
-            adapters.rule_health,
         ),
     )
 
@@ -1117,10 +1122,10 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
     failure = ProviderFailure(ProviderFailureKind.TEMPORARY, "synthetic outage")
     container = replace(
         container,
-        reconcile_now=ReconcileNow(
-            cast(ExecuteSyncRule, Mock(execute=full_pass)),
-            cast(ReconcileSyncRule, Mock(execute=Mock(side_effect=failure))),
-            adapters.rule_health,
+        reconcile_now=replace(
+            _reconcile_now(container),
+            synchronize=cast(ExecuteSyncRule, Mock(execute=full_pass)),
+            reconcile=cast(ReconcileSyncRule, Mock(execute=Mock(side_effect=failure))),
         ),
     )
 

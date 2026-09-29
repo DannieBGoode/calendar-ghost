@@ -43,6 +43,14 @@ class ProviderFailureKind(StrEnum):
     INFRASTRUCTURE = "infrastructure"
 
 
+# Failures that only reauthorizing the Connected Account can resolve.
+AUTHORIZATION_FAILURES = frozenset(
+    {ProviderFailureKind.AUTHENTICATION, ProviderFailureKind.AUTHORIZATION}
+)
+# Failures a later attempt can resolve, so they are retried with backoff.
+TRANSIENT_FAILURES = frozenset({ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY})
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderFailure(ApplicationError):
     kind: ProviderFailureKind
@@ -51,7 +59,11 @@ class ProviderFailure(ApplicationError):
 
     @property
     def retryable(self) -> bool:
-        return self.kind in {ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY}
+        return self.kind in TRANSIENT_FAILURES
+
+    @property
+    def requires_authorization(self) -> bool:
+        return self.kind in AUTHORIZATION_FAILURES
 
     def __str__(self) -> str:
         return self.detail

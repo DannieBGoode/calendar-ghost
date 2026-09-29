@@ -44,6 +44,13 @@ Settings. Connected Accounts and their credentials, encrypted by the `Credential
 `ConnectedAccountRepository` port. Deleting an account and its rules is the `DeleteConnectedAccount`
 use case; the adapters only delete their own records.
 
+Rule health follows the same direction. `application/health.py` holds the `RuleHealthPolicy`: which
+failures require intervention and degrade the rule, the three-failure Provider Incident threshold,
+and every incident key and summary. `RuleHealth` applies it through the `RuleHealthRecords`,
+`IncidentRepository`, and `IncidentNotifications` ports and the `Clock`, and the scheduler reports to
+it through the `RunHealth` protocol. Scheduled runs and Rule Removal share one retry helper in
+`application/retry.py`, which retries only temporary and rate-limited failures.
+
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
 results to HTTP payloads and never opens the database itself. The rule that sorts Audit Entries
