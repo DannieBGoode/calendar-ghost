@@ -42,11 +42,14 @@ export function reconcileResultMessage(result: SyncResult): string {
     drift === 1
       ? "1 still differs from its source event and was left as it is"
       : `${drift} still differ from their source events and were left as they are`
+  const blocked = result.conflicts + (result.reconciliation_conflicts?.length ?? 0)
+  // A blocked projection could not be verified, so only a check without blocks says all match.
   const check = drift
     ? `${checked}: ${differ}. The next sync puts back any that changed during the check.`
-    : `${checked}: every one matches its source event.`
+    : blocked
+      ? `${checked}.`
+      : `${checked}: every one matches its source event.`
   const synced = syncedChanges(result)
-  const blocked = result.conflicts + (result.reconciliation_conflicts?.length ?? 0)
   return withBlocked(synced ? `${synced} ${check}` : check, blocked)
 }
 

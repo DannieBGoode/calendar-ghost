@@ -86,7 +86,21 @@ describe("run results", () => {
         drift: [],
         reconciliation_conflicts: [{ reason: "projection_unmapped", detail: "" }],
       }),
-    ).toBe("Checked 4 projections: every one matches its source event. 2 conflicts blocked; see Activity.")
+    ).toBe("Checked 4 projections. 2 conflicts blocked; see Activity.")
+  })
+
+  it("never says every projection matches when an event was blocked", () => {
+    const checked = { ...result, checked_mappings: 4, drift: [] }
+    const bySync = reconcileResultMessage({ ...checked, conflicts: 1, consistent: true })
+    const byCheck = reconcileResultMessage({
+      ...checked,
+      consistent: false,
+      reconciliation_conflicts: [{ reason: "source_unverifiable", detail: "" }],
+    })
+    for (const message of [bySync, byCheck]) {
+      expect(message).not.toContain("matches")
+      expect(message).toContain("1 conflict blocked; see Activity.")
+    }
   })
 })
 
