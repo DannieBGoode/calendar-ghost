@@ -93,7 +93,7 @@ class SynchronizeOccurrences:
                 record_current=True,
             )
 
-    def apply(  # noqa: C901, PLR0912
+    def apply(
         self,
         run: SyncRunContext,
         series_mapping: EventMapping | None,
@@ -104,141 +104,32 @@ class SynchronizeOccurrences:
         record_current: bool,
         destination_reported: bool = False,
     ) -> None:
-        recorded = (
-            run.uow.occurrences.get(series_mapping.id, original_start) if series_mapping else None
-        )
-        decision, destination = self._decide(
-            run,
-            series_mapping,
+        occurrence = _OccurrenceEvidence(
             source_series,
             original_start,
             source_occurrence,
-            recorded,
+            run.uow.occurrences.get(series_mapping.id, original_start) if series_mapping else None,
             destination_reported,
         )
+        decision, destination = self._decide(run, series_mapping, occurrence)
         detail = ""
         if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
-            # A dormant series has no projection to repair, so nothing is missing.
-            live = has_live_occurrences(run, self.provider, source_series.reference)
-            series_check = None
-            if live:
-                # The repair re-verifies the series' other occurrences; this one is re-decided.
-                if source_occurrence is not None:
-                    run.handled.add(source_occurrence.reference)
-                series_check = self.repair_series(run, source_series)
-                series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
-            decision, destination = self._decide(
-                run,
-                series_mapping,
-                source_series,
-                original_start,
-                source_occurrence,
-                recorded,
-                destination_reported,
-                has_live_occurrences=live,
+            series_mapping, decision, destination, detail = self._decide_after_series_repair(
+                run, series_mapping, occurrence
             )
-            if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
-                detail = _missing_occurrence_detail(series_check, live, original_start)
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
-            source_ref = (
-                source_occurrence.reference
-                if source_occurrence is not None
-                else recorded.source
-                if recorded is not None
-                else None
+            run.count(decision.action, occurrence.source_ref or source_series.reference)
+            destination_ref = self._write(
+                run,
+                series_mapping,
+                occurrence,
+                decision,
+                destination.reference if destination is not None else None,
+                record_current=record_current,
             )
-            run.count(decision.action, source_ref or source_series.reference)
-            key = occurrence_operation_key(
-                run.rule.id,
-                source_series.reference,
-                original_start,
-                source_occurrence.revision if source_occurrence is not None else "absent",
-                decision.action,
-            )
-            destination_ref = destination.reference if destination is not None else None
-
-            if decision.action is SyncAction.UPDATE and decision.projection is not None:
-                assert series_mapping is not None
-                assert source_occurrence is not None
-                written = self.writer.write_occurrence(
-                    series_mapping.destination,
-                    original_start,
-                    source_series.reference,
-                    run.rule.id,
-                    decision.projection,
-                    key,
-                )
-                destination_ref = written.reference
-                self._record(
-                    run,
-                    recorded,
-                    series_mapping,
-                    original_start,
-                    source_occurrence,
-                    destination_ref,
-                    OccurrenceState.MODIFIED,
-                    self.fingerprinter.fingerprint(decision.projection),
-                    key,
-                )
-            elif decision.action is SyncAction.DELETE:
-                assert series_mapping is not None
-                self.writer.cancel_occurrence(
-                    series_mapping.destination,
-                    original_start,
-                    source_series.reference,
-                    run.rule.id,
-                    key,
-                )
-                if source_occurrence is None:
-                    if recorded is not None:
-                        run.uow.occurrences.delete(recorded)
-                else:
-                    assert destination_ref is not None
-                    self._record(
-                        run,
-                        recorded,
-                        series_mapping,
-                        original_start,
-                        source_occurrence,
-                        destination_ref,
-                        OccurrenceState.CANCELLED,
-                        None,
-                        key,
-                    )
-            elif decision.reason is SyncReason.OCCURRENCE_RETIRED and recorded is not None:
-                run.uow.occurrences.delete(recorded)
-            elif (
-                record_current
-                and decision.reason in _RECORDED_WHEN_UNCHANGED
-                and series_mapping is not None
-                and source_occurrence is not None
-                and destination_ref is not None
-            ):
-                state = _RECORDED_WHEN_UNCHANGED[decision.reason]
-                fingerprint = (
-                    self.fingerprinter.fingerprint(decision.projection)
-                    if state is OccurrenceState.MODIFIED and decision.projection is not None
-                    else None
-                )
-                if (
-                    recorded is None
-                    or recorded.state is not state
-                    or recorded.source_revision != source_occurrence.revision
-                ):
-                    self._record(
-                        run,
-                        recorded,
-                        series_mapping,
-                        original_start,
-                        source_occurrence,
-                        destination_ref,
-                        state,
-                        fingerprint,
-                        key,
-                    )
-
+            source_ref = occurrence.source_ref
             if source_ref is not None:
                 run.handled.add(source_ref)
             record(
@@ -261,19 +152,126 @@ class SynchronizeOccurrences:
             # Commit before the next provider call so no write lock spans network requests.
             run.uow.commit()
 
-    def _decide(  # noqa: PLR0913
+    def _decide_after_series_repair(
         self,
         run: SyncRunContext,
         series_mapping: EventMapping | None,
-        source_series: CalendarEvent,
-        original_start: OccurrenceStart,
-        source_occurrence: CalendarEvent | None,
-        recorded: OccurrenceMapping | None,
-        destination_reported: bool,
+        occurrence: _OccurrenceEvidence,
+    ) -> tuple[EventMapping | None, SyncDecision, CalendarEvent | None, str]:
+        """Repair a series missing the occurrence, then decide the occurrence again."""
+        source_series = occurrence.source_series
+        # A dormant series has no projection to repair, so nothing is missing.
+        live = has_live_occurrences(run, self.provider, source_series.reference)
+        series_check = None
+        if live:
+            # The repair re-verifies the series' other occurrences; this one is re-decided.
+            if occurrence.source is not None:
+                run.handled.add(occurrence.source.reference)
+            series_check = self.repair_series(run, source_series)
+            series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
+        decision, destination = self._decide(
+            run, series_mapping, occurrence, has_live_occurrences=live
+        )
+        detail = (
+            _missing_occurrence_detail(series_check, live, occurrence.original_start)
+            if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING
+            else ""
+        )
+        return series_mapping, decision, destination, detail
+
+    def _write(
+        self,
+        run: SyncRunContext,
+        series_mapping: EventMapping | None,
+        occurrence: _OccurrenceEvidence,
+        decision: SyncDecision,
+        destination: EventRef | None,
+        *,
+        record_current: bool,
+    ) -> EventRef | None:
+        """Apply the decision to the destination and its Occurrence Mapping; answer where."""
+        key = occurrence.operation_key(run.rule.id, decision.action)
+        if decision.action is SyncAction.UPDATE and decision.projection is not None:
+            assert series_mapping is not None
+            assert occurrence.source is not None
+            written = self.writer.write_occurrence(
+                series_mapping.destination,
+                occurrence.original_start,
+                occurrence.source_series.reference,
+                run.rule.id,
+                decision.projection,
+                key,
+            ).reference
+            fingerprint = self.fingerprinter.fingerprint(decision.projection)
+            run.uow.occurrences.save(
+                occurrence.mapping(
+                    series_mapping, written, OccurrenceState.MODIFIED, fingerprint, key
+                )
+            )
+            return written
+        if decision.action is SyncAction.DELETE:
+            assert series_mapping is not None
+            self.writer.cancel_occurrence(
+                series_mapping.destination,
+                occurrence.original_start,
+                occurrence.source_series.reference,
+                run.rule.id,
+                key,
+            )
+            if occurrence.source is not None:
+                assert destination is not None
+                run.uow.occurrences.save(
+                    occurrence.mapping(
+                        series_mapping, destination, OccurrenceState.CANCELLED, None, key
+                    )
+                )
+            elif occurrence.recorded is not None:
+                run.uow.occurrences.delete(occurrence.recorded)
+        elif decision.reason is SyncReason.OCCURRENCE_RETIRED and occurrence.recorded is not None:
+            run.uow.occurrences.delete(occurrence.recorded)
+        elif record_current and series_mapping is not None and destination is not None:
+            self._record_unchanged(run, series_mapping, occurrence, decision, destination, key)
+        return destination
+
+    def _record_unchanged(
+        self,
+        run: SyncRunContext,
+        series_mapping: EventMapping,
+        occurrence: _OccurrenceEvidence,
+        decision: SyncDecision,
+        destination: EventRef,
+        key: str,
+    ) -> None:
+        """Record an occurrence found current or already cancelled, unless it is recorded so."""
+        state = _RECORDED_WHEN_UNCHANGED.get(decision.reason)
+        source, recorded = occurrence.source, occurrence.recorded
+        if state is None or source is None:
+            return
+        if (
+            recorded is not None
+            and recorded.state is state
+            and recorded.source_revision == source.revision
+        ):
+            return
+        fingerprint = (
+            self.fingerprinter.fingerprint(decision.projection)
+            if state is OccurrenceState.MODIFIED and decision.projection is not None
+            else None
+        )
+        run.uow.occurrences.save(
+            occurrence.mapping(series_mapping, destination, state, fingerprint, key)
+        )
+
+    def _decide(
+        self,
+        run: SyncRunContext,
+        series_mapping: EventMapping | None,
+        occurrence: _OccurrenceEvidence,
         *,
         has_live_occurrences: bool = True,
     ) -> tuple[SyncDecision, CalendarEvent | None]:
         destination_series = destination = None
+        source_series = occurrence.source_series
         if series_mapping is not None and source_series.managed_origin is None:
             destination_series = self.provider.get_event(series_mapping.destination)
             if (
@@ -281,45 +279,66 @@ class SynchronizeOccurrences:
                 and destination_series.status is EventStatus.CONFIRMED
             ):
                 destination = self.provider.get_occurrence(
-                    series_mapping.destination, original_start
+                    series_mapping.destination, occurrence.original_start
                 )
         decision = self.decisions.decide_occurrence(
             run.rule,
             source_series,
             series_mapping,
-            original_start,
-            source_occurrence,
-            recorded,
+            occurrence.original_start,
+            occurrence.source,
+            occurrence.recorded,
             destination_series,
             destination,
-            destination_reported=destination_reported,
+            destination_reported=occurrence.destination_reported,
             has_live_occurrences=has_live_occurrences,
         )
         return decision, destination
 
-    @staticmethod
-    def _record(  # noqa: PLR0913
-        run: SyncRunContext,
-        recorded: OccurrenceMapping | None,
+
+@dataclass(frozen=True, slots=True)
+class _OccurrenceEvidence:
+    """What one decision knows about an occurrence before it reads the destination."""
+
+    source_series: CalendarEvent
+    original_start: OccurrenceStart
+    source: CalendarEvent | None
+    """The source occurrence, or None when the series no longer has it."""
+    recorded: OccurrenceMapping | None
+    destination_reported: bool
+    """The destination feed reported this occurrence, so a difference is drift."""
+
+    @property
+    def source_ref(self) -> EventRef | None:
+        if self.source is not None:
+            return self.source.reference
+        return self.recorded.source if self.recorded is not None else None
+
+    def operation_key(self, rule_id: SyncRuleId, action: SyncAction) -> str:
+        revision = self.source.revision if self.source is not None else "absent"
+        return occurrence_operation_key(
+            rule_id, self.source_series.reference, self.original_start, revision, action
+        )
+
+    def mapping(
+        self,
         series_mapping: EventMapping,
-        original_start: OccurrenceStart,
-        source_occurrence: CalendarEvent,
         destination: EventRef,
         state: OccurrenceState,
         fingerprint: ProjectionFingerprint | None,
         key: str,
-    ) -> None:
-        run.uow.occurrences.save(
-            OccurrenceMapping(
-                id=recorded.id if recorded is not None else OccurrenceMappingId(key),
-                series_mapping_id=series_mapping.id,
-                original_start=original_start,
-                source=source_occurrence.reference,
-                destination=destination,
-                state=state,
-                source_revision=source_occurrence.revision,
-                projection_fingerprint=fingerprint,
-            )
+    ) -> OccurrenceMapping:
+        """The Occurrence Mapping to save for a source occurrence this rule wrote or verified."""
+        assert self.source is not None
+        return OccurrenceMapping(
+            id=self.recorded.id if self.recorded is not None else OccurrenceMappingId(key),
+            series_mapping_id=series_mapping.id,
+            original_start=self.original_start,
+            source=self.source.reference,
+            destination=destination,
+            state=state,
+            source_revision=self.source.revision,
+            projection_fingerprint=fingerprint,
         )
 
 

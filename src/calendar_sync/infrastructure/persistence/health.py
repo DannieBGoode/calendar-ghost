@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import sqlite3
-import uuid
 from datetime import datetime
 from pathlib import Path
 
 from calendar_sync.application.errors import ProviderFailureKind
-from calendar_sync.application.ports import IncidentReport
+from calendar_sync.application.ports import IdGenerator, IncidentReport
 from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
 
 
@@ -71,8 +71,9 @@ class SqliteRuleHealthRecords:
 
 
 class SqliteIncidentRepository:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, ids: IdGenerator | None = None) -> None:
         self._database_path = database_path
+        self._ids = ids or UuidIdGenerator()
 
     def open(self, incident: IncidentReport, at: datetime) -> bool:
         with sqlite3.connect(self._database_path) as connection:
@@ -93,7 +94,7 @@ class SqliteIncidentRepository:
                     resolved_at = NULL
                 """,
                 (
-                    str(uuid.uuid4()),
+                    self._ids.new(),
                     incident.key,
                     incident.rule_id.value,
                     incident.category,

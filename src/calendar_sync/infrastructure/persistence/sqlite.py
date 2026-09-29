@@ -12,6 +12,7 @@ from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
+    Clock,
     ConnectedAccountRecords,
     ConnectedAccountState,
     EventMappingRepository,
@@ -48,6 +49,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.infrastructure.scheduling import SystemClock
 
 _FORWARD_MIGRATIONS = (
     (2, "0002_account_avatar.sql"),
@@ -110,8 +112,9 @@ class SqliteConnectedAccountRecords:
 
 
 class SqliteSyncRuleRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: sqlite3.Connection, clock: Clock) -> None:
         self._connection = connection
+        self._clock = clock
 
     def get(self, rule_id: SyncRuleId) -> SyncRule | None:
         row = self._connection.execute(
@@ -157,7 +160,7 @@ class SqliteSyncRuleRepository:
             raise KeyError(f"sync rule {rule.id.value} does not exist")
 
     def remove(self, rule_id: SyncRuleId) -> None:
-        now = datetime.now(UTC).isoformat()
+        now = self._clock.now().isoformat()
         self._connection.execute(
             """
             UPDATE incidents SET state = 'resolved', updated_at = ?, resolved_at = ?
@@ -614,8 +617,9 @@ class SqliteUnitOfWork:
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
 
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, clock: Clock) -> None:
         self._database_path = database_path
+        self._clock = clock
         self._connection: sqlite3.Connection | None = None
 
     def __enter__(self) -> Self:
@@ -624,7 +628,7 @@ class SqliteUnitOfWork:
         connection.execute("PRAGMA foreign_keys = ON")
         self._connection = connection
         self.accounts = SqliteConnectedAccountRecords(connection)
-        self.rules = SqliteSyncRuleRepository(connection)
+        self.rules = SqliteSyncRuleRepository(connection, self._clock)
         self.mappings = SqliteEventMappingRepository(connection)
         self.occurrences = SqliteOccurrenceMappingRepository(connection)
         self.replays = SqliteExceptionReplayRepository(connection)
@@ -654,11 +658,12 @@ class SqliteUnitOfWork:
 
 
 class SqliteUnitOfWorkFactory:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, clock: Clock | None = None) -> None:
         self._database_path = database_path
+        self._clock = clock or SystemClock()
 
     def __call__(self) -> UnitOfWork:
-        return SqliteUnitOfWork(self._database_path)
+        return SqliteUnitOfWork(self._database_path, self._clock)
 
 
 def _rule_values(rule: SyncRule) -> tuple[object, ...]:

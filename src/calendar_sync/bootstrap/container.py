@@ -25,6 +25,7 @@ from calendar_sync.application.ports import (
     IncidentNotifications,
     IncidentRepository,
     RuleHealthRecords,
+    RunIdGenerator,
     UnitOfWorkFactory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
@@ -50,7 +51,7 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
-from calendar_sync.infrastructure.identifiers import UuidIdGenerator
+from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
@@ -127,6 +128,7 @@ class Adapters:
     locks: RuleLocks
     clock: Clock
     ids: IdGenerator
+    run_ids: RunIdGenerator
     administrator: SqliteAdminAuth
     activity: ActivityQueries
     operations: OperationsQueries
@@ -145,23 +147,25 @@ def build_container(settings: Settings | None = None) -> Container:
 
 def build_adapters(settings: Settings) -> Adapters:
     initialize_database(settings.database_path)
-    unit_of_work = SqliteUnitOfWorkFactory(settings.database_path)
-    locks = RuleLocks()
+    # One clock and one identifier source, shared by every adapter and use case.
+    clock = SystemClock()
+    ids = UuidIdGenerator()
     adapters = Adapters(
-        unit_of_work=unit_of_work,
-        locks=locks,
-        clock=SystemClock(),
-        ids=UuidIdGenerator(),
-        administrator=SqliteAdminAuth(settings.database_path),
+        unit_of_work=SqliteUnitOfWorkFactory(settings.database_path, clock),
+        locks=RuleLocks(),
+        clock=clock,
+        ids=ids,
+        run_ids=UuidRunIdGenerator(),
+        administrator=SqliteAdminAuth(settings.database_path, clock),
         activity=SqliteActivityQueries(settings.database_path),
         operations=SqliteOperationsQueries(settings.database_path),
         health_records=SqliteRuleHealthRecords(settings.database_path),
-        incidents=SqliteIncidentRepository(settings.database_path),
+        incidents=SqliteIncidentRepository(settings.database_path, ids),
     )
     if not settings.master_key:
         return adapters
     accounts = SqliteConnectedAccountStore(
-        settings.database_path, CredentialCipher(settings.master_key)
+        settings.database_path, CredentialCipher(settings.master_key), clock, ids
     )
     google_oauth = GoogleOAuthService(
         OAuthClientConfig(
@@ -170,14 +174,14 @@ def build_adapters(settings: Settings) -> Adapters:
             settings.google_redirect_uri,
         ),
         accounts,
-        SqliteAuthorizationStates(settings.database_path),
+        SqliteAuthorizationStates(settings.database_path, clock),
         verifier_key=settings.master_key,
     )
     return replace(
         adapters,
         accounts=accounts,
         google_oauth=google_oauth,
-        calendar_provider=GoogleCalendarProvider(google_oauth.service_for),
+        calendar_provider=GoogleCalendarProvider(google_oauth.service_for, clock),
         notifications=_notifier(settings),
     )
 
@@ -204,7 +208,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         projector = EventProjector()
         decisions = SyncDecisionService(projector, fingerprinter)
         execute_sync_rule = ExecuteSyncRule(
-            unit_of_work, provider, decisions, fingerprinter, clock, locks
+            unit_of_work, provider, decisions, fingerprinter, clock, adapters.run_ids, locks
         )
         preview_sync_rule = PreviewSyncRule(
             unit_of_work, provider, projector, clock, decisions, locks
@@ -217,6 +221,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
                 projector,
                 ReconciliationService(fingerprinter),
                 clock,
+                adapters.run_ids,
                 locks,
             ),
             rule_health,

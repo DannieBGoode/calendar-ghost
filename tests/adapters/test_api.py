@@ -66,6 +66,7 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_calendar import FakeCalendars, FixedClock
@@ -1126,6 +1127,7 @@ def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_bloc
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     )
     synchronize.execute(rule().id)
     # The source is gone for good, so the full pass blocks its projection; the check that
@@ -1143,6 +1145,7 @@ def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_bloc
         EventProjector(),
         ReconciliationService(fingerprinter),
         FixedClock(),
+        UuidRunIdGenerator(),
     )
     container = replace(container, reconcile_now=ReconcileNow(synchronize, reconcile))
 

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
+
+from calendar_sync.application.ports import Clock
+from calendar_sync.infrastructure.scheduling import SystemClock
 
 STATE_LIFETIME = timedelta(minutes=10)
 
@@ -11,11 +14,12 @@ STATE_LIFETIME = timedelta(minutes=10)
 class SqliteAuthorizationStates:
     """Single-use OAuth states, stored only as hashes, that protect the authorization callback."""
 
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, clock: Clock | None = None) -> None:
         self._database_path = database_path
+        self._clock = clock or SystemClock()
 
     def store(self, state: str) -> None:
-        now = datetime.now(UTC)
+        now = self._clock.now()
         with sqlite3.connect(self._database_path) as connection:
             connection.execute(
                 "INSERT INTO oauth_states(state_hash, created_at, expires_at) VALUES (?, ?, ?)",
@@ -24,7 +28,7 @@ class SqliteAuthorizationStates:
 
     def consume(self, state: str) -> bool:
         """Use a state once; false when it is missing, expired, or already used."""
-        now = datetime.now(UTC).isoformat()
+        now = self._clock.now().isoformat()
         with sqlite3.connect(self._database_path) as connection:
             cursor = connection.execute(
                 """

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -55,6 +56,21 @@ def _excluded(event: CalendarEvent, rule: SyncRule) -> bool:
 
 
 @dataclass(slots=True)
+class _PreviewScope:
+    """Source events a preview would project, each with its parent series if an occurrence."""
+
+    eligible: list[tuple[CalendarEvent, CalendarEvent | None]] = field(default_factory=list)
+    excluded: int = 0
+    series_count: int = 0
+    occurrence_changes: int = 0
+
+    @property
+    def eligible_events(self) -> int:
+        """Events and series; occurrence changes are counted on their own."""
+        return len(self.eligible) - self.occurrence_changes
+
+
+@dataclass(slots=True)
 class PreviewSyncRule:
     unit_of_work: UnitOfWorkFactory
     provider: CalendarReader
@@ -67,7 +83,42 @@ class PreviewSyncRule:
         with self.locks.working(rule_id, RuleWork(RuleWorkKind.PREVIEW, self.clock.now())):
             return self._execute(rule_id)
 
-    def _execute(self, rule_id: SyncRuleId) -> RulePreview:  # noqa: C901
+    def _execute(self, rule_id: SyncRuleId) -> RulePreview:
+        rule = self._previewable_rule(rule_id)
+        cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
+        scope = self._classify(rule, self.provider.changes(rule.source, None, cutoff).events)
+        with self.unit_of_work() as uow:
+            sample = tuple(
+                self._item(uow, rule, event, parent)
+                for event, parent in scope.eligible[:_SAMPLE_SIZE]
+            )
+        with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
+            current = uow.rules.get(rule.id)
+            if current is None or current.material_signature != rule.material_signature:
+                raise RuleNotExecutable("sync rule changed while preview was running")
+            uow.rules.save(current.mark_previewed())
+            uow.previews.record(
+                RulePreviewSummary(
+                    rule.id,
+                    self.clock.now(),
+                    scope.eligible_events,
+                    scope.excluded,
+                    recurring_series=scope.series_count,
+                    occurrence_changes=scope.occurrence_changes,
+                )
+            )
+            uow.commit()
+
+        return RulePreview(
+            rule.id,
+            scope.eligible_events,
+            scope.excluded,
+            sample,
+            recurring_series=scope.series_count,
+            occurrence_changes=scope.occurrence_changes,
+        )
+
+    def _previewable_rule(self, rule_id: SyncRuleId) -> SyncRule:
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
         if rule is None:
@@ -78,9 +129,10 @@ class PreviewSyncRule:
             SyncRuleState.DEGRADED,
         }:
             raise RuleNotExecutable(f"sync rule cannot preview from state {rule.state}")
+        return rule
 
-        cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
-        events = self.provider.changes(rule.source, None, cutoff).events
+    def _classify(self, rule: SyncRule, events: Sequence[CalendarEvent]) -> _PreviewScope:
+        """Sort the source listing into what the rule would project and what it excludes."""
         masters = {event.reference: event for event in events if event.occurrence is None}
         live: dict[EventRef, bool] = {}
 
@@ -96,53 +148,23 @@ class PreviewSyncRule:
                 )
             return not live[master.reference]
 
-        eligible: list[tuple[CalendarEvent, CalendarEvent | None]] = []
-        excluded = series_count = occurrence_changes = 0
+        scope = _PreviewScope()
         for event in events:
             if event.occurrence is None:
                 if skipped(event):
-                    excluded += 1
+                    scope.excluded += 1
                     continue
-                series_count += event.recurrence is not None
-                eligible.append((event, None))
+                scope.series_count += event.recurrence is not None
+                scope.eligible.append((event, None))
                 continue
             parent_ref = EventRef(rule.source, event.occurrence.series_event_id)
             parent = masters.get(parent_ref) or self.provider.get_event(parent_ref)
             if parent is None or skipped(parent):
-                excluded += 1
+                scope.excluded += 1
                 continue
-            occurrence_changes += 1
-            eligible.append((event, parent))
-
-        with self.unit_of_work() as uow:
-            sample = tuple(
-                self._item(uow, rule, event, parent) for event, parent in eligible[:_SAMPLE_SIZE]
-            )
-        with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
-            current = uow.rules.get(rule.id)
-            if current is None or current.material_signature != rule.material_signature:
-                raise RuleNotExecutable("sync rule changed while preview was running")
-            uow.rules.save(current.mark_previewed())
-            uow.previews.record(
-                RulePreviewSummary(
-                    rule.id,
-                    self.clock.now(),
-                    len(eligible) - occurrence_changes,
-                    excluded,
-                    recurring_series=series_count,
-                    occurrence_changes=occurrence_changes,
-                )
-            )
-            uow.commit()
-
-        return RulePreview(
-            rule.id,
-            len(eligible) - occurrence_changes,
-            excluded,
-            sample,
-            recurring_series=series_count,
-            occurrence_changes=occurrence_changes,
-        )
+            scope.occurrence_changes += 1
+            scope.eligible.append((event, parent))
+        return scope
 
     def _item(
         self, uow: UnitOfWork, rule: SyncRule, event: CalendarEvent, parent: CalendarEvent | None

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -81,10 +82,20 @@ def google_event_payload(event_id: str = "event-1") -> dict[str, object]:
     }
 
 
-def provider_with_events_api(events_api: MagicMock) -> GoogleCalendarProvider:
+@dataclass(frozen=True)
+class FixedClock:
+    moment: datetime
+
+    def now(self) -> datetime:
+        return self.moment
+
+
+def provider_with_events_api(
+    events_api: MagicMock, clock: FixedClock | None = None
+) -> GoogleCalendarProvider:
     service = MagicMock()
     service.events.return_value = events_api
-    return GoogleCalendarProvider(lambda _account_id: service)
+    return GoogleCalendarProvider(lambda _account_id: service, clock)
 
 
 def test_changes_paginates_and_returns_the_final_sync_token() -> None:
@@ -203,19 +214,38 @@ def test_google_rate_limit_is_classified_as_retryable() -> None:
     ],
 )
 def test_google_retry_after_hint_is_propagated_and_bounded(
-    headers: dict[str, str], expected: int | None, monkeypatch: pytest.MonkeyPatch
+    headers: dict[str, str], expected: int | None
 ) -> None:
-    monkeypatch.setattr(
-        "calendar_sync.infrastructure.google.provider._now",
-        lambda: datetime(2026, 9, 28, 15, 18, tzinfo=UTC),
-    )
     events_api = MagicMock()
     events_api.get.return_value = request_raising(429, headers=headers)
-    provider = provider_with_events_api(events_api)
+    provider = provider_with_events_api(
+        events_api, FixedClock(datetime(2026, 9, 28, 15, 18, tzinfo=UTC))
+    )
 
     with pytest.raises(ProviderFailure) as raised:
         provider.get_event(event().reference)
 
+    assert raised.value.retry_after_seconds == expected
+
+
+@pytest.mark.parametrize(
+    ("elapsed", "expected"),
+    [(timedelta(0), 45), (timedelta(seconds=0.5), 45), (timedelta(seconds=40), 5)],
+)
+def test_google_retry_after_date_counts_down_from_the_injected_clock(
+    elapsed: timedelta, expected: int
+) -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_raising(
+        503, headers={"Retry-After": "Wed, 30 Sep 2026 12:00:45 GMT"}
+    )
+    clock = FixedClock(datetime(2026, 9, 30, 12, 0, tzinfo=UTC) + elapsed)
+    provider = provider_with_events_api(events_api, clock)
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.get_event(event().reference)
+
+    # A partial second rounds up, so a retry never starts before the provider allows it.
     assert raised.value.retry_after_seconds == expected
 
 

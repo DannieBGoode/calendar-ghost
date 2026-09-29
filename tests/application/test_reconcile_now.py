@@ -25,6 +25,7 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars, FixedClock, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, rule
@@ -58,6 +59,7 @@ def _reconcile_now(
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     )
     return ReconcileNow(sync_use_case(unit_of_work, calendars), reconcile, full_passes), calendars
 
@@ -120,6 +122,7 @@ def test_reconcile_now_reports_drift_its_full_pass_cannot_reach_without_repairin
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
         _EarlierClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
     destination = factory.state.mappings[(rule().id, old.reference)].destination
     calendars.put(replace(calendars.events[destination], title="Edited"))

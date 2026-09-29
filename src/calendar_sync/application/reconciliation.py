@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
-from uuid import uuid4
 
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
@@ -16,6 +15,7 @@ from calendar_sync.application.ports import (
     Clock,
     FullPassRecords,
     RuleRunOutcome,
+    RunIdGenerator,
     RunKind,
     UnitOfWorkFactory,
 )
@@ -47,8 +47,8 @@ class ReconcileSyncRule:
     projector: EventProjector
     reconciliation: ReconciliationService
     clock: Clock
+    run_ids: RunIdGenerator
     locks: RuleLocks = field(default_factory=RuleLocks)
-    new_run_id: Callable[[], str] = field(default=lambda: uuid4().hex)
 
     def execute(
         self,
@@ -64,7 +64,9 @@ class ReconcileSyncRule:
         """
         work = RuleWork(RuleWorkKind.RECONCILIATION, self.clock.now())
         with self.locks.for_rule(rule_id), self.locks.working(rule_id, work):
-            return self._execute_serialized(rule_id, run_id or self.new_run_id(), already_blocked)
+            return self._execute_serialized(
+                rule_id, run_id or self.run_ids.new_run_id(), already_blocked
+            )
 
     def _execute_serialized(
         self, rule_id: SyncRuleId, run_id: str, already_blocked: AbstractSet[EventRef]

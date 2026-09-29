@@ -21,8 +21,13 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
-from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
+from tests.application.test_execute_sync_rule import (
+    FakeCalendarProvider,
+    FixedClock,
+    ScriptedRunIds,
+)
 from tests.application.test_recurring_sync import _LiveLookupCalendars
 from tests.fake_calendar import (
     WRITE_OPERATIONS,
@@ -46,6 +51,7 @@ def test_reconciliation_independently_proves_managed_projection() -> None:
         SyncDecisionService(projector, fingerprinter),
         fingerprinter,
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     report = ReconcileSyncRule(
@@ -54,6 +60,7 @@ def test_reconciliation_independently_proves_managed_projection() -> None:
         projector,
         ReconciliationService(fingerprinter),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert report.checked_mappings == 1
@@ -67,7 +74,12 @@ def test_reconciliation_records_its_outcome() -> None:
     fingerprinter = ProjectionFingerprinter()
 
     report = ReconcileSyncRule(
-        unit_of_work, provider, EventProjector(), ReconciliationService(fingerprinter), FixedClock()
+        unit_of_work,
+        provider,
+        EventProjector(),
+        ReconciliationService(fingerprinter),
+        FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     outcome = unit_of_work.state.outcomes[(rule().id, RunKind.RECONCILIATION)]
@@ -87,6 +99,7 @@ def test_reconciliation_waits_for_the_rule_lock_held_by_removal_or_sync() -> Non
         EventProjector(),
         ReconciliationService(fingerprinter),
         FixedClock(),
+        UuidRunIdGenerator(),
         locks,
     )
     held = locks.for_rule(rule().id)
@@ -120,6 +133,7 @@ def test_reconciliation_counts_occurrence_drift_in_the_recorded_outcome() -> Non
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert [(item.kind, item.source) for item in report.drift] == [
@@ -145,6 +159,7 @@ def test_reconciliation_reports_a_recorded_occurrence_deleted_in_the_destination
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert [item.kind for item in report.drift] == [DriftKind.MISSING]
@@ -167,6 +182,7 @@ def test_reconciliation_reports_a_deleted_destination_series_without_failing() -
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert DriftKind.MISSING in [item.kind for item in report.drift]
@@ -187,6 +203,7 @@ def test_reconciliation_accepts_a_dormant_series_whose_every_occurrence_is_cance
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert report.drift == ()
@@ -211,6 +228,7 @@ def test_reconciliation_still_reports_a_deleted_live_series_beside_a_dormant_one
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert [(item.kind, item.source) for item in report.drift] == [
@@ -232,6 +250,7 @@ def test_reconciliation_reports_a_projection_left_for_a_cancelled_source_as_drif
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     # A verified cancellation authorizes the deletion a Sync Run would make; it is not a Conflict.
@@ -253,7 +272,7 @@ def test_reconciliation_blocks_a_mapping_whose_source_cannot_be_read_without_dri
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
-        new_run_id=lambda: "reconciliation-run",
+        ScriptedRunIds(iter(["reconciliation-run"])),
     ).execute(rule().id)
 
     assert report.drift == ()
@@ -288,6 +307,7 @@ def test_reconciliation_of_a_projected_series_asks_for_no_live_lookup() -> None:
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert calendars.live_lookups == []
@@ -315,6 +335,7 @@ def test_reconciliation_under_an_all_day_exclusion_accepts_a_series_left_with_al
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert report.drift == ()
@@ -330,6 +351,7 @@ def _reconcile(
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
 
@@ -388,6 +410,7 @@ def test_reconciliation_runs_against_a_calendar_that_can_only_read() -> None:
         EventProjector(),
         ReconciliationService(ProjectionFingerprinter()),
         FixedClock(),
+        UuidRunIdGenerator(),
     ).execute(rule().id)
 
     assert not any(hasattr(reader, name) for name in WRITE_OPERATIONS)

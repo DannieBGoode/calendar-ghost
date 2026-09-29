@@ -103,7 +103,7 @@ class SyncDecisionService:
         self._projector = projector
         self._fingerprinter = fingerprinter
 
-    def decide(  # noqa: C901, PLR0912
+    def decide(
         self,
         rule: SyncRule,
         source_event: CalendarEvent,
@@ -113,51 +113,32 @@ class SyncDecisionService:
         window_start: datetime | None = None,
         has_live_occurrences: bool = True,
     ) -> SyncDecision:
+        # In order: loop prevention, identity conflicts, removals, the sync window, projection.
         if source_event.reference.calendar != rule.source:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
         if source_event.managed_origin is not None:
             return SyncDecision(SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE)
         if source_event.occurrence is not None:
             raise DomainValidationError("occurrence exceptions are decided through their series")
-
-        if mapping is not None and (
-            not mapping.belongs_to(rule) or mapping.source != source_event.reference
-        ):
-            return SyncDecision(SyncAction.CONFLICT, SyncReason.MAPPING_INCONSISTENT)
-        if mapping is not None and actual_destination is not None:
-            if actual_destination.reference != mapping.destination:
-                return SyncDecision(
-                    SyncAction.CONFLICT, SyncReason.DESTINATION_IDENTITY_INCONSISTENT
-                )
-            origin = actual_destination.managed_origin
-            if origin is None or not origin.owns(rule, source_event.reference):
-                return SyncDecision(
-                    SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
-                )
-
-        excluded_all_day = (
-            source_event.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE
-        )
-        if source_event.status is EventStatus.CANCELLED:
-            if mapping is None:
-                return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
-            return SyncDecision(SyncAction.DELETE, SyncReason.SOURCE_CANCELLED)
-        if excluded_all_day:
-            if mapping is None:
-                return SyncDecision(SyncAction.IGNORE, SyncReason.ALL_DAY_EXCLUDED)
-            return SyncDecision(SyncAction.DELETE, SyncReason.ALL_DAY_EXCLUDED_REMOVED)
-        # A projected series with no live occurrence is cancelled by the provider, so none is
-        # created. A mapping stays dormant with its cancelled occurrences, so restoring one
-        # occurrence later cannot resurrect the others; only a live projection is removed.
-        if source_event.recurrence is not None and not has_live_occurrences:
-            if actual_destination is None:
-                return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
-            return SyncDecision(SyncAction.DELETE, SyncReason.SERIES_WITHOUT_OCCURRENCES_REMOVED)
-
+        conflict = _identity_conflict(rule, source_event, mapping, actual_destination)
+        if conflict is not None:
+            return SyncDecision(SyncAction.CONFLICT, conflict)
+        removal = _removal(rule, source_event, mapping, actual_destination, has_live_occurrences)
+        if removal is not None:
+            return removal
         # Incremental feeds report changes to any event, however old; only mapped ones stay current.
         if mapping is None and window_start is not None and source_event.ended_before(window_start):
             return SyncDecision(SyncAction.IGNORE, SyncReason.BEFORE_SYNC_WINDOW)
+        return self._projection_decision(rule, source_event, mapping, actual_destination)
 
+    def _projection_decision(
+        self,
+        rule: SyncRule,
+        source_event: CalendarEvent,
+        mapping: EventMapping | None,
+        actual_destination: CalendarEvent | None,
+    ) -> SyncDecision:
+        """Create a missing projection, or update one that differs from the source's."""
         projection = self._projector.project(source_event, rule)
         if mapping is None:
             return SyncDecision(SyncAction.CREATE, SyncReason.SOURCE_CREATED, projection)
@@ -174,6 +155,7 @@ class SyncDecisionService:
         )
         return SyncDecision(SyncAction.UPDATE, reason, projection)
 
+    # Ordered decision table; each guard returns a reason. Its inputs are the evidence it weighs.
     def decide_occurrence(  # noqa: C901, PLR0912, PLR0913
         self,
         rule: SyncRule,
@@ -302,6 +284,53 @@ class SyncDecisionService:
         )
 
 
+def _identity_conflict(
+    rule: SyncRule,
+    source_event: CalendarEvent,
+    mapping: EventMapping | None,
+    actual_destination: CalendarEvent | None,
+) -> SyncReason | None:
+    """Why the mapping or its destination cannot prove this rule owns the projection, if so."""
+    if mapping is None:
+        return None
+    if not mapping.belongs_to(rule) or mapping.source != source_event.reference:
+        return SyncReason.MAPPING_INCONSISTENT
+    if actual_destination is None:
+        return None
+    if actual_destination.reference != mapping.destination:
+        return SyncReason.DESTINATION_IDENTITY_INCONSISTENT
+    origin = actual_destination.managed_origin
+    if origin is None or not origin.owns(rule, source_event.reference):
+        return SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
+    return None
+
+
+def _removal(
+    rule: SyncRule,
+    source_event: CalendarEvent,
+    mapping: EventMapping | None,
+    actual_destination: CalendarEvent | None,
+    has_live_occurrences: bool,
+) -> SyncDecision | None:
+    """Remove, or never create, the projection of a source the rule no longer projects."""
+    if source_event.status is EventStatus.CANCELLED:
+        if mapping is None:
+            return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
+        return SyncDecision(SyncAction.DELETE, SyncReason.SOURCE_CANCELLED)
+    if source_event.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE:
+        if mapping is None:
+            return SyncDecision(SyncAction.IGNORE, SyncReason.ALL_DAY_EXCLUDED)
+        return SyncDecision(SyncAction.DELETE, SyncReason.ALL_DAY_EXCLUDED_REMOVED)
+    # A projected series with no live occurrence is cancelled by the provider, so none is
+    # created. A mapping stays dormant with its cancelled occurrences, so restoring one
+    # occurrence later cannot resurrect the others; only a live projection is removed.
+    if source_event.recurrence is not None and not has_live_occurrences:
+        if actual_destination is None:
+            return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
+        return SyncDecision(SyncAction.DELETE, SyncReason.SERIES_WITHOUT_OCCURRENCES_REMOVED)
+    return None
+
+
 def _is_occurrence_of(event: CalendarEvent, series: EventRef, start: OccurrenceStart) -> bool:
     return (
         event.occurrence is not None
@@ -328,56 +357,42 @@ class ReconciliationService:
         """Compare each mapping's expected and actual state; a source absent from
         `expected_by_source` could not be read."""
         mapping_list = tuple(mappings)
-        drift: list[ReconciliationDrift] = []
-        conflicts: list[ReconciliationConflict] = []
+        findings: list[ReconciliationDrift | ReconciliationConflict | None] = []
         managed_destinations: set[EventRef] = set()
 
         for mapping in mapping_list:
             if mapping.belongs_to(rule):
                 managed_destinations.add(mapping.destination)
-            finding = self._mapping_finding(
-                rule,
-                mapping,
-                expected_by_source.get(mapping.source),
-                actual_by_destination.get(mapping.destination),
+            findings.append(
+                self._mapping_finding(
+                    rule,
+                    mapping,
+                    expected_by_source.get(mapping.source),
+                    actual_by_destination.get(mapping.destination),
+                )
             )
-            if isinstance(finding, ReconciliationConflict):
-                conflicts.append(finding)
-            elif finding is not None:
-                drift.append(finding)
 
         checked_occurrences: set[tuple[EventRef, OccurrenceStart]] = set()
         for check in occurrences:
             checked_occurrences.add((check.destination_series, check.mapping.original_start))
-            drift.extend(self._occurrence_drift(check))
+            findings.extend(self._occurrence_drift(check))
 
-        for destination in actual_by_destination.keys() - managed_destinations:
-            event = actual_by_destination[destination]
-            parent = event.occurrence
-            if parent is not None:
-                series_ref = EventRef(destination.calendar, parent.series_event_id)
-                if series_ref in managed_destinations:
-                    if (series_ref, parent.original_start) not in checked_occurrences:
-                        drift.append(
-                            ReconciliationDrift(
-                                DriftKind.INCORRECT_PROJECTION,
-                                None,
-                                destination,
-                                "managed occurrence has no occurrence mapping",
-                            )
-                        )
-                    continue
-            # No mapping proves ownership, so nothing may change or delete it.
-            conflicts.append(
-                ReconciliationConflict(
-                    SyncReason.PROJECTION_UNMAPPED,
-                    event.managed_origin.source if event.managed_origin else None,
-                    destination,
-                    "managed provider event has no mapping",
-                )
+        findings.extend(
+            _unmapped_finding(
+                destination,
+                actual_by_destination[destination],
+                managed_destinations,
+                checked_occurrences,
             )
+            for destination in actual_by_destination.keys() - managed_destinations
+        )
 
-        return ReconciliationReport(rule.id, len(mapping_list), tuple(drift), tuple(conflicts))
+        return ReconciliationReport(
+            rule.id,
+            len(mapping_list),
+            tuple(item for item in findings if isinstance(item, ReconciliationDrift)),
+            tuple(item for item in findings if isinstance(item, ReconciliationConflict)),
+        )
 
     def _mapping_finding(
         self,
@@ -452,3 +467,31 @@ class ReconciliationService:
                 "managed occurrence differs from source authority",
             )
         return [ReconciliationDrift(kind, check.mapping.source, check.mapping.destination, detail)]
+
+
+def _unmapped_finding(
+    destination: EventRef,
+    event: CalendarEvent,
+    managed_destinations: set[EventRef],
+    checked_occurrences: set[tuple[EventRef, OccurrenceStart]],
+) -> ReconciliationDrift | ReconciliationConflict | None:
+    """A managed provider event no mapping accounts for, unless a checked occurrence is it."""
+    parent = event.occurrence
+    if parent is not None:
+        series_ref = EventRef(destination.calendar, parent.series_event_id)
+        if series_ref in managed_destinations:
+            if (series_ref, parent.original_start) in checked_occurrences:
+                return None
+            return ReconciliationDrift(
+                DriftKind.INCORRECT_PROJECTION,
+                None,
+                destination,
+                "managed occurrence has no occurrence mapping",
+            )
+    # No mapping proves ownership, so nothing may change or delete it.
+    return ReconciliationConflict(
+        SyncReason.PROJECTION_UNMAPPED,
+        event.managed_origin.source if event.managed_origin else None,
+        destination,
+        "managed provider event has no mapping",
+    )
