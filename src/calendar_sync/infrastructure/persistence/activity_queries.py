@@ -11,6 +11,7 @@ def open_blocks(
     rule_id: str | None = None,
     after: int | None = None,
     persisting: bool = False,
+    run_id: str | None = None,
 ) -> list[tuple[int, str]]:
     """Entry and rule of each event whose latest decision was a block, newest first.
 
@@ -18,8 +19,10 @@ def open_blocks(
     event again, so an older block it did not repeat, such as one of an occurrence whose series was
     deleted, is no longer open. That includes a block of an event that ended before the rule's sync
     window: the daily pass no longer lists it, and a past event no longer affects the destination
-    calendar, so its block retires with it. `after` replaces the recorded pass with an audit
-    identifier. A persisting block was also the event's latest decision in an earlier run.
+    calendar, so its block retires with it. `after` replaces the recorded pass with the audit
+    identifier a pass began after, and `run_id` keeps only that pass's own blocks. A persisting
+    block was already the event's latest decision before the pass began, so neither a failed
+    attempt of the same pass nor a run interleaved with it counts as earlier evidence.
     """
     rules = (
         [rule_id]
@@ -29,8 +32,8 @@ def open_blocks(
     # Recurring exclusions were recorded as conflicts before reason codes existed, and Rule Removal
     # conflicts belong to a rule that no longer exists.
     conditions = [
-        "a.rule_id = ?",
-        "a.id > ?",
+        "a.rule_id = :rule",
+        "a.id > :floor",
         "a.action = 'conflict' AND COALESCE(a.reason, '') != 'recurring_unsupported'",
         "a.source_event_id IS NOT NULL",
         """NOT EXISTS (
@@ -39,13 +42,14 @@ def open_blocks(
                 AND later.id > a.id
         )""",
     ]
+    if run_id is not None:
+        conditions.append("a.run_id = :run")
     if persisting:
         conditions.append(
             """(
                 SELECT earlier.action FROM audit_entries earlier
                 WHERE earlier.rule_id = a.rule_id AND earlier.source_event_id = a.source_event_id
-                    AND earlier.id < a.id
-                    AND COALESCE(earlier.run_id, '') != COALESCE(a.run_id, '')
+                    AND earlier.id <= :floor
                 ORDER BY earlier.id DESC LIMIT 1
             ) = 'conflict'"""
         )
@@ -59,7 +63,7 @@ def open_blocks(
                 SELECT a.id FROM audit_entries a INDEXED BY audit_entries_rule_id
                 WHERE {" AND ".join(conditions)}
                 """,
-                (rule, floor),
+                {"rule": rule, "floor": floor, "run": run_id},
             )
         )
     return sorted(blocks, reverse=True)

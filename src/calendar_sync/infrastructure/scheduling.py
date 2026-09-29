@@ -62,16 +62,22 @@ class SqliteRuleHealth:
                 connection.execute("SELECT COALESCE(MAX(id), 0) FROM audit_entries").fetchone()[0]
             )
 
-    def record_success(self, rule: SyncRule, *, full_pass_floor: int | None = None) -> None:
+    def record_success(
+        self,
+        rule: SyncRule,
+        *,
+        full_pass_floor: int | None = None,
+        full_pass_run: str | None = None,
+    ) -> None:
         """Record a successful run; a daily pass also names the audit entry it began after."""
         now = datetime.now(UTC).isoformat()
         with sqlite3.connect(self._database_path) as connection:
             connection.execute("DELETE FROM rule_failures WHERE rule_id = ?", (rule.id.value,))
         self._resolve(f"provider:{rule.id.value}", now)
         if full_pass_floor is not None:
-            self.record_full_pass(rule.id, full_pass_floor)
+            self.record_full_pass(rule.id, full_pass_floor, full_pass_run)
 
-    def record_full_pass(self, rule_id: SyncRuleId, floor: int) -> None:
+    def record_full_pass(self, rule_id: SyncRuleId, floor: int, run_id: str | None = None) -> None:
         """A full pass that began after audit entry `floor` decided every blocked event again.
 
         Blocks it repeated are persisting and open one Incident; blocks it did not repeat are no
@@ -81,10 +87,12 @@ class SqliteRuleHealth:
         # never given an incident no run could resolve. Notifying waits until the lock is
         # released, so a slow webhook never holds up the rule's other commands.
         with self._locks.for_rule(rule_id):
-            notification = self._record_full_pass(rule_id, floor)
+            notification = self._record_full_pass(rule_id, floor, run_id)
         self._notify(notification)
 
-    def _record_full_pass(self, rule_id: SyncRuleId, floor: int) -> IncidentNotification | None:
+    def _record_full_pass(
+        self, rule_id: SyncRuleId, floor: int, run_id: str | None
+    ) -> IncidentNotification | None:
         now = datetime.now(UTC).isoformat()
         with sqlite3.connect(self._database_path) as connection:
             if not connection.execute(
@@ -92,7 +100,9 @@ class SqliteRuleHealth:
             ).fetchone():
                 return None
             persisting = len(
-                open_blocks(connection, rule_id=rule_id.value, after=floor, persisting=True)
+                open_blocks(
+                    connection, rule_id=rule_id.value, after=floor, persisting=True, run_id=run_id
+                )
             )
             connection.execute(
                 """
@@ -272,10 +282,9 @@ class SyncScheduler:
         # Every decision of this run, including its retries, is recorded above this entry, so a
         # run that turns out to list both calendars in full can stand in for the daily pass.
         floor = self._audit_floor()
-        started = datetime.now(UTC)
         for attempt in range(3):
             try:
-                self._execute_rule.execute(rule.id, full=full)
+                result = self._execute_rule.execute(rule.id, full=full)
             except RuleNotExecutable:
                 # The rule was paused, edited, or removed after this pass listed it.
                 return True
@@ -296,8 +305,8 @@ class SyncScheduler:
                 )
                 return False
             else:
-                listed = full or self._listed_in_full(rule, started)
-                self._record_success(rule, floor if listed else None)
+                listed = full or result.listed_in_full
+                self._record_success(rule, floor if listed else None, result.run_id)
                 return True
         return False
 
@@ -308,25 +317,12 @@ class SyncScheduler:
             logger.exception("Could not read the audit position before a run")
             return None
 
-    def _listed_in_full(self, rule: SyncRule, started: datetime) -> bool:
-        """Whether the finished run listed both calendars, as a reprojection or lost cursor does."""
-        try:
-            with self._unit_of_work() as uow:
-                latest = uow.run_outcomes.latest(rule.id, RunKind.SYNC)
-        except Exception:
-            logger.exception("Could not read the outcome of rule %s", rule.id.value)
-            return False
-        return (
-            latest is not None
-            and latest.succeeded
-            and latest.full_run
-            and latest.completed_at >= started
-        )
-
-    def _record_success(self, rule: SyncRule, full_pass_floor: int | None) -> None:
+    def _record_success(
+        self, rule: SyncRule, full_pass_floor: int | None, run_id: str | None
+    ) -> None:
         # The run succeeded; failing to record its health must not report it as failed.
         try:
-            self._health.record_success(rule, full_pass_floor=full_pass_floor)
+            self._health.record_success(rule, full_pass_floor=full_pass_floor, full_pass_run=run_id)
         except Exception:
             logger.exception("Could not record the successful run of rule %s", rule.id.value)
 

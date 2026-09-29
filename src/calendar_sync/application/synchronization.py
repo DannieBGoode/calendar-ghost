@@ -55,6 +55,10 @@ class SyncRunResult:
     deleted: int = 0
     ignored: int = 0
     conflicts: int = 0
+    run_id: str | None = None
+    """Identifies this run's Audit Entries."""
+    listed_in_full: bool = False
+    """Both calendars were listed in full, so every event in the window was decided again."""
 
 
 @dataclass(slots=True)
@@ -226,6 +230,8 @@ class ExecuteSyncRule:
             deleted=counts[SyncAction.DELETE],
             ignored=counts[SyncAction.IGNORE],
             conflicts=counts[SyncAction.CONFLICT],
+            run_id=run_id,
+            listed_in_full=source_listed and destination_listed,
         )
 
     def _is_own_write(

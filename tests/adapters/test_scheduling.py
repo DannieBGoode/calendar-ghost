@@ -64,9 +64,16 @@ class RecordingHealth:
         self.full_successes = 0
         self.failures: list[ProviderFailure] = []
 
-    def record_success(self, _rule: object, *, full_pass_floor: int | None = None) -> None:
+    def record_success(
+        self,
+        _rule: object,
+        *,
+        full_pass_floor: int | None = None,
+        full_pass_run: str | None = None,
+    ) -> None:
         self.successes += 1
         self.full_successes += full_pass_floor is not None
+        self.full_pass_run = full_pass_run
 
     def audit_floor(self) -> int:
         return 0
@@ -509,12 +516,7 @@ def test_a_scheduled_run_that_listed_everything_checks_blocks_as_the_daily_pass(
         """A reprojection or a rejected cursor lists both calendars in full."""
 
         def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
-            with factory() as uow:
-                uow.run_outcomes.record(
-                    RuleRunOutcome(rule_id, RunKind.SYNC, datetime.now(UTC), True, full_run=True)
-                )
-                uow.commit()
-            return SyncRunResult(rule_id)
+            return SyncRunResult(rule_id, run_id="forced", listed_in_full=True)
 
     health = RecordingHealth()
     scheduler = SyncScheduler(
@@ -522,12 +524,18 @@ def test_a_scheduled_run_that_listed_everything_checks_blocks_as_the_daily_pass(
     )
 
     assert scheduler._execute_with_retry(rule(), full=False) is True
-    assert health.full_successes == 1
+    assert (health.full_successes, health.full_pass_run) == (1, "forced")
 
 
 def test_failing_to_record_health_never_reports_a_successful_run_as_failed() -> None:
     class BrokenHealth(RecordingHealth):
-        def record_success(self, _rule: object, *, full_pass_floor: int | None = None) -> None:
+        def record_success(
+            self,
+            _rule: object,
+            *,
+            full_pass_floor: int | None = None,
+            full_pass_run: str | None = None,
+        ) -> None:
             raise sqlite3.OperationalError("database is locked")
 
         def audit_floor(self) -> int:
@@ -567,3 +575,28 @@ def test_blocked_incident_is_notified_after_the_rule_lock_is_released(tmp_path: 
     health.record_full_pass(rule().id, 1)
 
     assert held == [False]
+
+
+def test_a_block_first_found_by_a_retried_daily_pass_is_not_persisting(tmp_path: Path) -> None:
+    # The first attempt recorded the block and then hit a retryable failure; the retry, a run of
+    # its own, recorded it again. Neither predates the pass.
+    database, health = _health_with(tmp_path, _block("attempt-1"), _block("attempt-2"))
+
+    health.record_full_pass(rule().id, 0, "attempt-2")
+
+    assert _incidents(database) == []
+
+
+def test_a_run_interleaved_with_the_daily_pass_does_not_decide_its_incident(
+    tmp_path: Path,
+) -> None:
+    # A block from before the pass, then a Sync Now that ran between the pass and its health
+    # check blocked the same event again. The pass itself did not decide it.
+    database, health = _health_with(tmp_path, _block("earlier"), _block("sync-now"))
+
+    health.record_full_pass(rule().id, 1, "daily")
+
+    assert _incidents(database) == []
+    with sqlite3.connect(database) as connection:
+        # The interleaved block is still the event's latest decision, so it stays open.
+        assert open_blocks(connection) == [(2, "rule-1")]

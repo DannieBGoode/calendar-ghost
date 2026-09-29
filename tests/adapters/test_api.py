@@ -981,7 +981,7 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
         _append_audit(
             container, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
         )
-        return SyncRunResult(rule_id, conflicts=1)
+        return SyncRunResult(rule_id, conflicts=1, run_id="run-2", listed_in_full=True)
 
     container = replace(
         container,
@@ -1000,6 +1000,39 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
 
     assert [(item["rule_id"], item["state"]) for item in incidents] == [("rule-1", "open")]
     assert incidents[0]["summary"].startswith("1 event could not be synced")
+
+
+def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
+    tmp_path: Path,
+) -> None:
+    container = build_container(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+    _append_audit(container, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
+
+    def full_pass(rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+        _append_audit(
+            container, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
+        )
+        return SyncRunResult(rule_id, conflicts=1, run_id="run-2", listed_in_full=True)
+
+    failure = ProviderFailure(ProviderFailureKind.TEMPORARY, "synthetic outage")
+    container = replace(
+        container,
+        scheduler=None,
+        execute_sync_rule=cast(ExecuteSyncRule, Mock(execute=full_pass)),
+        reconcile_sync_rule=cast(ReconcileSyncRule, Mock(execute=Mock(side_effect=failure))),
+    )
+
+    with TestClient(create_app(container), raise_server_exceptions=False) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        assert client.post("/api/v1/rules/rule-1/reconcile").status_code >= 500
+        incidents = client.get("/api/v1/incidents").json()
+
+    assert [(item["rule_id"], item["state"]) for item in incidents] == [("rule-1", "open")]
 
 
 def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Path) -> None:
@@ -1155,6 +1188,24 @@ def test_recent_changes_collapse_an_identical_repeated_write(tmp_path: Path) -> 
         (5, 1, "2026-09-28T15:18:00+00:00"),
         (4, 1, "2026-09-28T15:18:00+00:00"),
         (3, 3, "2026-09-29T14:00:00+00:00"),
+    ]
+
+
+def test_recent_changes_look_past_a_long_repeated_repair(tmp_path: Path) -> None:
+    container = build_container(Settings(tmp_path / "test.db"))
+    _append_audit(
+        container,
+        _audit("create", "source_created", run_id="older", source_event_id="dentist"),
+        *(_audit("create", "projection_missing", run_id=f"loop-{index}") for index in range(1200)),
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        changes = client.get("/api/v1/recent-changes").json()
+
+    assert [(change["entry"]["reason"], change["repeats"]) for change in changes] == [
+        ("projection_missing", 1200),
+        ("source_created", 1),
     ]
 
 

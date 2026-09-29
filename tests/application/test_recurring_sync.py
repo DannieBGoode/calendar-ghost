@@ -1001,9 +1001,9 @@ def test_daily_pass_decides_a_blocked_occurrence_again() -> None:
     sync_use_case(factory, calendars).execute(rule().id)
     recorded = len(factory.state.audit)
 
-    sync_use_case(factory, calendars).execute(rule().id, full=True)
+    result = sync_use_case(factory, calendars).execute(rule().id, full=True)
 
-    # A block that persists is recorded again, so rule health can see it persisted.
-    assert SyncReason.DESTINATION_OCCURRENCE_MISSING.value in [
-        entry.reason for entry in factory.state.audit[recorded:]
-    ]
+    # A block that persists is recorded again, by this run, so rule health can see it persisted.
+    again = [entry for entry in factory.state.audit[recorded:] if entry.run_id == result.run_id]
+    assert SyncReason.DESTINATION_OCCURRENCE_MISSING.value in [entry.reason for entry in again]
+    assert result.listed_in_full

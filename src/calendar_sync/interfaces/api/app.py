@@ -568,23 +568,31 @@ def create_app(container: Container | None = None) -> FastAPI:
         # repair repeated on every run shows as one line.
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
-            rows = connection.execute(
-                f"""
-                SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS} FROM audit_entries
-                WHERE action IN ({_WRITE_ACTIONS}) AND source_event_id IS NOT NULL
-                ORDER BY id DESC LIMIT ?
-                """,
-                (_RECENT_WRITE_SCAN_LIMIT,),
-            ).fetchall()
             groups: dict[tuple[object, ...], list[sqlite3.Row]] = {}
-            for row in rows:
-                # Only repairs collapse; any other write is a change of its own, see `repeated`.
-                key = (
-                    tuple(row[column] for column in _IDENTICAL_WRITE)
-                    if row["reason"] in _REPAIRS
-                    else (row["id"],)
-                )
-                groups.setdefault(key, []).append(row)
+            # Page backwards until more distinct changes than requested are found, so a repair
+            # repeated on every run never hides older changes; the scan stays bounded.
+            before: int | None = None
+            for _ in range(_RECENT_WRITE_PAGES):
+                rows = connection.execute(
+                    f"""
+                    SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS} FROM audit_entries
+                    WHERE action IN ({_WRITE_ACTIONS}) AND source_event_id IS NOT NULL
+                        {"AND id < ?" if before is not None else ""}
+                    ORDER BY id DESC LIMIT ?
+                    """,
+                    (*([before] if before is not None else []), _RECENT_WRITE_PAGE_SIZE),
+                ).fetchall()
+                for row in rows:
+                    # Only repairs collapse; any other write is a change of its own.
+                    key = (
+                        tuple(row[column] for column in _IDENTICAL_WRITE)
+                        if row["reason"] in _REPAIRS
+                        else (row["id"],)
+                    )
+                    groups.setdefault(key, []).append(row)
+                if len(rows) < _RECENT_WRITE_PAGE_SIZE or len(groups) > limit:
+                    break
+                before = int(rows[-1]["id"])
             chosen = list(groups.values())[:limit]
             heads = _audit_entry_responses(connection, [group[0] for group in chosen])
         return [
@@ -734,13 +742,16 @@ def create_app(container: Container | None = None) -> FastAPI:
             result = await asyncio.to_thread(
                 resolved.execute_sync_rule.execute, SyncRuleId(rule_id), full=True
             )
+            # The full pass succeeded and counts as today's; reconciliation can still fail after.
+            if health is not None and floor is not None:
+                await asyncio.to_thread(
+                    health.record_full_pass, SyncRuleId(rule_id), floor, result.run_id
+                )
             report = await asyncio.to_thread(
                 resolved.reconcile_sync_rule.execute, SyncRuleId(rule_id)
             )
         except RuleNotExecutable as error:
             raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
-        if health is not None and floor is not None:
-            await asyncio.to_thread(health.record_full_pass, SyncRuleId(rule_id), floor)
         return {
             "rule_id": result.rule_id.value,
             "created": result.created,
@@ -946,8 +957,10 @@ _REPAIRS = frozenset(
     }
 )
 _WRITE_ACTIONS = ", ".join(f"'{action}'" for action in _WRITES)
-# Recent changes read at most this many writes, enough to count a repair repeated on every run.
-_RECENT_WRITE_SCAN_LIMIT = 500
+# Recent changes read writes in pages until they find more distinct changes than requested, at
+# most 10,000 writes; a repeated repair's count covers the writes read.
+_RECENT_WRITE_PAGE_SIZE = 500
+_RECENT_WRITE_PAGES = 20
 _IDENTICAL_WRITE = (
     "rule_id",
     "source_event_id",
