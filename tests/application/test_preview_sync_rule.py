@@ -1,7 +1,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from calendar_sync.application.ports import CalendarProvider, UnitOfWorkFactory
+from calendar_sync.application.ports import CalendarReader, UnitOfWorkFactory
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -19,7 +19,13 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider
-from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
+from tests.fake_calendar import (
+    WRITE_OPERATIONS,
+    FakeCalendars,
+    ReaderOnlyCalendar,
+    enabled_rule_factory,
+    sync_use_case,
+)
 from tests.helpers import NOW, event, occurrence, rule, series, week_start
 
 
@@ -28,7 +34,7 @@ class FixedClock:
         return NOW
 
 
-def _preview(unit_of_work: UnitOfWorkFactory, provider: CalendarProvider) -> PreviewSyncRule:
+def _preview(unit_of_work: UnitOfWorkFactory, provider: CalendarReader) -> PreviewSyncRule:
     return PreviewSyncRule(
         unit_of_work,
         provider,
@@ -149,3 +155,28 @@ def test_preview_under_an_all_day_exclusion_skips_a_series_left_with_only_all_da
 
     assert excluded.recurring_series == 0
     assert included.recurring_series == 1
+
+
+def test_preview_cannot_reach_a_provider_write() -> None:
+    # CalendarReader declares no write, so a reader-only calendar is all preview can be given.
+    assert not any(hasattr(CalendarReader, name) for name in WRITE_OPERATIONS)
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
+    calendars.put(occurrence(master, 1, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    writes = list(calendars.writes)
+    with factory() as uow:
+        current = uow.rules.get(rule().id)
+        assert current is not None
+        uow.rules.save(current.pause())
+        uow.commit()
+    calendars.put(occurrence(master, 2, moved_by=timedelta(hours=2)))
+    reader = ReaderOnlyCalendar(calendars)
+
+    preview = _preview(factory, reader).execute(rule().id)
+
+    assert not any(hasattr(reader, name) for name in WRITE_OPERATIONS)
+    assert preview.recurring_series == 1
+    assert preview.occurrence_changes == 2
+    assert calendars.writes == writes

@@ -15,7 +15,6 @@ from calendar_sync.domain.model import (
     EventProjection,
     EventRef,
     EventStatus,
-    ManagedOrigin,
     OccurrenceCheck,
     OccurrenceMapping,
     OccurrenceStart,
@@ -120,9 +119,7 @@ class SyncDecisionService:
             raise DomainValidationError("occurrence exceptions are decided through their series")
 
         if mapping is not None and (
-            mapping.rule_id != rule.id
-            or mapping.source != source_event.reference
-            or mapping.destination.calendar != rule.destination
+            not mapping.belongs_to(rule) or mapping.source != source_event.reference
         ):
             return SyncDecision(SyncAction.CONFLICT, SyncReason.MAPPING_INCONSISTENT)
         if mapping is not None and actual_destination is not None:
@@ -131,11 +128,7 @@ class SyncDecisionService:
                     SyncAction.CONFLICT, SyncReason.DESTINATION_IDENTITY_INCONSISTENT
                 )
             origin = actual_destination.managed_origin
-            if (
-                origin is None
-                or origin.rule_id != rule.id
-                or origin.source != source_event.reference
-            ):
+            if origin is None or not origin.owns(rule, source_event.reference):
                 return SyncDecision(
                     SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
                 )
@@ -201,9 +194,8 @@ class SyncDecisionService:
         if series_mapping is None or source_series.status is EventStatus.CANCELLED:
             return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
         if (
-            series_mapping.rule_id != rule.id
+            not series_mapping.belongs_to(rule)
             or series_mapping.source != source_series.reference
-            or series_mapping.destination.calendar != rule.destination
             or (
                 occurrence_mapping is not None
                 and (
@@ -230,7 +222,8 @@ class SyncDecisionService:
             ):
                 return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
             return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
-        if not _owned_by(destination_series.managed_origin, rule, source_series.reference):
+        origin = destination_series.managed_origin
+        if origin is None or not origin.owns(rule, source_series.reference):
             return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT)
         if destination_occurrence is not None:
             if not _is_occurrence_of(
@@ -240,8 +233,9 @@ class SyncDecisionService:
                     SyncAction.CONFLICT, SyncReason.DESTINATION_IDENTITY_INCONSISTENT
                 )
             # Google omits metadata on cancelled instances; the parent series proves ownership.
-            if destination_occurrence.managed_origin is not None and not _owned_by(
-                destination_occurrence.managed_origin, rule, source_series.reference
+            occurrence_origin = destination_occurrence.managed_origin
+            if occurrence_origin is not None and not occurrence_origin.owns(
+                rule, source_series.reference
             ):
                 return SyncDecision(
                     SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
@@ -315,10 +309,6 @@ def _is_occurrence_of(event: CalendarEvent, series: EventRef, start: OccurrenceS
     )
 
 
-def _owned_by(origin: ManagedOrigin | None, rule: SyncRule, source: EventRef) -> bool:
-    return origin is not None and origin.rule_id == rule.id and origin.source == source
-
-
 class ReconciliationService:
     """Proves mapped provider state against freshly derived expected projections."""
 
@@ -338,7 +328,7 @@ class ReconciliationService:
         managed_destinations: set[EventRef] = set()
 
         for mapping in mapping_list:
-            if mapping.rule_id != rule.id or mapping.destination.calendar != rule.destination:
+            if not mapping.belongs_to(rule):
                 drift.append(
                     ReconciliationDrift(
                         DriftKind.MAPPING_INCONSISTENCY,

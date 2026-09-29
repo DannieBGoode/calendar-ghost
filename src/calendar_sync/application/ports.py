@@ -20,6 +20,8 @@ from calendar_sync.domain.model import (
     EventTime,
     OccurrenceMapping,
     OccurrenceStart,
+    SyncAction,
+    SyncReason,
     SyncRule,
     SyncRuleId,
 )
@@ -38,7 +40,9 @@ class CreatedProjection:
     destination_event: CalendarEvent
 
 
-class CalendarProvider(Protocol):
+class CalendarReader(Protocol):
+    """Provider reads. Preview and reconciliation receive only this role, so they cannot write."""
+
     def changes(
         self,
         source: CalendarEndpoint,
@@ -53,32 +57,6 @@ class CalendarProvider(Protocol):
     ) -> CalendarEvent | None:
         """Return the projection an earlier write with this Operation Key created, if any."""
         ...
-
-    def create_projection(
-        self,
-        destination: CalendarEndpoint,
-        source: EventRef,
-        rule_id: SyncRuleId,
-        projection: EventProjection,
-        operation_key: str,
-    ) -> CreatedProjection: ...
-
-    def update_projection(
-        self,
-        destination: EventRef,
-        source: EventRef,
-        rule_id: SyncRuleId,
-        projection: EventProjection,
-        operation_key: str,
-    ) -> CalendarEvent: ...
-
-    def delete_projection(
-        self,
-        destination: EventRef,
-        source: EventRef,
-        rule_id: SyncRuleId,
-        operation_key: str,
-    ) -> None: ...
 
     def managed_events(
         self, destination: CalendarEndpoint, rule_id: SyncRuleId
@@ -115,6 +93,44 @@ class CalendarProvider(Protocol):
         a later full listing reports them.
         """
 
+
+class ProjectionDeleter(Protocol):
+    """Deletes an owned projection; Rule Removal needs no other provider operation."""
+
+    def delete_projection(
+        self,
+        destination: EventRef,
+        source: EventRef,
+        rule_id: SyncRuleId,
+        operation_key: str,
+    ) -> None: ...
+
+
+class ProjectionWriter(ProjectionDeleter, Protocol):
+    """Creates, updates, and deletes owned projections."""
+
+    def create_projection(
+        self,
+        destination: CalendarEndpoint,
+        source: EventRef,
+        rule_id: SyncRuleId,
+        projection: EventProjection,
+        operation_key: str,
+    ) -> CreatedProjection: ...
+
+    def update_projection(
+        self,
+        destination: EventRef,
+        source: EventRef,
+        rule_id: SyncRuleId,
+        projection: EventProjection,
+        operation_key: str,
+    ) -> CalendarEvent: ...
+
+
+class OccurrenceWriter(Protocol):
+    """Writes and cancels single occurrences of owned destination series."""
+
     def write_occurrence(
         self,
         destination_series: EventRef,
@@ -135,6 +151,10 @@ class CalendarProvider(Protocol):
         operation_key: str,
     ) -> None:
         """Cancel one owned destination occurrence; the rest of its series is unchanged."""
+
+
+class CalendarProvider(CalendarReader, ProjectionWriter, OccurrenceWriter, Protocol):
+    """Every provider role. Only a Sync Run needs them all."""
 
 
 class SyncRuleRepository(Protocol):
@@ -217,16 +237,49 @@ class RecordedEvent:
         )
 
 
+class AuditAction(StrEnum):
+    """What an Audit Entry records; the stored values are a compatibility surface."""
+
+    CREATE = "create"
+    UPDATE = "update"
+    DELETE = "delete"
+    IGNORE = "ignore"
+    CONFLICT = "conflict"
+    POLICY_CHANGED = "policy_changed"
+    REMOVE_PROJECTION = "remove_projection"
+    DETACH_PROJECTION = "detach_projection"
+    REMOVAL_CONFLICT = "removal_conflict"
+    RULE_REMOVED = "rule_removed"
+
+    @classmethod
+    def of(cls, action: SyncAction) -> AuditAction:
+        return cls(action.value)
+
+
+class AuditOutcome(StrEnum):
+    COMPLETED = "completed"
+    SKIPPED = "skipped"
+    BLOCKED = "blocked"
+
+    @classmethod
+    def of(cls, action: SyncAction) -> AuditOutcome:
+        if action is SyncAction.IGNORE:
+            return cls.SKIPPED
+        if action is SyncAction.CONFLICT:
+            return cls.BLOCKED
+        return cls.COMPLETED
+
+
 @dataclass(frozen=True, slots=True)
 class AuditEntry:
     occurred_at: datetime
     rule_id: SyncRuleId
-    action: str
-    outcome: str
+    action: AuditAction
+    outcome: AuditOutcome
     source_event_id: str | None = None
     destination_event_id: str | None = None
     detail: str = ""
-    reason: str | None = None
+    reason: SyncReason | None = None
     run_id: str | None = None
     event: RecordedEvent | None = None
     """The source event's title and time; never its description, location, or attendees."""

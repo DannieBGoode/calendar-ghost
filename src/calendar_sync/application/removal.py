@@ -18,9 +18,11 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AccountAuthorizations,
+    AuditAction,
     AuditEntry,
-    CalendarProvider,
+    AuditOutcome,
     Clock,
+    ProjectionDeleter,
     RemovalIncidents,
     UnitOfWorkFactory,
 )
@@ -42,7 +44,7 @@ class RemoveSyncRule:
     """Permanently removes a rule after deleting or detaching its mapped projections."""
 
     unit_of_work: UnitOfWorkFactory
-    provider: CalendarProvider | None
+    provider: ProjectionDeleter | None
     accounts: AccountAuthorizations | None
     clock: Clock
     locks: RuleLocks
@@ -104,8 +106,8 @@ class RemoveSyncRule:
                 AuditEntry(
                     occurred_at=self.clock.now(),
                     rule_id=rule.id,
-                    action="rule_removed",
-                    outcome="completed",
+                    action=AuditAction.RULE_REMOVED,
+                    outcome=AuditOutcome.COMPLETED,
                     detail=detail,
                 )
             )
@@ -150,19 +152,19 @@ class RemoveSyncRule:
 
     def _projection_entry(self, mapping: EventMapping, deleting: bool, owned: bool) -> AuditEntry:
         if not owned:
-            action = "removal_conflict"
+            action = AuditAction.REMOVAL_CONFLICT
             detail = "mapping removed; event left because its ownership could not be verified"
         elif deleting:
-            action = "remove_projection"
+            action = AuditAction.REMOVE_PROJECTION
             detail = "managed projection deleted during rule removal"
         else:
-            action = "detach_projection"
+            action = AuditAction.DETACH_PROJECTION
             detail = "mapping removed; projection kept as a detached event"
         return AuditEntry(
             occurred_at=self.clock.now(),
             rule_id=mapping.rule_id,
             action=action,
-            outcome="completed" if owned else "blocked",
+            outcome=AuditOutcome.COMPLETED if owned else AuditOutcome.BLOCKED,
             source_event_id=mapping.source.event_id.value,
             destination_event_id=mapping.destination.event_id.value,
             detail=detail,

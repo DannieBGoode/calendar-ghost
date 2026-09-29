@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -10,7 +11,12 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import CreatedProjection, ProviderChangeSet, UnitOfWorkFactory
+from calendar_sync.application.ports import (
+    CalendarReader,
+    CreatedProjection,
+    ProviderChangeSet,
+    UnitOfWorkFactory,
+)
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -410,3 +416,51 @@ def sync_use_case(factory: UnitOfWorkFactory, calendars: FakeCalendars) -> Execu
         fingerprinter,
         FixedClock(),
     )
+
+
+# Every provider operation that changes a calendar; CalendarReader declares none of them.
+WRITE_OPERATIONS = (
+    "create_projection",
+    "update_projection",
+    "delete_projection",
+    "write_occurrence",
+    "cancel_occurrence",
+)
+
+
+class ReaderOnlyCalendar:
+    """Exposes only the CalendarReader role of another fake, so any write is an AttributeError."""
+
+    def __init__(self, calendar: CalendarReader) -> None:
+        self._calendar = calendar
+
+    def changes(
+        self, source: CalendarEndpoint, cursor: str | None, not_ended_before: datetime
+    ) -> ProviderChangeSet:
+        return self._calendar.changes(source, cursor, not_ended_before)
+
+    def get_event(self, reference: EventRef) -> CalendarEvent | None:
+        return self._calendar.get_event(reference)
+
+    def find_projection(
+        self, destination: CalendarEndpoint, operation_key: str
+    ) -> CalendarEvent | None:
+        return self._calendar.find_projection(destination, operation_key)
+
+    def managed_events(
+        self, destination: CalendarEndpoint, rule_id: SyncRuleId
+    ) -> Sequence[CalendarEvent]:
+        return self._calendar.managed_events(destination, rule_id)
+
+    def get_occurrence(
+        self, series: EventRef, original_start: OccurrenceStart
+    ) -> CalendarEvent | None:
+        return self._calendar.get_occurrence(series, original_start)
+
+    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
+        return self._calendar.has_live_occurrences(series, include_all_day=include_all_day)
+
+    def occurrence_exceptions(
+        self, series: EventRef, not_ended_before: datetime
+    ) -> Sequence[CalendarEvent]:
+        return self._calendar.occurrence_exceptions(series, not_ended_before)

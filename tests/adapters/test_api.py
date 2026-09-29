@@ -13,7 +13,9 @@ from fastapi.testclient import TestClient
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.locking import RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
+    AuditAction,
     AuditEntry,
+    AuditOutcome,
     CalendarProvider,
     RecordedEvent,
     RuleRunOutcome,
@@ -36,6 +38,7 @@ from calendar_sync.domain.model import (
     ProjectionFingerprint,
     ProjectionHandling,
     Recurrence,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     SyncRuleState,
@@ -125,8 +128,8 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
             AuditEntry(
                 occurred_at=datetime(2026, 8, 30, tzinfo=UTC),
                 rule_id=SyncRuleId("rule-1"),
-                action="create",
-                outcome="completed",
+                action=AuditAction.CREATE,
+                outcome=AuditOutcome.COMPLETED,
                 detail="source has no managed projection",
             )
         )
@@ -1389,11 +1392,13 @@ def _audit(
     return AuditEntry(
         occurred_at=datetime(2026, 9, 28, 15, 18, tzinfo=UTC),
         rule_id=SyncRuleId(rule_id),
-        action=action,
-        outcome={"ignore": "skipped", "conflict": "blocked"}.get(action, "completed"),
+        action=AuditAction(action),
+        outcome={"ignore": AuditOutcome.SKIPPED, "conflict": AuditOutcome.BLOCKED}.get(
+            action, AuditOutcome.COMPLETED
+        ),
         source_event_id=source_event_id,
         destination_event_id=destination_event_id,
-        reason=reason,
+        reason=SyncReason(reason) if reason is not None else None,
         run_id=run_id,
         event=event,
     )
