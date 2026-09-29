@@ -114,7 +114,9 @@ longer find it. Creating a series whose every source occurrence is cancelled and
 those occurrences would leave a cancelled projection that the next run reads as missing and
 recreates, indefinitely. Before creating or restoring a series projection, the application
 therefore asks the provider (`has_live_occurrences`, an `instances` listing without cancelled
-instances, cached per run) whether any source occurrence remains. Only an answered lookup may
+instances, cached per run) whether any source occurrence remains that the rule projects: under an
+all-day exclusion, all-day occurrences do not count, because they are cancelled in the destination
+as well. The adapter also checks each instance's status rather than relying on the filter alone. Only an answered lookup may
 report that none remain; a 404 or 410 is a temporary provider failure. A mapped series is kept
 dormant rather than deleted, because its `cancelled` Occurrence Mappings are what stop a later
 restore of one occurrence from resurrecting the others. Occurrence decisions against a dormant

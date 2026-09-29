@@ -17,8 +17,8 @@ prevention and bookkeeping, and each echo cost a provider read.
 - `managed_projection_source`, `outside_source_calendar`, `cancelled_without_projection`,
   `before_sync_window`, and `occurrence_retired` are not recorded. They are loop prevention, events
   that were never in the rule's scope, or bookkeeping with no provider write.
-- `all_day_excluded` and `series_not_synchronized` are recorded on the first run and on
-  incremental runs that saw the event change, and not on the daily full pass.
+- `all_day_excluded`, `series_not_synchronized`, and `series_without_occurrences` are recorded on
+  the first run and on incremental runs that saw the event change, and not on the daily full pass.
 - Earlier entries with the unrecorded reasons stay in SQLite and are hidden from Activity.
 - A destination projection or occurrence reported back unchanged by an incremental feed, still
   carrying this rule's Managed Origin and the fingerprint recorded when it was written, is counted
@@ -38,6 +38,7 @@ prevention and bookkeeping, and each echo cost a provider read.
 
 Activity shows fewer, more meaningful entries, and runs with no changes record nothing. An
 unrecorded skip can no longer be looked up by event, so "why is this event missing?" is answered
-only for all-day exclusions and unsynchronized series. The trust in the echo check rests on the
+only for all-day exclusions, unsynchronized series, and series whose every occurrence is
+cancelled. The trust in the echo check rests on the
 same fingerprint comparison the decision service already uses to confirm a projection is current.
 Audit history still has no retention limit.

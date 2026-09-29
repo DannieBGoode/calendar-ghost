@@ -15,6 +15,7 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
+from tests.application.test_recurring_sync import _LiveLookupCalendars
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import event, occurrence, rule, series, week_start
 
@@ -176,3 +177,65 @@ def test_reconciliation_accepts_a_dormant_series_whose_every_occurrence_is_cance
 
     assert report.drift == ()
     assert report.checked_mappings == 1
+
+
+def test_reconciliation_still_reports_a_deleted_live_series_beside_a_dormant_one() -> None:
+    calendars = FakeCalendars()
+    dormant = calendars.put(series("dormant-series"), starts=(week_start(0),))
+    live = calendars.put(series(), starts=(week_start(0), week_start(1)))
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(calendars.put(occurrence(dormant, 0, status=EventStatus.CANCELLED)))
+    use_case.execute(rule().id)
+    deleted = factory.state.mappings[(rule().id, live.reference)].destination
+    del calendars.events[deleted]
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert [(item.kind, item.source) for item in report.drift] == [
+        (DriftKind.MISSING, live.reference)
+    ]
+    assert report.checked_mappings == 2
+
+
+def test_reconciliation_reports_a_mapping_whose_source_is_no_longer_eligible() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    calendars.put(replace(event(), status=EventStatus.CANCELLED, time=None))
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert [item.kind for item in report.drift] == [DriftKind.MAPPING_INCONSISTENCY]
+
+
+def test_reconciliation_of_a_projected_series_asks_for_no_live_lookup() -> None:
+    calendars = _LiveLookupCalendars()
+    calendars.put(series(), starts=(week_start(0), week_start(1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    calendars.live_lookups.clear()
+
+    ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert calendars.live_lookups == []

@@ -6,6 +6,7 @@ from datetime import datetime
 from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.ports import AuditEntry, CalendarProvider, UnitOfWork
 from calendar_sync.domain.model import (
+    AllDaySyncPolicy,
     CalendarEvent,
     EventRef,
     SyncAction,
@@ -63,10 +64,16 @@ class SyncRunContext:
 
 
 def has_live_occurrences(run: SyncRunContext, provider: CalendarProvider, series: EventRef) -> bool:
-    """Ask the provider once per run whether a source series still has a live occurrence."""
+    """Ask once per run whether a source series still has an occurrence this rule projects."""
     if series not in run.live_series:
-        run.live_series[series] = provider.has_live_occurrences(series)
+        run.live_series[series] = provider.has_live_occurrences(
+            series, include_all_day=includes_all_day(run.rule)
+        )
     return run.live_series[series]
+
+
+def includes_all_day(rule: SyncRule) -> bool:
+    return rule.transformation.all_day is not AllDaySyncPolicy.EXCLUDE
 
 
 def require_unchanged(run: SyncRunContext) -> None:

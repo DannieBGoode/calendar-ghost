@@ -72,6 +72,21 @@ def test_excluded_all_day_event_is_explained_once_not_on_every_daily_pass() -> N
     assert _reasons(factory.state.audit) == [SyncReason.ALL_DAY_EXCLUDED.value]
 
 
+def test_series_without_live_occurrences_is_explained_once_not_on_every_daily_pass() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED))
+    factory = enabled_rule_factory()
+    sync = sync_use_case(factory, calendars)
+
+    sync.execute(rule().id)
+    first_run = _reasons(factory.state.audit)
+    sync.execute(rule().id, full=True)
+
+    assert SyncReason.SERIES_WITHOUT_OCCURRENCES.value in first_run
+    assert _reasons(factory.state.audit) == first_run
+
+
 def test_projection_echoed_by_the_destination_feed_needs_no_reads_or_entries() -> None:
     calendars = FakeCalendars()
     calendars.put(event())

@@ -115,7 +115,9 @@ Google cancels a whole series once its last live occurrence is cancelled, and a 
 projection reads as missing. A source series whose every occurrence is cancelled, such as the
 single-occurrence remainder of a "this and following" split, therefore cannot be projected: before
 creating or restoring a series projection, the run asks the provider, once per series per run,
-whether the source series has any occurrence that is not cancelled. If none remains, the series is
+whether the source series has any occurrence that is not cancelled, not counting all-day
+occurrences when the rule excludes all-day events, since those are cancelled in the destination
+too. If none remains, the series is
 ignored (`series_without_occurrences`) instead of being recreated on every run. A mapped series
 stays dormant: its Series Mapping and `cancelled` Occurrence Mappings are kept, so restoring one
 occurrence later recreates the series without resurrecting the others, and its occurrences are

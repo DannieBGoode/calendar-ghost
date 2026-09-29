@@ -151,7 +151,7 @@ class FakeCalendarProvider:
     ) -> CalendarEvent | None:
         return None
 
-    def has_live_occurrences(self, series: EventRef) -> bool:
+    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         return True
 
     def write_occurrence(

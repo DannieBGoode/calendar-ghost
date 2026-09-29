@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -9,6 +9,7 @@ import pytest
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind, RuleNotExecutable
 from calendar_sync.application.ports import ProviderChangeSet
+from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEndpoint,
@@ -20,6 +21,7 @@ from calendar_sync.domain.model import (
     OccurrenceState,
     PrivacyPolicy,
     Recurrence,
+    SyncAction,
     SyncReason,
     SyncRule,
     SyncRuleId,
@@ -138,6 +140,7 @@ def test_cancelled_series_deletes_the_destination_series_and_its_occurrence_mapp
     assert factory.state.mappings == {}
     assert factory.state.occurrences == {}
     assert ("delete", destination.event_id.value) in calendars.writes
+    assert not any(kind == "delete" and "_" in ref for kind, ref in calendars.writes)
 
 
 def _report_destination(calendars: FakeCalendars) -> None:
@@ -231,7 +234,87 @@ def test_acknowledged_create_of_a_series_that_lost_every_occurrence_is_removed()
     assert orphan not in calendars.events
     assert calendars.writes[-1] == ("delete", orphan.event_id.value)
     assert factory.state.mappings == {}
-    assert not any(kind == "delete" and "_" in ref for kind, ref in calendars.writes)
+    removed = [
+        (entry.action, entry.destination_event_id)
+        for entry in factory.state.audit
+        if entry.reason == SyncReason.SERIES_WITHOUT_OCCURRENCES_REMOVED.value
+    ]
+    assert removed == [("delete", orphan.event_id.value)]
+
+
+@dataclass
+class _LiveLookupCalendars(FakeCalendars):
+    live_lookups: list[EventRef] = field(default_factory=list)
+
+    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
+        self.live_lookups.append(series)
+        return super().has_live_occurrences(series, include_all_day=include_all_day)
+
+
+def _dormant(
+    calendars: FakeCalendars,
+) -> tuple[CalendarEvent, InMemoryUnitOfWorkFactory]:
+    """Project a one-occurrence series, then cancel that occurrence in the source."""
+    master = calendars.put(series(), starts=STARTS[:1])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+    use_case.execute(rule().id)
+    _report_destination(calendars)
+    use_case.execute(rule().id)
+    return master, factory
+
+
+def test_live_occurrences_of_a_series_are_looked_up_once_per_run() -> None:
+    calendars = _LiveLookupCalendars()
+    master, factory = _dormant(calendars)
+    calendars.live_lookups.clear()
+
+    # The master, its repair, and its exception each ask; the run asks Google only once.
+    sync_use_case(factory, calendars).execute(rule().id, full=True)
+
+    assert calendars.live_lookups == [master.reference]
+
+
+def test_policy_change_leaves_a_dormant_series_without_writes_or_conflicts() -> None:
+    calendars = FakeCalendars()
+    master, factory = _dormant(calendars)
+    writes = list(calendars.writes)
+
+    _change_policy(factory, TransformationPolicy(privacy=PrivacyPolicy.COPY_DETAILS))
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert calendars.writes == writes
+    assert result.conflicts == 0
+    assert (rule().id, master.reference) in factory.state.mappings
+    assert _occurrence_states(factory) == {week_start(0): OccurrenceState.CANCELLED}
+    assert factory.state.rules[rule().id].reprojection_required is False
+
+
+def test_acknowledged_lookup_that_finds_an_occurrence_never_deletes_it() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    destination = factory.state.mappings.pop((rule().id, master.reference)).destination
+    instance = calendars.get_occurrence(destination, week_start(0))
+    assert instance is not None
+    calendars.put(instance)
+    key = ExecuteSyncRule._operation_key(
+        rule().id, master.reference, master.revision, SyncAction.CREATE
+    )
+    # Only a series may be removed as an acknowledged series create, never a single instance.
+    calendars.operations[key] = instance.reference
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+    before = list(calendars.writes)
+
+    result = use_case.execute(rule().id, full=True)
+
+    assert calendars.writes == before
+    assert result.deleted == 0
+    assert factory.state.mappings == {}
 
 
 def test_this_and_following_split_truncates_the_old_series_and_creates_the_new_one() -> None:
@@ -593,3 +676,34 @@ def test_fake_occurrence_lookup_of_a_missing_series_is_a_failure() -> None:
 
     with pytest.raises(ProviderFailure):
         calendars.get_occurrence(series().reference, week_start(1))
+
+
+def test_series_whose_only_live_occurrence_is_all_day_is_dormant_under_an_excluding_rule() -> None:
+    # A timed series whose one remaining occurrence moved to all-day would be cancelled whole.
+    excluding = replace(
+        rule(), transformation=TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE)
+    )
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:2])
+    calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED))
+    calendars.put(occurrence(master, 1, all_day=True))
+    factory = enabled_rule_factory(excluding)
+    use_case = sync_use_case(factory, calendars)
+
+    use_case.execute(rule().id)
+    use_case.execute(rule().id, full=True)
+
+    assert calendars.writes == []
+
+
+def test_daily_pass_of_a_projected_live_series_asks_for_no_live_lookup() -> None:
+    calendars = _LiveLookupCalendars()
+    calendars.put(series(), starts=STARTS)
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.live_lookups.clear()
+
+    use_case.execute(rule().id, full=True)
+
+    assert calendars.live_lookups == []

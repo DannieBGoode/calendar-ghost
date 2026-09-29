@@ -273,18 +273,25 @@ class GoogleCalendarProvider:
                 return candidate
         return None
 
-    def has_live_occurrences(self, series: EventRef) -> bool:
+    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         parameters: dict[str, Any] = {
             "calendarId": series.calendar.calendar_id.value,
             "eventId": series.event_id.value,
             "showDeleted": False,
-            "maxResults": 1,
+            "maxResults": LIVE_OCCURRENCE_PAGE_SIZE,
+            "fields": "items(status,start),nextPageToken",
         }
         try:
             events_api = self._service_for(series.calendar.connected_account_id).events()
             while True:
                 response = events_api.instances(**parameters).execute()
-                if response.get("items"):
+                # showDeleted=False should omit cancelled instances; the status is checked anyway,
+                # because counting one as live would recreate a series that can only be cancelled.
+                if any(
+                    item.get("status") != "cancelled"
+                    and (include_all_day or "date" not in item.get("start", {}))
+                    for item in response.get("items", [])
+                ):
                     return True
                 # A filtered page may be empty while later pages still hold live instances.
                 page_token = response.get("nextPageToken")
@@ -410,6 +417,10 @@ def _provider_failure(error: Exception) -> ProviderFailure:
     else:
         kind = ProviderFailureKind.PERMANENT
     return ProviderFailure(kind, detail, _retry_after_seconds(error))
+
+
+# Instances are read only for their status and start, so one page covers most series.
+LIVE_OCCURRENCE_PAGE_SIZE = 250
 
 
 # Retries wait in-process while holding the rule lock, so a longer provider hint is bounded; the

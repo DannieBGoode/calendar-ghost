@@ -136,12 +136,24 @@ class FakeCalendars:
         stored = self.events.get(reference)
         return stored if stored is not None else self._expand(master, original_start, reference)
 
-    def has_live_occurrences(self, series: EventRef) -> bool:
+    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         self.reads.append(series)
         master = self.events.get(series)
         if master is None:
             raise ProviderFailure(ProviderFailureKind.TEMPORARY, "series could not be read")
-        return master.status is EventStatus.CONFIRMED and bool(self.live_starts(series))
+        if master.status is not EventStatus.CONFIRMED:
+            return False
+        return any(
+            include_all_day or not self._all_day(series, start)
+            for start in self.live_starts(series)
+        )
+
+    def _all_day(self, series: EventRef, start: OccurrenceStart) -> bool:
+        stored = self.events.get(
+            EventRef(series.calendar, EventId(instance_id(series.event_id.value, start)))
+        )
+        time = stored.time if stored is not None else self.events[series].time
+        return isinstance(time, AllDayRange)
 
     @staticmethod
     def _expand(

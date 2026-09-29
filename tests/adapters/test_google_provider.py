@@ -424,10 +424,32 @@ def test_has_live_occurrences_lists_instances_without_cancelled_ones() -> None:
     events_api.instances.return_value = request_returning({"items": [_instance()]})
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES) is True
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
     events_api.instances.assert_called_once_with(
-        calendarId="work-calendar", eventId="projection-1", showDeleted=False, maxResults=1
+        calendarId="work-calendar",
+        eventId="projection-1",
+        showDeleted=False,
+        maxResults=250,
+        fields="items(status,start),nextPageToken",
     )
+
+
+def test_has_live_occurrences_never_counts_a_cancelled_instance() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance("cancelled")]})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is False
+
+
+def test_has_live_occurrences_skips_all_day_instances_a_rule_excludes() -> None:
+    all_day = {**_instance(), "start": {"date": "2026-09-08"}, "end": {"date": "2026-09-09"}}
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [all_day]})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, include_all_day=False) is False
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
 
 
 def test_has_live_occurrences_reads_past_empty_pages_before_answering() -> None:
@@ -438,7 +460,7 @@ def test_has_live_occurrences_reads_past_empty_pages_before_answering() -> None:
     ]
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES) is True
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
     assert events_api.instances.call_args.kwargs["pageToken"] == "page-2"
 
 
@@ -447,7 +469,7 @@ def test_has_live_occurrences_is_false_only_when_every_page_is_empty() -> None:
     events_api.instances.return_value = request_returning({"items": []})
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES) is False
+    assert provider.has_live_occurrences(SERIES, include_all_day=True) is False
 
 
 @pytest.mark.parametrize("status", [404, 410])
@@ -457,9 +479,31 @@ def test_has_live_occurrences_of_an_unreadable_series_is_a_failure(status: int) 
     provider = provider_with_events_api(events_api)
 
     with pytest.raises(ProviderFailure) as failure:
-        provider.has_live_occurrences(SERIES)
+        provider.has_live_occurrences(SERIES, include_all_day=True)
 
     assert failure.value.kind is ProviderFailureKind.TEMPORARY
+
+
+@pytest.mark.parametrize(
+    ("status", "kind"),
+    [
+        (401, ProviderFailureKind.AUTHENTICATION),
+        (403, ProviderFailureKind.AUTHORIZATION),
+        (429, ProviderFailureKind.RATE_LIMIT),
+        (503, ProviderFailureKind.TEMPORARY),
+    ],
+)
+def test_has_live_occurrences_classifies_other_failures_like_any_request(
+    status: int, kind: ProviderFailureKind
+) -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_raising(status)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.has_live_occurrences(SERIES, include_all_day=True)
+
+    assert failure.value.kind is kind
 
 
 def test_write_occurrence_restores_a_cancelled_instance_without_notifications() -> None:

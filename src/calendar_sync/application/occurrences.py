@@ -90,34 +90,33 @@ class SynchronizeOccurrences:
             destination_reported,
         )
         if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
-            # The repair re-verifies the series' other occurrences; this one is re-decided below.
-            if source_occurrence is not None:
-                run.handled.add(source_occurrence.reference)
-            self.repair_series(run, source_series)
-            series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
-            decision, destination = self._decide(
-                run,
-                series_mapping,
-                source_series,
-                original_start,
-                source_occurrence,
-                recorded,
-                destination_reported,
-            )
-        if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING and not (
-            has_live_occurrences(run, self.provider, source_series.reference)
-        ):
-            # The repair left a dormant series without a projection; nothing is missing.
-            decision, destination = self._decide(
-                run,
-                series_mapping,
-                source_series,
-                original_start,
-                source_occurrence,
-                recorded,
-                destination_reported,
-                has_live=False,
-            )
+            if not has_live_occurrences(run, self.provider, source_series.reference):
+                # A dormant series has no projection to repair, so nothing is missing.
+                decision, destination = self._decide(
+                    run,
+                    series_mapping,
+                    source_series,
+                    original_start,
+                    source_occurrence,
+                    recorded,
+                    destination_reported,
+                    has_live=False,
+                )
+            else:
+                # The repair re-verifies the series' other occurrences; this one is re-decided.
+                if source_occurrence is not None:
+                    run.handled.add(source_occurrence.reference)
+                self.repair_series(run, source_series)
+                series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
+                decision, destination = self._decide(
+                    run,
+                    series_mapping,
+                    source_series,
+                    original_start,
+                    source_occurrence,
+                    recorded,
+                    destination_reported,
+                )
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)

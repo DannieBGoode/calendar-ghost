@@ -75,7 +75,7 @@ A modification or cancellation that applies to one occurrence without changing t
 _Avoid_: Recurrence override, detached event
 
 **Series Mapping**:
-An Event Mapping whose source is an Event Series. It proves ownership of the destination series and every occurrence in it.
+An Event Mapping whose source is an Event Series. It proves ownership of the destination series and every occurrence in it. When no occurrence of the source series remains that the rule would project, the Series Mapping stays dormant without a destination series, keeping its cancelled Occurrence Mappings until an occurrence is restored.
 _Avoid_: Parent mapping, master mapping
 
 **Occurrence Mapping**:
