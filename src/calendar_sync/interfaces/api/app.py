@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sqlite3
 import uuid
 from collections.abc import AsyncIterator, Sequence
@@ -63,6 +64,7 @@ from calendar_sync.infrastructure.google.oauth import (
     InvalidOAuthState,
 )
 from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
+from calendar_sync.infrastructure.scheduling import SqliteRuleHealth
 from calendar_sync.infrastructure.security import (
     AdminAlreadyConfigured,
     PasswordPolicyViolation,
@@ -99,6 +101,7 @@ from calendar_sync.interfaces.api.schemas import (
 )
 
 SESSION_COOKIE = "calendar_sync_session"
+logger = logging.getLogger(__name__)
 
 ActivityCategory = Literal["changed", "unchanged", "skipped", "blocked"]
 
@@ -736,8 +739,9 @@ def create_app(container: Container | None = None) -> FastAPI:
                 "configure Google OAuth and the installation master key before reconciling",
             )
         health = resolved.rule_health
-        # Reconcile Now is a full pass, which also stands in for that day's scheduled one.
-        floor = await asyncio.to_thread(health.audit_floor) if health is not None else None
+        # Reconcile Now is a full pass, which also stands in for that day's scheduled one. Like the
+        # scheduler's, this bookkeeping is best-effort and never aborts the requested commands.
+        floor = await asyncio.to_thread(_audit_floor, health) if health is not None else None
         try:
             result = await asyncio.to_thread(
                 resolved.execute_sync_rule.execute, SyncRuleId(rule_id), full=True
@@ -745,7 +749,7 @@ def create_app(container: Container | None = None) -> FastAPI:
             # The full pass succeeded and counts as today's; reconciliation can still fail after.
             if health is not None and floor is not None:
                 await asyncio.to_thread(
-                    health.record_full_pass, SyncRuleId(rule_id), floor, result.run_id
+                    _record_full_pass, health, SyncRuleId(rule_id), floor, result.run_id
                 )
             report = await asyncio.to_thread(
                 resolved.reconcile_sync_rule.execute, SyncRuleId(rule_id)
@@ -973,6 +977,23 @@ _IDENTICAL_WRITE = (
     "event_recurring",
     "event_cancelled",
 )
+
+
+def _audit_floor(health: SqliteRuleHealth) -> int | None:
+    try:
+        return health.audit_floor()
+    except Exception:
+        logger.exception("Could not read the audit position before Reconcile Now")
+        return None
+
+
+def _record_full_pass(
+    health: SqliteRuleHealth, rule_id: SyncRuleId, floor: int, run_id: str | None
+) -> None:
+    try:
+        health.record_full_pass(rule_id, floor, run_id)
+    except Exception:
+        logger.exception("Could not record block health for rule %s", rule_id.value)
 
 
 def _preview_response(summary: RulePreviewSummary | None) -> PreviewSummaryResponse | None:

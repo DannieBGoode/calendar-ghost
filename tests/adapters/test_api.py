@@ -1002,6 +1002,37 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
     assert incidents[0]["summary"].startswith("1 event could not be synced")
 
 
+@pytest.mark.parametrize("failing", ["audit_floor", "record_full_pass"])
+def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
+    tmp_path: Path, failing: str
+) -> None:
+    container = build_container(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    with container.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+    execute = Mock(return_value=SyncRunResult(SyncRuleId("rule-1"), run_id="run-1"))
+    reconcile = Mock(return_value=Mock(is_consistent=True, checked_mappings=0, drift=[]))
+    health = Mock(audit_floor=Mock(return_value=0), record_full_pass=Mock())
+    getattr(health, failing).side_effect = sqlite3.OperationalError("database is locked")
+    container = replace(
+        container,
+        scheduler=None,
+        execute_sync_rule=cast(ExecuteSyncRule, Mock(execute=execute)),
+        reconcile_sync_rule=cast(ReconcileSyncRule, Mock(execute=reconcile)),
+        rule_health=health,
+    )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.post("/api/v1/rules/rule-1/reconcile")
+
+    # Incident bookkeeping is best-effort; the requested sync and reconciliation still run.
+    assert response.status_code == 200
+    assert execute.call_count == 1 and reconcile.call_count == 1
+
+
 def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
     tmp_path: Path,
 ) -> None:
