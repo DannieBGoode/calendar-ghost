@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ChevronDown } from "lucide-react"
+import { ArrowRight, Check, ChevronDown, X } from "lucide-react"
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
@@ -32,6 +32,8 @@ export function RulePicker({
   value,
   options,
   showAccounts,
+  clearValue,
+  clearLabel = "Clear",
   onChange,
 }: {
   id: string
@@ -40,11 +42,15 @@ export function RulePicker({
   options: RulePickerOption[]
   /** Adds account emails where calendar names alone would not tell rules apart. */
   showAccounts: boolean
+  /** The unfiltered value. When set and another option is chosen, a clear button appears. */
+  clearValue?: string
+  clearLabel?: string
   onChange: (value: string) => void
 }) {
   const id = useId()
   const listId = `${id}-list`
   const listRef = useRef<HTMLDivElement>(null)
+  const comboRef = useRef<HTMLDivElement>(null)
   const typed = useRef({ text: "", at: 0 })
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
@@ -79,8 +85,21 @@ export function RulePicker({
     )
   }
 
+  const clearable = clearValue !== undefined && value !== clearValue && selectedIndex >= 0
+
+  function clear() {
+    setOpen(false)
+    if (clearValue !== undefined) onChange(clearValue)
+    comboRef.current?.focus()
+  }
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const printable = event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey
+    if (!open && clearable && (event.key === "Delete" || event.key === "Backspace")) {
+      event.preventDefault()
+      clear()
+      return
+    }
     if (!open) {
       const index = printable ? findTyped(event.key, selectedIndex) : openingIndex(event.key, event.altKey, selectedIndex, options.length)
       if (index === null || index < 0) return
@@ -132,8 +151,9 @@ export function RulePicker({
   }
 
   return (
-    <div className="rule-picker">
+    <div className="rule-picker" data-clearable={clearable || undefined}>
       <div
+        ref={comboRef}
         id={comboId}
         role="combobox"
         tabIndex={0}
@@ -150,6 +170,18 @@ export function RulePicker({
         {selected && <RuleOptionContent option={selected} showAccounts={false} />}
         <ChevronDown aria-hidden="true" className="rule-picker-chevron" data-open={open} />
       </div>
+      {/* A sibling rather than a child: a combobox cannot contain another control. */}
+      {clearable && !open && (
+        <button
+          type="button"
+          className="rule-picker-clear"
+          aria-label={clearLabel}
+          title={clearLabel}
+          onClick={clear}
+        >
+          <X aria-hidden="true" />
+        </button>
+      )}
       <div
         ref={listRef}
         id={listId}

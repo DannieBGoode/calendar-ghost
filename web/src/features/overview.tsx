@@ -9,6 +9,7 @@ import {
   ShieldAlert,
 } from "lucide-react"
 
+import { AccountAvatar } from "@/components/account-avatar"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { RuleStatusBadge } from "@/components/rule-commands"
@@ -26,11 +27,12 @@ import {
   type OpenRule,
   type ViewChange,
 } from "@/lib/navigation"
-import { overviewHealth, withoutRunningRemovals, type AttentionRule } from "@/lib/overview-health"
+import { overviewHealth, overviewRules, withoutRunningRemovals, type AttentionRule } from "@/lib/overview-health"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
+import { ruleWork, workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 import { cn } from "@/lib/utils"
@@ -68,7 +70,11 @@ function attentionRule(
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const now = useNow()
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })
-  const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules, refetchInterval: REFRESH_INTERVAL })
+  const rules = useQuery({
+    queryKey: ["rules"],
+    queryFn: api.rules,
+    refetchInterval: (query) => workRefreshInterval(query.state.data, REFRESH_INTERVAL),
+  })
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
   const incidents = useQuery({
     queryKey: ["incidents"],
@@ -76,7 +82,7 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
     enabled: (dashboard.data?.open_incidents ?? 0) > 0,
   })
   const { endpoints } = useRuleEndpoints(rules.data ?? [])
-  const removingIds = useRemovingRuleIds()
+  const removingIds = useRemovingRuleIds(rules.data)
 
   if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label="Loading overview" />
   if (dashboard.error || rules.error || google.error) return <LoadFailure title="Calendar Sync could not load" />
@@ -124,11 +130,11 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
           onViewChange={onViewChange}
         />
       )}
-      {rules.data.some((rule) => rule.state === "enabled" || rule.last_sync) && (
-        <RecentChanges rules={rules.data} endpoints={endpoints} now={now} onViewChange={onViewChange} onOpenRule={onOpenRule} />
-      )}
       {rules.data.length > 0 && (
         <OverviewRules rules={rules.data} endpoints={endpoints} now={now} onViewChange={onViewChange} onOpenRule={onOpenRule} />
+      )}
+      {rules.data.some((rule) => rule.state === "enabled" || rule.last_sync) && (
+        <RecentChanges rules={rules.data} endpoints={endpoints} now={now} onViewChange={onViewChange} onOpenRule={onOpenRule} />
       )}
       {dashboard.data.connected_accounts + dashboard.data.disconnected_accounts > 0 && (
         <p className="overview-facts">
@@ -304,8 +310,8 @@ function OverviewRules({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
-  const shown = rules.slice(0, OVERVIEW_RULE_LIMIT)
-  const removingIds = useRemovingRuleIds()
+  const removingIds = useRemovingRuleIds(rules)
+  const shown = overviewRules(rules, removingIds, OVERVIEW_RULE_LIMIT)
   return (
     <section className="workflow" aria-labelledby="overview-rules-title">
       <div className="section-heading section-heading-inline">
@@ -318,6 +324,8 @@ function OverviewRules({
         {shown.map((rule) => {
           const { source, destination, disconnected } = endpoints(rule)
           const stopped = rule.state === "degraded" || disconnected.length > 0
+          const removing = removingIds.has(rule.id)
+          const work = ruleWork({ pending: undefined, running: rule.running, removing })
           return (
             <li key={rule.id}>
               <a
@@ -329,21 +337,35 @@ function OverviewRules({
                 }}
               >
                 <span className="overview-rule-name">
-                  <span>{source.name}</span>
+                  <OverviewEndpoint endpoint={source} accountId={rule.source.connected_account_id} />
                   <ArrowRight aria-hidden="true" />
                   <span className="sr-only"> to </span>
-                  <span>{destination.name}</span>
+                  <OverviewEndpoint endpoint={destination} accountId={rule.destination.connected_account_id} />
                 </span>
                 <span className="overview-rule-run">
                   {rule.state === "enabled" || stopped ? lastRunLabel(rule.last_sync, now) : "Not running"}
                 </span>
               </a>
-              <RuleStatusBadge state={removingIds.has(rule.id) ? "removing" : rule.state} stopped={stopped} />
+              <RuleStatusBadge state={removing ? "removing" : rule.state} stopped={stopped} working={work?.kind} />
             </li>
           )
         })}
       </ul>
     </section>
+  )
+}
+
+function OverviewEndpoint({ endpoint, accountId }: { endpoint: RuleEndpoints["source"]; accountId: string }) {
+  return (
+    <span className="overview-rule-endpoint" title={endpoint.account?.email ?? accountId}>
+      <AccountAvatar
+        displayName={endpoint.account?.display_name ?? ""}
+        email={endpoint.account?.email ?? accountId}
+        avatarUrl={endpoint.account?.avatar_url}
+        compact
+      />
+      <span>{endpoint.name}</span>
+    </span>
   )
 }
 

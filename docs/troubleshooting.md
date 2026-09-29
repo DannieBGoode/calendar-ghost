@@ -33,6 +33,9 @@ recorded it, the event as it is in Google now, and a link to open it in Google C
 
 ## A rule removal stopped or left events behind
 
+A removal that is still running shows **Removing** with its progress, even after the page is
+reloaded, and keeps running if you leave. Restarting the service stops it partway.
+
 **Removal incomplete** means the rule stopped partway and does not synchronize. Temporary Google
 errors are already retried with backoff before removal stops; choose **Retry removal** to continue
 from the remaining projections.

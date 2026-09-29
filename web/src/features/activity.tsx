@@ -8,6 +8,7 @@ import {
   ExternalLink,
   RefreshCw,
   Repeat,
+  Search,
   ShieldAlert,
   X,
 } from "lucide-react"
@@ -19,6 +20,7 @@ import { RuleEndpoint } from "@/components/rule-endpoint"
 import { RulePicker, type RulePickerOption } from "@/components/rule-picker"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import {
@@ -64,6 +66,7 @@ import {
   type Rule,
 } from "@/lib/api"
 import { isPlainLeftClick, type OpenRule } from "@/lib/navigation"
+import { plural } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
 type RuleContext = {
@@ -105,13 +108,19 @@ function useActivityLocation() {
 export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
   const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
+  const query = state.query ?? ""
   // Expanded runs and how many pages of their no-change checks are loaded.
   const [expandedRuns, setExpandedRuns] = useState<ReadonlyMap<string, number>>(new Map())
   const focusDetail = useRef(false)
   const activity = useInfiniteQuery({
-    queryKey: ["activity", ruleId, show],
+    queryKey: ["activity", ruleId, show, query],
     queryFn: ({ pageParam }) =>
-      api.activity({ ruleId: ruleId || undefined, categories: showCategories(show), before: pageParam }),
+      api.activity({
+        ruleId: ruleId || undefined,
+        categories: showCategories(show),
+        before: pageParam,
+        query: query || undefined,
+      }),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (page) => (page.length === ACTIVITY_PAGE_SIZE ? page.at(-1)?.id : undefined),
     // Keep the current table on screen while another rule or filter loads.
@@ -135,7 +144,8 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
   const runs = groupRuns(entries)
   // The default view hides no-change checks; each run still says how many it made, including runs
   // that made nothing else. Runs older than the loaded entries wait until older entries load.
-  const countsNoChange = show === ""
+  // Per-run counts cannot say which checks match a search, so a search lists matches only.
+  const countsNoChange = show === "" && !query
   const oldestLoaded = entries.at(-1)?.id
   const noChangeAfter = activity.hasNextPage && oldestLoaded ? oldestLoaded - 1 : 0
   const noChangeRuns = useQuery({
@@ -303,7 +313,9 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
             <h2 id="activity-feed-title">History</h2>
             <p>Newest first. Select an entry to see what happened and why.</p>
           </div>
-          <div className="activity-filters">
+        </div>
+        <div className="activity-filters">
+            <ActivitySearch query={query} onSearch={(next) => changeFilters({ query: next })} />
             <div className="field-stack">
               <Label id="activity-rule-label" onClick={() => document.getElementById("activity-rule")?.focus()}>Rule</Label>
               <RulePicker
@@ -312,6 +324,8 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
                 value={ruleId}
                 options={pickerOptions.options}
                 showAccounts={pickerOptions.showAccounts}
+                clearValue=""
+                clearLabel="Show all rules"
                 onChange={(value) => changeFilters({ ruleId: value })}
               />
             </div>
@@ -321,16 +335,23 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
                 {SHOW_FILTERS.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}
               </NativeSelect>
             </div>
-          </div>
         </div>
-        <p className="sr-only" role="status">{updating ? "Updating activity…" : ""}</p>
+        <p className="sr-only" role="status">
+          {updating
+            ? "Updating activity…"
+            : query
+              ? `${activity.hasNextPage ? "More than " : ""}${plural(visibleEntries.length, "entry", "entries")} found for “${query}”.`
+              : ""}
+        </p>
 
         {groups.length === 0 ? (
           <EmptyActivity
             ruleId={ruleId}
             show={show}
+            query={query}
             onShowAll={() => changeFilters({ show: "all" })}
             onAllRules={() => changeFilters({ ruleId: "" })}
+            onClearSearch={() => changeFilters({ query: "" })}
           />
         ) : (
           <div className="activity-layout" data-detail={detailOpen}>
@@ -464,34 +485,108 @@ function rulePickerOptions(
 function EmptyActivity({
   ruleId,
   show,
+  query,
   onShowAll,
   onAllRules,
+  onClearSearch,
 }: {
   ruleId: string
   show: ActivityShow
+  query: string
   onShowAll: () => void
   onAllRules: () => void
+  onClearSearch: () => void
 }) {
   // The default view hides no-change checks, so an empty page there is usually good news.
-  const quiet = !ruleId && show === ""
-  const filtered = Boolean(ruleId) || show !== "all"
+  const quiet = !ruleId && show === "" && !query
+  const filtered = Boolean(ruleId) || show !== "all" || Boolean(query)
   return (
     <div className="empty-panel">
       <div className="empty-icon"><Activity aria-hidden="true" /></div>
-      <h2>{quiet ? "Nothing has changed yet" : filtered ? "No matching activity" : "No activity yet"}</h2>
+      <h2>{quiet ? "Nothing has changed yet" : query ? `No events named “${query}”` : filtered ? "No matching activity" : "No activity yet"}</h2>
       <p>
         {quiet
           ? "No rule has added, updated, removed, skipped, or blocked an event. Checks that found everything already up to date are hidden."
-          : filtered
-            ? "No recorded decisions match these filters. Show all decisions, or choose a different rule."
-            : "Synchronization decisions will appear here after an enabled rule completes its first run."}
+          : query
+            ? "Search matches event titles as each run recorded them. Check the spelling, show all decisions, or clear the search."
+            : filtered
+              ? "No recorded decisions match these filters. Show all decisions, or choose a different rule."
+              : "Synchronization decisions will appear here after an enabled rule completes its first run."}
       </p>
       {filtered && (
         <div className="empty-actions">
+          {query && <Button variant="outline" onClick={onClearSearch}>Clear search</Button>}
           {show !== "all" && <Button variant="outline" onClick={onShowAll}>Show all decisions</Button>}
           {ruleId && <Button variant="outline" onClick={onAllRules}>Show all rules</Button>}
         </div>
       )}
+    </div>
+  )
+}
+
+const SEARCH_DELAY_MS = 300
+
+/**
+ * Searches recorded event titles as the administrator types, pausing briefly so each keystroke
+ * does not replace the table. Enter searches at once; Escape clears.
+ */
+function ActivitySearch({ query, onSearch }: { query: string; onSearch: (query: string) => void }) {
+  const [text, setText] = useState(query)
+  const [shownQuery, setShownQuery] = useState(query)
+  const input = useRef<HTMLInputElement>(null)
+  const search = useRef(onSearch)
+  useEffect(() => {
+    search.current = onSearch
+  })
+  // A search cleared elsewhere, such as from the empty state, empties the field too.
+  if (query !== shownQuery) {
+    setShownQuery(query)
+    if (text.trim() !== query) setText(query)
+  }
+
+  useEffect(() => {
+    if (text.trim() === query) return
+    const timer = window.setTimeout(() => search.current(text.trim()), SEARCH_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [text, query])
+
+  function clear() {
+    setText("")
+    onSearch("")
+    input.current?.focus()
+  }
+
+  return (
+    <div className="field-stack">
+      <Label htmlFor="activity-search">Event</Label>
+      <div className="activity-search">
+        <Search aria-hidden="true" className="activity-search-icon" />
+        <Input
+          ref={input}
+          id="activity-search"
+          type="search"
+          value={text}
+          placeholder="Search event titles"
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={200}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault()
+              if (text.trim() !== query) onSearch(text.trim())
+            } else if (event.key === "Escape" && text) {
+              event.preventDefault()
+              clear()
+            }
+          }}
+        />
+        {text && (
+          <button type="button" className="activity-search-clear" aria-label="Clear search" title="Clear search" onClick={clear}>
+            <X aria-hidden="true" />
+          </button>
+        )}
+      </div>
     </div>
   )
 }

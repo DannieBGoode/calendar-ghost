@@ -198,7 +198,7 @@ describe("activity presentation", () => {
 
 describe("activity address", () => {
   it("reads links that name the outcome with the earlier category parameter", () => {
-    expect(activityStateFromSearch("?rule=rule-7&category=blocked")).toEqual({ ruleId: "rule-7", show: "blocked", entryId: null })
+    expect(activityStateFromSearch("?rule=rule-7&category=blocked")).toEqual({ ruleId: "rule-7", show: "blocked", entryId: null, query: "" })
     expect(activityStateFromSearch("?category=everything").show).toBe("")
     expect(activityStateFromSearch("?show=skipped&category=blocked").show).toBe("skipped")
   })

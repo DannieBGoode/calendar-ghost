@@ -36,6 +36,7 @@ export const PENDING_LABELS: Record<RuleCommand, string> = {
 export function useRuleCommands() {
   const queryClient = useQueryClient()
   const [pending, setPending] = useState<Record<string, RuleCommand>>({})
+  const [pendingSince, setPendingSince] = useState<Record<string, number>>({})
   const [feedback, setFeedback] = useState<Record<string, RuleFeedback>>({})
   const [announcement, setAnnouncement] = useState("")
   const announceTimer = useRef<number | undefined>(undefined)
@@ -47,6 +48,14 @@ export function useRuleCommands() {
     setAnnouncement("")
     window.clearTimeout(announceTimer.current)
     announceTimer.current = window.setTimeout(() => setAnnouncement(text), 60)
+  }
+
+  function clearFeedback(ruleId: string) {
+    setFeedback((current) => {
+      const next = { ...current }
+      delete next[ruleId]
+      return next
+    })
   }
 
   function notify(ruleId: string, next: RuleFeedback) {
@@ -82,27 +91,28 @@ export function useRuleCommands() {
     focusTarget?: () => HTMLElement | null,
   ) {
     setPending((current) => ({ ...current, [ruleId]: command }))
-    setFeedback((current) => {
-      const next = { ...current }
-      delete next[ruleId]
-      return next
-    })
+    setPendingSince((current) => ({ ...current, [ruleId]: Date.now() }))
+    clearFeedback(ruleId)
     try {
-      notify(ruleId, { tone: "success", text: await execute(ruleId, command, destination) })
+      const text = await execute(ruleId, command, destination)
+      // A passed preview shows its result in the review that replaces the Preview button.
+      if (command === "preview") announce(text)
+      else notify(ruleId, { tone: "success", text })
     } catch (error) {
       const reason = error instanceof Error ? ` ${error.message}` : ""
       notify(ruleId, { tone: "error", text: `${FAILED[command]}${reason}` })
     } finally {
-      setPending((current) => {
-        const next = { ...current }
-        delete next[ruleId]
-        return next
-      })
+      // Stay pending until the refreshed rule arrives, so the row never flashes its old state.
       await Promise.all(
         [["rules"], ["rule", ruleId], ["dashboard"], ["activity"], ["accounts"], ["recent-changes"]].map(
           (queryKey) => queryClient.invalidateQueries({ queryKey }),
         ),
       )
+      setPending((current) => {
+        const next = { ...current }
+        delete next[ruleId]
+        return next
+      })
       window.requestAnimationFrame(() => {
         const active = document.activeElement
         if (!active || active === document.body || !active.isConnected) focusTarget?.()?.focus()
@@ -110,5 +120,5 @@ export function useRuleCommands() {
     }
   }
 
-  return { pending, feedback, announcement, run, notify }
+  return { pending, pendingSince, feedback, announcement, run, notify }
 }

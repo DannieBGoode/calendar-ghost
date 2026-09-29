@@ -43,6 +43,7 @@ describe("activity location", () => {
       ruleId: "rule-1",
       show: "blocked",
       entryId: 12,
+      query: "",
     })
   })
 
@@ -51,6 +52,7 @@ describe("activity location", () => {
       ruleId: "",
       show: "",
       entryId: null,
+      query: "",
     })
     expect(activityStateFromSearch("?entry=0").entryId).toBeNull()
   })
@@ -60,6 +62,12 @@ describe("activity location", () => {
     expect(activitySearch({ ruleId: "rule 1", show: "all", entryId: 7 })).toBe(
       "?rule=rule+1&show=all&entry=7",
     )
+  })
+
+  it("keeps a search in the address, trimmed", () => {
+    expect(activityStateFromSearch("?q=%20Dentist%20").query).toBe("Dentist")
+    expect(activitySearch({ ruleId: "", show: "", entryId: null, query: " team lunch " })).toBe("?q=team+lunch")
+    expect(activitySearch({ ruleId: "", show: "", entryId: null, query: "  " })).toBe("")
   })
 })
 
