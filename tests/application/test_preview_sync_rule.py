@@ -1,13 +1,16 @@
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from calendar_sync.application.ports import CalendarProvider, UnitOfWorkFactory
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.domain.model import (
+    AllDaySyncPolicy,
     EventStatus,
     ManagedOrigin,
     SyncAction,
     SyncRuleId,
     SyncRuleState,
+    TransformationPolicy,
 )
 from calendar_sync.domain.services import (
     EventProjector,
@@ -125,3 +128,24 @@ def test_preview_excludes_a_series_whose_every_occurrence_is_cancelled() -> None
     assert preview.occurrence_changes == 0
     assert preview.excluded_events == 2
     assert preview.sample == ()
+
+
+def test_preview_under_an_all_day_exclusion_skips_a_series_left_with_only_all_day_occurrences() -> (
+    None
+):
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0), week_start(1)))
+    calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED))
+    calendars.put(occurrence(master, 1, all_day=True))
+    excluding = replace(
+        rule(state=SyncRuleState.DRAFT),
+        transformation=TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE),
+    )
+
+    excluded = _preview(enabled_rule_factory(excluding), calendars).execute(rule().id)
+    included = _preview(enabled_rule_factory(rule(state=SyncRuleState.DRAFT)), calendars).execute(
+        rule().id
+    )
+
+    assert excluded.recurring_series == 0
+    assert included.recurring_series == 1

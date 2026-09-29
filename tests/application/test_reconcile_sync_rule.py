@@ -6,7 +6,12 @@ from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import RunKind
 from calendar_sync.application.reconciliation import ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
-from calendar_sync.domain.model import DriftKind, EventStatus
+from calendar_sync.domain.model import (
+    AllDaySyncPolicy,
+    DriftKind,
+    EventStatus,
+    TransformationPolicy,
+)
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
@@ -239,3 +244,31 @@ def test_reconciliation_of_a_projected_series_asks_for_no_live_lookup() -> None:
     ).execute(rule().id)
 
     assert calendars.live_lookups == []
+
+
+def test_reconciliation_under_an_all_day_exclusion_accepts_a_series_left_with_all_day_only() -> (
+    None
+):
+    excluding = replace(
+        rule(), transformation=TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE)
+    )
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0), week_start(1)))
+    calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED))
+    factory = enabled_rule_factory(excluding)
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    # The last timed occurrence becomes all-day, so the rule cancels it and Google the series.
+    calendars.report(calendars.put(occurrence(master, 1, all_day=True)))
+    use_case.execute(rule().id)
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+    ).execute(rule().id)
+
+    assert report.drift == ()
+    assert report.checked_mappings == 1

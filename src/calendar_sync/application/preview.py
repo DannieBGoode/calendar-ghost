@@ -12,7 +12,6 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.sync_run import includes_all_day
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEvent,
@@ -89,7 +88,7 @@ class PreviewSyncRule:
             # Like a Sync Run, a series whose every occurrence is cancelled is not projected.
             if master.reference not in live:
                 live[master.reference] = self.provider.has_live_occurrences(
-                    master.reference, include_all_day=includes_all_day(rule)
+                    master.reference, include_all_day=rule.transformation.includes_all_day
                 )
             return not live[master.reference]
 

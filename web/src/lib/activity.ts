@@ -121,14 +121,14 @@ const REASONS: Record<string, ReasonCopy> = {
       "The destination series has no matching occurrence, even after repairing the series. Nothing was written. Reconcile the rule to investigate.",
   },
   series_without_occurrences: {
-    happened: "Skipped: every occurrence is cancelled",
+    happened: "Skipped: no occurrence left to sync",
     explanation:
-      "Every occurrence of this recurring event is cancelled in the source, so there is nothing to show in the destination calendar. It is synced again if an occurrence is restored.",
+      "Every occurrence of this recurring event is cancelled in the source, or is an all-day occurrence this rule excludes, so there is nothing to show in the destination calendar. It is synced again if an occurrence comes back.",
   },
   series_without_occurrences_removed: {
-    happened: "Removed from {destination}: every occurrence is cancelled",
+    happened: "Removed from {destination}: no occurrence left to sync",
     explanation:
-      "Every occurrence of this recurring event is cancelled in the source, so a projection left from an interrupted run was removed.",
+      "Every occurrence of this recurring event is cancelled in the source, or is an all-day occurrence this rule excludes, so a projection left from an interrupted run was removed.",
   },
 }
 

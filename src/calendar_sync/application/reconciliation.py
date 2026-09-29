@@ -12,7 +12,6 @@ from calendar_sync.application.ports import (
     RunKind,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.sync_run import includes_all_day
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEvent,
@@ -101,7 +100,7 @@ class ReconcileSyncRule:
                 source.recurrence is not None
                 and mapping.destination not in actual
                 and not self.provider.has_live_occurrences(
-                    source.reference, include_all_day=includes_all_day(rule)
+                    source.reference, include_all_day=rule.transformation.includes_all_day
                 )
             ):
                 # A series whose every occurrence is cancelled has no projection to verify.

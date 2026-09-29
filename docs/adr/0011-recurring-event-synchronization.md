@@ -107,7 +107,7 @@ run stops with `RuleNotExecutable` and the cursors do not advance.
 | Moved or edited occurrence | Update the matching destination instance |
 | Cancelled occurrence | Cancel the matching destination instance and retain a `cancelled` Occurrence Mapping |
 | Cancelled series | Delete the destination master, removing its instances, and delete the Series Mapping and its Occurrence Mappings |
-| Every occurrence cancelled | Do not create or restore the destination master; the series is ignored, and a mapped series keeps its Series Mapping and Occurrence Mappings as a dormant series |
+| No occurrence left to project (all cancelled, or all-day under an exclusion) | Do not create or restore the destination master; the series is ignored, and a mapped series keeps its Series Mapping and Occurrence Mappings as a dormant series |
 
 Google cancels a series once its last live instance is cancelled, and `showDeleted=false` lookups no
 longer find it. Creating a series whose every source occurrence is cancelled and then cancelling
@@ -121,9 +121,11 @@ report that none remain; a 404 or 410 is a temporary provider failure. A mapped 
 dormant rather than deleted, because its `cancelled` Occurrence Mappings are what stop a later
 restore of one occurrence from resurrecting the others. Occurrence decisions against a dormant
 series are ignored instead of reported as `destination_occurrence_missing`, Full Reconciliation
-accepts it without a projection, and Rule Preview excludes it. A projection created before an
-interrupted run recorded its mapping is found by its create Operation Key, verified like any mapped
-projection, and removed.
+accepts it without a projection, and Rule Preview excludes it. For a series that was never mapped,
+a projection created before an interrupted run recorded its mapping is found by its create
+Operation Key, verified like any mapped projection, and removed. A dormant mapped series does not
+look for one; a recreate interrupted in the same narrow window is left for Full Reconciliation to
+report as unexpected.
 
 A destination occurrence is cancelled only when the source proves the occurrence is cancelled or
 no longer part of an existing source series. When the source series cannot be verified, the
@@ -200,8 +202,8 @@ instance identifiers only. New reasons:
 | `occurrence_retired` | ignore | The occurrence no longer exists on either side; its mapping was removed |
 | `series_not_synchronized` | ignore | The occurrence belongs to a series this rule does not project |
 | `destination_occurrence_missing` | conflict | The destination series has no matching occurrence after repair |
-| `series_without_occurrences` | ignore | Every occurrence of the source series is cancelled; no projection is created |
-| `series_without_occurrences_removed` | delete | Every occurrence is cancelled; a projection left by an interrupted create was removed |
+| `series_without_occurrences` | ignore | No occurrence of the source series remains that the rule projects; no projection is created |
+| `series_without_occurrences_removed` | delete | No occurrence remains that the rule projects; a projection left by an interrupted first create was removed |
 
 Existing reasons are reused where the meaning is identical (`source_unverifiable`,
 `destination_ownership_inconsistent`, `mapping_inconsistent`, `all_day_excluded_removed`).

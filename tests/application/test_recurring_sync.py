@@ -317,6 +317,37 @@ def test_acknowledged_lookup_that_finds_an_occurrence_never_deletes_it() -> None
     assert factory.state.mappings == {}
 
 
+@dataclass
+class _UnfilteredLookupCalendars(FakeCalendars):
+    """Returns cancelled projections from Operation Key lookups, unlike Google's default."""
+
+    def find_projection(
+        self, destination: CalendarEndpoint, operation_key: str
+    ) -> CalendarEvent | None:
+        reference = self.operations.get(operation_key)
+        return None if reference is None else self.events.get(reference)
+
+
+def test_acknowledged_lookup_that_finds_a_cancelled_series_never_deletes_it() -> None:
+    calendars = _UnfilteredLookupCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    destination = factory.state.mappings.pop((rule().id, master.reference)).destination
+    calendars.events[destination] = replace(
+        calendars.events[destination], status=EventStatus.CANCELLED
+    )
+    calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))
+    before = list(calendars.writes)
+
+    result = use_case.execute(rule().id, full=True)
+
+    assert calendars.writes == before
+    assert result.deleted == 0
+    assert factory.state.mappings == {}
+
+
 def test_this_and_following_split_truncates_the_old_series_and_creates_the_new_one() -> None:
     calendars, factory, destination = _synced()
     calendars.report(calendars.put(occurrence(series(), 3, moved_by=timedelta(hours=1))))

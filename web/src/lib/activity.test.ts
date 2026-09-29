@@ -132,12 +132,12 @@ describe("activity presentation", () => {
     expect(describeEntry(entry({ reason: "managed_projection_source" })).explanation).toContain("never synced again")
   })
 
-  it("explains series whose every occurrence is cancelled", () => {
+  it("explains series with no occurrence left to sync", () => {
     const skipped = entry({ reason: "series_without_occurrences" })
-    expect(describeEntry(skipped).happened).toBe("Skipped: every occurrence is cancelled")
+    expect(describeEntry(skipped).happened).toBe("Skipped: no occurrence left to sync")
     expect(describeEntry(skipped).explanation).toContain("synced again if an occurrence is restored")
     const removed = entry({ action: "delete", reason: "series_without_occurrences_removed", category: "changed" })
-    expect(whatHappened(removed, "Work").text).toBe("Removed from Work: every occurrence is cancelled")
+    expect(whatHappened(removed, "Work").text).toBe("Removed from Work: no occurrence left to sync")
   })
 
   it("uses relative day names for recent runs", () => {

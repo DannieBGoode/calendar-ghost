@@ -90,33 +90,24 @@ class SynchronizeOccurrences:
             destination_reported,
         )
         if decision.reason is SyncReason.DESTINATION_OCCURRENCE_MISSING:
-            if not has_live_occurrences(run, self.provider, source_series.reference):
-                # A dormant series has no projection to repair, so nothing is missing.
-                decision, destination = self._decide(
-                    run,
-                    series_mapping,
-                    source_series,
-                    original_start,
-                    source_occurrence,
-                    recorded,
-                    destination_reported,
-                    has_live=False,
-                )
-            else:
+            # A dormant series has no projection to repair, so nothing is missing.
+            live = has_live_occurrences(run, self.provider, source_series.reference)
+            if live:
                 # The repair re-verifies the series' other occurrences; this one is re-decided.
                 if source_occurrence is not None:
                     run.handled.add(source_occurrence.reference)
                 self.repair_series(run, source_series)
                 series_mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
-                decision, destination = self._decide(
-                    run,
-                    series_mapping,
-                    source_series,
-                    original_start,
-                    source_occurrence,
-                    recorded,
-                    destination_reported,
-                )
+            decision, destination = self._decide(
+                run,
+                series_mapping,
+                source_series,
+                original_start,
+                source_occurrence,
+                recorded,
+                destination_reported,
+                has_live_occurrences=live,
+            )
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
@@ -246,7 +237,7 @@ class SynchronizeOccurrences:
         recorded: OccurrenceMapping | None,
         destination_reported: bool,
         *,
-        has_live: bool = True,
+        has_live_occurrences: bool = True,
     ) -> tuple[SyncDecision, CalendarEvent | None]:
         destination_series = destination = None
         if series_mapping is not None and source_series.managed_origin is None:
@@ -268,7 +259,7 @@ class SynchronizeOccurrences:
             destination_series,
             destination,
             destination_reported=destination_reported,
-            has_live_occurrences=has_live,
+            has_live_occurrences=has_live_occurrences,
         )
         return decision, destination
 

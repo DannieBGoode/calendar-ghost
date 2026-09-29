@@ -100,7 +100,7 @@ become sources of a reverse rule. A mapped series that the source no longer retu
 | Moved or edited occurrence | Update the matching destination occurrence |
 | Cancelled occurrence | Cancel the matching destination occurrence and keep a `cancelled` Occurrence Mapping |
 | Deleted series | Delete the destination series with its occurrences |
-| Every occurrence cancelled | Do not create or restore the destination series; keep its Series Mapping and Occurrence Mappings dormant |
+| No occurrence left to project (all cancelled, or all-day under an exclusion) | Do not create or restore the destination series; keep its Series Mapping and Occurrence Mappings dormant |
 
 A destination occurrence is cancelled only when the source proves it cancelled or absent from an
 existing series; an unverifiable source series is a Conflict. When the destination series has no
@@ -122,8 +122,9 @@ ignored (`series_without_occurrences`) instead of being recreated on every run. 
 stays dormant: its Series Mapping and `cancelled` Occurrence Mappings are kept, so restoring one
 occurrence later recreates the series without resurrecting the others, and its occurrences are
 ignored rather than reported as a missing destination occurrence. Full Reconciliation accepts a
-dormant series without a projection, and Rule Preview excludes it. A projection that Google created
-before an interrupted run could record its mapping is found by its create Operation Key and removed
+dormant series without a projection, and Rule Preview excludes it. For a series that was never
+mapped, a projection that Google created before an interrupted run could record its mapping is
+found by its create Operation Key and removed
 (`series_without_occurrences_removed`). Only an answered lookup may report that none remain; an
 unreadable series is a temporary failure. A series that was never mapped has no Occurrence Mappings,
 so when an incremental run first creates it, only the exceptions that feed reports are applied; the

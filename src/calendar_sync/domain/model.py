@@ -184,6 +184,10 @@ class TransformationPolicy:
         if self.privacy is PrivacyPolicy.BUSY_ONLY:
             _require_non_empty(self.busy_title, "busy title")
 
+    @property
+    def includes_all_day(self) -> bool:
+        return self.all_day is not AllDaySyncPolicy.EXCLUDE
+
 
 @dataclass(frozen=True, slots=True)
 class CalendarEvent:
