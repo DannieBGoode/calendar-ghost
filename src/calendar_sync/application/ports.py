@@ -16,6 +16,8 @@ from calendar_sync.domain.model import (
     EventMappingId,
     EventProjection,
     EventRef,
+    EventStatus,
+    EventTime,
     OccurrenceMapping,
     OccurrenceStart,
     SyncRule,
@@ -165,6 +167,25 @@ class SyncCursorRepository(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class RecordedEvent:
+    """What Activity names an entry's source event by, as the run saw it (ADR 0014)."""
+
+    title: str
+    time: EventTime | None = None
+    recurring: bool = False
+    cancelled: bool = False
+
+    @classmethod
+    def of(cls, event: CalendarEvent) -> RecordedEvent:
+        return cls(
+            title=event.title,
+            time=event.time,
+            recurring=event.recurrence is not None or event.occurrence is not None,
+            cancelled=event.status is EventStatus.CANCELLED,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class AuditEntry:
     occurred_at: datetime
     rule_id: SyncRuleId
@@ -175,6 +196,8 @@ class AuditEntry:
     detail: str = ""
     reason: str | None = None
     run_id: str | None = None
+    event: RecordedEvent | None = None
+    """The source event's title and time; never its description, location, or attendees."""
 
 
 class AuditRepository(Protocol):

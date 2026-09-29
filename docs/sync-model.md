@@ -120,7 +120,12 @@ identifier, the action, and a stable reason code from `SyncReason` in `domain/mo
 Activity view can explain what changed and why an expected event was not synchronized. Updates
 distinguish a changed
 source (`source_changed`) from a repaired destination edit (`destination_drift_repaired`). Entries
-store only identities; Activity reads titles and times from Google on demand and never persists them.
+also record the source event's title, time, recurrence, and cancellation as the run saw them, never
+its description, location, or attendees. When an entry saw no title, such as a cancellation Google
+reported without one, an occurrence removed from its series, or a projection removed with its rule,
+Activity names it from the latest earlier entry for the same rule and source event that saw one. A
+confirmed event with an empty title keeps it. An entry whose title differs from that earlier one is
+marked as renamed. Entries recorded before this behavior name no event (ADR 0014).
 Occurrence decisions that found the destination already matching (`occurrence_current`,
 `occurrence_already_cancelled`) are listed as no change, like `projection_current`.
 

@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, NoReturn, cast
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.ports import AuditEntry, CalendarProvider
+from calendar_sync.application.ports import AuditEntry, CalendarProvider, RecordedEvent
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Container, build_container
 from calendar_sync.domain.model import (
@@ -37,6 +37,7 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     CalendarId,
     ConnectedAccountId,
+    EventId,
     EventRef,
     EventStatus,
     Recurrence,
@@ -211,6 +212,7 @@ def _seed(container: Container, path: Path, now: datetime) -> None:
         ),
     )
     entries: list[AuditEntry] = []
+    calendar = PreviewCalendar(now)
 
     def record(
         minutes_ago: int,
@@ -220,7 +222,17 @@ def _seed(container: Container, path: Path, now: datetime) -> None:
         reason: str | None,
         event: str | None,
         projection: bool = True,
+        title: str | None = None,
     ) -> None:
+        # Entries of the removed rule predate recorded events, as an upgraded installation's do.
+        found = (
+            calendar.get_event(EventRef(PERSONAL, EventId(event)))
+            if event and rule != "preview-removed-rule"
+            else None
+        )
+        recorded = RecordedEvent.of(found) if found else None
+        if recorded is not None and title is not None:
+            recorded = replace(recorded, title=title)
         entries.append(
             AuditEntry(
                 occurred_at=now - timedelta(minutes=minutes_ago),
@@ -231,6 +243,7 @@ def _seed(container: Container, path: Path, now: datetime) -> None:
                 destination_event_id=f"copy-{event}" if event and projection else None,
                 reason=reason,
                 run_id=run,
+                event=recorded,
             )
         )
 
@@ -238,8 +251,9 @@ def _seed(container: Container, path: Path, now: datetime) -> None:
     # Oldest first, so identifiers ascend with time like a real history.
     record(60 * 30, "preview-removed-rule", None, "create", "source_created", "standup")
     record(60 * 29, "preview-removed-rule", None, "rule_removed", None, None)
-    for event in ("dentist", "gym", "school", "piano", "pta", "vet"):
+    for event in ("dentist", "gym", "school", "piano", "pta", "vet", "dinner"):
         record(60 * 26, personal, "preview-run-1", "create", "source_created", event)
+    record(60 * 26, personal, "preview-run-1", "create", "source_created", "flight", title="Flight")
     record(60 * 26, personal, "preview-run-1", "ignore", "all_day_excluded", "holiday", False)
     for event in ("dentist", "gym", "school", "piano", "pta"):
         record(60 * 5, personal, "preview-run-2", "ignore", "projection_current", event)
@@ -259,7 +273,8 @@ def _seed(container: Container, path: Path, now: datetime) -> None:
     for _ in range(150):
         record(30, family, "preview-reconcile", "ignore", "projection_current", "yoga")
     record(30, family, "preview-reconcile", "update", "occurrence_drift_repaired", "piano")
-    record(20, personal, "preview-run-5", "delete", "source_cancelled", "dinner")
+    # Google reports a deleted event without its title; Activity names it from earlier entries.
+    record(20, personal, "preview-run-5", "delete", "source_cancelled", "dinner", title="")
     record(20, personal, "preview-run-5", "delete", "source_cancelled", "deleted-event")
     record(20, personal, "preview-run-5", "ignore", "projection_current", "gym")
     record(5, personal, None, "policy_changed", None, None)

@@ -43,7 +43,7 @@ modified occurrences) a Projection Fingerprint.
 
 A Calendar Event is a transient provider-neutral representation. Its time is either a timezone-aware Timed Interval or an All-Day Range with an exclusive end date. Recurring events retain Event Series, Occurrence, and Occurrence Exception identity. An occurrence's original start is normalized to a UTC instant (timed series) or a date (all-day series) so both calendars identify it identically, and a timed series keeps its IANA time zone so its recurrence expands at the same local times across daylight-saving changes.
 
-Attendees, organizer identity, conferencing links, and attachments do not enter an Event Projection. Event content is processed in memory and excluded from operational persistence.
+Attendees, organizer identity, conferencing links, and attachments do not enter an Event Projection. Event content is processed in memory and excluded from operational persistence, except the source event's title and time recorded on each Audit Entry (ADR 0014).
 
 ## State machines
 

@@ -24,6 +24,7 @@ from calendar_sync.application.ports import (
     UnitOfWork,
 )
 from calendar_sync.domain.model import (
+    AllDayRange,
     AllDaySyncPolicy,
     CalendarEndpoint,
     CalendarId,
@@ -41,6 +42,7 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
     SyncRuleState,
+    TimedInterval,
     TransformationPolicy,
 )
 
@@ -52,6 +54,7 @@ _FORWARD_MIGRATIONS = (
     (6, "0006_rule_previews.sql"),
     (7, "0007_audit_run_index.sql"),
     (8, "0008_last_full_sync.sql"),
+    (9, "0009_audit_event_titles.sql"),
 )
 
 
@@ -380,12 +383,20 @@ class SqliteAuditRepository:
         self._connection = connection
 
     def append(self, entry: AuditEntry) -> None:
+        event = entry.event
+        starts = ends = None
+        if event is not None and isinstance(event.time, TimedInterval):
+            starts, ends = event.time.starts_at.isoformat(), event.time.ends_at.isoformat()
+        elif event is not None and isinstance(event.time, AllDayRange):
+            starts, ends = event.time.starts_on.isoformat(), event.time.ends_before.isoformat()
         self._connection.execute(
             """
             INSERT INTO audit_entries (
                 occurred_at, rule_id, action, outcome,
-                source_event_id, destination_event_id, detail, reason, run_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_event_id, destination_event_id, detail, reason, run_id,
+                event_title, event_starts, event_ends,
+                event_all_day, event_recurring, event_cancelled
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry.occurred_at.isoformat(),
@@ -397,6 +408,12 @@ class SqliteAuditRepository:
                 entry.detail,
                 entry.reason,
                 entry.run_id,
+                event.title if event else None,
+                starts,
+                ends,
+                event is not None and isinstance(event.time, AllDayRange),
+                event is not None and event.recurring,
+                event is not None and event.cancelled,
             ),
         )
 

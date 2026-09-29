@@ -155,6 +155,17 @@ export type AuditEntry = {
   detail: string
   source_event_id: string | null
   destination_event_id: string | null
+  /** The source event as its run recorded it; null for entries recorded before names were kept. */
+  event: RecordedEvent | null
+}
+export type RecordedEvent = {
+  title: string
+  all_day: boolean
+  starts: string | null
+  ends: string | null
+  recurring: boolean
+  cancelled: boolean
+  renamed_from: string | null
 }
 export type ActivityFilters = {
   ruleId?: string
@@ -181,11 +192,6 @@ export type NoChangeRun = {
   occurred_at: string
   count: number
 }
-export type ActivityEventSummary = {
-  entry_id: number
-  lookup: "found" | "rule_removed" | "unavailable"
-  source: EventSnapshot | null
-}
 export type Incident = {
   id: string
   rule_id: string | null
@@ -197,8 +203,6 @@ export type Incident = {
 }
 
 export const ACTIVITY_PAGE_SIZE = 100
-/** The service reads at most this many entries' events from Google per request. */
-export const EVENT_SUMMARY_BATCH_SIZE = 25
 
 export const api = {
   setup: () => request<SetupStatus>("/api/v1/setup"),
@@ -297,11 +301,6 @@ export const api = {
   activityEntry: (entryId: number) => request<AuditEntry>(`/api/v1/audit-entries/${entryId}`),
   activityEvent: (entryId: number) =>
     request<ActivityEvent>(`/api/v1/audit-entries/${entryId}/event`),
-  activityEventSummaries: (entryIds: number[]) => {
-    const params = new URLSearchParams()
-    for (const entryId of entryIds) params.append("ids", String(entryId))
-    return request<ActivityEventSummary[]>(`/api/v1/audit-entries/events?${params}`)
-  },
   incidents: () => request<Incident[]>("/api/v1/incidents"),
   recentChanges: (limit = 5) => request<RecentChange[]>(`/api/v1/recent-changes?limit=${limit}`),
 }

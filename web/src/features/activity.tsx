@@ -64,15 +64,12 @@ import {
 import {
   ACTIVITY_PAGE_SIZE,
   api,
-  EVENT_SUMMARY_BATCH_SIZE,
-  type ActivityEventSummary,
   type AuditEntry,
   type ConnectedAccount,
   type DiscoveredCalendar,
   type EventSnapshot,
   type Rule,
 } from "@/lib/api"
-import { createBatchLoader } from "@/lib/batch-loader"
 import { isPlainLeftClick, type OpenRule } from "@/lib/navigation"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
@@ -82,12 +79,6 @@ type RuleContext = {
   calendarsByAccount: Map<string, DiscoveredCalendar[] | undefined>
   rulesLoaded: boolean
 }
-
-// Rows that mount together share one request; entries naming the same event share one answer.
-const summaryLoader = createBatchLoader<ActivityEventSummary>(
-  async (ids) => new Map((await api.activityEventSummaries(ids)).map((summary) => [summary.entry_id, summary])),
-  EVENT_SUMMARY_BATCH_SIZE,
-)
 
 // Until rules load, assume a rule exists rather than hide its events.
 const LOADING_NAMES: RuleNames = { source: "the source calendar", destination: "the destination" }
@@ -117,21 +108,6 @@ function useActivityLocation() {
   return [state, update] as const
 }
 
-/** Looks up an entry's source event through the shared batch; the table and the pane share it. */
-function useEventCell(entry: AuditEntry, names: RuleNames | null): EventCell {
-  const lookup = useQuery({
-    queryKey: ["activity-event-summary", entry.rule_id, entry.source_event_id],
-    queryFn: () => summaryLoader.load(entry.id),
-    enabled: Boolean(entry.source_event_id) && names !== null,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  })
-  return eventCell(
-    entry,
-    names,
-    lookup.isPending ? { status: "pending" } : lookup.isError ? { status: "error" } : { status: "success", data: lookup.data },
-  )
-}
 
 export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
   const [state, update] = useActivityLocation()
@@ -444,8 +420,8 @@ function ActivityHeading() {
     <div>
       <h1>What your rules did</h1>
       <p className="page-intro">
-        Every event a rule added, updated, removed, skipped, or blocked, and why. Event names are
-        read from Google as you browse and are never stored.
+        Every event a rule added, updated, removed, skipped, or blocked, and why. Events are named as
+        each run found them.
       </p>
     </div>
   )
@@ -650,7 +626,7 @@ function EntryRow({
   onFilterRule: (ruleId: string) => void
 }) {
   const names = ruleNames(entry.rule_id, context)
-  const cell = useEventCell(entry, names)
+  const cell = eventCell(entry, names)
   const href = `${window.location.pathname}${activitySearch({ ...state, entryId: entry.id })}`
   const follow = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!isPlainLeftClick(event)) return
@@ -710,14 +686,6 @@ function EntryRow({
 }
 
 function EventCellContent({ cell }: { cell: EventCell }) {
-  if (cell.state === "loading") {
-    return (
-      <span className="activity-event-cell">
-        <span className="activity-event-placeholder" aria-hidden="true" />
-        <span className="sr-only">Looking up the event</span>
-      </span>
-    )
-  }
   if (cell.state === "unavailable") {
     return (
       <span className="activity-event-cell activity-event-cell-muted">
@@ -840,7 +808,7 @@ function EntryDetails({
     headingRef.current?.focus({ preventScroll: true })
   }, [entry, focusRef])
   const names = ruleNames(entry.rule_id, context)
-  const cell = useEventCell(entry, names)
+  const cell = eventCell(entry, names)
   const copy = describeEntry(entry)
   const exists = names !== null
   const inspection = entryInspection(entry, exists)
@@ -849,7 +817,7 @@ function EntryDetails({
       <div className="activity-detail-heading">
         {/* The event is what people recognise, so it leads; what happened follows. */}
         <h2 id="activity-detail-title" ref={headingRef} tabIndex={-1}>
-          {cell.state === "event" ? cell.title : cell.state === "unavailable" ? cell.label : "Looking up the event…"}
+          {cell.state === "event" ? cell.title : cell.label}
         </h2>
         {cell.state === "event" && <EventWhen cell={cell} />}
         <HappenedLabel entry={entry} destination={names?.destination ?? null} />

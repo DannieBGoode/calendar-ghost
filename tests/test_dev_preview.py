@@ -63,16 +63,13 @@ def test_preview_seeds_only_its_own_database_with_a_read_only_calendar(tmp_path:
             client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD}).status_code == 200
         )
         entries = client.get("/api/v1/audit-entries", params={"category": "changed"}).json()
-        titles = client.get(
-            "/api/v1/audit-entries/events", params=[("ids", item["id"]) for item in entries[:5]]
-        ).json()
-    assert entries
-    assert any(item["source"] and item["source"]["title"] for item in titles)
+    events = {(item["source_event_id"], item["reason"]): item["event"] for item in entries}
+    assert events["flight", "source_changed"]["renamed_from"] == "Flight"
+    assert events["flight", "destination_drift_repaired"]["renamed_from"] is None
+    assert events["dinner", "source_cancelled"]["title"] == "Dinner at Marta's"
     with closing(sqlite3.connect(database)) as connection:
-        dump = "\n".join(connection.iterdump())
         rules = connection.execute("SELECT COUNT(*) FROM sync_rules").fetchone()[0]
     assert rules == 2
-    assert "Dentist appointment" not in dump
 
 
 def test_preview_is_not_shipped_in_the_package_or_image() -> None:

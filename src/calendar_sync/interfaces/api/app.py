@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import sqlite3
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Annotated, Literal
@@ -68,7 +68,6 @@ from calendar_sync.infrastructure.security import (
 )
 from calendar_sync.interfaces.api.schemas import (
     ActivityEventResponse,
-    ActivityEventSummaryResponse,
     AuditEntryResponse,
     CalendarEndpointPayload,
     ConnectedAccountResponse,
@@ -84,6 +83,7 @@ from calendar_sync.interfaces.api.schemas import (
     PreviewSummaryResponse,
     ProjectionChoice,
     RecentChangeResponse,
+    RecordedEventResponse,
     RemovalResponse,
     ReplaceRuleRequest,
     RuleDetailResponse,
@@ -111,12 +111,9 @@ _NO_CHANGE_REASONS = frozenset(
 _NO_CHANGE_SQL = ", ".join(f"'{reason.value}'" for reason in sorted(_NO_CHANGE_REASONS))
 # Earlier releases recorded these skips; Activity no longer lists them.
 _UNRECORDED_SQL = ", ".join(f"'{reason.value}'" for reason in sorted(UNRECORDED_REASONS))
-# Event lookups share the Google quota with synchronization, so one request reads a bounded set.
-_EVENT_SUMMARY_LIMIT = 25
 # No-change summaries cover at most this many recent runs and audit entries.
 _NO_CHANGE_RUN_LIMIT = 500
 _NO_CHANGE_SCAN_LIMIT = 50_000
-_EVENT_SUMMARY_CONCURRENCY = 4
 
 # Recurring exclusions were recorded as conflicts before reason codes existed; they are skips.
 _ACTIVITY_CATEGORY_SQL: dict[ActivityCategory, str] = {
@@ -481,12 +478,12 @@ def create_app(container: Container | None = None) -> FastAPI:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
                 f"""
-                SELECT {_AUDIT_ENTRY_COLUMNS}
+                SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS}
                 FROM audit_entries {where} ORDER BY id DESC LIMIT ?
                 """,
                 (*parameters, limit),
             ).fetchall()
-        return [_audit_entry_response(row) for row in rows]
+            return _audit_entry_responses(connection, rows)
 
     @app.get(
         "/api/v1/audit-entries/no-change-runs",
@@ -534,71 +531,6 @@ def create_app(container: Container | None = None) -> FastAPI:
         ]
 
     @app.get(
-        "/api/v1/audit-entries/events",
-        response_model=list[ActivityEventSummaryResponse],
-        dependencies=[Depends(require_admin)],
-    )
-    async def summarize_activity_events(
-        ids: Annotated[list[int], Query(min_length=1, max_length=_EVENT_SUMMARY_LIMIT)],
-    ) -> list[ActivityEventSummaryResponse]:
-        provider = resolved.calendar_provider
-        if provider is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE,
-                "configure Google OAuth and the installation master key before inspecting events",
-            )
-        placeholders = ", ".join("?" for _ in ids)
-        with sqlite3.connect(resolved.settings.database_path) as connection:
-            rows = connection.execute(
-                f"""
-                SELECT id, rule_id, source_event_id FROM audit_entries
-                WHERE id IN ({placeholders}) AND source_event_id IS NOT NULL
-                """,
-                ids,
-            ).fetchall()
-        with resolved.unit_of_work() as uow:
-            rules = {
-                rule_id: uow.rules.get(SyncRuleId(rule_id)) for rule_id in {r[1] for r in rows}
-            }
-        # Every run records the events it looked at, so many entries name the same event.
-        wanted = {(str(rule_id), str(event_id)) for _, rule_id, event_id in rows if rules[rule_id]}
-        gate = asyncio.Semaphore(_EVENT_SUMMARY_CONCURRENCY)
-
-        async def read(rule_id: str, event_id: str) -> EventSnapshotResponse | None:
-            rule = rules[rule_id]
-            assert rule is not None
-            async with gate:
-                try:
-                    found = await asyncio.to_thread(
-                        provider.get_event, EventRef(rule.source, EventId(event_id))
-                    )
-                except ProviderFailure:
-                    return None
-            return _event_snapshot(found)
-
-        keys = sorted(wanted)
-        # Event content is read live for display only; it is never persisted or logged.
-        snapshots = dict(
-            zip(keys, await asyncio.gather(*(read(*key) for key in keys)), strict=True)
-        )
-        summaries: list[ActivityEventSummaryResponse] = []
-        for entry_id, rule_id, event_id in rows:
-            if rules[rule_id] is None:
-                summaries.append(
-                    ActivityEventSummaryResponse(entry_id=entry_id, lookup="rule_removed")
-                )
-                continue
-            snapshot = snapshots[(str(rule_id), str(event_id))]
-            summaries.append(
-                ActivityEventSummaryResponse(
-                    entry_id=entry_id,
-                    lookup="unavailable" if snapshot is None else "found",
-                    source=snapshot,
-                )
-            )
-        return summaries
-
-    @app.get(
         "/api/v1/audit-entries/{entry_id}",
         response_model=AuditEntryResponse,
         dependencies=[Depends(require_admin)],
@@ -607,11 +539,13 @@ def create_app(container: Container | None = None) -> FastAPI:
         with sqlite3.connect(resolved.settings.database_path) as connection:
             connection.row_factory = sqlite3.Row
             row = connection.execute(
-                f"SELECT {_AUDIT_ENTRY_COLUMNS} FROM audit_entries WHERE id = ?", (entry_id,)
+                f"SELECT {_AUDIT_ENTRY_COLUMNS}, {_RECORDED_EVENT_COLUMNS}"
+                " FROM audit_entries WHERE id = ?",
+                (entry_id,),
             ).fetchone()
-        if row is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry not found")
-        return _audit_entry_response(row)
+            if row is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry not found")
+            return _audit_entry_responses(connection, [row])[0]
 
     @app.get(
         "/api/v1/recent-changes",
@@ -1060,6 +994,12 @@ _AUDIT_ENTRY_COLUMNS = (
     "id, run_id, occurred_at, rule_id, action, outcome, reason, detail,"
     " source_event_id, destination_event_id"
 )
+# An entry observed its event's title unless Google reported a cancellation without one.
+_TITLE_OBSERVED = "event_title IS NOT NULL AND (event_title <> '' OR NOT event_cancelled)"
+_AUDIT_ENTRY_KEYS = tuple(column.strip() for column in _AUDIT_ENTRY_COLUMNS.split(","))
+_RECORDED_EVENT_COLUMNS = (
+    "event_title, event_starts, event_ends, event_all_day, event_recurring, event_cancelled"
+)
 
 
 def _recent_runs_sql(*, with_rule: bool) -> str:
@@ -1079,9 +1019,69 @@ def _recent_runs_sql(*, with_rule: bool) -> str:
     """
 
 
-def _audit_entry_response(row: sqlite3.Row) -> AuditEntryResponse:
-    return AuditEntryResponse(
-        **dict(row), category=_activity_category(row["action"], row["reason"])
+def _audit_entry_responses(
+    connection: sqlite3.Connection, rows: Sequence[sqlite3.Row]
+) -> list[AuditEntryResponse]:
+    """Entries with the event each names, falling back to the event's previous recorded name."""
+    ids = [row["id"] for row in rows if row["source_event_id"] is not None]
+    previous: dict[int, sqlite3.Row] = {}
+    if ids:
+        previous = {
+            row["entry_id"]: row
+            for row in connection.execute(
+                f"""
+                SELECT a.id AS entry_id, p.event_title, p.event_starts, p.event_ends,
+                    p.event_all_day, p.event_recurring
+                FROM audit_entries a JOIN audit_entries p ON p.id = (
+                    SELECT id FROM audit_entries
+                    WHERE rule_id = a.rule_id AND source_event_id = a.source_event_id
+                        AND id < a.id AND {_TITLE_OBSERVED}
+                    ORDER BY id DESC LIMIT 1
+                )
+                WHERE a.id IN ({", ".join("?" for _ in ids)})
+                """,
+                ids,
+            )
+        }
+    return [
+        AuditEntryResponse(
+            **{key: row[key] for key in _AUDIT_ENTRY_KEYS},
+            category=_activity_category(row["action"], row["reason"]),
+            event=_recorded_event(row, previous.get(row["id"])),
+        )
+        for row in rows
+    ]
+
+
+def _recorded_event(row: sqlite3.Row, previous: sqlite3.Row | None) -> RecordedEventResponse | None:
+    own = row if row["event_title"] is not None else None
+    if own is None and previous is None:
+        return None
+    cancelled = own is not None and bool(own["event_cancelled"])
+    # A confirmed event's empty title is what the run saw; only a cancellation reported without a
+    # title, or an entry that read no event, such as a projection removed with its rule, is named
+    # by the event's last observed title.
+    observed = own is not None and (bool(own["event_title"]) or not cancelled)
+    earlier = previous["event_title"] if previous is not None else None
+    title = own["event_title"] if observed and own is not None else earlier or ""
+    # Time and recurrence come from one entry: this one if it saw the event's time, else the
+    # earlier one, so a series converted to a single event stops showing as repeating.
+    timed = (
+        own
+        if own is not None and (own["event_starts"] is not None or previous is None)
+        else previous
+    )
+    assert timed is not None
+    return RecordedEventResponse(
+        title=title,
+        all_day=bool(timed["event_all_day"]),
+        starts=timed["event_starts"],
+        ends=timed["event_ends"],
+        recurring=bool(timed["event_recurring"]),
+        cancelled=cancelled,
+        renamed_from=earlier
+        if observed and not cancelled and earlier is not None and earlier != title
+        else None,
     )
 
 

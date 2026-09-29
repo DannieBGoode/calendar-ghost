@@ -1,5 +1,5 @@
 import type { ActivityShow } from "@/lib/activity-location"
-import { ApiError, type ActivityCategory, type ActivityEventSummary, type AuditEntry, type NoChangeRun } from "@/lib/api"
+import { ApiError, type ActivityCategory, type AuditEntry, type NoChangeRun } from "@/lib/api"
 
 /** `happened` answers "what happened?" in a few words; `{destination}` names the destination calendar. */
 type ReasonCopy = { happened: string; explanation: string }
@@ -331,30 +331,14 @@ export function activityRows(
 }
 
 export type EventCell =
-  | { state: "loading" }
   | { state: "event"; title: string; when: string; recurring: boolean; note?: string }
   | { state: "unavailable"; label: string; note?: string }
-
-type SummaryLookup =
-  | { status: "pending" }
-  | { status: "error" }
-  | { status: "success"; data: ActivityEventSummary | null }
 
 /** Calendar names of the entry's rule, or null once the rule is removed. */
 export type RuleNames = { source: string; destination: string }
 
-const REMOVED_RULE_CELL: EventCell = {
-  state: "unavailable",
-  label: "Event from a removed rule",
-  note: "Its events can no longer be looked up",
-}
-
-/** What the Event column shows, given the live lookup of the entry's source event. */
-export function eventCell(
-  entry: Pick<AuditEntry, "source_event_id">,
-  names: RuleNames | null,
-  lookup: SummaryLookup,
-): EventCell {
+/** What the Event column shows: the source event as the entry's run recorded it. */
+export function eventCell(entry: Pick<AuditEntry, "source_event_id" | "event">, names: RuleNames | null): EventCell {
   if (!entry.source_event_id) {
     return {
       state: "unavailable",
@@ -362,19 +346,22 @@ export function eventCell(
       note: "Applies to the whole rule",
     }
   }
-  if (!names) return REMOVED_RULE_CELL
-  if (lookup.status === "pending") return { state: "loading" }
-  if (lookup.status === "success" && lookup.data?.lookup === "rule_removed") return REMOVED_RULE_CELL
-  const source = lookup.status === "success" ? lookup.data?.source : null
-  if (!source) return { state: "unavailable", label: "Event name unavailable", note: "Google did not respond" }
-  if (!source.found) {
-    return { state: "unavailable", label: `Event deleted from ${names.source}`, note: "Its name is no longer available" }
+  const event = entry.event
+  if (!event) {
+    return { state: "unavailable", label: "Event name not recorded", note: "Recorded before event names were kept" }
   }
-  const when = formatEventTime(source)
-  if (source.cancelled) {
-    return { state: "event", title: source.title || "Cancelled event", when, recurring: source.recurring, note: "Cancelled" }
+  const when = formatEventTime(event)
+  if (event.cancelled) {
+    return { state: "event", title: event.title || "Cancelled event", when, recurring: event.recurring, note: "Cancelled" }
   }
-  return { state: "event", title: source.title || "(No title)", when, recurring: source.recurring }
+  return {
+    state: "event",
+    title: event.title || "(No title)",
+    when,
+    recurring: event.recurring,
+    // An empty former title is a real one: the event was untitled before.
+    ...(event.renamed_from !== null ? { note: `Renamed from “${event.renamed_from || "(No title)"}”` } : {}),
+  }
 }
 
 /** The Time column: the clock time alone, since day headers name the day. */

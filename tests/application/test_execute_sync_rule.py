@@ -505,7 +505,12 @@ def test_each_run_groups_its_audit_entries() -> None:
         ("run-1", "create", "completed", SyncReason.SOURCE_CREATED),
         ("run-2", "update", "completed", SyncReason.SOURCE_CHANGED),
     ]
-    assert all("Private appointment" not in repr(entry) for entry in unit_of_work.state.audit)
+    # Entries name the event by title and time (ADR 0014) but keep no other content.
+    assert [entry.event and entry.event.title for entry in unit_of_work.state.audit] == [
+        "Private appointment",
+        "Private appointment",
+    ]
+    assert all("Sensitive" not in repr(entry) for entry in unit_of_work.state.audit)
 
 
 @pytest.mark.parametrize(
