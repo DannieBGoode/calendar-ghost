@@ -209,6 +209,10 @@ class CalendarEvent:
     occurrence: OccurrenceIdentity | None = None
     managed_origin: ManagedOrigin | None = None
     web_link: str | None = None
+    guests: tuple[str, ...] | None = None
+    """Attendee email addresses, never projected; None when the provider did not list them all."""
+    conferencing: tuple[str, ...] | None = None
+    """Conferencing entry points, never projected; None when the provider did not return them."""
 
     def __post_init__(self) -> None:
         _require_non_empty(self.revision, "event revision")
