@@ -218,6 +218,7 @@ class IncidentResponse(BaseModel):
     updated_at: str
     resolved_at: str | None
     resolution: str | None
+    account_id: str | None
 
 
 class RecentChangeResponse(BaseModel):

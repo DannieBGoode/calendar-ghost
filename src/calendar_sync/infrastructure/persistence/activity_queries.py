@@ -263,8 +263,8 @@ class SqliteOperationsQueries:
         with _reading(self._database_path) as connection:
             rows = connection.execute(
                 """
-                SELECT id, rule_id, category, state, summary, opened_at, updated_at,
-                    resolved_at, resolution
+                SELECT id, rule_id, account_id, category, state, summary, opened_at,
+                    updated_at, resolved_at, resolution
                 FROM incidents ORDER BY state ASC, updated_at DESC LIMIT 100
                 """
             ).fetchall()
@@ -279,6 +279,7 @@ class SqliteOperationsQueries:
                 updated_at=row["updated_at"],
                 resolved_at=row["resolved_at"],
                 resolution=row["resolution"],
+                account_id=row["account_id"],
             )
             for row in rows
         ]

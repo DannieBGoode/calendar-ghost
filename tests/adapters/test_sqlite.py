@@ -170,7 +170,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -715,6 +715,31 @@ def test_migration_12_keeps_earlier_resolutions_unknown(tmp_path: Path) -> None:
     # The reason an earlier release resolved an Incident was never recorded.
     assert versions.count(12) == 1
     assert resolution is None
+
+
+def test_migration_13_keeps_earlier_incident_accounts_unknown(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE incidents DROP COLUMN account_id")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 13")
+        connection.execute(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at)
+            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'authentication', 'open', 's', 't', 't')
+            """
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+        account = connection.execute("SELECT account_id FROM incidents").fetchone()[0]
+    # Which account an earlier release's failure came from was never recorded.
+    assert versions.count(13) == 1
+    assert account is None
 
 
 @pytest.mark.parametrize("backend", ["sqlite", "memory"])

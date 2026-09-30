@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -11,12 +12,13 @@ from calendar_sync.application.health import (
     RuleHealthPolicy,
 )
 from calendar_sync.application.ports import IncidentReport, IncidentResolution
-from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule
 
 RULE = SyncRuleId("rule-1")
+ACCOUNT = ConnectedAccountId("work-account")
 INTERVENTION = (
     ProviderFailureKind.AUTHENTICATION,
     ProviderFailureKind.AUTHORIZATION,
@@ -34,11 +36,12 @@ def _failure(kind: ProviderFailureKind) -> ProviderFailure:
 def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
     kind: ProviderFailureKind,
 ) -> None:
-    response = RuleHealthPolicy().after_failure(RULE, _failure(kind), consecutive_failures=1)
+    failure = replace(_failure(kind), account_id=ACCOUNT)
+    response = RuleHealthPolicy().after_failure(RULE, failure, consecutive_failures=1)
 
     assert response.degrade
     assert response.incident == IncidentReport(
-        f"provider:{RULE.value}", RULE, kind.value, RuleHealthPolicy.summary(kind)
+        f"provider:{RULE.value}", RULE, kind.value, RuleHealthPolicy.summary(kind), ACCOUNT
     )
 
 
@@ -76,13 +79,15 @@ def test_persisting_blocks_open_one_incident_that_names_how_many() -> None:
 
 
 def test_a_blocked_removal_names_its_cause() -> None:
-    incident = RuleHealthPolicy().removal_blocked(RULE, _failure(ProviderFailureKind.AUTHORIZATION))
+    failure = replace(_failure(ProviderFailureKind.AUTHORIZATION), account_id=ACCOUNT)
+    incident = RuleHealthPolicy().removal_blocked(RULE, failure)
 
     assert incident == IncidentReport(
         f"removal:{RULE.value}",
         RULE,
         "authorization",
         "Rule Removal stopped: Google calendar access was denied",
+        ACCOUNT,
     )
 
 

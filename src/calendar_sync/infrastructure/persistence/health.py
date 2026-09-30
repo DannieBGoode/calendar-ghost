@@ -83,10 +83,11 @@ class SqliteIncidentRepository:
             connection.execute(
                 """
                 INSERT INTO incidents (
-                    id, deduplication_key, rule_id, category, state,
+                    id, deduplication_key, rule_id, account_id, category, state,
                     summary, opened_at, updated_at
-                ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)
                 ON CONFLICT(deduplication_key) DO UPDATE SET
+                    account_id = excluded.account_id,
                     category = excluded.category,
                     opened_at = CASE WHEN state = 'open' THEN opened_at ELSE excluded.opened_at END,
                     state = 'open',
@@ -99,6 +100,7 @@ class SqliteIncidentRepository:
                     self._ids.new(),
                     incident.key,
                     incident.rule_id.value,
+                    incident.account_id.value if incident.account_id else None,
                     incident.category,
                     incident.summary,
                     at.isoformat(),

@@ -73,7 +73,11 @@ class RuleHealthPolicy:
         if not degrade and consecutive_failures < self.threshold:
             return FailureResponse(degrade=False, incident=None)
         incident = IncidentReport(
-            self.provider_key(rule_id), rule_id, failure.kind.value, self.summary(failure.kind)
+            self.provider_key(rule_id),
+            rule_id,
+            failure.kind.value,
+            self.summary(failure.kind),
+            failure.account_id,
         )
         return FailureResponse(degrade, incident)
 
@@ -96,6 +100,7 @@ class RuleHealthPolicy:
             rule_id,
             failure.kind.value,
             f"Rule Removal stopped: {self.summary(failure.kind)}",
+            failure.account_id,
         )
 
 

@@ -26,13 +26,16 @@ from calendar_sync.application.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
-from calendar_sync.domain.model import SyncReason, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import (
     IncidentNotification,
     IncidentNotifier,
     NotificationChannel,
 )
-from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
+from calendar_sync.infrastructure.persistence.activity_queries import (
+    SqliteOperationsQueries,
+    open_blocks,
+)
 from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,
@@ -643,6 +646,25 @@ def test_a_later_interleaved_decision_does_not_hide_the_daily_pass_verdict(
     assert [(key, state) for key, _category, state, _summary in _incidents(database)] == [
         ("blocked:rule-1", "open")
     ]
+
+
+def test_an_incident_names_the_account_whose_failure_last_refreshed_it(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    incidents = SqliteIncidentRepository(database)
+    at = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
+    report = IncidentReport(
+        "provider:rule-1", rule().id, "authentication", "s", ConnectedAccountId("personal")
+    )
+
+    incidents.open(report, at)
+    first = SqliteOperationsQueries(database).incidents()[0].account_id
+    incidents.open(replace(report, account_id=ConnectedAccountId("work")), at)
+    refreshed = SqliteOperationsQueries(database).incidents()[0].account_id
+    incidents.open(replace(report, account_id=None), at)
+    unknown = SqliteOperationsQueries(database).incidents()[0].account_id
+
+    assert (first, refreshed, unknown) == ("personal", "work", None)
 
 
 def test_a_legacy_recurring_skip_is_not_evidence_of_an_earlier_block(tmp_path: Path) -> None:

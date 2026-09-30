@@ -163,6 +163,8 @@ class IncidentSummary:
     resolved_at: str | None = None
     resolution: str | None = None
     """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
+    account_id: str | None = None
+    """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
 
 
 class OperationsQueries(Protocol):

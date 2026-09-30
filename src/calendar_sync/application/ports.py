@@ -428,6 +428,8 @@ class IncidentReport:
     category: str
     summary: str
     """Operational wording only; never an event title or other event content."""
+    account_id: ConnectedAccountId | None = None
+    """The Connected Account whose failure opened or last refreshed the Incident, if known."""
 
 
 class IncidentResolution(StrEnum):

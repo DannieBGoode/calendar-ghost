@@ -35,6 +35,7 @@ def list_incidents(services: Services) -> list[IncidentResponse]:
             updated_at=incident.updated_at,
             resolved_at=incident.resolved_at,
             resolution=incident.resolution,
+            account_id=incident.account_id,
         )
         for incident in services.operations.incidents()
     ]

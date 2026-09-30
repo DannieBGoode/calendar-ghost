@@ -691,6 +691,23 @@ def test_has_live_occurrences_classifies_other_failures_like_any_request(
         provider.has_live_occurrences(SERIES, include_all_day=True)
 
     assert failure.value.kind is kind
+    assert failure.value.account_id == DESTINATION.connected_account_id
+
+
+def test_failures_name_the_account_whose_request_google_rejected() -> None:
+    # A rule's calendars may belong to different accounts; only the rejected one needs renewing.
+    source = endpoint("personal-account", "personal-calendar")
+    events_api = MagicMock()
+    events_api.list.return_value = request_raising(401)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as source_failure:
+        provider.changes(source, None, NOW)
+    with pytest.raises(ProviderFailure) as destination_failure:
+        provider.find_projection(DESTINATION, "operation-key")
+
+    assert source_failure.value.account_id == source.connected_account_id
+    assert destination_failure.value.account_id == DESTINATION.connected_account_id
 
 
 def test_occurrence_exceptions_count_changed_length_and_content_but_not_regular_instances() -> None:

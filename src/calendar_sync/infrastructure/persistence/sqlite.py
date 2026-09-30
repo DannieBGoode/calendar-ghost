@@ -64,6 +64,7 @@ _FORWARD_MIGRATIONS = (
     (10, "0010_pending_exception_replays.sql"),
     (11, "0011_rule_block_checks.sql"),
     (12, "0012_incident_resolutions.sql"),
+    (13, "0013_incident_accounts.sql"),
 )
 
 

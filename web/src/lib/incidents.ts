@@ -13,13 +13,17 @@ export type IncidentRuleState = { accessRenewed: boolean }
 
 /**
  * Whether the rule's Google access was renewed after the incident last recorded a failure. An
- * authorization failure leaves its account connected, so being connected proves nothing; only a
- * reauthorization since then does, with every account of the rule connected.
+ * authorization failure leaves its account connected, so being connected proves nothing; only
+ * reauthorizing the account that failed does, with every account of the rule connected. When
+ * the failing account was not recorded, every account of the rule must have been reauthorized.
  */
 export function accessRenewedSince(incident: Incident, accounts: (ConnectedAccount | undefined)[]): boolean {
   const lastFailure = Date.parse(incident.updated_at)
+  const renewed = (account: ConnectedAccount | undefined) =>
+    account?.authorized_at != null && Date.parse(account.authorized_at) > lastFailure
   if (accounts.some((account) => account?.state !== "connected")) return false
-  return accounts.some((account) => account?.authorized_at != null && Date.parse(account.authorized_at) > lastFailure)
+  if (incident.account_id === null) return accounts.every(renewed)
+  return renewed(accounts.find((account) => account?.id === incident.account_id))
 }
 
 const AUTHORIZATION = new Set(["authentication", "authorization"])
