@@ -63,8 +63,12 @@ use case, which deletes both in one unit of work; the adapters only delete their
 Rule health follows the same direction. `application/health.py` holds the `RuleHealthPolicy`: which
 failures require intervention and degrade the rule, the three-failure Provider Incident threshold,
 and every incident key and summary. `RuleHealth` applies it through the `RuleHealthRecords`,
-`IncidentRepository`, and `IncidentNotifications` ports and the `Clock`, and the scheduler reports to
-it through the `RunHealth` protocol. Scheduled runs and Rule Removal share one retry helper in
+`IncidentRepository`, and `IncidentNotifications` ports and the `Clock`. Each use case reports to it
+through a protocol of its own: the scheduler through `RunHealth` after every Sync Run, Reconcile Now
+through `FullPassRecords` after its full pass, Rule Removal through `RemovalIncidents` when lost
+authorization stops it, and the preview that recovers a degraded rule through `RecoveryIncidents`
+when it finds an account's authorization lost. A provider failure names the Connected Account whose
+request failed, so an authorization Incident names the account to reauthorize. Scheduled runs and Rule Removal share one retry helper in
 `application/retry.py`, which retries only temporary and rate-limited failures.
 
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in

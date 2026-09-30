@@ -74,10 +74,21 @@ The Activity screen names the reason it could not load audit entries and inciden
 
 ## A rule is degraded
 
-Open the incident in the Web UI. Authorization incidents require reauthorizing the affected identity
-from Settings. The rule keeps mappings and its last successful incremental positions and performs no
-writes while degraded. After reauthorization, choose **Validate recovery** in Rules, inspect the
-preview, and enable the rule; its next run repairs drift before advancing either cursor.
+Open **Activity**. The rule's incident says what stopped it and offers the next step. The rule keeps
+its mappings and last successful incremental positions, and writes nothing while degraded.
+
+- **Google authorization expired** or **Google calendar access was denied**: choose **Reauthorize in
+  Settings** and reauthorize the Google account Google rejected. Once that account is reauthorized,
+  the incident offers **Recover this rule** instead. If the rule's calendars belong to two accounts
+  and the other one has also lost access, recovering the rule points the incident back to Settings
+  for that account.
+- **Google Calendar rejected synchronization** or **Local synchronization infrastructure failed**:
+  choose **Review this rule** and check that both calendars still exist and are shared with the
+  accounts the rule uses.
+
+To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
+syncing**. Its next run repairs drift before advancing either cursor, and its successful run
+resolves the incident.
 
 ## A Google account was disconnected
 
