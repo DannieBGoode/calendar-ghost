@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from types import TracebackType
 from typing import Self
 
@@ -18,11 +19,14 @@ from calendar_sync.application.ports import (
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
+    SourceObservationRepository,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
 )
+from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
+    AllDayRange,
     CalendarEndpoint,
     ConnectedAccountId,
     EventMapping,
@@ -49,6 +53,11 @@ class MemoryState:
     audit: list[AuditEntry] = field(default_factory=list)
     outcomes: dict[tuple[SyncRuleId, RunKind], RuleRunOutcome] = field(default_factory=dict)
     previews: dict[SyncRuleId, RulePreviewSummary] = field(default_factory=dict)
+    observations: dict[tuple[SyncRuleId, EventRef], tuple[SourceObservation, datetime]] = field(
+        default_factory=dict
+    )
+    change_values_forgotten_before: dict[SyncRuleId, datetime] = field(default_factory=dict)
+    """Entries keep their changes in memory; this records the cutoff SQLite would apply."""
 
 
 class InMemoryConnectedAccountRecords:
@@ -103,6 +112,9 @@ class InMemorySyncRuleRepository:
             key: outcome for key, outcome in self._state.outcomes.items() if key[0] != rule_id
         }
         self._state.previews.pop(rule_id, None)
+        self._state.observations = {
+            key: value for key, value in self._state.observations.items() if key[0] != rule_id
+        }
 
     def purge(self, rule_id: SyncRuleId) -> None:
         self.remove(rule_id)
@@ -230,6 +242,45 @@ class InMemoryAuditRepository:
     def append(self, entry: AuditEntry) -> None:
         self._state.audit.append(entry)
 
+    def forget_change_values(self, rule_id: SyncRuleId, before: datetime) -> None:
+        self._state.change_values_forgotten_before[rule_id] = before
+
+
+class InMemorySourceObservationRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def get(self, rule_id: SyncRuleId, source: EventRef) -> SourceObservation | None:
+        found = self._state.observations.get((rule_id, source))
+        return found[0] if found is not None else None
+
+    def save(
+        self,
+        rule_id: SyncRuleId,
+        source: EventRef,
+        observation: SourceObservation,
+        observed_at: datetime,
+    ) -> None:
+        self._state.observations[(rule_id, source)] = (observation, observed_at)
+
+    def forget_stale(
+        self, rule_id: SyncRuleId, source: CalendarEndpoint, ended_before: datetime
+    ) -> None:
+        self._state.observations = {
+            (rule, reference): value
+            for (rule, reference), value in self._state.observations.items()
+            if rule != rule_id
+            or (reference.calendar == source and not _ended(value[0], ended_before))
+        }
+
+
+def _ended(observation: SourceObservation, before: datetime) -> bool:
+    if observation.recurrence:
+        return False
+    if isinstance(observation.time, AllDayRange):
+        return observation.time.ends_before <= before.date()
+    return observation.time.ends_at < before
+
 
 class InMemoryRuleRunOutcomeRepository:
     def __init__(self, state: MemoryState) -> None:
@@ -279,6 +330,7 @@ class InMemoryUnitOfWork:
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
+    observations: SourceObservationRepository
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
 
@@ -297,6 +349,7 @@ class InMemoryUnitOfWork:
         self.cursors = InMemorySyncCursorRepository(self._working.cursors)
         self.destination_cursors = InMemorySyncCursorRepository(self._working.destination_cursors)
         self.audit = InMemoryAuditRepository(self._working)
+        self.observations = InMemorySourceObservationRepository(self._working)
         self.run_outcomes = InMemoryRuleRunOutcomeRepository(self._working)
         self.previews = InMemoryRulePreviewRepository(self._working)
         return self
@@ -321,6 +374,8 @@ class InMemoryUnitOfWork:
         self._target.audit = self._working.audit
         self._target.outcomes = self._working.outcomes
         self._target.previews = self._working.previews
+        self._target.observations = self._working.observations
+        self._target.change_values_forgotten_before = self._working.change_values_forgotten_before
         self._committed = True
 
 

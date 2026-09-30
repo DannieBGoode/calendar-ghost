@@ -148,6 +148,7 @@ class SynchronizeOccurrences:
                     run_id=run.run_id,
                     event=_recorded_event(source_occurrence),
                 ),
+                observed=source_occurrence,
             )
             # Commit before the next provider call so no write lock spans network requests.
             run.uow.commit()

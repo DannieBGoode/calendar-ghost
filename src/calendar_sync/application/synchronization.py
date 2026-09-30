@@ -27,6 +27,7 @@ from calendar_sync.application.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync_run import (
+    SOURCE_CHANGE_RETENTION,
     SyncRunContext,
     has_live_occurrences,
     record,
@@ -253,6 +254,11 @@ class ExecuteSyncRule:
         uow, rule = run.uow, run.rule
         uow.cursors.save(rule.id, feeds.source.next_cursor)
         uow.destination_cursors.save(rule.id, feeds.destination.next_cursor)
+        if feeds.listed_in_full:
+            # Retention runs with the daily pass, which lists every event still observed.
+            cutoff = self.clock.now() - SOURCE_CHANGE_RETENTION
+            uow.audit.forget_change_values(rule.id, cutoff)
+            uow.observations.forget_stale(rule.id, rule.source, cutoff)
         with self.locks.for_writes(rule.id):
             if run.reproject:
                 current = uow.rules.get(rule.id)
@@ -561,6 +567,7 @@ class ExecuteSyncRule:
                     run_id=run.run_id,
                     event=RecordedEvent.of(source_event),
                 ),
+                observed=source_event,
             )
         uow.commit()
         return mapping, decision, source_moved

@@ -535,7 +535,8 @@ def test_each_run_groups_its_audit_entries() -> None:
         "Private appointment",
         "Private appointment",
     ]
-    assert all("Sensitive" not in repr(entry) for entry in unit_of_work.state.audit)
+    # Entries name the event by title and time; other details live only in a Source Change.
+    assert all("Sensitive" not in repr(entry.event) for entry in unit_of_work.state.audit)
 
 
 @pytest.mark.parametrize(
