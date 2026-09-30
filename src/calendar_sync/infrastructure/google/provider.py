@@ -506,10 +506,12 @@ def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
 LIVE_OCCURRENCE_PAGE_SIZE = 250
 # Instance listings run under the rule's write lock, so a long expansion is read only this far.
 OCCURRENCE_PAGE_LIMIT = 20
-# Only what translation reads; attendees and conferencing are never needed for a projection.
+# Only what translation reads. Guests and conferencing are never projected; they are read so a
+# Source Change can be described (ADR 0016), and an omitted field would read as removed.
 OCCURRENCE_EXCEPTION_FIELDS = (
     "items(id,etag,updated,status,start,end,summary,description,location,recurringEventId,"
-    "originalStartTime,extendedProperties,htmlLink),nextPageToken"
+    "originalStartTime,extendedProperties,htmlLink,attendees(email),attendeesOmitted,"
+    "conferenceData(entryPoints(uri)),hangoutLink),nextPageToken"
 )
 # Answers meaning Google cannot expand this series, rather than that the request failed.
 UNLISTABLE_SERIES_STATUSES = frozenset({400, 404, 410})
