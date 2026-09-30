@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import unicodedata
 from collections.abc import Iterator, Sequence
@@ -17,15 +18,19 @@ from calendar_sync.application.activity import (
     ActivityEvent,
     ActivityFilter,
     EntryEvents,
+    FieldChange,
     IncidentSummary,
     OpenBlock,
     OperationsOverview,
     RecentChange,
+    RecordedChange,
     RecordedTime,
     activity_category,
 )
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.model import SyncAction, SyncReason
+from calendar_sync.infrastructure.persistence.source_changes import open_change_values
+from calendar_sync.infrastructure.security import HistoryCipher
 
 # A synchronization block. Recurring exclusions were recorded as conflicts before reason codes
 # existed; they are skips.
@@ -153,15 +158,17 @@ _IDENTICAL_WRITE = (
 _ENTRY_COLUMNS = (
     "id, run_id, occurred_at, rule_id, action, outcome, reason, detail,"
     " source_event_id, destination_event_id,"
-    " event_title, event_starts, event_ends, event_all_day, event_recurring, event_cancelled"
+    " event_title, event_starts, event_ends, event_all_day, event_recurring, event_cancelled,"
+    " change_fields"
 )
 # An entry observed its event's title unless Google reported a cancellation without one.
 _TITLE_OBSERVED = "event_title IS NOT NULL AND (event_title <> '' OR NOT event_cancelled)"
 
 
 class SqliteActivityQueries:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, history: HistoryCipher | None = None) -> None:
         self._database_path = database_path
+        self._history = history
 
     def entries(self, selection: ActivityFilter) -> list[ActivityEntry]:
         conditions = [f"COALESCE(reason, '') NOT IN ({_UNRECORDED_SQL})"]
@@ -215,6 +222,29 @@ class SqliteActivityQueries:
             rule_id=str(row["rule_id"]),
             source_event_id=_text(row["source_event_id"]),
             destination_event_id=_text(row["destination_event_id"]),
+        )
+
+    def entry_change(self, entry_id: int) -> RecordedChange | None:
+        with _reading(self._database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT rule_id, source_event_id, event_title,
+                    change_fields, change_title_before, change_sealed
+                FROM audit_entries WHERE id = ?
+                """,
+                (entry_id,),
+            ).fetchone()
+        if row is None or row["change_fields"] is None:
+            return None
+        fields = tuple(str(field) for field in json.loads(row["change_fields"]))
+        values = open_change_values(self._history, row)
+        changes = tuple(
+            change for field in fields if (change := _field_change(field, row, values)) is not None
+        )
+        return RecordedChange(
+            fields=fields,
+            values_available=values is not None or fields == ("title",),
+            changes=changes,
         )
 
     def recent_changes(self, limit: int) -> list[RecentChange]:
@@ -364,9 +394,57 @@ def _entries(connection: sqlite3.Connection, rows: Sequence[sqlite3.Row]) -> lis
             destination_event_id=row["destination_event_id"],
             event=_recorded_event(row, previous.get(row["id"])),
             repeated=row["id"] in repeated,
+            changed_fields=(
+                tuple(json.loads(row["change_fields"]))
+                if row["change_fields"] is not None
+                else None
+            ),
         )
         for row in rows
     ]
+
+
+def _field_change(
+    field: str, row: sqlite3.Row, values: dict[str, dict[str, object]] | None
+) -> FieldChange | None:
+    """One field of an entry's change; titles are plain, other fields need their values."""
+    if field == "title":
+        return FieldChange(field, before=row["change_title_before"], after=row["event_title"])
+    value = values.get(field) if values is not None else None
+    if value is None:
+        return None
+    if field == "time":
+        return FieldChange(
+            field,
+            before_time=_change_time(value["before"]),
+            after_time=_change_time(value["after"]),
+        )
+    if field == "guests":
+        return FieldChange(field, added=_texts(value["added"]), removed=_texts(value["removed"]))
+    if field == "conferencing":
+        before, after = set(_texts(value["before"])), set(_texts(value["after"]))
+        return FieldChange(
+            field, added=tuple(sorted(after - before)), removed=tuple(sorted(before - after))
+        )
+    if field == "recurrence":
+        return FieldChange(
+            field,
+            before="\n".join(_texts(value["before"])),
+            after="\n".join(_texts(value["after"])),
+        )
+    return FieldChange(field, before=str(value["before"]), after=str(value["after"]))
+
+
+def _change_time(value: object) -> RecordedTime:
+    assert isinstance(value, dict)
+    return RecordedTime(
+        all_day=bool(value["all_day"]), starts=str(value["starts"]), ends=str(value["ends"])
+    )
+
+
+def _texts(value: object) -> tuple[str, ...]:
+    assert isinstance(value, list)
+    return tuple(str(item) for item in value)
 
 
 def _previous_names(connection: sqlite3.Connection, ids: Sequence[int]) -> dict[int, sqlite3.Row]:

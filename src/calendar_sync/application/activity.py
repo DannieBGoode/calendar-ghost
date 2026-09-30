@@ -1,7 +1,7 @@
 """Read-only questions the Web API asks about recorded Activity and operational state.
 
-Results carry identities, reason codes, and the source event's title and time (ADR 0014); never
-its description, location, attendees, or conferencing data.
+Results carry identities, reason codes, and the source event's title and time (ADR 0014). An
+entry's Source Change values are unsealed only when one entry's change is asked for (ADR 0016).
 """
 
 from __future__ import annotations
@@ -90,6 +90,30 @@ class ActivityEntry:
     event: ActivityEvent | None = None
     repeated: bool = False
     """A repair that redoes the same event's previous one, recorded by an earlier run."""
+    changed_fields: tuple[str, ...] | None = None
+    """The source fields this entry's Source Change touched; None when it recorded none."""
+
+
+@dataclass(frozen=True, slots=True)
+class FieldChange:
+    """One changed source field: text before and after, a time, or what was added and removed."""
+
+    field: str
+    before: str | None = None
+    after: str | None = None
+    before_time: RecordedTime | None = None
+    after_time: RecordedTime | None = None
+    added: tuple[str, ...] = ()
+    removed: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedChange:
+    """An entry's Source Change. Only titles remain once its values expired or cannot open."""
+
+    fields: tuple[str, ...]
+    values_available: bool
+    changes: tuple[FieldChange, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +153,10 @@ class ActivityQueries(Protocol):
     def entry(self, entry_id: int) -> ActivityEntry | None: ...
 
     def entry_events(self, entry_id: int) -> EntryEvents | None: ...
+
+    def entry_change(self, entry_id: int) -> RecordedChange | None:
+        """The entry's Source Change with its values, or None when it recorded none."""
+        ...
 
     def recent_changes(self, limit: int) -> Sequence[RecentChange]:
         """The newest written events, each repeated repair counted on its newest write."""

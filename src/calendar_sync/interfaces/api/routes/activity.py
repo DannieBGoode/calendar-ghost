@@ -11,6 +11,7 @@ from calendar_sync.application.activity import (
     ActivityEvent,
     ActivityFilter,
     ActivityQueries,
+    FieldChange,
     GetDashboard,
     InspectActivityEvent,
     RecordedTime,
@@ -28,9 +29,11 @@ from calendar_sync.interfaces.api.schemas import (
     AuditEntryResponse,
     DashboardResponse,
     EventSnapshotResponse,
+    FieldChangeResponse,
     RecentChangeResponse,
     RecordedEventResponse,
     RecordedTimeResponse,
+    SourceChangeResponse,
 )
 
 
@@ -124,6 +127,34 @@ def recent_changes(
 
 
 @router.get(
+    "/api/v1/audit-entries/{entry_id}/changes",
+    response_model=SourceChangeResponse,
+    dependencies=[Depends(require_admin)],
+)
+def get_activity_entry_changes(entry_id: int, services: Services) -> SourceChangeResponse:
+    change = services.activity.entry_change(entry_id)
+    if change is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry recorded no source change")
+    return SourceChangeResponse(
+        fields=list(change.fields),
+        values_available=change.values_available,
+        changes=[_field_change_response(item) for item in change.changes],
+    )
+
+
+def _field_change_response(change: FieldChange) -> FieldChangeResponse:
+    return FieldChangeResponse(
+        field=change.field,
+        before=change.before,
+        after=change.after,
+        before_time=_recorded_time_response(change.before_time) if change.before_time else None,
+        after_time=_recorded_time_response(change.after_time) if change.after_time else None,
+        added=list(change.added),
+        removed=list(change.removed),
+    )
+
+
+@router.get(
     "/api/v1/audit-entries/{entry_id}/event",
     response_model=ActivityEventResponse,
     dependencies=[Depends(require_admin)],
@@ -173,6 +204,7 @@ def _entry_response(entry: ActivityEntry) -> AuditEntryResponse:
         destination_event_id=entry.destination_event_id,
         event=_recorded_event_response(entry.event) if entry.event is not None else None,
         repeated=entry.repeated,
+        changed_fields=list(entry.changed_fields) if entry.changed_fields is not None else None,
     )
 
 

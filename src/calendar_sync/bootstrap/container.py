@@ -163,7 +163,7 @@ def build_adapters(settings: Settings) -> Adapters:
         ids=ids,
         run_ids=UuidRunIdGenerator(),
         administrator=SqliteAdminAuth(settings.database_path, clock),
-        activity=SqliteActivityQueries(settings.database_path),
+        activity=SqliteActivityQueries(settings.database_path, history),
         operations=SqliteOperationsQueries(settings.database_path),
         health_records=SqliteRuleHealthRecords(settings.database_path),
         incidents=SqliteIncidentRepository(settings.database_path, ids),
