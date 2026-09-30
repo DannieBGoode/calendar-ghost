@@ -91,6 +91,19 @@ authorization failure only once that account was reauthorized. Incidents recorde
 account, and for them Activity waits until every account of the rule was reauthorized after the
 failure. Rolling back works with the same database: earlier releases ignore the column.
 
+Migration 14 adds the `source_observations` table and the nullable `change_fields`,
+`change_title_before`, and `change_sealed` columns to `audit_entries`, plus a partial index on
+`audit_entries(occurred_at)` for entries that still have sealed values
+([ADR 0017](adr/0017-record-source-changes.md)). Observations hold each source event's title in
+plain text and its other tracked details sealed with a key derived from the master key; rows are
+removed with their rule. No state is rewritten: existing entries record no Source Change, and each
+event's first decision after upgrading records its observation without a change, so changes are
+described from the next revision on. Rolling back works with the same database: earlier releases
+ignore the table, columns, and index, and again rewrite projections on every new source revision.
+They also do not clear sealed values after 90 days, so values recorded before the rollback stay in
+the database until a later release clears them. Upgrading again compares each event with the
+observation recorded before the rollback, so changes made in between are described as one change.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.
