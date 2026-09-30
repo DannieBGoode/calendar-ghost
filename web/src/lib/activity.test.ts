@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest"
 
 import { ApiError } from "./api"
-import { describeEntry, entryInspection, eventLookupFailure, formatRunTime, groupRuns, whatHappened } from "./activity"
+import {
+  describeEntry,
+  entryInspection,
+  eventLookupFailure,
+  fieldChangeLines,
+  fieldLabel,
+  formatRunTime,
+  groupRuns,
+  whatHappened,
+} from "./activity"
 import { activityStateFromSearch } from "./activity-location"
 import type { AuditEntry } from "./api"
 
@@ -20,6 +29,7 @@ function entry(overrides: Partial<AuditEntry>): AuditEntry {
     destination_event_id: null,
     event: null,
     repeated: false,
+    changed_fields: null,
     ...overrides,
   }
 }
@@ -198,6 +208,105 @@ describe("activity presentation", () => {
     const now = new Date(2026, 8, 28, 18, 0)
     expect(formatRunTime(new Date(2026, 8, 28, 15, 18).toISOString(), now)).toMatch(/^Today at /)
     expect(formatRunTime(new Date(2026, 8, 27, 15, 18).toISOString(), now)).toMatch(/^Yesterday at /)
+  })
+})
+
+describe("source changes", () => {
+  const recorded = {
+    title: "Planning",
+    all_day: false,
+    starts: "2026-09-30T11:00:00+00:00",
+    ends: "2026-09-30T12:00:00+00:00",
+    recurring: false,
+    cancelled: false,
+    renamed_from: null,
+    moved_from: { all_day: false, starts: "2026-09-30T10:00:00+00:00", ends: "2026-09-30T11:00:00+00:00" },
+  }
+
+  it("names the fields that changed before what Calendar Sync did", () => {
+    const changed = entry({
+      action: "update",
+      reason: "source_changed",
+      category: "changed",
+      changed_fields: ["title", "description"],
+    })
+
+    expect(whatHappened(changed, names).text).toBe("Title and description changed in Personal → updated in Work")
+  })
+
+  it("says a change the rule does not show needed nothing in the destination", () => {
+    const unchanged = entry({ reason: "projection_current", category: "unchanged", changed_fields: ["guests"] })
+
+    expect(whatHappened(unchanged, names).text).toBe("Guests changed in Personal → already up to date")
+    expect(describeEntry(unchanged, names).explanation).toBe(
+      "The event changed in Personal, but Work shows none of what changed, so nothing was written.",
+    )
+  })
+
+  it("keeps saying where an event moved from when only its time changed", () => {
+    const moved = entry({
+      action: "update",
+      reason: "source_changed",
+      category: "changed",
+      changed_fields: ["time"],
+      event: recorded,
+    })
+
+    expect(whatHappened(moved, names).text).toMatch(/^Moved from .+ in Personal → updated in Work$/)
+  })
+
+  it("lists several fields in a sentence", () => {
+    const changed = entry({
+      action: "update",
+      reason: "occurrence_changed",
+      category: "changed",
+      changed_fields: ["time", "location", "conferencing"],
+      event: recorded,
+    })
+
+    expect(whatHappened(changed, names).text).toBe(
+      "Time, location, and video call links changed in Personal → updated in Work",
+    )
+  })
+
+  it("shows a changed field's values before and after, and what a list gained and lost", () => {
+    const none = { before: null, after: null, before_time: null, after_time: null, added: [], removed: [] }
+
+    expect(fieldChangeLines({ ...none, field: "description", before: "", after: "Dial in: 1234#" })).toEqual({
+      label: "Description",
+      before: "(empty)",
+      after: "Dial in: 1234#",
+      added: [],
+      removed: [],
+    })
+    expect(fieldChangeLines({ ...none, field: "guests", added: ["cleo@example.com"], removed: ["ben@example.com"] })).toMatchObject({
+      label: "Guests",
+      before: null,
+      after: null,
+      added: ["cleo@example.com"],
+      removed: ["ben@example.com"],
+    })
+    const moved = fieldChangeLines({
+      ...none,
+      field: "time",
+      before_time: { all_day: true, starts: "2026-09-30", ends: "2026-10-01" },
+      after_time: { all_day: true, starts: "2026-10-02", ends: "2026-10-03" },
+    })
+    expect(moved.before).toMatch(/all day$/)
+    expect(moved.after).toMatch(/all day$/)
+    expect(moved.before).not.toBe(moved.after)
+  })
+
+  it("labels every tracked field", () => {
+    expect(["title", "time", "description", "location", "guests", "recurrence", "conferencing"].map(fieldLabel)).toEqual([
+      "Title",
+      "Time",
+      "Description",
+      "Location",
+      "Guests",
+      "Repeat pattern",
+      "Video call links",
+    ])
   })
 })
 

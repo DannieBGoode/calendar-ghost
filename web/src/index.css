@@ -2565,6 +2565,50 @@ thead + .activity-day th {
   border-top: 1px solid var(--border);
 }
 
+.activity-changes {
+  display: grid;
+  gap: 0.875rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.activity-changes h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.activity-changes dl {
+  display: grid;
+  gap: 0.875rem;
+  margin: 0;
+}
+
+.activity-changes dt {
+  margin-bottom: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.activity-changes dd {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0;
+}
+
+.activity-change-value {
+  max-height: 12rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.activity-change-label {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
 .activity-event-status,
 .activity-event-missing {
   color: var(--muted-foreground);

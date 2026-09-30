@@ -28,6 +28,7 @@ import {
   entryInspection,
   eventCell,
   eventLookupFailure,
+  fieldChangeLines,
   formatClockTime,
   formatDay,
   formatEventTime,
@@ -739,6 +740,7 @@ function EntryDetails({
           <dd><RuleDirection ruleId={entry.rule_id} context={context} /></dd>
         </div>
       </dl>
+      {entry.changed_fields?.length ? <SourceChangeDetails entry={entry} names={names} /> : null}
       {inspection === "event" ? (
         <ActivityEventDetails entry={entry} />
       ) : (
@@ -798,6 +800,63 @@ function RuleDirection({ ruleId, context }: { ruleId: string; context: RuleConte
         role="Destination"
       />
     </span>
+  )
+}
+
+/** What the entry's run saw change in the source event, with the values before and after. */
+function SourceChangeDetails({ entry, names }: { entry: AuditEntry; names: RuleNames | null }) {
+  const change = useQuery({
+    queryKey: ["activity-changes", entry.id],
+    queryFn: () => api.activityChanges(entry.id),
+    staleTime: Infinity,
+    retry: false,
+  })
+  const heading = `What changed in ${names?.source ?? "the source calendar"}`
+  if (change.isPending) return <p className="activity-event-status" role="status">Loading what changed…</p>
+  if (change.error) {
+    return <p className="activity-event-status" role="alert">What changed could not be loaded right now.</p>
+  }
+  return (
+    <section className="activity-changes" aria-label={heading}>
+      <h3>{heading}</h3>
+      <dl>
+        {change.data.changes.map((item) => {
+          const lines = fieldChangeLines(item)
+          return (
+            <div key={item.field}>
+              <dt>{lines.label}</dt>
+              <dd>
+                {lines.before !== null && (
+                  <span className="activity-change-value">
+                    <span className="activity-change-label">Before</span> {lines.before}
+                  </span>
+                )}
+                {lines.after !== null && (
+                  <span className="activity-change-value">
+                    <span className="activity-change-label">After</span> {lines.after}
+                  </span>
+                )}
+                {lines.added.length > 0 && (
+                  <span className="activity-change-value">
+                    <span className="activity-change-label">Added</span> {lines.added.join(", ")}
+                  </span>
+                )}
+                {lines.removed.length > 0 && (
+                  <span className="activity-change-value">
+                    <span className="activity-change-label">Removed</span> {lines.removed.join(", ")}
+                  </span>
+                )}
+              </dd>
+            </div>
+          )
+        })}
+      </dl>
+      {!change.data.values_available && (
+        <p className="activity-event-status">
+          Earlier values are kept for 90 days, so only the fields that changed are listed.
+        </p>
+      )}
+    </section>
   )
 }
 

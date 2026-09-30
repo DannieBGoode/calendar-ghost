@@ -1,5 +1,5 @@
 import type { ActivityShow } from "@/lib/activity-location"
-import { ApiError, type ActivityCategory, type AuditEntry, type RecordedEvent } from "@/lib/api"
+import { ApiError, type ActivityCategory, type AuditEntry, type FieldChange, type RecordedEvent } from "@/lib/api"
 
 /**
  * What Calendar Sync observed (`trigger`) and what it did about it (`effect`), never who caused
@@ -229,11 +229,63 @@ function capitalized(text: string): string {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}`
 }
 
+// Keep in sync with SourceField in src/calendar_sync/domain/changes.py.
+const FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  time: "Time",
+  description: "Description",
+  location: "Location",
+  guests: "Guests",
+  recurrence: "Repeat pattern",
+  conferencing: "Video call links",
+}
+
+/** How Activity names a tracked source field. */
+export function fieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? capitalized(field.replaceAll("_", " "))
+}
+
+/** One changed field as the entry panel lists it: text before and after, or what a list gained and lost. */
+export type FieldChangeLines = {
+  label: string
+  before: string | null
+  after: string | null
+  added: string[]
+  removed: string[]
+}
+
+export function fieldChangeLines(change: FieldChange): FieldChangeLines {
+  const text = (value: string | null) => (value === null ? null : value || "(empty)")
+  const before = change.before_time ? formatEventTime(change.before_time) : text(change.before)
+  const after = change.after_time ? formatEventTime(change.after_time) : text(change.after)
+  return { label: fieldLabel(change.field), before, after, added: change.added, removed: change.removed }
+}
+
+// Decisions a source change can explain: an update, or a check that found nothing to write.
+const SOURCE_CHANGE_REASONS = new Set(["source_changed", "occurrence_changed", "projection_current", "occurrence_current"])
+const UNCHANGED_BY_SOURCE_CHANGE =
+  "The event changed in {source}, but {destination} shows none of what changed, so nothing was written."
+
+function changedFields(entry: Partial<Pick<AuditEntry, "reason" | "changed_fields">>): string[] {
+  if (!entry.reason || !SOURCE_CHANGE_REASONS.has(entry.reason)) return []
+  return entry.changed_fields ?? []
+}
+
+/** "Title and description changed in Personal": the fields in a sentence, then the calendar. */
+function changedTrigger(fields: string[], names: RuleNames | null): string {
+  const labels = fields.map((field, index) => (index === 0 ? fieldLabel(field) : fieldLabel(field).toLowerCase()))
+  const list = new Intl.ListFormat("en", { style: "long", type: "conjunction" }).format(labels)
+  return named(`${list} changed in {source}`, names)
+}
+
 /** The entry's copy with the rule's calendars named. */
 export function describeEntry(
-  entry: Pick<AuditEntry, "reason" | "action" | "detail">,
+  entry: Pick<AuditEntry, "reason" | "action" | "detail"> & Partial<Pick<AuditEntry, "changed_fields">>,
   names: RuleNames | null = null,
 ): ReasonCopy {
+  if (changedFields(entry).length && (entry.reason === "projection_current" || entry.reason === "occurrence_current")) {
+    return { effect: named(REASONS[entry.reason].effect, names), explanation: named(UNCHANGED_BY_SOURCE_CHANGE, names) }
+  }
   const known = entry.reason ? REASONS[entry.reason] : RULE_ACTIONS[entry.action]
   const copy = known ?? {
     effect: ACTION_FALLBACK[entry.action] ?? entry.action.replaceAll("_", " "),
@@ -293,12 +345,20 @@ const MOVES = new Set(["source_changed", "occurrence_changed"])
 /** The What happened column: what was observed, then what Calendar Sync did, with an icon for the outcome. */
 export function whatHappened(
   entry: Pick<AuditEntry, "reason" | "action" | "detail" | "category"> &
-    Partial<Pick<AuditEntry, "event" | "repeated">>,
+    Partial<Pick<AuditEntry, "event" | "repeated" | "changed_fields">>,
   names: RuleNames | null,
 ): Happened {
   const copy = describeEntry(entry, names)
   const moved = entry.reason && MOVES.has(entry.reason) && entry.event?.moved_from
-  const trigger = moved && entry.event ? movedTrigger(entry.event, names) : (copy.trigger ?? null)
+  const fields = changedFields(entry)
+  // A move alone says where from; any other change names its fields.
+  const onlyMoved = fields.length === 0 || (fields.length === 1 && fields[0] === "time")
+  const trigger =
+    moved && entry.event && onlyMoved
+      ? movedTrigger(entry.event, names)
+      : fields.length
+        ? changedTrigger(fields, names)
+        : (copy.trigger ?? null)
   const effect = entry.repeated ? `${copy.effect} again` : copy.effect
   const text = trigger ? `${capitalized(trigger)} → ${effect}` : capitalized(effect)
   const line = { text, trigger: trigger ? capitalized(trigger) : null, effect: trigger ? effect : capitalized(effect) }
