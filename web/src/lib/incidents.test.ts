@@ -3,6 +3,9 @@ import { describe, expect, it } from "vitest"
 import type { Incident } from "@/lib/api"
 import { incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents } from "@/lib/incidents"
 
+const DISCONNECTED = { accountsConnected: false }
+const CONNECTED = { accountsConnected: true }
+
 function incident(overrides: Partial<Incident> = {}): Incident {
   return {
     id: "incident-1",
@@ -19,36 +22,47 @@ function incident(overrides: Partial<Incident> = {}): Incident {
 }
 
 describe("incident guidance", () => {
-  it("sends authorization incidents to Settings, even once the rule is gone", () => {
+  it("sends authorization incidents to Settings while access is lost, even once the rule is gone", () => {
     for (const category of ["authentication", "authorization"]) {
-      expect(incidentGuidance(incident({ category }), false).action).toEqual({
-        kind: "settings",
-        label: "Reauthorize in Settings",
-      })
+      for (const rule of [DISCONNECTED, null]) {
+        expect(incidentGuidance(incident({ category }), rule).action).toEqual({
+          kind: "settings",
+          label: "Reauthorize in Settings",
+        })
+      }
+    }
+  })
+
+  it("sends authorization incidents to the rule's recovery once access is renewed", () => {
+    // Reauthorizing leaves the rule stopped, so no sync could close the incident on its own.
+    for (const category of ["authentication", "authorization"]) {
+      const guidance = incidentGuidance(incident({ category }), CONNECTED)
+      expect(guidance.action).toEqual({ kind: "rule", ruleId: "rule-1", label: "Recover this rule" })
+      expect(guidance.detail).not.toMatch(/reauthorize/i)
     }
   })
 
   it("opens a stopped rule so it can be recovered, but only while the rule exists", () => {
     for (const category of ["permanent", "infrastructure"]) {
-      expect(incidentGuidance(incident({ category }), true).action).toEqual({
+      expect(incidentGuidance(incident({ category }), CONNECTED).action).toEqual({
         kind: "rule",
         ruleId: "rule-1",
         label: "Review this rule",
       })
-      expect(incidentGuidance(incident({ category }), false).action).toBeNull()
+      expect(incidentGuidance(incident({ category }), null).action).toBeNull()
     }
   })
 
   it("asks nothing of the administrator while transient failures are retried", () => {
     for (const category of ["rate_limit", "temporary"]) {
-      const guidance = incidentGuidance(incident({ category }), true)
+      const guidance = incidentGuidance(incident({ category }), CONNECTED)
       expect(guidance.action).toBeNull()
       expect(guidance.detail).toMatch(/^Nothing to do now/)
     }
   })
 
   it("filters Activity to the rule's blocked events for a persisting block", () => {
-    expect(incidentGuidance(incident({ category: "conflict" }), true).action).toEqual({
+    expect(incidentGuidance(incident({ category: "conflict" }), CONNECTED).action).toEqual({
       kind: "blocked",
       ruleId: "rule-1",
       label: "See blocked events",
@@ -56,11 +70,11 @@ describe("incident guidance", () => {
   })
 
   it("offers the rule without explaining a category it does not know", () => {
-    expect(incidentGuidance(incident({ category: "ownership" }), true)).toEqual({
+    expect(incidentGuidance(incident({ category: "ownership" }), CONNECTED)).toEqual({
       detail: null,
       action: { kind: "rule", ruleId: "rule-1", label: "Review this rule" },
     })
-    expect(incidentGuidance(incident({ category: "ownership", rule_id: null }), true).action).toBeNull()
+    expect(incidentGuidance(incident({ category: "ownership", rule_id: null }), null).action).toBeNull()
   })
 })
 

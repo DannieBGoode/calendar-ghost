@@ -62,7 +62,7 @@ import {
   type Incident,
   type Rule,
 } from "@/lib/api"
-import { incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents, type IncidentAction } from "@/lib/incidents"
+import { incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents, type IncidentAction, type IncidentRuleState } from "@/lib/incidents"
 import { isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { plural } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
@@ -764,6 +764,16 @@ function Diagnostic({ label, value }: { label: string; value: string | null }) {
   )
 }
 
+function incidentRuleState(incident: Incident, context: RuleContext): IncidentRuleState | null {
+  if (!incident.rule_id) return null
+  // Until rules load, assume the rule exists but claim no renewed access.
+  if (!context.rulesLoaded) return { accountsConnected: false }
+  const rule = context.rulesById.get(incident.rule_id)
+  if (!rule) return null
+  const connected = (accountId: string) => context.accountsById.get(accountId)?.state === "connected"
+  return { accountsConnected: connected(rule.source.connected_account_id) && connected(rule.destination.connected_account_id) }
+}
+
 function IncidentRule({ incident, context }: { incident: Incident; context: RuleContext }) {
   return incident.rule_id ? <RuleDirection ruleId={incident.rule_id} context={context} /> : <span>Installation</span>
 }
@@ -789,8 +799,7 @@ function OpenIncidents({
       </div>
       <ul className="rule-list">
         {incidents.map((incident) => {
-          const ruleExists = incident.rule_id !== null && (!context.rulesLoaded || context.rulesById.has(incident.rule_id))
-          const { detail, action } = incidentGuidance(incident, ruleExists)
+          const { detail, action } = incidentGuidance(incident, incidentRuleState(incident, context))
           return (
             <li className="rule-row incident-row" key={incident.id}>
               <div className="incident-heading">

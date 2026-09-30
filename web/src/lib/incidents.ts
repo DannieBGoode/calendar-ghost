@@ -8,6 +8,9 @@ export type IncidentAction =
 
 export type IncidentGuidance = { detail: string | null; action: IncidentAction | null }
 
+/** What an incident's rule looks like now; null when the incident has no rule or it is gone. */
+export type IncidentRuleState = { accountsConnected: boolean }
+
 const AUTHORIZATION = new Set(["authentication", "authorization"])
 const STOPPED = new Set(["permanent", "infrastructure"])
 const RETRYING = new Set(["rate_limit", "temporary"])
@@ -16,9 +19,16 @@ const RETRYING = new Set(["rate_limit", "temporary"])
  * The next step for an open incident, in the terms of what its category needs. A rule action is
  * offered only while the rule still exists.
  */
-export function incidentGuidance(incident: Incident, ruleExists: boolean): IncidentGuidance {
-  const ruleId = ruleExists ? incident.rule_id : null
+export function incidentGuidance(incident: Incident, rule: IncidentRuleState | null): IncidentGuidance {
+  const ruleId = rule ? incident.rule_id : null
   if (AUTHORIZATION.has(incident.category)) {
+    // Reauthorizing renews access but leaves the rule stopped; only its recovery closes this.
+    if (ruleId && rule?.accountsConnected) {
+      return {
+        detail: "Google access is renewed, but the rule stays stopped until it is recovered.",
+        action: { kind: "rule", ruleId, label: "Recover this rule" },
+      }
+    }
     return {
       detail: "Nothing is written until the Google account is reauthorized. Existing events stay where they are.",
       action: { kind: "settings", label: "Reauthorize in Settings" },
