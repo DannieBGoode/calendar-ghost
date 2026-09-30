@@ -419,13 +419,24 @@ class IncidentReport:
     """Operational wording only; never an event title or other event content."""
 
 
+class IncidentResolution(StrEnum):
+    """Why an Incident resolved, so Activity can tell recovery apart from removal."""
+
+    SYNC_SUCCEEDED = "sync_succeeded"
+    BLOCKS_CLEARED = "blocks_cleared"
+    RULE_REMOVED = "rule_removed"
+
+
 class IncidentRepository(Protocol):
     def open(self, incident: IncidentReport, at: datetime) -> bool:
-        """Open or refresh the Incident under its key; whether it was newly opened."""
+        """Open or refresh the Incident under its key; whether it was newly opened.
+
+        Reopening a resolved Incident starts a new episode, so its opening time is `at`.
+        """
         ...
 
-    def resolve(self, key: str, at: datetime) -> None:
-        """Resolve the Incident under this key, if it is open."""
+    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
+        """Resolve the Incident under this key, if it is open, recording why."""
         ...
 
 

@@ -10,7 +10,7 @@ from calendar_sync.application.health import (
     RuleHealth,
     RuleHealthPolicy,
 )
-from calendar_sync.application.ports import IncidentReport
+from calendar_sync.application.ports import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
@@ -113,6 +113,7 @@ class Incidents:
     def __init__(self) -> None:
         self.open_keys: set[str] = set()
         self.events: list[tuple[str, str, datetime]] = []
+        self.resolutions: dict[str, IncidentResolution] = {}
 
     def open(self, incident: IncidentReport, at: datetime) -> bool:
         self.events.append(("open", incident.key, at))
@@ -120,8 +121,9 @@ class Incidents:
         self.open_keys.add(incident.key)
         return newly
 
-    def resolve(self, key: str, at: datetime) -> None:
+    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
         self.events.append(("resolve", key, at))
+        self.resolutions[key] = resolution
         self.open_keys.discard(key)
 
 
@@ -153,4 +155,8 @@ def test_rule_health_times_everything_by_its_clock_and_notifies_only_new_inciden
         ("resolve", "provider:rule-1"),
         ("resolve", "blocked:rule-1"),
     ]
+    assert incidents.resolutions == {
+        "provider:rule-1": IncidentResolution.SYNC_SUCCEEDED,
+        "blocked:rule-1": IncidentResolution.BLOCKS_CLEARED,
+    }
     assert {at for *_, at in incidents.events} | set(records.times) == {NOW}

@@ -293,14 +293,16 @@ def test_incidents_list_open_ones_first_then_most_recently_updated(database: Pat
     with sqlite3.connect(database) as connection:
         connection.executemany(
             """
-            INSERT INTO incidents
-                (id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at)
-            VALUES (?, ?, NULL, 'provider', ?, 'Synthetic', '2026-09-01', ?)
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
+                resolved_at, resolution
+            )
+            VALUES (?, ?, NULL, 'provider', ?, 'Synthetic', '2026-09-01', ?, ?, ?)
             """,
             [
-                ("old-open", "k1", "open", "2026-09-02"),
-                ("resolved", "k2", "resolved", "2026-09-05"),
-                ("new-open", "k3", "open", "2026-09-04"),
+                ("old-open", "k1", "open", "2026-09-02", None, None),
+                ("resolved", "k2", "resolved", "2026-09-05", "2026-09-05", "rule_removed"),
+                ("new-open", "k3", "open", "2026-09-04", None, None),
             ],
         )
 
@@ -308,3 +310,5 @@ def test_incidents_list_open_ones_first_then_most_recently_updated(database: Pat
 
     assert [incident.id for incident in incidents] == ["new-open", "old-open", "resolved"]
     assert incidents[0].rule_id is None
+    assert (incidents[0].resolved_at, incidents[0].resolution) == (None, None)
+    assert (incidents[2].resolved_at, incidents[2].resolution) == ("2026-09-05", "rule_removed")

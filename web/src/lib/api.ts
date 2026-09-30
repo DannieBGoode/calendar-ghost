@@ -213,6 +213,9 @@ export type Incident = {
   summary: string
   opened_at: string
   updated_at: string
+  resolved_at: string | null
+  /** Why a resolved incident resolved; null while open or when the reason was not recorded. */
+  resolution: "sync_succeeded" | "blocks_cleared" | "rule_removed" | null
 }
 
 export const ACTIVITY_PAGE_SIZE = 100

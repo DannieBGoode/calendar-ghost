@@ -176,6 +176,7 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
         assert activity[0]["action"] == "create"
         assert activity[0]["event"] is None
         assert incidents[0]["summary"] == "Google authorization expired"
+        assert (incidents[0]["resolved_at"], incidents[0]["resolution"]) == (None, None)
 
 
 def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: Path) -> None:

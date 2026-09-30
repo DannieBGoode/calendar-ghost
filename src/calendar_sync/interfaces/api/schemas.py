@@ -215,6 +215,8 @@ class IncidentResponse(BaseModel):
     summary: str
     opened_at: str
     updated_at: str
+    resolved_at: str | None
+    resolution: str | None
 
 
 class RecentChangeResponse(BaseModel):

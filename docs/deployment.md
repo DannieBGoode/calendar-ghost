@@ -78,6 +78,13 @@ rewritten: until a rule's first daily pass after upgrading, all of its blocks th
 latest decision about their event count as open. Rolling back works with the same database: earlier
 releases ignore the table and do not report blocked events on the Overview.
 
+Migration 12 adds the `resolution` column to `incidents`, recording why each Incident resolved: a
+successful sync, a daily pass that found nothing still blocked, or the removal of its rule.
+Incidents resolved earlier keep no resolution, because the reason was not recorded, and Activity
+shows them only as resolved. Rolling back works with the same database: earlier releases ignore
+the column. An Incident an earlier release reopens keeps its stale resolution until it resolves
+again, which Activity never shows while the Incident is open.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

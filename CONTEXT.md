@@ -141,7 +141,7 @@ Renewal of a connected or disconnected account's authorization after access is l
 _Avoid_: Reconnect, log in again
 
 **Incident**:
-A persistent operational condition requiring attention, such as expired authorization or identity corruption. Repeated sync attempts update one incident rather than creating duplicate alerts.
+A persistent operational condition requiring attention, such as expired authorization or identity corruption. Repeated sync attempts update one incident rather than creating duplicate alerts. An incident resolves after a successful sync, when a daily pass finds nothing still blocked, or when its rule is removed, and records which; one that opens again starts a new episode with its own opening time. Resolved incidents are kept as evidence until their Connected Account is deleted, but Activity leads only with open ones.
 _Avoid_: Error message, failure log
 
 **Incident Notification**:

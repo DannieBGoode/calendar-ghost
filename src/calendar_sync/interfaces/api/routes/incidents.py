@@ -33,6 +33,8 @@ def list_incidents(services: Services) -> list[IncidentResponse]:
             summary=incident.summary,
             opened_at=incident.opened_at,
             updated_at=incident.updated_at,
+            resolved_at=incident.resolved_at,
+            resolution=incident.resolution,
         )
         for incident in services.operations.incidents()
     ]

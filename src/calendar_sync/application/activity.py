@@ -160,6 +160,9 @@ class IncidentSummary:
     summary: str
     opened_at: str
     updated_at: str
+    resolved_at: str | None = None
+    resolution: str | None = None
+    """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
 
 
 class OperationsQueries(Protocol):

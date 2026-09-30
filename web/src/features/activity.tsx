@@ -59,9 +59,11 @@ import {
   type ConnectedAccount,
   type DiscoveredCalendar,
   type EventSnapshot,
+  type Incident,
   type Rule,
 } from "@/lib/api"
-import { isPlainLeftClick, type OpenRule } from "@/lib/navigation"
+import { incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents, type IncidentAction } from "@/lib/incidents"
+import { isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { plural } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
@@ -101,7 +103,7 @@ function useActivityLocation() {
 }
 
 
-export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
+export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
   const query = state.query ?? ""
@@ -184,6 +186,7 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
     ),
     rulesLoaded: rules.data !== undefined,
   }
+  const { open: openIncidents, resolved: resolvedIncidents } = splitIncidents(incidents.data)
   const groups = activityRows(runs)
   const visibleEntries = runs.flatMap((run) => run.entries)
   const selectedIndex = selected ? visibleEntries.findIndex((item) => item.id === selected.id) : -1
@@ -210,6 +213,15 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
     update({ ...next, entryId: null }, "replace")
   }
 
+  function followIncident(action: IncidentAction) {
+    if (action.kind === "settings") onViewChange("settings")
+    else if (action.kind === "rule") onOpenRule(action.ruleId)
+    else {
+      update({ ruleId: action.ruleId, show: "blocked", query: "", entryId: null }, "push")
+      requestAnimationFrame(() => document.getElementById("activity-feed-title")?.scrollIntoView({ block: "start" }))
+    }
+  }
+
   function moveSelection(event: KeyboardEvent<HTMLTableElement>) {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
     const target = event.target as HTMLElement
@@ -231,25 +243,8 @@ export function ActivityView({ onOpenRule }: { onOpenRule: OpenRule }) {
   return (
     <div className="page-section">
       <ActivityHeading />
-      {incidents.data.length > 0 && (
-        <section className="workflow activity-section">
-          <div className="section-heading"><div><h2>Incidents</h2><p>Authorization problems, repeated provider failures, and events still blocked at the daily check.</p></div></div>
-          <div className="rule-list">
-            {incidents.data.map((incident) => (
-              <div className="rule-row" key={incident.id}>
-                <div className="rule-details">
-                  <strong>{incident.summary}</strong>
-                  <div className="activity-run-meta">
-                    {incident.rule_id ? <RuleDirection ruleId={incident.rule_id} context={context} /> : <span>Installation</span>}
-                    <span>Updated {formatRunTime(incident.updated_at)}</span>
-                  </div>
-                </div>
-                <Badge variant={incident.state === "open" ? "attention" : "neutral"}>{incident.state === "open" ? "Open" : "Resolved"}</Badge>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      <OpenIncidents incidents={openIncidents} context={context} onAction={followIncident} />
+      <ResolvedIncidents incidents={resolvedIncidents} context={context} />
 
       <section className="workflow activity-section" aria-labelledby="activity-feed-title">
         <div className="section-heading activity-feed-heading">
@@ -766,6 +761,103 @@ function Diagnostic({ label, value }: { label: string; value: string | null }) {
       <dt>{label}</dt>
       <dd><code>{value}</code></dd>
     </div>
+  )
+}
+
+function IncidentRule({ incident, context }: { incident: Incident; context: RuleContext }) {
+  return incident.rule_id ? <RuleDirection ruleId={incident.rule_id} context={context} /> : <span>Installation</span>
+}
+
+/** Only incidents that still need attention lead the page, each with its next step. */
+function OpenIncidents({
+  incidents,
+  context,
+  onAction,
+}: {
+  incidents: Incident[]
+  context: RuleContext
+  onAction: (action: IncidentAction) => void
+}) {
+  if (incidents.length === 0) return null
+  return (
+    <section className="workflow activity-section" aria-labelledby="incidents-title">
+      <div className="section-heading">
+        <div>
+          <h2 id="incidents-title">Incidents</h2>
+          <p>Each stays open until Calendar Sync confirms the problem is gone.</p>
+        </div>
+      </div>
+      <ul className="rule-list">
+        {incidents.map((incident) => {
+          const ruleExists = incident.rule_id !== null && (!context.rulesLoaded || context.rulesById.has(incident.rule_id))
+          const { detail, action } = incidentGuidance(incident, ruleExists)
+          return (
+            <li className="rule-row incident-row" key={incident.id}>
+              <div className="incident-heading">
+                <strong>{incident.summary}</strong>
+                <Badge variant="attention">Open</Badge>
+              </div>
+              <div className="activity-run-meta">
+                <IncidentRule incident={incident} context={context} />
+                <span>Since {formatRunTime(incident.opened_at)}</span>
+                {incident.updated_at !== incident.opened_at && <span>Last seen {formatRunTime(incident.updated_at)}</span>}
+              </div>
+              {detail && <p className="incident-detail">{detail}</p>}
+              {action && (
+                <div>
+                  <Button variant="outline" size="sm" onClick={() => onAction(action)}>
+                    {action.label}
+                    <ArrowRight aria-hidden="true" />
+                  </Button>
+                </div>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+/** Resolved incidents are kept as evidence, out of the way until asked for. */
+function ResolvedIncidents({ incidents, context }: { incidents: Incident[]; context: RuleContext }) {
+  const [open, setOpen] = useState(false)
+  if (incidents.length === 0) return null
+  return (
+    <section className="resolved-incidents" aria-label="Resolved incidents">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="resolved-incidents-toggle"
+        aria-expanded={open}
+        aria-controls="resolved-incidents-list"
+        onClick={() => setOpen((value) => !value)}
+      >
+        {open ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
+        {open ? "Hide resolved incidents" : `Show ${plural(incidents.length, "resolved incident")}`}
+      </Button>
+      {open && (
+        <ul id="resolved-incidents-list" className="rule-list">
+          {incidents.map((incident) => {
+            const resolution = incidentResolution(incident)
+            return (
+              <li className="rule-row incident-row" key={incident.id}>
+                <div className="incident-heading">
+                  <strong>{incident.summary}</strong>
+                  <Badge variant="neutral">Resolved</Badge>
+                </div>
+                <div className="activity-run-meta">
+                  <IncidentRule incident={incident} context={context} />
+                  <span>Opened {formatRunTime(incident.opened_at)}</span>
+                  <span>Closed {formatRunTime(incidentClosedAt(incident))}</span>
+                </div>
+                {resolution && <p className="incident-detail">{resolution}</p>}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }
 

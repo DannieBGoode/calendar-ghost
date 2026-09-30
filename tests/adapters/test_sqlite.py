@@ -170,7 +170,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -393,7 +393,10 @@ def test_rule_removal_cascades_resolves_incidents_and_keeps_audit(tmp_path: Path
         assert uow.cursors.get(rule().id) is None
         assert uow.run_outcomes.latest(rule().id, RunKind.SYNC) is None
     with sqlite3.connect(database) as connection:
-        assert connection.execute("SELECT state FROM incidents").fetchone()[0] == "resolved"
+        assert connection.execute("SELECT state, resolution FROM incidents").fetchone() == (
+            "resolved",
+            "rule_removed",
+        )
         assert connection.execute("SELECT COUNT(*) FROM audit_entries").fetchone()[0] == 1
 
 
@@ -685,6 +688,33 @@ def test_migration_7_indexes_audit_entries_by_run(tmp_path: Path) -> None:
         )
     assert versions.count(7) == 1
     assert "audit_entries_run_id" in plan
+
+
+def test_migration_12_keeps_earlier_resolutions_unknown(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE incidents DROP COLUMN resolution")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 12")
+        connection.execute(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at, resolved_at)
+            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'temporary', 'resolved', 's', 't', 't', 't')
+            """
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+        resolution = connection.execute("SELECT resolution FROM incidents").fetchone()[0]
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute("UPDATE incidents SET resolution = 'fixed'")
+    # The reason an earlier release resolved an Incident was never recorded.
+    assert versions.count(12) == 1
+    assert resolution is None
 
 
 @pytest.mark.parametrize("backend", ["sqlite", "memory"])

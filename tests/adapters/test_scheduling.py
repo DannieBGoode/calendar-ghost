@@ -20,6 +20,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditOutcome,
     IncidentReport,
+    IncidentResolution,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
@@ -662,18 +663,49 @@ def test_incidents_open_once_refresh_while_open_and_reopen_after_resolving(
     incidents = SqliteIncidentRepository(database)
     report = IncidentReport("provider:rule-1", rule().id, "temporary", "first summary")
     opened_at = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
-    later = datetime(2026, 9, 29, 10, 0, tzinfo=UTC)
+    refreshed_at = datetime(2026, 9, 29, 10, 0, tzinfo=UTC)
+    resolved_at = datetime(2026, 9, 29, 11, 0, tzinfo=UTC)
+    reopened_at = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
+    columns = "state, summary, opened_at, updated_at, resolved_at, resolution"
 
     opened = incidents.open(report, opened_at)
-    refreshed = incidents.open(replace(report, summary="second summary"), later)
-    incidents.resolve(report.key, later)
-    reopened = incidents.open(report, later)
+    refreshed = incidents.open(replace(report, summary="second summary"), refreshed_at)
+    with sqlite3.connect(database) as connection:
+        while_open = connection.execute(f"SELECT {columns} FROM incidents").fetchone()
+    incidents.resolve(report.key, resolved_at, IncidentResolution.SYNC_SUCCEEDED)
+    with sqlite3.connect(database) as connection:
+        resolved = connection.execute(f"SELECT {columns} FROM incidents").fetchone()
+    reopened = incidents.open(report, reopened_at)
 
     assert (opened, refreshed, reopened) == (True, False, True)
+    # Refreshing keeps when the episode began; resolving records when and why it ended.
+    assert while_open == (
+        "open",
+        "second summary",
+        opened_at.isoformat(),
+        refreshed_at.isoformat(),
+        None,
+        None,
+    )
+    assert resolved == (
+        "resolved",
+        "second summary",
+        opened_at.isoformat(),
+        resolved_at.isoformat(),
+        resolved_at.isoformat(),
+        "sync_succeeded",
+    )
+    # Reopening starts a new episode, so "Since" never reaches back to an earlier one.
     with sqlite3.connect(database) as connection:
-        rows = connection.execute(
-            "SELECT deduplication_key, state, summary, opened_at, updated_at FROM incidents"
-        ).fetchall()
+        rows = connection.execute(f"SELECT deduplication_key, {columns} FROM incidents").fetchall()
     assert rows == [
-        ("provider:rule-1", "open", "first summary", opened_at.isoformat(), later.isoformat())
+        (
+            "provider:rule-1",
+            "open",
+            "first summary",
+            reopened_at.isoformat(),
+            reopened_at.isoformat(),
+            None,
+            None,
+        )
     ]

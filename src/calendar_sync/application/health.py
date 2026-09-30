@@ -17,6 +17,7 @@ from calendar_sync.application.ports import (
     IncidentNotifications,
     IncidentReport,
     IncidentRepository,
+    IncidentResolution,
     RuleHealthRecords,
     UnitOfWorkFactory,
 )
@@ -138,7 +139,11 @@ class RuleHealth:
     ) -> None:
         """Record a successful run; a daily pass also names the audit entry it began after."""
         self.records.clear_failures(rule.id)
-        self.incidents.resolve(self.policy.provider_key(rule.id), self.clock.now())
+        self.incidents.resolve(
+            self.policy.provider_key(rule.id),
+            self.clock.now(),
+            IncidentResolution.SYNC_SUCCEEDED,
+        )
         if full_pass_floor is not None:
             self.record_full_pass(rule.id, full_pass_floor, full_pass_run)
 
@@ -165,7 +170,9 @@ class RuleHealth:
             return None
         incident = self.policy.after_full_pass(rule_id, persisting)
         if incident is None:
-            self.incidents.resolve(self.policy.blocked_key(rule_id), now)
+            self.incidents.resolve(
+                self.policy.blocked_key(rule_id), now, IncidentResolution.BLOCKS_CLEARED
+            )
             return None
         return (incident, now) if self.incidents.open(incident, now) else None
 
