@@ -55,6 +55,14 @@ _Avoid_: Original event, user event
 An event projection owned by this application and marked with durable origin identity. Reverse rules ignore managed projections, preventing them from becoming sources and creating loops.
 _Avoid_: Synced event, copied event
 
+**Source Observation**:
+The tracked details of a source event a rule last saw: title, time, description, location, guest addresses, recurrence, and conferencing links. It lets the next revision be described. Responses to invitations are not tracked.
+_Avoid_: Cached event, event copy in the database
+
+**Source Change**:
+The tracked fields a new revision of a source event changed since its Source Observation, with their values before and after, recorded on that decision's Audit Entry. It never says who made the change. A revision that changed nothing a rule projects needs no destination write.
+_Avoid_: Event diff, edit history
+
 ## Recurrence
 
 A recurring source event projects as one recurring destination series, never as unrelated single

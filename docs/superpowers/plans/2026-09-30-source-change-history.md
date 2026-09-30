@@ -64,8 +64,7 @@ if expected == actual:
     # A new revision alone is evidence to check, not a reason to write (ADR 0016).
     return SyncDecision(SyncAction.IGNORE, SyncReason.PROJECTION_CURRENT, projection)
 source_changed = (
-    mapping.source_revision != source_event.revision
-    and expected != mapping.projection_fingerprint
+    mapping.source_revision != source_event.revision and expected != mapping.projection_fingerprint
 )
 reason = SyncReason.SOURCE_CHANGED if source_changed else SyncReason.DESTINATION_DRIFT_REPAIRED
 return SyncDecision(SyncAction.UPDATE, reason, projection)
@@ -157,11 +156,19 @@ class SourceChange:
 ```python
 class SourceObservationRepository(Protocol):
     def get(self, rule_id: SyncRuleId, source: EventRef) -> SourceObservation | None: ...
-    def save(self, rule_id: SyncRuleId, source: EventRef, observation: SourceObservation, at: datetime) -> None: ...
-    def forget_stale(self, rule_id: SyncRuleId, source: CalendarEndpoint, ended_before: datetime) -> None: ...
+    def save(
+        self, rule_id: SyncRuleId, source: EventRef, observation: SourceObservation, at: datetime
+    ) -> None: ...
+    def forget_stale(
+        self, rule_id: SyncRuleId, source: CalendarEndpoint, ended_before: datetime
+    ) -> None: ...
+
+
 class AuditRepository(Protocol):
     def append(self, entry: AuditEntry) -> None: ...
     def forget_change_values(self, rule_id: SyncRuleId, before: datetime) -> None: ...
+
+
 SOURCE_CHANGE_RETENTION = timedelta(days=90)
 ```
 

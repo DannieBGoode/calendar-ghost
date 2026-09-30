@@ -113,6 +113,13 @@ an account.
 
 Keep Google client credentials and the installation master key outside the database and repository. Use Docker secrets or a root-readable environment file. Database backups cannot restore connected accounts without the separately backed-up master key.
 
+The database also holds each observed event's description, location, guest addresses, recurrence,
+and conferencing links, sealed with a key derived from the master key, and 90 days of their earlier
+values ([ADR 0016](adr/0016-record-source-changes.md)). A backup kept with the master key can
+reveal them, and a backup keeps values older than 90 days until it rotates. Replacing or losing the
+master key makes that history unreadable: Activity then lists which fields changed without their
+values, and each event's next change is described afresh.
+
 Disconnecting a Google identity from Settings replaces its encrypted credential payload with an
 empty encrypted value. Directional Sync Rules and their mappings remain in SQLite so the same
 identity can be reauthorized and reconciled later.

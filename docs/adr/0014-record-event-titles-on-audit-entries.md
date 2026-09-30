@@ -1,5 +1,8 @@
 # Record the source event's title and time on each Audit Entry
 
+Amended by [ADR 0016](0016-record-source-changes.md), which also keeps sealed descriptions,
+locations, guests, recurrence rules, and conferencing links so Activity can say what changed.
+
 ## Context
 
 Activity named each entry's event by reading it live from Google: one `events.get` per distinct

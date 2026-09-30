@@ -59,7 +59,11 @@ as Drift. The report never implies a repair; see [ADR 0015](adr/0015-reconciliat
 
 A Calendar Event is a transient provider-neutral representation. Its time is either a timezone-aware Timed Interval or an All-Day Range with an exclusive end date. Recurring events retain Event Series, Occurrence, and Occurrence Exception identity. An occurrence's original start is normalized to a UTC instant (timed series) or a date (all-day series) so both calendars identify it identically, and a timed series keeps its IANA time zone so its recurrence expands at the same local times across daylight-saving changes.
 
-Attendees, organizer identity, conferencing links, and attachments do not enter an Event Projection. Event content is processed in memory and excluded from operational persistence, except the source event's title and time recorded on each Audit Entry (ADR 0014).
+Attendees, organizer identity, conferencing links, and attachments do not enter an Event Projection. A Calendar Event carries its guest addresses and conferencing entry points only so a Source Change can be described; `None` means the provider did not return them all. Event content stays out of operational persistence except the source event's title and time on each Audit Entry (ADR 0014), and the sealed Source Observations and Source Change values Activity shows (ADR 0016).
+
+## Source Observations and Source Changes
+
+`domain/changes.py` holds a Source Observation: the tracked details of a source event a rule last saw, namely its title, time, description, location, guests, recurrence, and conferencing entry points. Guests are a set of lower-cased email addresses, so responses to invitations and display names are not tracked. `SourceChange.between` compares two observations and names the fields that differ, in that order; unknown guests or conferencing on either side are not compared. Cancelled events and Managed Projections are not observed.
 
 ## State machines
 
