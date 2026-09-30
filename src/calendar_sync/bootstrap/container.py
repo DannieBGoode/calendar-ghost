@@ -211,7 +211,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             unit_of_work, provider, decisions, fingerprinter, clock, adapters.run_ids, locks
         )
         preview_sync_rule = PreviewSyncRule(
-            unit_of_work, provider, projector, clock, decisions, locks
+            unit_of_work, provider, projector, clock, decisions, locks, incidents=rule_health
         )
         reconcile_now = ReconcileNow(
             execute_sync_rule,

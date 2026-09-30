@@ -489,6 +489,12 @@ class RemovalIncidents(Protocol):
         ...
 
 
+class RecoveryIncidents(Protocol):
+    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+        """Refresh a stopped rule's Incident with the lost authorization its recovery met."""
+        ...
+
+
 class ConnectedAccountState(StrEnum):
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"

@@ -119,9 +119,11 @@ class Incidents:
         self.open_keys: set[str] = set()
         self.events: list[tuple[str, str, datetime]] = []
         self.resolutions: dict[str, IncidentResolution] = {}
+        self.reports: list[IncidentReport] = []
 
     def open(self, incident: IncidentReport, at: datetime) -> bool:
         self.events.append(("open", incident.key, at))
+        self.reports.append(incident)
         newly = incident.key not in self.open_keys
         self.open_keys.add(incident.key)
         return newly
@@ -165,3 +167,21 @@ def test_rule_health_times_everything_by_its_clock_and_notifies_only_new_inciden
         "blocked:rule-1": IncidentResolution.BLOCKS_CLEARED,
     }
     assert {at for *_, at in incidents.events} | set(records.times) == {NOW}
+
+
+def test_recovery_refreshes_the_incident_with_the_account_still_unauthorized() -> None:
+    # The rule stopped on one account; recovering it met the other, which also lost access.
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule(state=SyncRuleState.DEGRADED)
+    records, incidents, notifications = Records(), Incidents(), Notifications()
+    incidents.open_keys.add("provider:rule-1")
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
+    failure = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
+
+    health.recovery_blocked(RULE, failure)
+
+    assert incidents.events == [("open", "provider:rule-1", NOW)]
+    assert incidents.reports[-1].account_id == ACCOUNT
+    # Refreshing an open Incident notifies nobody, and a preview is not a failed sync run.
+    assert notifications.opened == []
+    assert records.failures == {}

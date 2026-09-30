@@ -72,14 +72,17 @@ class RuleHealthPolicy:
         degrade = failure.kind in INTERVENTION_FAILURES
         if not degrade and consecutive_failures < self.threshold:
             return FailureResponse(degrade=False, incident=None)
-        incident = IncidentReport(
+        return FailureResponse(degrade, self.provider_incident(rule_id, failure))
+
+    def provider_incident(self, rule_id: SyncRuleId, failure: ProviderFailure) -> IncidentReport:
+        """The rule's one provider Incident, naming the account whose request failed."""
+        return IncidentReport(
             self.provider_key(rule_id),
             rule_id,
             failure.kind.value,
             self.summary(failure.kind),
             failure.account_id,
         )
-        return FailureResponse(degrade, incident)
 
     def after_full_pass(self, rule_id: SyncRuleId, persisting: int) -> IncidentReport | None:
         """The Incident for blocks a daily pass found again; none resolves an open one."""
@@ -194,6 +197,17 @@ class RuleHealth:
         """Open or refresh the one Incident for a removal stopped by lost authorization."""
         now = self.clock.now()
         incident = self.policy.removal_blocked(rule_id, failure)
+        if self.incidents.open(incident, now):
+            self._notify(incident, now)
+
+    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+        """Refresh a stopped rule's Incident with the lost authorization its recovery met.
+
+        A rule whose calendars belong to two accounts can stop on the first and meet the second
+        only while recovering, so the Incident then names the account still to reauthorize.
+        """
+        now = self.clock.now()
+        incident = self.policy.provider_incident(rule_id, failure)
         if self.incidents.open(incident, now):
             self._notify(incident, now)
 

@@ -25,6 +25,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditOutcome,
     CalendarProvider,
+    IncidentReport,
     RecordedEvent,
     RuleRunOutcome,
     RunKind,
@@ -42,6 +43,7 @@ from calendar_sync.bootstrap.container import (
     compose,
 )
 from calendar_sync.domain.model import (
+    CalendarEndpoint,
     CalendarEvent,
     ConnectedAccountId,
     EventId,
@@ -2306,3 +2308,53 @@ def test_delete_removal_reports_events_left_because_ownership_was_not_proven(
     assert removed.json() == {"deleted": 0, "detached": 0, "conflicts": 1}
     assert after.status_code == 404
     assert calendars.writes == []
+
+
+class DeniedAccountProvider:
+    """Google rejects every request made with this account's credentials."""
+
+    def __init__(self, account: str) -> None:
+        self.account = ConnectedAccountId(account)
+
+    def changes(self, source: CalendarEndpoint, *_args: object) -> None:
+        raise ProviderFailure(
+            ProviderFailureKind.AUTHENTICATION,
+            "synthetic rejection",
+            account_id=source.connected_account_id,
+        )
+
+
+def test_recovering_a_rule_moves_its_incident_to_the_account_still_unauthorized(
+    tmp_path: Path,
+) -> None:
+    # The rule stopped when Google rejected the destination account, which was then
+    # reauthorized; recovering it now meets the source account, which also lost access.
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key()),
+        calendar_provider=cast(CalendarProvider, DeniedAccountProvider("personal-account")),
+    )
+    _connect_accounts(database, "personal-account", "work-account")
+    with adapters.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.DEGRADED))
+        uow.commit()
+    adapters.incidents.open(
+        IncidentReport(
+            "provider:rule-1",
+            SyncRuleId("rule-1"),
+            "authentication",
+            "Google authorization expired",
+            ConnectedAccountId("work-account"),
+        ),
+        datetime(2026, 9, 29, 9, 0, tzinfo=UTC),
+    )
+
+    with TestClient(create_app(container), raise_server_exceptions=False) as client:
+        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        preview = client.post("/api/v1/rules/rule-1/preview")
+        incidents = client.get("/api/v1/incidents").json()
+
+    assert preview.status_code == 500
+    assert [(item["state"], item["account_id"]) for item in incidents] == [
+        ("open", "personal-account")
+    ]
