@@ -163,6 +163,19 @@ def test_changed_source_occurrence_whose_projection_matches_needs_no_write() -> 
     assert decision.reason is SyncReason.OCCURRENCE_CURRENT
 
 
+def test_edited_occurrence_is_drift_when_the_source_change_is_not_projected() -> None:
+    renamed = occurrence(SOURCE, 1, revision="occurrence-revision-2", title="Renamed")
+    projected = ProjectionFingerprinter().fingerprint(
+        EventProjector().project(occurrence(SOURCE, 1), rule())
+    )
+    written = replace(recorded(), projection_fingerprint=projected)
+
+    decision = decide(renamed, busy_instance(title="Edited"), occurrence_mapping=written)
+
+    assert decision.action is SyncAction.UPDATE
+    assert decision.reason is SyncReason.OCCURRENCE_DRIFT_REPAIRED
+
+
 def test_destination_edit_with_unchanged_source_is_drift_repair() -> None:
     edited = busy_instance(title="Edited in destination")
 

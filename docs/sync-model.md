@@ -162,10 +162,10 @@ recurrence, and conferencing links. When a later run sees a new revision, the en
 Source Change: the fields that differ and their values before and after. The first observation,
 and a revision that changed no tracked field, such as a reply to an invitation, record none.
 Decisions Activity does not record never observe, so they cannot absorb a change. Titles and the
-names of changed fields are plain text; the other values are sealed with the History Cipher. The
-daily pass, and any run that lists both calendars in full, clears sealed values older than 90 days
-and forgets observations of single events that ended more than 90 days ago or of calendars the rule
-no longer uses. Activity lists the changed fields, and
+names of changed fields are plain text; the other values are sealed with the History Cipher. Every
+scheduler pass clears sealed values older than 90 days from every rule's entries, including paused
+and removed rules. A run that lists both calendars in full also forgets that rule's observations of
+single events that ended more than 90 days ago or of calendars it no longer uses. Activity lists the changed fields, and
 `GET /api/v1/audit-entries/{id}/changes` shows one entry's values.
 
 Occurrence decisions that found the destination already matching (`occurrence_current`,

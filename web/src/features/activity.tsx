@@ -27,8 +27,9 @@ import {
   describeEntry,
   entryInspection,
   eventCell,
+  CHANGE_VALUES_UNAVAILABLE,
+  changeListing,
   eventLookupFailure,
-  fieldChangeLines,
   formatClockTime,
   formatDay,
   formatEventTime,
@@ -820,12 +821,12 @@ function SourceChangeDetails({ entry, names }: { entry: AuditEntry; names: RuleN
     <section className="activity-changes" aria-label={heading}>
       <h3>{heading}</h3>
       <dl>
-        {change.data.changes.map((item) => {
-          const lines = fieldChangeLines(item)
+        {changeListing(change.data).map((lines) => {
           return (
-            <div key={item.field}>
+            <div key={lines.field}>
               <dt>{lines.label}</dt>
               <dd>
+                {lines.unavailable && <span className="activity-event-status">No longer available</span>}
                 {lines.before !== null && (
                   <span className="activity-change-value">
                     <span className="activity-change-label">Before</span> {lines.before}
@@ -851,11 +852,7 @@ function SourceChangeDetails({ entry, names }: { entry: AuditEntry; names: RuleN
           )
         })}
       </dl>
-      {!change.data.values_available && (
-        <p className="activity-event-status">
-          Earlier values are kept for 90 days, so only the fields that changed are listed.
-        </p>
-      )}
+      {!change.data.values_available && <p className="activity-event-status">{CHANGE_VALUES_UNAVAILABLE}</p>}
     </section>
   )
 }

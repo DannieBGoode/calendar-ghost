@@ -195,11 +195,11 @@ def test_change_values_older_than_the_cutoff_are_forgotten(tmp_path: Path) -> No
         uow.commit()
 
     with factory() as uow:
-        uow.audit.forget_change_values(rule().id, NOW)
+        uow.audit.forget_change_values(NOW)
         uow.commit()
     assert _audit_row(tmp_path)["change_sealed"] is not None
     with factory() as uow:
-        uow.audit.forget_change_values(rule().id, NOW + timedelta(seconds=1))
+        uow.audit.forget_change_values(NOW + timedelta(seconds=1))
         uow.commit()
 
     row = _audit_row(tmp_path)
@@ -247,3 +247,17 @@ def test_removing_a_rule_removes_its_observations(tmp_path: Path) -> None:
 
     with sqlite3.connect(tmp_path / "calendar-sync.db") as connection:
         assert connection.execute("SELECT COUNT(*) FROM source_observations").fetchone()[0] == 0
+
+
+def test_change_values_of_a_removed_rule_are_forgotten_too(tmp_path: Path) -> None:
+    factory = _factory(tmp_path)
+    with factory() as uow:
+        uow.audit.append(_entry(_change()))
+        uow.rules.remove(rule().id)
+        uow.commit()
+
+    with factory() as uow:
+        uow.audit.forget_change_values(NOW + timedelta(seconds=1))
+        uow.commit()
+
+    assert _audit_row(tmp_path)["change_sealed"] is None

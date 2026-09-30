@@ -136,8 +136,6 @@ def test_a_full_listing_forgets_old_change_values_and_ended_events() -> None:
 
     sync_use_case(factory, calendars).execute(rule().id, full=True)
 
-    assert factory.state.change_values_forgotten_before[rule().id] == (
-        NOW - SOURCE_CHANGE_RETENTION
-    )
+    assert factory.state.change_values_forgotten_before == NOW - SOURCE_CHANGE_RETENTION
     assert (rule().id, ended.reference) not in factory.state.observations
     assert (rule().id, event().reference) in factory.state.observations

@@ -1,5 +1,12 @@
 import type { ActivityShow } from "@/lib/activity-location"
-import { ApiError, type ActivityCategory, type AuditEntry, type FieldChange, type RecordedEvent } from "@/lib/api"
+import {
+  ApiError,
+  type ActivityCategory,
+  type AuditEntry,
+  type FieldChange,
+  type RecordedEvent,
+  type SourceChange,
+} from "@/lib/api"
 
 /**
  * What Calendar Sync observed (`trigger`) and what it did about it (`effect`), never who caused
@@ -247,24 +254,47 @@ export function fieldLabel(field: string): string {
 
 /** One changed field as the entry panel lists it: text before and after, or what a list gained and lost. */
 export type FieldChangeLines = {
+  field: string
   label: string
   before: string | null
   after: string | null
   added: string[]
   removed: string[]
+  /** The field changed, but its values expired or cannot be read with the current master key. */
+  unavailable: boolean
 }
 
 export function fieldChangeLines(change: FieldChange): FieldChangeLines {
   const text = (value: string | null) => (value === null ? null : value || "(empty)")
   const before = change.before_time ? formatEventTime(change.before_time) : text(change.before)
   const after = change.after_time ? formatEventTime(change.after_time) : text(change.after)
-  return { label: fieldLabel(change.field), before, after, added: change.added, removed: change.removed }
+  return {
+    field: change.field,
+    label: fieldLabel(change.field),
+    before,
+    after,
+    added: change.added,
+    removed: change.removed,
+    unavailable: false,
+  }
 }
+
+/** Every field the change touched, in order, with values where they are still kept. */
+export function changeListing(change: SourceChange): FieldChangeLines[] {
+  const known = new Map(change.changes.map((item) => [item.field, fieldChangeLines(item)]))
+  return change.fields.map(
+    (field) =>
+      known.get(field) ?? { field, label: fieldLabel(field), before: null, after: null, added: [], removed: [], unavailable: true },
+  )
+}
+
+export const CHANGE_VALUES_UNAVAILABLE =
+  "Some values are no longer available. They are kept for 90 days, and cannot be read after the installation master key changes."
 
 // Decisions a source change can explain: an update, or a check that found nothing to write.
 const SOURCE_CHANGE_REASONS = new Set(["source_changed", "occurrence_changed", "projection_current", "occurrence_current"])
 const UNCHANGED_BY_SOURCE_CHANGE =
-  "The event changed in {source}, but {destination} shows none of what changed, so nothing was written."
+  "The event changed in {source}, and {destination} already matched it, so nothing was written for this entry."
 
 function changedFields(entry: Partial<Pick<AuditEntry, "reason" | "changed_fields">>): string[] {
   if (!entry.reason || !SOURCE_CHANGE_REASONS.has(entry.reason)) return []

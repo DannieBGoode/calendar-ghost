@@ -255,18 +255,23 @@ class SyncDecisionService:
             return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
 
         projection = self._projector.project(source_occurrence, rule)
-        source_unchanged = (
-            occurrence_mapping is not None
-            and occurrence_mapping.source_revision == source_occurrence.revision
+        expected = self._fingerprinter.fingerprint(projection)
+        # As for a series, only a projection the source now calls for differently than the one
+        # last written is a source change (ADR 0016).
+        source_changed = not destination_reported and (
+            occurrence_mapping is None
+            or (
+                occurrence_mapping.source_revision != source_occurrence.revision
+                and occurrence_mapping.projection_fingerprint != expected
+            )
         )
         changed = (
-            SyncReason.OCCURRENCE_DRIFT_REPAIRED
-            if source_unchanged or destination_reported
-            else SyncReason.OCCURRENCE_CHANGED
+            SyncReason.OCCURRENCE_CHANGED
+            if source_changed
+            else SyncReason.OCCURRENCE_DRIFT_REPAIRED
         )
         if destination_occurrence.status is EventStatus.CANCELLED:
             return SyncDecision(SyncAction.UPDATE, changed, projection)
-        expected = self._fingerprinter.fingerprint(projection)
         actual = self._fingerprinter.fingerprint(self.as_projection(destination_occurrence))
         if expected == actual:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CURRENT, projection)

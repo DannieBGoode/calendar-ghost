@@ -257,7 +257,7 @@ class ExecuteSyncRule:
         if feeds.listed_in_full:
             # Retention runs with the daily pass, which lists every event still observed.
             cutoff = self.clock.now() - SOURCE_CHANGE_RETENTION
-            uow.audit.forget_change_values(rule.id, cutoff)
+            uow.audit.forget_change_values(cutoff)
             uow.observations.forget_stale(rule.id, rule.source, cutoff)
         with self.locks.for_writes(rule.id):
             if run.reproject:

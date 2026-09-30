@@ -5,6 +5,7 @@ import {
   describeEntry,
   entryInspection,
   eventLookupFailure,
+  changeListing,
   fieldChangeLines,
   fieldLabel,
   formatRunTime,
@@ -239,7 +240,7 @@ describe("source changes", () => {
 
     expect(whatHappened(unchanged, names).text).toBe("Guests changed in Personal → already up to date")
     expect(describeEntry(unchanged, names).explanation).toBe(
-      "The event changed in Personal, but Work shows none of what changed, so nothing was written.",
+      "The event changed in Personal, and Work already matched it, so nothing was written for this entry.",
     )
   })
 
@@ -272,7 +273,7 @@ describe("source changes", () => {
   it("shows a changed field's values before and after, and what a list gained and lost", () => {
     const none = { before: null, after: null, before_time: null, after_time: null, added: [], removed: [] }
 
-    expect(fieldChangeLines({ ...none, field: "description", before: "", after: "Dial in: 1234#" })).toEqual({
+    expect(fieldChangeLines({ ...none, field: "description", before: "", after: "Dial in: 1234#" })).toMatchObject({
       label: "Description",
       before: "(empty)",
       after: "Dial in: 1234#",
@@ -295,6 +296,22 @@ describe("source changes", () => {
     expect(moved.before).toMatch(/all day$/)
     expect(moved.after).toMatch(/all day$/)
     expect(moved.before).not.toBe(moved.after)
+  })
+
+  it("still lists every changed field once its values are no longer available", () => {
+    const listing = changeListing({
+      fields: ["title", "description", "guests"],
+      values_available: false,
+      changes: [
+        { field: "title", before: "Planning", after: "Kick-off", before_time: null, after_time: null, added: [], removed: [] },
+      ],
+    })
+
+    expect(listing.map((line) => [line.label, line.unavailable])).toEqual([
+      ["Title", false],
+      ["Description", true],
+      ["Guests", true],
+    ])
   })
 
   it("labels every tracked field", () => {

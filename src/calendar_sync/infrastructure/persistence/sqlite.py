@@ -490,13 +490,13 @@ class SqliteAuditRepository:
             ),
         )
 
-    def forget_change_values(self, rule_id: SyncRuleId, before: datetime) -> None:
+    def forget_change_values(self, before: datetime) -> None:
         self._connection.execute(
             """
             UPDATE audit_entries SET change_sealed = NULL
-            WHERE rule_id = ? AND change_sealed IS NOT NULL AND occurred_at < ?
+            WHERE change_sealed IS NOT NULL AND occurred_at < ?
             """,
-            (rule_id.value, before.isoformat()),
+            (before.isoformat(),),
         )
 
 

@@ -43,10 +43,11 @@ out persisting descriptions, locations, attendees, and conferencing data.
   Master Key for this purpose only, bound to the rule and source event as associated data. Values
   are stored as Google returned them, without redaction, so descriptions keep any meeting links,
   dial-in codes, or passwords they contain.
-- Sealed change values are kept for 90 days. The daily full pass clears older values from Audit
-  Entries, keeping the names of the fields that changed and the titles. It also deletes
-  observations of single events that ended more than 90 days ago and of calendars the rule no
-  longer uses. Observations are deleted with their rule.
+- Sealed change values are kept for 90 days. Every scheduler pass clears older values from the
+  Audit Entries of every rule, including paused and removed rules, keeping the names of the fields
+  that changed and the titles. A rule's full listing deletes its observations of single events that
+  ended more than 90 days ago and of calendars it no longer uses. Observations are deleted with
+  their rule.
 - Activity lists which fields changed. Opening an entry shows the values before and after, read and
   unsealed on request. Values that expired or cannot be unsealed, for example after the master key
   was replaced, are reported as no longer available.

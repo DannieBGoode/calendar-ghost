@@ -294,10 +294,11 @@ class AuditEntry:
 class AuditRepository(Protocol):
     def append(self, entry: AuditEntry) -> None: ...
 
-    def forget_change_values(self, rule_id: SyncRuleId, before: datetime) -> None:
-        """Discard the values of the rule's Source Changes recorded before `before`.
+    def forget_change_values(self, before: datetime) -> None:
+        """Discard the values of every Source Change recorded before `before`.
 
-        The changed fields and titles stay, so Activity still says what changed.
+        Every rule's, including paused and removed rules'. The changed fields and titles stay, so
+        Activity still says what changed.
         """
         ...
 

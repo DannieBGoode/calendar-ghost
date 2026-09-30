@@ -20,4 +20,4 @@ ALTER TABLE audit_entries ADD COLUMN change_fields TEXT;
 ALTER TABLE audit_entries ADD COLUMN change_title_before TEXT;
 ALTER TABLE audit_entries ADD COLUMN change_sealed BLOB;
 CREATE INDEX IF NOT EXISTS audit_entries_change_values
-ON audit_entries(rule_id, occurred_at) WHERE change_sealed IS NOT NULL;
+ON audit_entries(occurred_at) WHERE change_sealed IS NOT NULL;

@@ -14,6 +14,7 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.health import RunHealth
 from calendar_sync.application.ports import Clock, RuleRunOutcome, RunKind, UnitOfWorkFactory
 from calendar_sync.application.retry import with_retries
+from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import SyncRule, SyncRuleState
 
@@ -47,8 +48,12 @@ class SyncScheduler:
             await asyncio.sleep(self._interval_seconds)
 
     async def run_once(self) -> None:
-        today = self._clock.now().astimezone(UTC).date()
+        now = self._clock.now()
+        today = now.astimezone(UTC).date()
         with self._unit_of_work() as uow:
+            # Values of paused and removed rules expire too, although no run of theirs does it.
+            uow.audit.forget_change_values(now - SOURCE_CHANGE_RETENTION)
+            uow.commit()
             # Each rule's daily full pass is due from its own last one, so a restart or another
             # rule's failure never re-lists calendars that already completed today's pass.
             due = tuple(

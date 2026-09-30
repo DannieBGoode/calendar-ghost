@@ -56,7 +56,7 @@ class MemoryState:
     observations: dict[tuple[SyncRuleId, EventRef], tuple[SourceObservation, datetime]] = field(
         default_factory=dict
     )
-    change_values_forgotten_before: dict[SyncRuleId, datetime] = field(default_factory=dict)
+    change_values_forgotten_before: datetime | None = None
     """Entries keep their changes in memory; this records the cutoff SQLite would apply."""
 
 
@@ -242,8 +242,8 @@ class InMemoryAuditRepository:
     def append(self, entry: AuditEntry) -> None:
         self._state.audit.append(entry)
 
-    def forget_change_values(self, rule_id: SyncRuleId, before: datetime) -> None:
-        self._state.change_values_forgotten_before[rule_id] = before
+    def forget_change_values(self, before: datetime) -> None:
+        self._state.change_values_forgotten_before = before
 
 
 class InMemorySourceObservationRepository:
