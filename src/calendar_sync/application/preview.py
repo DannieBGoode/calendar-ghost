@@ -4,11 +4,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from calendar_sync.application.errors import RuleNotExecutable
+from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     CalendarReader,
     Clock,
+    RecoveryIncidents,
     RulePreviewSummary,
     UnitOfWork,
     UnitOfWorkFactory,
@@ -78,6 +79,7 @@ class PreviewSyncRule:
     clock: Clock
     decisions: SyncDecisionService
     locks: RuleLocks = field(default_factory=RuleLocks)
+    incidents: RecoveryIncidents | None = None
 
     def execute(self, rule_id: SyncRuleId) -> RulePreview:
         with self.locks.working(rule_id, RuleWork(RuleWorkKind.PREVIEW, self.clock.now())):
@@ -85,13 +87,15 @@ class PreviewSyncRule:
 
     def _execute(self, rule_id: SyncRuleId) -> RulePreview:
         rule = self._previewable_rule(rule_id)
-        cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
-        scope = self._classify(rule, self.provider.changes(rule.source, None, cutoff).events)
-        with self.unit_of_work() as uow:
-            sample = tuple(
-                self._item(uow, rule, event, parent)
-                for event, parent in scope.eligible[:_SAMPLE_SIZE]
-            )
+        try:
+            scope, sample = self._read(rule)
+        except ProviderFailure as failure:
+            # Previewing is how a stopped rule recovers; lost authorization it meets on either
+            # account keeps the Incident pointing at the account still to reauthorize.
+            recovering = rule.state is SyncRuleState.DEGRADED
+            if recovering and failure.requires_authorization and self.incidents is not None:
+                self.incidents.recovery_blocked(rule.id, failure)
+            raise
         with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
             current = uow.rules.get(rule.id)
             if current is None or current.material_signature != rule.material_signature:
@@ -117,6 +121,16 @@ class PreviewSyncRule:
             recurring_series=scope.series_count,
             occurrence_changes=scope.occurrence_changes,
         )
+
+    def _read(self, rule: SyncRule) -> tuple[_PreviewScope, tuple[PreviewItem, ...]]:
+        cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
+        scope = self._classify(rule, self.provider.changes(rule.source, None, cutoff).events)
+        with self.unit_of_work() as uow:
+            sample = tuple(
+                self._item(uow, rule, event, parent)
+                for event, parent in scope.eligible[:_SAMPLE_SIZE]
+            )
+        return scope, sample
 
     def _previewable_rule(self, rule_id: SyncRuleId) -> SyncRule:
         with self.unit_of_work() as uow:

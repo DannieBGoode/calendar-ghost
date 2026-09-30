@@ -1,4 +1,4 @@
-"""SQLite keeps Source Observations and Source Change values sealed (ADR 0016)."""
+"""SQLite keeps Source Observations and Source Change values sealed (ADR 0017)."""
 
 import json
 import sqlite3

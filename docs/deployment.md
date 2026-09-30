@@ -78,6 +78,19 @@ rewritten: until a rule's first daily pass after upgrading, all of its blocks th
 latest decision about their event count as open. Rolling back works with the same database: earlier
 releases ignore the table and do not report blocked events on the Overview.
 
+Migration 12 adds the `resolution` column to `incidents`, recording why each Incident resolved: a
+successful sync, a daily pass that found nothing still blocked, or the removal of its rule.
+Incidents resolved earlier keep no resolution, because the reason was not recorded, and Activity
+shows them only as resolved. Rolling back works with the same database: earlier releases ignore
+the column. An Incident an earlier release reopens keeps its stale resolution until it resolves
+again, which Activity never shows while the Incident is open.
+
+Migration 13 adds the `account_id` column to `incidents`, naming the Connected Account whose
+failure opened or last refreshed each Incident. Activity offers to recover a rule after an
+authorization failure only once that account was reauthorized. Incidents recorded earlier keep no
+account, and for them Activity waits until every account of the rule was reauthorized after the
+failure. Rolling back works with the same database: earlier releases ignore the column.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.
@@ -115,7 +128,7 @@ Keep Google client credentials and the installation master key outside the datab
 
 The database also holds each observed event's description, location, guest addresses, recurrence,
 and conferencing links, sealed with a key derived from the master key, and 90 days of their earlier
-values ([ADR 0016](adr/0016-record-source-changes.md)). A backup kept with the master key can
+values ([ADR 0017](adr/0017-record-source-changes.md)). A backup kept with the master key can
 reveal them, and a backup keeps values older than 90 days until it rotates. Replacing or losing the
 master key makes that history unreadable: Activity then lists which fields changed without their
 values, and each event's next change is described afresh.

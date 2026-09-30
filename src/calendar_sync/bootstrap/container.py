@@ -154,7 +154,7 @@ def build_adapters(settings: Settings) -> Adapters:
     # One clock and one identifier source, shared by every adapter and use case.
     clock = SystemClock()
     ids = UuidIdGenerator()
-    # Source Change values are sealed with a key derived from the master key (ADR 0016).
+    # Source Change values are sealed with a key derived from the master key (ADR 0017).
     history = HistoryCipher(settings.master_key) if settings.master_key else None
     adapters = Adapters(
         unit_of_work=SqliteUnitOfWorkFactory(settings.database_path, clock, history),
@@ -217,7 +217,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             unit_of_work, provider, decisions, fingerprinter, clock, adapters.run_ids, locks
         )
         preview_sync_rule = PreviewSyncRule(
-            unit_of_work, provider, projector, clock, decisions, locks
+            unit_of_work, provider, projector, clock, decisions, locks, incidents=rule_health
         )
         reconcile_now = ReconcileNow(
             execute_sync_rule,

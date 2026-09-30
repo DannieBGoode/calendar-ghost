@@ -1,4 +1,4 @@
-"""SQLite storage of Source Observations and Source Change values, sealed at rest (ADR 0016)."""
+"""SQLite storage of Source Observations and Source Change values, sealed at rest (ADR 0017)."""
 
 from __future__ import annotations
 

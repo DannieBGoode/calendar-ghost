@@ -1,5 +1,5 @@
 -- The tracked details of each source event a rule last observed, so the next revision's changes
--- can be described (ADR 0016). Titles are plain text; every other detail is sealed.
+-- can be described (ADR 0017). Titles are plain text; every other detail is sealed.
 CREATE TABLE IF NOT EXISTS source_observations (
     rule_id TEXT NOT NULL REFERENCES sync_rules(id) ON DELETE CASCADE,
     source_account_id TEXT NOT NULL,

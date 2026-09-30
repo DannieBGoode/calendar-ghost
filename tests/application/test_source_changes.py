@@ -1,4 +1,4 @@
-"""Runs record what changed in a source event on the decision's Audit Entry (ADR 0016)."""
+"""Runs record what changed in a source event on the decision's Audit Entry (ADR 0017)."""
 
 from __future__ import annotations
 

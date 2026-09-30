@@ -1,7 +1,7 @@
 """Read-only questions the Web API asks about recorded Activity and operational state.
 
 Results carry identities, reason codes, and the source event's title and time (ADR 0014). An
-entry's Source Change values are unsealed only when one entry's change is asked for (ADR 0016).
+entry's Source Change values are unsealed only when one entry's change is asked for (ADR 0017).
 """
 
 from __future__ import annotations
@@ -188,6 +188,11 @@ class IncidentSummary:
     summary: str
     opened_at: str
     updated_at: str
+    resolved_at: str | None = None
+    resolution: str | None = None
+    """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
+    account_id: str | None = None
+    """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
 
 
 class OperationsQueries(Protocol):

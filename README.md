@@ -190,7 +190,7 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   events ([ADR 0014](docs/adr/0014-record-event-titles-on-audit-entries.md)). To say what changed
   in an event, SQLite also keeps its latest description, location, guest addresses, recurrence,
   and conferencing links, and 90 days of their earlier values, sealed with a key derived from the
-  installation master key ([ADR 0016](docs/adr/0016-record-source-changes.md)). Values are stored
+  installation master key ([ADR 0017](docs/adr/0017-record-source-changes.md)). Values are stored
   as Google returns them, including any meeting codes in descriptions. Treat the database and its
   backups as sensitive; together with the master key they reveal those details.
 - Mappings retain provider IDs, revisions, and a non-reversible projection fingerprint.

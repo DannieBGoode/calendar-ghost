@@ -53,13 +53,13 @@ A Conflict carries a `SyncReason`: `mapping_inconsistent` for a mapping outside 
 relationship or whose source is itself a managed projection, `source_unverifiable` for a mapping
 whose source cannot be read, and `projection_unmapped` for a managed event with no mapping. A report
 is consistent only when both are empty, so a Conflict leaves the rule inconsistent without counting
-as Drift. The report never implies a repair; see [ADR 0015](adr/0015-reconciliation-reports-conflicts-apart-from-drift.md).
+as Drift. It covers only mappings whose source or projection reaches the rule's sync window ([ADR 0016](adr/0016-reconcile-within-the-sync-window.md)), and `checked_mappings` counts those. The report never implies a repair; see [ADR 0015](adr/0015-reconciliation-reports-conflicts-apart-from-drift.md).
 
 ## Calendar Event values
 
 A Calendar Event is a transient provider-neutral representation. Its time is either a timezone-aware Timed Interval or an All-Day Range with an exclusive end date. Recurring events retain Event Series, Occurrence, and Occurrence Exception identity. An occurrence's original start is normalized to a UTC instant (timed series) or a date (all-day series) so both calendars identify it identically, and a timed series keeps its IANA time zone so its recurrence expands at the same local times across daylight-saving changes.
 
-Attendees, organizer identity, conferencing links, and attachments do not enter an Event Projection. A Calendar Event carries its guest addresses and conferencing entry points only so a Source Change can be described; `None` means the provider did not return them all. Event content stays out of operational persistence except the source event's title and time on each Audit Entry (ADR 0014), and the sealed Source Observations and Source Change values Activity shows (ADR 0016).
+Attendees, organizer identity, conferencing links, and attachments do not enter an Event Projection. A Calendar Event carries its guest addresses and conferencing entry points only so a Source Change can be described; `None` means the provider did not return them all. Event content stays out of operational persistence except the source event's title and time on each Audit Entry (ADR 0014), and the sealed Source Observations and Source Change values Activity shows (ADR 0017).
 
 ## Source Observations and Source Changes
 

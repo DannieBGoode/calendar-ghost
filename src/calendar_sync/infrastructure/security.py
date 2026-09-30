@@ -54,7 +54,7 @@ class CredentialCipher:
 
 
 class HistoryCipher:
-    """Seals Source Observations and Source Change values (ADR 0016).
+    """Seals Source Observations and Source Change values (ADR 0017).
 
     Its key is derived from the Installation Master Key for this purpose only, and each value is
     bound to the record it belongs to, so a value copied to another event does not open.

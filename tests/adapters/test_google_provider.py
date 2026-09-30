@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
+from google.auth.exceptions import RefreshError, TransportError
 
 from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
@@ -30,7 +31,7 @@ from calendar_sync.infrastructure.google.translation import (
     SOURCE_CALENDAR_PROPERTY,
     SOURCE_EVENT_PROPERTY,
 )
-from tests.helpers import endpoint, event
+from tests.helpers import NOW, endpoint, event
 
 
 class GoogleResponse(dict[str, str]):
@@ -294,13 +295,35 @@ def test_managed_event_listing_paginates() -> None:
     ]
     provider = provider_with_events_api(events_api)
 
-    managed = provider.managed_events(endpoint("work", "destination"), SyncRuleId("rule-1"))
+    managed = provider.managed_events(
+        endpoint("work", "destination"), SyncRuleId("rule-1"), NOW - timedelta(days=30)
+    )
 
     assert [item.reference.event_id.value for item in managed] == [
         "managed-one",
         "managed-two",
     ]
     assert events_api.list.call_args_list[1].kwargs["pageToken"] == "page-2"
+    # Only projections that reach the sync window are listed.
+    assert events_api.list.call_args.kwargs["timeMin"] == (NOW - timedelta(days=30)).isoformat()
+
+
+def test_window_listing_includes_cancellations_and_reads_no_sync_token() -> None:
+    events_api = MagicMock()
+    events_api.list.side_effect = [
+        request_returning({"items": [google_event_payload("one")], "nextPageToken": "page-2"}),
+        # A listing that never asks for a synchronization token need not receive one.
+        request_returning({"items": [google_event_payload("two")]}),
+    ]
+    provider = provider_with_events_api(events_api)
+
+    listed = provider.list_events(endpoint("personal", "source"), NOW - timedelta(days=30))
+
+    assert [item.reference.event_id.value for item in listed] == ["one", "two"]
+    first = events_api.list.call_args_list[0].kwargs
+    assert first["showDeleted"] is True
+    assert first["timeMin"] == (NOW - timedelta(days=30)).isoformat()
+    assert "syncToken" not in first
 
 
 def _managed_payload(event_id: str, source_event_id: str) -> dict[str, object]:
@@ -669,6 +692,59 @@ def test_has_live_occurrences_classifies_other_failures_like_any_request(
         provider.has_live_occurrences(SERIES, include_all_day=True)
 
     assert failure.value.kind is kind
+    assert failure.value.account_id == DESTINATION.connected_account_id
+
+
+@pytest.mark.parametrize(
+    ("error", "kind"),
+    [
+        # Google revoked the grant or it expired: only reauthorizing the account recovers.
+        (
+            RefreshError("invalid_grant: Token has been expired or revoked."),  # type: ignore[no-untyped-call]
+            ProviderFailureKind.AUTHENTICATION,
+        ),
+        (
+            RefreshError("token endpoint returned 503", retryable=True),  # type: ignore[no-untyped-call]
+            ProviderFailureKind.TEMPORARY,
+        ),
+        (
+            TransportError("connection reset"),  # type: ignore[no-untyped-call]
+            ProviderFailureKind.TEMPORARY,
+        ),
+    ],
+)
+def test_access_token_refresh_failures_are_classified_without_a_status(
+    error: Exception, kind: ProviderFailureKind
+) -> None:
+    request = MagicMock()
+    request.execute.side_effect = error
+    events_api = MagicMock()
+    events_api.list.return_value = request
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.find_projection(DESTINATION, "operation-key")
+
+    assert failure.value.kind is kind
+    assert failure.value.account_id == DESTINATION.connected_account_id
+    # The token endpoint's response is not repeated into incidents or logs.
+    assert str(error) not in failure.value.detail
+
+
+def test_failures_name_the_account_whose_request_google_rejected() -> None:
+    # A rule's calendars may belong to different accounts; only the rejected one needs renewing.
+    source = endpoint("personal-account", "personal-calendar")
+    events_api = MagicMock()
+    events_api.list.return_value = request_raising(401)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as source_failure:
+        provider.changes(source, None, NOW)
+    with pytest.raises(ProviderFailure) as destination_failure:
+        provider.find_projection(DESTINATION, "operation-key")
+
+    assert source_failure.value.account_id == source.connected_account_id
+    assert destination_failure.value.account_id == DESTINATION.connected_account_id
 
 
 def test_occurrence_exceptions_count_changed_length_and_content_but_not_regular_instances() -> None:

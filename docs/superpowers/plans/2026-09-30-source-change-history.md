@@ -14,7 +14,7 @@ derived from the Installation Master Key, keeps values 90 days, and Activity uns
 **Tech Stack:** Python 3.12, FastAPI, SQLite, `cryptography` (AESGCM, HKDF), React + TypeScript +
 Vite, pytest, vitest.
 
-**Spec:** `docs/adr/0016-record-source-changes.md`
+**Spec:** `docs/adr/0017-record-source-changes.md`
 
 ## Global Constraints
 
@@ -61,7 +61,7 @@ Vite, pytest, vitest.
 expected = self._fingerprinter.fingerprint(projection)
 actual = self._fingerprinter.fingerprint(self.as_projection(actual_destination))
 if expected == actual:
-    # A new revision alone is evidence to check, not a reason to write (ADR 0016).
+    # A new revision alone is evidence to check, not a reason to write (ADR 0017).
     return SyncDecision(SyncAction.IGNORE, SyncReason.PROJECTION_CURRENT, projection)
 source_changed = (
     mapping.source_revision != source_event.revision and expected != mapping.projection_fingerprint
@@ -252,5 +252,5 @@ ON audit_entries(rule_id, occurred_at) WHERE change_sealed IS NOT NULL;
 
 **Files:** `AGENTS.md`, `CONTEXT.md`, `docs/sync-model.md`, `docs/deployment.md`, `docs/domain-model.md`, `docs/adr/0014-record-event-titles-on-audit-entries.md`, `CHANGELOG.md`, `README.md` (if it states the old invariant)
 
-- [ ] Update the invariant, glossary (**Source Observation**, **Source Change**), audit evidence, backup and master-key consequences, retention; mark ADR 0014 as amended by ADR 0016; CHANGELOG entries.
+- [ ] Update the invariant, glossary (**Source Observation**, **Source Change**), audit evidence, backup and master-key consequences, retention; mark ADR 0014 as amended by ADR 0017; CHANGELOG entries.
 - [ ] Run every backend and frontend gate from AGENTS.md; commit `docs: record source changes and projection-only writes`.

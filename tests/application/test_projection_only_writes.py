@@ -1,4 +1,4 @@
-"""A new source revision writes to the destination only when the projection changes (ADR 0016)."""
+"""A new source revision writes to the destination only when the projection changes (ADR 0017)."""
 
 from __future__ import annotations
 

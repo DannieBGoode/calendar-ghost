@@ -39,7 +39,7 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
   reconciliation.
 - Event content never reaches logs, incidents, or notifications. SQLite keeps only what Activity
   needs: each Audit Entry's source event title, time, recurrence, and cancellation (ADR 0014), and
-  Source Observations and Source Change values (ADR 0016). Titles are plain text; descriptions,
+  Source Observations and Source Change values (ADR 0017). Titles are plain text; descriptions,
   locations, guests, recurrence rules, and conferencing data are persisted only sealed with the
   History Cipher, and Source Change values are kept for 90 days.
 - A Sync Run writes to the destination only when the projection derived from the source differs

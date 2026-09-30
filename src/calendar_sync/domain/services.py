@@ -148,7 +148,7 @@ class SyncDecisionService:
         expected = self._fingerprinter.fingerprint(projection)
         actual = self._fingerprinter.fingerprint(self.as_projection(actual_destination))
         if expected == actual:
-            # A new source revision is evidence to check, not a reason to write (ADR 0016).
+            # A new source revision is evidence to check, not a reason to write (ADR 0017).
             return SyncDecision(SyncAction.IGNORE, SyncReason.PROJECTION_CURRENT, projection)
         # Only a projection the source now calls for differently is a source change; a revision
         # whose projection is the one last written, such as a reply to an invitation, left the
@@ -257,7 +257,7 @@ class SyncDecisionService:
         projection = self._projector.project(source_occurrence, rule)
         expected = self._fingerprinter.fingerprint(projection)
         # As for a series, only a projection the source now calls for differently than the one
-        # last written is a source change (ADR 0016).
+        # last written is a source change (ADR 0017).
         source_changed = not destination_reported and (
             occurrence_mapping is None
             or (

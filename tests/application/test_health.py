@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 
 import pytest
@@ -10,13 +11,14 @@ from calendar_sync.application.health import (
     RuleHealth,
     RuleHealthPolicy,
 )
-from calendar_sync.application.ports import IncidentReport
-from calendar_sync.domain.model import SyncRuleId, SyncRuleState
+from calendar_sync.application.ports import IncidentReport, IncidentResolution
+from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule
 
 RULE = SyncRuleId("rule-1")
+ACCOUNT = ConnectedAccountId("work-account")
 INTERVENTION = (
     ProviderFailureKind.AUTHENTICATION,
     ProviderFailureKind.AUTHORIZATION,
@@ -34,11 +36,12 @@ def _failure(kind: ProviderFailureKind) -> ProviderFailure:
 def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
     kind: ProviderFailureKind,
 ) -> None:
-    response = RuleHealthPolicy().after_failure(RULE, _failure(kind), consecutive_failures=1)
+    failure = replace(_failure(kind), account_id=ACCOUNT)
+    response = RuleHealthPolicy().after_failure(RULE, failure, consecutive_failures=1)
 
     assert response.degrade
     assert response.incident == IncidentReport(
-        f"provider:{RULE.value}", RULE, kind.value, RuleHealthPolicy.summary(kind)
+        f"provider:{RULE.value}", RULE, kind.value, RuleHealthPolicy.summary(kind), ACCOUNT
     )
 
 
@@ -76,13 +79,15 @@ def test_persisting_blocks_open_one_incident_that_names_how_many() -> None:
 
 
 def test_a_blocked_removal_names_its_cause() -> None:
-    incident = RuleHealthPolicy().removal_blocked(RULE, _failure(ProviderFailureKind.AUTHORIZATION))
+    failure = replace(_failure(ProviderFailureKind.AUTHORIZATION), account_id=ACCOUNT)
+    incident = RuleHealthPolicy().removal_blocked(RULE, failure)
 
     assert incident == IncidentReport(
         f"removal:{RULE.value}",
         RULE,
         "authorization",
         "Rule Removal stopped: Google calendar access was denied",
+        ACCOUNT,
     )
 
 
@@ -113,15 +118,19 @@ class Incidents:
     def __init__(self) -> None:
         self.open_keys: set[str] = set()
         self.events: list[tuple[str, str, datetime]] = []
+        self.resolutions: dict[str, IncidentResolution] = {}
+        self.reports: list[IncidentReport] = []
 
     def open(self, incident: IncidentReport, at: datetime) -> bool:
         self.events.append(("open", incident.key, at))
+        self.reports.append(incident)
         newly = incident.key not in self.open_keys
         self.open_keys.add(incident.key)
         return newly
 
-    def resolve(self, key: str, at: datetime) -> None:
+    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
         self.events.append(("resolve", key, at))
+        self.resolutions[key] = resolution
         self.open_keys.discard(key)
 
 
@@ -153,4 +162,26 @@ def test_rule_health_times_everything_by_its_clock_and_notifies_only_new_inciden
         ("resolve", "provider:rule-1"),
         ("resolve", "blocked:rule-1"),
     ]
+    assert incidents.resolutions == {
+        "provider:rule-1": IncidentResolution.SYNC_SUCCEEDED,
+        "blocked:rule-1": IncidentResolution.BLOCKS_CLEARED,
+    }
     assert {at for *_, at in incidents.events} | set(records.times) == {NOW}
+
+
+def test_recovery_refreshes_the_incident_with_the_account_still_unauthorized() -> None:
+    # The rule stopped on one account; recovering it met the other, which also lost access.
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule(state=SyncRuleState.DEGRADED)
+    records, incidents, notifications = Records(), Incidents(), Notifications()
+    incidents.open_keys.add("provider:rule-1")
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
+    failure = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
+
+    health.recovery_blocked(RULE, failure)
+
+    assert incidents.events == [("open", "provider:rule-1", NOW)]
+    assert incidents.reports[-1].account_id == ACCOUNT
+    # Refreshing an open Incident notifies nobody, and a preview is not a failed sync run.
+    assert notifications.opened == []
+    assert records.failures == {}

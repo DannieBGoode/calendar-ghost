@@ -21,6 +21,19 @@ const FAILED: Record<RuleCommand, string> = {
   pause: "The rule was not paused.",
 }
 
+/**
+ * Everything a rule command or change can alter. Incidents are among them: a successful run
+ * resolves one, and a recovery preview can move one back to the account still to reauthorize.
+ */
+export const RULE_CHANGE_QUERIES = [
+  ["rules"],
+  ["dashboard"],
+  ["activity"],
+  ["accounts"],
+  ["recent-changes"],
+  ["incidents"],
+] as const
+
 export const PENDING_LABELS: Record<RuleCommand, string> = {
   preview: "Previewing…",
   enable: "Enabling…",
@@ -104,9 +117,7 @@ export function useRuleCommands() {
     } finally {
       // Stay pending until the refreshed rule arrives, so the row never flashes its old state.
       await Promise.all(
-        [["rules"], ["rule", ruleId], ["dashboard"], ["activity"], ["accounts"], ["recent-changes"]].map(
-          (queryKey) => queryClient.invalidateQueries({ queryKey }),
-        ),
+        [...RULE_CHANGE_QUERIES, ["rule", ruleId]].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
       )
       setPending((current) => {
         const next = { ...current }

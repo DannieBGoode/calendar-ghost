@@ -1,4 +1,4 @@
-"""What a source event's tracked details were, and how a later revision changed them (ADR 0016)."""
+"""What a source event's tracked details were, and how a later revision changed them (ADR 0017)."""
 
 from __future__ import annotations
 

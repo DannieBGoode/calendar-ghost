@@ -121,7 +121,7 @@ def test_avatar_migration_upgrades_an_existing_installation(tmp_path: Path) -> N
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     with sqlite3.connect(database) as connection:
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     assert [(account.id.value, account.avatar_url) for account in store.list()] == [
         ("existing", None)
     ]
@@ -155,6 +155,41 @@ def test_disconnect_discards_credentials_and_reauthorization_preserves_identity(
     )
     assert reauthorized.id == account.id
     assert reauthorized.state == "connected"
+
+
+class SteppingClock:
+    def __init__(self, *moments: datetime) -> None:
+        self._moments = list(moments)
+
+    def now(self) -> datetime:
+        return self._moments.pop(0)
+
+
+def test_authorized_at_follows_connection_and_reauthorization_only(tmp_path: Path) -> None:
+    # Activity offers rule recovery only once access was renewed after the incident.
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    connected_at, disconnected_at, reauthorized_at = (
+        datetime(2026, 9, 29, hour, tzinfo=UTC) for hour in (9, 10, 11)
+    )
+    store = SqliteConnectedAccountStore(
+        database,
+        CredentialCipher(CredentialCipher.generate_key()),
+        SteppingClock(connected_at, disconnected_at, reauthorized_at),
+    )
+
+    account = store.save("Personal", "person@example.test", "{}")
+    disconnected = store.disconnect(account.id)
+    listed_disconnected = store.list()
+    reauthorized = store.save("Personal", "person@example.test", "{}")
+
+    assert account.authorized_at == connected_at.isoformat()
+    assert disconnected.authorized_at is None
+    assert [item.authorized_at for item in listed_disconnected] == [None]
+    assert reauthorized.authorized_at == reauthorized_at.isoformat()
+    fetched = store.get(account.id)
+    assert fetched is not None
+    assert fetched.authorized_at == reauthorized_at.isoformat()
 
 
 def test_oauth_state_is_single_use(tmp_path: Path) -> None:

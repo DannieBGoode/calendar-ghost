@@ -156,7 +156,7 @@ Activity names it from the latest earlier entry for the same rule and source eve
 confirmed event with an empty title keeps it. An entry whose title differs from that earlier one is
 marked as renamed. Entries recorded before this behavior name no event (ADR 0014).
 
-Each recorded decision about a confirmed source event also observes it (ADR 0016). The rule keeps
+Each recorded decision about a confirmed source event also observes it (ADR 0017). The rule keeps
 a Source Observation of the event's title, time, description, location, guest addresses,
 recurrence, and conferencing links. When a later run sees a new revision, the entry records the
 Source Change: the fields that differ and their values before and after. The first observation,
@@ -190,7 +190,13 @@ Provider writes use stable Operation Keys. Each acknowledged provider operation 
 and audit evidence in a short SQLite transaction, while both incremental cursors advance only after
 the complete source and destination batches succeed. A retry can therefore reuse completed mappings
 without losing its safe position. Temporary failures retry with exponential backoff and jitter.
-Three consecutive scheduled failures open one deduplicated incident.
+Three consecutive scheduled failures open one deduplicated incident, resolved by the rule's next
+successful run. Each resolved incident records why it resolved (`sync_succeeded`,
+`blocks_cleared`, or `rule_removed`, SQLite migration 12), and reopening one resets its opening
+time, so "Since" on the Overview measures only the current episode. An authorization failure
+opens the Incident at once and names the Connected Account Google rejected; the preview that
+recovers a stopped rule refreshes it with any other account whose authorization it finds lost,
+so Activity keeps pointing at the account still to reauthorize.
 
 ## Reconciliation
 
@@ -201,22 +207,29 @@ destination unchanged while the rest of the rule keeps synchronizing; a block st
 daily pass opens one `blocked:{rule}` Incident. It persists only when the event was already blocked before the pass began and the pass's own run blocked it again, so a retried attempt or a Sync Now interleaved with the pass is not earlier evidence, which a later daily pass without persisting blocks resolves. A rule's open blocks are those recorded since its latest successful daily pass began (SQLite migration 11); an older block that pass did not repeat, such as one of an occurrence whose series was deleted or of an event that ended before the sync window, is no longer open. Reconcile Now, and a scheduled run that lists both calendars in full because of a reprojection or a rejected cursor, count as that day's pass. Incident notifications are sent after the rule lock is released.
 
 Reconcile Now runs that full pass and then a Full Reconciliation. The reconciliation is read-only:
-it derives expected projections from current sources for every mapping, of any age, fetches this
-rule's managed destination events independently, and reports what still differs. It never writes
-to Google, so the Web UI never calls what it found repaired.
+it covers the same range the daily pass keeps current, from the rolling window start onward. It
+lists the source calendar and this rule's managed destination events from that instant, each in
+one paginated request, then verifies every mapping whose source or projection either listing
+returned. A listed source needs no further read; a source that only its projection's listing
+reached, such as one moved before the window or deleted, is read directly. A mapping neither
+listing reaches belongs to an event that ended before the window: it is not read, checked,
+counted, or reported, unless it lies outside the rule's relationship, which is a
+`mapping_inconsistent` Conflict at any age and needs no read to prove. A series reaches the window while any occurrence does, however long ago it
+began, and its Occurrence Mappings are checked when their original start is in the window or
+either listing returned the occurrence as an exception, so an old occurrence moved into the window
+is checked and a past one is not. It never writes to Google, so the Web UI never calls what it
+found repaired ([ADR 0016](adr/0016-reconcile-within-the-sync-window.md)).
 
 | Finding | Kind | Why it can remain after the full pass |
 | --- | --- | --- |
-| Projection missing | Drift `missing` | The event ended before the sync window, so the pass did not list it; or it was deleted after the pass |
-| Projection differs from its source | Drift `incorrect_projection` | As above, or either calendar changed after the pass |
+| Projection missing | Drift `missing` | It was deleted after the pass, or the pass blocked writing it |
+| Projection differs from its source | Drift `incorrect_projection` | Either calendar changed after the pass |
 | Projection left for a source that is cancelled or excluded | Drift `unexpected` | The source's cancellation was not reported to any run that could reach it |
 | Mapping outside the rule's relationship, or whose source is itself a managed projection | Conflict `mapping_inconsistent` | No run writes through a mapping it cannot prove |
 | Mapping whose source cannot be read | Conflict `source_unverifiable` | An unverifiable source never authorizes deletion |
 | Managed event with this rule's marker but no mapping | Conflict `projection_unmapped` | No mapping proves ownership, so nothing changes or deletes it |
 
-Drift within the sync window that changed during the check is repaired by the next Sync Run. Drift
-in an event that ended before the window is not repaired by any run until a Material Rule Change
-reprojects it. Each Conflict the reconciliation finds appends one blocked Audit Entry with its
+Drift that changed during the check is repaired by the next Sync Run. Each Conflict the reconciliation finds appends one blocked Audit Entry with its
 reason code under the full pass's run, so Activity lists it under **Blocked**, and it counts as
 earlier evidence for the next daily pass's `blocked:{rule}` check. A finding about an event the full
 pass already blocked is left out, because that block is already recorded and counted. The Reconcile

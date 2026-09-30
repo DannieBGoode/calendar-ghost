@@ -190,8 +190,17 @@ class FakeCalendarProvider:
     ) -> None:
         raise AssertionError("single-event tests never cancel occurrences")
 
+    def list_events(
+        self, calendar: CalendarEndpoint, not_ended_before: datetime
+    ) -> tuple[CalendarEvent, ...]:
+        return tuple(
+            event
+            for event in (self.source, self.destination)
+            if event is not None and event.reference.calendar == calendar
+        )
+
     def managed_events(
-        self, destination: CalendarEndpoint, rule_id: SyncRuleId
+        self, destination: CalendarEndpoint, rule_id: SyncRuleId, not_ended_before: datetime
     ) -> tuple[CalendarEvent, ...]:
         return (self.destination,) if self.destination else ()
 

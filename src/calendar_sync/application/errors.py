@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
-from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 
 
 class ApplicationError(Exception):
@@ -56,6 +56,8 @@ class ProviderFailure(ApplicationError):
     kind: ProviderFailureKind
     detail: str
     retry_after_seconds: int | None = None
+    account_id: ConnectedAccountId | None = None
+    """The Connected Account whose request failed, when the provider knows it."""
 
     @property
     def retryable(self) -> bool:

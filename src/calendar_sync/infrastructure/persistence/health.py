@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from calendar_sync.application.errors import ProviderFailureKind
-from calendar_sync.application.ports import IdGenerator, IncidentReport
+from calendar_sync.application.ports import IdGenerator, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
@@ -83,20 +83,24 @@ class SqliteIncidentRepository:
             connection.execute(
                 """
                 INSERT INTO incidents (
-                    id, deduplication_key, rule_id, category, state,
+                    id, deduplication_key, rule_id, account_id, category, state,
                     summary, opened_at, updated_at
-                ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)
                 ON CONFLICT(deduplication_key) DO UPDATE SET
+                    account_id = excluded.account_id,
                     category = excluded.category,
+                    opened_at = CASE WHEN state = 'open' THEN opened_at ELSE excluded.opened_at END,
                     state = 'open',
                     summary = excluded.summary,
                     updated_at = excluded.updated_at,
-                    resolved_at = NULL
+                    resolved_at = NULL,
+                    resolution = NULL
                 """,
                 (
                     self._ids.new(),
                     incident.key,
                     incident.rule_id.value,
+                    incident.account_id.value if incident.account_id else None,
                     incident.category,
                     incident.summary,
                     at.isoformat(),
@@ -105,12 +109,13 @@ class SqliteIncidentRepository:
             )
         return existing is None or existing[0] != "open"
 
-    def resolve(self, key: str, at: datetime) -> None:
+    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
         with sqlite3.connect(self._database_path) as connection:
             connection.execute(
                 """
-                UPDATE incidents SET state = 'resolved', updated_at = ?, resolved_at = ?
+                UPDATE incidents SET
+                    state = 'resolved', updated_at = ?, resolved_at = ?, resolution = ?
                 WHERE deduplication_key = ? AND state = 'open'
                 """,
-                (at.isoformat(), at.isoformat(), key),
+                (at.isoformat(), at.isoformat(), resolution.value, key),
             )

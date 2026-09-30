@@ -1,6 +1,6 @@
 # Record the source event's title and time on each Audit Entry
 
-Amended by [ADR 0016](0016-record-source-changes.md), which also keeps sealed descriptions,
+Amended by [ADR 0017](0017-record-source-changes.md), which also keeps sealed descriptions,
 locations, guests, recurrence rules, and conferencing links so Activity can say what changed.
 
 ## Context

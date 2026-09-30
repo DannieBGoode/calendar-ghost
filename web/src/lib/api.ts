@@ -116,6 +116,8 @@ export type ConnectedAccount = {
   avatar_url: string | null
   state: string
   rule_count: number
+  /** When the account was last connected or reauthorized; null while disconnected. */
+  authorized_at: string | null
 }
 export type GoogleAccountAccess = {
   calendar_api: boolean
@@ -231,6 +233,11 @@ export type Incident = {
   summary: string
   opened_at: string
   updated_at: string
+  resolved_at: string | null
+  /** Why a resolved incident resolved; null while open or when the reason was not recorded. */
+  resolution: "sync_succeeded" | "blocks_cleared" | "rule_removed" | null
+  /** The Connected Account whose failure opened or last refreshed it; null when not recorded. */
+  account_id: string | null
 }
 
 export const ACTIVITY_PAGE_SIZE = 100

@@ -137,6 +137,7 @@ class ConnectedAccountResponse(BaseModel):
     avatar_url: str | None
     state: str
     rule_count: int
+    authorized_at: str | None
 
 
 class GoogleAccountAccessResponse(BaseModel):
@@ -190,7 +191,7 @@ class AuditEntryResponse(BaseModel):
     repeated: bool = False
     """A repair that redoes the same event's previous one, recorded by an earlier run."""
     changed_fields: list[str] | None = None
-    """The source fields this entry's Source Change touched (ADR 0016); None when none."""
+    """The source fields this entry's Source Change touched (ADR 0017); None when none."""
 
 
 class FieldChangeResponse(BaseModel):
@@ -235,6 +236,9 @@ class IncidentResponse(BaseModel):
     summary: str
     opened_at: str
     updated_at: str
+    resolved_at: str | None
+    resolution: str | None
+    account_id: str | None
 
 
 class RecentChangeResponse(BaseModel):

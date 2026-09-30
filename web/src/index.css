@@ -2277,6 +2277,53 @@ thead + .activity-day th {
   color: var(--muted-foreground);
 }
 
+.incident-row {
+  gap: 0.5rem;
+}
+
+.incident-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.incident-row .activity-run-meta {
+  margin-top: 0;
+}
+
+.incident-detail {
+  max-width: 68ch;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.incident-row .incident-detail + div {
+  margin-top: 0.25rem;
+}
+
+.resolved-incidents {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.resolved-incidents .rule-list {
+  align-self: stretch;
+}
+
+.resolved-incidents .incident-row strong {
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+/* Aligns the label, not the hover surface, with the page text. */
+.resolved-incidents-toggle {
+  margin-inline-start: -0.75rem;
+}
+
 .empty-actions {
   display: flex;
   flex-wrap: wrap;

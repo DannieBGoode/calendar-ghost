@@ -17,6 +17,7 @@ from calendar_sync.application.ports import (
     ConnectedAccountState,
     EventMappingRepository,
     ExceptionReplayRepository,
+    IncidentResolution,
     OccurrenceMappingRepository,
     RulePreviewRepository,
     RulePreviewSummary,
@@ -68,7 +69,9 @@ _FORWARD_MIGRATIONS = (
     (9, "0009_audit_event_titles.sql"),
     (10, "0010_pending_exception_replays.sql"),
     (11, "0011_rule_block_checks.sql"),
-    (12, "0012_source_changes.sql"),
+    (12, "0012_incident_resolutions.sql"),
+    (13, "0013_incident_accounts.sql"),
+    (14, "0014_source_changes.sql"),
 )
 
 
@@ -170,10 +173,10 @@ class SqliteSyncRuleRepository:
         now = self._clock.now().isoformat()
         self._connection.execute(
             """
-            UPDATE incidents SET state = 'resolved', updated_at = ?, resolved_at = ?
+            UPDATE incidents SET state = 'resolved', updated_at = ?, resolved_at = ?, resolution = ?
             WHERE rule_id = ? AND state = 'open'
             """,
-            (now, now, rule_id.value),
+            (now, now, IncidentResolution.RULE_REMOVED.value, rule_id.value),
         )
         self._connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule_id.value,))
 

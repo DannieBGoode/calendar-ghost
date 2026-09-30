@@ -1,13 +1,19 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import cast
 
 import pytest
 
-from calendar_sync.application.errors import RuleNotExecutable
+from calendar_sync.application.errors import (
+    ProviderFailure,
+    ProviderFailureKind,
+    RuleNotExecutable,
+)
 from calendar_sync.application.ports import CalendarReader, UnitOfWorkFactory
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
+    ConnectedAccountId,
     EventStatus,
     ManagedOrigin,
     SyncAction,
@@ -75,6 +81,69 @@ def test_preview_revalidates_a_degraded_rule_after_reauthorization() -> None:
     use_case.execute(degraded.id)
 
     assert unit_of_work.state.rules[degraded.id].state is SyncRuleState.PREVIEWED
+
+
+class DeniedReader:
+    """A reader whose account Google no longer accepts."""
+
+    def __init__(self, failure: ProviderFailure) -> None:
+        self.failure = failure
+
+    def changes(self, *_args: object) -> None:
+        raise self.failure
+
+
+class RecoveryIncidents:
+    def __init__(self) -> None:
+        self.blocked: list[tuple[SyncRuleId, ProviderFailure]] = []
+
+    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+        self.blocked.append((rule_id, failure))
+
+
+def _denied_preview(
+    state: SyncRuleState, kind: ProviderFailureKind
+) -> tuple[PreviewSyncRule, RecoveryIncidents, ProviderFailure]:
+    stopped = rule(state=state)
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[stopped.id] = stopped
+    failure = ProviderFailure(kind, "synthetic", account_id=ConnectedAccountId("work-account"))
+    incidents = RecoveryIncidents()
+    use_case = replace(
+        _preview(unit_of_work, cast(CalendarReader, DeniedReader(failure))), incidents=incidents
+    )
+    return use_case, incidents, failure
+
+
+def test_recovering_a_stopped_rule_reports_the_account_still_unauthorized() -> None:
+    use_case, incidents, failure = _denied_preview(
+        SyncRuleState.DEGRADED, ProviderFailureKind.AUTHENTICATION
+    )
+
+    with pytest.raises(ProviderFailure):
+        use_case.execute(SyncRuleId("rule-1"))
+
+    assert incidents.blocked == [(SyncRuleId("rule-1"), failure)]
+
+
+@pytest.mark.parametrize(
+    ("state", "kind"),
+    [
+        # A new rule's preview reports its failure inline; there is no Incident to refresh.
+        (SyncRuleState.DRAFT, ProviderFailureKind.AUTHENTICATION),
+        # Reauthorizing would not help, so the Incident keeps pointing where it does.
+        (SyncRuleState.DEGRADED, ProviderFailureKind.TEMPORARY),
+    ],
+)
+def test_other_preview_failures_leave_incidents_alone(
+    state: SyncRuleState, kind: ProviderFailureKind
+) -> None:
+    use_case, incidents, _failure = _denied_preview(state, kind)
+
+    with pytest.raises(ProviderFailure):
+        use_case.execute(SyncRuleId("rule-1"))
+
+    assert incidents.blocked == []
 
 
 def test_preview_of_a_missing_rule_is_refused() -> None:

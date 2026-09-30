@@ -63,7 +63,7 @@ import { relativeTime } from "@/lib/relative-time"
 import { recoveryExplanation } from "@/lib/rule-run"
 import { busyCommand, ruleWork, WORK_REFRESH_MS } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
+import { RULE_CHANGE_QUERIES, useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
@@ -328,7 +328,7 @@ export function RuleDetailsView({
           />
           <OutcomeFact
             label="Last reconciliation"
-            explanation={`Compares every event this rule wrote to ${destinationName} with its source and reports any that differ, without changing them. Runs when you choose Reconcile now.`}
+            explanation={`Compares the events this rule wrote to ${destinationName} from the past ${plural(detail.initial_lookback_days, "day")} onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now.`}
             outcome={detail.last_reconciliation}
             kind="reconciliation"
             now={now}
@@ -409,9 +409,7 @@ function useRuleInvalidation(ruleId: string) {
   const queryClient = useQueryClient()
   return async () => {
     await Promise.all(
-      [["rule", ruleId], ["rules"], ["dashboard"], ["activity"], ["accounts"]].map((queryKey) =>
-        queryClient.invalidateQueries({ queryKey }),
-      ),
+      [...RULE_CHANGE_QUERIES, ["rule", ruleId]].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     )
   }
 }
@@ -421,9 +419,7 @@ function useRuleExit(ruleId: string) {
   return async () => {
     queryClient.removeQueries({ queryKey: ["rule", ruleId] })
     await Promise.all(
-      [["rules"], ["dashboard"], ["activity"], ["accounts"]].map((queryKey) =>
-        queryClient.invalidateQueries({ queryKey }),
-      ),
+      RULE_CHANGE_QUERIES.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     )
   }
 }
