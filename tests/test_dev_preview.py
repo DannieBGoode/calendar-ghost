@@ -81,3 +81,19 @@ def test_preview_is_not_shipped_in_the_package_or_image() -> None:
     assert "COPY scripts" not in dockerfile
     assert "COPY . " not in dockerfile
     assert 'packages = ["src/calendar_sync"]' in pyproject
+
+
+def test_preview_shows_source_changes_with_their_values(tmp_path: Path) -> None:
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        changed = [
+            entry
+            for entry in client.get("/api/v1/audit-entries", params={"limit": 200}).json()
+            if entry["changed_fields"]
+        ]
+        change = client.get(f"/api/v1/audit-entries/{changed[0]['id']}/changes").json()
+
+    assert {entry["reason"] for entry in changed} == {"source_changed", "projection_current"}
+    assert change["values_available"] is True

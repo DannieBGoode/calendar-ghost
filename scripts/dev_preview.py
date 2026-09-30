@@ -46,6 +46,7 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
+from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
@@ -62,6 +63,9 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
+from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
@@ -201,6 +205,13 @@ def build_preview_container(
     # Explicit settings: nothing is read from the environment or .env.
     settings = Settings(path)
     adapters = build_adapters(settings)
+    # A key of this process only, so seeded Source Changes can be unsealed; it never syncs.
+    history = HistoryCipher(CredentialCipher.generate_key())
+    adapters = replace(
+        adapters,
+        unit_of_work=SqliteUnitOfWorkFactory(path, adapters.clock, history),
+        activity=SqliteActivityQueries(path, history),
+    )
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute(f"CREATE TABLE {MARKER_TABLE} (created_at TEXT NOT NULL)")
         # The marker table name is a constant.
@@ -315,6 +326,7 @@ def _audit_entry(seeded: SeededEntry, calendar: PreviewCalendar, now: datetime) 
     recorded = RecordedEvent.of(found) if found else None
     if recorded is not None and seeded.title is not None:
         recorded = replace(recorded, title=seeded.title)
+    change = _preview_change(found, seeded) if found else None
     return AuditEntry(
         occurred_at=now - timedelta(minutes=seeded.minutes_ago),
         rule_id=SyncRuleId(seeded.rule),
@@ -327,7 +339,36 @@ def _audit_entry(seeded: SeededEntry, calendar: PreviewCalendar, now: datetime) 
         reason=SyncReason(seeded.reason) if seeded.reason is not None else None,
         run_id=seeded.run,
         event=recorded,
+        change=change,
     )
+
+
+# Seeded Source Changes: an update, and a guest change a Busy-Only rule does not show.
+PREVIEW_CHANGES = {
+    ("preview-run-2", "flight"): {
+        "title": "Flight",
+        "description": "Gate B12",
+        "guests": ("ana@example.com", "ben@example.com"),
+    },
+    ("preview-run-4", "gym"): {"guests": ("ana@example.com",)},
+}
+
+
+def _preview_change(found: CalendarEvent, seeded: SeededEntry) -> SourceChange | None:
+    earlier = PREVIEW_CHANGES.get((seeded.run or "", seeded.event or ""))
+    if earlier is None:
+        return None
+    now = replace(
+        found,
+        description="Gate B14, boarding 9:40.\nBring the printed pass.",
+        guests=("ana@example.com", "cleo@example.com"),
+        conferencing=(),
+    )
+    before = SourceObservation.of(replace(now, revision="preview-0", **earlier))  # type: ignore[arg-type]
+    after = SourceObservation.of(now)
+    assert before is not None
+    assert after is not None
+    return SourceChange.between(before, after)
 
 
 def _seed(adapters: Adapters, path: Path, now: datetime) -> None:
