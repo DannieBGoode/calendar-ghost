@@ -1,4 +1,4 @@
-import type { Incident } from "@/lib/api"
+import type { ConnectedAccount, Incident } from "@/lib/api"
 
 /** What the administrator can do about an open incident, if anything. */
 export type IncidentAction =
@@ -9,7 +9,18 @@ export type IncidentAction =
 export type IncidentGuidance = { detail: string | null; action: IncidentAction | null }
 
 /** What an incident's rule looks like now; null when the incident has no rule or it is gone. */
-export type IncidentRuleState = { accountsConnected: boolean }
+export type IncidentRuleState = { accessRenewed: boolean }
+
+/**
+ * Whether the rule's Google access was renewed after the incident last recorded a failure. An
+ * authorization failure leaves its account connected, so being connected proves nothing; only a
+ * reauthorization since then does, with every account of the rule connected.
+ */
+export function accessRenewedSince(incident: Incident, accounts: (ConnectedAccount | undefined)[]): boolean {
+  const lastFailure = Date.parse(incident.updated_at)
+  if (accounts.some((account) => account?.state !== "connected")) return false
+  return accounts.some((account) => account?.authorized_at != null && Date.parse(account.authorized_at) > lastFailure)
+}
 
 const AUTHORIZATION = new Set(["authentication", "authorization"])
 const STOPPED = new Set(["permanent", "infrastructure"])
@@ -23,7 +34,7 @@ export function incidentGuidance(incident: Incident, rule: IncidentRuleState | n
   const ruleId = rule ? incident.rule_id : null
   if (AUTHORIZATION.has(incident.category)) {
     // Reauthorizing renews access but leaves the rule stopped; only its recovery closes this.
-    if (ruleId && rule?.accountsConnected) {
+    if (ruleId && rule?.accessRenewed) {
       return {
         detail: "Google access is renewed, but the rule stays stopped until it is recovered.",
         action: { kind: "rule", ruleId, label: "Recover this rule" },

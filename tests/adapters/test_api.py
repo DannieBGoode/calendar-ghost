@@ -388,11 +388,14 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
             "avatar_url": "https://lh3.googleusercontent.com/a/synthetic=s96-c",
             "state": "connected",
             "rule_count": 4,
+            "authorized_at": account.authorized_at,
         }
     ]
+    assert account.authorized_at is not None
     assert disconnected.status_code == 200
     assert disconnected.json()["state"] == "disconnected"
     assert disconnected.json()["rule_count"] == 4
+    assert disconnected.json()["authorized_at"] is None
     assert disconnected_calendars.status_code == 409
     assert "reauthorize" in disconnected_calendars.json()["detail"]
     assert disconnected_verification.status_code == 409

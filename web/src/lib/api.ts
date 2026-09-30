@@ -116,6 +116,8 @@ export type ConnectedAccount = {
   avatar_url: string | null
   state: string
   rule_count: number
+  /** When the account was last connected or reauthorized; null while disconnected. */
+  authorized_at: string | null
 }
 export type GoogleAccountAccess = {
   calendar_api: boolean

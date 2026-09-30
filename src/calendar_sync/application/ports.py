@@ -499,6 +499,8 @@ class ConnectedAccount:
     email: str
     state: ConnectedAccountState
     avatar_url: str | None = None
+    authorized_at: str | None = None
+    """When the account was last connected or reauthorized; None while disconnected."""
 
 
 class ConnectedAccountRepository(AccountAuthorizations, Protocol):

@@ -137,6 +137,7 @@ class ConnectedAccountResponse(BaseModel):
     avatar_url: str | None
     state: str
     rule_count: int
+    authorized_at: str | None
 
 
 class GoogleAccountAccessResponse(BaseModel):

@@ -62,7 +62,9 @@ import {
   type Incident,
   type Rule,
 } from "@/lib/api"
-import { incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents, type IncidentAction, type IncidentRuleState } from "@/lib/incidents"
+import {
+  accessRenewedSince,
+  incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents, type IncidentAction, type IncidentRuleState } from "@/lib/incidents"
 import { isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { plural } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
@@ -767,11 +769,11 @@ function Diagnostic({ label, value }: { label: string; value: string | null }) {
 function incidentRuleState(incident: Incident, context: RuleContext): IncidentRuleState | null {
   if (!incident.rule_id) return null
   // Until rules load, assume the rule exists but claim no renewed access.
-  if (!context.rulesLoaded) return { accountsConnected: false }
+  if (!context.rulesLoaded) return { accessRenewed: false }
   const rule = context.rulesById.get(incident.rule_id)
   if (!rule) return null
-  const connected = (accountId: string) => context.accountsById.get(accountId)?.state === "connected"
-  return { accountsConnected: connected(rule.source.connected_account_id) && connected(rule.destination.connected_account_id) }
+  const accounts = [rule.source, rule.destination].map((endpoint) => context.accountsById.get(endpoint.connected_account_id))
+  return { accessRenewed: accessRenewedSince(incident, accounts) }
 }
 
 function IncidentRule({ incident, context }: { incident: Incident; context: RuleContext }) {

@@ -38,7 +38,7 @@ class SqliteConnectedAccountStore:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT id, display_name, email, state, avatar_url
+                SELECT id, display_name, email, state, avatar_url, updated_at
                 FROM connected_accounts ORDER BY email
                 """
             ).fetchall()
@@ -48,7 +48,7 @@ class SqliteConnectedAccountStore:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT id, display_name, email, state, avatar_url
+                SELECT id, display_name, email, state, avatar_url, updated_at
                 FROM connected_accounts WHERE id = ?
                 """,
                 (account_id.value,),
@@ -89,7 +89,7 @@ class SqliteConnectedAccountStore:
             )
             row = connection.execute(
                 """
-                SELECT id, display_name, email, state, avatar_url
+                SELECT id, display_name, email, state, avatar_url, updated_at
                 FROM connected_accounts WHERE email = ?
                 """,
                 (email,),
@@ -152,12 +152,17 @@ class SqliteConnectedAccountStore:
 
 
 def _account_from_row(row: sqlite3.Row) -> ConnectedAccount:
+    state = ConnectedAccountState(str(row["state"]))
+    # Only connecting, reauthorizing, and disconnecting write the row, so a connected account's
+    # last update is when it was last authorized.
+    connected = state is ConnectedAccountState.CONNECTED
     return ConnectedAccount(
         ConnectedAccountId(str(row["id"])),
         str(row["display_name"]),
         str(row["email"]),
-        ConnectedAccountState(str(row["state"])),
+        state,
         _optional_text(row["avatar_url"]),
+        str(row["updated_at"]) if connected else None,
     )
 
 

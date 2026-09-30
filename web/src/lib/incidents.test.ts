@@ -1,10 +1,28 @@
 import { describe, expect, it } from "vitest"
 
-import type { Incident } from "@/lib/api"
-import { incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents } from "@/lib/incidents"
+import type { ConnectedAccount, Incident } from "@/lib/api"
+import {
+  accessRenewedSince,
+  incidentClosedAt,
+  incidentGuidance,
+  incidentResolution,
+  splitIncidents,
+} from "@/lib/incidents"
 
-const DISCONNECTED = { accountsConnected: false }
-const CONNECTED = { accountsConnected: true }
+const NOT_RENEWED = { accessRenewed: false }
+const RENEWED = { accessRenewed: true }
+
+function account(state: string, authorizedAt: string | null): ConnectedAccount {
+  return {
+    id: `account-${authorizedAt}`,
+    display_name: "Personal",
+    email: "person@example.test",
+    avatar_url: null,
+    state,
+    rule_count: 1,
+    authorized_at: authorizedAt,
+  }
+}
 
 function incident(overrides: Partial<Incident> = {}): Incident {
   return {
@@ -24,7 +42,7 @@ function incident(overrides: Partial<Incident> = {}): Incident {
 describe("incident guidance", () => {
   it("sends authorization incidents to Settings while access is lost, even once the rule is gone", () => {
     for (const category of ["authentication", "authorization"]) {
-      for (const rule of [DISCONNECTED, null]) {
+      for (const rule of [NOT_RENEWED, null]) {
         expect(incidentGuidance(incident({ category }), rule).action).toEqual({
           kind: "settings",
           label: "Reauthorize in Settings",
@@ -36,7 +54,7 @@ describe("incident guidance", () => {
   it("sends authorization incidents to the rule's recovery once access is renewed", () => {
     // Reauthorizing leaves the rule stopped, so no sync could close the incident on its own.
     for (const category of ["authentication", "authorization"]) {
-      const guidance = incidentGuidance(incident({ category }), CONNECTED)
+      const guidance = incidentGuidance(incident({ category }), RENEWED)
       expect(guidance.action).toEqual({ kind: "rule", ruleId: "rule-1", label: "Recover this rule" })
       expect(guidance.detail).not.toMatch(/reauthorize/i)
     }
@@ -44,7 +62,7 @@ describe("incident guidance", () => {
 
   it("opens a stopped rule so it can be recovered, but only while the rule exists", () => {
     for (const category of ["permanent", "infrastructure"]) {
-      expect(incidentGuidance(incident({ category }), CONNECTED).action).toEqual({
+      expect(incidentGuidance(incident({ category }), RENEWED).action).toEqual({
         kind: "rule",
         ruleId: "rule-1",
         label: "Review this rule",
@@ -55,14 +73,14 @@ describe("incident guidance", () => {
 
   it("asks nothing of the administrator while transient failures are retried", () => {
     for (const category of ["rate_limit", "temporary"]) {
-      const guidance = incidentGuidance(incident({ category }), CONNECTED)
+      const guidance = incidentGuidance(incident({ category }), RENEWED)
       expect(guidance.action).toBeNull()
       expect(guidance.detail).toMatch(/^Nothing to do now/)
     }
   })
 
   it("filters Activity to the rule's blocked events for a persisting block", () => {
-    expect(incidentGuidance(incident({ category: "conflict" }), CONNECTED).action).toEqual({
+    expect(incidentGuidance(incident({ category: "conflict" }), RENEWED).action).toEqual({
       kind: "blocked",
       ruleId: "rule-1",
       label: "See blocked events",
@@ -70,11 +88,36 @@ describe("incident guidance", () => {
   })
 
   it("offers the rule without explaining a category it does not know", () => {
-    expect(incidentGuidance(incident({ category: "ownership" }), CONNECTED)).toEqual({
+    expect(incidentGuidance(incident({ category: "ownership" }), RENEWED)).toEqual({
       detail: null,
       action: { kind: "rule", ruleId: "rule-1", label: "Review this rule" },
     })
     expect(incidentGuidance(incident({ category: "ownership", rule_id: null }), null).action).toBeNull()
+  })
+})
+
+describe("renewed access", () => {
+  // The incident last recorded a failure at 18:30.
+  const before = "2026-09-28T18:00:00Z"
+  const after = "2026-09-28T19:00:00Z"
+
+  it("is not claimed for accounts that stayed connected through the failure", () => {
+    // Google rejecting credentials leaves the account connected; nothing was renewed.
+    expect(accessRenewedSince(incident(), [account("connected", before), account("connected", before)])).toBe(false)
+  })
+
+  it("is claimed once an account of the rule was reauthorized after the failure", () => {
+    expect(accessRenewedSince(incident(), [account("connected", after), account("connected", before)])).toBe(true)
+  })
+
+  it("is not claimed while any account of the rule is disconnected or unknown", () => {
+    expect(accessRenewedSince(incident(), [account("connected", after), account("disconnected", null)])).toBe(false)
+    expect(accessRenewedSince(incident(), [account("connected", after), undefined])).toBe(false)
+  })
+
+  it("is withdrawn when the incident records another failure after reauthorizing", () => {
+    const failedAgain = incident({ updated_at: "2026-09-28T19:30:00Z" })
+    expect(accessRenewedSince(failedAgain, [account("connected", after), account("connected", after)])).toBe(false)
   })
 })
 
