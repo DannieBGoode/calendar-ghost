@@ -58,9 +58,20 @@ class CalendarReader(Protocol):
         """Return the projection an earlier write with this Operation Key created, if any."""
         ...
 
+    def list_events(
+        self, calendar: CalendarEndpoint, not_ended_before: datetime
+    ) -> Sequence[CalendarEvent]:
+        """Every event, cancelled ones included, that ends at or after `not_ended_before`.
+
+        Unlike `changes`, it reads no incremental position and yields none.
+        """
+        ...
+
     def managed_events(
-        self, destination: CalendarEndpoint, rule_id: SyncRuleId
-    ) -> Sequence[CalendarEvent]: ...
+        self, destination: CalendarEndpoint, rule_id: SyncRuleId, not_ended_before: datetime
+    ) -> Sequence[CalendarEvent]:
+        """This rule's live Managed Projections that end at or after `not_ended_before`."""
+        ...
 
     def get_occurrence(
         self, series: EventRef, original_start: OccurrenceStart

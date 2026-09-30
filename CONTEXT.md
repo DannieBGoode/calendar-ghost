@@ -199,7 +199,7 @@ Verification of mappings affected by one synchronization run. It occurs before t
 _Avoid_: Sync verification, spot check
 
 **Full Reconciliation**:
-Read-only verification of every mapping under a rule, of any age, against its current source and the managed events in the destination. It reports the Drift still present and records each Conflict it finds as a blocked Audit Entry; it repairs nothing itself. A mapping outside the rule's relationship, a mapping whose source cannot be read, and a managed event with no mapping are Conflicts, never Drift.
+Read-only verification of every mapping under a rule whose source or projection reaches its Initial Sync Window, from the window's start onward, against its current source and the managed events in the destination. A series reaches the window while any of its occurrences does; an event that ended before the window is past and is neither checked nor reported. It reports the Drift still present and records each Conflict it finds as a blocked Audit Entry; it repairs nothing itself. A mapping outside the rule's relationship, a mapping whose source cannot be read, and a managed event with no mapping are Conflicts, never Drift.
 _Avoid_: Full sync, rescan
 
 **Reconcile Now**:
@@ -239,7 +239,7 @@ diagnostics keep the glossary terms above.
 | Material Rule Change | "A change stops the rule from writing until you preview it again" |
 | Rule Preview, then enable | "Preview rule", then "Start syncing" |
 | Degraded Rule | "Stopped", with the cause and "Preview to restart" |
-| Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote and reports any that still differ; never "repaired" for what the check only reported |
+| Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
 | Connected Account | "Google account" |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Sync did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |

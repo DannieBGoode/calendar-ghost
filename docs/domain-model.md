@@ -53,7 +53,7 @@ A Conflict carries a `SyncReason`: `mapping_inconsistent` for a mapping outside 
 relationship or whose source is itself a managed projection, `source_unverifiable` for a mapping
 whose source cannot be read, and `projection_unmapped` for a managed event with no mapping. A report
 is consistent only when both are empty, so a Conflict leaves the rule inconsistent without counting
-as Drift. The report never implies a repair; see [ADR 0015](adr/0015-reconciliation-reports-conflicts-apart-from-drift.md).
+as Drift. It covers only mappings whose source or projection reaches the rule's sync window ([ADR 0016](adr/0016-reconcile-within-the-sync-window.md)), and `checked_mappings` counts those. The report never implies a repair; see [ADR 0015](adr/0015-reconciliation-reports-conflicts-apart-from-drift.md).
 
 ## Calendar Event values
 

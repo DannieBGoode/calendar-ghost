@@ -218,24 +218,45 @@ class GoogleCalendarProvider:
             if _status_code(error) not in {404, 410}:
                 raise self._failure(error) from error
 
-    def managed_events(
-        self, destination: CalendarEndpoint, rule_id: SyncRuleId
+    def list_events(
+        self, calendar: CalendarEndpoint, not_ended_before: datetime
     ) -> Sequence[CalendarEvent]:
-        try:
-            events_api = self._service_for(destination.connected_account_id).events()
-            parameters: dict[str, Any] = {
+        return self._list(
+            calendar,
+            {
+                "calendarId": calendar.calendar_id.value,
+                "showDeleted": True,
+                "singleEvents": False,
+                "timeMin": not_ended_before.isoformat(),
+                "maxResults": 2500,
+            },
+        )
+
+    def managed_events(
+        self, destination: CalendarEndpoint, rule_id: SyncRuleId, not_ended_before: datetime
+    ) -> Sequence[CalendarEvent]:
+        return self._list(
+            destination,
+            {
                 "calendarId": destination.calendar_id.value,
                 "privateExtendedProperty": f"{RULE_PROPERTY}={rule_id.value}",
                 "showDeleted": False,
                 "singleEvents": False,
+                "timeMin": not_ended_before.isoformat(),
                 "maxResults": 2500,
-            }
+            },
+        )
+
+    def _list(
+        self, calendar: CalendarEndpoint, parameters: dict[str, Any]
+    ) -> Sequence[CalendarEvent]:
+        """Every page of one events.list request, without asking for a synchronization token."""
+        try:
+            events_api = self._service_for(calendar.connected_account_id).events()
             items: list[CalendarEvent] = []
             while True:
                 response = events_api.list(**parameters).execute()
-                items.extend(
-                    to_domain_event(item, destination) for item in response.get("items", [])
-                )
+                items.extend(to_domain_event(item, calendar) for item in response.get("items", []))
                 page_token = response.get("nextPageToken")
                 if not page_token:
                     return tuple(items)

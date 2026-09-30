@@ -10,7 +10,6 @@ from calendar_sync.application.ports import AuditAction, AuditOutcome, RunKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
-    DriftKind,
     EventId,
     EventRef,
     ManagedOrigin,
@@ -107,7 +106,7 @@ class _EarlierClock:
         return NOW - timedelta(days=60)
 
 
-def test_reconcile_now_reports_drift_its_full_pass_cannot_reach_without_repairing_it() -> None:
+def test_reconcile_now_leaves_events_that_ended_before_the_sync_window_unread() -> None:
     factory = enabled_rule_factory()
     reconcile_now, calendars = _reconcile_now(factory, RecordingFullPasses())
     del calendars.events[event().reference]
@@ -126,15 +125,18 @@ def test_reconcile_now_reports_drift_its_full_pass_cannot_reach_without_repairin
     ).execute(rule().id)
     destination = factory.state.mappings[(rule().id, old.reference)].destination
     calendars.put(replace(calendars.events[destination], title="Edited"))
+    calendars.reads.clear()
 
     result = reconcile_now.execute(rule().id)
 
+    # The event is past: neither the full pass nor the check reads, repairs, or reports it.
     assert (result.sync.created, result.sync.updated) == (0, 0)
-    assert [item.kind for item in result.report.drift] == [DriftKind.INCORRECT_PROJECTION]
-    assert result.report.conflicts == ()
+    assert result.report.is_consistent
+    assert result.report.checked_mappings == 0
+    assert old.reference not in calendars.reads
     assert calendars.events[destination].title == "Edited"
     outcome = factory.state.outcomes[(rule().id, RunKind.RECONCILIATION)]
-    assert (outcome.drift, outcome.conflicts) == (1, 0)
+    assert (outcome.checked_mappings, outcome.drift, outcome.conflicts) == (0, 0, 0)
 
 
 def test_reconcile_now_blocks_an_unmapped_projection_as_a_conflict_not_drift() -> None:
