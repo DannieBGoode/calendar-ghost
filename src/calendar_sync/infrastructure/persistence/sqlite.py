@@ -23,6 +23,7 @@ from calendar_sync.application.ports import (
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
+    SourceObservationRepository,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
@@ -49,7 +50,12 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.infrastructure.persistence.source_changes import (
+    SqliteSourceObservationRepository,
+    change_columns,
+)
 from calendar_sync.infrastructure.scheduling import SystemClock
+from calendar_sync.infrastructure.security import HistoryCipher
 
 _FORWARD_MIGRATIONS = (
     (2, "0002_account_avatar.sql"),
@@ -62,6 +68,7 @@ _FORWARD_MIGRATIONS = (
     (9, "0009_audit_event_titles.sql"),
     (10, "0010_pending_exception_replays.sql"),
     (11, "0011_rule_block_checks.sql"),
+    (12, "0012_source_changes.sql"),
 )
 
 
@@ -441,8 +448,9 @@ class SqliteDestinationSyncCursorRepository:
 
 
 class SqliteAuditRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: sqlite3.Connection, history: HistoryCipher | None) -> None:
         self._connection = connection
+        self._history = history
 
     def append(self, entry: AuditEntry) -> None:
         event = entry.event
@@ -451,14 +459,16 @@ class SqliteAuditRepository:
             starts, ends = event.time.starts_at.isoformat(), event.time.ends_at.isoformat()
         elif event is not None and isinstance(event.time, AllDayRange):
             starts, ends = event.time.starts_on.isoformat(), event.time.ends_before.isoformat()
+        changed = change_columns(self._history, entry.rule_id, entry.source_event_id, entry.change)
         self._connection.execute(
             """
             INSERT INTO audit_entries (
                 occurred_at, rule_id, action, outcome,
                 source_event_id, destination_event_id, detail, reason, run_id,
                 event_title, event_starts, event_ends,
-                event_all_day, event_recurring, event_cancelled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                event_all_day, event_recurring, event_cancelled,
+                change_fields, change_title_before, change_sealed
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry.occurred_at.isoformat(),
@@ -476,7 +486,17 @@ class SqliteAuditRepository:
                 event is not None and isinstance(event.time, AllDayRange),
                 event is not None and event.recurring,
                 event is not None and event.cancelled,
+                *changed,
             ),
+        )
+
+    def forget_change_values(self, rule_id: SyncRuleId, before: datetime) -> None:
+        self._connection.execute(
+            """
+            UPDATE audit_entries SET change_sealed = NULL
+            WHERE rule_id = ? AND change_sealed IS NOT NULL AND occurred_at < ?
+            """,
+            (rule_id.value, before.isoformat()),
         )
 
 
@@ -614,12 +634,16 @@ class SqliteUnitOfWork:
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
+    observations: SourceObservationRepository
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
 
-    def __init__(self, database_path: Path, clock: Clock) -> None:
+    def __init__(
+        self, database_path: Path, clock: Clock, history: HistoryCipher | None = None
+    ) -> None:
         self._database_path = database_path
         self._clock = clock
+        self._history = history
         self._connection: sqlite3.Connection | None = None
 
     def __enter__(self) -> Self:
@@ -634,7 +658,8 @@ class SqliteUnitOfWork:
         self.replays = SqliteExceptionReplayRepository(connection)
         self.cursors = SqliteSyncCursorRepository(connection)
         self.destination_cursors = SqliteDestinationSyncCursorRepository(connection)
-        self.audit = SqliteAuditRepository(connection)
+        self.audit = SqliteAuditRepository(connection, self._history)
+        self.observations = SqliteSourceObservationRepository(connection, self._history)
         self.run_outcomes = SqliteRuleRunOutcomeRepository(connection)
         self.previews = SqliteRulePreviewRepository(connection)
         return self
@@ -658,12 +683,20 @@ class SqliteUnitOfWork:
 
 
 class SqliteUnitOfWorkFactory:
-    def __init__(self, database_path: Path, clock: Clock | None = None) -> None:
+    """Units of work over one database; without a History Cipher, no Source Change has values."""
+
+    def __init__(
+        self,
+        database_path: Path,
+        clock: Clock | None = None,
+        history: HistoryCipher | None = None,
+    ) -> None:
         self._database_path = database_path
         self._clock = clock or SystemClock()
+        self._history = history
 
     def __call__(self) -> UnitOfWork:
-        return SqliteUnitOfWork(self._database_path, self._clock)
+        return SqliteUnitOfWork(self._database_path, self._clock, self._history)
 
 
 def _rule_values(rule: SyncRule) -> tuple[object, ...]:
