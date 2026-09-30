@@ -85,7 +85,9 @@ its mappings and last successful incremental positions, and writes nothing while
 - **Google Calendar rejected synchronization**: Google refused a request for a reason other than
   authorization or rate limiting, or answered in a way Calendar Sync could not use. Choose **Review
   this rule** and check that both calendars still exist and are shared with the accounts the rule
-  uses; if they are, the container logs name the Google error.
+  uses. Calendar Sync does not record the error Google returned, so if both calendars are available,
+  recover the rule; if it stops again with the same incident, note when the incident opened when
+  asking for help.
 - **Local synchronization infrastructure failed**: an unexpected error inside Calendar Sync stopped
   the run, not a Google condition. Review the container logs for the error, and check that the data
   volume has free space and the database is writable, before recovering the rule.
