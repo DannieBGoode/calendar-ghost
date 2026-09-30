@@ -22,6 +22,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     initialize_database,
 )
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
+from tests.fake_calendar import FakeCalendars, sync_use_case
 from tests.helpers import NOW, endpoint, event, rule
 
 HISTORY = HistoryCipher(CredentialCipher.generate_key())
@@ -261,3 +262,33 @@ def test_change_values_of_a_removed_rule_are_forgotten_too(tmp_path: Path) -> No
         uow.commit()
 
     assert _audit_row(tmp_path)["change_sealed"] is None
+
+
+def test_a_sync_run_records_a_busy_only_rename_in_sqlite_without_a_write(tmp_path: Path) -> None:
+    factory = _factory(tmp_path)
+    details = {"guests": ("ana@example.com",), "conferencing": ()}
+    calendars = FakeCalendars()
+    calendars.put(replace(event(), **details))  # type: ignore[arg-type]
+    sync = sync_use_case(factory, calendars)
+    sync.execute(rule().id)
+    writes = len(calendars.writes)
+    renamed = replace(event(), revision="revision-2", title="Renamed", **details)  # type: ignore[arg-type]
+    calendars.report(calendars.put(renamed))
+
+    sync.execute(rule().id)
+
+    assert calendars.writes[writes:] == []
+    with sqlite3.connect(tmp_path / "calendar-sync.db") as connection:
+        reason, fields, title_before = connection.execute(
+            "SELECT reason, change_fields, change_title_before FROM audit_entries"
+            " ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    assert (reason, json.loads(fields), title_before) == (
+        "projection_current",
+        ["title"],
+        "Private appointment",
+    )
+    with factory() as uow:
+        mapping = uow.mappings.for_source(rule().id, event().reference)
+    assert mapping is not None
+    assert mapping.source_revision == "revision-2"

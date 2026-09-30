@@ -487,7 +487,8 @@ class ExecuteSyncRule:
             and (series_changed or (run.reproject and decision.action is SyncAction.IGNORE))
         ):
             self.occurrences.reverify(run, mapping, source_event)
-            self._complete_series_revision(run, source_event)
+            if source_event.recurrence is not None:
+                self._complete_series_revision(run, source_event)
         if (
             mapping is not None
             and decision.action is SyncAction.CREATE

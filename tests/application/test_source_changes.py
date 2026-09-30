@@ -40,7 +40,8 @@ def _run_with(
 
 
 def _source(**changes: object) -> CalendarEvent:
-    return replace(event(), guests=GUESTS, conferencing=(), **changes)  # type: ignore[arg-type]
+    details: dict[str, object] = {"guests": GUESTS, "conferencing": (), **changes}
+    return replace(event(), **details)  # type: ignore[arg-type]
 
 
 def test_the_first_observation_of_an_event_records_no_change() -> None:
@@ -139,3 +140,30 @@ def test_a_full_listing_forgets_old_change_values_and_ended_events() -> None:
     assert factory.state.change_values_forgotten_before == NOW - SOURCE_CHANGE_RETENTION
     assert (rule().id, ended.reference) not in factory.state.observations
     assert (rule().id, event().reference) in factory.state.observations
+
+
+def test_a_revision_both_feeds_report_in_one_run_records_its_change_once() -> None:
+    calendars, factory = _synced(DETAILS)
+    destination = factory.state.mappings[(rule().id, event().reference)].destination
+    changed = calendars.put(_source(revision="revision-2", location="Room 2"))
+    edited = calendars.put(replace(calendars.events[destination], title="Edited"))
+    calendars.report(changed, edited)
+    recorded = len(factory.state.audit)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    changes = [entry.change for entry in factory.state.audit[recorded:] if entry.change]
+    assert [change.fields for change in changes] == [(SourceField.LOCATION,)]
+
+
+def test_a_shortened_guest_list_keeps_the_last_complete_one() -> None:
+    calendars, factory = _synced()
+    # Google shortened the guest list, so this revision cannot say who was removed.
+    _run_with(calendars, factory, _source(revision="revision-2", guests=None))
+
+    _run_with(calendars, factory, _source(revision="revision-3", guests=("ana@example.com",)))
+
+    change = factory.state.audit[-1].change
+    assert change is not None
+    assert change.fields == (SourceField.GUESTS,)
+    assert change.before.guests == GUESTS

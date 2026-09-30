@@ -36,7 +36,8 @@ out persisting descriptions, locations, attendees, and conferencing data.
   "already up to date".
 - Guests are compared as the set of attendee email addresses; a response or display-name change is
   not a guest change. When Google omits part of the guest list (`attendeesOmitted`), guests are
-  unknown and not compared, so a partial list never reads as guests removed. Cancelled events are
+  unknown and not compared, so a partial list never reads as guests removed, and the
+  observation keeps the last complete list for the next comparison. Cancelled events are
   not observed; their last observation stays, so a restored event is compared with how it was.
 - Titles stay in plain text, as ADR 0014 decided, including a change's previous title. The other
   values are sealed with AES-256-GCM under a key derived with HKDF-SHA256 from the Installation

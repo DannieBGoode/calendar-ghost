@@ -118,5 +118,15 @@ def _observe(run: SyncRunContext, event: CalendarEvent, at: datetime) -> SourceC
     previous = observations.get(run.rule.id, event.reference)
     if previous is not None and previous.revision == current.revision:
         return None
+    if previous is not None:
+        # A list Google did not return in full keeps the last complete one, so a guest removed
+        # before the next complete list is still reported.
+        current = replace(
+            current,
+            guests=previous.guests if current.guests is None else current.guests,
+            conferencing=(
+                previous.conferencing if current.conferencing is None else current.conferencing
+            ),
+        )
     observations.save(run.rule.id, event.reference, current, at)
     return SourceChange.between(previous, current) if previous is not None else None

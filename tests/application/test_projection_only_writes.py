@@ -102,3 +102,21 @@ def test_series_keeps_its_old_revision_until_its_occurrences_were_rechecked() ->
         entry.reason for entry in factory.state.audit[recorded:]
     ]
     assert _series_mapping_revision(factory) == "series-revision-2"
+
+
+def test_a_series_repaired_during_its_recheck_finishes_its_revision_once() -> None:
+    calendars, factory = _synced_series_with_exception()
+    destination = factory.state.mappings[(rule().id, series().reference)].destination
+    # The destination series no longer has the exception, so re-checking it repairs the series.
+    calendars.expansions[destination] = ()
+    renamed = calendars.put(series(revision="series-revision-2", title="Renamed"), starts=STARTS)
+    calendars.report(renamed)
+    recorded = len(factory.state.audit)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert [entry.reason for entry in factory.state.audit[recorded:]] == [
+        SyncReason.PROJECTION_CURRENT,
+        SyncReason.DESTINATION_OCCURRENCE_MISSING,
+    ]
+    assert _series_mapping_revision(factory) == "series-revision-2"
