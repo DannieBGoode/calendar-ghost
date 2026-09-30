@@ -191,7 +191,8 @@ and audit evidence in a short SQLite transaction, while both incremental cursors
 the complete source and destination batches succeed. A retry can therefore reuse completed mappings
 without losing its safe position. Temporary failures retry with exponential backoff and jitter.
 Three consecutive scheduled failures open one deduplicated incident, resolved by the rule's next
-successful run. Each resolved incident records why it resolved (`sync_succeeded`,
+successful scheduled run. Only scheduled runs report their success to rule health, so Sync Now and
+Reconcile Now never resolve it. Each resolved incident records why it resolved (`sync_succeeded`,
 `blocks_cleared`, or `rule_removed`, SQLite migration 12), and reopening one resets its opening
 time, so "Since" on the Overview measures only the current episode. An authorization failure
 opens the Incident at once and names the Connected Account Google rejected; the preview that

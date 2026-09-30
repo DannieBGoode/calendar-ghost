@@ -82,13 +82,17 @@ its mappings and last successful incremental positions, and writes nothing while
   the incident offers **Recover this rule** instead. If the rule's calendars belong to two accounts
   and the other one has also lost access, recovering the rule points the incident back to Settings
   for that account.
-- **Google Calendar rejected synchronization** or **Local synchronization infrastructure failed**:
-  choose **Review this rule** and check that both calendars still exist and are shared with the
-  accounts the rule uses.
+- **Google Calendar rejected synchronization**: Google refused a request for a reason other than
+  authorization or rate limiting, or answered in a way Calendar Sync could not use. Choose **Review
+  this rule** and check that both calendars still exist and are shared with the accounts the rule
+  uses; if they are, the container logs name the Google error.
+- **Local synchronization infrastructure failed**: an unexpected error inside Calendar Sync stopped
+  the run, not a Google condition. Review the container logs for the error, and check that the data
+  volume has free space and the database is writable, before recovering the rule.
 
 To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
-syncing**. Its next run repairs drift before advancing either cursor, and its successful run
-resolves the incident.
+syncing**. Its next run repairs drift before advancing either cursor. The next successful scheduled
+run, within five minutes, resolves the incident; **Sync Now** and **Reconcile Now** do not.
 
 ## A Google account was disconnected
 
