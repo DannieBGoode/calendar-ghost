@@ -137,6 +137,7 @@ class ConnectedAccountResponse(BaseModel):
     avatar_url: str | None
     state: str
     rule_count: int
+    authorized_at: str | None
 
 
 class GoogleAccountAccessResponse(BaseModel):
@@ -215,6 +216,9 @@ class IncidentResponse(BaseModel):
     summary: str
     opened_at: str
     updated_at: str
+    resolved_at: str | None
+    resolution: str | None
+    account_id: str | None
 
 
 class RecentChangeResponse(BaseModel):

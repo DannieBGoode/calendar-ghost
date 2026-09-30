@@ -428,15 +428,28 @@ class IncidentReport:
     category: str
     summary: str
     """Operational wording only; never an event title or other event content."""
+    account_id: ConnectedAccountId | None = None
+    """The Connected Account whose failure opened or last refreshed the Incident, if known."""
+
+
+class IncidentResolution(StrEnum):
+    """Why an Incident resolved, so Activity can tell recovery apart from removal."""
+
+    SYNC_SUCCEEDED = "sync_succeeded"
+    BLOCKS_CLEARED = "blocks_cleared"
+    RULE_REMOVED = "rule_removed"
 
 
 class IncidentRepository(Protocol):
     def open(self, incident: IncidentReport, at: datetime) -> bool:
-        """Open or refresh the Incident under its key; whether it was newly opened."""
+        """Open or refresh the Incident under its key; whether it was newly opened.
+
+        Reopening a resolved Incident starts a new episode, so its opening time is `at`.
+        """
         ...
 
-    def resolve(self, key: str, at: datetime) -> None:
-        """Resolve the Incident under this key, if it is open."""
+    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
+        """Resolve the Incident under this key, if it is open, recording why."""
         ...
 
 
@@ -476,6 +489,12 @@ class RemovalIncidents(Protocol):
         ...
 
 
+class RecoveryIncidents(Protocol):
+    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+        """Refresh a stopped rule's Incident with the lost authorization its recovery met."""
+        ...
+
+
 class ConnectedAccountState(StrEnum):
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
@@ -488,6 +507,8 @@ class ConnectedAccount:
     email: str
     state: ConnectedAccountState
     avatar_url: str | None = None
+    authorized_at: str | None = None
+    """When the account was last connected or reauthorized; None while disconnected."""
 
 
 class ConnectedAccountRepository(AccountAuthorizations, Protocol):

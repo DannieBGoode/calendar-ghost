@@ -215,4 +215,5 @@ def _account_response(summary: ConnectedAccountSummary) -> ConnectedAccountRespo
         avatar_url=account.avatar_url,
         state=account.state.value,
         rule_count=summary.rule_count,
+        authorized_at=account.authorized_at,
     )

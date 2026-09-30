@@ -3,9 +3,12 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
+
+from google.auth.exceptions import RefreshError, TransportError
 
 from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
@@ -84,7 +87,7 @@ class GoogleCalendarProvider:
         except Exception as error:
             if cursor is not None and _status_code(error) == 410:
                 return self.changes(source, None, not_ended_before)
-            raise self._failure(error) from error
+            raise self._failure(error, source.connected_account_id) from error
 
     def get_event(self, reference: EventRef) -> CalendarEvent | None:
         try:
@@ -101,7 +104,7 @@ class GoogleCalendarProvider:
         except Exception as error:
             if _status_code(error) == 404:
                 return None
-            raise self._failure(error) from error
+            raise self._failure(error, reference.calendar.connected_account_id) from error
 
     def find_projection(
         self, destination: CalendarEndpoint, operation_key: str
@@ -120,7 +123,7 @@ class GoogleCalendarProvider:
                 .get("items", [])
             )
         except Exception as error:
-            raise self._failure(error) from error
+            raise self._failure(error, destination.connected_account_id) from error
         return to_domain_event(existing[0], destination) if existing else None
 
     def create_projection(
@@ -147,7 +150,7 @@ class GoogleCalendarProvider:
             )
             return CreatedProjection(to_domain_event(payload, destination))
         except Exception as error:
-            raise self._failure(error) from error
+            raise self._failure(error, destination.connected_account_id) from error
 
     def update_projection(
         self,
@@ -182,7 +185,7 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, destination.calendar)
         except Exception as error:
-            raise self._failure(error) from error
+            raise self._failure(error, destination.calendar.connected_account_id) from error
 
     def delete_projection(
         self,
@@ -216,7 +219,7 @@ class GoogleCalendarProvider:
             )
         except Exception as error:
             if _status_code(error) not in {404, 410}:
-                raise self._failure(error) from error
+                raise self._failure(error, destination.calendar.connected_account_id) from error
 
     def list_events(
         self, calendar: CalendarEndpoint, not_ended_before: datetime
@@ -262,7 +265,7 @@ class GoogleCalendarProvider:
                     return tuple(items)
                 parameters["pageToken"] = page_token
         except Exception as error:
-            raise self._failure(error) from error
+            raise self._failure(error, calendar.connected_account_id) from error
 
     def get_occurrence(
         self, series: EventRef, original_start: OccurrenceStart
@@ -300,7 +303,7 @@ class GoogleCalendarProvider:
                     ProviderFailureKind.TEMPORARY,
                     "Google series could not be read while resolving an occurrence",
                 ) from error
-            raise self._failure(error) from error
+            raise self._failure(error, series.calendar.connected_account_id) from error
         # Pages beyond the limit were not read, so the occurrence is not proven absent.
         raise ProviderFailure(
             ProviderFailureKind.TEMPORARY,
@@ -337,7 +340,7 @@ class GoogleCalendarProvider:
             # counts as live, so it synchronizes as before instead of failing the whole rule.
             if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
                 return True
-            raise self._failure(error) from error
+            raise self._failure(error, series.calendar.connected_account_id) from error
         # Pages beyond the limit were not read, so the series is not proven empty.
         return True
 
@@ -375,7 +378,7 @@ class GoogleCalendarProvider:
         except Exception as error:
             if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
                 return ()
-            raise self._failure(error) from error
+            raise self._failure(error, series.calendar.connected_account_id) from error
         return tuple(exceptions)
 
     def write_occurrence(
@@ -412,7 +415,7 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, destination_series.calendar)
         except Exception as error:
-            raise self._failure(error) from error
+            raise self._failure(error, destination_series.calendar.connected_account_id) from error
 
     def cancel_occurrence(
         self,
@@ -441,11 +444,14 @@ class GoogleCalendarProvider:
             )
         except Exception as error:
             if _status_code(error) not in {404, 410}:
-                raise self._failure(error) from error
+                raise self._failure(
+                    error, destination_series.calendar.connected_account_id
+                ) from error
 
-    def _failure(self, error: Exception) -> ProviderFailure:
-        # The clock turns a Retry-After date into the seconds the retry helper waits.
-        return _provider_failure(error, self._clock.now())
+    def _failure(self, error: Exception, account: ConnectedAccountId) -> ProviderFailure:
+        # The clock turns a Retry-After date into the seconds the retry helper waits. The account
+        # names whose access to renew when Google rejected its credentials.
+        return replace(_provider_failure(error, self._clock.now()), account_id=account)
 
     def _owned_occurrence(
         self,
@@ -506,6 +512,21 @@ def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) 
 
 
 def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
+    # Refreshing the access token fails before any request is sent, so it carries no status. A
+    # revoked or expired grant needs reauthorization; google-auth marks token-endpoint outages
+    # retryable. Their text can quote the token endpoint's response, so it is not kept.
+    if isinstance(error, RefreshError):
+        if error.retryable:
+            return ProviderFailure(
+                ProviderFailureKind.TEMPORARY, "Google could not refresh access right now"
+            )
+        return ProviderFailure(
+            ProviderFailureKind.AUTHENTICATION, "Google no longer accepts this account's access"
+        )
+    if isinstance(error, TransportError):
+        return ProviderFailure(
+            ProviderFailureKind.TEMPORARY, "Google could not be reached to refresh access"
+        )
     status = _status_code(error)
     detail = str(error) or error.__class__.__name__
     if status == 401:

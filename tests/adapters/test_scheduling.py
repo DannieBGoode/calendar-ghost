@@ -20,18 +20,22 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditOutcome,
     IncidentReport,
+    IncidentResolution,
     RuleRunOutcome,
     RunKind,
     UnitOfWorkFactory,
 )
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
-from calendar_sync.domain.model import SyncReason, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import (
     IncidentNotification,
     IncidentNotifier,
     NotificationChannel,
 )
-from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
+from calendar_sync.infrastructure.persistence.activity_queries import (
+    SqliteOperationsQueries,
+    open_blocks,
+)
 from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,
@@ -644,6 +648,25 @@ def test_a_later_interleaved_decision_does_not_hide_the_daily_pass_verdict(
     ]
 
 
+def test_an_incident_names_the_account_whose_failure_last_refreshed_it(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    incidents = SqliteIncidentRepository(database)
+    at = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
+    report = IncidentReport(
+        "provider:rule-1", rule().id, "authentication", "s", ConnectedAccountId("personal")
+    )
+
+    incidents.open(report, at)
+    first = SqliteOperationsQueries(database).incidents()[0].account_id
+    incidents.open(replace(report, account_id=ConnectedAccountId("work")), at)
+    refreshed = SqliteOperationsQueries(database).incidents()[0].account_id
+    incidents.open(replace(report, account_id=None), at)
+    unknown = SqliteOperationsQueries(database).incidents()[0].account_id
+
+    assert (first, refreshed, unknown) == ("personal", "work", None)
+
+
 def test_a_legacy_recurring_skip_is_not_evidence_of_an_earlier_block(tmp_path: Path) -> None:
     # Earlier releases recorded skipped recurring events as conflicts; they are skips.
     legacy = replace(_block("upgrade"), reason=SyncReason.RECURRING_UNSUPPORTED)
@@ -662,18 +685,49 @@ def test_incidents_open_once_refresh_while_open_and_reopen_after_resolving(
     incidents = SqliteIncidentRepository(database)
     report = IncidentReport("provider:rule-1", rule().id, "temporary", "first summary")
     opened_at = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
-    later = datetime(2026, 9, 29, 10, 0, tzinfo=UTC)
+    refreshed_at = datetime(2026, 9, 29, 10, 0, tzinfo=UTC)
+    resolved_at = datetime(2026, 9, 29, 11, 0, tzinfo=UTC)
+    reopened_at = datetime(2026, 9, 29, 12, 0, tzinfo=UTC)
+    columns = "state, summary, opened_at, updated_at, resolved_at, resolution"
 
     opened = incidents.open(report, opened_at)
-    refreshed = incidents.open(replace(report, summary="second summary"), later)
-    incidents.resolve(report.key, later)
-    reopened = incidents.open(report, later)
+    refreshed = incidents.open(replace(report, summary="second summary"), refreshed_at)
+    with sqlite3.connect(database) as connection:
+        while_open = connection.execute(f"SELECT {columns} FROM incidents").fetchone()
+    incidents.resolve(report.key, resolved_at, IncidentResolution.SYNC_SUCCEEDED)
+    with sqlite3.connect(database) as connection:
+        resolved = connection.execute(f"SELECT {columns} FROM incidents").fetchone()
+    reopened = incidents.open(report, reopened_at)
 
     assert (opened, refreshed, reopened) == (True, False, True)
+    # Refreshing keeps when the episode began; resolving records when and why it ended.
+    assert while_open == (
+        "open",
+        "second summary",
+        opened_at.isoformat(),
+        refreshed_at.isoformat(),
+        None,
+        None,
+    )
+    assert resolved == (
+        "resolved",
+        "second summary",
+        opened_at.isoformat(),
+        resolved_at.isoformat(),
+        resolved_at.isoformat(),
+        "sync_succeeded",
+    )
+    # Reopening starts a new episode, so "Since" never reaches back to an earlier one.
     with sqlite3.connect(database) as connection:
-        rows = connection.execute(
-            "SELECT deduplication_key, state, summary, opened_at, updated_at FROM incidents"
-        ).fetchall()
+        rows = connection.execute(f"SELECT deduplication_key, {columns} FROM incidents").fetchall()
     assert rows == [
-        ("provider:rule-1", "open", "first summary", opened_at.isoformat(), later.isoformat())
+        (
+            "provider:rule-1",
+            "open",
+            "first summary",
+            reopened_at.isoformat(),
+            reopened_at.isoformat(),
+            None,
+            None,
+        )
     ]

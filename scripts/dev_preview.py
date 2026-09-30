@@ -375,6 +375,43 @@ def _seed(adapters: Adapters, path: Path, now: datetime) -> None:
                 (now - timedelta(hours=1)).isoformat(),
             ),
         )
+        connection.executemany(
+            """
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, category, state, summary,
+                opened_at, updated_at, resolved_at, resolution
+            ) VALUES (?, ?, ?, ?, 'resolved', ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    f"preview-resolved-{resolution}",
+                    f"preview-resolved-{resolution}",
+                    rule_id,
+                    category,
+                    summary,
+                    (now - timedelta(days=days, hours=2)).isoformat(),
+                    (now - timedelta(days=days)).isoformat(),
+                    (now - timedelta(days=days)).isoformat(),
+                    resolution,
+                )
+                for rule_id, category, summary, days, resolution in (
+                    (
+                        "preview-personal-work",
+                        "temporary",
+                        "Google Calendar is temporarily unavailable",
+                        1,
+                        "sync_succeeded",
+                    ),
+                    (
+                        "preview-removed-rule",
+                        "permanent",
+                        "Google Calendar rejected synchronization",
+                        2,
+                        "rule_removed",
+                    ),
+                )
+            ],
+        )
 
 
 def main() -> None:
