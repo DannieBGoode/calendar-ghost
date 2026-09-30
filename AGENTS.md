@@ -37,9 +37,13 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
 - Preview is side-effect-free and required before enabling a new or materially changed rule.
 - Pausing preserves mappings and projections. Reauthorization and resume begin with validation and
   reconciliation.
-- Event descriptions, locations, attendees, and conferencing data must not be persisted in SQLite,
-  audit entries, incidents, or logs. Audit Entries record only the source event's title, time,
-  recurrence, and cancellation for Activity (ADR 0014); titles still never reach logs or incidents.
+- Event content never reaches logs, incidents, or notifications. SQLite keeps only what Activity
+  needs: each Audit Entry's source event title, time, recurrence, and cancellation (ADR 0014), and
+  Source Observations and Source Change values (ADR 0017). Titles are plain text; descriptions,
+  locations, guests, recurrence rules, and conferencing data are persisted only sealed with the
+  History Cipher, and Source Change values are kept for 90 days.
+- A Sync Run writes to the destination only when the projection derived from the source differs
+  from the destination's content. A new source revision alone is never a reason to write.
 
 Use the exact terms defined in `CONTEXT.md`. In particular, do not use “sync pair,” “event copy,” or
 “conflict” when Directional Sync Rule, Event Projection, or Drift is the intended concept.

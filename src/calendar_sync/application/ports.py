@@ -8,6 +8,7 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -296,11 +297,41 @@ class AuditEntry:
     reason: SyncReason | None = None
     run_id: str | None = None
     event: RecordedEvent | None = None
-    """The source event's title and time; never its description, location, or attendees."""
+    """The source event's title and time, as ADR 0014 records them."""
+    change: SourceChange | None = None
+    """What the source event's new revision changed since the rule last observed it (ADR 0017)."""
 
 
 class AuditRepository(Protocol):
     def append(self, entry: AuditEntry) -> None: ...
+
+    def forget_change_values(self, before: datetime) -> None:
+        """Discard the values of every Source Change recorded before `before`.
+
+        Every rule's, including paused and removed rules'. The changed fields and titles stay, so
+        Activity still says what changed.
+        """
+        ...
+
+
+class SourceObservationRepository(Protocol):
+    """The tracked details of each source event a rule last observed (ADR 0017)."""
+
+    def get(self, rule_id: SyncRuleId, source: EventRef) -> SourceObservation | None: ...
+
+    def save(
+        self,
+        rule_id: SyncRuleId,
+        source: EventRef,
+        observation: SourceObservation,
+        observed_at: datetime,
+    ) -> None: ...
+
+    def forget_stale(
+        self, rule_id: SyncRuleId, source: CalendarEndpoint, ended_before: datetime
+    ) -> None:
+        """Forget single events that ended before `ended_before`, and other calendars' events."""
+        ...
 
 
 class RunKind(StrEnum):
@@ -379,6 +410,7 @@ class UnitOfWork(Protocol):
     cursors: SyncCursorRepository
     destination_cursors: SyncCursorRepository
     audit: AuditRepository
+    observations: SourceObservationRepository
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
 

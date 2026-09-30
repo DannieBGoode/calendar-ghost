@@ -75,7 +75,11 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     initialize_database,
 )
 from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
-from calendar_sync.infrastructure.security import CredentialCipher, SqliteAdminAuth
+from calendar_sync.infrastructure.security import (
+    CredentialCipher,
+    HistoryCipher,
+    SqliteAdminAuth,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,14 +154,16 @@ def build_adapters(settings: Settings) -> Adapters:
     # One clock and one identifier source, shared by every adapter and use case.
     clock = SystemClock()
     ids = UuidIdGenerator()
+    # Source Change values are sealed with a key derived from the master key (ADR 0017).
+    history = HistoryCipher(settings.master_key) if settings.master_key else None
     adapters = Adapters(
-        unit_of_work=SqliteUnitOfWorkFactory(settings.database_path, clock),
+        unit_of_work=SqliteUnitOfWorkFactory(settings.database_path, clock, history),
         locks=RuleLocks(),
         clock=clock,
         ids=ids,
         run_ids=UuidRunIdGenerator(),
         administrator=SqliteAdminAuth(settings.database_path, clock),
-        activity=SqliteActivityQueries(settings.database_path),
+        activity=SqliteActivityQueries(settings.database_path, history),
         operations=SqliteOperationsQueries(settings.database_path),
         health_records=SqliteRuleHealthRecords(settings.database_path),
         incidents=SqliteIncidentRepository(settings.database_path, ids),

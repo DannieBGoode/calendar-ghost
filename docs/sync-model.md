@@ -40,7 +40,7 @@ another rule failing does not repeat a full pass that already completed.
 For each changed source event, the decision service chooses one action:
 
 - **Create** when an eligible source has no managed projection or the mapped projection is missing.
-- **Update** whenever actual destination content differs from the projection derived from source authority.
+- **Update** whenever actual destination content differs from the projection derived from source authority. A new source revision whose projection matches the destination, such as a reply to an invitation or a title change under a Busy-Only rule, is ignored as `projection_current`, and the mapping records the revision without a provider write. An update is `source_changed` only when the projection the source calls for differs from the one last written; otherwise it repairs drift.
 - **Delete** when a mapped source is cancelled or becomes excluded by rule policy.
 - **Ignore** when content is current, the source is itself managed, an excluded/cancelled source has no mapping, or an unmapped single event ended before the window.
 - **Conflict** only when identity or ownership is ambiguous.
@@ -95,7 +95,7 @@ become sources of a reverse rule. A mapped series that the source no longer retu
 
 | Source change | Destination behavior |
 | --- | --- |
-| Series content, time, or recurrence change | Update the destination series, then re-verify every Occurrence Mapping |
+| Series content, time, or recurrence change | Update the destination series if its projection changed, then re-verify every Occurrence Mapping. The Series Mapping records the new revision only after that, so a retry re-verifies again |
 | "This and following" split | Truncate the old destination series and create the new one; retire Occurrence Mappings that no longer exist on either side |
 | Moved or edited occurrence | Update the matching destination occurrence |
 | Cancelled occurrence | Cancel the matching destination occurrence and keep a `cancelled` Occurrence Mapping |
@@ -150,12 +150,24 @@ identifier, an `AuditAction` and `AuditOutcome` from `application/ports.py`, and
 code from `SyncReason` in `domain/model.py`, so the Activity view can explain what changed and why an expected event was not synchronized. Updates
 distinguish a changed
 source (`source_changed`) from a repaired destination edit (`destination_drift_repaired`). Entries
-also record the source event's title, time, recurrence, and cancellation as the run saw them, never
-its description, location, or attendees. When an entry saw no title, such as a cancellation Google
+also record the source event's title, time, recurrence, and cancellation as the run saw them. When an entry saw no title, such as a cancellation Google
 reported without one, an occurrence removed from its series, or a projection removed with its rule,
 Activity names it from the latest earlier entry for the same rule and source event that saw one. A
 confirmed event with an empty title keeps it. An entry whose title differs from that earlier one is
 marked as renamed. Entries recorded before this behavior name no event (ADR 0014).
+
+Each recorded decision about a confirmed source event also observes it (ADR 0017). The rule keeps
+a Source Observation of the event's title, time, description, location, guest addresses,
+recurrence, and conferencing links. When a later run sees a new revision, the entry records the
+Source Change: the fields that differ and their values before and after. The first observation,
+and a revision that changed no tracked field, such as a reply to an invitation, record none.
+Decisions Activity does not record never observe, so they cannot absorb a change. Titles and the
+names of changed fields are plain text; the other values are sealed with the History Cipher. Every
+scheduler pass clears sealed values older than 90 days from every rule's entries, including paused
+and removed rules. A run that lists both calendars in full also forgets that rule's observations of
+single events that ended more than 90 days ago or of calendars it no longer uses. Activity lists the changed fields, and
+`GET /api/v1/audit-entries/{id}/changes` shows one entry's values.
+
 Occurrence decisions that found the destination already matching (`occurrence_current`,
 `occurrence_already_cancelled`) are listed as no change, like `projection_current`. When an
 occurrence is missing from its destination series, the run checks the series before blocking; that

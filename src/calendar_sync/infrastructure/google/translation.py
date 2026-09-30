@@ -69,7 +69,43 @@ def to_domain_event(payload: Mapping[str, Any], endpoint: CalendarEndpoint) -> C
         web_link=(
             html_link if isinstance(html_link, str) and html_link.startswith("https://") else None
         ),
+        guests=None if status is EventStatus.CANCELLED else _guests(payload),
+        conferencing=None if status is EventStatus.CANCELLED else _conferencing(payload),
     )
+
+
+def _guests(payload: Mapping[str, Any]) -> tuple[str, ...] | None:
+    """Attendee addresses; responses are not tracked, and a shortened list is unknown."""
+    if payload.get("attendeesOmitted") is True:
+        return None
+    attendees = payload.get("attendees")
+    if not isinstance(attendees, list):
+        return ()
+    addresses = {
+        attendee["email"].strip().lower()
+        for attendee in attendees
+        if isinstance(attendee, Mapping)
+        and isinstance(attendee.get("email"), str)
+        and attendee["email"].strip()
+    }
+    return tuple(sorted(addresses))
+
+
+def _conferencing(payload: Mapping[str, Any]) -> tuple[str, ...]:
+    """Every conferencing entry point, including the Google Meet link."""
+    uris: set[str] = set()
+    link = payload.get("hangoutLink")
+    if isinstance(link, str) and link:
+        uris.add(link)
+    conference = payload.get("conferenceData")
+    entry_points = conference.get("entryPoints") if isinstance(conference, Mapping) else None
+    if isinstance(entry_points, list):
+        uris.update(
+            point["uri"]
+            for point in entry_points
+            if isinstance(point, Mapping) and isinstance(point.get("uri"), str) and point["uri"]
+        )
+    return tuple(sorted(uris))
 
 
 def projection_payload(

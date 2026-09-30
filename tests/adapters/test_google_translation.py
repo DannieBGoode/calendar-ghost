@@ -187,3 +187,69 @@ def test_occurrence_payload_records_the_original_start() -> None:
 
     assert private_properties(body)[ORIGINAL_START_PROPERTY] == "2026-09-08T08:00:00Z"
     assert "attendees" not in body
+
+
+def _timed(**fields: object) -> dict[str, object]:
+    return {
+        "id": "event-1",
+        "etag": "revision-1",
+        "summary": "Planning",
+        "start": {"dateTime": "2026-08-30T10:00:00Z"},
+        "end": {"dateTime": "2026-08-30T11:00:00Z"},
+        **fields,
+    }
+
+
+def test_guests_are_attendee_addresses_without_their_responses() -> None:
+    payload = _timed(
+        attendees=[
+            {"email": "Ben@Example.com", "responseStatus": "accepted"},
+            {"email": "ana@example.com", "responseStatus": "declined", "displayName": "Ana"},
+            {"responseStatus": "needsAction"},
+        ]
+    )
+
+    translated = to_domain_event(payload, endpoint("account", "calendar"))
+
+    assert translated.guests == ("ana@example.com", "ben@example.com")
+
+
+def test_an_event_without_attendees_has_no_guests() -> None:
+    translated = to_domain_event(_timed(), endpoint("account", "calendar"))
+
+    assert translated.guests == ()
+    assert translated.conferencing == ()
+
+
+def test_a_guest_list_google_shortened_is_unknown() -> None:
+    payload = _timed(attendees=[{"email": "ana@example.com"}], attendeesOmitted=True)
+
+    assert to_domain_event(payload, endpoint("account", "calendar")).guests is None
+
+
+def test_conferencing_is_every_entry_point_and_the_meet_link() -> None:
+    payload = _timed(
+        hangoutLink="https://meet.google.com/abc-defg-hij",
+        conferenceData={
+            "entryPoints": [
+                {"entryPointType": "video", "uri": "https://meet.google.com/abc-defg-hij"},
+                {"entryPointType": "phone", "uri": "tel:+34-900-000-000", "pin": "1234"},
+            ]
+        },
+    )
+
+    translated = to_domain_event(payload, endpoint("account", "calendar"))
+
+    assert translated.conferencing == (
+        "https://meet.google.com/abc-defg-hij",
+        "tel:+34-900-000-000",
+    )
+
+
+def test_a_cancelled_tombstone_has_unknown_guests_and_conferencing() -> None:
+    payload = {"id": "event-1", "status": "cancelled"}
+
+    translated = to_domain_event(payload, endpoint("account", "calendar"))
+
+    assert translated.guests is None
+    assert translated.conferencing is None

@@ -190,6 +190,26 @@ class AuditEntryResponse(BaseModel):
     event: RecordedEventResponse | None = None
     repeated: bool = False
     """A repair that redoes the same event's previous one, recorded by an earlier run."""
+    changed_fields: list[str] | None = None
+    """The source fields this entry's Source Change touched (ADR 0017); None when none."""
+
+
+class FieldChangeResponse(BaseModel):
+    field: str
+    before: str | None = None
+    after: str | None = None
+    before_time: RecordedTimeResponse | None = None
+    after_time: RecordedTimeResponse | None = None
+    added: list[str] = []
+    removed: list[str] = []
+
+
+class SourceChangeResponse(BaseModel):
+    """What changed in the entry's source event; values are kept for 90 days."""
+
+    fields: list[str]
+    values_available: bool
+    changes: list[FieldChangeResponse]
 
 
 class EventSnapshotResponse(BaseModel):

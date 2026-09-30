@@ -177,6 +177,24 @@ export type AuditEntry = {
   event: RecordedEvent | null
   /** A repair that redoes the same event's previous one, recorded by an earlier run. */
   repeated: boolean
+  /** The source fields this entry's Source Change touched; null when it recorded none. */
+  changed_fields: string[] | null
+}
+export type RecordedTime = { all_day: boolean; starts: string | null; ends: string | null }
+export type FieldChange = {
+  field: string
+  before: string | null
+  after: string | null
+  before_time: RecordedTime | null
+  after_time: RecordedTime | null
+  added: string[]
+  removed: string[]
+}
+/** What changed in an entry's source event; values other than titles are kept for 90 days. */
+export type SourceChange = {
+  fields: string[]
+  values_available: boolean
+  changes: FieldChange[]
 }
 export type RecordedEvent = {
   title: string
@@ -316,6 +334,8 @@ export const api = {
   activityEntry: (entryId: number) => request<AuditEntry>(`/api/v1/audit-entries/${entryId}`),
   activityEvent: (entryId: number) =>
     request<ActivityEvent>(`/api/v1/audit-entries/${entryId}/event`),
+  activityChanges: (entryId: number) =>
+    request<SourceChange>(`/api/v1/audit-entries/${entryId}/changes`),
   incidents: () => request<Incident[]>("/api/v1/incidents"),
   recentChanges: (limit = 5) => request<RecentChange[]>(`/api/v1/recent-changes?limit=${limit}`),
 }

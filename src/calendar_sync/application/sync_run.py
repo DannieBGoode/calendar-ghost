@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass, field, replace
+from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.ports import AuditEntry, CalendarReader, UnitOfWork
+from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
@@ -13,6 +14,9 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleState,
 )
+
+# How long the values of a Source Change are kept; which fields changed is kept with the entry.
+SOURCE_CHANGE_RETENTION = timedelta(days=90)
 
 # Skips that answer no question a person would ask: loop prevention, bookkeeping, and events
 # that never were in scope. Runs count them but do not record them.
@@ -90,9 +94,39 @@ def require_unchanged(run: SyncRunContext) -> None:
         raise RuleNotExecutable("sync rule changed during synchronization; run stopped")
 
 
-def record(run: SyncRunContext, entry: AuditEntry) -> None:
-    """Append an Audit Entry unless its decision is one Activity deliberately leaves out."""
+def record(run: SyncRunContext, entry: AuditEntry, observed: CalendarEvent | None = None) -> None:
+    """Append an Audit Entry unless its decision is one Activity deliberately leaves out.
+
+    An entry about `observed` also records what changed in it since the rule last observed it.
+    Only recorded decisions observe, so no change is absorbed by a decision Activity never shows.
+    """
     reason = entry.reason
     if reason in UNRECORDED_REASONS or (run.daily_pass and reason in UNRECORDED_ON_DAILY_PASS):
         return
+    if observed is not None:
+        entry = replace(entry, change=_observe(run, observed, entry.occurred_at))
     run.uow.audit.append(entry)
+
+
+def _observe(run: SyncRunContext, event: CalendarEvent, at: datetime) -> SourceChange | None:
+    """Remember the event's tracked details; how they changed, if the rule saw it before."""
+    current = SourceObservation.of(event)
+    if current is None:
+        # A cancellation keeps the last observation, so a restored event compares with it.
+        return None
+    observations = run.uow.observations
+    previous = observations.get(run.rule.id, event.reference)
+    if previous is not None and previous.revision == current.revision:
+        return None
+    if previous is not None:
+        # A list Google did not return in full keeps the last complete one, so a guest removed
+        # before the next complete list is still reported.
+        current = replace(
+            current,
+            guests=previous.guests if current.guests is None else current.guests,
+            conferencing=(
+                previous.conferencing if current.conferencing is None else current.conferencing
+            ),
+        )
+    observations.save(run.rule.id, event.reference, current, at)
+    return SourceChange.between(previous, current) if previous is not None else None

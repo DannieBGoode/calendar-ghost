@@ -25,6 +25,7 @@ from calendar_sync.application.ports import (
     RunKind,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.notifications import (
@@ -731,3 +732,25 @@ def test_incidents_open_once_refresh_while_open_and_reopen_after_resolving(
             None,
         )
     ]
+
+
+def test_each_scheduler_pass_forgets_change_values_of_every_rule() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.PAUSED)
+    now = datetime(2026, 9, 30, 10, tzinfo=UTC)
+
+    class FixedClock:
+        def now(self) -> datetime:
+            return now
+
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, RecordingExecuteRule([])),
+        unit_of_work,
+        cast(RunHealth, RecordingHealth()),
+        clock=FixedClock(),
+    )
+
+    asyncio.run(scheduler.run_once())
+
+    # Paused and removed rules never run, so their values expire here rather than in a run.
+    assert unit_of_work.state.change_values_forgotten_before == now - SOURCE_CHANGE_RETENTION

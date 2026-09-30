@@ -47,7 +47,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
-from tests.helpers import NOW, event, rule
+from tests.helpers import NOW, event, rescheduled, rule
 
 
 @dataclass
@@ -524,7 +524,7 @@ def test_each_run_groups_its_audit_entries() -> None:
     )
 
     first = use_case.execute(rule().id)
-    changed = event(revision="revision-2")
+    changed = rescheduled(event(), "revision-2")
     provider.source = changed
     provider.source_changes = (changed, managed)
     use_case.execute(rule().id)
@@ -544,7 +544,8 @@ def test_each_run_groups_its_audit_entries() -> None:
         "Private appointment",
         "Private appointment",
     ]
-    assert all("Sensitive" not in repr(entry) for entry in unit_of_work.state.audit)
+    # Entries name the event by title and time; other details live only in a Source Change.
+    assert all("Sensitive" not in repr(entry.event) for entry in unit_of_work.state.audit)
 
 
 @pytest.mark.parametrize(
