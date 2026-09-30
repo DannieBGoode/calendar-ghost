@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
 
+from google.auth.exceptions import RefreshError, TransportError
+
 from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
@@ -510,6 +512,21 @@ def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) 
 
 
 def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
+    # Refreshing the access token fails before any request is sent, so it carries no status. A
+    # revoked or expired grant needs reauthorization; google-auth marks token-endpoint outages
+    # retryable. Their text can quote the token endpoint's response, so it is not kept.
+    if isinstance(error, RefreshError):
+        if error.retryable:
+            return ProviderFailure(
+                ProviderFailureKind.TEMPORARY, "Google could not refresh access right now"
+            )
+        return ProviderFailure(
+            ProviderFailureKind.AUTHENTICATION, "Google no longer accepts this account's access"
+        )
+    if isinstance(error, TransportError):
+        return ProviderFailure(
+            ProviderFailureKind.TEMPORARY, "Google could not be reached to refresh access"
+        )
     status = _status_code(error)
     detail = str(error) or error.__class__.__name__
     if status == 401:

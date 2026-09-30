@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
+from google.auth.exceptions import RefreshError, TransportError
 
 from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
@@ -692,6 +693,42 @@ def test_has_live_occurrences_classifies_other_failures_like_any_request(
 
     assert failure.value.kind is kind
     assert failure.value.account_id == DESTINATION.connected_account_id
+
+
+@pytest.mark.parametrize(
+    ("error", "kind"),
+    [
+        # Google revoked the grant or it expired: only reauthorizing the account recovers.
+        (
+            RefreshError("invalid_grant: Token has been expired or revoked."),  # type: ignore[no-untyped-call]
+            ProviderFailureKind.AUTHENTICATION,
+        ),
+        (
+            RefreshError("token endpoint returned 503", retryable=True),  # type: ignore[no-untyped-call]
+            ProviderFailureKind.TEMPORARY,
+        ),
+        (
+            TransportError("connection reset"),  # type: ignore[no-untyped-call]
+            ProviderFailureKind.TEMPORARY,
+        ),
+    ],
+)
+def test_access_token_refresh_failures_are_classified_without_a_status(
+    error: Exception, kind: ProviderFailureKind
+) -> None:
+    request = MagicMock()
+    request.execute.side_effect = error
+    events_api = MagicMock()
+    events_api.list.return_value = request
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.find_projection(DESTINATION, "operation-key")
+
+    assert failure.value.kind is kind
+    assert failure.value.account_id == DESTINATION.connected_account_id
+    # The token endpoint's response is not repeated into incidents or logs.
+    assert str(error) not in failure.value.detail
 
 
 def test_failures_name_the_account_whose_request_google_rejected() -> None:
