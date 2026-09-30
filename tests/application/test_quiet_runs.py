@@ -18,7 +18,16 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
-from tests.helpers import NOW, all_day_event, event, occurrence, rule, series, week_start
+from tests.helpers import (
+    NOW,
+    all_day_event,
+    event,
+    occurrence,
+    rescheduled,
+    rule,
+    series,
+    week_start,
+)
 
 STARTS = tuple(week_start(week) for week in range(4))
 
@@ -129,7 +138,7 @@ def test_projection_reported_by_both_feeds_in_one_run_is_decided_once() -> None:
     sync = sync_use_case(factory, calendars)
     sync.execute(rule().id)
     destination = factory.state.mappings[(rule().id, event().reference)].destination
-    changed = calendars.put(replace(event(), revision="revision-2", title="Moved"))
+    changed = calendars.put(rescheduled(event(), "revision-2"))
     edited = calendars.put(replace(calendars.events[destination], title="Edited"))
     calendars.report(changed, edited)
     first_run = len(factory.state.audit)

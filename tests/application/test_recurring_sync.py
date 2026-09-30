@@ -1031,9 +1031,9 @@ def test_reverifying_an_occurrence_already_recorded_as_current_leaves_its_mappin
 
     sync_use_case(factory, calendars).execute(rule().id)
 
-    # The series update re-verified the occurrence, found it current, and kept the record as is.
+    # The series' new revision re-verified the occurrence, found it current, and kept the record.
     assert [entry.reason for entry in factory.state.audit][-2:] == [
-        SyncReason.SOURCE_CHANGED,
+        SyncReason.PROJECTION_CURRENT,
         SyncReason.OCCURRENCE_CURRENT,
     ]
     assert factory.state.occurrences[key] == recorded

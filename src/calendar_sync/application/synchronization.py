@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
 from calendar_sync.application.errors import (
@@ -463,7 +463,7 @@ class ExecuteSyncRule:
     ) -> SyncDecision:
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
-            mapping, decision = self._decide_and_write(
+            mapping, decision, source_moved = self._decide_and_write(
                 run,
                 source_event,
                 destination_loaded=destination_loaded,
@@ -471,13 +471,17 @@ class ExecuteSyncRule:
                 record_current=record_current,
             )
         # Occurrence re-verification takes the write lock per occurrence, so it runs outside it.
-        series_changed = decision.action in {SyncAction.CREATE, SyncAction.UPDATE}
+        # A new series revision can change its occurrences even when the series needs no write.
+        series_changed = decision.action in {SyncAction.CREATE, SyncAction.UPDATE} or (
+            source_moved and decision.reason is SyncReason.PROJECTION_CURRENT
+        )
         if (
             mapping is not None
             and decision.action is not SyncAction.DELETE
             and (series_changed or (run.reproject and decision.action is SyncAction.IGNORE))
         ):
             self.occurrences.reverify(run, mapping, source_event)
+            self._complete_series_revision(run, source_event)
         if (
             mapping is not None
             and decision.action is SyncAction.CREATE
@@ -486,6 +490,16 @@ class ExecuteSyncRule:
         ):
             self._replay_exceptions(run, mapping, source_event)
         return decision
+
+    def _complete_series_revision(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
+        """Record a series' new revision once every Occurrence Mapping was re-verified under it."""
+        with self.locks.for_writes(run.rule.id):
+            require_unchanged(run)
+            mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
+            if mapping is None or mapping.source_revision == source_series.revision:
+                return
+            run.uow.mappings.save(replace(mapping, source_revision=source_series.revision))
+            run.uow.commit()
 
     def _replay_exceptions(
         self, run: SyncRunContext, mapping: EventMapping, source_series: CalendarEvent
@@ -519,9 +533,49 @@ class ExecuteSyncRule:
         destination_loaded: bool,
         actual_destination: CalendarEvent | None,
         record_current: bool = True,
-    ) -> tuple[EventMapping | None, SyncDecision]:
+    ) -> tuple[EventMapping | None, SyncDecision, bool]:
+        """Decide and apply one source event; also whether its revision is new to its mapping."""
         uow, rule = run.uow, run.rule
         mapping = uow.mappings.for_source(rule.id, source_event.reference)
+        source_moved = mapping is not None and mapping.source_revision != source_event.revision
+        mapping, decision = self._decide(
+            run,
+            source_event,
+            mapping,
+            destination_loaded=destination_loaded,
+            actual_destination=actual_destination,
+        )
+        run.count(decision.action, source_event.reference)
+        mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
+        if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:
+            record(
+                run,
+                AuditEntry(
+                    occurred_at=self.clock.now(),
+                    rule_id=rule.id,
+                    action=AuditAction.of(decision.action),
+                    outcome=AuditOutcome.of(decision.action),
+                    source_event_id=source_event.reference.event_id.value,
+                    destination_event_id=mapping.destination.event_id.value if mapping else None,
+                    reason=decision.reason,
+                    run_id=run.run_id,
+                    event=RecordedEvent.of(source_event),
+                ),
+            )
+        uow.commit()
+        return mapping, decision, source_moved
+
+    def _decide(
+        self,
+        run: SyncRunContext,
+        source_event: CalendarEvent,
+        mapping: EventMapping | None,
+        *,
+        destination_loaded: bool,
+        actual_destination: CalendarEvent | None,
+    ) -> tuple[EventMapping | None, SyncDecision]:
+        """Decide one source event against its projection; a found interrupted create maps it."""
+        rule = run.rule
         actual = actual_destination
         if not destination_loaded and mapping is not None:
             # A listed projection is used once; any later decision this run reads it fresh.
@@ -552,11 +606,22 @@ class ExecuteSyncRule:
             decision = self.decisions.decide(
                 rule, source_event, mapping, actual, has_live_occurrences=False
             )
-        run.count(decision.action, source_event.reference)
+        return mapping, decision
+
+    def _write(
+        self,
+        run: SyncRunContext,
+        source_event: CalendarEvent,
+        mapping: EventMapping | None,
+        decision: SyncDecision,
+        *,
+        source_moved: bool,
+    ) -> EventMapping | None:
+        """Apply a decision to the destination and the Event Mapping; answer the mapping now."""
+        uow, rule = run.uow, run.rule
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action
         )
-
         if decision.action is SyncAction.CREATE and decision.projection is not None:
             created = self.provider.create_projection(
                 rule.destination,
@@ -586,42 +651,44 @@ class ExecuteSyncRule:
                 decision.projection,
                 operation_key,
             )
-            mapping = EventMapping(
-                id=mapping.id,
-                rule_id=mapping.rule_id,
-                source=mapping.source,
+            mapping = replace(
+                mapping,
                 destination=updated.reference,
-                source_revision=source_event.revision,
+                source_revision=self._recorded_revision(run, mapping, source_event),
+                projection_fingerprint=self.fingerprinter.fingerprint(decision.projection),
+            )
+            uow.mappings.save(mapping)
+        elif (
+            decision.reason is SyncReason.PROJECTION_CURRENT
+            and decision.projection is not None
+            and mapping is not None
+            and source_moved
+        ):
+            # The destination already shows the new revision, so only the mapping learns it.
+            mapping = replace(
+                mapping,
+                source_revision=self._recorded_revision(run, mapping, source_event),
                 projection_fingerprint=self.fingerprinter.fingerprint(decision.projection),
             )
             uow.mappings.save(mapping)
         elif decision.action is SyncAction.DELETE:
             owned = self.decisions.require_delete_ownership(mapping)
-            self.provider.delete_projection(
-                owned.destination,
-                owned.source,
-                rule.id,
-                operation_key,
-            )
+            self.provider.delete_projection(owned.destination, owned.source, rule.id, operation_key)
             uow.mappings.delete(owned)
+        return mapping
 
-        if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:
-            record(
-                run,
-                AuditEntry(
-                    occurred_at=self.clock.now(),
-                    rule_id=rule.id,
-                    action=AuditAction.of(decision.action),
-                    outcome=AuditOutcome.of(decision.action),
-                    source_event_id=source_event.reference.event_id.value,
-                    destination_event_id=mapping.destination.event_id.value if mapping else None,
-                    reason=decision.reason,
-                    run_id=run.run_id,
-                    event=RecordedEvent.of(source_event),
-                ),
-            )
-        uow.commit()
-        return mapping, decision
+    @staticmethod
+    def _recorded_revision(
+        run: SyncRunContext, mapping: EventMapping, source_event: CalendarEvent
+    ) -> str:
+        """The revision a mapping may record now.
+
+        A series with Occurrence Mappings keeps its previous revision until they are re-verified,
+        so a run that fails before then re-verifies them again on its retry.
+        """
+        if source_event.recurrence is not None and run.uow.occurrences.for_series(mapping.id):
+            return mapping.source_revision
+        return source_event.revision
 
     def _acknowledged_series(
         self, run: SyncRunContext, source_event: CalendarEvent

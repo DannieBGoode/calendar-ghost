@@ -23,6 +23,7 @@ from calendar_sync.domain.model import (
     Recurrence,
     SyncAction,
     SyncReason,
+    SyncRule,
     SyncRuleId,
     TimedInterval,
     TransformationPolicy,
@@ -33,7 +34,16 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
-from tests.helpers import NOW, all_day_event, event, occurrence, rule, series, week_start
+from tests.helpers import (
+    NOW,
+    all_day_event,
+    event,
+    occurrence,
+    rescheduled,
+    rule,
+    series,
+    week_start,
+)
 
 projector = EventProjector()
 fingerprinter = ProjectionFingerprinter()
@@ -49,6 +59,15 @@ def _mapping(source: CalendarEvent, destination: CalendarEvent) -> EventMapping:
         destination.reference,
         source.revision,
         fingerprinter.fingerprint(projection),
+    )
+
+
+def _details_mapping(
+    source: CalendarEvent, destination: CalendarEvent, details: SyncRule
+) -> EventMapping:
+    return replace(
+        _mapping(source, destination),
+        projection_fingerprint=fingerprinter.fingerprint(projector.project(source, details)),
     )
 
 
@@ -170,7 +189,7 @@ def test_unmapped_single_event_that_ended_before_the_window_is_skipped() -> None
 
 def test_window_does_not_block_mapped_events_or_series_that_began_before_it() -> None:
     window_start = NOW + timedelta(days=1)
-    source = replace(event(), revision="revision-2")
+    source = rescheduled(event(), "revision-2")
     destination = _destination(event())
     old_series = replace(event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY",)))
 
@@ -237,19 +256,67 @@ def test_cancelled_and_excluded_all_day_events_record_distinct_reasons() -> None
 
 
 def test_update_reason_distinguishes_source_change_from_destination_drift() -> None:
+    details = replace(
+        rule(), transformation=TransformationPolicy(content=ProjectionContent.DETAILS)
+    )
     source = event()
-    edited_destination = _destination(source, title="Edited in destination")
-    mapping = _mapping(source, edited_destination)
+    current = _destination(source, title="Private appointment")
+    current = replace(current, description="Sensitive description", location="Sensitive location")
+    mapping = _details_mapping(source, current, details)
 
-    drift = decisions.decide(rule(), source, mapping, edited_destination)
+    drift = decisions.decide(details, source, mapping, replace(current, title="Edited"))
     changed = decisions.decide(
-        rule(), replace(source, revision="revision-2"), mapping, _destination(source)
+        details, replace(source, revision="revision-2", title="Renamed"), mapping, current
     )
 
     assert drift.action is SyncAction.UPDATE
     assert drift.reason is SyncReason.DESTINATION_DRIFT_REPAIRED
     assert changed.action is SyncAction.UPDATE
     assert changed.reason is SyncReason.SOURCE_CHANGED
+
+
+def test_source_change_a_busy_only_projection_does_not_show_needs_no_write() -> None:
+    source = event()
+    destination = _destination(source)
+    renamed = replace(source, revision="revision-2", title="Renamed privately")
+
+    decision = decisions.decide(rule(), renamed, _mapping(source, destination), destination)
+
+    assert decision.action is SyncAction.IGNORE
+    assert decision.reason is SyncReason.PROJECTION_CURRENT
+    assert decision.projection is not None
+    assert decision.projection.title == "Busy"
+
+
+def test_new_source_revision_with_identical_details_needs_no_write() -> None:
+    details = replace(
+        rule(), transformation=TransformationPolicy(content=ProjectionContent.DETAILS)
+    )
+    source = event()
+    destination = replace(
+        _destination(source, title="Private appointment"),
+        description="Sensitive description",
+        location="Sensitive location",
+    )
+    mapping = _details_mapping(source, destination, details)
+
+    decision = decisions.decide(
+        details, replace(source, revision="revision-2"), mapping, destination
+    )
+
+    assert decision.action is SyncAction.IGNORE
+    assert decision.reason is SyncReason.PROJECTION_CURRENT
+
+
+def test_edited_destination_is_drift_even_when_the_source_revision_changed() -> None:
+    source = event()
+    edited = _destination(source, title="Edited in destination")
+    responded = replace(source, revision="revision-2")
+
+    decision = decisions.decide(rule(), responded, _mapping(source, edited), edited)
+
+    assert decision.action is SyncAction.UPDATE
+    assert decision.reason is SyncReason.DESTINATION_DRIFT_REPAIRED
 
 
 def test_event_outside_the_source_calendar_is_ignored() -> None:

@@ -154,6 +154,15 @@ def test_matching_occurrence_is_current_and_keeps_its_projection() -> None:
     assert decision.projection is not None
 
 
+def test_changed_source_occurrence_whose_projection_matches_needs_no_write() -> None:
+    renamed = occurrence(SOURCE, 1, revision="occurrence-revision-2", title="Renamed")
+
+    decision = decide(renamed, busy_instance(), occurrence_mapping=recorded())
+
+    assert decision.action is SyncAction.IGNORE
+    assert decision.reason is SyncReason.OCCURRENCE_CURRENT
+
+
 def test_destination_edit_with_unchanged_source_is_drift_repair() -> None:
     edited = busy_instance(title="Edited in destination")
 

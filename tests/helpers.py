@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 
 from calendar_sync.domain.model import (
@@ -52,6 +53,14 @@ def event(
         description="Sensitive description",
         location="Sensitive location",
     )
+
+
+def rescheduled(source: CalendarEvent, revision: str, *, hours: int = 1) -> CalendarEvent:
+    """The timed source event at a later time, as a new revision, so its projection changes."""
+    assert isinstance(source.time, TimedInterval)
+    later = timedelta(hours=hours)
+    time = TimedInterval(source.time.starts_at + later, source.time.ends_at + later)
+    return replace(source, revision=revision, time=time)
 
 
 def all_day_event() -> CalendarEvent:
