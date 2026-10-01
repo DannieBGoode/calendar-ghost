@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.accounts import (
     DeleteConnectedAccount,
@@ -24,6 +24,7 @@ from calendar_sync.application.ports import (
     IdGenerator,
     IncidentNotifications,
     IncidentRepository,
+    ProviderCallStats,
     RuleHealthRecords,
     RunIdGenerator,
     UnitOfWorkFactory,
@@ -41,14 +42,17 @@ from calendar_sync.application.rules import (
     PauseSyncRule,
     ReplaceSyncRuleCalendars,
 )
+from calendar_sync.application.run_log import UntalliedProviderCalls
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.bootstrap.config import Settings
+from calendar_sync.bootstrap.logs import configure_logging
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.google.instrumentation import GoogleCallStats
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
@@ -142,11 +146,23 @@ class Adapters:
     accounts: SqliteConnectedAccountStore | None = None
     google_oauth: GoogleOAuthService | None = None
     calendar_provider: CalendarProvider | None = None
+    call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
+    """Counts the calendar provider's calls for each run's log lines."""
 
 
 def build_container(settings: Settings | None = None) -> Container:
     resolved = settings or Settings.from_environment()
     return compose(resolved, build_adapters(resolved))
+
+
+def service_container() -> Container:
+    """The running service's container, configured from the environment.
+
+    Logging is configured first, so every line the service writes follows the configured level.
+    """
+    settings = Settings.from_environment()
+    configure_logging(settings.log_level)
+    return build_container(settings)
 
 
 def build_adapters(settings: Settings) -> Adapters:
@@ -188,6 +204,7 @@ def build_adapters(settings: Settings) -> Adapters:
         accounts=accounts,
         google_oauth=google_oauth,
         calendar_provider=GoogleCalendarProvider(google_oauth.service_for, clock),
+        call_stats=GoogleCallStats(),
         notifications=_notifier(settings),
     )
 
@@ -205,8 +222,9 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         locks,
         adapters.notifications,
     )
+    call_stats = adapters.call_stats
     remove_sync_rule = RemoveSyncRule(
-        unit_of_work, provider, accounts, clock, locks, incidents=rule_health
+        unit_of_work, provider, accounts, clock, locks, incidents=rule_health, call_stats=call_stats
     )
     execute_sync_rule = preview_sync_rule = reconcile_now = scheduler = None
     if provider is not None and accounts is not None:
@@ -214,7 +232,14 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         projector = EventProjector()
         decisions = SyncDecisionService(projector, fingerprinter)
         execute_sync_rule = ExecuteSyncRule(
-            unit_of_work, provider, decisions, fingerprinter, clock, adapters.run_ids, locks
+            unit_of_work,
+            provider,
+            decisions,
+            fingerprinter,
+            clock,
+            adapters.run_ids,
+            locks,
+            call_stats=call_stats,
         )
         preview_sync_rule = PreviewSyncRule(
             unit_of_work, provider, projector, clock, decisions, locks, incidents=rule_health
@@ -229,6 +254,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
                 clock,
                 adapters.run_ids,
                 locks,
+                call_stats=call_stats,
             ),
             rule_health,
         )

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -454,6 +455,27 @@ class RunIdGenerator(Protocol):
     """
 
     def new_run_id(self) -> str: ...
+
+
+@dataclass(slots=True)
+class ProviderCallTally:
+    """The provider calls one run made so far; the adapter adds each call as it returns."""
+
+    calls: int = 0
+    seconds: float = 0.0
+    slowest_seconds: float = 0.0
+    rate_limited: int = 0
+    """Calls the provider refused for its rate limit or quota."""
+    server_errors: int = 0
+    """Calls the provider answered with a server error."""
+    token_refreshes: int = 0
+    """Access tokens renewed during the run."""
+
+
+class ProviderCallStats(Protocol):
+    def measure(self) -> AbstractContextManager[ProviderCallTally]:
+        """Tally the provider calls made in this context, by this thread, until it exits."""
+        ...
 
 
 class AccountAuthorizations(Protocol):

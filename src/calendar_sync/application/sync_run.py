@@ -1,10 +1,19 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.ports import AuditEntry, CalendarReader, UnitOfWork
+from calendar_sync.application.ports import (
+    AuditEntry,
+    CalendarReader,
+    Clock,
+    ProviderCallTally,
+    UnitOfWork,
+)
+from calendar_sync.application.run_log import call_summary, duration
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEvent,
@@ -13,8 +22,14 @@ from calendar_sync.domain.model import (
     SyncAction,
     SyncReason,
     SyncRule,
+    SyncRuleId,
     SyncRuleState,
 )
+
+logger = logging.getLogger(__name__)
+
+# A long run says how far it got this often, so a quiet log means a stuck run, not a slow one.
+PROGRESS_INTERVAL = timedelta(seconds=30)
 
 # How long the values of a Source Change are kept; which fields changed is kept with the entry.
 SOURCE_CHANGE_RETENTION = timedelta(days=90)
@@ -42,6 +57,94 @@ UNRECORDED_ON_DAILY_PASS = frozenset(
         SyncReason.SERIES_WITHOUT_OCCURRENCES,
     }
 )
+
+
+@dataclass(slots=True)
+class SyncRunLog:
+    """The service log lines of one Sync Run, from its start to how it ended."""
+
+    rule_id: SyncRuleId
+    clock: Clock
+    calls: ProviderCallTally
+    started_at: datetime
+    run_id: str | None = None
+    """Known once the run began; a rule found not enabled never begins one."""
+    _next_progress: datetime | None = None
+
+    def begin(self, run_id: str, mode: str, reason: str) -> None:
+        self.run_id = run_id
+        self._next_progress = self.started_at + PROGRESS_INTERVAL
+        logger.info("run started %s mode=%s reason=%s", self._names(), mode, reason)
+
+    def listed(self, source_events: int, destination_events: int) -> None:
+        logger.info(
+            "listing done %s source events=%d destination events=%d",
+            self._names(),
+            source_events,
+            destination_events,
+        )
+
+    def cursor_rejected(self, feed: str) -> None:
+        logger.info("cursor rejected %s feed=%s; listed in full", self._names(), feed)
+
+    def reprojecting(self, mappings: int) -> None:
+        logger.info("reprojecting remaining %s mappings=%d", self._names(), mappings)
+
+    def replaying(self, pending: int) -> None:
+        logger.info("pending replays %s series=%d", self._names(), pending)
+
+    def progress(self, counts: Mapping[SyncAction, int]) -> None:
+        """Say how far the run got, at most once every PROGRESS_INTERVAL."""
+        now = self.clock.now()
+        if self._next_progress is None or now < self._next_progress:
+            return
+        self._next_progress = now + PROGRESS_INTERVAL
+        logger.info(
+            "run progress %s decided=%d %s elapsed=%s google_calls=%d",
+            self._names(),
+            sum(counts.values()),
+            _decisions(counts),
+            duration(now - self.started_at),
+            self.calls.calls,
+        )
+
+    def finished(self, counts: Mapping[SyncAction, int]) -> None:
+        logger.info(
+            "run finished %s in %s %s %s",
+            self._names(),
+            self._elapsed(),
+            _decisions(counts),
+            call_summary(self.calls),
+        )
+
+    def failed(self, kind: str) -> None:
+        logger.warning(
+            "run failed %s kind=%s after %s %s",
+            self._names(),
+            kind,
+            self._elapsed(),
+            call_summary(self.calls),
+        )
+
+    def stopped(self) -> None:
+        if self.run_id is None:
+            logger.info("run not started rule=%s: rule is not enabled", self.rule_id.value)
+        else:
+            logger.info("run stopped %s after %s: rule changed", self._names(), self._elapsed())
+
+    def _names(self) -> str:
+        return f"rule={self.rule_id.value} run={self.run_id}"
+
+    def _elapsed(self) -> str:
+        return duration(self.clock.now() - self.started_at)
+
+
+def _decisions(counts: Mapping[SyncAction, int]) -> str:
+    return (
+        f"created={counts[SyncAction.CREATE]} updated={counts[SyncAction.UPDATE]} "
+        f"deleted={counts[SyncAction.DELETE]} ignored={counts[SyncAction.IGNORE]} "
+        f"conflicts={counts[SyncAction.CONFLICT]}"
+    )
 
 
 @dataclass(slots=True)
@@ -84,12 +187,18 @@ class SyncRunContext:
 
     Occurrence writes verify the series' ownership with a fresh read of their own.
     """
+    log: SyncRunLog | None = None
 
     def count(self, action: SyncAction, source: EventRef) -> None:
-        """Count one decision about `source`, remembering it when it is a block."""
+        """Count one decision about `source`, remembering it when it is a block.
+
+        Every decision of a run is counted here, so this is also where a long run reports progress.
+        """
         self.counts[action] += 1
         if action is SyncAction.CONFLICT:
             self.blocked.add(source)
+        if self.log is not None:
+            self.log.progress(self.counts)
 
 
 def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: EventRef) -> bool:
