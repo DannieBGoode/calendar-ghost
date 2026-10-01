@@ -232,3 +232,26 @@ def test_a_current_log_that_is_a_link_turns_file_logging_off(
 
     assert target.read_text() == ""
     assert "file logging is off" in capsys.readouterr().err
+
+
+# Regression: PR #34 review — configuring logging again kept writing to the first files
+def test_configuring_logging_again_writes_to_the_newest_files(tmp_path: Path) -> None:
+    first = RotatingLogFiles(tmp_path / "first")
+    second = RotatingLogFiles(tmp_path / "second")
+    assert configure_logging("INFO", first) is True
+
+    assert configure_logging("INFO", second) is True
+    logging.getLogger("calendar_sync.test").info("after reconfiguring")
+    second.purge()
+    logging.getLogger("calendar_sync.test").info("after purging")
+
+    assert "after reconfiguring" not in (tmp_path / "first" / "calendar-sync.log").read_text()
+    text = b"".join(second.chunks()).decode()
+    assert "logs purged" in text
+    assert text.endswith("after purging\n")
+    file_handlers = [
+        handler
+        for handler in logging.getLogger("calendar_sync").handlers
+        if handler.get_name() == "calendar_sync.file"
+    ]
+    assert len(file_handlers) == 1
