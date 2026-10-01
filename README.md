@@ -41,6 +41,7 @@ machine and creates only the destination representation selected by each rule.
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Authenticated Activity view, deduplication, optional SMTP, and optional webhook delivery |
 | Access | One local administrator password and encrypted Google OAuth credentials |
+| Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
 | Deployment | One Docker image and Compose service for `linux/amd64` and `linux/arm64` |
 
@@ -151,6 +152,12 @@ uses the identity; mappings, Managed Projections, and incremental positions are 
 reauthorization. Accounts connected before profile photos were supported show initials until they
 are connected again with **Connect Google account**, which updates the existing identity in place.
 
+Use **Settings → Storage** to see the database size, the number of Activity entries, and the oldest
+one, and clear Activity older than 30, 90, 180, or 365 days; an inline confirmation shows how many
+entries that removes before you confirm. The Logs row shows the size and date range of the
+service's own rotating log files and offers **Download** and **Purge logs**, so an administrator
+can retrieve or clear them without SSH access to the host.
+
 Check service health with:
 
 ```sh
@@ -193,6 +200,11 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   installation master key ([ADR 0017](docs/adr/0017-record-source-changes.md)). Values are stored
   as Google returns them, including any meeting codes in descriptions. Treat the database and its
   backups as sensitive; together with the master key they reveal those details.
+- Activity is kept until the administrator clears it. Settings → Storage shows the database size
+  and Activity's entry count and oldest entry, and clears entries older than 30, 90, 180, or 365
+  days, keeping, per rule and source event, the latest entry older than the cutoff and the latest
+  that recorded a title
+  ([ADR 0019](docs/adr/0019-administrator-chosen-activity-retention.md)).
 - Mappings retain provider IDs, revisions, and a non-reversible projection fingerprint.
 - Google access and refresh credentials are encrypted at rest with AES-256-GCM using the separate
   installation master key.
@@ -224,6 +236,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_GOOGLE_REDIRECT_URI` | For Google | Exact registered OAuth callback |
 | `CALENDAR_SYNC_SECURE_COOKIES` | No | Set `true` when serving the app over HTTPS |
 | `CALENDAR_SYNC_LOG_LEVEL` | No | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); defaults to `INFO` |
+| `CALENDAR_SYNC_LOG_DIR` | No | Directory for rotating log files; defaults to `logs` beside the database. Empty turns file logging off |
 | `CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` | No | Receives a JSON POST when a deduplicated incident opens |
 | `CALENDAR_SYNC_SMTP_HOST` | No | SMTP server for incident email |
 | `CALENDAR_SYNC_SMTP_PORT` | No | SMTP port; defaults to `587` |

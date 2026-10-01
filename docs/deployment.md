@@ -59,7 +59,9 @@ Migration 9 adds nullable `event_title`, `event_starts`, and `event_ends` column
 on `audit_entries(rule_id, source_event_id, id)`. New entries record their source event's title and
 time; existing entries are not backfilled and appear in Activity without an event name. Rolling back
 works with the same database: earlier releases ignore the columns and index and look titles up from
-Google again, but recorded titles stay in the database until their entries are deleted.
+Google again, but recorded titles stay in the database until their entries are deleted, including by
+clearing old Activity from Settings → Storage
+([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 
 Migration 10 adds the `pending_exception_replays` table, which stores only the identifier of each
 Series Mapping whose source Occurrence Exceptions still have to be applied after an incremental run
@@ -123,6 +125,15 @@ three files of 10 MB, so a long-running Raspberry Pi does not fill its storage. 
 `docker compose logs -f app`; [Troubleshooting](troubleshooting.md#reading-the-logs) explains each
 line.
 
+The service also writes the same lines to its own rotating log files, next to the database by
+default: `<database directory>/logs/calendar-sync.log` plus up to four rotated files of 5 MB each,
+25 MB at most, oldest deleted when the current file fills. In Docker the default database directory
+is the data volume, so the files land at `/data/logs`. Set `CALENDAR_SYNC_LOG_DIR` to use a
+different directory, or set it to an empty value to turn file logging off; if the configured
+directory cannot be used, the service logs one warning and keeps logging to standard error. Settings
+→ Storage shows these files' size and date range and offers Download and Purge logs, so an
+administrator can retrieve or clear them without SSH access to the host.
+
 For access beyond localhost or a trusted LAN, place the service behind HTTPS and set `CALENDAR_SYNC_SECURE_COOKIES=true`. Do not expose the service directly to the public internet.
 
 ## Raspberry Pi
@@ -160,6 +171,10 @@ values ([ADR 0017](adr/0017-record-source-changes.md)). A backup kept with the m
 reveal them, and a backup keeps values older than 90 days until it rotates. Replacing or losing the
 master key makes that history unreadable: Activity then lists which fields changed without their
 values, and each event's next change is described afresh.
+
+Clearing old Activity from Settings → Storage removes rows from the live database only; a backup
+taken before the clear keeps those entries until it rotates out of your backup schedule
+([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 
 Disconnecting a Google identity from Settings replaces its encrypted credential payload with an
 empty encrypted value. Directional Sync Rules and their mappings remain in SQLite so the same

@@ -1,7 +1,9 @@
 # Record the source event's title and time on each Audit Entry
 
 Amended by [ADR 0017](0017-record-source-changes.md), which also keeps sealed descriptions,
-locations, guests, recurrence rules, and conferencing links so Activity can say what changed.
+locations, guests, recurrence rules, and conferencing links so Activity can say what changed, and
+by [ADR 0019](0019-administrator-chosen-activity-retention.md), which lets the administrator clear
+Activity older than a chosen age.
 
 ## Context
 
@@ -44,6 +46,6 @@ titles are never persisted in SQLite made the live read the only option.
 
 Activity no longer calls Google to render the table, and removed rules' history keeps its event
 names. The database now holds every synchronized event's title, including those of Busy-Only rules,
-so it and its backups are as sensitive as the calendars themselves. Audit history still has no
-retention limit, so recorded titles are kept as long as their entries, including those of removed
-rules.
+so it and its backups are as sensitive as the calendars themselves. Recorded titles are kept as
+long as their entries, including those of removed rules; retention is now the administrator's
+choice, see [ADR 0019](0019-administrator-chosen-activity-retention.md).
