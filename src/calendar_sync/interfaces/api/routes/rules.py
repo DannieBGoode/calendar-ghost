@@ -404,6 +404,7 @@ def _work_response(work: RuleWork | None) -> RuleWorkResponse | None:
         handling=work.handling.value if work.handling else None,
         total=work.total,
         done=work.done,
+        stage=work.stage.value if work.stage else None,
     )
 
 

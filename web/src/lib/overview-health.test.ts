@@ -129,7 +129,7 @@ describe("overviewRules", () => {
   const rule = (id: string, state: string, running: "preview" | null = null) => ({
     id,
     state,
-    running: running && { kind: running, started_at: "2026-09-28T12:00:00Z", handling: null, total: null, done: 0 },
+    running: running && { kind: running, started_at: "2026-09-28T12:00:00Z", handling: null, total: null, done: 0, stage: null },
   })
 
   it("keeps working rules within the limit ahead of idle enabled ones", () => {

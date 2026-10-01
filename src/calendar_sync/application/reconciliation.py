@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
+from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
@@ -64,16 +65,20 @@ class ReconcileSyncRule:
         *,
         run_id: str | None = None,
         already_blocked: AbstractSet[EventRef] = frozenset(),
+        work: RuleWork | None = None,
     ) -> ReconciliationReport:
         """Verify every mapping and record each conflict found as a blocked Audit Entry.
 
         `already_blocked` names sources a Sync Run just blocked, so none is reported twice, and
-        `run_id` files the entries under that run.
+        `run_id` files the entries under that run. `work` is the larger work this check is part
+        of, which its caller reports.
         """
-        work = RuleWork(RuleWorkKind.RECONCILIATION, self.clock.now())
+        started = self.clock.now()
+        reported = nullcontext() if work else None
+        work = work or RuleWork(RuleWorkKind.RECONCILIATION, started)
         with (
             self.locks.for_rule(rule_id),
-            self.locks.working(rule_id, work),
+            reported or self.locks.working(rule_id, work),
             self.call_stats.measure() as calls,
         ):
             run = run_id or self.run_ids.new_run_id()
@@ -93,14 +98,14 @@ class ReconcileSyncRule:
                     "reconciliation failed %s kind=%s after %s %s",
                     names,
                     kind.value,
-                    duration(self.clock.now() - work.started_at),
+                    duration(self.clock.now() - started),
                     call_summary(calls),
                 )
                 raise
             logger.info(
                 "reconciliation finished %s in %s checked=%d drift=%d conflicts=%d %s",
                 names,
-                duration(self.clock.now() - work.started_at),
+                duration(self.clock.now() - started),
                 report.checked_mappings,
                 len(report.drift),
                 len(report.conflicts),
@@ -359,14 +364,20 @@ class ReconcileNow:
     full_passes: FullPassRecords | None = None
 
     def execute(self, rule_id: SyncRuleId) -> ReconcileNowResult:
-        floor = self._audit_floor()
-        result = self.synchronize.execute(rule_id, full=True)
-        # The full pass succeeded and counts as today's; reconciliation can still fail after.
-        if floor is not None:
-            self._record_full_pass(rule_id, floor, result.run_id)
-        report = self.reconcile.execute(
-            rule_id, run_id=result.run_id, already_blocked=result.blocked
+        work = RuleWork(
+            RuleWorkKind.RECONCILIATION, self.synchronize.clock.now(), stage=RuleWorkKind.SYNC
         )
+        # Reported from start to finish, so a reload between the stages still sees it.
+        with self.synchronize.locks.working(rule_id, work):
+            floor = self._audit_floor()
+            result = self.synchronize.execute(rule_id, full=True, work=work)
+            # The full pass succeeded and counts as today's; reconciliation can still fail after.
+            if floor is not None:
+                self._record_full_pass(rule_id, floor, result.run_id)
+            work.begin_stage(RuleWorkKind.RECONCILIATION)
+            report = self.reconcile.execute(
+                rule_id, run_id=result.run_id, already_blocked=result.blocked, work=work
+            )
         return ReconcileNowResult(result, report)
 
     def _audit_floor(self) -> int | None:

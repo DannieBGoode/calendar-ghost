@@ -26,15 +26,15 @@ describe("rule removal progress", () => {
     expect(removalProgress({ handling: "delete", total: 10, done: 4 }, 10, "Family").done).toBe(4)
     expect(
       reportedRemoval(
-        { kind: "removal", started_at: "2026-09-29T09:00:00Z", handling: "delete", total: 10, done: 4 },
+        { kind: "removal", started_at: "2026-09-29T09:00:00Z", handling: "delete", total: 10, done: 4, stage: null },
         7,
       ),
     ).toEqual({ handling: "delete", total: 10, done: 4, startedAt: Date.parse("2026-09-29T09:00:00Z") })
     expect(
-      reportedRemoval({ kind: "removal", started_at: "2026-09-29T09:00:00Z", handling: null, total: null, done: 0 }, 7),
+      reportedRemoval({ kind: "removal", started_at: "2026-09-29T09:00:00Z", handling: null, total: null, done: 0, stage: null }, 7),
     ).toMatchObject({ handling: "delete", total: 7, done: undefined })
     expect(
-      reportedRemoval({ kind: "sync", started_at: "2026-09-29T09:00:00Z", handling: null, total: null, done: 0 }, 7),
+      reportedRemoval({ kind: "sync", started_at: "2026-09-29T09:00:00Z", handling: null, total: null, done: 0, stage: null }, 7),
     ).toBeUndefined()
   })
 
@@ -94,7 +94,7 @@ describe("rule removal presentation", () => {
 
   it("refreshes quickly while removing and keeps the page when the rule disappears", () => {
     expect(detailsSource).toContain(
-      "sessionRemoval ? REMOVAL_REFRESH_MS : query.state.data?.running ? WORK_REFRESH_MS : 60_000",
+      "sessionRemoval ? REMOVAL_REFRESH_MS : workRefreshInterval(query.state.data && [query.state.data], 60_000, commands.pending)",
     )
     expect(detailsSource).toContain("(rule.error && !sessionRemoval)")
     expect(detailsSource).toContain('const removed = missing && rule.data?.running?.kind === "removal"')

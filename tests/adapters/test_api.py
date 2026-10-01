@@ -18,7 +18,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.locking import RuleWork, RuleWorkKind
+from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AccountAccess,
     AuditAction,
@@ -1101,6 +1101,11 @@ def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path
     assert reconciled.status_code == 409
 
 
+def _sync_stand_in(execute: object) -> Mock:
+    """A full pass for Reconcile Now, with the locks and clock it reports its work through."""
+    return Mock(execute=execute, locks=RuleLocks(), clock=FixedClock())
+
+
 def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Path) -> None:
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
@@ -1110,7 +1115,7 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
         uow.commit()
     _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
 
-    def full_pass(rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+    def full_pass(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> SyncRunResult:
         assert full
         # The pass decides the blocked event again and finds it still blocked.
         _append_audit(
@@ -1122,7 +1127,7 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
         container,
         reconcile_now=replace(
             _reconcile_now(container),
-            synchronize=cast(ExecuteSyncRule, Mock(execute=full_pass)),
+            synchronize=cast(ExecuteSyncRule, _sync_stand_in(full_pass)),
             reconcile=cast(
                 ReconcileSyncRule,
                 Mock(execute=Mock(return_value=ReconciliationReport(SyncRuleId("rule-1"), 0, ()))),
@@ -1224,7 +1229,7 @@ def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
     container = replace(
         container,
         reconcile_now=ReconcileNow(
-            cast(ExecuteSyncRule, Mock(execute=execute)),
+            cast(ExecuteSyncRule, _sync_stand_in(execute)),
             cast(ReconcileSyncRule, Mock(execute=reconcile)),
             health,
         ),
@@ -1251,7 +1256,7 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
         uow.commit()
     _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
 
-    def full_pass(rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+    def full_pass(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> SyncRunResult:
         _append_audit(
             adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
         )
@@ -1262,7 +1267,7 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
         container,
         reconcile_now=replace(
             _reconcile_now(container),
-            synchronize=cast(ExecuteSyncRule, Mock(execute=full_pass)),
+            synchronize=cast(ExecuteSyncRule, _sync_stand_in(full_pass)),
             reconcile=cast(ReconcileSyncRule, Mock(execute=Mock(side_effect=failure))),
         ),
     )
@@ -1345,6 +1350,7 @@ def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
         "handling": "delete",
         "total": 4,
         "done": 1,
+        "stage": None,
     }
     assert listed["running"] == expected
     assert detail["running"] == expected

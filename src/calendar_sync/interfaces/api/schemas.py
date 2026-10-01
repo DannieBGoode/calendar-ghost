@@ -70,12 +70,17 @@ class PreviewSummaryResponse(BaseModel):
     occurrence_changes: int
 
 
+WorkKind = Literal["preview", "sync", "reconciliation", "removal"]
+
+
 class RuleWorkResponse(BaseModel):
-    kind: Literal["preview", "sync", "reconciliation", "removal"]
+    kind: WorkKind
     started_at: str
     handling: Literal["delete", "detach"] | None
     total: int | None
     done: int
+    # Reconcile Now's part running now: its full pass ("sync"), then the check.
+    stage: WorkKind | None
 
 
 class RuleSummaryResponse(RuleResponse):

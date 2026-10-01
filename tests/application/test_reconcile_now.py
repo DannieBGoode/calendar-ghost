@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 
 from calendar_sync.application.errors import RuleNotExecutable
+from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import AuditAction, AuditOutcome, RunKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
@@ -26,6 +28,7 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from tests.application.test_run_logging import SteppedClock
 from tests.fake_calendar import FakeCalendars, FixedClock, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, rule
 
@@ -184,3 +187,107 @@ def test_reconcile_now_does_not_report_again_an_event_its_full_pass_blocked() ->
     assert result.report.drift == ()
     blocked = [entry for entry in factory.state.audit if entry.outcome is AuditOutcome.BLOCKED]
     assert [entry.reason for entry in blocked] == [SyncReason.SOURCE_UNVERIFIABLE]
+
+
+@dataclass
+class _WatchedCalendars(FakeCalendars):
+    """Records the rule's reported work at every read, moving the clock on each time."""
+
+    locks: RuleLocks = field(default_factory=RuleLocks)
+    clock: SteppedClock = field(default_factory=SteppedClock)
+    seen: list[tuple[str, str | None, datetime, int | None]] = field(default_factory=list)
+
+    def _watch(self) -> None:
+        work = self.locks.current_work(rule().id)
+        if work is not None:
+            stage = work.stage.value if work.stage else None
+            self.seen.append((work.kind.value, stage, work.started_at, work.total))
+        self.clock.advance(20)
+
+    def changes(self, *args: Any, **kwargs: Any) -> Any:
+        self._watch()
+        return super().changes(*args, **kwargs)
+
+    def list_events(self, *args: Any, **kwargs: Any) -> Any:
+        self._watch()
+        return super().list_events(*args, **kwargs)
+
+    def managed_events(self, *args: Any, **kwargs: Any) -> Any:
+        self._watch()
+        return super().managed_events(*args, **kwargs)
+
+
+def _watched_reconcile_now(
+    calendars: _WatchedCalendars, full_passes: RecordingFullPasses | None = None
+) -> ReconcileNow:
+    factory = enabled_rule_factory()
+    fingerprinter = ProjectionFingerprinter()
+    synchronize = ExecuteSyncRule(
+        factory,
+        calendars,
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        calendars.clock,
+        UuidRunIdGenerator(),
+        calendars.locks,
+    )
+    reconcile = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(fingerprinter),
+        calendars.clock,
+        UuidRunIdGenerator(),
+        calendars.locks,
+    )
+
+    return ReconcileNow(synchronize, reconcile, full_passes)
+
+
+def test_reconcile_now_reports_one_reconciliation_from_its_start_naming_each_stage() -> None:
+    calendars = _WatchedCalendars()
+    calendars.put(event())
+
+    _watched_reconcile_now(calendars).execute(rule().id)
+
+    kinds = {kind for kind, _, _, _ in calendars.seen}
+    starts = {started for _, _, started, _ in calendars.seen}
+    stages = [stage for _, stage, _, _ in calendars.seen]
+    assert kinds == {"reconciliation"}
+    assert starts == {NOW}
+    # The full pass, then the check, each read at least once.
+    assert [
+        stage for index, stage in enumerate(stages) if stages[index - 1 : index] != [stage]
+    ] == [
+        "sync",
+        "reconciliation",
+    ]
+    # The check counts nothing, so it never shows the full pass's count.
+    assert all(total is None for _, stage, _, total in calendars.seen if stage == "reconciliation")
+    assert calendars.locks.current_work(rule().id) is None
+
+
+class _WatchedFullPasses(RecordingFullPasses):
+    """Records the rule's reported work while the full pass is recorded, between the stages."""
+
+    def __init__(self, locks: RuleLocks) -> None:
+        super().__init__()
+        self.locks = locks
+        self.seen: list[RuleWork | None] = []
+
+    def record_full_pass(self, rule_id: SyncRuleId, floor: int, run_id: str | None = None) -> None:
+        self.seen.append(self.locks.current_work(rule_id))
+        super().record_full_pass(rule_id, floor, run_id)
+
+
+def test_reconcile_now_stays_reported_between_its_full_pass_and_its_check() -> None:
+    calendars = _WatchedCalendars()
+    calendars.put(event())
+    full_passes = _WatchedFullPasses(calendars.locks)
+
+    _watched_reconcile_now(calendars, full_passes).execute(rule().id)
+
+    (between,) = full_passes.seen
+    assert between is not None
+    assert (between.kind, between.started_at) == (RuleWorkKind.RECONCILIATION, NOW)
+    assert calendars.locks.current_work(rule().id) is None

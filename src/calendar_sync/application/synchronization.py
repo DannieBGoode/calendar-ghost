@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
@@ -127,11 +127,15 @@ class ExecuteSyncRule:
             self.locks,
         )
 
-    def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
-        work = RuleWork(RuleWorkKind.SYNC, self.clock.now())
+    def execute(
+        self, rule_id: SyncRuleId, *, full: bool = False, work: RuleWork | None = None
+    ) -> SyncRunResult:
+        """Run once; `work` is the larger work this run is part of, which its caller reports."""
+        reported = nullcontext() if work else None
+        work = work or RuleWork(RuleWorkKind.SYNC, self.clock.now())
         with (
             self.locks.for_rule(rule_id),
-            self.locks.working(rule_id, work),
+            reported or self.locks.working(rule_id, work),
             self.call_stats.measure() as calls,
         ):
             log = SyncRunLog(rule_id, self.clock, calls, work.started_at)
