@@ -300,3 +300,39 @@ def test_clearing_waits_for_a_concurrent_writer_instead_of_failing(tmp_path: Pat
 
     assert committed.is_set()
     assert removed == 99
+
+
+# Regression: PR #34 review — after the clock stepped back, clearing removed the entry a recent
+# one is compared with, because protection picked entries by time while Activity walks by id.
+def test_clearing_after_the_clock_stepped_back_keeps_what_recent_entries_compare_with(
+    tmp_path: Path,
+) -> None:
+    path = _database(tmp_path)
+    _entry(path, 200, "renamed", title="Weekly sync")
+    renamed = _entry(path, 10, "renamed", title="Team sync")
+    # The clock stepped back past the cutoff before the next run.
+    _entry(path, 150, "renamed", title="Team sync")
+    latest = _entry(path, 5, "renamed", title="Team sync")
+    # Untitled, so only the previous entry by id, not a titled one, tells whether it repeats.
+    _entry(path, 200, "repeat", reason=SyncReason.PROJECTION_MISSING, title=None)
+    repeated = _entry(path, 10, "repeat", reason=SyncReason.PROJECTION_MISSING, title=None)
+    _entry(path, 150, "repeat", reason=SyncReason.SOURCE_CHANGED, title=None)
+    kept_ids = (renamed, latest, repeated)
+    queries = SqliteActivityQueries(path)
+
+    def _snapshot() -> dict[int, ActivityEntry]:
+        return {
+            entry.id: entry
+            for entry in queries.entries(ActivityFilter(limit=1000))
+            if entry.id in kept_ids
+        }
+
+    before = _snapshot()
+    renamed_event = before[renamed].event
+    assert renamed_event is not None
+    assert renamed_event.renamed_from == "Weekly sync"
+    assert before[repeated].repeated is True
+
+    SqliteStorage(path).clear_activity(CUTOFF)
+
+    assert _snapshot() == before

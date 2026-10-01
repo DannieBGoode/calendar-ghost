@@ -19,15 +19,19 @@ old rows, was to SSH in and run SQLite commands directly.
   inline confirmation shows how many entries that removes before it runs. Nothing shorter than 30
   days is offered, so a Sync Run window or a recent investigation is never cut short.
 - Every entry newer than the cutoff is kept untouched. For each Directional Sync Rule and source
-  event, two entries older than the cutoff are also kept:
-  1. **The latest entry older than the cutoff.** Activity compares an entry with the event's
-     previous one, both to show a repair as repeated and to show an earlier name or time it was
-     renamed or moved from. A block check compares a block with the event's decision before the
-     pass began. Each reads at most one entry past the cutoff, and this is it. It also keeps an
-     event's latest entry when every entry is old, which keeps open blocks and the dashboard's
-     blocked-entry links.
-  2. **The latest entry older than the cutoff that recorded a title.** Activity names a
-     cancellation recorded without a title from the event's previous titled entry.
+  event, the older entries that newer ones are compared with are also kept. They are found by
+  id, the order Activity reads them in, not by time, which a clock stepping back would reorder:
+  1. **The previous entry of every entry newer than the cutoff.** Activity compares an entry with
+     the event's previous one, both to show a repair as repeated and to show an earlier name or
+     time it was renamed or moved from. A block check compares a block with the event's decision
+     before the pass began.
+  2. **The previous titled entry of every entry newer than the cutoff.** Activity names a
+     cancellation recorded without a title from it, and shows a rename against it.
+  3. **The event's latest entry**, and its previous titled entry when it recorded no title. This
+     keeps open blocks and the dashboard's blocked-entry links when every entry is old.
+
+  With ids in time order these are just the latest entry older than the cutoff and the latest
+  titled one.
   Every other entry older than the cutoff is removed, including those of removed rules: that
   history is evidence, not state, and Incidents keep no Audit Entry IDs, so they are unaffected.
 - Clearing deletes in batches of 5,000 rows, each its own short write transaction, then runs

@@ -203,8 +203,8 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   backups as sensitive; together with the master key they reveal those details.
 - Activity is kept until the administrator clears it. Settings → Storage shows the database size
   and Activity's entry count and oldest entry, and clears entries older than 30, 90, 180, or 365
-  days, keeping, per rule and source event, the latest entry older than the cutoff and the latest
-  that recorded a title
+  days, keeping, per rule and source event, the older entries newer ones are compared with
+  (normally the latest entry older than the cutoff and the latest that recorded a title)
   ([ADR 0019](docs/adr/0019-administrator-chosen-activity-retention.md)).
 - Mappings retain provider IDs, revisions, and a non-reversible projection fingerprint.
 - Google access and refresh credentials are encrypted at rest with AES-256-GCM using the separate

@@ -523,8 +523,9 @@ class DatabaseStorage(Protocol):
     def clear_activity(self, before: datetime) -> int:
         """Remove Audit Entries older than `before`, except those Activity still reads.
 
-        Every entry newer than `before` is kept. Of the older ones, per rule and source event,
-        the latest entry and the latest that recorded a title are kept; the rest are removed.
+        Every entry newer than `before` is kept. Of the older ones, per rule and source event, those
+        Activity compares a kept entry with are kept, found by id: normally the latest entry and
+        the latest that recorded a title. The rest are removed.
         """
         ...
 

@@ -172,7 +172,8 @@ single events that ended more than 90 days ago or of calendars it no longer uses
 That 90-day expiry only clears sealed Source Change values; the Audit Entries themselves are kept
 until the administrator clears them. Settings → Storage shows the database size and the number and
 age of Activity entries, and clears entries older than 30, 90, 180, or 365 days, keeping, per rule
-and source event, the latest entry older than the cutoff and the latest that recorded a title. See
+and source event, the older entries that newer ones are compared with, found by id: normally the
+latest entry older than the cutoff and the latest that recorded a title. See
 [ADR 0019](adr/0019-administrator-chosen-activity-retention.md).
 
 Occurrence decisions that found the destination already matching (`occurrence_current`,

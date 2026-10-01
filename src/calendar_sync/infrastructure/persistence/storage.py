@@ -11,24 +11,33 @@ from calendar_sync.application.errors import STORAGE_BUSY_MESSAGE, StorageBusy
 from calendar_sync.application.ports import DatabaseUsage
 from calendar_sync.infrastructure.persistence.activity_queries import _TITLE_OBSERVED
 
-# Entries clearing never removes, per rule and source event: the latest entry older than the
-# cutoff, and the latest older than it that recorded a title. Every reader that compares an entry
-# with an earlier one for the same rule and source event -- `_previous_names`, `_repeated_repairs`,
-# and a persisting block check at any floor at or after the cutoff -- looks back at most one entry
-# past the cutoff, and these two clauses are that entry. When every entry of an event is older than
-# the cutoff, its latest is still kept by the first clause, which keeps its open blocks and the
-# dashboard's blocked-entry links too. Every entry newer than the cutoff is kept regardless, by the
-# caller's own `occurred_at < ?` condition.
-# Protection selects by `occurred_at` while those readers find an entry's predecessor by id, so it
-# assumes ids follow `occurred_at` within a rule and source event. That holds because entries are
-# appended with the clock's current time; a clock stepping back only changes how an entry inside
-# the window compares with its predecessor, and never which blocks are open.
+# Entries clearing never removes, besides every entry newer than the cutoff (the caller's own
+# `occurred_at < :cutoff` condition). Activity compares an entry with the earlier entries of its
+# rule and source event by id: `_repeated_repairs` reads the previous entry, `_previous_names` the
+# previous one that recorded a title, and a persisting block check the latest at or before its
+# floor. So, by id rather than by time, which a clock stepping back would reorder, it keeps:
+# - each event's latest entry, which keeps open blocks and the dashboard's blocked-entry links;
+# - the previous entry of every entry newer than the cutoff;
+# - the previous titled entry of every entry newer than the cutoff, and of each event's latest
+#   when that one recorded no title, which Activity then names from it.
+# With ids in time order these are the latest entry older than the cutoff and the latest titled
+# one; entries newer than the cutoff then render exactly as before clearing.
 # Interpolates only the constant `_TITLE_OBSERVED` predicate.
+_LATEST = "SELECT MAX(id) AS id FROM audit_entries GROUP BY rule_id, source_event_id"
+_PREVIOUS = """
+    SELECT MAX(p.id) FROM audit_entries p
+    WHERE p.rule_id = k.rule_id AND p.source_event_id = k.source_event_id AND p.id < k.id
+"""
 _PROTECTED = f"""
-    SELECT MAX(id) FROM audit_entries WHERE occurred_at < ? GROUP BY rule_id, source_event_id
-    UNION
-    SELECT MAX(id) FROM audit_entries WHERE occurred_at < ? AND {_TITLE_OBSERVED}
-    GROUP BY rule_id, source_event_id
+    SELECT id FROM (
+        {_LATEST}
+        UNION
+        SELECT ({_PREVIOUS}) FROM audit_entries k WHERE k.occurred_at >= :cutoff
+        UNION
+        SELECT ({_PREVIOUS} AND {_TITLE_OBSERVED}) FROM audit_entries k
+        WHERE k.occurred_at >= :cutoff OR (k.id IN ({_LATEST}) AND NOT ({_TITLE_OBSERVED}))
+    )
+    WHERE id IS NOT NULL
 """  # noqa: S608
 
 
@@ -58,9 +67,9 @@ class SqliteStorage:
         with closing(sqlite3.connect(self._database_path)) as connection:
             # Interpolates only the constant protected-entries query.
             row = connection.execute(
-                f"SELECT COUNT(*) FROM audit_entries WHERE occurred_at < ? "  # noqa: S608
+                f"SELECT COUNT(*) FROM audit_entries WHERE occurred_at < :cutoff "  # noqa: S608
                 f"AND id NOT IN ({_PROTECTED})",
-                (cutoff, cutoff, cutoff),
+                {"cutoff": cutoff},
             ).fetchone()
         return int(row[0])
 
@@ -74,8 +83,8 @@ class SqliteStorage:
             connection.execute("CREATE TEMP TABLE clearable (id INTEGER PRIMARY KEY)")
             connection.execute(
                 f"INSERT INTO temp.clearable SELECT id FROM audit_entries "  # noqa: S608
-                f"WHERE occurred_at < ? AND id NOT IN ({_PROTECTED})",
-                (cutoff, cutoff, cutoff),
+                f"WHERE occurred_at < :cutoff AND id NOT IN ({_PROTECTED})",
+                {"cutoff": cutoff},
             )
             # The insert opened a read transaction on the database; ending it lets a writer that
             # started meanwhile commit, and each batch then waits for its own write lock.

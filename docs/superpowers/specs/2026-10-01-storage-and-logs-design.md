@@ -72,6 +72,9 @@ Storage
 **What is kept.** Every entry newer than the cutoff, and, for each rule and source event, two
 entries older than it:
 
+Found by id, the order Activity reads them in, so a clock stepping back cannot reorder them; with
+ids in time order they are the two entries below.
+
 1. **The latest entry older than the cutoff.** Activity compares an entry with the event's
    previous one, both to show a repair as repeated and to show an earlier name or time. A block
    check compares a block with the event's decision before the pass began. Each reads at most one
