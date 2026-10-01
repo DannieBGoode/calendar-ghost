@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 
 from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.locking import RuleLocks
+from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import AuditAction, AuditOutcome, RunKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
@@ -217,9 +217,9 @@ class _WatchedCalendars(FakeCalendars):
         return super().managed_events(*args, **kwargs)
 
 
-def test_reconcile_now_reports_one_reconciliation_from_its_start_naming_each_stage() -> None:
-    calendars = _WatchedCalendars()
-    calendars.put(event())
+def _watched_reconcile_now(
+    calendars: _WatchedCalendars, full_passes: RecordingFullPasses | None = None
+) -> ReconcileNow:
     factory = enabled_rule_factory()
     fingerprinter = ProjectionFingerprinter()
     synchronize = ExecuteSyncRule(
@@ -241,7 +241,14 @@ def test_reconcile_now_reports_one_reconciliation_from_its_start_naming_each_sta
         calendars.locks,
     )
 
-    ReconcileNow(synchronize, reconcile).execute(rule().id)
+    return ReconcileNow(synchronize, reconcile, full_passes)
+
+
+def test_reconcile_now_reports_one_reconciliation_from_its_start_naming_each_stage() -> None:
+    calendars = _WatchedCalendars()
+    calendars.put(event())
+
+    _watched_reconcile_now(calendars).execute(rule().id)
 
     kinds = {kind for kind, _, _, _ in calendars.seen}
     starts = {started for _, _, started, _ in calendars.seen}
@@ -257,4 +264,30 @@ def test_reconcile_now_reports_one_reconciliation_from_its_start_naming_each_sta
     ]
     # The check counts nothing, so it never shows the full pass's count.
     assert all(total is None for _, stage, _, total in calendars.seen if stage == "reconciliation")
+    assert calendars.locks.current_work(rule().id) is None
+
+
+class _WatchedFullPasses(RecordingFullPasses):
+    """Records the rule's reported work while the full pass is recorded, between the stages."""
+
+    def __init__(self, locks: RuleLocks) -> None:
+        super().__init__()
+        self.locks = locks
+        self.seen: list[RuleWork | None] = []
+
+    def record_full_pass(self, rule_id: SyncRuleId, floor: int, run_id: str | None = None) -> None:
+        self.seen.append(self.locks.current_work(rule_id))
+        super().record_full_pass(rule_id, floor, run_id)
+
+
+def test_reconcile_now_stays_reported_between_its_full_pass_and_its_check() -> None:
+    calendars = _WatchedCalendars()
+    calendars.put(event())
+    full_passes = _WatchedFullPasses(calendars.locks)
+
+    _watched_reconcile_now(calendars, full_passes).execute(rule().id)
+
+    (between,) = full_passes.seen
+    assert between is not None
+    assert (between.kind, between.started_at) == (RuleWorkKind.RECONCILIATION, NOW)
     assert calendars.locks.current_work(rule().id) is None
