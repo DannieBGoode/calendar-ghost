@@ -165,6 +165,57 @@ class AllDaySyncPolicy(StrEnum):
     EXCLUDE = "exclude"
 
 
+class InvitationResponse(StrEnum):
+    """How the Source Calendar answered an event's invitation.
+
+    An event the Source Calendar was not invited to, such as one it organizes, counts as accepted.
+    """
+
+    ACCEPTED = "accepted"
+    TENTATIVE = "tentative"
+    DECLINED = "declined"
+    AWAITING = "needs_action"
+
+
+class TentativeEventPolicy(StrEnum):
+    """What a rule does with an event the Source Calendar answered Maybe to."""
+
+    SYNC = "sync"
+    """Project it like an accepted event."""
+    MARK = "mark"
+    """Project it with a title that says it is tentative."""
+    SKIP = "skip"
+    """Project nothing."""
+
+
+class UnansweredInvitationPolicy(StrEnum):
+    """What a rule does with an invitation the Source Calendar has not answered yet."""
+
+    WAIT = "wait"
+    """Project nothing until it is answered."""
+    AS_TENTATIVE = "as_tentative"
+    """Treat it as answered Maybe."""
+
+
+class Exclusion(StrEnum):
+    """Why a rule's Transformation Policy projects no event like this one."""
+
+    ALL_DAY = "all_day"
+    DECLINED = "declined"
+    TENTATIVE = "tentative"
+    AWAITING_RESPONSE = "awaiting_response"
+
+    @property
+    def skip_reason(self) -> SyncReason:
+        """Why an event never projected stays that way."""
+        return _EXCLUSION_REASONS[self][0]
+
+    @property
+    def removal_reason(self) -> SyncReason:
+        """Why an event's projection, or an occurrence's, is removed."""
+        return _EXCLUSION_REASONS[self][1]
+
+
 class ProjectionHandling(StrEnum):
     """What Rule Removal does with mapped Managed Projections."""
 
@@ -186,6 +237,8 @@ class TransformationPolicy:
     content: ProjectionContent = ProjectionContent.BUSY_ONLY
     all_day: AllDaySyncPolicy = AllDaySyncPolicy.INCLUDE
     busy_title: str = "Busy"
+    tentative: TentativeEventPolicy = TentativeEventPolicy.MARK
+    unanswered: UnansweredInvitationPolicy = UnansweredInvitationPolicy.AS_TENTATIVE
 
     def __post_init__(self) -> None:
         if self.content is ProjectionContent.BUSY_ONLY:
@@ -194,6 +247,35 @@ class TransformationPolicy:
     @property
     def includes_all_day(self) -> bool:
         return self.all_day is not AllDaySyncPolicy.EXCLUDE
+
+    def response_to(self, event: CalendarEvent) -> InvitationResponse:
+        """The event's Invitation Response, with an unanswered one read as this rule says."""
+        if (
+            event.response is InvitationResponse.AWAITING
+            and self.unanswered is UnansweredInvitationPolicy.AS_TENTATIVE
+        ):
+            return InvitationResponse.TENTATIVE
+        return event.response
+
+    def exclusion(self, event: CalendarEvent) -> Exclusion | None:
+        """Why this policy projects no event like this one; None when it projects it."""
+        if event.is_all_day and not self.includes_all_day:
+            return Exclusion.ALL_DAY
+        response = self.response_to(event)
+        if response is InvitationResponse.DECLINED:
+            return Exclusion.DECLINED
+        if response is InvitationResponse.AWAITING:
+            return Exclusion.AWAITING_RESPONSE
+        if response is InvitationResponse.TENTATIVE and self.tentative is TentativeEventPolicy.SKIP:
+            return Exclusion.TENTATIVE
+        return None
+
+    def marks_tentative(self, event: CalendarEvent) -> bool:
+        """Whether the event's projection says it is tentative."""
+        return (
+            self.tentative is TentativeEventPolicy.MARK
+            and self.response_to(event) is InvitationResponse.TENTATIVE
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +295,7 @@ class CalendarEvent:
     """Attendee email addresses, never projected; None when the provider did not list them all."""
     conferencing: tuple[str, ...] | None = None
     """Conferencing entry points, never projected; None when the provider did not return them."""
+    response: InvitationResponse = InvitationResponse.ACCEPTED
 
     def __post_init__(self) -> None:
         _require_non_empty(self.revision, "event revision")
@@ -390,14 +473,22 @@ class SyncReason(StrEnum):
     PROJECTION_MISSING = "projection_missing"
     SOURCE_CHANGED = "source_changed"
     DESTINATION_DRIFT_REPAIRED = "destination_drift_repaired"
+    POLICY_APPLIED = "policy_applied"
+    """A changed policy rewrote a projection still as this rule last wrote it."""
     SOURCE_CANCELLED = "source_cancelled"
     ALL_DAY_EXCLUDED_REMOVED = "all_day_excluded_removed"
+    DECLINED_REMOVED = "declined_removed"
+    TENTATIVE_EXCLUDED_REMOVED = "tentative_excluded_removed"
+    AWAITING_RESPONSE_REMOVED = "awaiting_response_removed"
     PROJECTION_CURRENT = "projection_current"
     OUTSIDE_SOURCE_CALENDAR = "outside_source_calendar"
     MANAGED_PROJECTION_SOURCE = "managed_projection_source"
     RECURRING_UNSUPPORTED = "recurring_unsupported"
     CANCELLED_WITHOUT_PROJECTION = "cancelled_without_projection"
     ALL_DAY_EXCLUDED = "all_day_excluded"
+    DECLINED = "declined"
+    TENTATIVE_EXCLUDED = "tentative_excluded"
+    AWAITING_RESPONSE = "awaiting_response"
     BEFORE_SYNC_WINDOW = "before_sync_window"
     MAPPING_INCONSISTENT = "mapping_inconsistent"
     DESTINATION_IDENTITY_INCONSISTENT = "destination_identity_inconsistent"
@@ -415,6 +506,17 @@ class SyncReason(StrEnum):
     SERIES_WITHOUT_OCCURRENCES = "series_without_occurrences"
     SERIES_WITHOUT_OCCURRENCES_REMOVED = "series_without_occurrences_removed"
     PROJECTION_UNMAPPED = "projection_unmapped"
+
+
+_EXCLUSION_REASONS = {
+    Exclusion.ALL_DAY: (SyncReason.ALL_DAY_EXCLUDED, SyncReason.ALL_DAY_EXCLUDED_REMOVED),
+    Exclusion.DECLINED: (SyncReason.DECLINED, SyncReason.DECLINED_REMOVED),
+    Exclusion.TENTATIVE: (SyncReason.TENTATIVE_EXCLUDED, SyncReason.TENTATIVE_EXCLUDED_REMOVED),
+    Exclusion.AWAITING_RESPONSE: (
+        SyncReason.AWAITING_RESPONSE,
+        SyncReason.AWAITING_RESPONSE_REMOVED,
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)

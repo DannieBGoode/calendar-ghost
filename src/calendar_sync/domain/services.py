@@ -8,7 +8,6 @@ from datetime import UTC, date, datetime
 from calendar_sync.domain.errors import DomainValidationError, OwnershipNotEstablished
 from calendar_sync.domain.model import (
     AllDayRange,
-    AllDaySyncPolicy,
     CalendarEvent,
     DriftKind,
     EventMapping,
@@ -47,6 +46,8 @@ class EventProjector:
             title = event.title
             description = event.description
             location = event.location
+        if policy.marks_tentative(event):
+            title = _tentative_title(title, policy.content)
 
         return EventProjection(
             time=event.time,
@@ -55,6 +56,13 @@ class EventProjector:
             location=location,
             recurrence=event.recurrence,
         )
+
+
+def _tentative_title(title: str, content: ProjectionContent) -> str:
+    """'Busy (tentative)' for a Busy-Only Projection; 'Maybe: Standup' for a Details Projection."""
+    if content is ProjectionContent.BUSY_ONLY:
+        return f"{title} (tentative)"
+    return f"Maybe: {title}" if title else "Maybe"
 
 
 class ProjectionFingerprinter:
@@ -151,15 +159,18 @@ class SyncDecisionService:
             # A new source revision is evidence to check, not a reason to write (ADR 0017).
             return SyncDecision(SyncAction.IGNORE, SyncReason.PROJECTION_CURRENT, projection)
         # Only a projection the source now calls for differently is a source change; a revision
-        # whose projection is the one last written, such as a reply to an invitation, left the
+        # whose projection is the one last written, such as another guest's reply, left the
         # destination edit to repair.
-        source_changed = (
+        if (
             mapping.source_revision != source_event.revision
             and expected != mapping.projection_fingerprint
-        )
-        reason = (
-            SyncReason.SOURCE_CHANGED if source_changed else SyncReason.DESTINATION_DRIFT_REPAIRED
-        )
+        ):
+            reason = SyncReason.SOURCE_CHANGED
+        elif rule.reprojection_required and actual == mapping.projection_fingerprint:
+            # The destination is as last written, so the rule's changed policy calls for this.
+            reason = SyncReason.POLICY_APPLIED
+        else:
+            reason = SyncReason.DESTINATION_DRIFT_REPAIRED
         return SyncDecision(SyncAction.UPDATE, reason, projection)
 
     # Ordered decision table; each guard returns a reason. Its inputs are the evidence it weighs.
@@ -239,16 +250,15 @@ class SyncDecisionService:
             if destination_absent:
                 return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_RETIRED)
             return SyncDecision(SyncAction.DELETE, SyncReason.OCCURRENCE_REMOVED_FROM_SERIES)
-        excluded_all_day = (
-            source_occurrence.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE
-        )
-        if source_occurrence.status is EventStatus.CANCELLED or excluded_all_day:
+        cancelled = source_occurrence.status is EventStatus.CANCELLED
+        exclusion = None if cancelled else rule.transformation.exclusion(source_occurrence)
+        if cancelled or exclusion is not None:
             if destination_absent:
                 return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_ALREADY_CANCELLED)
             reason = (
-                SyncReason.OCCURRENCE_CANCELLED
-                if source_occurrence.status is EventStatus.CANCELLED
-                else SyncReason.ALL_DAY_EXCLUDED_REMOVED
+                exclusion.removal_reason
+                if exclusion is not None
+                else SyncReason.OCCURRENCE_CANCELLED
             )
             return SyncDecision(SyncAction.DELETE, reason)
         if destination_occurrence is None:
@@ -275,6 +285,13 @@ class SyncDecisionService:
         actual = self._fingerprinter.fingerprint(self.as_projection(destination_occurrence))
         if expected == actual:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CURRENT, projection)
+        if (
+            rule.reprojection_required
+            and not source_changed
+            and occurrence_mapping is not None
+            and occurrence_mapping.projection_fingerprint == actual
+        ):
+            return SyncDecision(SyncAction.UPDATE, SyncReason.POLICY_APPLIED, projection)
         return SyncDecision(SyncAction.UPDATE, changed, projection)
 
     @staticmethod
@@ -329,10 +346,11 @@ def _removal(
         if mapping is None:
             return SyncDecision(SyncAction.IGNORE, SyncReason.CANCELLED_WITHOUT_PROJECTION)
         return SyncDecision(SyncAction.DELETE, SyncReason.SOURCE_CANCELLED)
-    if source_event.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE:
+    exclusion = rule.transformation.exclusion(source_event)
+    if exclusion is not None:
         if mapping is None:
-            return SyncDecision(SyncAction.IGNORE, SyncReason.ALL_DAY_EXCLUDED)
-        return SyncDecision(SyncAction.DELETE, SyncReason.ALL_DAY_EXCLUDED_REMOVED)
+            return SyncDecision(SyncAction.IGNORE, exclusion.skip_reason)
+        return SyncDecision(SyncAction.DELETE, exclusion.removal_reason)
     # A projected series with no live occurrence is cancelled by the provider, so none is
     # created. A mapping stays dormant with its cancelled occurrences, so restoring one
     # occurrence later cannot resurrect the others; only a live projection is removed.

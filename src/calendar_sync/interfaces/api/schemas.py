@@ -5,6 +5,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 ProjectionChoice = Literal["delete", "detach"]
+# What a rule does with events its source calendar answered Maybe to, or has not answered yet.
+TentativeChoice = Literal["sync", "mark", "skip"]
+UnansweredChoice = Literal["wait", "as_tentative"]
 
 
 class SetupStatusResponse(BaseModel):
@@ -29,6 +32,8 @@ class CreateRuleRequest(BaseModel):
     destination: CalendarEndpointPayload
     privacy_policy: str = "busy_only"
     sync_all_day_events: bool = True
+    tentative_events: TentativeChoice = "mark"
+    unanswered_invitations: UnansweredChoice = "as_tentative"
 
 
 class RuleResponse(BaseModel):
@@ -37,6 +42,8 @@ class RuleResponse(BaseModel):
     destination: CalendarEndpointPayload
     privacy_policy: str
     sync_all_day_events: bool
+    tentative_events: TentativeChoice
+    unanswered_invitations: UnansweredChoice
     state: str
     reprojection_required: bool
 
@@ -89,6 +96,8 @@ class RuleDetailResponse(RuleResponse):
 class UpdateRulePolicyRequest(BaseModel):
     privacy_policy: str
     sync_all_day_events: bool
+    tentative_events: TentativeChoice
+    unanswered_invitations: UnansweredChoice
 
 
 class ReplaceRuleRequest(BaseModel):

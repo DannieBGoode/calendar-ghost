@@ -52,6 +52,27 @@ const REASONS: Record<string, ReasonCopy> = {
     effect: "removed from {destination}",
     explanation: "This rule syncs timed events only, so the all-day event it had written was removed.",
   },
+  declined_removed: {
+    trigger: "Declined",
+    effect: "removed from {destination}",
+    explanation: "You declined this event in {source}, so the event Calendar Sync had written was removed. Declined events are never synced.",
+  },
+  tentative_excluded_removed: {
+    trigger: "Answered Maybe, which this rule leaves out",
+    effect: "removed from {destination}",
+    explanation: "This rule doesn't sync events you answered Maybe to, so the event it had written was removed.",
+  },
+  awaiting_response_removed: {
+    trigger: "Not answered yet",
+    effect: "removed from {destination}",
+    explanation:
+      "This rule waits for you to answer an invitation before syncing it, so the event it had written was removed. It is added again once you accept, or answer Maybe if this rule syncs those.",
+  },
+  policy_applied: {
+    trigger: "Rule settings changed",
+    effect: "rewritten in {destination}",
+    explanation: "The rule's settings changed, so the event it had written was rewritten to match them.",
+  },
   projection_current: {
     effect: "already up to date",
     explanation: "The event in {destination} already matches {source}.",
@@ -81,6 +102,22 @@ const REASONS: Record<string, ReasonCopy> = {
     trigger: "All-day event",
     effect: "skipped",
     explanation: "This rule syncs timed events only. Edit the rule to include all-day events.",
+  },
+  declined: {
+    trigger: "Declined",
+    effect: "skipped",
+    explanation: "You declined this event in {source}. Declined events are never synced.",
+  },
+  tentative_excluded: {
+    trigger: "Answered Maybe",
+    effect: "skipped",
+    explanation: "This rule doesn't sync events you answered Maybe to. Edit the rule to sync them.",
+  },
+  awaiting_response: {
+    trigger: "Not answered yet",
+    effect: "skipped",
+    explanation:
+      "This rule waits for you to answer an invitation before syncing it. It is synced once you accept, or answer Maybe if this rule syncs those.",
   },
   before_sync_window: {
     trigger: "Ended before the sync window",
@@ -196,7 +233,7 @@ const ACTION_FALLBACK: Record<string, string> = {
 // Rule management entries carry no SyncReason; keep in sync with application/rules.py and removal.py.
 const RULE_ACTIONS: Record<string, ReasonCopy> = {
   policy_changed: {
-    effect: "privacy setting changed",
+    effect: "rule settings changed",
     explanation:
       "The rule needs a new preview, and the events it wrote are rewritten on the next run after it is enabled.",
   },
@@ -245,6 +282,15 @@ const FIELD_LABELS: Record<string, string> = {
   guests: "Guests",
   recurrence: "Repeat pattern",
   conferencing: "Video call links",
+  response: "Your response",
+}
+
+// Keep in sync with InvitationResponse in src/calendar_sync/domain/model.py.
+const RESPONSE_LABELS: Record<string, string> = {
+  accepted: "Yes",
+  tentative: "Maybe",
+  declined: "No",
+  needs_action: "Not answered",
 }
 
 /** How Activity names a tracked source field. */
@@ -265,7 +311,8 @@ export type FieldChangeLines = {
 }
 
 export function fieldChangeLines(change: FieldChange): FieldChangeLines {
-  const text = (value: string | null) => (value === null ? null : value || "(empty)")
+  const text = (value: string | null) =>
+    value === null ? null : change.field === "response" ? (RESPONSE_LABELS[value] ?? value) : value || "(empty)"
   const before = change.before_time ? formatEventTime(change.before_time) : text(change.before)
   const after = change.after_time ? formatEventTime(change.after_time) : text(change.after)
   return {
@@ -500,6 +547,10 @@ const OCCURRENCE_REASONS = new Set([
 
 const EITHER_SCOPE_REASONS = new Set([
   "all_day_excluded_removed",
+  "declined_removed",
+  "tentative_excluded_removed",
+  "awaiting_response_removed",
+  "policy_applied",
   "mapping_inconsistent",
   "destination_identity_inconsistent",
   "destination_ownership_inconsistent",

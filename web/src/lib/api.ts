@@ -50,9 +50,15 @@ export type Rule = {
   destination: { connected_account_id: string; calendar_id: string }
   privacy_policy: "busy_only" | "copy_details"
   sync_all_day_events: boolean
+  tentative_events: TentativeEvents
+  unanswered_invitations: UnansweredInvitations
   state: string
   reprojection_required: boolean
 }
+/** What a rule does with events its source calendar answered Maybe to. */
+export type TentativeEvents = "sync" | "mark" | "skip"
+/** What a rule does with invitations its source calendar has not answered yet. */
+export type UnansweredInvitations = "wait" | "as_tentative"
 export type ProjectionHandling = "delete" | "detach"
 export type RemovalResult = { deleted: number; detached: number; conflicts: number }
 export type RunOutcome = {
@@ -106,6 +112,8 @@ export type RuleDetail = Rule & {
 export type RulePolicyPayload = {
   privacy_policy: "busy_only" | "copy_details"
   sync_all_day_events: boolean
+  tentative_events: TentativeEvents
+  unanswered_invitations: UnansweredInvitations
 }
 export type RuleEndpointPayload = { connected_account_id: string; calendar_id: string }
 export type GoogleConfiguration = { configured: boolean; redirect_uri: string | null }
@@ -299,9 +307,7 @@ export const api = {
   createRule: (payload: {
     source: { connected_account_id: string; calendar_id: string }
     destination: { connected_account_id: string; calendar_id: string }
-    privacy_policy: "busy_only" | "copy_details"
-    sync_all_day_events: boolean
-  }) =>
+  } & RulePolicyPayload) =>
     request<Rule>("/api/v1/rules", { method: "POST", body: JSON.stringify(payload) }),
   previewRule: (ruleId: string) =>
     request<RulePreview>(`/api/v1/rules/${encodeURIComponent(ruleId)}/preview`, {

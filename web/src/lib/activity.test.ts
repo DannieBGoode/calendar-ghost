@@ -118,7 +118,7 @@ describe("activity presentation", () => {
   it("says what happened to rule management entries without calling them event changes", () => {
     const changed = (action: string) => whatHappened(entry({ action, reason: null, category: "changed" }), names)
 
-    expect(changed("policy_changed")).toMatchObject({ text: "Privacy setting changed", icon: "rule", tone: "change" })
+    expect(changed("policy_changed")).toMatchObject({ text: "Rule settings changed", icon: "rule", tone: "change" })
     expect(changed("rule_removed")).toMatchObject({ text: "Rule removed", icon: "rule", tone: "change" })
     expect(changed("remove_projection")).toMatchObject({ text: "Rule removed → removed from Work", icon: "removed" })
     expect(changed("detach_projection")).toMatchObject({ text: "Rule removed → kept in Work, no longer synced", icon: "kept" })
@@ -286,6 +286,11 @@ describe("source changes", () => {
       after: null,
       added: ["cleo@example.com"],
       removed: ["ben@example.com"],
+    })
+    expect(fieldChangeLines({ ...none, field: "response", before: "tentative", after: "accepted" })).toMatchObject({
+      label: "Your response",
+      before: "Maybe",
+      after: "Yes",
     })
     const moved = fieldChangeLines({
       ...none,

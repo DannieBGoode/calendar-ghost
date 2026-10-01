@@ -10,6 +10,7 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     EventStatus,
     EventTime,
+    InvitationResponse,
     TimedInterval,
 )
 
@@ -17,7 +18,8 @@ from calendar_sync.domain.model import (
 class SourceField(StrEnum):
     """A tracked detail of a source event, in the order Activity lists them.
 
-    Responses to invitations, reminders, and colours are not tracked.
+    Only the Source Calendar's own Invitation Response is tracked, because it decides the
+    projection; other guests' responses, reminders, and colours are not.
     """
 
     TITLE = "title"
@@ -27,6 +29,7 @@ class SourceField(StrEnum):
     GUESTS = "guests"
     RECURRENCE = "recurrence"
     CONFERENCING = "conferencing"
+    RESPONSE = "response"
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +45,8 @@ class SourceObservation:
     guests: tuple[str, ...] | None = None
     """Guest email addresses; None when the provider did not list every guest."""
     conferencing: tuple[str, ...] | None = None
+    response: InvitationResponse | None = None
+    """None when observed before Invitation Responses were tracked."""
 
     def __post_init__(self) -> None:
         # Sets, so neither order nor the case of an address reads as a change.
@@ -69,6 +74,7 @@ class SourceObservation:
             recurrence=event.recurrence.lines if event.recurrence is not None else (),
             guests=event.guests,
             conferencing=event.conferencing,
+            response=event.response,
         )
 
 
@@ -94,6 +100,8 @@ def _differs(field: SourceField, before: SourceObservation, after: SourceObserva
         return _known_differ(before.guests, after.guests)
     if field is SourceField.CONFERENCING:
         return _known_differ(before.conferencing, after.conferencing)
+    if field is SourceField.RESPONSE:
+        return before.response is not None and before.response != after.response
     return bool(getattr(before, field.value) != getattr(after, field.value))
 
 

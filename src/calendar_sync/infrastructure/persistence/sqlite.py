@@ -48,8 +48,10 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
     SyncRuleState,
+    TentativeEventPolicy,
     TimedInterval,
     TransformationPolicy,
+    UnansweredInvitationPolicy,
 )
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
@@ -72,6 +74,7 @@ _FORWARD_MIGRATIONS = (
     (12, "0012_incident_resolutions.sql"),
     (13, "0013_incident_accounts.sql"),
     (14, "0014_source_changes.sql"),
+    (15, "0015_invitation_responses.sql"),
 )
 
 
@@ -144,8 +147,9 @@ class SqliteSyncRuleRepository:
                     id, source_account_id, source_calendar_id,
                     destination_account_id, destination_calendar_id,
                     privacy_policy, all_day_policy, busy_title,
+                    tentative_policy, unanswered_policy,
                     initial_lookback_days, state, reprojection_required
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 _rule_values(rule),
             )
@@ -161,6 +165,7 @@ class SqliteSyncRuleRepository:
                 source_account_id = ?, source_calendar_id = ?,
                 destination_account_id = ?, destination_calendar_id = ?,
                 privacy_policy = ?, all_day_policy = ?, busy_title = ?,
+                tentative_policy = ?, unanswered_policy = ?,
                 initial_lookback_days = ?, state = ?, reprojection_required = ?
             WHERE id = ?
             """,
@@ -712,6 +717,8 @@ def _rule_values(rule: SyncRule) -> tuple[object, ...]:
         rule.transformation.content.value,
         rule.transformation.all_day.value,
         rule.transformation.busy_title,
+        rule.transformation.tentative.value,
+        rule.transformation.unanswered.value,
         rule.initial_lookback_days,
         rule.state.value,
         int(rule.reprojection_required),
@@ -733,6 +740,8 @@ def _rule_from_row(row: sqlite3.Row) -> SyncRule:
             content=ProjectionContent(str(row["privacy_policy"])),
             all_day=AllDaySyncPolicy(str(row["all_day_policy"])),
             busy_title=str(row["busy_title"]),
+            tentative=TentativeEventPolicy(str(row["tentative_policy"])),
+            unanswered=UnansweredInvitationPolicy(str(row["unanswered_policy"])),
         ),
         initial_lookback_days=int(row["initial_lookback_days"]),
         state=SyncRuleState(str(row["state"])),

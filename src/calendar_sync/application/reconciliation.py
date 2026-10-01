@@ -22,7 +22,6 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import (
-    AllDaySyncPolicy,
     CalendarEvent,
     EventMapping,
     EventMappingId,
@@ -298,7 +297,7 @@ def _eligible(source: CalendarEvent, rule: SyncRule) -> bool:
     return (
         source.status is EventStatus.CONFIRMED
         and source.managed_origin is None
-        and not (source.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE)
+        and rule.transformation.exclusion(source) is None
     )
 
 

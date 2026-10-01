@@ -14,6 +14,7 @@ from calendar_sync.domain.model import (
     EventMappingId,
     EventRef,
     EventStatus,
+    InvitationResponse,
     ManagedOrigin,
     ProjectionFingerprint,
     ReconciliationReport,
@@ -346,6 +347,19 @@ def test_reconciliation_under_an_all_day_exclusion_accepts_a_series_left_with_al
 
     assert report.drift == ()
     assert report.checked_mappings == 1
+
+
+def test_reconciliation_reports_a_projection_left_behind_for_a_declined_event() -> None:
+    calendars = FakeCalendars()
+    calendars.put(event())
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    # Declined without the feed reporting it, so only reconciliation sees the leftover projection.
+    calendars.put(replace(event(), revision="revision-2", response=InvitationResponse.DECLINED))
+
+    report = _reconcile(factory, calendars)
+
+    assert [item.kind for item in report.drift] == [DriftKind.UNEXPECTED]
 
 
 def _reconcile(

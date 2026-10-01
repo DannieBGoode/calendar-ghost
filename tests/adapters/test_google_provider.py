@@ -17,6 +17,7 @@ from calendar_sync.domain.model import (
     EventProjection,
     EventRef,
     EventStatus,
+    InvitationResponse,
     SyncRuleId,
     TimedInterval,
 )
@@ -757,6 +758,22 @@ def test_occurrence_exceptions_count_changed_length_and_content_but_not_regular_
     exceptions = provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
 
     assert len(exceptions) == 2
+
+
+def test_occurrence_exceptions_count_an_occurrence_answered_on_its_own() -> None:
+    maybe = {
+        **_instance(),
+        "attendees": [{"email": "me@example.com", "self": True, "responseStatus": "tentative"}],
+    }
+    events_api = _with_series_master(MagicMock())
+    events_api.instances.return_value = request_returning({"items": [_instance(), maybe]})
+    provider = provider_with_events_api(events_api)
+
+    (exception,) = provider.occurrence_exceptions(SERIES, datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert exception.response is InvitationResponse.TENTATIVE
+    fields = events_api.instances.call_args.kwargs["fields"]
+    assert "attendees(email,self,responseStatus)" in fields
 
 
 def test_occurrence_exceptions_of_a_deleted_series_are_none() -> None:

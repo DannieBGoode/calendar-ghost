@@ -130,6 +130,9 @@ def test_create_cross_account_rule_through_api(tmp_path: Path) -> None:
         assert response.json()["source"]["connected_account_id"] == "personal"
         assert response.json()["destination"]["connected_account_id"] == "work"
         assert response.json()["sync_all_day_events"] is False
+        # New rules mark Maybe events and treat unanswered invitations as Maybe.
+        assert response.json()["tentative_events"] == "mark"
+        assert response.json()["unanswered_invitations"] == "as_tentative"
 
 
 def test_activity_and_incidents_require_admin_and_return_operational_data(
@@ -949,29 +952,48 @@ def test_rule_details_include_policy_state_mapping_count_and_outcomes(tmp_path: 
     assert missing.status_code == 404
 
 
+RESPONSES = {"tentative_events": "mark", "unanswered_invitations": "as_tentative"}
+POLICY = {"privacy_policy": "busy_only", "sync_all_day_events": True, **RESPONSES}
+
+
 def test_policy_edit_pauses_rule_and_blocks_enable_until_previewed(tmp_path: Path) -> None:
     with _client_with_rule(tmp_path) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
         edited = client.patch(
             "/api/v1/rules/rule-1",
-            json={"privacy_policy": "copy_details", "sync_all_day_events": True},
+            json={
+                "privacy_policy": "copy_details",
+                "sync_all_day_events": True,
+                "tentative_events": "skip",
+                "unanswered_invitations": "wait",
+            },
         )
         enable = client.post("/api/v1/rules/rule-1/enable")
         unknown = client.patch(
             "/api/v1/rules/rule-1",
-            json={"privacy_policy": "everything", "sync_all_day_events": True},
+            json={"privacy_policy": "everything", "sync_all_day_events": True, **RESPONSES},
         )
-        missing = client.patch(
-            "/api/v1/rules/missing",
+        unknown_response = client.patch(
+            "/api/v1/rules/rule-1",
+            json={**POLICY, "tentative_events": "sometimes"},
+        )
+        omitted_responses = client.patch(
+            "/api/v1/rules/rule-1",
             json={"privacy_policy": "busy_only", "sync_all_day_events": True},
         )
+        missing = client.patch("/api/v1/rules/missing", json=POLICY)
 
     assert edited.status_code == 200
     assert edited.json()["state"] == "paused"
     assert edited.json()["privacy_policy"] == "copy_details"
+    assert edited.json()["tentative_events"] == "skip"
+    assert edited.json()["unanswered_invitations"] == "wait"
     assert edited.json()["reprojection_required"] is True
     assert enable.status_code == 409
     assert unknown.status_code == 422
+    assert unknown_response.status_code == 422
+    # Omitting a choice must not quietly reset it to the default.
+    assert omitted_responses.status_code == 422
     assert missing.status_code == 404
 
 
@@ -979,8 +1001,7 @@ def test_policy_edit_is_rejected_while_removal_is_incomplete(tmp_path: Path) -> 
     with _client_with_rule(tmp_path, SyncRuleState.REMOVING) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
         response = client.patch(
-            "/api/v1/rules/rule-1",
-            json={"privacy_policy": "copy_details", "sync_all_day_events": True},
+            "/api/v1/rules/rule-1", json={**POLICY, "privacy_policy": "copy_details"}
         )
 
     assert response.status_code == 409

@@ -12,6 +12,7 @@ from calendar_sync.domain.model import (
     EventProjection,
     EventRef,
     EventStatus,
+    InvitationResponse,
     ManagedOrigin,
     OccurrenceIdentity,
     OccurrenceStart,
@@ -71,6 +72,7 @@ def to_domain_event(payload: Mapping[str, Any], endpoint: CalendarEndpoint) -> C
         ),
         guests=None if status is EventStatus.CANCELLED else _guests(payload),
         conferencing=None if status is EventStatus.CANCELLED else _conferencing(payload),
+        response=_response(payload),
     )
 
 
@@ -89,6 +91,29 @@ def _guests(payload: Mapping[str, Any]) -> tuple[str, ...] | None:
         and attendee["email"].strip()
     }
     return tuple(sorted(addresses))
+
+
+_RESPONSES = {
+    "accepted": InvitationResponse.ACCEPTED,
+    "tentative": InvitationResponse.TENTATIVE,
+    "declined": InvitationResponse.DECLINED,
+    "needsAction": InvitationResponse.AWAITING,
+}
+
+
+def _response(payload: Mapping[str, Any]) -> InvitationResponse:
+    """The calendar's own answer: Google marks its attendee entry `self`.
+
+    Without one, the calendar was not invited, so the event is its own; an unknown answer keeps
+    the event projected as before.
+    """
+    attendees = payload.get("attendees")
+    if not isinstance(attendees, list):
+        return InvitationResponse.ACCEPTED
+    for attendee in attendees:
+        if isinstance(attendee, Mapping) and attendee.get("self") is True:
+            return _RESPONSES.get(str(attendee.get("responseStatus")), InvitationResponse.ACCEPTED)
+    return InvitationResponse.ACCEPTED
 
 
 def _conferencing(payload: Mapping[str, Any]) -> tuple[str, ...]:

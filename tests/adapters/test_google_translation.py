@@ -2,12 +2,15 @@ import json
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+import pytest
+
 from calendar_sync.domain.model import (
     AllDayRange,
     EventId,
     EventProjection,
     EventRef,
     EventStatus,
+    InvitationResponse,
     OccurrenceIdentity,
     Recurrence,
     SyncRuleId,
@@ -253,3 +256,35 @@ def test_a_cancelled_tombstone_has_unknown_guests_and_conferencing() -> None:
 
     assert translated.guests is None
     assert translated.conferencing is None
+
+
+@pytest.mark.parametrize(
+    ("status", "response"),
+    [
+        ("accepted", InvitationResponse.ACCEPTED),
+        ("tentative", InvitationResponse.TENTATIVE),
+        ("declined", InvitationResponse.DECLINED),
+        ("needsAction", InvitationResponse.AWAITING),
+        ("unheard-of", InvitationResponse.ACCEPTED),
+    ],
+)
+def test_the_response_is_the_calendars_own_attendee_entry(
+    status: str, response: InvitationResponse
+) -> None:
+    payload = _timed(
+        attendees=[
+            {"email": "organizer@example.com", "organizer": True, "responseStatus": "accepted"},
+            {"email": "me@example.com", "self": True, "responseStatus": status},
+            {"email": "ana@example.com", "responseStatus": "declined"},
+        ]
+    )
+
+    assert to_domain_event(payload, endpoint("account", "calendar")).response is response
+
+
+def test_an_event_the_calendar_was_not_invited_to_counts_as_accepted() -> None:
+    others = _timed(attendees=[{"email": "ana@example.com", "responseStatus": "declined"}])
+
+    for payload in (_timed(), others):
+        translated = to_domain_event(payload, endpoint("account", "calendar"))
+        assert translated.response is InvitationResponse.ACCEPTED

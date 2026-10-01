@@ -104,6 +104,15 @@ They also do not clear sealed values after 90 days, so values recorded before th
 the database until a later release clears them. Upgrading again compares each event with the
 observation recorded before the rollback, so changes made in between are described as one change.
 
+Migration 15 adds `sync_rules.tentative_policy` (default `mark`) and
+`sync_rules.unanswered_policy` (default `as_tentative`), and sets every rule's reprojection flag
+([ADR 0018](adr/0018-project-by-invitation-response.md)). Existing rules keep running without a new
+preview: their next run lists both calendars in full, retitles projections of events answered Maybe
+as "Busy (tentative)" or "Maybe: …", and deletes projections of declined events. Activity records
+these as `policy_applied` and `declined_removed`. Rolling back works with the same database: earlier
+releases ignore the columns, rewrite the tentative titles back on their next full pass, and recreate
+projections of declined events still in the sync window.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

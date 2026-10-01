@@ -1,4 +1,5 @@
 import type { ProjectionHandling, RemovalResult, RulePolicyPayload, RunOutcome } from "@/lib/api"
+import { responseConsequences } from "@/lib/invitation-responses"
 
 export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
   return `${count} ${count === 1 ? singular : pluralForm}`
@@ -7,7 +8,9 @@ export function plural(count: number, singular: string, pluralForm = `${singular
 export function policyChanged(current: RulePolicyPayload, next: RulePolicyPayload): boolean {
   return (
     current.privacy_policy !== next.privacy_policy ||
-    current.sync_all_day_events !== next.sync_all_day_events
+    current.sync_all_day_events !== next.sync_all_day_events ||
+    current.tentative_events !== next.tentative_events ||
+    current.unanswered_invitations !== next.unanswered_invitations
   )
 }
 
@@ -51,6 +54,7 @@ export function policyChangeConsequences({
   if (!current.sync_all_day_events && next.sync_all_day_events) {
     lines.push(`All-day source events will be added to ${destination} on the next run.`)
   }
+  lines.push(...responseConsequences(current, next, destination))
   lines.push("Nothing changes in Google Calendar until the rule is enabled again.")
   return lines
 }

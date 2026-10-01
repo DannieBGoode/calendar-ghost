@@ -23,11 +23,16 @@ from calendar_sync.domain.model import (
     ProjectionContent,
     SyncRuleId,
     SyncRuleState,
+    TentativeEventPolicy,
     TransformationPolicy,
+    UnansweredInvitationPolicy,
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FixedClock
 from tests.helpers import rule
+
+MARK = TentativeEventPolicy.MARK
+AS_TENTATIVE = UnansweredInvitationPolicy.AS_TENTATIVE
 
 
 def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -> None:
@@ -35,7 +40,11 @@ def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
 
     changed = ChangeSyncRulePolicy(unit_of_work, FixedClock()).execute(
-        rule().id, ProjectionContent.DETAILS, AllDaySyncPolicy.INCLUDE
+        rule().id,
+        ProjectionContent.DETAILS,
+        AllDaySyncPolicy.INCLUDE,
+        tentative=TentativeEventPolicy.SKIP,
+        unanswered=UnansweredInvitationPolicy.WAIT,
     )
 
     stored = unit_of_work.state.rules[rule().id]
@@ -43,7 +52,11 @@ def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -
     assert stored.state is SyncRuleState.PAUSED
     assert stored.reprojection_required is True
     assert unit_of_work.state.audit[-1].action == "policy_changed"
-    assert unit_of_work.state.audit[-1].detail == "privacy=copy_details, all_day=include"
+    assert stored.transformation.tentative is TentativeEventPolicy.SKIP
+    assert stored.transformation.unanswered is UnansweredInvitationPolicy.WAIT
+    assert unit_of_work.state.audit[-1].detail == (
+        "privacy=copy_details, all_day=include, tentative=skip, unanswered=wait"
+    )
 
 
 def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
@@ -51,7 +64,11 @@ def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
 
     unchanged = ChangeSyncRulePolicy(unit_of_work, FixedClock()).execute(
-        rule().id, ProjectionContent.BUSY_ONLY, AllDaySyncPolicy.INCLUDE
+        rule().id,
+        ProjectionContent.BUSY_ONLY,
+        AllDaySyncPolicy.INCLUDE,
+        tentative=MARK,
+        unanswered=AS_TENTATIVE,
     )
 
     assert unchanged.state is SyncRuleState.ENABLED
@@ -65,10 +82,20 @@ def test_policy_change_is_blocked_for_missing_or_removing_rules() -> None:
 
     with pytest.raises(RuleNotFound):
         use_case.execute(
-            SyncRuleId("missing"), ProjectionContent.BUSY_ONLY, AllDaySyncPolicy.INCLUDE
+            SyncRuleId("missing"),
+            ProjectionContent.BUSY_ONLY,
+            AllDaySyncPolicy.INCLUDE,
+            tentative=MARK,
+            unanswered=AS_TENTATIVE,
         )
     with pytest.raises(InvalidStateTransition):
-        use_case.execute(rule().id, ProjectionContent.DETAILS, AllDaySyncPolicy.INCLUDE)
+        use_case.execute(
+            rule().id,
+            ProjectionContent.DETAILS,
+            AllDaySyncPolicy.INCLUDE,
+            tentative=MARK,
+            unanswered=AS_TENTATIVE,
+        )
 
 
 def test_details_report_mapping_count_and_latest_outcomes() -> None:
@@ -97,6 +124,7 @@ def test_policy_change_waits_for_an_in_flight_provider_write() -> None:
     worker = Thread(
         target=change.execute,
         args=(rule().id, ProjectionContent.DETAILS, AllDaySyncPolicy.INCLUDE),
+        kwargs={"tentative": MARK, "unanswered": AS_TENTATIVE},
     )
     worker.start()
     worker.join(0.1)

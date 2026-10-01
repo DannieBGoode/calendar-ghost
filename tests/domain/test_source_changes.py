@@ -7,6 +7,7 @@ from calendar_sync.domain.changes import SourceChange, SourceField, SourceObserv
 from calendar_sync.domain.model import (
     AllDayRange,
     EventStatus,
+    InvitationResponse,
     ManagedOrigin,
     Recurrence,
     TimedInterval,
@@ -70,6 +71,7 @@ def test_guests_are_compared_as_a_set_of_addresses() -> None:
         ({"guests": ("ana@example.com",)}, SourceField.GUESTS),
         ({"recurrence": Recurrence(("RRULE:FREQ=DAILY",))}, SourceField.RECURRENCE),
         ({"conferencing": ()}, SourceField.CONFERENCING),
+        ({"response": InvitationResponse.TENTATIVE}, SourceField.RESPONSE),
     ],
 )
 def test_each_tracked_field_is_detected_on_its_own(
@@ -112,3 +114,14 @@ def test_changed_fields_follow_display_order() -> None:
     assert change.fields == (SourceField.TITLE, SourceField.LOCATION)
     assert change.before.title == "Private appointment"
     assert change.after.title == "Renamed"
+
+
+def test_a_response_observed_before_responses_were_tracked_is_not_compared() -> None:
+    earlier = replace(observed(), response=None)
+
+    assert (
+        SourceChange.between(
+            earlier, observed(revision="revision-2", response=InvitationResponse.DECLINED)
+        )
+        is None
+    )
