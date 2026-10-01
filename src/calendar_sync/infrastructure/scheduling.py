@@ -44,7 +44,13 @@ class SyncScheduler:
 
     async def run_forever(self) -> None:
         while True:
-            await self.run_once()
+            # A pass that fails, such as on a database another operation holds locked, must not
+            # end the loop: every rule would stop synchronizing until the service restarts.
+            # Cancellation is a BaseException, so stopping the service still ends the loop.
+            try:
+                await self.run_once()
+            except Exception:
+                logger.exception("Scheduled pass failed; trying again at the next interval")
             await asyncio.sleep(self._interval_seconds)
 
     async def run_once(self) -> None:
