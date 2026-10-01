@@ -205,14 +205,14 @@ def test_progress_is_logged_at_most_every_thirty_seconds(logs: pytest.LogCapture
 
     for seconds in (10, 19, 1, 15, 15, 400):
         clock.advance(seconds)
-        log.progress(counts)
+        log.progress(counts, handled=5, total=None)
 
     assert lines(logs, "run progress") == [
-        "run progress rule=rule-1 run=run-1 decided=3 created=0 updated=0 deleted=0 "
+        "run progress rule=rule-1 run=run-1 decided=3 handled=5 created=0 updated=0 deleted=0 "
         "ignored=3 conflicts=0 elapsed=30s google_calls=12",
-        "run progress rule=rule-1 run=run-1 decided=3 created=0 updated=0 deleted=0 "
+        "run progress rule=rule-1 run=run-1 decided=3 handled=5 created=0 updated=0 deleted=0 "
         "ignored=3 conflicts=0 elapsed=1m00s google_calls=12",
-        "run progress rule=rule-1 run=run-1 decided=3 created=0 updated=0 deleted=0 "
+        "run progress rule=rule-1 run=run-1 decided=3 handled=5 created=0 updated=0 deleted=0 "
         "ignored=3 conflicts=0 elapsed=7m40s google_calls=12",
     ]
 
@@ -225,10 +225,12 @@ def test_a_long_run_reports_its_progress_as_it_decides(logs: pytest.LogCaptureFi
 
     result = use_case(enabled_rule_factory(), calendars, clock).execute(rule().id)
 
-    # Each decision is counted before its write, and each write takes 20 seconds.
+    # Each write takes 20 seconds; progress is checked at each decision and each handled event.
     assert lines(logs, "run progress") == [
-        f"run progress rule=rule-1 run={result.run_id} decided=3 created=3 updated=0 deleted=0 "
-        "ignored=0 conflicts=0 elapsed=40s google_calls=0"
+        f"run progress rule=rule-1 run={result.run_id} decided=2 handled=2/4 created=2 "
+        "updated=0 deleted=0 ignored=0 conflicts=0 elapsed=40s google_calls=0",
+        f"run progress rule=rule-1 run={result.run_id} decided=4 handled=4/4 created=4 "
+        "updated=0 deleted=0 ignored=0 conflicts=0 elapsed=1m20s google_calls=0",
     ]
     assert lines(logs, "run finished")[0].startswith(
         f"run finished rule=rule-1 run={result.run_id} in 1m20s created=4 "

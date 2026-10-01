@@ -136,7 +136,7 @@ class ExecuteSyncRule:
         ):
             log = SyncRunLog(rule_id, self.clock, calls, work.started_at)
             try:
-                result = self._execute_serialized(rule_id, full=full, log=log)
+                result = self._execute_serialized(rule_id, full=full, log=log, work=work)
             except RuleNotExecutable:
                 log.stopped()
                 raise
@@ -162,11 +162,11 @@ class ExecuteSyncRule:
                 uow.commit()
 
     def _execute_serialized(
-        self, rule_id: SyncRuleId, *, full: bool, log: SyncRunLog
+        self, rule_id: SyncRuleId, *, full: bool, log: SyncRunLog, work: RuleWork
     ) -> SyncRunResult:
         with self.unit_of_work() as uow:
             rule = _executable_rule(uow, rule_id)
-            run, feeds = self._begin(uow, rule, full=full, log=log)
+            run, feeds = self._begin(uow, rule, full=full, log=log, work=work)
             self._synchronize_sources(run, feeds.source)
             self._repair_destinations(run, feeds.destination)
             if run.reproject:
@@ -189,7 +189,7 @@ class ExecuteSyncRule:
         )
 
     def _begin(
-        self, uow: UnitOfWork, rule: SyncRule, *, full: bool, log: SyncRunLog
+        self, uow: UnitOfWork, rule: SyncRule, *, full: bool, log: SyncRunLog, work: RuleWork
     ) -> tuple[SyncRunContext, _ChangeFeeds]:
         """Read both change feeds from the saved cursors, or in full when a full run is due."""
         run_id = self.run_ids.new_run_id()
@@ -227,7 +227,9 @@ class ExecuteSyncRule:
             daily_pass=feeds.source_listed and previous_cursor is not None,
             source_listed=feeds.source_listed,
             log=log,
+            work=work,
         )
+        run.expect(len(changes.events) + len(destination_changes.events))
         if feeds.destination_listed:
             # A full listing already holds each projection, so decisions need not re-read it.
             run.listed_destinations = {
@@ -249,6 +251,7 @@ class ExecuteSyncRule:
                 )
                 run.handled.add(source_event.reference)
             run.uow.commit()
+            run.handled_one()
 
     def _repair_destinations(self, run: SyncRunContext, changes: ProviderChangeSet) -> None:
         """Repair drift the destination feed reports on projections the source batch left alone."""
@@ -258,6 +261,7 @@ class ExecuteSyncRule:
                 run.uow.commit()
             else:
                 self._repair_destination_event(run, destination_event)
+            run.handled_one()
 
     def _repair_destination_event(
         self, run: SyncRunContext, destination_event: CalendarEvent
@@ -368,20 +372,24 @@ class ExecuteSyncRule:
         ]
         if run.log is not None:
             run.log.reprojecting(len(remaining))
+        run.expect(len(remaining))
         for mapping in remaining:
             # Applying an earlier series can handle a later mapping's source.
-            if mapping.source in run.handled:
-                continue
-            authoritative_source = self.provider.get_event(mapping.source)
-            if authoritative_source is None:
-                self._record_unverifiable(run, mapping.source, mapping.destination)
-            else:
-                # Reprojection re-verifies every recorded occurrence of a series as well.
-                self._synchronize_event(
-                    run, authoritative_source, destination_loaded=False, actual_destination=None
-                )
-            run.handled.add(mapping.source)
-            run.uow.commit()
+            if mapping.source not in run.handled:
+                authoritative_source = self.provider.get_event(mapping.source)
+                if authoritative_source is None:
+                    self._record_unverifiable(run, mapping.source, mapping.destination)
+                else:
+                    # Reprojection re-verifies every recorded occurrence of a series as well.
+                    self._synchronize_event(
+                        run,
+                        authoritative_source,
+                        destination_loaded=False,
+                        actual_destination=None,
+                    )
+                run.handled.add(mapping.source)
+                run.uow.commit()
+            run.handled_one()
 
     def _synchronize_source_exception(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         identity = exception.occurrence

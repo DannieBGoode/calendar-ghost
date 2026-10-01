@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import RuleNotExecutable
+from calendar_sync.application.locking import RuleWork
 from calendar_sync.application.ports import (
     AuditEntry,
     CalendarReader,
@@ -93,16 +94,19 @@ class SyncRunLog:
     def replaying(self, pending: int) -> None:
         logger.info("pending replays %s series=%d", self._names(), pending)
 
-    def progress(self, counts: Mapping[SyncAction, int]) -> None:
+    def progress(
+        self, counts: Mapping[SyncAction, int], *, handled: int, total: int | None
+    ) -> None:
         """Say how far the run got, at most once every PROGRESS_INTERVAL."""
         now = self.clock.now()
         if self._next_progress is None or now < self._next_progress:
             return
         self._next_progress = now + PROGRESS_INTERVAL
         logger.info(
-            "run progress %s decided=%d %s elapsed=%s google_calls=%d",
+            "run progress %s decided=%d handled=%s %s elapsed=%s google_calls=%d",
             self._names(),
             sum(counts.values()),
+            handled if total is None else f"{handled}/{total}",
             _decisions(counts),
             duration(now - self.started_at),
             self.calls.calls,
@@ -188,6 +192,8 @@ class SyncRunContext:
     Occurrence writes verify the series' ownership with a fresh read of their own.
     """
     log: SyncRunLog | None = None
+    work: RuleWork | None = None
+    """What the rule reports while this run is in progress, including how much it handled."""
 
     def count(self, action: SyncAction, source: EventRef) -> None:
         """Count one decision about `source`, remembering it when it is a block.
@@ -197,8 +203,27 @@ class SyncRunContext:
         self.counts[action] += 1
         if action is SyncAction.CONFLICT:
             self.blocked.add(source)
+        self._report_progress()
+
+    def expect(self, items: int) -> None:
+        """Add `items` the run will handle to its reported total, before handling any of them."""
+        if self.work is not None:
+            self.work.total = (self.work.total or 0) + items
+
+    def handled_one(self) -> None:
+        """One expected item is handled, whatever was decided about it."""
+        if self.work is not None:
+            self.work.done += 1
+        self._report_progress()
+
+    def _report_progress(self) -> None:
         if self.log is not None:
-            self.log.progress(self.counts)
+            work = self.work
+            self.log.progress(
+                self.counts,
+                handled=work.done if work else 0,
+                total=work.total if work else None,
+            )
 
 
 def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: EventRef) -> bool:

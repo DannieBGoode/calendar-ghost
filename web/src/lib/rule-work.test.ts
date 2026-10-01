@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { RunningWork } from "@/lib/api"
-import { busyCommand, ruleWork, workDescription, workRefreshInterval, WORK_REFRESH_MS } from "@/lib/rule-work"
+import { busyCommand, ruleWork, workDescription, workMeta, workRefreshInterval, WORK_REFRESH_MS } from "@/lib/rule-work"
 
 const started = "2026-09-29T09:00:00Z"
 const running = (overrides: Partial<RunningWork>): RunningWork => ({
@@ -53,6 +53,65 @@ describe("ruleWork", () => {
       startedAt: null,
       progress: null,
     })
+  })
+})
+
+describe("ruleWork for a sync", () => {
+  it("reports how many reported events a sync has checked, out of how many", () => {
+    expect(ruleWork({ pending: undefined, running: running({ total: 840, done: 412 }) })?.progress).toEqual({
+      done: 412,
+      total: 840,
+    })
+  })
+
+  it("never reports more checked than the total", () => {
+    expect(ruleWork({ pending: undefined, running: running({ total: 10, done: 12 }) })?.progress).toEqual({
+      done: 10,
+      total: 10,
+    })
+  })
+
+  it("counts handled events alone while the total is unknown", () => {
+    const work = ruleWork({ pending: undefined, running: running({ total: null, done: 5 }) })
+    expect(work?.progress).toBeNull()
+    expect(work?.handled).toBe(5)
+    expect(ruleWork({ pending: undefined, running: running({ total: null, done: 0 }) })?.handled).toBeUndefined()
+  })
+
+  it("keeps the progress of a sync this page started", () => {
+    const syncing = running({ total: 40, done: 4 })
+    expect(ruleWork({ pending: "sync", pendingSince: 5, running: syncing })?.progress).toEqual({ done: 4, total: 40 })
+    // Reconcile now's opening full sync is not the reconciliation the page names.
+    expect(ruleWork({ pending: "reconcile", pendingSince: 5, running: syncing })?.progress).toBeNull()
+  })
+})
+
+describe("workMeta", () => {
+  const startedAt = Date.parse(started)
+  const twelveMinutes = startedAt + 12 * 60_000
+
+  it("leads with how many events a sync checked", () => {
+    expect(workMeta({ kind: "sync", startedAt, progress: { done: 412, total: 840 } }, twelveMinutes)).toBe(
+      "412 of 840 checked · Running for 12 min 0 s · It keeps running if you leave this page.",
+    )
+    expect(workMeta({ kind: "sync", startedAt, progress: null, handled: 5 }, twelveMinutes)).toBe(
+      "5 handled · Running for 12 min 0 s · It keeps running if you leave this page.",
+    )
+  })
+
+  it("says only how long work runs when it has no count", () => {
+    expect(workMeta({ kind: "sync", startedAt, progress: null }, twelveMinutes)).toBe(
+      "Running for 12 min 0 s · It keeps running if you leave this page.",
+    )
+    expect(workMeta({ kind: "preview", startedAt: null, progress: null }, twelveMinutes)).toBe(
+      "It keeps running if you leave this page.",
+    )
+  })
+
+  it("leaves a removal's count to its description", () => {
+    expect(workMeta({ kind: "removal", startedAt, progress: { done: 3, total: 10 } }, twelveMinutes)).toBe(
+      "Running for 12 min 0 s · It keeps running if you leave this page.",
+    )
   })
 })
 
