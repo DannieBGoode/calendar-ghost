@@ -502,6 +502,37 @@ class LogFiles(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class DatabaseUsage:
+    bytes: int
+    reclaimable_bytes: int
+    """Free pages the file keeps until it is compacted."""
+    activity_entries: int
+    oldest_activity_at: datetime | None
+
+
+class DatabaseStorage(Protocol):
+    """The installation's database, as Settings → Storage reports and trims it."""
+
+    def usage(self) -> DatabaseUsage: ...
+
+    def clearable_activity(self, before: datetime) -> int:
+        """How many Audit Entries older than `before` clearing would remove."""
+        ...
+
+    def clear_activity(self, before: datetime) -> int:
+        """Remove Audit Entries older than `before`, except those run health and naming read.
+
+        Kept regardless of age, per rule and source event: the latest entry, the latest at or
+        before the rule's last block check, and the latest that recorded a title.
+        """
+        ...
+
+    def compact(self) -> None:
+        """Return free pages to the filesystem. It briefly blocks every other writer."""
+        ...
+
+
 class AccountAuthorizations(Protocol):
     def is_connected(self, account_id: ConnectedAccountId) -> bool: ...
 
