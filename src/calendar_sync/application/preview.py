@@ -154,10 +154,10 @@ class PreviewSyncRule:
                 return True
             if master.recurrence is None:
                 return False
-            # Like a Sync Run, a series whose every occurrence is cancelled is not projected.
+            # Like a Sync Run, a series with no occurrence left to project is not projected.
             if master.reference not in live:
                 live[master.reference] = self.provider.has_live_occurrences(
-                    master.reference, include_all_day=rule.transformation.includes_all_day
+                    master.reference, rule.transformation
                 )
             return not live[master.reference]
 

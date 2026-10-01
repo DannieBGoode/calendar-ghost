@@ -13,15 +13,19 @@ from calendar_sync.application.errors import (
     ProviderFailureKind,
 )
 from calendar_sync.domain.model import (
+    AllDaySyncPolicy,
     EventId,
     EventProjection,
     EventRef,
     EventStatus,
     InvitationResponse,
     SyncRuleId,
+    TentativeEventPolicy,
     TimedInterval,
+    TransformationPolicy,
 )
 from calendar_sync.infrastructure.google.provider import (
+    LIVE_OCCURRENCE_FIELDS,
     OCCURRENCE_EXCEPTION_FIELDS,
     OCCURRENCE_PAGE_LIMIT,
     GoogleCalendarProvider,
@@ -398,6 +402,7 @@ def test_deleting_a_native_event_is_refused_as_an_ownership_mismatch() -> None:
 
 DESTINATION = endpoint("work-account", "work-calendar")
 SERIES = EventRef(DESTINATION, EventId("projection-1"))
+_EXCLUDING_ALL_DAY = TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE)
 SOURCE_SERIES = EventRef(
     endpoint("personal-account", "personal-calendar"), EventId("source-series")
 )
@@ -616,13 +621,13 @@ def test_has_live_occurrences_lists_instances_without_cancelled_ones() -> None:
     events_api.instances.return_value = request_returning({"items": [_instance()]})
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is True
     events_api.instances.assert_called_once_with(
         calendarId="work-calendar",
         eventId="projection-1",
         showDeleted=False,
         maxResults=250,
-        fields="items(status,start),nextPageToken",
+        fields=LIVE_OCCURRENCE_FIELDS,
     )
 
 
@@ -631,7 +636,7 @@ def test_has_live_occurrences_never_counts_a_cancelled_instance() -> None:
     events_api.instances.return_value = request_returning({"items": [_instance("cancelled")]})
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES, include_all_day=True) is False
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is False
 
 
 def test_has_live_occurrences_skips_all_day_instances_a_rule_excludes() -> None:
@@ -640,8 +645,66 @@ def test_has_live_occurrences_skips_all_day_instances_a_rule_excludes() -> None:
     events_api.instances.return_value = request_returning({"items": [all_day]})
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES, include_all_day=False) is False
-    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    assert provider.has_live_occurrences(SERIES, _EXCLUDING_ALL_DAY) is False
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is True
+
+
+def _answered(response: str) -> dict[str, object]:
+    return {
+        **_instance(),
+        "attendees": [
+            {"email": "organizer@example.com", "responseStatus": "accepted"},
+            {"email": "me@example.com", "self": True, "responseStatus": response},
+        ],
+    }
+
+
+def test_has_live_occurrences_asks_for_the_fields_a_rule_decides_by() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [_instance()]})
+    provider = provider_with_events_api(events_api)
+
+    provider.has_live_occurrences(SERIES, TransformationPolicy())
+
+    fields = events_api.instances.call_args.kwargs["fields"]
+    assert fields == "items(id,status,start,end,attendees(self,responseStatus)),nextPageToken"
+
+
+def test_has_live_occurrences_skips_instances_the_rule_excludes_by_their_answer() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning(
+        {"items": [_answered("declined"), _answered("tentative")]}
+    )
+    provider = provider_with_events_api(events_api)
+    skipping = TransformationPolicy(tentative=TentativeEventPolicy.SKIP)
+
+    assert provider.has_live_occurrences(SERIES, skipping) is False
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is True
+
+
+def test_has_live_occurrences_counts_an_instance_without_its_own_answer_as_live() -> None:
+    # Without the calendar's own attendee entry nothing proves the occurrence declined.
+    uninvited = {
+        **_instance(),
+        "attendees": [{"email": "a@example.com", "responseStatus": "declined"}],
+    }
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning({"items": [uninvited]})
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is True
+
+
+def test_has_live_occurrences_finds_an_accepted_instance_after_a_page_of_declined_ones() -> None:
+    events_api = MagicMock()
+    events_api.instances.side_effect = [
+        request_returning({"items": [_answered("declined")], "nextPageToken": "page-2"}),
+        request_returning({"items": [_answered("accepted")]}),
+    ]
+    provider = provider_with_events_api(events_api)
+
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is True
+    assert events_api.instances.call_count == 2
 
 
 def test_has_live_occurrences_reads_past_empty_pages_before_answering() -> None:
@@ -652,7 +715,7 @@ def test_has_live_occurrences_reads_past_empty_pages_before_answering() -> None:
     ]
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is True
     assert events_api.instances.call_args.kwargs["pageToken"] == "page-2"
 
 
@@ -661,7 +724,7 @@ def test_has_live_occurrences_is_false_only_when_every_page_is_empty() -> None:
     events_api.instances.return_value = request_returning({"items": []})
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES, include_all_day=True) is False
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is False
 
 
 @pytest.mark.parametrize("status", [400, 404, 410])
@@ -670,7 +733,7 @@ def test_has_live_occurrences_of_a_series_google_cannot_expand_counts_as_live(st
     events_api.instances.return_value = request_raising(status)
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is True
 
 
 def test_has_live_occurrences_stops_at_the_page_limit_without_proving_the_series_empty() -> None:
@@ -678,7 +741,7 @@ def test_has_live_occurrences_stops_at_the_page_limit_without_proving_the_series
     events_api.instances.return_value = request_returning({"items": [], "nextPageToken": "next"})
     provider = provider_with_events_api(events_api)
 
-    assert provider.has_live_occurrences(SERIES, include_all_day=True) is True
+    assert provider.has_live_occurrences(SERIES, TransformationPolicy()) is True
     assert events_api.instances.call_count == OCCURRENCE_PAGE_LIMIT
 
 
@@ -777,7 +840,7 @@ def test_has_live_occurrences_classifies_other_failures_like_any_request(
     provider = provider_with_events_api(events_api)
 
     with pytest.raises(ProviderFailure) as failure:
-        provider.has_live_occurrences(SERIES, include_all_day=True)
+        provider.has_live_occurrences(SERIES, TransformationPolicy())
 
     assert failure.value.kind is kind
     assert failure.value.account_id == DESTINATION.connected_account_id

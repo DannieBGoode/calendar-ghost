@@ -86,7 +86,7 @@ export function useRuleCommands() {
       case "sync":
         return syncResultMessage(await api.syncRule(ruleId))
       case "reconcile":
-        return reconcileResultMessage(await api.reconcileRule(ruleId))
+        return reconcileResultMessage(await api.reconcileRule(ruleId), destination)
       case "pause":
         await api.pauseRule(ruleId)
         return pausedMessage(destination)

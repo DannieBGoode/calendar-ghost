@@ -32,6 +32,7 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
     TimedInterval,
+    TransformationPolicy,
 )
 from calendar_sync.domain.services import (
     EventProjector,
@@ -154,7 +155,7 @@ class FakeCalendars:
         found = {start: self.get_occurrence(series, start) for start in original_starts}
         return {start: event for start, event in found.items() if event is not None}
 
-    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
+    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
         self.reads.append(series)
         master = self.events.get(series)
         if master is None:
@@ -162,7 +163,7 @@ class FakeCalendars:
         if master.status is not EventStatus.CONFIRMED:
             return False
         return any(
-            include_all_day or not self._all_day(series, start)
+            policy.exclusion(self._instance(master, start)) is None
             for start in self.live_starts(series)
         )
 
@@ -186,19 +187,26 @@ class FakeCalendars:
                 instance.title,
                 instance.description,
                 instance.location,
-            ) != (regular.time, regular.title, regular.description, regular.location)
+                instance.response,
+            ) != (
+                regular.time,
+                regular.title,
+                regular.description,
+                regular.location,
+                regular.response,
+            )
             if (instance.status is EventStatus.CANCELLED or edited) and instance.occurrence_reaches(
                 not_ended_before
             ):
                 exceptions.append(instance)
         return tuple(exceptions)
 
-    def _all_day(self, series: EventRef, start: OccurrenceStart) -> bool:
-        stored = self.events.get(
-            EventRef(series.calendar, EventId(instance_id(series.event_id.value, start)))
-        )
-        time = stored.time if stored is not None else self.events[series].time
-        return isinstance(time, AllDayRange)
+    def _instance(self, master: CalendarEvent, start: OccurrenceStart) -> CalendarEvent:
+        """The occurrence as stored, or as the master expands it."""
+        series = master.reference
+        reference = EventRef(series.calendar, EventId(instance_id(series.event_id.value, start)))
+        stored = self.events.get(reference)
+        return stored if stored is not None else self._expand(master, start, reference)
 
     @staticmethod
     def _expand(
@@ -222,6 +230,7 @@ class FakeCalendars:
             location=master.location,
             occurrence=OccurrenceIdentity(master.reference.event_id, start),
             managed_origin=master.managed_origin,
+            response=master.response,
         )
 
     def find_projection(
@@ -491,8 +500,8 @@ class ReaderOnlyCalendar:
     ) -> Mapping[OccurrenceStart, CalendarEvent]:
         return self._calendar.list_occurrences(series, original_starts)
 
-    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
-        return self._calendar.has_live_occurrences(series, include_all_day=include_all_day)
+    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+        return self._calendar.has_live_occurrences(series, policy)
 
     def occurrence_exceptions(
         self, series: EventRef, not_ended_before: datetime

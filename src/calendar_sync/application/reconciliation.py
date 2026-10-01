@@ -289,9 +289,7 @@ class ReconcileSyncRule:
             source.recurrence is None
             or mapping.destination in actual
             or not mapping.belongs_to(rule)
-            or self.provider.has_live_occurrences(
-                source.reference, include_all_day=rule.transformation.includes_all_day
-            )
+            or self.provider.has_live_occurrences(source.reference, rule.transformation)
         ):
             return False
         destination = self.provider.get_event(mapping.destination)

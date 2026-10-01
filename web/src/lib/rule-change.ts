@@ -146,10 +146,12 @@ function reconciliationSummary(outcome: RunOutcome): string {
   if (outcome.drift === 0) {
     return blocked ? `Checked ${checked}: ${blocked}` : `All ${checked} matched their sources`
   }
+  // Projections are counted per series while differences include single occurrences, so the two
+  // counts are not a ratio.
   const differed =
     outcome.drift === 1
-      ? `1 of ${checked} differed from its source; it was not changed`
-      : `${outcome.drift} of ${checked} differed from their sources; none were changed`
+      ? `Checked ${checked}: 1 difference found; it was not changed`
+      : `Checked ${checked}: ${outcome.drift} differences found; none were changed`
   return blocked ? `${differed}. ${blocked}` : differed
 }
 

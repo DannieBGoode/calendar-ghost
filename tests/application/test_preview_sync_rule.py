@@ -254,6 +254,19 @@ def test_preview_under_an_all_day_exclusion_skips_a_series_left_with_only_all_da
     assert included.recurring_series == 1
 
 
+def test_preview_excludes_a_series_whose_every_occurrence_is_declined() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0), week_start(1)))
+    calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED))
+    calendars.put(replace(occurrence(master, 1), response=InvitationResponse.DECLINED))
+    factory = enabled_rule_factory(rule(state=SyncRuleState.DRAFT))
+
+    preview = _preview(factory, calendars).execute(rule().id)
+
+    assert preview.recurring_series == 0
+    assert preview.sample == ()
+
+
 def test_preview_excludes_declined_events_and_follows_the_rules_response_choices() -> None:
     calendars = FakeCalendars()
     responses = {

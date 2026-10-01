@@ -101,7 +101,7 @@ become sources of a reverse rule. A mapped series that the source no longer retu
 | Occurrence answered on its own | Mark it as tentative, unmark it, or cancel it in the destination, as the rule's policy calls for |
 | Cancelled occurrence | Cancel the matching destination occurrence and keep a `cancelled` Occurrence Mapping |
 | Deleted series | Delete the destination series with its occurrences |
-| No occurrence left to project (all cancelled, or all-day under an exclusion) | Do not create or restore the destination series; keep its Series Mapping and Occurrence Mappings dormant |
+| No occurrence left to project (all cancelled, or excluded by the rule, such as declined or all-day under an exclusion) | Do not create or restore the destination series; keep its Series Mapping and Occurrence Mappings dormant |
 
 A destination occurrence is cancelled only when the source proves it cancelled or absent from an
 existing series; an unverifiable source series is a Conflict. When the destination series has no
@@ -116,9 +116,10 @@ Google cancels a whole series once its last live occurrence is cancelled, and a 
 projection reads as missing. A source series whose every occurrence is cancelled, such as the
 single-occurrence remainder of a "this and following" split, therefore cannot be projected: before
 creating or restoring a series projection, the run asks the provider, once per series per run,
-whether the source series has any occurrence that is not cancelled, not counting all-day
-occurrences when the rule excludes all-day events, since those are cancelled in the destination
-too. If none remains, the series is ignored (`series_without_occurrences`) instead of being
+whether the source series has any occurrence that is not cancelled and that the rule projects.
+Occurrences the rule excludes do not count, such as one the Source Calendar declined, one awaiting
+an answer or answered Maybe when the rule skips those, or an all-day one when the rule excludes
+all-day events, since those are cancelled in the destination too. If none remains, the series is ignored (`series_without_occurrences`) instead of being
 recreated on every run. A mapped series stays dormant: its Series Mapping and `cancelled`
 Occurrence Mappings are kept, and its occurrences are ignored rather than reported as a missing
 destination occurrence. Full Reconciliation accepts a dormant series once it confirms the

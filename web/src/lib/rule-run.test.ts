@@ -43,60 +43,102 @@ describe("run results", () => {
 
   it("summarizes a reconciliation by what its sync changed and what its check found", () => {
     const checked = { ...result, checked_mappings: 12, drift: [], reconciliation_conflicts: [] }
-    expect(reconcileResultMessage({ ...checked, consistent: true })).toBe(
-      "Checked 12 projections: every one matches its source event.",
+    expect(reconcileResultMessage({ ...checked, consistent: true }, "Family")).toBe(
+      "Checked 12 events this rule wrote to Family: every one matches its source event.",
     )
-    expect(reconcileResultMessage({ ...checked, consistent: true, updated: 2 })).toBe(
-      "Synced: 2 updated. Checked 12 projections: every one matches its source event.",
+    expect(reconcileResultMessage({ ...checked, consistent: true, updated: 2 }, "Family")).toBe(
+      "Synced: 2 updated. Checked 12 events this rule wrote to Family: every one matches its source event.",
     )
-    expect(
-      reconcileResultMessage({ ...checked, consistent: false, drift: [{ kind: "missing", detail: "" }] }),
-    ).toBe(
-      "Checked 12 projections: 1 still differs from its source event and was left as it is. The next sync puts back any that changed during the check.",
-    )
-    expect(
-      reconcileResultMessage({
-        ...checked,
+  })
+
+  it("counts what still differs after the sync by kind, and never blames a change during the check", () => {
+    const message = reconcileResultMessage(
+      {
+        ...result,
         consistent: false,
+        checked_mappings: 71,
         drift: [
           { kind: "missing", detail: "" },
+          { kind: "missing", detail: "" },
           { kind: "incorrect_projection", detail: "" },
+          { kind: "unexpected", detail: "" },
         ],
-      }),
-    ).toContain("2 still differ from their source events and were left as they are.")
+      },
+      "IO Clone",
+    )
+    expect(message).toBe(
+      "Checked 71 events this rule wrote to IO Clone (a recurring series counts once). " +
+        "4 differences remain after the sync: 2 missing from IO Clone, 1 different from its source event, " +
+        "1 still in IO Clone though its source event was cancelled or excluded. " +
+        "If Reconcile now finds them again, Calendar Sync can't settle them on its own.",
+    )
+    expect(message).not.toMatch(/during the check/)
+  })
+
+  it("names one remaining difference in the singular", () => {
+    const message = reconcileResultMessage(
+      { ...result, consistent: false, checked_mappings: 1, drift: [{ kind: "missing", detail: "" }] },
+      "Family",
+    )
+    expect(message).toBe(
+      "Checked 1 event this rule wrote to Family (a recurring series counts once). " +
+        "1 difference remains after the sync: 1 missing from Family. " +
+        "If Reconcile now finds it again, Calendar Sync can't settle it on its own.",
+    )
+  })
+
+  it("describes several differences of one kind in the plural", () => {
+    const drift = [
+      { kind: "incorrect_projection", detail: "" },
+      { kind: "incorrect_projection", detail: "" },
+      { kind: "unexpected", detail: "" },
+      { kind: "unexpected", detail: "" },
+    ]
+    expect(reconcileResultMessage({ ...result, consistent: false, checked_mappings: 9, drift }, "Family")).toContain(
+      "2 different from their source events, 2 still in Family though their source events were cancelled or excluded.",
+    )
   })
 
   it("never calls what the check only reported repaired", () => {
-    const message = reconcileResultMessage({
-      ...result,
-      consistent: false,
-      checked_mappings: 3,
-      drift: [{ kind: "incorrect_projection", detail: "" }],
-    })
-    expect(message).not.toMatch(/repaired/)
+    const message = reconcileResultMessage(
+      {
+        ...result,
+        consistent: false,
+        checked_mappings: 3,
+        drift: [{ kind: "incorrect_projection", detail: "" }],
+      },
+      "Family",
+    )
+    expect(message).not.toMatch(/repair/)
   })
 
   it("counts the sync's blocks and the check's own conflicts together", () => {
     expect(
-      reconcileResultMessage({
-        ...result,
-        conflicts: 1,
-        consistent: false,
-        checked_mappings: 4,
-        drift: [],
-        reconciliation_conflicts: [{ reason: "projection_unmapped", detail: "" }],
-      }),
-    ).toBe("Checked 4 projections. 2 conflicts blocked; see Activity.")
+      reconcileResultMessage(
+        {
+          ...result,
+          conflicts: 1,
+          consistent: false,
+          checked_mappings: 4,
+          drift: [],
+          reconciliation_conflicts: [{ reason: "projection_unmapped", detail: "" }],
+        },
+        "Family",
+      ),
+    ).toBe("Checked 4 events this rule wrote to Family. 2 conflicts blocked; see Activity.")
   })
 
   it("never says every projection matches when an event was blocked", () => {
     const checked = { ...result, checked_mappings: 4, drift: [] }
-    const bySync = reconcileResultMessage({ ...checked, conflicts: 1, consistent: true })
-    const byCheck = reconcileResultMessage({
-      ...checked,
-      consistent: false,
-      reconciliation_conflicts: [{ reason: "source_unverifiable", detail: "" }],
-    })
+    const bySync = reconcileResultMessage({ ...checked, conflicts: 1, consistent: true }, "Family")
+    const byCheck = reconcileResultMessage(
+      {
+        ...checked,
+        consistent: false,
+        reconciliation_conflicts: [{ reason: "source_unverifiable", detail: "" }],
+      },
+      "Family",
+    )
     for (const message of [bySync, byCheck]) {
       expect(message).not.toContain("matches")
       expect(message).toContain("1 conflict blocked; see Activity.")

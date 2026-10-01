@@ -229,9 +229,7 @@ class SyncRunContext:
 def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: EventRef) -> bool:
     """Ask once per run whether a source series still has an occurrence this rule projects."""
     if series not in run.live_series:
-        run.live_series[series] = provider.has_live_occurrences(
-            series, include_all_day=run.rule.transformation.includes_all_day
-        )
+        run.live_series[series] = provider.has_live_occurrences(series, run.rule.transformation)
     return run.live_series[series]
 
 

@@ -217,6 +217,29 @@ def test_reconciliation_accepts_a_dormant_series_whose_every_occurrence_is_cance
     assert report.checked_mappings == 1
 
 
+def test_reconciliation_accepts_a_dormant_series_whose_every_occurrence_is_declined() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=(week_start(0),))
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    declined = replace(occurrence(master, 0), response=InvitationResponse.DECLINED)
+    calendars.report(calendars.put(declined))
+    use_case.execute(rule().id)
+
+    report = ReconcileSyncRule(
+        factory,
+        calendars,
+        EventProjector(),
+        ReconciliationService(ProjectionFingerprinter()),
+        FixedClock(),
+        UuidRunIdGenerator(),
+    ).execute(rule().id)
+
+    assert report.drift == ()
+    assert report.checked_mappings == 1
+
+
 def test_reconciliation_still_reports_a_deleted_live_series_beside_a_dormant_one() -> None:
     calendars = FakeCalendars()
     dormant = calendars.put(series("dormant-series"), starts=(week_start(0),))
