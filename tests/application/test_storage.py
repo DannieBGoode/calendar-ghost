@@ -214,3 +214,35 @@ def test_purging_logs_purges_the_files() -> None:
 
     assert logs.purged == 1
     assert b"".join(storage.log_chunks()) == b"line\n"
+
+
+# Regression: ISSUE-001 — clearing Activity left no trace in the logs
+# Found by /qa on 2026-10-01
+# Report: .context/qa-reports/run-20261001T190652Z/qa-report-127.0.0.1-2026-10-01.md
+def test_clearing_activity_is_logged_with_its_age_and_count(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    storage = _storage(FakeDatabase())
+
+    with caplog.at_level("INFO", logger="calendar_sync"):
+        storage.clear_activity(90)
+
+    assert "activity cleared older_than_days=90 removed=7 space=reclaimed" in caplog.text
+
+
+def test_clearing_whose_space_stays_unreclaimed_is_logged_as_a_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    storage = _storage(FakeDatabase(), wait=0.05)
+    running = storage.locks.for_rule(rule().id)
+    running.acquire()
+    try:
+        with caplog.at_level("INFO", logger="calendar_sync"), pytest.raises(StorageBusy):
+            storage.clear_activity(30)
+    finally:
+        running.release()
+
+    warnings = [record for record in caplog.records if record.levelname == "WARNING"]
+    assert [record.getMessage() for record in warnings] == [
+        "activity cleared older_than_days=30 removed=7 space=not reclaimed, a rule was busy"
+    ]

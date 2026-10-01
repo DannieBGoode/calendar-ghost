@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Iterator
 from contextlib import ExitStack
@@ -24,6 +25,8 @@ from calendar_sync.application.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.model import SyncRuleId
+
+logger = logging.getLogger(__name__)
 
 ACTIVITY_AGES: tuple[int, ...] = (30, 90, 180, 365)
 COMPACT_WAIT_SECONDS: float = 30.0
@@ -59,7 +62,14 @@ class StorageAdministration:
 
     def clear_activity(self, older_than_days: int) -> ClearedActivity:
         removed = self.database.clear_activity(self._cutoff(older_than_days))
-        self._compact()
+        cleared = f"activity cleared older_than_days={older_than_days} removed={removed}"
+        try:
+            self._compact()
+        except StorageBusy:
+            # The entries are gone either way; only reclaiming their space waits for a retry.
+            logger.warning("%s space=not reclaimed, a rule was busy", cleared)
+            raise
+        logger.info("%s space=reclaimed", cleared)
         return ClearedActivity(removed, self.database.usage())
 
     def log_chunks(self) -> Iterator[bytes]:
