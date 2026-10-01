@@ -167,3 +167,15 @@ class ActivityRuleRemoved(ApplicationError):
 
 class EventInspectionUnavailable(ApplicationError):
     """Events cannot be read live without a configured calendar provider."""
+
+
+class InvalidActivityAge(ApplicationError):
+    """Activity can be cleared only from one of the offered ages."""
+
+
+class StorageBusy(ApplicationError):
+    """Rule work kept the database from being compacted."""
+
+
+class FileLoggingOff(ApplicationError):
+    """The installation keeps no log files to read or purge."""
