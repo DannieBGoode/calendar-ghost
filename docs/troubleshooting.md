@@ -19,6 +19,10 @@ docker compose logs -f app
 docker compose logs --since 1h app
 ```
 
+The service's own lines, those of the `calendar_sync` loggers, are also kept in its rotating log
+files beside the database, so Settings → Storage → Download gets them without SSH access to the
+host. Uvicorn's request and error lines stay in the container logs only.
+
 Lines name a rule and a run only by their internal identifiers. They never contain event titles,
 descriptions, calendar identifiers, account emails, URLs, or tokens, but review them before
 posting them publicly anyway. Uvicorn's own request and startup lines appear alongside them in
@@ -62,6 +66,18 @@ call; look for `slow google call` warnings, or turn on debug logging.
 Set `CALENDAR_SYNC_LOG_LEVEL=DEBUG` in `.env` and run `docker compose up -d` to also log every Google
 call as `google call op=events.get status=200 took=84ms`. Debug logging is verbose; set it back to
 `INFO` when you are done.
+
+## Database is large
+
+Settings → Storage shows the database's size, the number of Activity entries, and the oldest one.
+Clear Activity older than 30, 90, 180, or 365 days; the confirmation shows how many entries that
+removes before you confirm. Clearing deletes in batches and then compacts the database, which
+briefly waits for any rule that is synchronizing; if every rule's lock cannot be taken, or SQLite
+stays locked, within 30 seconds, the response is "Old Activity was cleared, but its space could not
+be reclaimed while a rule is synchronizing. Try again when it finishes." The entries are already
+gone at that point, so clearing again later reclaims the space without deleting anything further.
+See [ADR 0019](adr/0019-administrator-chosen-activity-retention.md) for which entries are kept and
+why.
 
 ## An event did not synchronize
 

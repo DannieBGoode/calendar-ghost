@@ -23,6 +23,7 @@ from calendar_sync.application.ports import (
     IncidentResolution,
     RuleRunOutcome,
     RunKind,
+    UnitOfWork,
     UnitOfWorkFactory,
 )
 from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
@@ -754,3 +755,42 @@ def test_each_scheduler_pass_forgets_change_values_of_every_rule() -> None:
 
     # Paused and removed rules never run, so their values expire here rather than in a run.
     assert unit_of_work.state.change_values_forgotten_before == now - SOURCE_CHANGE_RETENTION
+
+
+def test_a_failed_pass_is_logged_and_the_next_interval_runs_again(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    opened = 0
+
+    def locked_once() -> UnitOfWork:
+        # Clearing Activity can hold the database through VACUUM for longer than a busy timeout.
+        nonlocal opened
+        opened += 1
+        if opened == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return unit_of_work()
+
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, RecordingExecuteRule([])),
+        locked_once,
+        cast(RunHealth, RecordingHealth()),
+        interval_seconds=0,
+    )
+
+    async def two_passes() -> None:
+        task = asyncio.create_task(scheduler.run_forever())
+        while unit_of_work.state.change_values_forgotten_before is None:
+            await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    with caplog.at_level("ERROR", logger="calendar_sync.infrastructure.scheduling"):
+        asyncio.run(asyncio.wait_for(two_passes(), timeout=5))
+
+    assert opened == 2
+    assert [record.getMessage() for record in caplog.records] == [
+        "Scheduled pass failed; trying again at the next interval"
+    ]
+    assert caplog.records[0].exc_info is not None

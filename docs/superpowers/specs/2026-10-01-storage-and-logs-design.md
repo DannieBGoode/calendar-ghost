@@ -69,16 +69,27 @@ Storage
 - **Allowed values for N:** 30, 90, 180 and 365. Nothing shorter than 30 days, so a Sync Run
   window or a recent investigation is never cut short.
 
-**Kept regardless of age**, because the run-health bookkeeping depends on them:
+**What is kept.** Every entry newer than the cutoff, and, for each rule and source event, two
+entries older than it:
 
-1. Each rule's latest entry for each source event. This keeps open blocks, the dashboard's
-   blocked-entry links, and the names Activity shows for renames and cancellations.
-2. Each rule's latest entry for each source event at or before that rule's last block check
-   (`rule_block_checks.audit_floor`). Without it, a block that persists across a daily pass could
-   miss its "blocked" incident.
+Found by id, the order Activity reads them in, so a clock stepping back cannot reorder them; with
+ids in time order they are the two entries below.
+
+1. **The latest entry older than the cutoff.** Activity compares an entry with the event's
+   previous one, both to show a repair as repeated and to show an earlier name or time. A block
+   check compares a block with the event's decision before the pass began. Each reads at most one
+   entry past the cutoff, and this is that entry. It also keeps an event's latest entry when every
+   entry is old, which keeps its open blocks and the dashboard's blocked-entry links.
+2. **The latest entry older than the cutoff that recorded a title.** Activity names a cancellation
+   recorded without a title from the event's previous titled entry.
 
 **Removed:** every other entry older than the cutoff, including those of removed rules. These are
 history, not state. Incidents keep no Audit Entry IDs, so they are unaffected.
+
+**What changes.** Entries newer than the cutoff show exactly what they showed before. The two kept
+old entries lose the earlier entries they were compared with: an old entry may stop reading as a
+repeated repair, or lose the earlier name or time it was renamed or moved from. That is accepted,
+and the ADR records it.
 
 **Deletion and space reclaim**
 
@@ -86,9 +97,10 @@ history, not state. Incidents keep no Audit Entry IDs, so they are unaffected.
   write locks.
 - Then `VACUUM` returns the space to the filesystem. VACUUM briefly blocks writes, so it waits for
   any running rule work to finish:
-  - Clearing acquires every rule's run lock (`RuleLocks.for_rule`) and holds them only for the
-    vacuum itself, which is seconds on a database of this size. No provider call happens while they
-    are held.
+  - Clearing acquires every rule's run lock (`RuleLocks.for_rule`). Locks acquired first stay held
+    while it waits up to 30 s in total for the rest; all are released once the vacuum, which is
+    seconds on a database of this size, finishes or the wait gives up. No provider call happens
+    while they are held.
   - If the locks cannot all be acquired within 30 s, the answer is 409 "A rule is synchronizing;
     try again when it finishes."
 - Pagination still works, because Activity pages by ID with `before`, and AUTOINCREMENT IDs are
@@ -115,7 +127,10 @@ history, not state. Incidents keep no Audit Entry IDs, so they are unaffected.
 - Size, reclaimable bytes, the entry count and the oldest entry are reported correctly.
 - Clearing keeps both protected entries for each event, and removes the rest older than the
   cutoff, across several rules, including removed ones.
-- After clearing, open blocks, persisting-block incidents and renamed-from names are unchanged.
+- What Activity shows for entries newer than the cutoff (titles, repeated repairs, earlier names
+  and times) is the same before and after clearing.
+- After clearing, open blocks, persisting-block incidents and the titles of cancellations are
+  unchanged.
   These tests seed SQLite, run the existing queries, and compare the results before and after.
 - Batching works across several batches.
 - `VACUUM` shrinks the file.

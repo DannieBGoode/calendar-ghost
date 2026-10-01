@@ -1,5 +1,8 @@
 # Record the decisions worth explaining
 
+Amended by [ADR 0019](0019-administrator-chosen-activity-retention.md), which lets the
+administrator clear Activity older than a chosen age.
+
 ## Context
 
 `docs/sync-model.md` required every synchronization decision to append an Audit Entry, including
@@ -45,4 +48,4 @@ unrecorded skip can no longer be looked up by event, so "why is this event missi
 only for all-day exclusions, unsynchronized series, and series whose every occurrence is
 cancelled. The trust in the echo check rests on the
 same fingerprint comparison the decision service already uses to confirm a projection is current.
-Audit history still has no retention limit.
+Retention is now the administrator's choice; see [ADR 0019](0019-administrator-chosen-activity-retention.md).

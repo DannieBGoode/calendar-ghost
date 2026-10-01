@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -475,6 +475,62 @@ class ProviderCallTally:
 class ProviderCallStats(Protocol):
     def measure(self) -> AbstractContextManager[ProviderCallTally]:
         """Tally the provider calls made in this context, by this thread, until it exits."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class LogUsage:
+    """What the service's own log files hold: their size, count, and first and last line times."""
+
+    bytes: int
+    files: int
+    oldest_at: datetime | None
+    newest_at: datetime | None
+
+
+class LogFiles(Protocol):
+    """The service's rotating log files. They carry no event content (AGENTS.md)."""
+
+    def usage(self) -> LogUsage: ...
+
+    def chunks(self) -> Iterator[bytes]:
+        """Every file's bytes, oldest file first; a file rotated away meanwhile is skipped."""
+        ...
+
+    def purge(self) -> None:
+        """Empty the logs, leaving one line that says they were purged."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class DatabaseUsage:
+    bytes: int
+    reclaimable_bytes: int
+    """Free pages the file keeps until it is compacted."""
+    activity_entries: int
+    oldest_activity_at: datetime | None
+
+
+class DatabaseStorage(Protocol):
+    """The installation's database, as Settings → Storage reports and trims it."""
+
+    def usage(self) -> DatabaseUsage: ...
+
+    def clearable_activity(self, before: datetime) -> int:
+        """How many Audit Entries older than `before` clearing would remove."""
+        ...
+
+    def clear_activity(self, before: datetime) -> int:
+        """Remove Audit Entries older than `before`, except those Activity still reads.
+
+        Every entry newer than `before` is kept. Of the older ones, per rule and source event, those
+        Activity compares a kept entry with are kept, found by id: normally the latest entry and
+        the latest that recorded a title. The rest are removed.
+        """
+        ...
+
+    def compact(self) -> None:
+        """Return free pages to the filesystem. It briefly blocks every other writer."""
         ...
 
 

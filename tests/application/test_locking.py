@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from threading import Lock, Thread
 
 import pytest
 
@@ -48,3 +49,66 @@ def test_work_ends_when_it_fails_and_snapshots_do_not_change_it() -> None:
         fail_after_changing_a_snapshot()
 
     assert locks.current_work(RULE) is None
+
+
+def _held_elsewhere(lock: Lock) -> bool:
+    """Whether another thread would have to wait for `lock`."""
+    acquired = lock.acquire(timeout=0.05)
+    if acquired:
+        lock.release()
+    return not acquired
+
+
+# Regression: PR #34 review — a rule created right before VACUUM could run alongside it
+def test_holding_every_rule_also_holds_a_rule_first_locked_meanwhile() -> None:
+    locks = RuleLocks()
+    existing = locks.for_rule(RULE)
+
+    with locks.every_rule(timeout=1.0):
+        assert existing.locked()
+        # A brand-new rule's first run asks for its lock only now, from another thread.
+        newcomer: list[Lock] = []
+        thread = Thread(target=lambda: newcomer.append(locks.for_rule(SyncRuleId("new"))))
+        thread.start()
+        thread.join()
+        assert _held_elsewhere(newcomer[0])
+
+    assert not existing.locked()
+    assert not newcomer[0].locked()
+
+
+def test_holding_every_rule_gives_up_after_its_timeout_and_holds_nothing() -> None:
+    locks = RuleLocks()
+    first = locks.for_rule(SyncRuleId("a-rule"))
+    busy = locks.for_rule(SyncRuleId("b-rule"))
+    busy.acquire()
+    try:
+        with pytest.raises(TimeoutError), locks.every_rule(timeout=0.05):
+            pytest.fail("entered while a rule was busy")
+        assert not first.locked()
+        assert busy.locked()
+        assert not locks.for_rule(SyncRuleId("asked-for-later")).locked()
+    finally:
+        busy.release()
+
+
+def test_only_one_caller_holds_every_rule_at_a_time() -> None:
+    locks = RuleLocks()
+
+    with locks.every_rule(timeout=1.0):
+        outcome: list[str] = []
+
+        def second_holder() -> None:
+            try:
+                with locks.every_rule(timeout=0.05):
+                    outcome.append("entered")
+            except TimeoutError:
+                outcome.append("timed out")
+
+        thread = Thread(target=second_holder)
+        thread.start()
+        thread.join()
+
+    assert outcome == ["timed out"]
+    with locks.every_rule(timeout=0.05):
+        pass

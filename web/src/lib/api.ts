@@ -248,6 +248,27 @@ export type Incident = {
   account_id: string | null
 }
 
+export type DatabaseUsage = {
+  bytes: number
+  reclaimable_bytes: number
+  activity_entries: number
+  oldest_activity_at: string | null
+}
+export type LogUsage = {
+  bytes: number
+  files: number
+  oldest_at: string | null
+  newest_at: string | null
+}
+export type StorageUsage = {
+  database: DatabaseUsage
+  logs: LogUsage | null
+  activity_ages: number[]
+}
+export type ClearableActivity = { older_than_days: number; entries: number }
+export type ClearedActivity = { removed: number; database: DatabaseUsage }
+export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
+
 export const ACTIVITY_PAGE_SIZE = 100
 
 export const api = {
@@ -344,4 +365,13 @@ export const api = {
     request<SourceChange>(`/api/v1/audit-entries/${entryId}/changes`),
   incidents: () => request<Incident[]>("/api/v1/incidents"),
   recentChanges: (limit = 5) => request<RecentChange[]>(`/api/v1/recent-changes?limit=${limit}`),
+  storage: () => request<StorageUsage>("/api/v1/storage"),
+  clearableActivity: (days: number) =>
+    request<ClearableActivity>(`/api/v1/storage/activity?older_than_days=${days}`),
+  clearActivity: (days: number) =>
+    request<ClearedActivity>("/api/v1/storage/activity/clear", {
+      method: "POST",
+      body: JSON.stringify({ older_than_days: days }),
+    }),
+  purgeLogs: () => request<void>(STORAGE_LOGS_URL, { method: "DELETE" }),
 }

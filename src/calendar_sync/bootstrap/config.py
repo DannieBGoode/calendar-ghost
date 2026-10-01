@@ -9,6 +9,7 @@ from pathlib import Path
 class Settings:
     database_path: Path
     log_level: str = "INFO"
+    log_directory: Path | None = None
     secure_cookies: bool = False
     master_key: str = ""
     google_client_id: str = ""
@@ -25,9 +26,17 @@ class Settings:
 
     @classmethod
     def from_environment(cls) -> Settings:
+        database_path = Path(os.environ.get("CALENDAR_SYNC_DATABASE_PATH", "./calendar-sync.db"))
+        configured_logs = os.environ.get("CALENDAR_SYNC_LOG_DIR")
+        log_directory = (
+            database_path.parent / "logs"
+            if configured_logs is None
+            else (Path(configured_logs) if configured_logs.strip() else None)
+        )
         return cls(
-            database_path=Path(os.environ.get("CALENDAR_SYNC_DATABASE_PATH", "./calendar-sync.db")),
+            database_path=database_path,
             log_level=os.environ.get("CALENDAR_SYNC_LOG_LEVEL", "INFO"),
+            log_directory=log_directory,
             secure_cookies=os.environ.get("CALENDAR_SYNC_SECURE_COOKIES", "false").lower()
             in {"1", "true", "yes"},
             master_key=os.environ.get("CALENDAR_SYNC_MASTER_KEY", ""),

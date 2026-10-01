@@ -21,9 +21,11 @@ from calendar_sync.application.ports import (
     AdministratorAccess,
     CalendarProvider,
     Clock,
+    DatabaseStorage,
     IdGenerator,
     IncidentNotifications,
     IncidentRepository,
+    LogFiles,
     ProviderCallStats,
     RuleHealthRecords,
     RunIdGenerator,
@@ -43,6 +45,7 @@ from calendar_sync.application.rules import (
     ReplaceSyncRuleCalendars,
 )
 from calendar_sync.application.run_log import UntalliedProviderCalls
+from calendar_sync.application.storage import StorageAdministration
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import configure_logging
@@ -56,6 +59,7 @@ from calendar_sync.infrastructure.google.instrumentation import GoogleCallStats
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
+from calendar_sync.infrastructure.log_files import RotatingLogFiles
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
@@ -78,6 +82,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
+from calendar_sync.infrastructure.persistence.storage import SqliteStorage
 from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
 from calendar_sync.infrastructure.security import (
     CredentialCipher,
@@ -102,6 +107,7 @@ class Container:
     administrator: AdministratorAccess
     activity: ActivityQueries
     operations: OperationsQueries
+    storage: StorageAdministration
     get_dashboard: GetDashboard
     inspect_activity_event: InspectActivityEvent
     list_sync_rules: ListSyncRules
@@ -142,12 +148,14 @@ class Adapters:
     operations: OperationsQueries
     health_records: RuleHealthRecords
     incidents: IncidentRepository
+    database_storage: DatabaseStorage
     notifications: IncidentNotifications | None = None
     accounts: SqliteConnectedAccountStore | None = None
     google_oauth: GoogleOAuthService | None = None
     calendar_provider: CalendarProvider | None = None
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
     """Counts the calendar provider's calls for each run's log lines."""
+    log_files: LogFiles | None = None
 
 
 def build_container(settings: Settings | None = None) -> Container:
@@ -161,8 +169,13 @@ def service_container() -> Container:
     Logging is configured first, so every line the service writes follows the configured level.
     """
     settings = Settings.from_environment()
-    configure_logging(settings.log_level)
-    return build_container(settings)
+    log_files = (
+        RotatingLogFiles(settings.log_directory) if settings.log_directory is not None else None
+    )
+    # A directory that cannot be used leaves file logging off, and Settings must say so.
+    if not configure_logging(settings.log_level, log_files):
+        log_files = None
+    return compose(settings, replace(build_adapters(settings), log_files=log_files))
 
 
 def build_adapters(settings: Settings) -> Adapters:
@@ -183,6 +196,7 @@ def build_adapters(settings: Settings) -> Adapters:
         operations=SqliteOperationsQueries(settings.database_path),
         health_records=SqliteRuleHealthRecords(settings.database_path),
         incidents=SqliteIncidentRepository(settings.database_path, ids),
+        database_storage=SqliteStorage(settings.database_path),
     )
     if not settings.master_key:
         return adapters
@@ -271,6 +285,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         administrator=adapters.administrator,
         activity=adapters.activity,
         operations=adapters.operations,
+        storage=StorageAdministration(adapters.database_storage, locks, clock, adapters.log_files),
         get_dashboard=GetDashboard(unit_of_work, adapters.operations),
         inspect_activity_event=InspectActivityEvent(adapters.activity, unit_of_work, provider),
         list_sync_rules=ListSyncRules(unit_of_work, locks),
