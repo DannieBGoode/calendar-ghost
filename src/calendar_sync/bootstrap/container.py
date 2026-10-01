@@ -24,6 +24,7 @@ from calendar_sync.application.ports import (
     IdGenerator,
     IncidentNotifications,
     IncidentRepository,
+    LogFiles,
     ProviderCallStats,
     RuleHealthRecords,
     RunIdGenerator,
@@ -56,6 +57,7 @@ from calendar_sync.infrastructure.google.instrumentation import GoogleCallStats
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
+from calendar_sync.infrastructure.log_files import RotatingLogFiles
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
@@ -148,6 +150,7 @@ class Adapters:
     calendar_provider: CalendarProvider | None = None
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
     """Counts the calendar provider's calls for each run's log lines."""
+    log_files: LogFiles | None = None
 
 
 def build_container(settings: Settings | None = None) -> Container:
@@ -161,8 +164,11 @@ def service_container() -> Container:
     Logging is configured first, so every line the service writes follows the configured level.
     """
     settings = Settings.from_environment()
-    configure_logging(settings.log_level)
-    return build_container(settings)
+    log_files = (
+        RotatingLogFiles(settings.log_directory) if settings.log_directory is not None else None
+    )
+    configure_logging(settings.log_level, log_files)
+    return compose(settings, replace(build_adapters(settings), log_files=log_files))
 
 
 def build_adapters(settings: Settings) -> Adapters:

@@ -10,8 +10,11 @@ import logging
 import sys
 from datetime import UTC, datetime
 
+from calendar_sync.infrastructure.log_files import RotatingLogFiles
+
 LOGGER = "calendar_sync"
 HANDLER = "calendar_sync.stderr"
+FILE_HANDLER = "calendar_sync.file"
 FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 
 
@@ -23,10 +26,11 @@ class _UtcFormatter(logging.Formatter):
         return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def configure_logging(level: str) -> None:
-    """Write `calendar_sync` records at `level` and above to standard error.
+def configure_logging(level: str, files: RotatingLogFiles | None = None) -> None:
+    """Write `calendar_sync` records at `level` and above to standard error, and to `files`.
 
-    Calling it again changes the level without adding a second handler, so no line is doubled.
+    Calling it again changes the level without adding a second handler, so no line is doubled. A
+    log directory that cannot be used turns file logging off with one warning; the service runs.
     """
     logger = logging.getLogger(LOGGER)
     logger.setLevel(level.strip().upper())
@@ -35,5 +39,18 @@ def configure_logging(level: str) -> None:
         handler.set_name(HANDLER)
         handler.setFormatter(_UtcFormatter())
         logger.addHandler(handler)
+    if files is not None and not any(h.get_name() == FILE_HANDLER for h in logger.handlers):
+        try:
+            file_handler = files.handler()
+        except OSError as error:
+            logger.warning(
+                "file logging is off: %s cannot be used (%s)",
+                files.directory,
+                error.__class__.__name__,
+            )
+        else:
+            file_handler.set_name(FILE_HANDLER)
+            file_handler.setFormatter(_UtcFormatter())
+            logger.addHandler(file_handler)
     # Written here only, even when something else configures the root logger.
     logger.propagate = False

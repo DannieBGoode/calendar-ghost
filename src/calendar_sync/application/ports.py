@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
@@ -475,6 +475,30 @@ class ProviderCallTally:
 class ProviderCallStats(Protocol):
     def measure(self) -> AbstractContextManager[ProviderCallTally]:
         """Tally the provider calls made in this context, by this thread, until it exits."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class LogUsage:
+    """What the service's own log files hold: their size, count, and first and last line times."""
+
+    bytes: int
+    files: int
+    oldest_at: datetime | None
+    newest_at: datetime | None
+
+
+class LogFiles(Protocol):
+    """The service's rotating log files. They carry no event content (AGENTS.md)."""
+
+    def usage(self) -> LogUsage: ...
+
+    def chunks(self) -> Iterator[bytes]:
+        """Every file's bytes, oldest file first; a file rotated away meanwhile is skipped."""
+        ...
+
+    def purge(self) -> None:
+        """Empty the logs, leaving one line that says they were purged."""
         ...
 
 

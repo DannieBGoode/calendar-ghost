@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import HANDLER, LOGGER, configure_logging
 from calendar_sync.interfaces.api.app import create_app
 
@@ -84,3 +85,17 @@ def test_the_service_configures_logging_from_its_settings(
 
     assert service_logger.level == logging.DEBUG
     assert len(own_handlers(service_logger)) == 1
+
+
+def test_log_directory_defaults_beside_the_database_and_can_be_turned_off(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("CALENDAR_SYNC_DATABASE_PATH", str(tmp_path / "data" / "sync.db"))
+    monkeypatch.delenv("CALENDAR_SYNC_LOG_DIR", raising=False)
+    assert Settings.from_environment().log_directory == tmp_path / "data" / "logs"
+
+    monkeypatch.setenv("CALENDAR_SYNC_LOG_DIR", str(tmp_path / "elsewhere"))
+    assert Settings.from_environment().log_directory == tmp_path / "elsewhere"
+
+    monkeypatch.setenv("CALENDAR_SYNC_LOG_DIR", "")
+    assert Settings.from_environment().log_directory is None
