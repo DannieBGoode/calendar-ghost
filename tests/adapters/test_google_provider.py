@@ -732,6 +732,38 @@ def test_access_token_refresh_failures_are_classified_without_a_status(
     assert str(error) not in failure.value.detail
 
 
+def test_a_refresh_failing_while_creating_a_projection_is_classified() -> None:
+    # Credentials are refreshed as each request's service is made, before any request is sent.
+    events_api = MagicMock()
+    events_api.list.return_value = request_returning({"items": []})
+    service = MagicMock()
+    service.events.return_value = events_api
+    services = iter((service,))
+
+    def service_for(_account_id: object) -> MagicMock:
+        try:
+            return next(services)
+        except StopIteration:
+            raise RefreshError("invalid_grant") from None  # type: ignore[no-untyped-call]
+
+    provider = GoogleCalendarProvider(service_for)
+    projection = EventProjection(
+        TimedInterval(
+            datetime(2026, 8, 30, 10, tzinfo=UTC),
+            datetime(2026, 8, 30, 11, tzinfo=UTC),
+        ),
+        "Busy",
+    )
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.create_projection(
+            DESTINATION, event().reference, SyncRuleId("rule-1"), projection, "operation-key"
+        )
+
+    assert failure.value.kind is ProviderFailureKind.AUTHENTICATION
+    assert failure.value.account_id == DESTINATION.connected_account_id
+
+
 def test_failures_name_the_account_whose_request_google_rejected() -> None:
     # A rule's calendars may belong to different accounts; only the rejected one needs renewing.
     source = endpoint("personal-account", "personal-calendar")

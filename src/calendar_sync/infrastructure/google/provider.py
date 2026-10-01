@@ -137,10 +137,10 @@ class GoogleCalendarProvider:
         existing = self.find_projection(destination, operation_key)
         if existing is not None:
             return CreatedProjection(existing)
-        service = self._service_for(destination.connected_account_id)
         try:
             payload = (
-                service.events()
+                self._service_for(destination.connected_account_id)
+                .events()
                 .insert(
                     calendarId=destination.calendar_id.value,
                     body=projection_payload(projection, rule_id, source, operation_key),

@@ -7,9 +7,11 @@ import json
 import os
 import secrets
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any, cast
 from urllib.parse import urlparse
 
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
@@ -69,6 +71,8 @@ class GoogleOAuthService:
         self._states = states
         # The Installation Master Key, from which each state's PKCE verifier is derived.
         self._verifier_key = verifier_key
+        self._refresh_locks: dict[ConnectedAccountId, Lock] = {}
+        self._refresh_guard = Lock()
 
     def authorization_url(self) -> str:
         self._require_client_configuration()
@@ -195,11 +199,28 @@ class GoogleOAuthService:
         return build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
     def _credentials(self, account_id: ConnectedAccountId) -> Credentials:
-        payload = json.loads(self._accounts.credential_json(account_id))
-        credentials = Credentials.from_authorized_user_info(  # type: ignore[no-untyped-call]
-            payload, scopes=CALENDAR_SCOPES
-        )
-        return cast(Credentials, credentials)
+        """Usable credentials, refreshing an expired access token once and keeping the new one.
+
+        Without keeping it, every request after the first hour would refresh again first.
+        """
+        with self._refresh_lock(account_id):
+            stored = self._accounts.credential_json(account_id)
+            credentials = cast(
+                Credentials,
+                Credentials.from_authorized_user_info(  # type: ignore[no-untyped-call]
+                    json.loads(stored), scopes=CALENDAR_SCOPES
+                ),
+            )
+            if not credentials.valid:
+                credentials.refresh(Request())  # type: ignore[no-untyped-call]
+                refreshed = credentials.to_json()  # type: ignore[no-untyped-call]
+                self._accounts.replace_credentials(account_id, stored, refreshed)
+            return credentials
+
+    def _refresh_lock(self, account_id: ConnectedAccountId) -> Lock:
+        # One refresh per account at a time, so concurrent requests reuse its new token.
+        with self._refresh_guard:
+            return self._refresh_locks.setdefault(account_id, Lock())
 
     def _flow(self, state: str) -> Flow:
         client_config = {

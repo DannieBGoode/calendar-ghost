@@ -112,6 +112,33 @@ class SqliteConnectedAccountStore:
             )
         return self._cipher.decrypt(bytes(row["encrypted_credentials"]))
 
+    def replace_credentials(
+        self, account_id: ConnectedAccountId, expected_json: str, credential_json: str
+    ) -> bool:
+        """Keep refreshed credentials, unless the account was reauthorized or disconnected since.
+
+        It is not an authorization, so the account's authorization time stays as it was.
+        """
+        encrypted = self._cipher.encrypt(credential_json)
+        with self._connect() as connection:
+            # Held from the read to the write, so a reauthorization cannot land in between.
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT encrypted_credentials, state FROM connected_accounts WHERE id = ?",
+                (account_id.value,),
+            ).fetchone()
+            if (
+                row is None
+                or str(row["state"]) != ConnectedAccountState.CONNECTED.value
+                or self._cipher.decrypt(bytes(row["encrypted_credentials"])) != expected_json
+            ):
+                return False
+            connection.execute(
+                "UPDATE connected_accounts SET encrypted_credentials = ? WHERE id = ?",
+                (encrypted, account_id.value),
+            )
+        return True
+
     def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
         now = self._clock.now().isoformat()
         cleared_credentials = self._cipher.encrypt("{}")
