@@ -99,6 +99,7 @@ It builds on that branch's run logging (PR #33). Open its PR against `main` once
       oldest_at: datetime | None
       newest_at: datetime | None
 
+
   class LogFiles(Protocol):
       def usage(self) -> LogUsage: ...
       def chunks(self) -> Iterator[bytes]: ...
@@ -568,6 +569,7 @@ git commit -m "feat: keep the service's logs in rotating files beside the databa
       activity_entries: int
       oldest_activity_at: datetime | None
 
+
   class DatabaseStorage(Protocol):
       def usage(self) -> DatabaseUsage: ...
       def clearable_activity(self, before: datetime) -> int: ...
@@ -918,15 +920,18 @@ git commit -m "feat: report database usage and clear Activity older than a chose
   ACTIVITY_AGES: tuple[int, ...] = (30, 90, 180, 365)
   COMPACT_WAIT_SECONDS: float = 30.0
 
+
   @dataclass(frozen=True, slots=True)
   class StorageUsage:
       database: DatabaseUsage
       logs: LogUsage | None  # None when file logging is off
 
+
   @dataclass(frozen=True, slots=True)
   class ClearedActivity:
       removed: int
       database: DatabaseUsage
+
 
   @dataclass(slots=True)
   class StorageAdministration:
@@ -1255,23 +1260,28 @@ git commit -m "feat: clear old Activity and purge logs without racing rule work"
       activity_entries: int
       oldest_activity_at: str | None
 
+
   class LogUsageResponse(BaseModel):
       bytes: int
       files: int
       oldest_at: str | None
       newest_at: str | None
 
+
   class StorageResponse(BaseModel):
       database: DatabaseUsageResponse
       logs: LogUsageResponse | None
       activity_ages: list[int]
 
+
   class ClearableActivityResponse(BaseModel):
       older_than_days: int
       entries: int
 
+
   class ClearActivityRequest(BaseModel):
       older_than_days: int
+
 
   class ClearedActivityResponse(BaseModel):
       removed: int
@@ -1346,9 +1356,10 @@ def test_clearing_activity_answers_what_was_removed(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["removed"] == 0
-    assert client.post(
-        "/api/v1/storage/activity/clear", json={"older_than_days": 1}
-    ).status_code == 422
+    assert (
+        client.post("/api/v1/storage/activity/clear", json={"older_than_days": 1}).status_code
+        == 422
+    )
 
 
 def test_clearing_while_a_rule_runs_is_a_conflict(
@@ -1495,9 +1506,7 @@ def download_logs(services: Services) -> StreamingResponse:
     )
 
 
-@router.delete(
-    "/api/v1/storage/logs", status_code=status.HTTP_204_NO_CONTENT, dependencies=ADMIN
-)
+@router.delete("/api/v1/storage/logs", status_code=status.HTTP_204_NO_CONTENT, dependencies=ADMIN)
 def purge_logs(services: Services) -> Response:
     try:
         services.storage.purge_logs()
