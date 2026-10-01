@@ -37,6 +37,10 @@ class RotatingLogFiles:
         """The handler writing the current file; raises OSError if the directory is unusable."""
         if self._handler is None:
             self._directory.mkdir(parents=True, exist_ok=True)
+            current = self._directory / FILE_NAME
+            if not self._contained(current, allow_missing=True):
+                # Writing, rotating, or purging through a link would change a file elsewhere.
+                raise OSError(f"{FILE_NAME} is a link or leaves the log directory")
             self._handler = RotatingFileHandler(
                 self._directory / FILE_NAME,
                 maxBytes=self._max_bytes,
@@ -51,7 +55,15 @@ class RotatingLogFiles:
         rotated = [
             current.with_name(f"{FILE_NAME}.{number}") for number in range(self._backups, 0, -1)
         ]
-        return [path for path in (*rotated, current) if path.is_file()]
+        return [path for path in (*rotated, current) if self._contained(path)]
+
+    def _contained(self, path: Path, *, allow_missing: bool = False) -> bool:
+        """A regular file, not a link, that resolves inside the log directory (AGENTS.md)."""
+        if path.is_symlink():
+            return False
+        if not path.exists():
+            return allow_missing
+        return path.is_file() and path.resolve().parent == self._directory.resolve()
 
     def usage(self) -> LogUsage:
         paths = self.files()

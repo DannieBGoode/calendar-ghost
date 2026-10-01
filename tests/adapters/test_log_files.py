@@ -199,3 +199,36 @@ def test_no_event_content_reaches_the_log_files(tmp_path: Path) -> None:
         "therapy",
     ):
         assert content not in text
+
+
+# Regression: Codex review P2 — log files that are links could expose or truncate other files
+# Found by /codex review on 2026-10-01
+def test_a_rotated_log_that_links_outside_the_directory_is_never_served(tmp_path: Path) -> None:
+    directory = tmp_path / "logs"
+    directory.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("not a log\n")
+    (directory / "calendar-sync.log.1").symlink_to(secret)
+    (directory / "calendar-sync.log").write_text("kept\n")
+    files = RotatingLogFiles(directory)
+
+    assert b"".join(files.chunks()) == b"kept\n"
+    assert files.usage().files == 1
+    files.purge()
+    assert secret.read_text() == "not a log\n"
+
+
+def test_a_current_log_that_is_a_link_turns_file_logging_off(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    directory = tmp_path / "logs"
+    directory.mkdir()
+    target = tmp_path / "elsewhere.txt"
+    target.write_text("")
+    (directory / "calendar-sync.log").symlink_to(target)
+
+    assert configure_logging("INFO", RotatingLogFiles(directory)) is False
+    logging.getLogger("calendar_sync.test").info("service started")
+
+    assert target.read_text() == ""
+    assert "file logging is off" in capsys.readouterr().err
