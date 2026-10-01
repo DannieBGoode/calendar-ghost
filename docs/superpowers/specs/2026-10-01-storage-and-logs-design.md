@@ -94,9 +94,10 @@ and the ADR records it.
   write locks.
 - Then `VACUUM` returns the space to the filesystem. VACUUM briefly blocks writes, so it waits for
   any running rule work to finish:
-  - Clearing acquires every rule's run lock (`RuleLocks.for_rule`) and holds them only for the
-    vacuum itself, which is seconds on a database of this size. No provider call happens while they
-    are held.
+  - Clearing acquires every rule's run lock (`RuleLocks.for_rule`). Locks acquired first stay held
+    while it waits up to 30 s in total for the rest; all are released once the vacuum, which is
+    seconds on a database of this size, finishes or the wait gives up. No provider call happens
+    while they are held.
   - If the locks cannot all be acquired within 30 s, the answer is 409 "A rule is synchronizing;
     try again when it finishes."
 - Pagination still works, because Activity pages by ID with `before`, and AUTOINCREMENT IDs are

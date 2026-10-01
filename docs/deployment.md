@@ -125,9 +125,11 @@ three files of 10 MB, so a long-running Raspberry Pi does not fill its storage. 
 `docker compose logs -f app`; [Troubleshooting](troubleshooting.md#reading-the-logs) explains each
 line.
 
-The service also writes the same lines to its own rotating log files, next to the database by
-default: `<database directory>/logs/calendar-sync.log` plus up to four rotated files of 5 MB each,
-25 MB at most, oldest deleted when the current file fills. Compose passes `CALENDAR_SYNC_LOG_DIR`
+The service also writes its own lines, those of the `calendar_sync` loggers, to rotating log
+files, next to the database by default: `<database directory>/logs/calendar-sync.log` plus up to
+four rotated files: at most five files of 5 MB each, 25 MB in total. The oldest is deleted when the
+current file fills. Uvicorn's request and error lines stay on standard error only, so they appear in
+`docker compose logs` but not in these files. Compose passes `CALENDAR_SYNC_LOG_DIR`
 from `.env` and defaults it to `/data/logs` on the data volume when it is unset, as it is in
 `.env.example`. Set it to another path to use a different directory (inside the container, on a
 mounted volume so the files survive a rebuild), or set it to an empty value to turn file logging

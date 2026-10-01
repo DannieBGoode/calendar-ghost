@@ -1,13 +1,17 @@
 import logging
 import threading
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from calendar_sync.bootstrap.logs import configure_logging
+from calendar_sync.domain.model import ProjectionContent, TransformationPolicy
 from calendar_sync.infrastructure.log_files import RotatingLogFiles
+from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
+from tests.helpers import endpoint, event, rule, series
 
 
 @pytest.fixture(autouse=True)
@@ -97,10 +101,13 @@ def test_chunks_stream_the_oldest_file_first(tmp_path: Path) -> None:
 def test_a_file_rotated_away_during_a_download_is_skipped(tmp_path: Path) -> None:
     directory = tmp_path / "logs"
     directory.mkdir()
+    (directory / "calendar-sync.log.2").write_text("first\n")
     (directory / "calendar-sync.log.1").write_text("gone\n")
     (directory / "calendar-sync.log").write_text("kept\n")
-    files = RotatingLogFiles(directory)
-    chunks = files.chunks()
+    chunks = RotatingLogFiles(directory).chunks()
+    # The download has listed the files and is streaming the oldest one when rotation removes
+    # a file it has not opened yet.
+    assert next(chunks) == b"first\n"
     (directory / "calendar-sync.log.1").unlink()
 
     assert b"".join(chunks) == b"kept\n"
@@ -158,3 +165,37 @@ def test_an_unwritable_log_directory_leaves_standard_error_logging_working(
     errors = capsys.readouterr().err
     assert "file logging is off" in errors
     assert "service started" in errors
+
+
+def test_no_event_content_reaches_the_log_files(tmp_path: Path) -> None:
+    files = RotatingLogFiles(tmp_path / "logs")
+    assert configure_logging("DEBUG", files)
+    family = endpoint("account-family", "family@example.com")
+    work = endpoint("account-work", "work.calendar@example.org")
+    secret_rule = replace(
+        rule(),
+        source=family,
+        destination=work,
+        transformation=TransformationPolicy(ProjectionContent.DETAILS),
+    )
+    calendars = FakeCalendars()
+    calendars.put(event("dentist", calendar=family, title="Dentist with Dr. Secretface"))
+    calendars.put(series("therapy", calendar=family, title="Therapy session Wednesdays"))
+    execute = sync_use_case(enabled_rule_factory(secret_rule), calendars)
+
+    execute.execute(secret_rule.id)
+    execute.execute(secret_rule.id, full=True)
+
+    text = b"".join(files.chunks()).decode()
+    assert "run finished" in text
+    for content in (
+        "Secretface",
+        "Therapy session",
+        "Sensitive description",
+        "Sensitive location",
+        "family@example.com",
+        "work.calendar@example.org",
+        "dentist",
+        "therapy",
+    ):
+        assert content not in text

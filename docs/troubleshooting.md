@@ -19,8 +19,9 @@ docker compose logs -f app
 docker compose logs --since 1h app
 ```
 
-The same lines are also kept in the service's own rotating log files beside the database, so
-Settings → Storage → Download gets them without SSH access to the host.
+The service's own lines, those of the `calendar_sync` loggers, are also kept in its rotating log
+files beside the database, so Settings → Storage → Download gets them without SSH access to the
+host. Uvicorn's request and error lines stay in the container logs only.
 
 Lines name a rule and a run only by their internal identifiers. They never contain event titles,
 descriptions, calendar identifiers, account emails, URLs, or tokens, but review them before

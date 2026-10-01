@@ -152,9 +152,10 @@ uses the identity; mappings, Managed Projections, and incremental positions are 
 reauthorization. Accounts connected before profile photos were supported show initials until they
 are connected again with **Connect Google account**, which updates the existing identity in place.
 
-Use **Settings → Storage** to see the database size, the number of Activity entries, and the oldest
-one, and clear Activity older than 30, 90, 180, or 365 days; an inline confirmation shows how many
-entries that removes before you confirm. The Logs row shows the size and date range of the
+Use **Settings → Storage** to see the database size, the number of Activity entries, the oldest
+one, and any space earlier clearing left to reclaim, and clear Activity older than 30, 90, 180, or
+365 days; an inline confirmation shows how many entries that removes before you confirm, and offers
+**Reclaim space** when nothing is old enough but space is still left. The Logs row shows the size and date range of the
 service's own rotating log files and offers **Download** and **Purge logs**, so an administrator
 can retrieve or clear them without SSH access to the host.
 

@@ -32,8 +32,9 @@ old rows, was to SSH in and run SQLite commands directly.
   history is evidence, not state, and Incidents keep no Audit Entry IDs, so they are unaffected.
 - Clearing deletes in batches of 5,000 rows, each its own short write transaction, then runs
   `VACUUM` to return the space to the filesystem. `VACUUM` briefly blocks writes, so it waits for
-  every rule's run lock, holding each only for the vacuum itself. If the locks cannot all be
-  acquired within 30 seconds, or SQLite still reports the database locked after that, the answer is
+  every rule's run lock. Locks acquired first stay held while it waits for the rest, up to 30
+  seconds in total, and all are released once the vacuum finishes or the wait gives up. If the locks
+  cannot all be acquired within those 30 seconds, or SQLite still reports the database locked after that, the answer is
   409: "Old Activity was cleared, but its space could not be reclaimed while a rule is
   synchronizing. Try again when it finishes." The rows are already gone by then; clearing again
   later reclaims the space without deleting anything further.

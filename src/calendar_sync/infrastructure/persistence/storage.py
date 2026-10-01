@@ -19,6 +19,10 @@ from calendar_sync.infrastructure.persistence.activity_queries import _TITLE_OBS
 # the cutoff, its latest is still kept by the first clause, which keeps its open blocks and the
 # dashboard's blocked-entry links too. Every entry newer than the cutoff is kept regardless, by the
 # caller's own `occurred_at < ?` condition.
+# Protection selects by `occurred_at` while those readers find an entry's predecessor by id, so it
+# assumes ids follow `occurred_at` within a rule and source event. That holds because entries are
+# appended with the clock's current time; a clock stepping back only changes how an entry inside
+# the window compares with its predecessor, and never which blocks are open.
 # Interpolates only the constant `_TITLE_OBSERVED` predicate.
 _PROTECTED = f"""
     SELECT MAX(id) FROM audit_entries WHERE occurred_at < ? GROUP BY rule_id, source_event_id

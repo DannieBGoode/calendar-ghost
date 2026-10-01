@@ -172,7 +172,9 @@ def service_container() -> Container:
     log_files = (
         RotatingLogFiles(settings.log_directory) if settings.log_directory is not None else None
     )
-    configure_logging(settings.log_level, log_files)
+    # A directory that cannot be used leaves file logging off, and Settings must say so.
+    if not configure_logging(settings.log_level, log_files):
+        log_files = None
     return compose(settings, replace(build_adapters(settings), log_files=log_files))
 
 

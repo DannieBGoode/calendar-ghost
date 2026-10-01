@@ -26,11 +26,12 @@ class _UtcFormatter(logging.Formatter):
         return datetime.fromtimestamp(record.created, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def configure_logging(level: str, files: RotatingLogFiles | None = None) -> None:
+def configure_logging(level: str, files: RotatingLogFiles | None = None) -> bool:
     """Write `calendar_sync` records at `level` and above to standard error, and to `files`.
 
     Calling it again changes the level without adding a second handler, so no line is doubled. A
     log directory that cannot be used turns file logging off with one warning; the service runs.
+    Returns whether records reach `files`, so Settings never offers files nothing writes to.
     """
     logger = logging.getLogger(LOGGER)
     logger.setLevel(level.strip().upper())
@@ -54,3 +55,4 @@ def configure_logging(level: str, files: RotatingLogFiles | None = None) -> None
             logger.addHandler(file_handler)
     # Written here only, even when something else configures the root logger.
     logger.propagate = False
+    return files is not None and any(h.get_name() == FILE_HANDLER for h in logger.handlers)
