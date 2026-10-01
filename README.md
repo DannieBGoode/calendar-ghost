@@ -236,7 +236,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_GOOGLE_REDIRECT_URI` | For Google | Exact registered OAuth callback |
 | `CALENDAR_SYNC_SECURE_COOKIES` | No | Set `true` when serving the app over HTTPS |
 | `CALENDAR_SYNC_LOG_LEVEL` | No | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); defaults to `INFO` |
-| `CALENDAR_SYNC_LOG_DIR` | No | Directory for rotating log files; defaults to `logs` beside the database. Empty turns file logging off |
+| `CALENDAR_SYNC_LOG_DIR` | No | Directory for rotating log files; unset defaults to `logs` beside the database (`/data/logs` in Compose). Empty turns file logging off |
 | `CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` | No | Receives a JSON POST when a deduplicated incident opens |
 | `CALENDAR_SYNC_SMTP_HOST` | No | SMTP server for incident email |
 | `CALENDAR_SYNC_SMTP_PORT` | No | SMTP port; defaults to `587` |

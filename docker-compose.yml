@@ -6,6 +6,8 @@ services:
     environment:
       CALENDAR_SYNC_DATABASE_PATH: /data/calendar-sync.db
       CALENDAR_SYNC_LOG_LEVEL: ${CALENDAR_SYNC_LOG_LEVEL:-INFO}
+      # No colon: unset keeps the files in /data/logs, while an explicitly empty value turns them off.
+      CALENDAR_SYNC_LOG_DIR: ${CALENDAR_SYNC_LOG_DIR-/data/logs}
       CALENDAR_SYNC_SECURE_COOKIES: ${CALENDAR_SYNC_SECURE_COOKIES:-false}
       CALENDAR_SYNC_MASTER_KEY: ${CALENDAR_SYNC_MASTER_KEY:-}
       CALENDAR_SYNC_GOOGLE_CLIENT_ID: ${CALENDAR_SYNC_GOOGLE_CLIENT_ID:-}

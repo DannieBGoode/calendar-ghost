@@ -127,10 +127,12 @@ line.
 
 The service also writes the same lines to its own rotating log files, next to the database by
 default: `<database directory>/logs/calendar-sync.log` plus up to four rotated files of 5 MB each,
-25 MB at most, oldest deleted when the current file fills. In Docker the default database directory
-is the data volume, so the files land at `/data/logs`. Set `CALENDAR_SYNC_LOG_DIR` to use a
-different directory, or set it to an empty value to turn file logging off; if the configured
-directory cannot be used, the service logs one warning and keeps logging to standard error. Settings
+25 MB at most, oldest deleted when the current file fills. Compose passes `CALENDAR_SYNC_LOG_DIR`
+from `.env` and defaults it to `/data/logs` on the data volume when it is unset, as it is in
+`.env.example`. Set it to another path to use a different directory (inside the container, on a
+mounted volume so the files survive a rebuild), or set it to an empty value to turn file logging
+off; if the configured directory cannot be used, the service logs one warning, keeps logging to
+standard error, and Settings shows file logging as off. Settings
 → Storage shows these files' size and date range and offers Download and Purge logs, so an
 administrator can retrieve or clear them without SSH access to the host.
 
