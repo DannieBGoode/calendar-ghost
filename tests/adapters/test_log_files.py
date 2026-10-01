@@ -255,3 +255,29 @@ def test_configuring_logging_again_writes_to_the_newest_files(tmp_path: Path) ->
         if handler.get_name() == "calendar_sync.file"
     ]
     assert len(file_handlers) == 1
+
+
+def _file_handlers() -> list[logging.Handler]:
+    return [
+        handler
+        for handler in logging.getLogger("calendar_sync").handlers
+        if handler.get_name() == "calendar_sync.file"
+    ]
+
+
+# Regression: PR #34 review — turning file logging off kept writing to the earlier files
+@pytest.mark.parametrize("turned_off", ["no directory", "unusable directory"])
+def test_turning_file_logging_off_stops_writing_to_the_earlier_files(
+    tmp_path: Path, turned_off: str
+) -> None:
+    first = RotatingLogFiles(tmp_path / "first")
+    assert configure_logging("INFO", first) is True
+    blocked = tmp_path / "blocked"
+    blocked.write_text("a file where the directory should be")
+    later = None if turned_off == "no directory" else RotatingLogFiles(blocked)
+
+    assert configure_logging("INFO", later) is False
+    logging.getLogger("calendar_sync.test").info("after turning file logging off")
+
+    assert _file_handlers() == []
+    assert "after turning" not in (tmp_path / "first" / "calendar-sync.log").read_text()
