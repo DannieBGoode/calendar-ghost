@@ -70,8 +70,10 @@ class SqliteStorage:
         with closing(sqlite3.connect(self._database_path)) as connection:
             # Chosen once, so batches never re-evaluate which entries are protected. A fresh
             # connection never carries a temp table over from an earlier call.
+            # Keyed by id, so each batch reads and deletes its candidates without a full scan.
+            connection.execute("CREATE TEMP TABLE clearable (id INTEGER PRIMARY KEY)")
             connection.execute(
-                f"CREATE TEMP TABLE clearable AS SELECT id FROM audit_entries "  # noqa: S608
+                f"INSERT INTO temp.clearable SELECT id FROM audit_entries "  # noqa: S608
                 f"WHERE occurred_at < ? AND id NOT IN ({_PROTECTED})",
                 (cutoff, cutoff, cutoff),
             )
