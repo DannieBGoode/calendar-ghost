@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -310,6 +310,48 @@ class GoogleCalendarProvider:
             "Google did not finish resolving an occurrence within the page limit",
         )
 
+    def list_occurrences(
+        self, series: EventRef, original_starts: Collection[OccurrenceStart]
+    ) -> Mapping[OccurrenceStart, CalendarEvent]:
+        wanted = set(original_starts)
+        if not wanted:
+            return {}
+        parameters: dict[str, Any] = {
+            "calendarId": series.calendar.calendar_id.value,
+            "eventId": series.event_id.value,
+            "showDeleted": True,
+            "maxResults": 2500,
+            "fields": OCCURRENCE_EXCEPTION_FIELDS,
+            # No timeMin: it filters by where an instance is now, not by its original start. The
+            # bound only keeps an endless series from paging on; anything past it is looked up.
+            "timeMax": (max(map(_as_instant, wanted)) + OCCURRENCE_LISTING_MARGIN).isoformat(),
+        }
+        found: dict[OccurrenceStart, CalendarEvent] = {}
+        try:
+            events_api = self._service_for(series.calendar.connected_account_id).events()
+            for _ in range(OCCURRENCE_PAGE_LIMIT):
+                response = events_api.instances(**parameters).execute()
+                for item in response.get("items", []):
+                    candidate = to_domain_event(item, series.calendar)
+                    identity = candidate.occurrence
+                    # Never trust a positional result: the instance must name its series and start.
+                    if (
+                        identity is not None
+                        and identity.series_event_id == series.event_id
+                        and identity.original_start in wanted
+                    ):
+                        found[identity.original_start] = candidate
+                page_token = response.get("nextPageToken")
+                if not page_token or len(found) == len(wanted):
+                    break
+                parameters["pageToken"] = page_token
+        except Exception as error:
+            # A series Google cannot expand answers nothing; each lookup then decides on its own.
+            if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
+                return {}
+            raise self._failure(error, series.calendar.connected_account_id) from error
+        return found
+
     def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         parameters: dict[str, Any] = {
             "calendarId": series.calendar.calendar_id.value,
@@ -508,6 +550,12 @@ def _is_exception(instance: CalendarEvent, master: CalendarEvent) -> bool:
     return True
 
 
+def _as_instant(start: OccurrenceStart) -> datetime:
+    if isinstance(start, datetime):
+        return start.astimezone(UTC)
+    return datetime(start.year, start.month, start.day, tzinfo=UTC)
+
+
 def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:
     return origin is not None and origin.rule_id == rule_id and origin.source == source
 
@@ -557,6 +605,8 @@ OCCURRENCE_EXCEPTION_FIELDS = (
     "originalStartTime,extendedProperties,htmlLink,attendees(email,self,responseStatus),"
     "attendeesOmitted,conferenceData(entryPoints(uri)),hangoutLink),nextPageToken"
 )
+# How far past the latest requested start a series listing reaches, for occurrences moved later.
+OCCURRENCE_LISTING_MARGIN = timedelta(days=31)
 # Answers meaning Google cannot expand this series, rather than that the request failed.
 UNLISTABLE_SERIES_STATUSES = frozenset({400, 404, 410})
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -81,6 +81,15 @@ class CalendarReader(Protocol):
 
         `None` means the series answered and has no occurrence at that start. A series that cannot
         be read raises instead, because absence can authorize cancelling a destination occurrence.
+        """
+        ...
+
+    def list_occurrences(
+        self, series: EventRef, original_starts: Collection[OccurrenceStart]
+    ) -> Mapping[OccurrenceStart, CalendarEvent]:
+        """Occurrences of a series one listing found, cancelled or not, by original start.
+
+        A requested start the answer lacks proves nothing: resolve it with `get_occurrence`.
         """
         ...
 

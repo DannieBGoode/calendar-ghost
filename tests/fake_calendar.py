@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -146,6 +146,13 @@ class FakeCalendars:
         )
         stored = self.events.get(reference)
         return stored if stored is not None else self._expand(master, original_start, reference)
+
+    def list_occurrences(
+        self, series: EventRef, original_starts: Collection[OccurrenceStart]
+    ) -> Mapping[OccurrenceStart, CalendarEvent]:
+        # Answers through get_occurrence, so a test overriding it shapes both lookups alike.
+        found = {start: self.get_occurrence(series, start) for start in original_starts}
+        return {start: event for start, event in found.items() if event is not None}
 
     def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         self.reads.append(series)
@@ -478,6 +485,11 @@ class ReaderOnlyCalendar:
         self, series: EventRef, original_start: OccurrenceStart
     ) -> CalendarEvent | None:
         return self._calendar.get_occurrence(series, original_start)
+
+    def list_occurrences(
+        self, series: EventRef, original_starts: Collection[OccurrenceStart]
+    ) -> Mapping[OccurrenceStart, CalendarEvent]:
+        return self._calendar.list_occurrences(series, original_starts)
 
     def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         return self._calendar.has_live_occurrences(series, include_all_day=include_all_day)

@@ -9,6 +9,7 @@ from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
+    OccurrenceStart,
     SyncAction,
     SyncReason,
     SyncRule,
@@ -63,12 +64,21 @@ class SyncRunContext:
     listed_destinations: dict[EventRef, CalendarEvent] = field(default_factory=dict)
     """Destination events from this run's full listing, each usable once instead of a read."""
     handled: set[EventRef] = field(default_factory=set)
+    handled_occurrences: set[tuple[EventRef, OccurrenceStart]] = field(default_factory=set)
+    """Source occurrences decided this run, by source series and original start.
+
+    A destination occurrence reported later is skipped by these without looking its source up.
+    """
     repaired: set[EventRef] = field(default_factory=set)
     """Source series already repaired this run, so a repair never recurses."""
     live_series: dict[EventRef, bool] = field(default_factory=dict)
     """Whether each source series looked up this run still has an occurrence this rule projects."""
     blocked: set[EventRef] = field(default_factory=set)
     """Source events and occurrences this run blocked as a Conflict."""
+    listed_occurrences: dict[EventRef, dict[OccurrenceStart, CalendarEvent]] = field(
+        default_factory=dict
+    )
+    """Occurrences a series listing found while their series is re-verified, each usable once."""
     destination_series: dict[EventRef, CalendarEvent | None] = field(default_factory=dict)
     """Destination series read this run, shared by their occurrences until this run writes one.
 
@@ -98,6 +108,14 @@ def read_destination_series(
     if series not in run.destination_series:
         run.destination_series[series] = provider.get_event(series)
     return run.destination_series[series]
+
+
+def read_occurrence(
+    run: SyncRunContext, provider: CalendarReader, series: EventRef, original_start: OccurrenceStart
+) -> CalendarEvent | None:
+    """An occurrence from its series' listing if it found it, otherwise from its own lookup."""
+    listed = run.listed_occurrences.get(series, {}).pop(original_start, None)
+    return listed if listed is not None else provider.get_occurrence(series, original_start)
 
 
 def require_unchanged(run: SyncRunContext) -> None:

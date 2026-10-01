@@ -18,6 +18,7 @@ from calendar_sync.application.sync_run import (
     SyncRunContext,
     has_live_occurrences,
     read_destination_series,
+    read_occurrence,
     record,
     require_unchanged,
 )
@@ -60,21 +61,41 @@ class SynchronizeOccurrences:
     def reverify(
         self, run: SyncRunContext, series_mapping: EventMapping, source_series: CalendarEvent
     ) -> None:
-        """Re-decide every recorded occurrence of a series after its master changed."""
-        for recorded in run.uow.occurrences.for_series(series_mapping.id):
-            if recorded.source in run.handled:
-                continue
-            source_occurrence = self.provider.get_occurrence(
-                source_series.reference, recorded.original_start
+        """Re-decide every recorded occurrence of a series after its master changed.
+
+        One listing of each calendar's series answers most of them; any occurrence a listing did
+        not find is looked up on its own.
+        """
+        pending = [
+            recorded
+            for recorded in run.uow.occurrences.for_series(series_mapping.id)
+            if recorded.source not in run.handled
+        ]
+        if not pending:
+            return
+        series = (source_series.reference, series_mapping.destination)
+        starts = [recorded.original_start for recorded in pending]
+        for reference in series:
+            run.listed_occurrences[reference] = dict(
+                self.provider.list_occurrences(reference, starts)
             )
-            self.apply(
-                run,
-                series_mapping,
-                source_series,
-                recorded.original_start,
-                source_occurrence,
-                record_current=True,
-            )
+        try:
+            for recorded in pending:
+                source_occurrence = read_occurrence(
+                    run, self.provider, source_series.reference, recorded.original_start
+                )
+                self.apply(
+                    run,
+                    series_mapping,
+                    source_series,
+                    recorded.original_start,
+                    source_occurrence,
+                    record_current=True,
+                )
+        finally:
+            # Listings are only as fresh as this re-verification; later decisions read again.
+            for reference in series:
+                run.listed_occurrences.pop(reference, None)
 
     def replay_exceptions(
         self, run: SyncRunContext, series_mapping: EventMapping, source_series: CalendarEvent
@@ -133,6 +154,7 @@ class SynchronizeOccurrences:
             source_ref = occurrence.source_ref
             if source_ref is not None:
                 run.handled.add(source_ref)
+                run.handled_occurrences.add((source_series.reference, occurrence.original_start))
             record(
                 run,
                 AuditEntry(
@@ -282,8 +304,8 @@ class SynchronizeOccurrences:
                 destination_series is not None
                 and destination_series.status is EventStatus.CONFIRMED
             ):
-                destination = self.provider.get_occurrence(
-                    series_mapping.destination, occurrence.original_start
+                destination = read_occurrence(
+                    run, self.provider, series_mapping.destination, occurrence.original_start
                 )
         decision = self.decisions.decide_occurrence(
             run.rule,

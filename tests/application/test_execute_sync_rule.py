@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -165,6 +165,11 @@ class FakeCalendarProvider:
         self, series: EventRef, not_ended_before: datetime
     ) -> tuple[CalendarEvent, ...]:
         return ()
+
+    def list_occurrences(
+        self, series: EventRef, original_starts: Collection[OccurrenceStart]
+    ) -> dict[OccurrenceStart, CalendarEvent]:
+        return {}
 
     def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         return True

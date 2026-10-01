@@ -386,6 +386,9 @@ class ExecuteSyncRule:
         if self._is_own_occurrence_write(run, series_mapping, destination_event):
             run.counts[SyncAction.IGNORE] += 1
             return
+        if (series_mapping.source, identity.original_start) in run.handled_occurrences:
+            # Already decided this run from its source; a full listing reports every exception.
+            return
         source_series = self.provider.get_event(series_mapping.source)
         if source_series is None:
             self._record_unverifiable(run, series_mapping.source, destination_event.reference)
@@ -633,6 +636,7 @@ class ExecuteSyncRule:
         if mapping is not None and decision.action in _DESTINATION_WRITES:
             # Occurrences decided after this write read the series as it now is.
             run.destination_series.pop(mapping.destination, None)
+            run.listed_occurrences.pop(mapping.destination, None)
         if decision.action is SyncAction.CREATE and decision.projection is not None:
             created = self.provider.create_projection(
                 rule.destination,
