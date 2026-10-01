@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.ports import AccountAccess, ConnectedAccount, DiscoveredCalendar
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.infrastructure.google.instrumentation import record_token_refresh
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
@@ -41,6 +43,8 @@ OAUTH_SCOPES = CALENDAR_SCOPES + PROFILE_SCOPES
 # Google may grant fewer scopes than requested (a declined profile) or more (previously granted
 # scopes). oauthlib rejects any difference unless relaxed; complete() enforces Calendar scopes.
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,8 +217,14 @@ class GoogleOAuthService:
             )
             if not credentials.valid:
                 credentials.refresh(Request())  # type: ignore[no-untyped-call]
+                record_token_refresh()
                 refreshed = credentials.to_json()  # type: ignore[no-untyped-call]
-                self._accounts.replace_credentials(account_id, stored, refreshed)
+                kept = self._accounts.replace_credentials(account_id, stored, refreshed)
+                logger.info(
+                    "refreshed access token account=%s kept=%s",
+                    account_id.value,
+                    "yes" if kept else "no",
+                )
             return credentials
 
     def _refresh_lock(self, account_id: ConnectedAccountId) -> Lock:

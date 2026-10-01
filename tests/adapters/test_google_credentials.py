@@ -7,6 +7,7 @@ import pytest
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 
+from calendar_sync.infrastructure.google.instrumentation import GoogleCallStats
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
@@ -165,3 +166,25 @@ def test_keeping_a_refreshed_token_is_not_a_reauthorization(tmp_path: Path) -> N
     assert kept is not None
     assert kept.authorized_at == account.authorized_at
     assert store.credential_json(account.id) == '{"token": "refreshed"}'
+
+
+def test_a_token_refresh_is_counted_toward_the_run_and_logged_without_the_token(
+    tmp_path: Path,
+    built: list[Credentials],
+    refreshes: list[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store = _store(tmp_path)
+    account = store.save(
+        "Work", "work@example.test", _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
+    )
+    oauth = _oauth(tmp_path, store)
+
+    with caplog.at_level("INFO", logger="calendar_sync"), GoogleCallStats().measure() as tally:
+        oauth.service_for(account.id)
+        oauth.service_for(account.id)
+
+    assert tally.token_refreshes == 1
+    assert f"account={account.id.value}" in caplog.text
+    assert "token" not in caplog.text.replace("access token", "")
+    assert "work@example.test" not in caplog.text
