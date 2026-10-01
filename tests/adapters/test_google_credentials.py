@@ -7,6 +7,7 @@ import pytest
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 
+from calendar_sync.application.errors import AccountAccessCheckFailed, ConnectedAccountDisconnected
 from calendar_sync.infrastructure.google.instrumentation import GoogleCallStats
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
@@ -188,3 +189,51 @@ def test_a_token_refresh_is_counted_toward_the_run_and_logged_without_the_token(
     assert f"account={account.id.value}" in caplog.text
     assert "token" not in caplog.text.replace("access token", "")
     assert "work@example.test" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            RefreshError("invalid_grant"),  # type: ignore[no-untyped-call]
+            "Google authorization has expired; reauthorize this account",
+        ),
+        (
+            RefreshError("token endpoint returned 503", retryable=True),  # type: ignore[no-untyped-call]
+            "Google Calendar access could not be verified; try again",
+        ),
+    ],
+)
+def test_an_access_check_whose_token_refresh_fails_explains_what_to_do(
+    tmp_path: Path,
+    built: list[Credentials],
+    monkeypatch: pytest.MonkeyPatch,
+    error: RefreshError,
+    expected: str,
+) -> None:
+    store = _store(tmp_path)
+    account = store.save(
+        "Work", "work@example.test", _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
+    )
+
+    def refresh(self: Credentials, _request: object) -> None:
+        raise error
+
+    monkeypatch.setattr(Credentials, "refresh", refresh)
+
+    with pytest.raises(AccountAccessCheckFailed, match=expected):
+        _oauth(tmp_path, store).verify_access(account.id)
+    assert built == []
+
+
+def test_an_access_check_of_a_disconnected_account_still_says_it_is_disconnected(
+    tmp_path: Path, built: list[Credentials]
+) -> None:
+    store = _store(tmp_path)
+    account = store.save(
+        "Work", "work@example.test", _stored("token", datetime.now(UTC) + timedelta(hours=1))
+    )
+    store.disconnect(account.id)
+
+    with pytest.raises(ConnectedAccountDisconnected):
+        _oauth(tmp_path, store).verify_access(account.id)

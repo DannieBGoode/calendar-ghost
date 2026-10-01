@@ -12,6 +12,7 @@ from threading import Lock
 from typing import Any, cast
 from urllib.parse import urlparse
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
@@ -22,6 +23,8 @@ from calendar_sync.application.errors import (
     AuthorizationFailed,
     AuthorizationNotConfigured,
     CalendarPermissionRequired,
+    ConnectedAccountDisconnected,
+    ConnectedAccountNotFound,
     InvalidAuthorizationState,
 )
 from calendar_sync.application.ports import AccountAccess, ConnectedAccount, DiscoveredCalendar
@@ -147,8 +150,10 @@ class GoogleOAuthService:
         )
 
     def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
-        credentials = self._credentials(account_id)
         try:
+            # Inside the check: an expired token is refreshed here, and a rejected refresh is the
+            # most common reason access fails.
+            credentials = self._credentials(account_id)
             service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
             calendars = self._calendar_items(service)
             calendar_id = next(
@@ -177,11 +182,13 @@ class GoogleOAuthService:
                 )
                 .execute()
             )
-        except AccountAccessCheckFailed:
+        except (AccountAccessCheckFailed, ConnectedAccountDisconnected, ConnectedAccountNotFound):
             raise
         except Exception as error:
             status_code = _google_status_code(error)
-            if status_code == 401:
+            # A refresh Google rejected carries no status; one it could not answer is retryable.
+            revoked = isinstance(error, RefreshError) and not error.retryable
+            if status_code == 401 or revoked:
                 detail = "Google authorization has expired; reauthorize this account"
             elif status_code == 403:
                 detail = (
