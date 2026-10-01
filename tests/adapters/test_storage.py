@@ -1,4 +1,6 @@
 import sqlite3
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -269,3 +271,32 @@ def test_clearing_keeps_what_activity_reads_across_the_cutoff(tmp_path: Path) ->
     SqliteStorage(path).clear_activity(CUTOFF)
 
     assert _snapshot() == before
+
+
+# Regression: Codex review P2 — clearing deadlocked with a concurrent writer
+# Found by /codex review on 2026-10-01
+def test_clearing_waits_for_a_concurrent_writer_instead_of_failing(tmp_path: Path) -> None:
+    path = _database(tmp_path)
+    for day in range(200, 100, -1):
+        _entry(path, day, "busy-event")
+    writer = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+    # A sync run's write is in progress when clearing starts, and commits a moment later.
+    writer.execute("BEGIN IMMEDIATE")
+    writer.execute("UPDATE sync_rules SET state = state")
+    committed = threading.Event()
+
+    def commit_soon() -> None:
+        time.sleep(0.3)
+        writer.execute("COMMIT")
+        committed.set()
+
+    thread = threading.Thread(target=commit_soon)
+    thread.start()
+    try:
+        removed = SqliteStorage(path).clear_activity(CUTOFF)
+    finally:
+        thread.join()
+        writer.close()
+
+    assert committed.is_set()
+    assert removed == 99

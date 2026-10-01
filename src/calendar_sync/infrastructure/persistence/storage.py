@@ -77,6 +77,9 @@ class SqliteStorage:
                 f"WHERE occurred_at < ? AND id NOT IN ({_PROTECTED})",
                 (cutoff, cutoff, cutoff),
             )
+            # The insert opened a read transaction on the database; ending it lets a writer that
+            # started meanwhile commit, and each batch then waits for its own write lock.
+            connection.commit()
             while True:
                 batch = [
                     row[0]
