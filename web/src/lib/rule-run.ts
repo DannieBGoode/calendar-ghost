@@ -31,21 +31,47 @@ export function syncResultMessage(result: SyncResult): string {
   )
 }
 
+type Drift = NonNullable<SyncResult["drift"]>
+
+/** Each kind of difference the check found, in plain words, in the order it found them. */
+function driftParts(drift: Drift, destination: string): string[] {
+  const counts = new Map<string, number>()
+  for (const item of drift) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1)
+  const describe = (kind: string, count: number): string => {
+    const one = count === 1
+    switch (kind) {
+      case "missing":
+        return `${count} missing from ${destination}`
+      case "incorrect_projection":
+        return one ? "1 different from its source event" : `${count} different from their source events`
+      case "unexpected":
+        return one
+          ? `1 still in ${destination} though its source event was cancelled or excluded`
+          : `${count} still in ${destination} though their source events were cancelled or excluded`
+      default:
+        return `${count} other`
+    }
+  }
+  return [...counts].map(([kind, count]) => describe(kind, count))
+}
+
 /**
- * Reconcile Now syncs first, which is where repairs happen, then checks every projection. The
- * check only reports: whatever still differs was left as it is.
+ * Reconcile Now syncs first, which is where fixes happen, then checks every projection without
+ * changing anything. Whatever the check still finds survived a full sync, so it is a difference
+ * the sync cannot settle, or a check that is wrong, rather than a change made during the check.
  */
-export function reconcileResultMessage(result: SyncResult): string {
-  const checked = `Checked ${plural(result.checked_mappings ?? 0, "projection")}`
-  const drift = result.drift?.length ?? 0
-  const differ =
-    drift === 1
-      ? "1 still differs from its source event and was left as it is"
-      : `${drift} still differ from their source events and were left as they are`
+export function reconcileResultMessage(result: SyncResult, destination: string): string {
+  const checked = `Checked ${plural(result.checked_mappings ?? 0, "event")} this rule wrote to ${destination}`
+  const drift = result.drift ?? []
   const blocked = result.conflicts + (result.reconciliation_conflicts?.length ?? 0)
   // A blocked projection could not be verified, so only a check without blocks says all match.
-  const check = drift
-    ? `${checked}: ${differ}. The next sync puts back any that changed during the check.`
+  const check = drift.length
+    ? [
+        // Mappings are counted per series while differences include single occurrences.
+        `${checked} (a recurring series counts once).`,
+        `${drift.length === 1 ? "1 difference remains" : `${drift.length} differences remain`} after the sync: ${driftParts(drift, destination).join(", ")}.`,
+        `If Reconcile now finds ${drift.length === 1 ? "it" : "them"} again, Calendar Sync can't settle ${drift.length === 1 ? "it" : "them"} on its own.`,
+      ].join(" ")
     : blocked
       ? `${checked}.`
       : `${checked}: every one matches its source event.`

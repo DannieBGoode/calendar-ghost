@@ -108,8 +108,15 @@ recorded it, the event as it is in Google now, and a link to open it in Google C
 - **Blocked: marked as written by this rule, but not linked to an event**: Reconcile now found an
   event carrying this rule's marker that no mapping owns, so Calendar Sync will never change or
   delete it. Delete it in the destination calendar if you don't want it.
-- **Reconcile now says projections still differ**: the check after the sync only reports; it
-  changes nothing. A difference that appeared during the check is put back by the next sync.
+- **Reconcile now says differences remain after the sync**: the check after the sync only
+  reports; it changes nothing. The sync before it has just put back everything it can, so a
+  remaining difference is rarely an edit made in the seconds between them. Choose **Reconcile now**
+  again: a difference that is still there means the sync cannot settle it, or the check disagrees
+  with the sync about what the destination should hold. Both are Calendar Sync problems, not
+  something to fix in your calendars. Look in Activity for the same event being put back and then
+  removed on every run, and report the rule's service log lines starting `reconciliation finished`,
+  which count what the check found. The count of events checked counts a recurring series once,
+  while differences include single occurrences, so the two numbers do not compare.
 - **An old event looks different in the destination calendar**: Reconcile now and the daily check
   cover events from the rule's starting point onward (the past 30 days by default), plus every
   recurring event that still has occurrences in that range. Older events are not checked. Editing
