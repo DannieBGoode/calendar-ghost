@@ -29,6 +29,7 @@ import {
   canClearActivity,
   clearActivityConfirmation,
   clearedActivityMessage,
+  countFailedConfirmation,
   logSummary,
 } from "@/lib/storage"
 import type { ThemePreference } from "@/lib/theme"
@@ -563,7 +564,9 @@ function StorageSection() {
         days,
         usage?.database.reclaimable_bytes ?? 0,
       )
-    : null
+    : clearable.error
+      ? countFailedConfirmation(clearable.error.message)
+      : null
 
   return (
     <section className="settings-section" aria-labelledby="storage-title">
@@ -627,9 +630,9 @@ function StorageSection() {
               cancelLabel="Keep Activity"
               confirmLabel={confirmation?.confirmLabel ?? "Clear Activity"}
               pendingLabel={confirmation?.pendingLabel ?? "Clearing…"}
-              pending={clear.isPending}
+              pending={clear.isPending || clearable.isRefetching}
               confirmDisabled={!confirmation?.canConfirm}
-              onConfirm={() => clear.mutate()}
+              onConfirm={() => (clearable.error ? void clearable.refetch() : clear.mutate())}
               onCancel={() => {
                 setConfirming(null)
                 clearTrigger.current?.focus()

@@ -100,6 +100,15 @@ export function clearActivityConfirmation(
   return { ...clearing, body: `Nothing is older than ${days} days.`, canConfirm: false }
 }
 
+export function countFailedConfirmation(message: string): ClearActivityConfirmation {
+  return {
+    body: `The entries to remove could not be counted: ${message}`,
+    confirmLabel: "Count again",
+    pendingLabel: "Counting…",
+    canConfirm: true,
+  }
+}
+
 export function clearedActivityMessage(removed: number, reclaimableBefore: number): string {
   if (removed === 0) {
     return reclaimableBefore > 0

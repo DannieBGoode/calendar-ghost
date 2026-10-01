@@ -5,6 +5,7 @@ import {
   canClearActivity,
   clearActivityConfirmation,
   clearedActivityMessage,
+  countFailedConfirmation,
   formatBytes,
   logSummary,
 } from "@/lib/storage"
@@ -146,5 +147,16 @@ describe("clearedActivityMessage", () => {
       "The space left by earlier clearing was reclaimed.",
     )
     expect(clearedActivityMessage(0, 0)).toBe("Nothing was old enough to clear.")
+  })
+})
+
+describe("countFailedConfirmation", () => {
+  it("says the count failed and offers to count again", () => {
+    expect(countFailedConfirmation("The database is busy.")).toEqual({
+      body: "The entries to remove could not be counted: The database is busy.",
+      confirmLabel: "Count again",
+      pendingLabel: "Counting…",
+      canConfirm: true,
+    })
   })
 })
