@@ -27,8 +27,10 @@ old rows, was to SSH in and run SQLite commands directly.
      before the pass began.
   2. **The previous titled entry of every entry newer than the cutoff.** Activity names a
      cancellation recorded without a title from it, and shows a rename against it.
-  3. **The event's latest entry**, and its previous titled entry when it recorded no title. This
-     keeps open blocks and the dashboard's blocked-entry links when every entry is old.
+  3. **The event's latest entry**, its previous titled entry when it recorded no title, and its
+     previous entry when it is a block, which the next block check compares with even when a
+     clock stepping back made the block look old. This keeps open blocks, persisting-block
+     incidents, and the dashboard's blocked-entry links when every entry is old.
 
   With ids in time order these are just the latest entry older than the cutoff and the latest
   titled one.

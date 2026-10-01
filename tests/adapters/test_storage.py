@@ -336,3 +336,24 @@ def test_clearing_after_the_clock_stepped_back_keeps_what_recent_entries_compare
     SqliteStorage(path).clear_activity(CUTOFF)
 
     assert _snapshot() == before
+
+
+# Regression: PR #34 review — with the clock stepped back past the cutoff, clearing between a
+# pass and its block check removed the earlier block the check compares with.
+def test_clearing_keeps_what_a_block_check_reads_when_the_new_block_looks_old(
+    tmp_path: Path,
+) -> None:
+    path = _database(tmp_path)
+    _entry(path, 200, "blocked-event", blocked=True)
+    with sqlite3.connect(path) as connection:
+        floor = int(connection.execute("SELECT MAX(id) FROM audit_entries").fetchone()[0])
+    # The pass repeats the block, but the clock stepped back, so it looks older than the cutoff.
+    _entry(path, 150, "blocked-event", blocked=True)
+    with sqlite3.connect(path) as connection:
+        before = open_blocks(connection, after=floor, persisting=True)
+    assert before
+
+    SqliteStorage(path).clear_activity(CUTOFF)
+
+    with sqlite3.connect(path) as connection:
+        assert open_blocks(connection, after=floor, persisting=True) == before

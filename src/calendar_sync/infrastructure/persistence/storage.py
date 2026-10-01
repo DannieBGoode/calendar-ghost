@@ -9,7 +9,7 @@ from pathlib import Path
 
 from calendar_sync.application.errors import STORAGE_BUSY_MESSAGE, StorageBusy
 from calendar_sync.application.ports import DatabaseUsage
-from calendar_sync.infrastructure.persistence.activity_queries import _TITLE_OBSERVED
+from calendar_sync.infrastructure.persistence.activity_queries import _BLOCK, _TITLE_OBSERVED
 
 # Entries clearing never removes, besides every entry newer than the cutoff (the caller's own
 # `occurred_at < :cutoff` condition). Activity compares an entry with the earlier entries of its
@@ -17,12 +17,13 @@ from calendar_sync.infrastructure.persistence.activity_queries import _TITLE_OBS
 # previous one that recorded a title, and a persisting block check the latest at or before its
 # floor. So, by id rather than by time, which a clock stepping back would reorder, it keeps:
 # - each event's latest entry, which keeps open blocks and the dashboard's blocked-entry links;
-# - the previous entry of every entry newer than the cutoff;
+# - the previous entry of every entry newer than the cutoff, and of each event's latest when that
+#   one is a block, which a block check compares with even when the clock made it look old;
 # - the previous titled entry of every entry newer than the cutoff, and of each event's latest
 #   when that one recorded no title, which Activity then names from it.
 # With ids in time order these are the latest entry older than the cutoff and the latest titled
 # one; entries newer than the cutoff then render exactly as before clearing.
-# Interpolates only the constant `_TITLE_OBSERVED` predicate.
+# Interpolates only the constant `_TITLE_OBSERVED` and `_BLOCK` predicates.
 _LATEST = "SELECT MAX(id) AS id FROM audit_entries GROUP BY rule_id, source_event_id"
 _PREVIOUS = """
     SELECT MAX(p.id) FROM audit_entries p
@@ -32,7 +33,8 @@ _PROTECTED = f"""
     SELECT id FROM (
         {_LATEST}
         UNION
-        SELECT ({_PREVIOUS}) FROM audit_entries k WHERE k.occurred_at >= :cutoff
+        SELECT ({_PREVIOUS}) FROM audit_entries k
+        WHERE k.occurred_at >= :cutoff OR (k.id IN ({_LATEST}) AND {_BLOCK.format(t="k")})
         UNION
         SELECT ({_PREVIOUS} AND {_TITLE_OBSERVED}) FROM audit_entries k
         WHERE k.occurred_at >= :cutoff OR (k.id IN ({_LATEST}) AND NOT ({_TITLE_OBSERVED}))
