@@ -21,6 +21,7 @@ from calendar_sync.application.ports import (
     AdministratorAccess,
     CalendarProvider,
     Clock,
+    DatabaseStorage,
     IdGenerator,
     IncidentNotifications,
     IncidentRepository,
@@ -44,6 +45,7 @@ from calendar_sync.application.rules import (
     ReplaceSyncRuleCalendars,
 )
 from calendar_sync.application.run_log import UntalliedProviderCalls
+from calendar_sync.application.storage import StorageAdministration
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import configure_logging
@@ -80,6 +82,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
+from calendar_sync.infrastructure.persistence.storage import SqliteStorage
 from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
 from calendar_sync.infrastructure.security import (
     CredentialCipher,
@@ -104,6 +107,7 @@ class Container:
     administrator: AdministratorAccess
     activity: ActivityQueries
     operations: OperationsQueries
+    storage: StorageAdministration
     get_dashboard: GetDashboard
     inspect_activity_event: InspectActivityEvent
     list_sync_rules: ListSyncRules
@@ -144,6 +148,7 @@ class Adapters:
     operations: OperationsQueries
     health_records: RuleHealthRecords
     incidents: IncidentRepository
+    database_storage: DatabaseStorage
     notifications: IncidentNotifications | None = None
     accounts: SqliteConnectedAccountStore | None = None
     google_oauth: GoogleOAuthService | None = None
@@ -189,6 +194,7 @@ def build_adapters(settings: Settings) -> Adapters:
         operations=SqliteOperationsQueries(settings.database_path),
         health_records=SqliteRuleHealthRecords(settings.database_path),
         incidents=SqliteIncidentRepository(settings.database_path, ids),
+        database_storage=SqliteStorage(settings.database_path),
     )
     if not settings.master_key:
         return adapters
@@ -277,6 +283,9 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         administrator=adapters.administrator,
         activity=adapters.activity,
         operations=adapters.operations,
+        storage=StorageAdministration(
+            adapters.database_storage, unit_of_work, locks, clock, adapters.log_files
+        ),
         get_dashboard=GetDashboard(unit_of_work, adapters.operations),
         inspect_activity_event=InspectActivityEvent(adapters.activity, unit_of_work, provider),
         list_sync_rules=ListSyncRules(unit_of_work, locks),

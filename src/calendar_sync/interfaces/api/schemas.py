@@ -250,6 +250,40 @@ class IncidentResponse(BaseModel):
     account_id: str | None
 
 
+class DatabaseUsageResponse(BaseModel):
+    bytes: int
+    reclaimable_bytes: int
+    activity_entries: int
+    oldest_activity_at: str | None
+
+
+class LogUsageResponse(BaseModel):
+    bytes: int
+    files: int
+    oldest_at: str | None
+    newest_at: str | None
+
+
+class StorageResponse(BaseModel):
+    database: DatabaseUsageResponse
+    logs: LogUsageResponse | None
+    activity_ages: list[int]
+
+
+class ClearableActivityResponse(BaseModel):
+    older_than_days: int
+    entries: int
+
+
+class ClearActivityRequest(BaseModel):
+    older_than_days: int
+
+
+class ClearedActivityResponse(BaseModel):
+    removed: int
+    database: DatabaseUsageResponse
+
+
 class RecentChangeResponse(BaseModel):
     """One written event; an identical repair repeated among recent entries is counted on it."""
 
