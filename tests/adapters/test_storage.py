@@ -2,9 +2,13 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from calendar_sync.application.activity import ActivityEntry, ActivityFilter
 from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
-from calendar_sync.domain.model import SyncReason
-from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
+from calendar_sync.domain.model import SyncReason, TimedInterval
+from calendar_sync.infrastructure.persistence.activity_queries import (
+    SqliteActivityQueries,
+    open_blocks,
+)
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
     initialize_database,
@@ -34,6 +38,8 @@ def _entry(
     blocked: bool = False,
     title: str | None = "Standup",
     cancelled: bool = False,
+    reason: SyncReason | None = None,
+    time: TimedInterval | None = None,
 ) -> int:
     with SqliteUnitOfWorkFactory(path, FixedClock())() as uow:
         uow.audit.append(
@@ -43,9 +49,14 @@ def _entry(
                 action=AuditAction.CONFLICT if blocked else AuditAction.UPDATE,
                 outcome=AuditOutcome.BLOCKED if blocked else AuditOutcome.COMPLETED,
                 source_event_id=event,
-                reason=SyncReason.SOURCE_UNVERIFIABLE if blocked else SyncReason.SOURCE_CHANGED,
+                reason=reason
+                or (SyncReason.SOURCE_UNVERIFIABLE if blocked else SyncReason.SOURCE_CHANGED),
                 run_id=f"run-{days_ago}",
-                event=None if title is None else RecordedEvent(title=title, cancelled=cancelled),
+                event=(
+                    None
+                    if title is None
+                    else RecordedEvent(title=title, time=time, cancelled=cancelled)
+                ),
             )
         )
         uow.commit()
@@ -58,12 +69,9 @@ def _ids(path: Path) -> list[int]:
         return [row[0] for row in connection.execute("SELECT id FROM audit_entries ORDER BY id")]
 
 
-def _block_check(path: Path, floor: int) -> None:
-    with sqlite3.connect(path) as connection:
-        connection.execute(
-            "INSERT INTO rule_block_checks (rule_id, audit_floor, checked_at) VALUES (?, ?, ?)",
-            (rule().id.value, floor, NOW.isoformat()),
-        )
+def _time(days_ago: int) -> TimedInterval:
+    start = NOW - timedelta(days=days_ago)
+    return TimedInterval(start, start + timedelta(hours=1))
 
 
 def test_usage_reports_size_reclaimable_space_and_activity(tmp_path: Path) -> None:
@@ -88,7 +96,10 @@ def test_usage_without_activity_has_no_oldest_entry(tmp_path: Path) -> None:
 def test_clearing_removes_old_history_and_keeps_each_events_latest_entry(tmp_path: Path) -> None:
     path = _database(tmp_path)
     old_a = _entry(path, 200, "a")
-    latest_a = _entry(path, 100, "a")  # older than the cutoff, but a's latest
+    middle_a = _entry(path, 150, "a")
+    latest_a = _entry(path, 100, "a")  # older than the cutoff, but a's latest before it
+    # "b" has a single entry older than the cutoff: kept, because "recent_b" could read back to
+    # it, even though "b" also has an entry newer than the cutoff.
     old_b = _entry(path, 120, "b")
     recent_b = _entry(path, 10, "b")
     storage = SqliteStorage(path)
@@ -96,27 +107,31 @@ def test_clearing_removes_old_history_and_keeps_each_events_latest_entry(tmp_pat
     assert storage.clearable_activity(CUTOFF) == 2
     assert storage.clear_activity(CUTOFF) == 2
 
-    assert _ids(path) == [latest_a, recent_b]
+    assert _ids(path) == [latest_a, old_b, recent_b]
     assert old_a not in _ids(path)
-    assert old_b not in _ids(path)
+    assert middle_a not in _ids(path)
 
 
-def test_clearing_keeps_what_a_persisting_block_check_reads(tmp_path: Path) -> None:
+def test_clearing_keeps_what_an_in_flight_persisting_check_reads(tmp_path: Path) -> None:
+    """A persisting block check reads a `MAX(id)` floor taken just before the pass runs, not the
+
+    floor stored from the rule's last check (`rule_block_checks.audit_floor`), which is always
+    older. So the entry at or before that in-flight floor must survive clearing even when it is
+    older than the cutoff.
+    """
     path = _database(tmp_path)
-    _entry(path, 300, "blocked-event", blocked=True)
-    before_floor = _entry(path, 200, "blocked-event", blocked=True)
-    _block_check(path, floor=before_floor)
-    _entry(path, 5, "blocked-event", blocked=True)
+    _entry(path, 300, "blocked-event", blocked=True)  # older than the cutoff
     with sqlite3.connect(path) as connection:
-        persisting = open_blocks(connection, after=before_floor, persisting=True)
-        current = open_blocks(connection)
+        floor = int(connection.execute("SELECT MAX(id) FROM audit_entries").fetchone()[0])
+    _entry(path, 5, "blocked-event", blocked=True)  # written after the floor was taken
+    with sqlite3.connect(path) as connection:
+        persisting = open_blocks(connection, after=floor, persisting=True)
+    assert persisting
 
     SqliteStorage(path).clear_activity(CUTOFF)
 
-    assert before_floor in _ids(path)
     with sqlite3.connect(path) as connection:
-        assert open_blocks(connection, after=before_floor, persisting=True) == persisting
-        assert open_blocks(connection) == current
+        assert open_blocks(connection, after=floor, persisting=True) == persisting
 
 
 def test_clearing_keeps_the_title_a_cancellation_is_named_from(tmp_path: Path) -> None:
@@ -127,6 +142,20 @@ def test_clearing_keeps_the_title_a_cancellation_is_named_from(tmp_path: Path) -
     SqliteStorage(path).clear_activity(CUTOFF)
 
     assert _ids(path) == [titled, untitled_cancellation]
+
+
+def test_clearing_removes_a_removed_rules_old_entries_like_any_other(tmp_path: Path) -> None:
+    path = _database(tmp_path)
+    _entry(path, 200, "f")
+    latest = _entry(path, 150, "f")  # the rule's only entry older than the cutoff after it
+    with sqlite3.connect(path) as connection:
+        connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule().id.value,))
+        connection.commit()
+
+    assert SqliteStorage(path).clearable_activity(CUTOFF) == 1
+    assert SqliteStorage(path).clear_activity(CUTOFF) == 1
+
+    assert _ids(path) == [latest]
 
 
 def test_clearing_runs_in_batches(tmp_path: Path) -> None:
@@ -162,3 +191,44 @@ def test_compacting_returns_cleared_space_to_the_filesystem(tmp_path: Path) -> N
 
     assert path.stat().st_size < before
     assert storage.usage().reclaimable_bytes == 0
+
+
+def test_clearing_keeps_what_activity_reads_across_the_cutoff(tmp_path: Path) -> None:
+    path = _database(tmp_path)
+    # A repair repeated by every run of the same event: the oldest copy is older than the cutoff;
+    # the later two are newer and each is compared against the previous one to tell whether it
+    # repeats.
+    _entry(path, 100, "repeat", reason=SyncReason.PROJECTION_MISSING)
+    repeat_2 = _entry(path, 80, "repeat", reason=SyncReason.PROJECTION_MISSING)
+    repeat_3 = _entry(path, 10, "repeat", reason=SyncReason.PROJECTION_MISSING)
+    # A cancellation recorded without a title, named from the event's last titled entry, which is
+    # older than the cutoff.
+    _entry(path, 200, "offsite-event", title="Offsite")
+    cancelled_mid = _entry(path, 50, "offsite-event", title="", cancelled=True)
+    # An event whose newer entry moved from a time only the older, pre-cutoff entry recorded.
+    _entry(path, 300, "moved-event", time=_time(300))
+    moved_new = _entry(path, 20, "moved-event", time=_time(20))
+
+    kept_ids = (repeat_2, repeat_3, cancelled_mid, moved_new)
+    queries = SqliteActivityQueries(path)
+
+    def _snapshot() -> dict[int, ActivityEntry]:
+        return {
+            entry.id: entry
+            for entry in queries.entries(ActivityFilter(limit=1000))
+            if entry.id in kept_ids
+        }
+
+    before = _snapshot()
+    assert before[repeat_2].repeated is True
+    assert before[repeat_3].repeated is True
+    cancelled_event = before[cancelled_mid].event
+    assert cancelled_event is not None
+    assert cancelled_event.title == "Offsite"
+    moved_event = before[moved_new].event
+    assert moved_event is not None
+    assert moved_event.moved_from is not None
+
+    SqliteStorage(path).clear_activity(CUTOFF)
+
+    assert _snapshot() == before

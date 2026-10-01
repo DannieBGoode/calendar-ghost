@@ -4,26 +4,27 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from calendar_sync.application.ports import DatabaseUsage
+from calendar_sync.infrastructure.persistence.activity_queries import _TITLE_OBSERVED
 
-# Entries clearing never removes. Each is the latest of its rule and source event in one sense:
-# overall (open blocks), at or before the rule's last block check (persisting blocks), and among
-# those that recorded a title (the name a cancellation without one is shown with).
-_PROTECTED = """
-    SELECT MAX(id) FROM audit_entries GROUP BY rule_id, source_event_id
+# Entries clearing never removes, per rule and source event: the latest entry older than the
+# cutoff, and the latest older than it that recorded a title. Every reader that compares an entry
+# with an earlier one for the same rule and source event -- `_previous_names`, `_repeated_repairs`,
+# and a persisting block check at any floor at or after the cutoff -- looks back at most one entry
+# past the cutoff, and these two clauses are that entry. When every entry of an event is older than
+# the cutoff, its latest is still kept by the first clause, which keeps its open blocks and the
+# dashboard's blocked-entry links too. Every entry newer than the cutoff is kept regardless, by the
+# caller's own `occurred_at < ?` condition.
+# Interpolates only the constant `_TITLE_OBSERVED` predicate.
+_PROTECTED = f"""
+    SELECT MAX(id) FROM audit_entries WHERE occurred_at < ? GROUP BY rule_id, source_event_id
     UNION
-    SELECT MAX(a.id) FROM audit_entries a
-    JOIN rule_block_checks c ON c.rule_id = a.rule_id
-    WHERE a.id <= c.audit_floor
-    GROUP BY a.rule_id, a.source_event_id
-    UNION
-    SELECT MAX(id) FROM audit_entries
-    WHERE event_title IS NOT NULL AND (event_title <> '' OR NOT event_cancelled)
+    SELECT MAX(id) FROM audit_entries WHERE occurred_at < ? AND {_TITLE_OBSERVED}
     GROUP BY rule_id, source_event_id
-"""
+"""  # noqa: S608
 
 
 class SqliteStorage:
@@ -47,26 +48,27 @@ class SqliteStorage:
         )
 
     def clearable_activity(self, before: datetime) -> int:
+        cutoff = before.astimezone(UTC).isoformat()
         with closing(sqlite3.connect(self._database_path)) as connection:
             # Interpolates only the constant protected-entries query.
             row = connection.execute(
                 f"SELECT COUNT(*) FROM audit_entries WHERE occurred_at < ? "  # noqa: S608
                 f"AND id NOT IN ({_PROTECTED})",
-                (before.isoformat(),),
+                (cutoff, cutoff, cutoff),
             ).fetchone()
         return int(row[0])
 
     def clear_activity(self, before: datetime) -> int:
+        cutoff = before.astimezone(UTC).isoformat()
         removed = 0
         with closing(sqlite3.connect(self._database_path)) as connection:
-            # Chosen once, so batches never re-evaluate which entries are protected.
-            connection.execute("DROP TABLE IF EXISTS temp.clearable")
+            # Chosen once, so batches never re-evaluate which entries are protected. A fresh
+            # connection never carries a temp table over from an earlier call.
             connection.execute(
                 f"CREATE TEMP TABLE clearable AS SELECT id FROM audit_entries "  # noqa: S608
                 f"WHERE occurred_at < ? AND id NOT IN ({_PROTECTED})",
-                (before.isoformat(),),
+                (cutoff, cutoff, cutoff),
             )
-            connection.commit()
             while True:
                 batch = [
                     row[0]
