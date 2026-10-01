@@ -1037,3 +1037,55 @@ def test_reverifying_an_occurrence_already_recorded_as_current_leaves_its_mappin
         SyncReason.OCCURRENCE_CURRENT,
     ]
     assert factory.state.occurrences[key] == recorded
+
+
+class _DestinationSeriesReads(FakeCalendars):
+    """Counts the reads of each event by reference, as the run asks for them."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.event_reads: list[EventRef] = []
+
+    def get_event(self, reference: EventRef) -> CalendarEvent | None:
+        self.event_reads.append(reference)
+        return super().get_event(reference)
+
+
+def test_a_destination_series_is_read_once_for_all_of_its_occurrences() -> None:
+    calendars = _DestinationSeriesReads()
+    master = calendars.put(series(), starts=STARTS)
+    for week in (1, 2, 3):
+        calendars.put(occurrence(master, week, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    calendars.event_reads.clear()
+
+    # Reprojection re-verifies each recorded occurrence against the destination series.
+    _change_policy(factory, TransformationPolicy(content=ProjectionContent.DETAILS))
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert calendars.event_reads.count(destination) == 1
+    assert _occurrence_states(factory) == dict.fromkeys(
+        (week_start(1), week_start(2), week_start(3)), OccurrenceState.MODIFIED
+    )
+
+
+def test_a_destination_series_this_run_rewrote_is_read_again_for_its_occurrences() -> None:
+    calendars = _DestinationSeriesReads()
+    master = calendars.put(series(), starts=STARTS)
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    # The destination series drifted, so the occurrence is missing until the series is repaired.
+    calendars.events[destination] = replace(calendars.events[destination], title="Edited")
+    calendars.expansions[destination] = ()
+    calendars.report(calendars.put(occurrence(master, 2, moved_by=timedelta(hours=1))))
+    calendars.event_reads.clear()
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    # Before the repair, by the repair itself, and once more after the repair rewrote it.
+    assert calendars.event_reads.count(destination) == 3
+    assert calendars.events[destination].title == "Busy"
+    assert _occurrence_states(factory) == {week_start(2): OccurrenceState.MODIFIED}

@@ -630,6 +630,9 @@ class ExecuteSyncRule:
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action
         )
+        if mapping is not None and decision.action in _DESTINATION_WRITES:
+            # Occurrences decided after this write read the series as it now is.
+            run.destination_series.pop(mapping.destination, None)
         if decision.action is SyncAction.CREATE and decision.projection is not None:
             created = self.provider.create_projection(
                 rule.destination,
@@ -741,6 +744,9 @@ class ExecuteSyncRule:
             )
         )
         return hashlib.sha256(raw.encode()).hexdigest()
+
+
+_DESTINATION_WRITES = frozenset({SyncAction.CREATE, SyncAction.UPDATE, SyncAction.DELETE})
 
 
 def stored_fingerprint(value: str) -> ProjectionFingerprint:

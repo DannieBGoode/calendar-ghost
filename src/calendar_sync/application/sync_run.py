@@ -69,6 +69,11 @@ class SyncRunContext:
     """Whether each source series looked up this run still has an occurrence this rule projects."""
     blocked: set[EventRef] = field(default_factory=set)
     """Source events and occurrences this run blocked as a Conflict."""
+    destination_series: dict[EventRef, CalendarEvent | None] = field(default_factory=dict)
+    """Destination series read this run, shared by their occurrences until this run writes one.
+
+    Occurrence writes verify the series' ownership with a fresh read of their own.
+    """
 
     def count(self, action: SyncAction, source: EventRef) -> None:
         """Count one decision about `source`, remembering it when it is a block."""
@@ -84,6 +89,15 @@ def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: 
             series, include_all_day=run.rule.transformation.includes_all_day
         )
     return run.live_series[series]
+
+
+def read_destination_series(
+    run: SyncRunContext, provider: CalendarReader, series: EventRef
+) -> CalendarEvent | None:
+    """Read a destination series once per run, however many of its occurrences are decided."""
+    if series not in run.destination_series:
+        run.destination_series[series] = provider.get_event(series)
+    return run.destination_series[series]
 
 
 def require_unchanged(run: SyncRunContext) -> None:

@@ -17,6 +17,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.sync_run import (
     SyncRunContext,
     has_live_occurrences,
+    read_destination_series,
     record,
     require_unchanged,
 )
@@ -274,7 +275,9 @@ class SynchronizeOccurrences:
         destination_series = destination = None
         source_series = occurrence.source_series
         if series_mapping is not None and source_series.managed_origin is None:
-            destination_series = self.provider.get_event(series_mapping.destination)
+            destination_series = read_destination_series(
+                run, self.provider, series_mapping.destination
+            )
             if (
                 destination_series is not None
                 and destination_series.status is EventStatus.CONFIRMED
