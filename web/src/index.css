@@ -428,6 +428,19 @@ p {
   flex: none;
 }
 
+.storage-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  flex: none;
+}
+
+.storage-select {
+  width: 13rem;
+  flex: none;
+}
+
 .menu-button {
   display: none;
 }
@@ -2845,13 +2858,15 @@ thead + .activity-day th {
   }
 
   .account-actions,
-  .confirmation-actions {
+  .confirmation-actions,
+  .storage-actions {
     width: 100%;
     flex-direction: column;
   }
 
-  .account-actions {
-    align-items: flex-start;
+  .account-actions,
+  .storage-actions {
+    align-items: stretch;
     justify-content: flex-start;
   }
 
@@ -2862,7 +2877,10 @@ thead + .activity-day th {
   .account-actions > button,
   .account-actions > a,
   .confirmation-actions > button,
-  .confirmation-actions > a {
+  .confirmation-actions > a,
+  .storage-actions > button,
+  .storage-actions > a,
+  .storage-actions > div {
     width: 100%;
   }
 

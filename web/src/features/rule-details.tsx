@@ -2,6 +2,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { ArrowLeft, ArrowRight, LoaderCircle, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react"
 
+import { DestructiveConfirmation } from "@/components/destructive-confirmation"
 import { PageSkeleton } from "@/components/page-skeleton"
 import {
   LiveAnnouncement,
@@ -436,52 +437,6 @@ function useRuleExit(ruleId: string) {
       RULE_CHANGE_QUERIES.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
     )
   }
-}
-
-function DestructiveConfirmation({
-  id,
-  title,
-  body,
-  cancelLabel,
-  confirmLabel,
-  pendingLabel,
-  pending,
-  onConfirm,
-  onCancel,
-}: {
-  id: string
-  title: string
-  body: string
-  cancelLabel: string
-  confirmLabel: string
-  pendingLabel: string
-  pending: boolean
-  onConfirm: () => void
-  onCancel: () => void
-}) {
-  const heading = useRef<HTMLHeadingElement>(null)
-  useEffect(() => {
-    heading.current?.focus()
-  }, [])
-  return (
-    <div className="disconnect-confirmation delete-confirmation" id={id} role="group" aria-labelledby={`${id}-title`}>
-      <div>
-        <h3 id={`${id}-title`} ref={heading} tabIndex={-1}>
-          {title}
-        </h3>
-        <p>{body}</p>
-      </div>
-      <div className="confirmation-actions">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
-          {cancelLabel}
-        </Button>
-        <Button type="button" variant="destructive" onClick={onConfirm} disabled={pending}>
-          <Trash2 aria-hidden="true" />
-          {pending ? pendingLabel : confirmLabel}
-        </Button>
-      </div>
-    </div>
-  )
 }
 
 function PolicyEditor({

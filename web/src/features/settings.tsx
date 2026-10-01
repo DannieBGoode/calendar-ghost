@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   CheckCircle2,
   CircleUserRound,
+  Download,
   ExternalLink,
   KeyRound,
   Plus,
@@ -10,9 +11,10 @@ import {
   Trash2,
   Unplug,
 } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { DestructiveConfirmation } from "@/components/destructive-confirmation"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { Badge } from "@/components/ui/badge"
@@ -20,8 +22,9 @@ import { Button } from "@/components/ui/button"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
-import { api } from "@/lib/api"
+import { ApiError, STORAGE_LOGS_URL, api } from "@/lib/api"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
+import { activitySummary, clearActivityBody, logSummary } from "@/lib/storage"
 import type { ThemePreference } from "@/lib/theme"
 
 export function RedirectMismatchNotice({ redirectUri }: { redirectUri: string | null }) {
@@ -497,6 +500,187 @@ function SettingsView({
           </div>
         </div>
       </section>
+
+      <StorageSection />
     </div>
+  )
+}
+
+function StorageSection() {
+  const queryClient = useQueryClient()
+  const storage = useQuery({ queryKey: ["storage"], queryFn: api.storage })
+  const [days, setDays] = useState(90)
+  const [confirming, setConfirming] = useState<"activity" | "logs" | null>(null)
+  const [message, setMessage] = useState("")
+  const clearTrigger = useRef<HTMLButtonElement>(null)
+  const purgeTrigger = useRef<HTMLButtonElement>(null)
+  const clearable = useQuery({
+    queryKey: ["storage", "clearable", days],
+    queryFn: () => api.clearableActivity(days),
+    enabled: confirming === "activity",
+  })
+  const clear = useMutation({
+    mutationFn: () => api.clearActivity(days),
+    onSuccess: async (cleared) => {
+      setConfirming(null)
+      setMessage(
+        cleared.removed === 0
+          ? "Nothing was old enough to clear."
+          : `${cleared.removed.toLocaleString("en-US")} Activity entries were cleared.`,
+      )
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["storage"] }),
+        queryClient.invalidateQueries({ queryKey: ["activity"] }),
+      ])
+    },
+    onError: async (error) => {
+      // A 409 means the clear deleted entries but could not reclaim the space while a rule
+      // was synchronizing; refresh the usage even though the mutation itself failed.
+      if (error instanceof ApiError && error.status === 409) {
+        await queryClient.invalidateQueries({ queryKey: ["storage"] })
+      }
+    },
+  })
+  const purge = useMutation({
+    mutationFn: api.purgeLogs,
+    onSuccess: async () => {
+      setConfirming(null)
+      setMessage("The logs were purged.")
+      await queryClient.invalidateQueries({ queryKey: ["storage"] })
+    },
+  })
+  const busy = clear.isPending || purge.isPending
+  const usage = storage.data
+
+  return (
+    <section className="settings-section" aria-labelledby="storage-title">
+      <div className="section-heading">
+        <div>
+          <h2 id="storage-title">Storage</h2>
+          <p>What this installation keeps, and clearing what it no longer needs.</p>
+        </div>
+      </div>
+      {storage.isPending && <Skeleton className="h-24 w-full" />}
+      {storage.error && (
+        <div className="inline-error" role="alert">
+          Storage usage could not load.
+        </div>
+      )}
+      {usage && (
+        <div className="settings-list">
+          <div className="setting-row">
+            <div>
+              <h3>Database</h3>
+              <p>{activitySummary(usage.database)}</p>
+            </div>
+            <div className="storage-actions">
+              <div className="storage-select">
+                <NativeSelect
+                  id="activity-age"
+                  aria-label="Clear Activity older than"
+                  value={days}
+                  disabled={busy}
+                  onChange={(event) => setDays(Number(event.target.value))}
+                >
+                  {usage.activity_ages.map((age) => (
+                    <option key={age} value={age}>
+                      Older than {age} days
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              <Button
+                ref={clearTrigger}
+                type="button"
+                variant="outline"
+                disabled={busy || usage.database.activity_entries === 0}
+                aria-expanded={confirming === "activity"}
+                aria-controls="clear-activity-confirmation"
+                onClick={() => {
+                  clear.reset()
+                  setMessage("")
+                  setConfirming("activity")
+                }}
+              >
+                Clear Activity
+              </Button>
+            </div>
+          </div>
+          {confirming === "activity" && (
+            <DestructiveConfirmation
+              id="clear-activity-confirmation"
+              title={`Clear Activity older than ${days} days?`}
+              body={
+                clearable.data
+                  ? clearActivityBody(clearable.data.entries, days)
+                  : "Counting the entries that would be removed…"
+              }
+              cancelLabel="Keep Activity"
+              confirmLabel="Clear Activity"
+              pendingLabel="Clearing…"
+              pending={clear.isPending}
+              confirmDisabled={!clearable.data || clearable.data.entries === 0}
+              onConfirm={() => clear.mutate()}
+              onCancel={() => {
+                setConfirming(null)
+                clearTrigger.current?.focus()
+              }}
+            />
+          )}
+          <div className="setting-row">
+            <div>
+              <h3>Logs</h3>
+              <p>{logSummary(usage.logs)}</p>
+            </div>
+            {usage.logs && (
+              <div className="storage-actions">
+                <Button variant="outline" asChild>
+                  <a href={STORAGE_LOGS_URL} download>
+                    <Download aria-hidden="true" /> Download
+                  </a>
+                </Button>
+                <Button
+                  ref={purgeTrigger}
+                  type="button"
+                  variant="outline"
+                  disabled={busy || usage.logs.files === 0}
+                  aria-expanded={confirming === "logs"}
+                  aria-controls="purge-logs-confirmation"
+                  onClick={() => {
+                    purge.reset()
+                    setMessage("")
+                    setConfirming("logs")
+                  }}
+                >
+                  Purge logs
+                </Button>
+              </div>
+            )}
+          </div>
+          {confirming === "logs" && (
+            <DestructiveConfirmation
+              id="purge-logs-confirmation"
+              title="Purge the logs?"
+              body="Every log line kept on this installation is deleted. Download them first if you may need them. This cannot be undone."
+              cancelLabel="Keep logs"
+              confirmLabel="Purge logs"
+              pendingLabel="Purging…"
+              pending={purge.isPending}
+              onConfirm={() => purge.mutate()}
+              onCancel={() => {
+                setConfirming(null)
+                purgeTrigger.current?.focus()
+              }}
+            />
+          )}
+        </div>
+      )}
+      {message && <p role="status">{message}</p>}
+      {(clear.error ?? purge.error) && (
+        <div className="inline-error" role="alert">
+          {(clear.error ?? purge.error)?.message}
+        </div>
+      )}
+    </section>
   )
 }
