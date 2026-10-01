@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest"
 
-import { activitySummary, clearActivityBody, formatBytes, logSummary } from "@/lib/storage"
+import {
+  activitySummary,
+  canClearActivity,
+  clearActivityConfirmation,
+  clearedActivityMessage,
+  formatBytes,
+  logSummary,
+} from "@/lib/storage"
 
 describe("formatBytes", () => {
   it("uses binary units with one decimal above a kilobyte", () => {
@@ -35,6 +42,39 @@ describe("activitySummary", () => {
       ),
     ).toBe("4.0 KB · No Activity yet")
   })
+
+  it("adds the space earlier clearing left to reclaim", () => {
+    expect(
+      activitySummary(
+        {
+          bytes: 260 * 1024,
+          reclaimable_bytes: 1.2 * 1024 * 1024,
+          activity_entries: 193,
+          oldest_activity_at: "2026-06-12T09:00:00+00:00",
+        },
+        "en-GB",
+      ),
+    ).toBe("260.0 KB · 193 Activity entries since 12 Jun 2026 · 1.2 MB can be reclaimed")
+    expect(
+      activitySummary(
+        { bytes: 4096, reclaimable_bytes: 2048, activity_entries: 0, oldest_activity_at: null },
+        "en-GB",
+      ),
+    ).toBe("4.0 KB · No Activity yet · 2.0 KB can be reclaimed")
+  })
+})
+
+describe("canClearActivity", () => {
+  const usage = { bytes: 4096, oldest_activity_at: null }
+
+  it("allows clearing while there is Activity or space to reclaim", () => {
+    expect(canClearActivity({ ...usage, reclaimable_bytes: 0, activity_entries: 3 })).toBe(true)
+    expect(canClearActivity({ ...usage, reclaimable_bytes: 2048, activity_entries: 0 })).toBe(true)
+  })
+
+  it("has nothing to do without either", () => {
+    expect(canClearActivity({ ...usage, reclaimable_bytes: 0, activity_entries: 0 })).toBe(false)
+  })
 })
 
 describe("logSummary", () => {
@@ -63,14 +103,48 @@ describe("logSummary", () => {
   })
 })
 
-describe("clearActivityBody", () => {
+describe("clearActivityConfirmation", () => {
   it("says how many entries go and that it cannot be undone", () => {
-    expect(clearActivityBody(41880, 90)).toBe(
-      "41,880 Activity entries older than 90 days will be removed. Each event's latest entry is kept. This cannot be undone.",
-    )
-    expect(clearActivityBody(1, 30)).toBe(
+    expect(clearActivityConfirmation(41880, 90, 0)).toEqual({
+      body: "41,880 Activity entries older than 90 days will be removed. Each event's latest entry is kept. This cannot be undone.",
+      confirmLabel: "Clear Activity",
+      pendingLabel: "Clearing…",
+      canConfirm: true,
+    })
+    expect(clearActivityConfirmation(1, 30, 1024 * 1024).body).toBe(
       "1 Activity entry older than 30 days will be removed. Each event's latest entry is kept. This cannot be undone.",
     )
-    expect(clearActivityBody(0, 365)).toBe("Nothing is older than 365 days.")
+  })
+
+  it("offers to reclaim the space an earlier clear left when nothing is old enough", () => {
+    expect(clearActivityConfirmation(0, 90, 1.2 * 1024 * 1024)).toEqual({
+      body: "Nothing is older than 90 days. 1.2 MB left by earlier clearing can still be reclaimed.",
+      confirmLabel: "Reclaim space",
+      pendingLabel: "Reclaiming…",
+      canConfirm: true,
+    })
+  })
+
+  it("has nothing to confirm when nothing is old enough and no space is left", () => {
+    expect(clearActivityConfirmation(0, 365, 0)).toEqual({
+      body: "Nothing is older than 365 days.",
+      confirmLabel: "Clear Activity",
+      pendingLabel: "Clearing…",
+      canConfirm: false,
+    })
+  })
+})
+
+describe("clearedActivityMessage", () => {
+  it("counts the cleared entries", () => {
+    expect(clearedActivityMessage(41880, 0)).toBe("41,880 Activity entries were cleared.")
+    expect(clearedActivityMessage(1, 0)).toBe("1 Activity entry was cleared.")
+  })
+
+  it("says when only space was reclaimed or nothing happened", () => {
+    expect(clearedActivityMessage(0, 2048)).toBe(
+      "The space left by earlier clearing was reclaimed.",
+    )
+    expect(clearedActivityMessage(0, 0)).toBe("Nothing was old enough to clear.")
   })
 })

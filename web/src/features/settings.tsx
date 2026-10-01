@@ -24,7 +24,13 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
 import { ApiError, STORAGE_LOGS_URL, api } from "@/lib/api"
 import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
-import { activitySummary, clearActivityBody, logSummary } from "@/lib/storage"
+import {
+  activitySummary,
+  canClearActivity,
+  clearActivityConfirmation,
+  clearedActivityMessage,
+  logSummary,
+} from "@/lib/storage"
 import type { ThemePreference } from "@/lib/theme"
 
 export function RedirectMismatchNotice({ redirectUri }: { redirectUri: string | null }) {
@@ -524,9 +530,7 @@ function StorageSection() {
     onSuccess: async (cleared) => {
       setConfirming(null)
       setMessage(
-        cleared.removed === 0
-          ? "Nothing was old enough to clear."
-          : `${cleared.removed.toLocaleString("en-US")} Activity entries were cleared.`,
+        clearedActivityMessage(cleared.removed, storage.data?.database.reclaimable_bytes ?? 0),
       )
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["storage"] }),
@@ -535,8 +539,10 @@ function StorageSection() {
     },
     onError: async (error) => {
       // A 409 means the clear deleted entries but could not reclaim the space while a rule
-      // was synchronizing; refresh the usage even though the mutation itself failed.
+      // was synchronizing. Close the confirmation, keep the server's message in the alert, and
+      // refresh the usage, so the row offers to reclaim the space that is left.
       if (error instanceof ApiError && error.status === 409) {
+        setConfirming(null)
         await queryClient.invalidateQueries({ queryKey: ["storage"] })
       }
     },
@@ -551,6 +557,13 @@ function StorageSection() {
   })
   const busy = clear.isPending || purge.isPending
   const usage = storage.data
+  const confirmation = clearable.data
+    ? clearActivityConfirmation(
+        clearable.data.entries,
+        days,
+        usage?.database.reclaimable_bytes ?? 0,
+      )
+    : null
 
   return (
     <section className="settings-section" aria-labelledby="storage-title">
@@ -593,7 +606,7 @@ function StorageSection() {
                 ref={clearTrigger}
                 type="button"
                 variant="outline"
-                disabled={busy || usage.database.activity_entries === 0}
+                disabled={busy || !canClearActivity(usage.database)}
                 aria-expanded={confirming === "activity"}
                 aria-controls="clear-activity-confirmation"
                 onClick={() => {
@@ -610,16 +623,12 @@ function StorageSection() {
             <DestructiveConfirmation
               id="clear-activity-confirmation"
               title={`Clear Activity older than ${days} days?`}
-              body={
-                clearable.data
-                  ? clearActivityBody(clearable.data.entries, days)
-                  : "Counting the entries that would be removed…"
-              }
+              body={confirmation?.body ?? "Counting the entries that would be removed…"}
               cancelLabel="Keep Activity"
-              confirmLabel="Clear Activity"
-              pendingLabel="Clearing…"
+              confirmLabel={confirmation?.confirmLabel ?? "Clear Activity"}
+              pendingLabel={confirmation?.pendingLabel ?? "Clearing…"}
               pending={clear.isPending}
-              confirmDisabled={!clearable.data || clearable.data.entries === 0}
+              confirmDisabled={!confirmation?.canConfirm}
               onConfirm={() => clear.mutate()}
               onCancel={() => {
                 setConfirming(null)
