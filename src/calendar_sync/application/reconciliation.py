@@ -64,13 +64,16 @@ class ReconcileSyncRule:
         *,
         run_id: str | None = None,
         already_blocked: AbstractSet[EventRef] = frozenset(),
+        work: RuleWork | None = None,
     ) -> ReconciliationReport:
         """Verify every mapping and record each conflict found as a blocked Audit Entry.
 
         `already_blocked` names sources a Sync Run just blocked, so none is reported twice, and
-        `run_id` files the entries under that run.
+        `run_id` files the entries under that run. `work` is the larger work this check is part
+        of, reported in its place.
         """
-        work = RuleWork(RuleWorkKind.RECONCILIATION, self.clock.now())
+        started = self.clock.now()
+        work = work or RuleWork(RuleWorkKind.RECONCILIATION, started)
         with (
             self.locks.for_rule(rule_id),
             self.locks.working(rule_id, work),
@@ -93,14 +96,14 @@ class ReconcileSyncRule:
                     "reconciliation failed %s kind=%s after %s %s",
                     names,
                     kind.value,
-                    duration(self.clock.now() - work.started_at),
+                    duration(self.clock.now() - started),
                     call_summary(calls),
                 )
                 raise
             logger.info(
                 "reconciliation finished %s in %s checked=%d drift=%d conflicts=%d %s",
                 names,
-                duration(self.clock.now() - work.started_at),
+                duration(self.clock.now() - started),
                 report.checked_mappings,
                 len(report.drift),
                 len(report.conflicts),
@@ -360,12 +363,16 @@ class ReconcileNow:
 
     def execute(self, rule_id: SyncRuleId) -> ReconcileNowResult:
         floor = self._audit_floor()
-        result = self.synchronize.execute(rule_id, full=True)
+        work = RuleWork(
+            RuleWorkKind.RECONCILIATION, self.synchronize.clock.now(), stage=RuleWorkKind.SYNC
+        )
+        result = self.synchronize.execute(rule_id, full=True, work=work)
         # The full pass succeeded and counts as today's; reconciliation can still fail after.
         if floor is not None:
             self._record_full_pass(rule_id, floor, result.run_id)
+        work.begin_stage(RuleWorkKind.RECONCILIATION)
         report = self.reconcile.execute(
-            rule_id, run_id=result.run_id, already_blocked=result.blocked
+            rule_id, run_id=result.run_id, already_blocked=result.blocked, work=work
         )
         return ReconcileNowResult(result, report)
 

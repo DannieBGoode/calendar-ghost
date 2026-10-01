@@ -24,6 +24,10 @@ class RuleWork:
     Removal fills ``total`` once it knows its mappings and counts each one it handles in ``done``.
     A Sync Run fills ``total`` once both calendars reported their events, adds the mappings it
     reprojects when it reaches them, and counts each one it handles, so ``done`` never exceeds it.
+
+    Reconcile Now is one reconciliation from start to finish, so a page reloaded during its full
+    pass still names it and times it from the start. ``stage`` says which part runs: the full
+    pass, whose counts these are, then the check, which counts nothing.
     """
 
     kind: RuleWorkKind
@@ -31,6 +35,11 @@ class RuleWork:
     handling: ProjectionHandling | None = None
     total: int | None = None
     done: int = 0
+    stage: RuleWorkKind | None = None
+
+    def begin_stage(self, stage: RuleWorkKind) -> None:
+        """Start the next part of this work, whose counts begin again."""
+        self.stage, self.total, self.done = stage, None, 0
 
 
 @dataclass(slots=True)

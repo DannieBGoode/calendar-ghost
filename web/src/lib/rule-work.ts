@@ -16,6 +16,8 @@ export type RuleWork = {
   progress: { done: number; total: number } | null
   /** Events a sync handled while it cannot say out of how many. */
   handled?: number
+  /** Reconcile now is in its opening full sync, so any count is that sync's. */
+  syncing?: true
 }
 
 const COMMAND_WORK: Partial<Record<RuleCommand, RuleWorkKind>> = {
@@ -32,8 +34,8 @@ const WORK_COMMAND: Record<Exclude<RuleWorkKind, "removal">, RuleCommand> = {
 
 /**
  * The service's report is what survives a reload and how scheduled runs show up. A command this
- * page sent names the work instead while it waits, because Reconcile now begins with a full sync
- * that the service reports as syncing.
+ * page sent names the work until the service reports it, and while it waits behind other work,
+ * whose count is not its own. Reconcile now reports its full pass as its first stage.
  */
 export function ruleWork({
   pending,
@@ -46,29 +48,32 @@ export function ruleWork({
   running: RunningWork | null | undefined
   removing?: boolean
 }): RuleWork | null {
-  const reportedStart = running ? Date.parse(running.started_at) : null
   if (running?.kind === "removal") {
     const progress =
       running.handling === "delete" && running.total !== null && running.total > 0
         ? { done: running.done, total: running.total }
         : null
-    return { kind: "removal", startedAt: reportedStart, progress }
+    return { kind: "removal", startedAt: Date.parse(running.started_at), progress }
   }
   const requested = pending ? COMMAND_WORK[pending] : undefined
   if (requested) {
-    const startedAt = reportedStart ?? pendingSince ?? null
-    // Reconcile now begins with a sync, whose count is not the reconciliation's.
-    return running?.kind === requested
-      ? { kind: requested, startedAt, ...syncProgress(running) }
-      : { kind: requested, startedAt, progress: null }
+    if (running?.kind === requested) return reportedWork(running)
+    // Reconcile now begins with its full pass.
+    const syncing = requested === "reconciliation" ? { syncing: true as const } : {}
+    return { kind: requested, startedAt: pendingSince ?? null, progress: null, ...syncing }
   }
   if (removing) return { kind: "removal", startedAt: null, progress: null }
-  return running ? { kind: running.kind, startedAt: reportedStart, ...syncProgress(running) } : null
+  return running ? reportedWork(running) : null
+}
+
+function reportedWork(running: RunningWork): RuleWork {
+  const work = { kind: running.kind, startedAt: Date.parse(running.started_at), ...syncProgress(running) }
+  return running.stage === "sync" ? { ...work, syncing: true } : work
 }
 
 /** A sync counts the events both calendars reported once it has listed them. */
 function syncProgress(running: RunningWork): Pick<RuleWork, "progress" | "handled"> {
-  if (running.kind !== "sync") return { progress: null }
+  if (running.kind !== "sync" && running.stage !== "sync") return { progress: null }
   if (running.total !== null && running.total > 0) {
     return { progress: { done: Math.min(running.done, running.total), total: running.total } }
   }
@@ -100,7 +105,9 @@ export function workDescription(work: RuleWork, source: string, destination: str
     case "sync":
       return `Applying changes from ${source} to ${destination}.`
     case "reconciliation":
-      return `Checking every event this rule wrote to ${destination} against ${source}.`
+      return work.syncing
+        ? `Syncing every event from ${source} to ${destination}, then checking each one this rule wrote.`
+        : `Checking every event this rule wrote to ${destination} against ${source}.`
     case "removal":
       return work.progress
         ? `Removing this rule: handled ${work.progress.done} of ${plural(work.progress.total, "projection")} in ${destination}.`
@@ -121,7 +128,15 @@ export function workMeta(work: RuleWork, now: number): string {
   return parts.join(" · ")
 }
 
-/** Rules with work running refresh quickly; otherwise lists refresh at their usual pace. */
-export function workRefreshInterval(rules: { running: RunningWork | null }[] | undefined, idleMs: number): number {
-  return rules?.some((rule) => rule.running) ? WORK_REFRESH_MS : idleMs
+/**
+ * Rules with work running refresh quickly; otherwise lists refresh at their usual pace. A command
+ * this page sent counts too: the rules it last fetched predate the work, so without it the page
+ * would not learn of the work's progress until its next idle refresh.
+ */
+export function workRefreshInterval(
+  rules: { running: RunningWork | null }[] | undefined,
+  idleMs: number,
+  pending: Partial<Record<string, RuleCommand>> = {},
+): number {
+  return Object.keys(pending).length > 0 || rules?.some((rule) => rule.running) ? WORK_REFRESH_MS : idleMs
 }

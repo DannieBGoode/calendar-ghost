@@ -49,13 +49,13 @@ export function RulesView({
   onOpenRule: OpenRule
 }) {
   const now = useNow()
+  const commands = useRuleCommands()
   const rules = useQuery({
     queryKey: ["rules"],
     queryFn: api.rules,
-    refetchInterval: (query) => workRefreshInterval(query.state.data, 60_000),
+    refetchInterval: (query) => workRefreshInterval(query.state.data, 60_000, commands.pending),
   })
   const { accounts, endpoints } = useRuleEndpoints(rules.data ?? [])
-  const commands = useRuleCommands()
   const removingIds = useRemovingRuleIds(rules.data)
   const [builderChoice, setBuilderChoice] = useState<boolean | null>(null)
   const [noticeDismissed, setNoticeDismissed] = useState(false)

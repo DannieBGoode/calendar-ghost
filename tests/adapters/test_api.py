@@ -1110,7 +1110,7 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
         uow.commit()
     _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
 
-    def full_pass(rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+    def full_pass(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> SyncRunResult:
         assert full
         # The pass decides the blocked event again and finds it still blocked.
         _append_audit(
@@ -1251,7 +1251,7 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
         uow.commit()
     _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
 
-    def full_pass(rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+    def full_pass(rule_id: SyncRuleId, *, full: bool = False, work: object = None) -> SyncRunResult:
         _append_audit(
             adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-2")
         )
@@ -1345,6 +1345,7 @@ def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
         "handling": "delete",
         "total": 4,
         "done": 1,
+        "stage": None,
     }
     assert listed["running"] == expected
     assert detail["running"] == expected

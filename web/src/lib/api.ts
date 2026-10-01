@@ -89,6 +89,8 @@ export type RunningWork = {
   /** What a removal or sync handles, once it has counted it: projections, or reported events. */
   total: number | null
   done: number
+  /** Reconcile now's part running now: its full pass, whose counts these are, then the check. */
+  stage: "sync" | "reconciliation" | null
 }
 export type RuleSummary = Rule & {
   last_sync: RunOutcome | null

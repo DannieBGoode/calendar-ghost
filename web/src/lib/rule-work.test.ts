@@ -10,6 +10,7 @@ const running = (overrides: Partial<RunningWork>): RunningWork => ({
   handling: null,
   total: null,
   done: 0,
+  stage: null,
   ...overrides,
 })
 
@@ -30,11 +31,22 @@ describe("ruleWork", () => {
     })
   })
 
-  it("keeps calling Reconcile now reconciling during its opening full sync", () => {
-    expect(ruleWork({ pending: "reconcile", pendingSince: 5, running: running({ kind: "sync" }) })).toEqual({
+  it("names Reconcile now's full pass as its first stage before the service reports it", () => {
+    expect(ruleWork({ pending: "reconcile", pendingSince: 5, running: null })).toEqual({
       kind: "reconciliation",
-      startedAt: Date.parse(started),
+      startedAt: 5,
       progress: null,
+      syncing: true,
+    })
+  })
+
+  it("never shows the count of other work a command this page sent waits behind", () => {
+    const scheduled = running({ kind: "sync", total: 40, done: 4 })
+    expect(ruleWork({ pending: "reconcile", pendingSince: 5, running: scheduled })).toEqual({
+      kind: "reconciliation",
+      startedAt: 5,
+      progress: null,
+      syncing: true,
     })
   })
 
@@ -81,8 +93,27 @@ describe("ruleWork for a sync", () => {
   it("keeps the progress of a sync this page started", () => {
     const syncing = running({ total: 40, done: 4 })
     expect(ruleWork({ pending: "sync", pendingSince: 5, running: syncing })?.progress).toEqual({ done: 4, total: 40 })
-    // Reconcile now's opening full sync is not the reconciliation the page names.
-    expect(ruleWork({ pending: "reconcile", pendingSince: 5, running: syncing })?.progress).toBeNull()
+  })
+
+  it("shows Reconcile now's full pass with its progress, also after a reload", () => {
+    const fullPass = running({ kind: "reconciliation", stage: "sync", total: 40, done: 4 })
+    for (const pending of ["reconcile", undefined] as const) {
+      const work = ruleWork({ pending, pendingSince: 5, running: fullPass })
+      expect(work).toEqual({
+        kind: "reconciliation",
+        startedAt: Date.parse(started),
+        progress: { done: 4, total: 40 },
+        syncing: true,
+      })
+      expect(workDescription(work!, "Family", "Work")).toBe(
+        "Syncing every event from Family to Work, then checking each one this rule wrote.",
+      )
+    }
+    const checking = ruleWork({ pending: undefined, running: running({ kind: "reconciliation", stage: "reconciliation" }) })
+    expect(checking).toEqual({ kind: "reconciliation", startedAt: Date.parse(started), progress: null })
+    expect(workDescription(checking!, "Family", "Work")).toBe(
+      "Checking every event this rule wrote to Work against Family.",
+    )
   })
 })
 
@@ -143,5 +174,10 @@ describe("workRefreshInterval", () => {
     expect(workRefreshInterval([{ running: null }, { running: running({}) }], 60_000)).toBe(WORK_REFRESH_MS)
     expect(workRefreshInterval([{ running: null }], 60_000)).toBe(60_000)
     expect(workRefreshInterval(undefined, 60_000)).toBe(60_000)
+  })
+
+  it("refreshes quickly while a command this page sent runs, before the service reports it", () => {
+    expect(workRefreshInterval([{ running: null }], 60_000, { "rule-1": "reconcile" })).toBe(WORK_REFRESH_MS)
+    expect(workRefreshInterval([{ running: null }], 60_000, {})).toBe(60_000)
   })
 })

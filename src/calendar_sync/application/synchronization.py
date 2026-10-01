@@ -127,8 +127,11 @@ class ExecuteSyncRule:
             self.locks,
         )
 
-    def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
-        work = RuleWork(RuleWorkKind.SYNC, self.clock.now())
+    def execute(
+        self, rule_id: SyncRuleId, *, full: bool = False, work: RuleWork | None = None
+    ) -> SyncRunResult:
+        """Run once; `work` is the larger work this run is part of, reported in its place."""
+        work = work or RuleWork(RuleWorkKind.SYNC, self.clock.now())
         with (
             self.locks.for_rule(rule_id),
             self.locks.working(rule_id, work),

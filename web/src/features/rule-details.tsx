@@ -64,7 +64,7 @@ import {
 } from "@/lib/rule-removal"
 import { relativeTime } from "@/lib/relative-time"
 import { recoveryExplanation } from "@/lib/rule-run"
-import { busyCommand, ruleWork, WORK_REFRESH_MS } from "@/lib/rule-work"
+import { busyCommand, ruleWork, workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
 import { RULE_CHANGE_QUERIES, useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 
@@ -90,7 +90,7 @@ export function RuleDetailsView({
     retry: false,
     // A removal commits each projection it deletes, so refresh quickly to show its progress.
     refetchInterval: (query) =>
-      sessionRemoval ? REMOVAL_REFRESH_MS : query.state.data?.running ? WORK_REFRESH_MS : 60_000,
+      sessionRemoval ? REMOVAL_REFRESH_MS : workRefreshInterval(query.state.data && [query.state.data], 60_000, commands.pending),
   })
   // A failed refresh keeps stale data, which must not keep a finished removal on screen.
   const reported = rule.error ? undefined : reportedRemoval(rule.data?.running, rule.data?.mapping_count ?? 0)
