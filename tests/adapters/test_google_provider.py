@@ -457,6 +457,93 @@ def test_get_occurrence_resolves_through_instances_and_verifies_the_start() -> N
     )
 
 
+def _instance_at(start: str, *, series: str = "projection-1") -> dict[str, object]:
+    return {
+        **_instance(),
+        "id": f"{series}_{start}",
+        "recurringEventId": series,
+        "originalStartTime": {"dateTime": start},
+        "start": {"dateTime": start},
+        "end": {"dateTime": start.replace("T08", "T09")},
+    }
+
+
+def test_list_occurrences_finds_the_requested_starts_in_one_bounded_listing() -> None:
+    later = datetime(2026, 9, 22, 8, 0, tzinfo=UTC)
+    events_api = MagicMock()
+    events_api.instances.return_value = request_returning(
+        {
+            "items": [
+                _instance_at("2026-09-08T08:00:00Z"),
+                _instance_at("2026-09-15T08:00:00Z"),
+                {
+                    **_instance("cancelled"),
+                    "originalStartTime": {"dateTime": "2026-09-22T08:00:00Z"},
+                },
+                # Another series' instance never answers for this one.
+                _instance_at("2026-09-29T08:00:00Z", series="other-series"),
+            ]
+        }
+    )
+    provider = provider_with_events_api(events_api)
+
+    found = provider.list_occurrences(
+        SERIES, [START, later, datetime(2026, 9, 29, 8, 0, tzinfo=UTC)]
+    )
+
+    assert set(found) == {START, later}
+    assert found[later].status is EventStatus.CANCELLED
+    events_api.instances.assert_called_once_with(
+        calendarId="work-calendar",
+        eventId="projection-1",
+        showDeleted=True,
+        maxResults=2500,
+        fields=OCCURRENCE_EXCEPTION_FIELDS,
+        # A month past the latest start, so an occurrence moved a little later is still listed.
+        timeMax="2026-10-30T08:00:00+00:00",
+    )
+
+
+def test_list_occurrences_stops_paging_once_every_start_is_found() -> None:
+    events_api = MagicMock()
+    events_api.instances.side_effect = [
+        request_returning({"items": [], "nextPageToken": "page-2"}),
+        request_returning({"items": [_instance_at("2026-09-08T08:00:00Z")], "nextPageToken": "3"}),
+    ]
+    provider = provider_with_events_api(events_api)
+
+    assert set(provider.list_occurrences(SERIES, [START])) == {START}
+    assert events_api.instances.call_count == 2
+
+
+def test_list_occurrences_of_a_series_google_cannot_expand_finds_nothing() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_raising(404)
+    provider = provider_with_events_api(events_api)
+
+    # Finding nothing proves nothing; each occurrence is then looked up on its own.
+    assert provider.list_occurrences(SERIES, [START]) == {}
+
+
+def test_list_occurrences_failures_are_classified() -> None:
+    events_api = MagicMock()
+    events_api.instances.return_value = request_raising(503)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.list_occurrences(SERIES, [START])
+
+    assert failure.value.kind is ProviderFailureKind.TEMPORARY
+
+
+def test_list_occurrences_without_starts_asks_nothing() -> None:
+    events_api = MagicMock()
+    provider = provider_with_events_api(events_api)
+
+    assert provider.list_occurrences(SERIES, []) == {}
+    events_api.instances.assert_not_called()
+
+
 def _moved_instance() -> dict[str, object]:
     return {
         **_instance(),
@@ -730,6 +817,38 @@ def test_access_token_refresh_failures_are_classified_without_a_status(
     assert failure.value.account_id == DESTINATION.connected_account_id
     # The token endpoint's response is not repeated into incidents or logs.
     assert str(error) not in failure.value.detail
+
+
+def test_a_refresh_failing_while_creating_a_projection_is_classified() -> None:
+    # Credentials are refreshed as each request's service is made, before any request is sent.
+    events_api = MagicMock()
+    events_api.list.return_value = request_returning({"items": []})
+    service = MagicMock()
+    service.events.return_value = events_api
+    services = iter((service,))
+
+    def service_for(_account_id: object) -> MagicMock:
+        try:
+            return next(services)
+        except StopIteration:
+            raise RefreshError("invalid_grant") from None  # type: ignore[no-untyped-call]
+
+    provider = GoogleCalendarProvider(service_for)
+    projection = EventProjection(
+        TimedInterval(
+            datetime(2026, 8, 30, 10, tzinfo=UTC),
+            datetime(2026, 8, 30, 11, tzinfo=UTC),
+        ),
+        "Busy",
+    )
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.create_projection(
+            DESTINATION, event().reference, SyncRuleId("rule-1"), projection, "operation-key"
+        )
+
+    assert failure.value.kind is ProviderFailureKind.AUTHENTICATION
+    assert failure.value.account_id == DESTINATION.connected_account_id
 
 
 def test_failures_name_the_account_whose_request_google_rejected() -> None:

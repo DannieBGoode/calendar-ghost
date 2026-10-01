@@ -6,7 +6,11 @@ from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
-from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
+from calendar_sync.application.errors import (
+    ProviderFailure,
+    ProviderFailureKind,
+    RuleNotExecutable,
+)
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AuditAction,
@@ -15,11 +19,13 @@ from calendar_sync.application.ports import (
     CalendarReader,
     Clock,
     FullPassRecords,
+    ProviderCallStats,
     RuleRunOutcome,
     RunIdGenerator,
     RunKind,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.run_log import UntalliedProviderCalls, call_summary, duration
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import (
     CalendarEvent,
@@ -50,6 +56,7 @@ class ReconcileSyncRule:
     clock: Clock
     run_ids: RunIdGenerator
     locks: RuleLocks = field(default_factory=RuleLocks)
+    call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
 
     def execute(
         self,
@@ -64,10 +71,42 @@ class ReconcileSyncRule:
         `run_id` files the entries under that run.
         """
         work = RuleWork(RuleWorkKind.RECONCILIATION, self.clock.now())
-        with self.locks.for_rule(rule_id), self.locks.working(rule_id, work):
-            return self._execute_serialized(
-                rule_id, run_id or self.run_ids.new_run_id(), already_blocked
+        with (
+            self.locks.for_rule(rule_id),
+            self.locks.working(rule_id, work),
+            self.call_stats.measure() as calls,
+        ):
+            run = run_id or self.run_ids.new_run_id()
+            names = f"rule={rule_id.value} run={run}"
+            logger.info("reconciliation started %s", names)
+            try:
+                report = self._execute_serialized(rule_id, run, already_blocked)
+            except RuleNotExecutable:
+                raise
+            except Exception as error:
+                kind = (
+                    error.kind
+                    if isinstance(error, ProviderFailure)
+                    else ProviderFailureKind.INFRASTRUCTURE
+                )
+                logger.warning(
+                    "reconciliation failed %s kind=%s after %s %s",
+                    names,
+                    kind.value,
+                    duration(self.clock.now() - work.started_at),
+                    call_summary(calls),
+                )
+                raise
+            logger.info(
+                "reconciliation finished %s in %s checked=%d drift=%d conflicts=%d %s",
+                names,
+                duration(self.clock.now() - work.started_at),
+                report.checked_mappings,
+                len(report.drift),
+                len(report.conflicts),
+                call_summary(calls),
             )
+            return report
 
     def _execute_serialized(
         self, rule_id: SyncRuleId, run_id: str, already_blocked: AbstractSet[EventRef]

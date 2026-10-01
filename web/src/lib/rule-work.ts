@@ -1,5 +1,6 @@
 import type { RunningWork } from "@/lib/api"
 import { plural } from "@/lib/rule-change"
+import { elapsedLabel } from "@/lib/rule-removal"
 import type { RuleCommand } from "@/lib/use-rule-commands"
 
 /** Pages refresh this often while a rule is working, so its progress and outcome appear promptly. */
@@ -13,6 +14,8 @@ export type RuleWork = {
   /** Null only in the moment before this page learns when a removal it started began. */
   startedAt: number | null
   progress: { done: number; total: number } | null
+  /** Events a sync handled while it cannot say out of how many. */
+  handled?: number
 }
 
 const COMMAND_WORK: Partial<Record<RuleCommand, RuleWorkKind>> = {
@@ -52,9 +55,24 @@ export function ruleWork({
     return { kind: "removal", startedAt: reportedStart, progress }
   }
   const requested = pending ? COMMAND_WORK[pending] : undefined
-  if (requested) return { kind: requested, startedAt: reportedStart ?? pendingSince ?? null, progress: null }
+  if (requested) {
+    const startedAt = reportedStart ?? pendingSince ?? null
+    // Reconcile now begins with a sync, whose count is not the reconciliation's.
+    return running?.kind === requested
+      ? { kind: requested, startedAt, ...syncProgress(running) }
+      : { kind: requested, startedAt, progress: null }
+  }
   if (removing) return { kind: "removal", startedAt: null, progress: null }
-  return running ? { kind: running.kind, startedAt: reportedStart, progress: null } : null
+  return running ? { kind: running.kind, startedAt: reportedStart, ...syncProgress(running) } : null
+}
+
+/** A sync counts the events both calendars reported once it has listed them. */
+function syncProgress(running: RunningWork): Pick<RuleWork, "progress" | "handled"> {
+  if (running.kind !== "sync") return { progress: null }
+  if (running.total !== null && running.total > 0) {
+    return { progress: { done: Math.min(running.done, running.total), total: running.total } }
+  }
+  return running.done > 0 ? { progress: null, handled: running.done } : { progress: null }
 }
 
 /** The command a rule's buttons treat as running, so they stay unavailable until it finishes. */
@@ -88,6 +106,19 @@ export function workDescription(work: RuleWork, source: string, destination: str
         ? `Removing this rule: handled ${work.progress.done} of ${plural(work.progress.total, "projection")} in ${destination}.`
         : `Removing this rule from ${destination}.`
   }
+}
+
+/**
+ * The line under the description: how far the work got, how long it has run, and that leaving is
+ * safe. A removal's count is already in its description.
+ */
+export function workMeta(work: RuleWork, now: number): string {
+  const parts: string[] = []
+  if (work.kind !== "removal" && work.progress) parts.push(`${work.progress.done} of ${work.progress.total} checked`)
+  else if (work.kind !== "removal" && work.handled) parts.push(`${work.handled} handled`)
+  if (work.startedAt !== null) parts.push(`Running for ${elapsedLabel(now - work.startedAt)}`)
+  parts.push("It keeps running if you leave this page.")
+  return parts.join(" · ")
 }
 
 /** Rules with work running refresh quickly; otherwise lists refresh at their usual pace. */

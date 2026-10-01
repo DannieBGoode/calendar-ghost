@@ -6,9 +6,8 @@ import { Button } from "@/components/ui/button"
 import type { PreviewSummary } from "@/lib/api"
 import { appPathForView, isPlainLeftClick, type AppView } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
-import { elapsedLabel } from "@/lib/rule-removal"
 import { previewReadyLabel } from "@/lib/rule-run"
-import { workDescription, workLabel, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
+import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
 import { PENDING_LABELS, type RuleCommand, type RuleFeedback } from "@/lib/use-rule-commands"
 
@@ -213,10 +212,7 @@ export function RuleWorkNote({
       <LoaderCircle aria-hidden="true" className="work-spinner" />
       <p>
         <span>{workDescription(work, source, destination)}</span>
-        <span className="rule-work-meta">
-          {work.startedAt !== null && `Running for ${elapsedLabel(now - work.startedAt)} · `}
-          It keeps running if you leave this page.
-        </span>
+        <span className="rule-work-meta">{workMeta(work, now)}</span>
       </p>
       {work.progress && (
         <progress

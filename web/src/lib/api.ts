@@ -86,7 +86,7 @@ export type RunningWork = {
   kind: "preview" | "sync" | "reconciliation" | "removal"
   started_at: string
   handling: ProjectionHandling | null
-  /** Projections a removal is handling, once it has counted them. */
+  /** What a removal or sync handles, once it has counted it: projections, or reported events. */
   total: number | null
   done: number
 }

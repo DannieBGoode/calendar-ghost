@@ -18,6 +18,7 @@ from calendar_sync.application.ports import (
     AuditOutcome,
     CalendarProvider,
     Clock,
+    ProviderCallStats,
     ProviderChangeSet,
     RecordedEvent,
     RuleRunOutcome,
@@ -26,9 +27,11 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.run_log import UntalliedProviderCalls
 from calendar_sync.application.sync_run import (
     SOURCE_CHANGE_RETENTION,
     SyncRunContext,
+    SyncRunLog,
     has_live_occurrences,
     record,
     require_unchanged,
@@ -67,6 +70,17 @@ class SyncRunResult:
     """Source events and occurrences this run blocked, each already recorded as an Audit Entry."""
 
 
+def _run_mode(*, reproject: bool, full: bool, first: bool) -> tuple[str, str]:
+    """How a run reads its calendars, and why: the mode and reason its first log line names."""
+    if reproject:
+        return "reprojection", "reprojection"
+    if first:
+        return "full", "first-run"
+    if full:
+        return "full", "daily-pass"
+    return "incremental", "changes"
+
+
 @dataclass(frozen=True, slots=True)
 class _ChangeFeeds:
     """Both calendars' changes for one Sync Run, and whether each feed listed in full."""
@@ -99,6 +113,7 @@ class ExecuteSyncRule:
     clock: Clock
     run_ids: RunIdGenerator
     locks: RuleLocks = field(default_factory=RuleLocks)
+    call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
     occurrences: SynchronizeOccurrences = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -113,20 +128,27 @@ class ExecuteSyncRule:
         )
 
     def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+        work = RuleWork(RuleWorkKind.SYNC, self.clock.now())
         with (
             self.locks.for_rule(rule_id),
-            self.locks.working(rule_id, RuleWork(RuleWorkKind.SYNC, self.clock.now())),
+            self.locks.working(rule_id, work),
+            self.call_stats.measure() as calls,
         ):
+            log = SyncRunLog(rule_id, self.clock, calls, work.started_at)
             try:
-                return self._execute_serialized(rule_id, full=full)
+                result = self._execute_serialized(rule_id, full=full, log=log, work=work)
             except RuleNotExecutable:
+                log.stopped()
                 raise
             except ProviderFailure as failure:
+                log.failed(failure.kind.value)
                 self._record_failure(rule_id, full, failure.kind.value)
                 raise
             except Exception:
+                log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
                 self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value)
                 raise
+            return result
 
     def _record_failure(self, rule_id: SyncRuleId, full: bool, kind: str) -> None:
         # Recording evidence must never replace the failure the scheduler classifies.
@@ -139,16 +161,19 @@ class ExecuteSyncRule:
                 )
                 uow.commit()
 
-    def _execute_serialized(self, rule_id: SyncRuleId, *, full: bool) -> SyncRunResult:
+    def _execute_serialized(
+        self, rule_id: SyncRuleId, *, full: bool, log: SyncRunLog, work: RuleWork
+    ) -> SyncRunResult:
         with self.unit_of_work() as uow:
             rule = _executable_rule(uow, rule_id)
-            run, feeds = self._begin(uow, rule, full=full)
+            run, feeds = self._begin(uow, rule, full=full, log=log, work=work)
             self._synchronize_sources(run, feeds.source)
             self._repair_destinations(run, feeds.destination)
             if run.reproject:
                 self._reproject_remaining(run)
             self._finish_pending_replays(run)
             self._advance_cursors(run, feeds)
+        log.finished(run.counts)
 
         counts = run.counts
         return SyncRunResult(
@@ -164,7 +189,7 @@ class ExecuteSyncRule:
         )
 
     def _begin(
-        self, uow: UnitOfWork, rule: SyncRule, *, full: bool
+        self, uow: UnitOfWork, rule: SyncRule, *, full: bool, log: SyncRunLog, work: RuleWork
     ) -> tuple[SyncRunContext, _ChangeFeeds]:
         """Read both change feeds from the saved cursors, or in full when a full run is due."""
         run_id = self.run_ids.new_run_id()
@@ -173,10 +198,18 @@ class ExecuteSyncRule:
         previous_cursor = uow.cursors.get(rule.id)
         cursor = None if full_run else previous_cursor
         destination_cursor = None if full_run else uow.destination_cursors.get(rule.id)
+        log.begin(run_id, *_run_mode(reproject=reproject, full=full, first=previous_cursor is None))
         cutoff = self.clock.now() - timedelta(days=rule.initial_lookback_days)
         changes = self.provider.changes(rule.source, cursor, cutoff)
         destination_changes = self.provider.changes(rule.destination, destination_cursor, cutoff)
+        log.listed(len(changes.events), len(destination_changes.events))
         # A missing or rejected cursor also yields a full listing instead of changes.
+        for feed, sent, received in (
+            ("source", cursor, changes),
+            ("destination", destination_cursor, destination_changes),
+        ):
+            if sent is not None and received.complete:
+                log.cursor_rejected(feed)
         feeds = _ChangeFeeds(
             changes,
             destination_changes,
@@ -193,7 +226,10 @@ class ExecuteSyncRule:
             incremental=not feeds.source_listed and not feeds.destination_listed,
             daily_pass=feeds.source_listed and previous_cursor is not None,
             source_listed=feeds.source_listed,
+            log=log,
+            work=work,
         )
+        run.expect(len(changes.events) + len(destination_changes.events))
         if feeds.destination_listed:
             # A full listing already holds each projection, so decisions need not re-read it.
             run.listed_destinations = {
@@ -215,6 +251,7 @@ class ExecuteSyncRule:
                 )
                 run.handled.add(source_event.reference)
             run.uow.commit()
+            run.handled_one()
 
     def _repair_destinations(self, run: SyncRunContext, changes: ProviderChangeSet) -> None:
         """Repair drift the destination feed reports on projections the source batch left alone."""
@@ -224,6 +261,7 @@ class ExecuteSyncRule:
                 run.uow.commit()
             else:
                 self._repair_destination_event(run, destination_event)
+            run.handled_one()
 
     def _repair_destination_event(
         self, run: SyncRunContext, destination_event: CalendarEvent
@@ -232,7 +270,7 @@ class ExecuteSyncRule:
         if mapping is None or mapping.source in run.handled:
             return
         if self._is_own_write(run, mapping, destination_event):
-            run.counts[SyncAction.IGNORE] += 1
+            run.count(SyncAction.IGNORE, mapping.source)
             return
         authoritative_source = self.provider.get_event(mapping.source)
         if authoritative_source is None:
@@ -327,19 +365,31 @@ class ExecuteSyncRule:
 
     def _reproject_remaining(self, run: SyncRunContext) -> None:
         """Apply a changed policy to mappings the change feeds did not report."""
-        for mapping in run.uow.mappings.for_rule(run.rule.id):
-            if mapping.source in run.handled:
-                continue
-            authoritative_source = self.provider.get_event(mapping.source)
-            if authoritative_source is None:
-                self._record_unverifiable(run, mapping.source, mapping.destination)
-            else:
-                # Reprojection re-verifies every recorded occurrence of a series as well.
-                self._synchronize_event(
-                    run, authoritative_source, destination_loaded=False, actual_destination=None
-                )
-            run.handled.add(mapping.source)
-            run.uow.commit()
+        remaining = [
+            mapping
+            for mapping in run.uow.mappings.for_rule(run.rule.id)
+            if mapping.source not in run.handled
+        ]
+        if run.log is not None:
+            run.log.reprojecting(len(remaining))
+        run.expect(len(remaining))
+        for mapping in remaining:
+            # Applying an earlier series can handle a later mapping's source.
+            if mapping.source not in run.handled:
+                authoritative_source = self.provider.get_event(mapping.source)
+                if authoritative_source is None:
+                    self._record_unverifiable(run, mapping.source, mapping.destination)
+                else:
+                    # Reprojection re-verifies every recorded occurrence of a series as well.
+                    self._synchronize_event(
+                        run,
+                        authoritative_source,
+                        destination_loaded=False,
+                        actual_destination=None,
+                    )
+                run.handled.add(mapping.source)
+                run.uow.commit()
+            run.handled_one()
 
     def _synchronize_source_exception(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         identity = exception.occurrence
@@ -384,7 +434,10 @@ class ExecuteSyncRule:
         if series_mapping is None:
             return
         if self._is_own_occurrence_write(run, series_mapping, destination_event):
-            run.counts[SyncAction.IGNORE] += 1
+            run.count(SyncAction.IGNORE, series_mapping.source)
+            return
+        if (series_mapping.source, identity.original_start) in run.handled_occurrences:
+            # Already decided this run from its source; a full listing reports every exception.
             return
         source_series = self.provider.get_event(series_mapping.source)
         if source_series is None:
@@ -426,7 +479,7 @@ class ExecuteSyncRule:
 
     def _record_skipped_occurrence(self, run: SyncRunContext, exception: CalendarEvent) -> None:
         """An exception of a series this rule never projected has nothing to protect."""
-        run.counts[SyncAction.IGNORE] += 1
+        run.count(SyncAction.IGNORE, exception.reference)
         record(
             run,
             AuditEntry(
@@ -522,7 +575,10 @@ class ExecuteSyncRule:
 
     def _finish_pending_replays(self, run: SyncRunContext) -> None:
         """Complete replays an earlier failed run left unfinished."""
-        for mapping in run.uow.replays.pending(run.rule.id):
+        pending = run.uow.replays.pending(run.rule.id)
+        if pending and run.log is not None:
+            run.log.replaying(len(pending))
+        for mapping in pending:
             source_series = None if run.source_listed else self.provider.get_event(mapping.source)
             if source_series is None or source_series.recurrence is None:
                 # A full listing already applied every exception in the window, and a series
@@ -630,6 +686,10 @@ class ExecuteSyncRule:
         operation_key = self._operation_key(
             rule.id, source_event.reference, source_event.revision, decision.action
         )
+        if mapping is not None and decision.action in _DESTINATION_WRITES:
+            # Occurrences decided after this write read the series as it now is.
+            run.destination_series.pop(mapping.destination, None)
+            run.listed_occurrences.pop(mapping.destination, None)
         if decision.action is SyncAction.CREATE and decision.projection is not None:
             created = self.provider.create_projection(
                 rule.destination,
@@ -741,6 +801,9 @@ class ExecuteSyncRule:
             )
         )
         return hashlib.sha256(raw.encode()).hexdigest()
+
+
+_DESTINATION_WRITES = frozenset({SyncAction.CREATE, SyncAction.UPDATE, SyncAction.DELETE})
 
 
 def stored_fingerprint(value: str) -> ProjectionFingerprint:

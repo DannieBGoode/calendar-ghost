@@ -1,19 +1,36 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.ports import AuditEntry, CalendarReader, UnitOfWork
+from calendar_sync.application.locking import RuleWork
+from calendar_sync.application.ports import (
+    AuditEntry,
+    CalendarReader,
+    Clock,
+    ProviderCallTally,
+    UnitOfWork,
+)
+from calendar_sync.application.run_log import call_summary, duration
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
+    OccurrenceStart,
     SyncAction,
     SyncReason,
     SyncRule,
+    SyncRuleId,
     SyncRuleState,
 )
+
+logger = logging.getLogger(__name__)
+
+# A long run says how far it got this often, so a quiet log means a stuck run, not a slow one.
+PROGRESS_INTERVAL = timedelta(seconds=30)
 
 # How long the values of a Source Change are kept; which fields changed is kept with the entry.
 SOURCE_CHANGE_RETENTION = timedelta(days=90)
@@ -44,6 +61,97 @@ UNRECORDED_ON_DAILY_PASS = frozenset(
 
 
 @dataclass(slots=True)
+class SyncRunLog:
+    """The service log lines of one Sync Run, from its start to how it ended."""
+
+    rule_id: SyncRuleId
+    clock: Clock
+    calls: ProviderCallTally
+    started_at: datetime
+    run_id: str | None = None
+    """Known once the run began; a rule found not enabled never begins one."""
+    _next_progress: datetime | None = None
+
+    def begin(self, run_id: str, mode: str, reason: str) -> None:
+        self.run_id = run_id
+        self._next_progress = self.started_at + PROGRESS_INTERVAL
+        logger.info("run started %s mode=%s reason=%s", self._names(), mode, reason)
+
+    def listed(self, source_events: int, destination_events: int) -> None:
+        logger.info(
+            "listing done %s source events=%d destination events=%d",
+            self._names(),
+            source_events,
+            destination_events,
+        )
+
+    def cursor_rejected(self, feed: str) -> None:
+        logger.info("cursor rejected %s feed=%s; listed in full", self._names(), feed)
+
+    def reprojecting(self, mappings: int) -> None:
+        logger.info("reprojecting remaining %s mappings=%d", self._names(), mappings)
+
+    def replaying(self, pending: int) -> None:
+        logger.info("pending replays %s series=%d", self._names(), pending)
+
+    def progress(
+        self, counts: Mapping[SyncAction, int], *, handled: int, total: int | None
+    ) -> None:
+        """Say how far the run got, at most once every PROGRESS_INTERVAL."""
+        now = self.clock.now()
+        if self._next_progress is None or now < self._next_progress:
+            return
+        self._next_progress = now + PROGRESS_INTERVAL
+        logger.info(
+            "run progress %s decided=%d handled=%s %s elapsed=%s google_calls=%d",
+            self._names(),
+            sum(counts.values()),
+            handled if total is None else f"{handled}/{total}",
+            _decisions(counts),
+            duration(now - self.started_at),
+            self.calls.calls,
+        )
+
+    def finished(self, counts: Mapping[SyncAction, int]) -> None:
+        logger.info(
+            "run finished %s in %s %s %s",
+            self._names(),
+            self._elapsed(),
+            _decisions(counts),
+            call_summary(self.calls),
+        )
+
+    def failed(self, kind: str) -> None:
+        logger.warning(
+            "run failed %s kind=%s after %s %s",
+            self._names(),
+            kind,
+            self._elapsed(),
+            call_summary(self.calls),
+        )
+
+    def stopped(self) -> None:
+        if self.run_id is None:
+            logger.info("run not started rule=%s: rule is not enabled", self.rule_id.value)
+        else:
+            logger.info("run stopped %s after %s: rule changed", self._names(), self._elapsed())
+
+    def _names(self) -> str:
+        return f"rule={self.rule_id.value} run={self.run_id}"
+
+    def _elapsed(self) -> str:
+        return duration(self.clock.now() - self.started_at)
+
+
+def _decisions(counts: Mapping[SyncAction, int]) -> str:
+    return (
+        f"created={counts[SyncAction.CREATE]} updated={counts[SyncAction.UPDATE]} "
+        f"deleted={counts[SyncAction.DELETE]} ignored={counts[SyncAction.IGNORE]} "
+        f"conflicts={counts[SyncAction.CONFLICT]}"
+    )
+
+
+@dataclass(slots=True)
 class SyncRunContext:
     """State shared by every decision of one Sync Run."""
 
@@ -63,18 +171,59 @@ class SyncRunContext:
     listed_destinations: dict[EventRef, CalendarEvent] = field(default_factory=dict)
     """Destination events from this run's full listing, each usable once instead of a read."""
     handled: set[EventRef] = field(default_factory=set)
+    handled_occurrences: set[tuple[EventRef, OccurrenceStart]] = field(default_factory=set)
+    """Source occurrences decided this run, by source series and original start.
+
+    A destination occurrence reported later is skipped by these without looking its source up.
+    """
     repaired: set[EventRef] = field(default_factory=set)
     """Source series already repaired this run, so a repair never recurses."""
     live_series: dict[EventRef, bool] = field(default_factory=dict)
     """Whether each source series looked up this run still has an occurrence this rule projects."""
     blocked: set[EventRef] = field(default_factory=set)
     """Source events and occurrences this run blocked as a Conflict."""
+    listed_occurrences: dict[EventRef, dict[OccurrenceStart, CalendarEvent]] = field(
+        default_factory=dict
+    )
+    """Occurrences a series listing found while their series is re-verified, each usable once."""
+    destination_series: dict[EventRef, CalendarEvent | None] = field(default_factory=dict)
+    """Destination series read this run, shared by their occurrences until this run writes one.
+
+    Occurrence writes verify the series' ownership with a fresh read of their own.
+    """
+    log: SyncRunLog | None = None
+    work: RuleWork | None = None
+    """What the rule reports while this run is in progress, including how much it handled."""
 
     def count(self, action: SyncAction, source: EventRef) -> None:
-        """Count one decision about `source`, remembering it when it is a block."""
+        """Count one decision about `source`, remembering it when it is a block.
+
+        Every decision of a run is counted here, so this is also where a long run reports progress.
+        """
         self.counts[action] += 1
         if action is SyncAction.CONFLICT:
             self.blocked.add(source)
+        self._report_progress()
+
+    def expect(self, items: int) -> None:
+        """Add `items` the run will handle to its reported total, before handling any of them."""
+        if self.work is not None:
+            self.work.total = (self.work.total or 0) + items
+
+    def handled_one(self) -> None:
+        """One expected item is handled, whatever was decided about it."""
+        if self.work is not None:
+            self.work.done += 1
+        self._report_progress()
+
+    def _report_progress(self) -> None:
+        if self.log is not None:
+            work = self.work
+            self.log.progress(
+                self.counts,
+                handled=work.done if work else 0,
+                total=work.total if work else None,
+            )
 
 
 def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: EventRef) -> bool:
@@ -84,6 +233,23 @@ def has_live_occurrences(run: SyncRunContext, provider: CalendarReader, series: 
             series, include_all_day=run.rule.transformation.includes_all_day
         )
     return run.live_series[series]
+
+
+def read_destination_series(
+    run: SyncRunContext, provider: CalendarReader, series: EventRef
+) -> CalendarEvent | None:
+    """Read a destination series once per run, however many of its occurrences are decided."""
+    if series not in run.destination_series:
+        run.destination_series[series] = provider.get_event(series)
+    return run.destination_series[series]
+
+
+def read_occurrence(
+    run: SyncRunContext, provider: CalendarReader, series: EventRef, original_start: OccurrenceStart
+) -> CalendarEvent | None:
+    """An occurrence from its series' listing if it found it, otherwise from its own lookup."""
+    listed = run.listed_occurrences.get(series, {}).pop(original_start, None)
+    return listed if listed is not None else provider.get_occurrence(series, original_start)
 
 
 def require_unchanged(run: SyncRunContext) -> None:

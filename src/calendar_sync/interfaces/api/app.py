@@ -15,7 +15,7 @@ from starlette.routing import Match, Route
 from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
-from calendar_sync.bootstrap.container import Container, build_container
+from calendar_sync.bootstrap.container import Container, service_container
 from calendar_sync.interfaces.api.routes import (
     accounts,
     activity,
@@ -39,7 +39,7 @@ class ApiServices(
 
 
 def create_app(container: Container | None = None) -> FastAPI:
-    resolved = container or build_container()
+    resolved = container or service_container()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:

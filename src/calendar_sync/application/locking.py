@@ -21,6 +21,8 @@ class RuleWork:
     """Work running for one rule in this process, so a reloaded page can show it again.
 
     Removal fills ``total`` once it knows its mappings and counts each one it handles in ``done``.
+    A Sync Run fills ``total`` once both calendars reported their events, adds the mappings it
+    reprojects when it reaches them, and counts each one it handles, so ``done`` never exceeds it.
     """
 
     kind: RuleWorkKind

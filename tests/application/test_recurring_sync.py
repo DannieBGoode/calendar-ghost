@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -1037,3 +1038,151 @@ def test_reverifying_an_occurrence_already_recorded_as_current_leaves_its_mappin
         SyncReason.OCCURRENCE_CURRENT,
     ]
     assert factory.state.occurrences[key] == recorded
+
+
+class _DestinationSeriesReads(FakeCalendars):
+    """Counts the reads of each event by reference, as the run asks for them."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.event_reads: list[EventRef] = []
+
+    def get_event(self, reference: EventRef) -> CalendarEvent | None:
+        self.event_reads.append(reference)
+        return super().get_event(reference)
+
+
+def test_a_destination_series_is_read_once_for_all_of_its_occurrences() -> None:
+    calendars = _DestinationSeriesReads()
+    master = calendars.put(series(), starts=STARTS)
+    for week in (1, 2, 3):
+        calendars.put(occurrence(master, week, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    calendars.event_reads.clear()
+
+    # Reprojection re-verifies each recorded occurrence against the destination series.
+    _change_policy(factory, TransformationPolicy(content=ProjectionContent.DETAILS))
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert calendars.event_reads.count(destination) == 1
+    assert _occurrence_states(factory) == dict.fromkeys(
+        (week_start(1), week_start(2), week_start(3)), OccurrenceState.MODIFIED
+    )
+
+
+def test_a_destination_series_this_run_rewrote_is_read_again_for_its_occurrences() -> None:
+    calendars = _DestinationSeriesReads()
+    master = calendars.put(series(), starts=STARTS)
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    # The destination series drifted, so the occurrence is missing until the series is repaired.
+    calendars.events[destination] = replace(calendars.events[destination], title="Edited")
+    calendars.expansions[destination] = ()
+    calendars.report(calendars.put(occurrence(master, 2, moved_by=timedelta(hours=1))))
+    calendars.event_reads.clear()
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    # Before the repair, by the repair itself, and once more after the repair rewrote it.
+    assert calendars.event_reads.count(destination) == 3
+    assert calendars.events[destination].title == "Busy"
+    assert _occurrence_states(factory) == {week_start(2): OccurrenceState.MODIFIED}
+
+
+class _OccurrenceLookups(FakeCalendars):
+    """Separates occurrences read one by one from those a series listing answered."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.listed: list[EventRef] = []
+        self.looked_up: list[tuple[EventRef, OccurrenceStart]] = []
+        self.listing_answers = True
+        self._listing = False
+
+    def list_occurrences(
+        self, series: EventRef, original_starts: Collection[OccurrenceStart]
+    ) -> Mapping[OccurrenceStart, CalendarEvent]:
+        self.listed.append(series)
+        if not self.listing_answers:
+            return {}
+        self._listing = True
+        try:
+            return super().list_occurrences(series, original_starts)
+        finally:
+            self._listing = False
+
+    def get_occurrence(
+        self, series: EventRef, original_start: OccurrenceStart
+    ) -> CalendarEvent | None:
+        if not self._listing:
+            self.looked_up.append((series, original_start))
+        return super().get_occurrence(series, original_start)
+
+
+def _reprojected_with_exceptions(
+    calendars: _OccurrenceLookups,
+) -> tuple[InMemoryUnitOfWorkFactory, EventRef, EventRef]:
+    master = calendars.put(series(), starts=STARTS)
+    for week in (1, 2, 3):
+        calendars.put(occurrence(master, week, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    calendars.listed.clear()
+    calendars.looked_up.clear()
+    # The timed occurrences project the same either way, so re-verifying them writes nothing.
+    _change_policy(factory, TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE))
+    return factory, master.reference, destination
+
+
+def test_reverification_lists_each_series_once_instead_of_reading_every_occurrence() -> None:
+    calendars = _OccurrenceLookups()
+    factory, source, destination = _reprojected_with_exceptions(calendars)
+    writes = list(calendars.writes)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    assert sorted(calendars.listed, key=str) == sorted([source, destination], key=str)
+    assert calendars.looked_up == []
+    assert calendars.writes == writes
+    assert _occurrence_states(factory) == dict.fromkeys(
+        (week_start(1), week_start(2), week_start(3)), OccurrenceState.MODIFIED
+    )
+
+
+def test_occurrences_a_listing_did_not_answer_are_looked_up_one_by_one() -> None:
+    calendars = _OccurrenceLookups()
+    factory, source, destination = _reprojected_with_exceptions(calendars)
+    # A listing that misses an occurrence proves nothing about it.
+    calendars.listing_answers = False
+    writes = list(calendars.writes)
+
+    sync_use_case(factory, calendars).execute(rule().id)
+
+    starts = [week_start(week) for week in (1, 2, 3)]
+    assert [start for ref, start in calendars.looked_up if ref == source] == starts
+    assert [start for ref, start in calendars.looked_up if ref == destination] == starts
+    assert calendars.writes == writes
+    assert _occurrence_states(factory) == dict.fromkeys(starts, OccurrenceState.MODIFIED)
+
+
+def test_a_daily_pass_does_not_look_up_sources_of_occurrences_it_already_decided() -> None:
+    calendars = _OccurrenceLookups()
+    master = calendars.put(series(), starts=STARTS)
+    for week in (1, 2, 3):
+        calendars.put(occurrence(master, week, moved_by=timedelta(hours=1)))
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    calendars.looked_up.clear()
+
+    # Both full listings report every exception; the source batch decides them first.
+    result = sync_use_case(factory, calendars).execute(rule().id, full=True)
+
+    assert [start for ref, start in calendars.looked_up if ref == master.reference] == []
+    assert result.conflicts == 0
+    assert _occurrence_states(factory) == dict.fromkeys(
+        (week_start(1), week_start(2), week_start(3)), OccurrenceState.MODIFIED
+    )

@@ -4,12 +4,16 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any, cast
 from urllib.parse import urlparse
 
+from google.auth.exceptions import RefreshError
+from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
@@ -19,10 +23,13 @@ from calendar_sync.application.errors import (
     AuthorizationFailed,
     AuthorizationNotConfigured,
     CalendarPermissionRequired,
+    ConnectedAccountDisconnected,
+    ConnectedAccountNotFound,
     InvalidAuthorizationState,
 )
 from calendar_sync.application.ports import AccountAccess, ConnectedAccount, DiscoveredCalendar
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.infrastructure.google.instrumentation import record_token_refresh
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
@@ -39,6 +46,8 @@ OAUTH_SCOPES = CALENDAR_SCOPES + PROFILE_SCOPES
 # Google may grant fewer scopes than requested (a declined profile) or more (previously granted
 # scopes). oauthlib rejects any difference unless relaxed; complete() enforces Calendar scopes.
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +78,8 @@ class GoogleOAuthService:
         self._states = states
         # The Installation Master Key, from which each state's PKCE verifier is derived.
         self._verifier_key = verifier_key
+        self._refresh_locks: dict[ConnectedAccountId, Lock] = {}
+        self._refresh_guard = Lock()
 
     def authorization_url(self) -> str:
         self._require_client_configuration()
@@ -139,8 +150,10 @@ class GoogleOAuthService:
         )
 
     def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
-        credentials = self._credentials(account_id)
         try:
+            # Inside the check: an expired token is refreshed here, and a rejected refresh is the
+            # most common reason access fails.
+            credentials = self._credentials(account_id)
             service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
             calendars = self._calendar_items(service)
             calendar_id = next(
@@ -169,11 +182,13 @@ class GoogleOAuthService:
                 )
                 .execute()
             )
-        except AccountAccessCheckFailed:
+        except (AccountAccessCheckFailed, ConnectedAccountDisconnected, ConnectedAccountNotFound):
             raise
         except Exception as error:
             status_code = _google_status_code(error)
-            if status_code == 401:
+            # A refresh Google rejected carries no status; one it could not answer is retryable.
+            revoked = isinstance(error, RefreshError) and not error.retryable
+            if status_code == 401 or revoked:
                 detail = "Google authorization has expired; reauthorize this account"
             elif status_code == 403:
                 detail = (
@@ -195,11 +210,34 @@ class GoogleOAuthService:
         return build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
     def _credentials(self, account_id: ConnectedAccountId) -> Credentials:
-        payload = json.loads(self._accounts.credential_json(account_id))
-        credentials = Credentials.from_authorized_user_info(  # type: ignore[no-untyped-call]
-            payload, scopes=CALENDAR_SCOPES
-        )
-        return cast(Credentials, credentials)
+        """Usable credentials, refreshing an expired access token once and keeping the new one.
+
+        Without keeping it, every request after the first hour would refresh again first.
+        """
+        with self._refresh_lock(account_id):
+            stored = self._accounts.credential_json(account_id)
+            credentials = cast(
+                Credentials,
+                Credentials.from_authorized_user_info(  # type: ignore[no-untyped-call]
+                    json.loads(stored), scopes=CALENDAR_SCOPES
+                ),
+            )
+            if not credentials.valid:
+                credentials.refresh(Request())  # type: ignore[no-untyped-call]
+                record_token_refresh()
+                refreshed = credentials.to_json()  # type: ignore[no-untyped-call]
+                kept = self._accounts.replace_credentials(account_id, stored, refreshed)
+                logger.info(
+                    "refreshed access token account=%s kept=%s",
+                    account_id.value,
+                    "yes" if kept else "no",
+                )
+            return credentials
+
+    def _refresh_lock(self, account_id: ConnectedAccountId) -> Lock:
+        # One refresh per account at a time, so concurrent requests reuse its new token.
+        with self._refresh_guard:
+            return self._refresh_locks.setdefault(account_id, Lock())
 
     def _flow(self, state: str) -> Flow:
         client_config = {

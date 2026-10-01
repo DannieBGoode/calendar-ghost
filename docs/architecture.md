@@ -92,6 +92,19 @@ the roles it calls:
 `CalendarProvider` combines every role for the Sync Run. Rule Preview is side-effect-free by type:
 it holds a `CalendarReader`, which declares no write. The Google adapter implements every role.
 
+## Logging
+
+`service_container` configures the `calendar_sync` logger from `CALENDAR_SYNC_LOG_LEVEL` before
+it composes anything; Uvicorn's loggers are left as Uvicorn configures them. The Sync Run,
+reconciliation, and Rule Removal log their lifecycle with standard `logging`, naming rules and runs
+by identifier only. Their closing lines include how the run's provider calls went, read from the
+`ProviderCallStats` port: `measure()` returns a `ProviderCallTally` that the provider adds each
+call to while the run is in progress. The Google adapter sends every request through one helper that
+times it, and `infrastructure/google/instrumentation.py` keeps each measured run's tally in a
+context variable, so runs on different worker threads never share one; its `record_token_refresh()`
+counts a renewed access token toward the current run. Use cases default to
+`UntalliedProviderCalls`, so test fakes need nothing.
+
 ## Transaction boundary
 
 Google and SQLite cannot share an atomic transaction. A Sync Run therefore uses stable operation

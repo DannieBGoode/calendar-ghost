@@ -4,6 +4,65 @@
 
 Check `docker compose ps`, then request `http://localhost:8000/health`. Review container logs without posting credentials or event payloads publicly.
 
+## Reading the logs
+
+The service writes one line per record to the container's standard error, timestamped in UTC:
+
+```text
+2026-10-01T18:04:12Z INFO calendar_sync.application.sync_run run started rule=7f3c… run=ab12… mode=incremental reason=changes
+```
+
+Follow the logs live, or read the last hour:
+
+```sh
+docker compose logs -f app
+docker compose logs --since 1h app
+```
+
+Lines name a rule and a run only by their internal identifiers. They never contain event titles,
+descriptions, calendar identifiers, account emails, URLs, or tokens, but review them before
+posting them publicly anyway. Uvicorn's own request and startup lines appear alongside them in
+their own format.
+
+Each Sync Run, scheduled or started with **Sync now**, writes:
+
+- `run started … mode=… reason=…`: how the run reads its calendars and why. `mode=incremental
+  reason=changes` follows the saved cursors. `mode=full` lists every event in the window, because
+  it is the rule's `first-run` or its `daily-pass`; `mode=reprojection` rewrites every projection
+  after a Material Rule Change.
+- `listing done … source events=N destination events=M`: what both calendars reported. A full
+  listing reports every event in the window, so it is much larger than an incremental one.
+- `cursor rejected … feed=source; listed in full`: Google no longer accepted the saved cursor, so
+  that calendar was listed in full instead. Expect a longer run.
+- `reprojecting remaining … mappings=N` and `pending replays … series=N`: later phases, logged only
+  when the run has them.
+- `run progress … decided=412 handled=380/840 created=3 … elapsed=12m03s google_calls=1630`:
+  written at most every 30 seconds while the run decides events. `handled` counts the events both
+  calendars reported, plus the mappings a reprojection rewrites, that the run has finished;
+  `decided` also counts each occurrence of a recurring event, so it can be larger.
+- `run finished … in 28m14s created=… google_calls=… token_refreshes=… rate_limited=…
+  server_errors=… slowest_call=1.3s`: the run's counts and how its Google calls went.
+- `run failed … kind=rate_limit after 3m02s` (WARNING): the run stopped with this failure kind; the
+  scheduler retries temporary and rate-limit failures as a new run with a new `run=` identifier.
+- `run stopped … rule changed`: the rule was paused, edited, or removed while the run was in
+  progress. Nothing needs fixing.
+
+Reconcile now and Rule Removal write one `reconciliation started`/`removal started` line and one
+`finished`, `failed`, or `interrupted` line each. A Google call slower than 10 seconds is a WARNING
+`slow google call op=events.instances status=200 took=12.4s`.
+
+To judge whether a long run is still working, compare consecutive `run progress` lines for the same
+`run=`. Rules and Rule Details show the same count while a sync runs, as "380 of 840 checked". If
+`handled`, `decided`, and `google_calls` grow, the run is progressing; a large calendar on its
+`first-run`, `daily-pass`, or `reprojection` can take many minutes. A growing `rate_limited` count
+means Google is slowing the run down and it will finish later. If no `run progress` line appears for
+several minutes and no `run finished` or `run failed` follows, the run is waiting on a single Google
+call; look for `slow google call` warnings, or turn on debug logging.
+
+Set `CALENDAR_SYNC_LOG_LEVEL=DEBUG` in `.env` and run `docker compose up -d` to also log every Google
+call as `google call op=events.get status=200 took=84ms`. Debug logging is verbose; set it back to
+`INFO` when you are done.
+
 ## An event did not synchronize
 
 Open **Activity**, filter by the rule, and choose **Skipped** or **Blocked**. Each row names the event

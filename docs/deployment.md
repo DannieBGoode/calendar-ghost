@@ -117,6 +117,12 @@ Run one application process per SQLite database. The shipped container uses one 
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.
 
+The service logs to standard error at `CALENDAR_SYNC_LOG_LEVEL` (`INFO` by default; `DEBUG` adds a
+line per Google call). Compose keeps the container's logs with the `json-file` driver capped at
+three files of 10 MB, so a long-running Raspberry Pi does not fill its storage. Read them with
+`docker compose logs -f app`; [Troubleshooting](troubleshooting.md#reading-the-logs) explains each
+line.
+
 For access beyond localhost or a trusted LAN, place the service behind HTTPS and set `CALENDAR_SYNC_SECURE_COOKIES=true`. Do not expose the service directly to the public internet.
 
 ## Raspberry Pi

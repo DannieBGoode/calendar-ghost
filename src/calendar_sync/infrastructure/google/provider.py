@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Callable, Mapping, Sequence
+import time
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -30,6 +31,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     occurrence_start,
 )
+from calendar_sync.infrastructure.google.instrumentation import record_call
 from calendar_sync.infrastructure.google.translation import (
     OPERATION_PROPERTY,
     RULE_PROPERTY,
@@ -45,9 +47,30 @@ GoogleServiceFactory = Callable[[ConnectedAccountId], Any]
 class GoogleCalendarProvider:
     """Google Calendar implementation of every application calendar role (CalendarProvider)."""
 
-    def __init__(self, service_for: GoogleServiceFactory, clock: Clock | None = None) -> None:
+    def __init__(
+        self,
+        service_for: GoogleServiceFactory,
+        clock: Clock | None = None,
+        timer: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._service_for = service_for
         self._clock = clock or SystemClock()
+        # Seconds from an arbitrary start, for timing calls; the clock tells wall time.
+        self._timer = timer
+
+    def _call(self, operation: str, request: Any) -> Any:
+        """Send one Google request, tallying and logging it by its operation name alone."""
+        started = self._timer()
+        status: int | None = 200
+        rate_limited = False
+        try:
+            return request.execute()
+        except Exception as error:
+            status = _status_code(error)
+            rate_limited = status == 429 or (status == 403 and _is_rate_limit_error(error))
+            raise
+        finally:
+            record_call(operation, status, self._timer() - started, rate_limited=rate_limited)
 
     def changes(
         self,
@@ -70,7 +93,7 @@ class GoogleCalendarProvider:
         try:
             events_api = self._service_for(source.connected_account_id).events()
             while True:
-                response = events_api.list(**parameters).execute()
+                response = self._call("events.list", events_api.list(**parameters))
                 items.extend(to_domain_event(item, source) for item in response.get("items", []))
                 page_token = response.get("nextPageToken")
                 if not page_token:
@@ -91,14 +114,14 @@ class GoogleCalendarProvider:
 
     def get_event(self, reference: EventRef) -> CalendarEvent | None:
         try:
-            payload = (
+            payload = self._call(
+                "events.get",
                 self._service_for(reference.calendar.connected_account_id)
                 .events()
                 .get(
                     calendarId=reference.calendar.calendar_id.value,
                     eventId=reference.event_id.value,
-                )
-                .execute()
+                ),
             )
             return to_domain_event(payload, reference.calendar)
         except Exception as error:
@@ -110,7 +133,8 @@ class GoogleCalendarProvider:
         self, destination: CalendarEndpoint, operation_key: str
     ) -> CalendarEvent | None:
         try:
-            existing = (
+            existing = self._call(
+                "events.list",
                 self._service_for(destination.connected_account_id)
                 .events()
                 .list(
@@ -118,10 +142,8 @@ class GoogleCalendarProvider:
                     privateExtendedProperty=f"{OPERATION_PROPERTY}={operation_key}",
                     showDeleted=False,
                     maxResults=2,
-                )
-                .execute()
-                .get("items", [])
-            )
+                ),
+            ).get("items", [])
         except Exception as error:
             raise self._failure(error, destination.connected_account_id) from error
         return to_domain_event(existing[0], destination) if existing else None
@@ -137,16 +159,16 @@ class GoogleCalendarProvider:
         existing = self.find_projection(destination, operation_key)
         if existing is not None:
             return CreatedProjection(existing)
-        service = self._service_for(destination.connected_account_id)
         try:
-            payload = (
-                service.events()
+            payload = self._call(
+                "events.insert",
+                self._service_for(destination.connected_account_id)
+                .events()
                 .insert(
                     calendarId=destination.calendar_id.value,
                     body=projection_payload(projection, rule_id, source, operation_key),
                     sendUpdates="none",
-                )
-                .execute()
+                ),
             )
             return CreatedProjection(to_domain_event(payload, destination))
         except Exception as error:
@@ -172,7 +194,8 @@ class GoogleCalendarProvider:
                 "Google event does not carry compatible ownership metadata",
             )
         try:
-            payload = (
+            payload = self._call(
+                "events.update",
                 self._service_for(destination.calendar.connected_account_id)
                 .events()
                 .update(
@@ -180,8 +203,7 @@ class GoogleCalendarProvider:
                     eventId=destination.event_id.value,
                     body=projection_payload(projection, rule_id, source, operation_key),
                     sendUpdates="none",
-                )
-                .execute()
+                ),
             )
             return to_domain_event(payload, destination.calendar)
         except Exception as error:
@@ -207,15 +229,15 @@ class GoogleCalendarProvider:
                 "Google event does not carry compatible ownership metadata"
             )
         try:
-            (
+            self._call(
+                "events.delete",
                 self._service_for(destination.calendar.connected_account_id)
                 .events()
                 .delete(
                     calendarId=destination.calendar.calendar_id.value,
                     eventId=destination.event_id.value,
                     sendUpdates="none",
-                )
-                .execute()
+                ),
             )
         except Exception as error:
             if _status_code(error) not in {404, 410}:
@@ -258,7 +280,7 @@ class GoogleCalendarProvider:
             events_api = self._service_for(calendar.connected_account_id).events()
             items: list[CalendarEvent] = []
             while True:
-                response = events_api.list(**parameters).execute()
+                response = self._call("events.list", events_api.list(**parameters))
                 items.extend(to_domain_event(item, calendar) for item in response.get("items", []))
                 page_token = response.get("nextPageToken")
                 if not page_token:
@@ -281,7 +303,7 @@ class GoogleCalendarProvider:
         try:
             events_api = self._service_for(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):
-                response = events_api.instances(**parameters).execute()
+                response = self._call("events.instances", events_api.instances(**parameters))
                 for item in response.get("items", []):
                     candidate = to_domain_event(item, series.calendar)
                     # Never trust a positional result: the instance must name the requested start.
@@ -310,6 +332,48 @@ class GoogleCalendarProvider:
             "Google did not finish resolving an occurrence within the page limit",
         )
 
+    def list_occurrences(
+        self, series: EventRef, original_starts: Collection[OccurrenceStart]
+    ) -> Mapping[OccurrenceStart, CalendarEvent]:
+        wanted = set(original_starts)
+        if not wanted:
+            return {}
+        parameters: dict[str, Any] = {
+            "calendarId": series.calendar.calendar_id.value,
+            "eventId": series.event_id.value,
+            "showDeleted": True,
+            "maxResults": 2500,
+            "fields": OCCURRENCE_EXCEPTION_FIELDS,
+            # No timeMin: it filters by where an instance is now, not by its original start. The
+            # bound only keeps an endless series from paging on; anything past it is looked up.
+            "timeMax": (max(map(_as_instant, wanted)) + OCCURRENCE_LISTING_MARGIN).isoformat(),
+        }
+        found: dict[OccurrenceStart, CalendarEvent] = {}
+        try:
+            events_api = self._service_for(series.calendar.connected_account_id).events()
+            for _ in range(OCCURRENCE_PAGE_LIMIT):
+                response = self._call("events.instances", events_api.instances(**parameters))
+                for item in response.get("items", []):
+                    candidate = to_domain_event(item, series.calendar)
+                    identity = candidate.occurrence
+                    # Never trust a positional result: the instance must name its series and start.
+                    if (
+                        identity is not None
+                        and identity.series_event_id == series.event_id
+                        and identity.original_start in wanted
+                    ):
+                        found[identity.original_start] = candidate
+                page_token = response.get("nextPageToken")
+                if not page_token or len(found) == len(wanted):
+                    break
+                parameters["pageToken"] = page_token
+        except Exception as error:
+            # A series Google cannot expand answers nothing; each lookup then decides on its own.
+            if _status_code(error) in UNLISTABLE_SERIES_STATUSES:
+                return {}
+            raise self._failure(error, series.calendar.connected_account_id) from error
+        return found
+
     def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
         parameters: dict[str, Any] = {
             "calendarId": series.calendar.calendar_id.value,
@@ -321,7 +385,7 @@ class GoogleCalendarProvider:
         try:
             events_api = self._service_for(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):
-                response = events_api.instances(**parameters).execute()
+                response = self._call("events.instances", events_api.instances(**parameters))
                 # showDeleted=False should omit cancelled instances; the status is checked anyway,
                 # because counting one as live would recreate a series that can only be cancelled.
                 if any(
@@ -364,7 +428,7 @@ class GoogleCalendarProvider:
         try:
             events_api = self._service_for(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):
-                response = events_api.instances(**parameters).execute()
+                response = self._call("events.instances", events_api.instances(**parameters))
                 for item in response.get("items", []):
                     instance = to_domain_event(item, series.calendar)
                     if _is_exception(instance, master) and instance.occurrence_reaches(
@@ -402,7 +466,8 @@ class GoogleCalendarProvider:
         )
         body["status"] = "confirmed"
         try:
-            payload = (
+            payload = self._call(
+                "events.patch",
                 self._service_for(destination_series.calendar.connected_account_id)
                 .events()
                 .patch(
@@ -410,8 +475,7 @@ class GoogleCalendarProvider:
                     eventId=instance.reference.event_id.value,
                     body=body,
                     sendUpdates="none",
-                )
-                .execute()
+                ),
             )
             return to_domain_event(payload, destination_series.calendar)
         except Exception as error:
@@ -432,15 +496,15 @@ class GoogleCalendarProvider:
         if instance is None or instance.status is EventStatus.CANCELLED:
             return
         try:
-            (
+            self._call(
+                "events.delete",
                 self._service_for(destination_series.calendar.connected_account_id)
                 .events()
                 .delete(
                     calendarId=destination_series.calendar.calendar_id.value,
                     eventId=instance.reference.event_id.value,
                     sendUpdates="none",
-                )
-                .execute()
+                ),
             )
         except Exception as error:
             if _status_code(error) not in {404, 410}:
@@ -508,6 +572,12 @@ def _is_exception(instance: CalendarEvent, master: CalendarEvent) -> bool:
     return True
 
 
+def _as_instant(start: OccurrenceStart) -> datetime:
+    if isinstance(start, datetime):
+        return start.astimezone(UTC)
+    return datetime(start.year, start.month, start.day, tzinfo=UTC)
+
+
 def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:
     return origin is not None and origin.rule_id == rule_id and origin.source == source
 
@@ -557,6 +627,8 @@ OCCURRENCE_EXCEPTION_FIELDS = (
     "originalStartTime,extendedProperties,htmlLink,attendees(email,self,responseStatus),"
     "attendeesOmitted,conferenceData(entryPoints(uri)),hangoutLink),nextPageToken"
 )
+# How far past the latest requested start a series listing reaches, for occurrences moved later.
+OCCURRENCE_LISTING_MARGIN = timedelta(days=31)
 # Answers meaning Google cannot expand this series, rather than that the request failed.
 UNLISTABLE_SERIES_STATUSES = frozenset({400, 404, 410})
 

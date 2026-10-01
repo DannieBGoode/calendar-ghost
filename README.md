@@ -223,7 +223,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_GOOGLE_CLIENT_SECRET` | For Google | OAuth Web application client secret |
 | `CALENDAR_SYNC_GOOGLE_REDIRECT_URI` | For Google | Exact registered OAuth callback |
 | `CALENDAR_SYNC_SECURE_COOKIES` | No | Set `true` when serving the app over HTTPS |
-| `CALENDAR_SYNC_LOG_LEVEL` | No | Application log level; defaults to `INFO` |
+| `CALENDAR_SYNC_LOG_LEVEL` | No | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); defaults to `INFO` |
 | `CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` | No | Receives a JSON POST when a deduplicated incident opens |
 | `CALENDAR_SYNC_SMTP_HOST` | No | SMTP server for incident email |
 | `CALENDAR_SYNC_SMTP_PORT` | No | SMTP port; defaults to `587` |
