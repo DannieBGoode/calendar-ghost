@@ -2,7 +2,10 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from calendar_sync.application.activity import ActivityEntry, ActivityFilter
+from calendar_sync.application.errors import StorageBusy
 from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import SyncReason, TimedInterval
 from calendar_sync.infrastructure.persistence.activity_queries import (
@@ -191,6 +194,40 @@ def test_compacting_returns_cleared_space_to_the_filesystem(tmp_path: Path) -> N
 
     assert path.stat().st_size < before
     assert storage.usage().reclaimable_bytes == 0
+
+
+def test_compacting_a_locked_database_raises_storage_busy(tmp_path: Path) -> None:
+    path = _database(tmp_path)
+    storage = SqliteStorage(path, busy_timeout=0.2)
+    blocker = sqlite3.connect(path)
+    blocker.execute("BEGIN IMMEDIATE")
+    try:
+        with pytest.raises(StorageBusy):
+            storage.compact()
+    finally:
+        blocker.rollback()
+        blocker.close()
+
+
+class _BrokenConnection:
+    """Stands in for a connection whose `VACUUM` fails for a reason other than contention."""
+
+    def execute(self, *args: object, **kwargs: object) -> None:
+        raise sqlite3.OperationalError("no such table: audit_entries")
+
+    def close(self) -> None:
+        pass
+
+
+def test_compacting_reraises_an_unrelated_operational_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _database(tmp_path)
+    storage = SqliteStorage(path)
+    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: _BrokenConnection())
+
+    with pytest.raises(sqlite3.OperationalError, match="no such table"):
+        storage.compact()
 
 
 def test_clearing_keeps_what_activity_reads_across_the_cutoff(tmp_path: Path) -> None:

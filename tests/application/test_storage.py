@@ -1,3 +1,4 @@
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -6,10 +7,12 @@ import pytest
 
 from calendar_sync.application.errors import FileLoggingOff, InvalidActivityAge, StorageBusy
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import DatabaseUsage, LogUsage
+from calendar_sync.application.ports import DatabaseUsage, LogUsage, UnitOfWorkFactory
 from calendar_sync.application.storage import StorageAdministration
+from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock, enabled_rule_factory
-from tests.helpers import rule
+from tests.helpers import endpoint, rule
 
 USAGE = DatabaseUsage(bytes=4096, reclaimable_bytes=0, activity_entries=3, oldest_activity_at=None)
 
@@ -48,15 +51,27 @@ class FakeLogs:
 
 
 def _storage(
-    database: FakeDatabase, logs: FakeLogs | None = None, wait: float = 0.05
+    database: FakeDatabase,
+    logs: FakeLogs | None = None,
+    wait: float = 0.05,
+    factory: UnitOfWorkFactory | None = None,
 ) -> StorageAdministration:
     return StorageAdministration(
         database,
-        enabled_rule_factory(),
+        factory or enabled_rule_factory(),
         RuleLocks(),
         FixedClock(),
         logs,
         compact_wait_seconds=wait,
+    )
+
+
+def _second_rule() -> SyncRule:
+    return SyncRule(
+        id=SyncRuleId("rule-2"),
+        source=endpoint("personal-account-2", "personal-calendar-2"),
+        destination=endpoint("work-account-2", "work-calendar-2"),
+        state=SyncRuleState.ENABLED,
     )
 
 
@@ -75,9 +90,9 @@ def test_clearing_uses_the_chosen_age_and_compacts() -> None:
 def test_only_the_offered_ages_can_be_cleared(days: int) -> None:
     storage = _storage(FakeDatabase())
 
-    with pytest.raises(InvalidActivityAge):
+    with pytest.raises(InvalidActivityAge, match="Choose 30, 90, 180 or 365 days"):
         storage.clear_activity(days)
-    with pytest.raises(InvalidActivityAge):
+    with pytest.raises(InvalidActivityAge, match="Choose 30, 90, 180 or 365 days"):
         storage.clearable_activity(days)
 
 
@@ -109,6 +124,69 @@ def test_compacting_holds_every_rule_lock_and_releases_them() -> None:
 
     assert held == [True]
     assert not lock.locked()
+
+
+def test_compacting_with_no_rules_runs_straight_away() -> None:
+    database = FakeDatabase()
+    storage = _storage(database, factory=InMemoryUnitOfWorkFactory())
+
+    storage.clear_activity(30)
+
+    assert database.compactions == 1
+
+
+def test_compacting_releases_the_first_lock_when_a_second_times_out() -> None:
+    database = FakeDatabase()
+    second = _second_rule()
+    factory = enabled_rule_factory()
+    with factory() as uow:
+        uow.rules.add(second)
+        uow.commit()
+    storage = _storage(database, factory=factory, wait=0.05)
+    first_lock = storage.locks.for_rule(rule().id)
+    second_lock = storage.locks.for_rule(second.id)
+    second_lock.acquire()
+    try:
+        with pytest.raises(StorageBusy):
+            storage.clear_activity(30)
+        # The lock that timed out was never ours to release: it is still held, by this test.
+        assert second_lock.locked()
+        assert not first_lock.locked()
+    finally:
+        second_lock.release()
+
+    assert database.compactions == 0
+
+
+def test_compacting_locks_a_rule_created_while_it_waits_on_another() -> None:
+    """A rule added mid-wait is itself locked before `VACUUM` runs, never compacted around."""
+    database = FakeDatabase()
+    second = _second_rule()
+    factory = enabled_rule_factory()
+    storage = _storage(database, factory=factory, wait=1.0)
+    first_lock = storage.locks.for_rule(rule().id)
+    first_lock.acquire()
+    held: list[tuple[bool, bool]] = []
+
+    def _record_and_compact() -> None:
+        held.append((first_lock.locked(), storage.locks.for_rule(second.id).locked()))
+
+    database.compact = _record_and_compact  # type: ignore[method-assign]
+
+    def _add_rule_then_release_first() -> None:
+        with factory() as uow:
+            uow.rules.add(second)
+            uow.commit()
+        first_lock.release()
+
+    adder = threading.Thread(target=_add_rule_then_release_first)
+    adder.start()
+    storage.clear_activity(30)
+    adder.join()
+
+    assert held == [(True, True)]
+    assert not first_lock.locked()
+    assert not storage.locks.for_rule(second.id).locked()
 
 
 def test_clearing_twice_is_not_an_error() -> None:

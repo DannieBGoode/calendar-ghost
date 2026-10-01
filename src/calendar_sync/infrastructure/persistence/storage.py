@@ -7,6 +7,7 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
+from calendar_sync.application.errors import STORAGE_BUSY_MESSAGE, StorageBusy
 from calendar_sync.application.ports import DatabaseUsage
 from calendar_sync.infrastructure.persistence.activity_queries import _TITLE_OBSERVED
 
@@ -28,9 +29,10 @@ _PROTECTED = f"""
 
 
 class SqliteStorage:
-    def __init__(self, database_path: Path, batch: int = 5000) -> None:
+    def __init__(self, database_path: Path, batch: int = 5000, busy_timeout: float = 30.0) -> None:
         self._database_path = database_path
         self._batch = batch
+        self._busy_timeout = busy_timeout
 
     def usage(self) -> DatabaseUsage:
         with closing(sqlite3.connect(self._database_path)) as connection:
@@ -91,5 +93,15 @@ class SqliteStorage:
                     )
 
     def compact(self) -> None:
-        with closing(sqlite3.connect(self._database_path, isolation_level=None)) as connection:
-            connection.execute("VACUUM")
+        try:
+            with closing(
+                sqlite3.connect(
+                    self._database_path, isolation_level=None, timeout=self._busy_timeout
+                )
+            ) as connection:
+                connection.execute("VACUUM")
+        except sqlite3.OperationalError as error:
+            detail = str(error).lower()
+            if "locked" in detail or "busy" in detail:
+                raise StorageBusy(STORAGE_BUSY_MESSAGE) from error
+            raise

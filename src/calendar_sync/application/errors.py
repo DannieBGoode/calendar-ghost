@@ -173,8 +173,19 @@ class InvalidActivityAge(ApplicationError):
     """Activity can be cleared only from one of the offered ages."""
 
 
+STORAGE_BUSY_MESSAGE = (
+    "Old Activity was cleared, but its space could not be reclaimed while a rule is "
+    "synchronizing. Try again when it finishes."
+)
+
+
 class StorageBusy(ApplicationError):
-    """Rule work kept the database from being compacted."""
+    """Rule work kept the database from being compacted.
+
+    Raised by the storage use case when a rule's lock cannot be acquired before its deadline, and
+    by the SQLite adapter when `VACUUM` itself reports the database is locked -- a database user
+    rule locks do not cover, such as a lifecycle change, Activity read, or health write.
+    """
 
 
 class FileLoggingOff(ApplicationError):
