@@ -32,7 +32,12 @@ Storage
   `<data dir>/logs/calendar-sync.log`, next to the database. `CALENDAR_SYNC_LOG_DIR` overrides the
   location; an empty value turns file logging off.
 - **Rotation.** `RotatingFileHandler` with 5 MB files, the current file plus 4 rotated ones, so
-  at most 25 MB in total.
+  at most 25 MB in total. When the current file reaches 5 MB:
+  - it is renamed to `.1`, each older file moves up one number, and the oldest (`.4`) is deleted;
+  - logging continues in a new, empty current file.
+
+  Logs are never lost because a limit was reached, and logging never stops. The oldest 5 MB is
+  always what goes first, so the files always hold the most recent roughly 25 MB of lines.
 - **Docker's copy.** Docker's own copy is capped by `docker-compose.yml` (10 MB × 3), which is part
   of the run-logging change.
 - **Content.** The same content rules as the console: rule and run IDs, operation names, counts,
