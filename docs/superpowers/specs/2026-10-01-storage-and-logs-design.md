@@ -69,20 +69,24 @@ Storage
 - **Allowed values for N:** 30, 90, 180 and 365. Nothing shorter than 30 days, so a Sync Run
   window or a recent investigation is never cut short.
 
-**Kept regardless of age**, because run-health bookkeeping and Activity's naming depend on them:
+**What is kept.** Every entry newer than the cutoff, and, for each rule and source event, two
+entries older than it:
 
-1. Each rule's latest entry for each source event. This keeps open blocks and the dashboard's
-   blocked-entry links.
-2. Each rule's latest entry for each source event at or before that rule's last block check
-   (`rule_block_checks.audit_floor`). Without it, a block that persists across a daily pass could
-   miss its "blocked" incident.
-3. Each rule's latest entry for each source event that recorded a title. Activity names a
-   cancellation recorded without a title from it.
+1. **The latest entry older than the cutoff.** Activity compares an entry with the event's
+   previous one, both to show a repair as repeated and to show an earlier name or time. A block
+   check compares a block with the event's decision before the pass began. Each reads at most one
+   entry past the cutoff, and this is that entry. It also keeps an event's latest entry when every
+   entry is old, which keeps its open blocks and the dashboard's blocked-entry links.
+2. **The latest entry older than the cutoff that recorded a title.** Activity names a cancellation
+   recorded without a title from the event's previous titled entry.
 
 **Removed:** every other entry older than the cutoff, including those of removed rules. These are
-history, not state. Incidents keep no Audit Entry IDs, so they are unaffected. An old rename shown
-on a kept entry ("renamed from …") loses its earlier name once the entry that recorded it is
-cleared. That is accepted, and the ADR records it.
+history, not state. Incidents keep no Audit Entry IDs, so they are unaffected.
+
+**What changes.** Entries newer than the cutoff show exactly what they showed before. The two kept
+old entries lose the earlier entries they were compared with: an old entry may stop reading as a
+repeated repair, or lose the earlier name or time it was renamed or moved from. That is accepted,
+and the ADR records it.
 
 **Deletion and space reclaim**
 
@@ -119,6 +123,8 @@ cleared. That is accepted, and the ADR records it.
 - Size, reclaimable bytes, the entry count and the oldest entry are reported correctly.
 - Clearing keeps both protected entries for each event, and removes the rest older than the
   cutoff, across several rules, including removed ones.
+- What Activity shows for entries newer than the cutoff (titles, repeated repairs, earlier names
+  and times) is the same before and after clearing.
 - After clearing, open blocks, persisting-block incidents and the titles of cancellations are
   unchanged.
   These tests seed SQLite, run the existing queries, and compare the results before and after.
