@@ -300,7 +300,7 @@ export function RuleDetailsView({
           </div>
           <div>
             <dt>Invitations you haven't answered</dt>
-            <dd>{unansweredFact(detail.unanswered_invitations)}</dd>
+            <dd>{unansweredFact(detail)}</dd>
           </div>
           <div>
             <dt>Declined events</dt>

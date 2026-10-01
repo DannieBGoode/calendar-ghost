@@ -1,7 +1,7 @@
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import type { RulePolicyPayload, TentativeEvents, UnansweredInvitations } from "@/lib/api"
-import { TENTATIVE_OPTIONS, UNANSWERED_HINT, UNANSWERED_OPTIONS, tentativeHint } from "@/lib/invitation-responses"
+import { TENTATIVE_OPTIONS, UNANSWERED_OPTIONS, tentativeHint, unansweredHint } from "@/lib/invitation-responses"
 
 type ResponsePolicy = Pick<RulePolicyPayload, "privacy_policy" | "tentative_events" | "unanswered_invitations">
 
@@ -55,7 +55,7 @@ export function InvitationResponseFields({
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </NativeSelect>
-        <p id={`${unansweredId}-hint`} className="field-hint">{UNANSWERED_HINT}</p>
+        <p id={`${unansweredId}-hint`} className="field-hint">{unansweredHint(policy)}</p>
       </div>
     </>
   )

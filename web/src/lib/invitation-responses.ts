@@ -30,18 +30,23 @@ const TENTATIVE_FACTS: Record<Exclude<TentativeEvents, "mark">, string> = {
   skip: "Not synced",
 }
 
-const UNANSWERED_FACTS: Record<UnansweredInvitations, string> = {
-  as_tentative: "Synced as Maybe",
-  wait: "Not synced until answered",
-}
 
 export function tentativeFact(policy: Pick<RulePolicyPayload, "privacy_policy" | "tentative_events">): string {
   if (policy.tentative_events === "mark") return `Synced as ${tentativeTitle(policy.privacy_policy)}`
   return TENTATIVE_FACTS[policy.tentative_events]
 }
 
-export function unansweredFact(unanswered: UnansweredInvitations): string {
-  return UNANSWERED_FACTS[unanswered]
+/** Unanswered invitations treated as Maybe follow the Maybe choice, including not being synced. */
+export function unansweredFact(policy: Pick<RulePolicyPayload, "tentative_events" | "unanswered_invitations">): string {
+  if (policy.unanswered_invitations === "wait") return "Not synced until answered"
+  return policy.tentative_events === "skip" ? "Not synced, like events you answered Maybe" : "Synced as Maybe"
+}
+
+export function unansweredHint(policy: Pick<RulePolicyPayload, "tentative_events" | "unanswered_invitations">): string {
+  if (policy.unanswered_invitations === "as_tentative" && policy.tentative_events === "skip") {
+    return `Treated as Maybe, so they stay out of the destination too. ${UNANSWERED_HINT}`
+  }
+  return UNANSWERED_HINT
 }
 
 /** Whether invitations not answered yet are projected under this policy. */

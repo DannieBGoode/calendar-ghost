@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { RulePolicyPayload } from "./api"
-import { responseConsequences, tentativeFact, tentativeHint, unansweredFact } from "./invitation-responses"
+import { responseConsequences, tentativeFact, tentativeHint, unansweredFact, unansweredHint } from "./invitation-responses"
 
 const marked: RulePolicyPayload = {
   privacy_policy: "busy_only",
@@ -19,7 +19,17 @@ describe("invitation responses", () => {
     expect(tentativeHint({ ...marked, tentative_events: "sync" })).toBe("Shown the same as events you accepted.")
     expect(tentativeFact({ ...marked, tentative_events: "skip" })).toBe("Not synced")
     expect(tentativeFact(marked)).toBe("Synced as “Busy (tentative)”")
-    expect(unansweredFact("wait")).toBe("Not synced until answered")
+    expect(unansweredFact({ ...marked, unanswered_invitations: "wait" })).toBe("Not synced until answered")
+    expect(unansweredFact(marked)).toBe("Synced as Maybe")
+  })
+
+  it("says unanswered invitations treated as Maybe are not synced when Maybe events are not", () => {
+    const skipping = { ...marked, tentative_events: "skip" } as const
+    expect(unansweredFact(skipping)).toBe("Not synced, like events you answered Maybe")
+    expect(unansweredHint(skipping)).toBe(
+      "Treated as Maybe, so they stay out of the destination too. Declined events are never synced.",
+    )
+    expect(unansweredHint(marked)).toBe("Declined events are never synced.")
   })
 
   it("says what changing the Maybe choice does", () => {
