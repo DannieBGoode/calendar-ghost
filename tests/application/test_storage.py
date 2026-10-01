@@ -7,11 +7,10 @@ import pytest
 
 from calendar_sync.application.errors import FileLoggingOff, InvalidActivityAge, StorageBusy
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import DatabaseUsage, LogUsage, UnitOfWorkFactory
+from calendar_sync.application.ports import DatabaseUsage, LogUsage
 from calendar_sync.application.storage import StorageAdministration
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
-from tests.fake_calendar import FixedClock, enabled_rule_factory
+from tests.fake_calendar import FixedClock
 from tests.helpers import endpoint, rule
 
 USAGE = DatabaseUsage(bytes=4096, reclaimable_bytes=0, activity_entries=3, oldest_activity_at=None)
@@ -51,18 +50,10 @@ class FakeLogs:
 
 
 def _storage(
-    database: FakeDatabase,
-    logs: FakeLogs | None = None,
-    wait: float = 0.05,
-    factory: UnitOfWorkFactory | None = None,
+    database: FakeDatabase, logs: FakeLogs | None = None, wait: float = 0.05
 ) -> StorageAdministration:
     return StorageAdministration(
-        database,
-        factory or enabled_rule_factory(),
-        RuleLocks(),
-        FixedClock(),
-        logs,
-        compact_wait_seconds=wait,
+        database, RuleLocks(), FixedClock(), logs, compact_wait_seconds=wait
     )
 
 
@@ -128,7 +119,7 @@ def test_compacting_holds_every_rule_lock_and_releases_them() -> None:
 
 def test_compacting_with_no_rules_runs_straight_away() -> None:
     database = FakeDatabase()
-    storage = _storage(database, factory=InMemoryUnitOfWorkFactory())
+    storage = _storage(database)
 
     storage.clear_activity(30)
 
@@ -137,14 +128,9 @@ def test_compacting_with_no_rules_runs_straight_away() -> None:
 
 def test_compacting_releases_the_first_lock_when_a_second_times_out() -> None:
     database = FakeDatabase()
-    second = _second_rule()
-    factory = enabled_rule_factory()
-    with factory() as uow:
-        uow.rules.add(second)
-        uow.commit()
-    storage = _storage(database, factory=factory, wait=0.05)
+    storage = _storage(database, wait=0.05)
     first_lock = storage.locks.for_rule(rule().id)
-    second_lock = storage.locks.for_rule(second.id)
+    second_lock = storage.locks.for_rule(_second_rule().id)
     second_lock.acquire()
     try:
         with pytest.raises(StorageBusy):
@@ -158,35 +144,30 @@ def test_compacting_releases_the_first_lock_when_a_second_times_out() -> None:
     assert database.compactions == 0
 
 
-def test_compacting_locks_a_rule_created_while_it_waits_on_another() -> None:
-    """A rule added mid-wait is itself locked before `VACUUM` runs, never compacted around."""
+# Regression: PR #34 review — a rule created after the last check could start during VACUUM
+def test_a_rule_first_run_while_compacting_waits_for_it_to_finish() -> None:
     database = FakeDatabase()
-    second = _second_rule()
-    factory = enabled_rule_factory()
-    storage = _storage(database, factory=factory, wait=1.0)
-    first_lock = storage.locks.for_rule(rule().id)
-    first_lock.acquire()
-    held: list[tuple[bool, bool]] = []
+    storage = _storage(database, wait=1.0)
+    blocked: list[bool] = []
 
-    def _record_and_compact() -> None:
-        held.append((first_lock.locked(), storage.locks.for_rule(second.id).locked()))
+    def _new_rule_runs_during_compaction() -> None:
+        def first_run() -> None:
+            lock = storage.locks.for_rule(_second_rule().id)
+            acquired = lock.acquire(timeout=0.05)
+            blocked.append(not acquired)
+            if acquired:
+                lock.release()
 
-    database.compact = _record_and_compact  # type: ignore[method-assign]
+        thread = threading.Thread(target=first_run)
+        thread.start()
+        thread.join()
 
-    def _add_rule_then_release_first() -> None:
-        with factory() as uow:
-            uow.rules.add(second)
-            uow.commit()
-        first_lock.release()
+    database.compact = _new_rule_runs_during_compaction  # type: ignore[method-assign]
 
-    adder = threading.Thread(target=_add_rule_then_release_first)
-    adder.start()
     storage.clear_activity(30)
-    adder.join()
 
-    assert held == [(True, True)]
-    assert not first_lock.locked()
-    assert not storage.locks.for_rule(second.id).locked()
+    assert blocked == [True]
+    assert not storage.locks.for_rule(_second_rule().id).locked()
 
 
 def test_clearing_twice_is_not_an_error() -> None:

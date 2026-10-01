@@ -285,9 +285,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         administrator=adapters.administrator,
         activity=adapters.activity,
         operations=adapters.operations,
-        storage=StorageAdministration(
-            adapters.database_storage, unit_of_work, locks, clock, adapters.log_files
-        ),
+        storage=StorageAdministration(adapters.database_storage, locks, clock, adapters.log_files),
         get_dashboard=GetDashboard(unit_of_work, adapters.operations),
         inspect_activity_event=InspectActivityEvent(adapters.activity, unit_of_work, provider),
         list_sync_rules=ListSyncRules(unit_of_work, locks),

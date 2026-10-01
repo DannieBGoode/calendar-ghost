@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import logging
-import time
 from collections.abc import Iterator
-from contextlib import ExitStack
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -22,9 +20,7 @@ from calendar_sync.application.ports import (
     DatabaseUsage,
     LogFiles,
     LogUsage,
-    UnitOfWorkFactory,
 )
-from calendar_sync.domain.model import SyncRuleId
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +44,6 @@ class ClearedActivity:
 @dataclass(slots=True)
 class StorageAdministration:
     database: DatabaseStorage
-    unit_of_work: UnitOfWorkFactory
     locks: RuleLocks
     clock: Clock
     logs: LogFiles | None = None
@@ -85,28 +80,15 @@ class StorageAdministration:
         return self.clock.now() - timedelta(days=older_than_days)
 
     def _compact(self) -> None:
-        """Compact while every rule's lock is held, a run in progress waited for, never cut off.
+        """Compact while every rule's lock is held: a run in progress is waited for, never cut off.
 
-        A rule created while waiting is itself locked and re-checked, rather than compacting
-        around it, so a "Sync now" on a brand-new rule can never run concurrently with `VACUUM`.
+        A rule created meanwhile is held too, so its first run cannot start beside `VACUUM`.
         """
-        deadline = time.monotonic() + self.compact_wait_seconds
-        with ExitStack() as held:
-            locked: set[SyncRuleId] = set()
-            pending = self._rule_ids()
-            while pending:
-                for rule_id in pending:
-                    lock = self.locks.for_rule(rule_id)
-                    if not lock.acquire(timeout=max(0.0, deadline - time.monotonic())):
-                        raise StorageBusy(STORAGE_BUSY_MESSAGE)
-                    held.callback(lock.release)
-                    locked.add(rule_id)
-                pending = tuple(rule_id for rule_id in self._rule_ids() if rule_id not in locked)
-            self.database.compact()
-
-    def _rule_ids(self) -> tuple[SyncRuleId, ...]:
-        with self.unit_of_work() as uow:
-            return tuple(sorted((rule.id for rule in uow.rules.list()), key=lambda r: r.value))
+        try:
+            with self.locks.every_rule(self.compact_wait_seconds):
+                self.database.compact()
+        except TimeoutError as error:
+            raise StorageBusy(STORAGE_BUSY_MESSAGE) from error
 
     def _log_files(self) -> LogFiles:
         if self.logs is None:
