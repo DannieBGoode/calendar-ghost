@@ -69,16 +69,20 @@ Storage
 - **Allowed values for N:** 30, 90, 180 and 365. Nothing shorter than 30 days, so a Sync Run
   window or a recent investigation is never cut short.
 
-**Kept regardless of age**, because the run-health bookkeeping depends on them:
+**Kept regardless of age**, because run-health bookkeeping and Activity's naming depend on them:
 
-1. Each rule's latest entry for each source event. This keeps open blocks, the dashboard's
-   blocked-entry links, and the names Activity shows for renames and cancellations.
+1. Each rule's latest entry for each source event. This keeps open blocks and the dashboard's
+   blocked-entry links.
 2. Each rule's latest entry for each source event at or before that rule's last block check
    (`rule_block_checks.audit_floor`). Without it, a block that persists across a daily pass could
    miss its "blocked" incident.
+3. Each rule's latest entry for each source event that recorded a title. Activity names a
+   cancellation recorded without a title from it.
 
 **Removed:** every other entry older than the cutoff, including those of removed rules. These are
-history, not state. Incidents keep no Audit Entry IDs, so they are unaffected.
+history, not state. Incidents keep no Audit Entry IDs, so they are unaffected. An old rename shown
+on a kept entry ("renamed from …") loses its earlier name once the entry that recorded it is
+cleared. That is accepted, and the ADR records it.
 
 **Deletion and space reclaim**
 
@@ -115,7 +119,8 @@ history, not state. Incidents keep no Audit Entry IDs, so they are unaffected.
 - Size, reclaimable bytes, the entry count and the oldest entry are reported correctly.
 - Clearing keeps both protected entries for each event, and removes the rest older than the
   cutoff, across several rules, including removed ones.
-- After clearing, open blocks, persisting-block incidents and renamed-from names are unchanged.
+- After clearing, open blocks, persisting-block incidents and the titles of cancellations are
+  unchanged.
   These tests seed SQLite, run the existing queries, and compare the results before and after.
 - Batching works across several batches.
 - `VACUUM` shrinks the file.
