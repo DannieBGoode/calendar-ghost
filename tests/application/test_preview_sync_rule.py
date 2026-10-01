@@ -15,11 +15,14 @@ from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     ConnectedAccountId,
     EventStatus,
+    InvitationResponse,
     ManagedOrigin,
     SyncAction,
     SyncRuleId,
     SyncRuleState,
+    TentativeEventPolicy,
     TransformationPolicy,
+    UnansweredInvitationPolicy,
 )
 from calendar_sync.domain.services import (
     EventProjector,
@@ -249,6 +252,37 @@ def test_preview_under_an_all_day_exclusion_skips_a_series_left_with_only_all_da
 
     assert excluded.recurring_series == 0
     assert included.recurring_series == 1
+
+
+def test_preview_excludes_declined_events_and_follows_the_rules_response_choices() -> None:
+    calendars = FakeCalendars()
+    responses = {
+        "declined": InvitationResponse.DECLINED,
+        "maybe": InvitationResponse.TENTATIVE,
+        "unanswered": InvitationResponse.AWAITING,
+        "accepted": InvitationResponse.ACCEPTED,
+    }
+    for event_id, response in responses.items():
+        calendars.put(replace(event(event_id), response=response))
+    strict = replace(
+        rule(state=SyncRuleState.DRAFT),
+        transformation=TransformationPolicy(
+            tentative=TentativeEventPolicy.SKIP, unanswered=UnansweredInvitationPolicy.WAIT
+        ),
+    )
+
+    marking = _preview(enabled_rule_factory(rule(state=SyncRuleState.DRAFT)), calendars).execute(
+        rule().id
+    )
+    skipping = _preview(enabled_rule_factory(strict), calendars).execute(rule().id)
+
+    assert (marking.eligible_events, marking.excluded_events) == (3, 1)
+    assert sorted(item.projected_title for item in marking.sample) == [
+        "Busy",
+        "Busy (tentative)",
+        "Busy (tentative)",
+    ]
+    assert (skipping.eligible_events, skipping.excluded_events) == (1, 3)
 
 
 def test_preview_cannot_reach_a_provider_write() -> None:

@@ -11,14 +11,17 @@ import {
   runOutcomeSummary,
 } from "./rule-change"
 
-const busy = { privacy_policy: "busy_only", sync_all_day_events: true } as const
-const details = { privacy_policy: "copy_details", sync_all_day_events: true } as const
+const responses = { tentative_events: "mark", unanswered_invitations: "as_tentative" } as const
+const busy = { privacy_policy: "busy_only", sync_all_day_events: true, ...responses } as const
+const details = { privacy_policy: "copy_details", sync_all_day_events: true, ...responses } as const
 
 describe("policy change consequences", () => {
   it("detects changes", () => {
     expect(policyChanged(busy, busy)).toBe(false)
     expect(policyChanged(busy, details)).toBe(true)
     expect(policyChanged(busy, { ...busy, sync_all_day_events: false })).toBe(true)
+    expect(policyChanged(busy, { ...busy, tentative_events: "skip" })).toBe(true)
+    expect(policyChanged(busy, { ...busy, unanswered_invitations: "wait" })).toBe(true)
   })
 
   it("warns before exposing event details", () => {
@@ -40,7 +43,7 @@ describe("policy change consequences", () => {
     const lines = policyChangeConsequences({
       state: "draft",
       current: details,
-      next: { privacy_policy: "busy_only", sync_all_day_events: false },
+      next: { ...busy, sync_all_day_events: false },
       mappingCount: 1,
       destination: "Work",
     })

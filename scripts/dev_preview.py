@@ -56,6 +56,7 @@ from calendar_sync.domain.model import (
     EventId,
     EventRef,
     EventStatus,
+    InvitationResponse,
     Recurrence,
     SyncReason,
     SyncRule,
@@ -313,6 +314,10 @@ def _history() -> Iterator[SeededEntry]:
     # An occurrence the destination series does not have, blocked after checking the series.
     yield entry(8, family, "preview-run-8", "conflict", "destination_occurrence_missing", "piano")
     yield entry(5, personal, None, "policy_changed", None, None)
+    # Answers to invitations: accepting a Maybe, declining, and one not answered yet.
+    yield entry(3, personal, "preview-run-9", "update", "source_changed", "pta")
+    yield entry(3, personal, "preview-run-9", "delete", "declined_removed", "school")
+    yield entry(3, personal, "preview-run-9", "ignore", "awaiting_response", "dentist", False)
 
 
 def _audit_entry(seeded: SeededEntry, calendar: PreviewCalendar, now: datetime) -> AuditEntry:
@@ -351,6 +356,7 @@ PREVIEW_CHANGES = {
         "guests": ("ana@example.com", "ben@example.com"),
     },
     ("preview-run-4", "gym"): {"guests": ("ana@example.com",)},
+    ("preview-run-9", "pta"): {"response": InvitationResponse.TENTATIVE},
 }
 
 

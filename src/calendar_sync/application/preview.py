@@ -15,7 +15,6 @@ from calendar_sync.application.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.model import (
-    AllDaySyncPolicy,
     CalendarEvent,
     EventRef,
     EventStatus,
@@ -52,7 +51,7 @@ def _excluded(event: CalendarEvent, rule: SyncRule) -> bool:
     return (
         event.managed_origin is not None
         or event.status is EventStatus.CANCELLED
-        or (event.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE)
+        or rule.transformation.exclusion(event) is not None
     )
 
 
@@ -197,8 +196,9 @@ class PreviewSyncRule:
         start = event.occurrence.original_start
         series_mapping = uow.mappings.for_source(rule.id, parent.reference)
         if series_mapping is None:
-            cancels = event.status is EventStatus.CANCELLED or (
-                event.is_all_day and rule.transformation.all_day is AllDaySyncPolicy.EXCLUDE
+            cancels = (
+                event.status is EventStatus.CANCELLED
+                or rule.transformation.exclusion(event) is not None
             )
             action = SyncAction.DELETE if cancels else SyncAction.UPDATE
         else:

@@ -31,7 +31,8 @@ out persisting descriptions, locations, attendees, and conferencing data.
   Audit Entry: which fields changed, and their values before and after. The first observation of an
   event records no change. Observations are updated only by recorded decisions, so a change is
   never absorbed by a decision Activity does not show.
-- Responses to invitations, reminders, colours, and other fields are not tracked. A revision that
+- Responses to invitations, reminders, colours, and other fields are not tracked. (ADR 0018 later
+  tracks the Source Calendar's own response, because it now decides the projection.) A revision that
   changed none of the tracked fields records no Source Change, and its decision reads as
   "already up to date".
 - Guests are compared as the set of attendee email addresses; a response or display-name change is

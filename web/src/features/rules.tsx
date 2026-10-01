@@ -13,11 +13,19 @@ import {
   RuleStatusBadge,
   RuleWorkNote,
 } from "@/components/rule-commands"
+import { InvitationResponseFields } from "@/components/invitation-response-fields"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
-import { api, type ConnectedAccount, type DiscoveredCalendar, type Rule } from "@/lib/api"
+import {
+  api,
+  type ConnectedAccount,
+  type DiscoveredCalendar,
+  type Rule,
+  type TentativeEvents,
+  type UnansweredInvitations,
+} from "@/lib/api"
 import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
@@ -306,6 +314,10 @@ function RuleBuilder({
   const [destinationCalendar, setDestinationCalendar] = useState("")
   const [privacy, setPrivacy] = useState<"busy_only" | "copy_details">("busy_only")
   const [allDay, setAllDay] = useState(true)
+  const [responses, setResponses] = useState<{
+    tentative_events: TentativeEvents
+    unanswered_invitations: UnansweredInvitations
+  }>({ tentative_events: "mark", unanswered_invitations: "as_tentative" })
 
   useEffect(() => {
     heading.current?.focus()
@@ -346,6 +358,7 @@ function RuleBuilder({
         destination: { connected_account_id: resolvedDestinationAccount, calendar_id: resolvedDestinationCalendar },
         privacy_policy: privacy,
         sync_all_day_events: allDay,
+        ...responses,
       }),
     onSuccess: async (rule) => {
       await Promise.all([
@@ -447,6 +460,11 @@ function RuleBuilder({
             </NativeSelect>
           </div>
           <label className="checkbox-row"><input type="checkbox" checked={allDay} onChange={(event) => setAllDay(event.target.checked)} /><span><strong>Sync all-day events</strong><small>Turn this off to synchronize timed events only.</small></span></label>
+          <InvitationResponseFields
+            idPrefix=""
+            policy={{ privacy_policy: privacy, ...responses }}
+            onChange={setResponses}
+          />
         </fieldset>
         {create.error && <div className="inline-error" role="alert">{create.error.message}</div>}
         <div className="form-actions"><Button type="submit" disabled={!canSubmit || create.isPending}>{create.isPending ? "Saving draft…" : "Save rule draft"}</Button></div>

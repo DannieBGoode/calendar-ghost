@@ -6,13 +6,14 @@ The canonical glossary is [CONTEXT.md](../CONTEXT.md). This document explains ag
 
 A Directional Sync Rule identifies one source Calendar Endpoint and one destination Calendar Endpoint. Each endpoint combines a Connected Account identity with a provider calendar identity, so a rule may cross Google identities. Rules may form one-to-many or many-to-one topologies, but an exact directional relationship is unique.
 
-The rule owns its Transformation Policy, all-day eligibility, initial lookback, and lifecycle. A new or materially changed rule must pass Rule Preview before enabling. Editing the transformation policy or all-day eligibility sets a persisted reprojection flag that the next successful Sync Run clears after rewriting every mapped projection. Source and destination are fixed for the life of a rule; changing either is a Rule Replacement.
+The rule owns its Transformation Policy, all-day eligibility, Tentative Event and Unanswered Invitation Policies, initial lookback, and lifecycle. A new or materially changed rule must pass Rule Preview before enabling. Editing any of these policies sets a persisted reprojection flag that the next successful Sync Run clears after rewriting every mapped projection. Source and destination are fixed for the life of a rule; changing either is a Rule Replacement.
 
 Invariants:
 
 - Source and destination endpoints cannot be identical.
 - Busy-only is the default transformation policy.
 - All-day events are included by default and may be excluded per rule.
+- Declined events are never projected. Events answered Maybe are marked as tentative by default, and unanswered invitations are treated as Maybe by default; both may be changed per rule ([ADR 0018](adr/0018-project-by-invitation-response.md)).
 - Destination content is never authoritative.
 - Managed projections are never eligible sources.
 

@@ -12,6 +12,7 @@ from calendar_sync.domain.model import (
     AllDayRange,
     EventId,
     EventRef,
+    InvitationResponse,
     Recurrence,
     SyncReason,
     TimedInterval,
@@ -69,6 +70,44 @@ def test_an_observation_round_trips_and_is_sealed_at_rest(tmp_path: Path) -> Non
     assert b"Sensitive description" not in stored
     assert b"ben@example.com" not in stored
     assert b"1234#" not in stored
+
+
+def test_a_response_round_trips_and_one_sealed_before_it_was_tracked_reads_as_unknown(
+    tmp_path: Path,
+) -> None:
+    factory = _factory(tmp_path)
+    maybe = _observation(response=InvitationResponse.TENTATIVE)
+    with factory() as uow:
+        uow.observations.save(rule().id, event().reference, maybe, NOW)
+        uow.commit()
+    with factory() as uow:
+        assert uow.observations.get(rule().id, event().reference) == maybe
+    context = "observation|" + "|".join(
+        (rule().id.value, "personal-account", "personal-calendar", "source-event")
+    )
+    details: dict[str, object] = {
+        "time": {
+            "all_day": False,
+            "starts": NOW.isoformat(),
+            "ends": (NOW + timedelta(hours=1)).isoformat(),
+        },
+        "description": "",
+        "location": "",
+        "recurrence": [],
+        "guests": None,
+        "conferencing": None,
+    }
+    with sqlite3.connect(tmp_path / "calendar-sync.db") as connection:
+        connection.execute(
+            "UPDATE source_observations SET sealed = ?",
+            (HISTORY.seal(json.dumps(details), context),),
+        )
+
+    with factory() as uow:
+        earlier = uow.observations.get(rule().id, event().reference)
+
+    assert earlier is not None
+    assert earlier.response is None
 
 
 def test_an_all_day_observation_round_trips(tmp_path: Path) -> None:
@@ -292,3 +331,42 @@ def test_a_sync_run_records_a_busy_only_rename_in_sqlite_without_a_write(tmp_pat
         mapping = uow.mappings.for_source(rule().id, event().reference)
     assert mapping is not None
     assert mapping.source_revision == "revision-2"
+
+
+def test_answering_a_maybe_event_rewrites_it_and_records_the_response(tmp_path: Path) -> None:
+    factory = _factory(tmp_path)
+    calendars = FakeCalendars()
+    calendars.put(replace(event(), response=InvitationResponse.TENTATIVE))
+    sync = sync_use_case(factory, calendars)
+    sync.execute(rule().id)
+    with factory() as uow:
+        mapping = uow.mappings.for_source(rule().id, event().reference)
+    assert mapping is not None
+    assert calendars.events[mapping.destination].title == "Busy (tentative)"
+
+    accepted = replace(event(), revision="revision-2", response=InvitationResponse.ACCEPTED)
+    calendars.report(calendars.put(accepted))
+    sync.execute(rule().id)
+
+    assert calendars.events[mapping.destination].title == "Busy"
+    row = _latest_entry(tmp_path)
+    assert (row["reason"], json.loads(row["change_fields"])) == ("source_changed", ["response"])
+    assert open_change_values(HISTORY, row) == {
+        "response": {"before": "tentative", "after": "accepted"}
+    }
+
+    declined = replace(event(), revision="revision-3", response=InvitationResponse.DECLINED)
+    calendars.report(calendars.put(declined))
+    sync.execute(rule().id)
+
+    assert mapping.destination not in calendars.events
+    assert _latest_entry(tmp_path)["reason"] == "declined_removed"
+
+
+def _latest_entry(tmp_path: Path) -> sqlite3.Row:
+    with sqlite3.connect(tmp_path / "calendar-sync.db") as connection:
+        connection.row_factory = sqlite3.Row
+        row: sqlite3.Row = connection.execute(
+            "SELECT * FROM audit_entries ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return row

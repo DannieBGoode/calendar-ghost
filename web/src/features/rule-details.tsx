@@ -12,6 +12,7 @@ import {
   RuleStatusBadge,
   RuleWorkNote,
 } from "@/components/rule-commands"
+import { InvitationResponseFields } from "@/components/invitation-response-fields"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -47,6 +48,7 @@ import {
   type RemovalOutcome,
   runOutcomeSummary,
 } from "@/lib/rule-change"
+import { tentativeFact, unansweredFact } from "@/lib/invitation-responses"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 import {
   elapsedLabel,
@@ -293,6 +295,18 @@ export function RuleDetailsView({
             <dd>{detail.sync_all_day_events ? "Included" : "Excluded; timed events only"}</dd>
           </div>
           <div>
+            <dt>Events you answered Maybe</dt>
+            <dd>{tentativeFact(detail)}</dd>
+          </div>
+          <div>
+            <dt>Invitations you haven't answered</dt>
+            <dd>{unansweredFact(detail)}</dd>
+          </div>
+          <div>
+            <dt>Declined events</dt>
+            <dd>Not synced</dd>
+          </div>
+          <div>
             <dt>Starting point</dt>
             <dd>Includes events from the past {plural(detail.initial_lookback_days, "day")} onward</dd>
           </div>
@@ -485,6 +499,8 @@ function PolicyEditor({
   const current: RulePolicyPayload = {
     privacy_policy: detail.privacy_policy,
     sync_all_day_events: detail.sync_all_day_events,
+    tentative_events: detail.tentative_events,
+    unanswered_invitations: detail.unanswered_invitations,
   }
   const [open, setOpen] = useState(false)
   const [next, setNext] = useState<RulePolicyPayload>(current)
@@ -561,6 +577,11 @@ function PolicyEditor({
               <small>Turn this off to synchronize timed events only.</small>
             </span>
           </label>
+          <InvitationResponseFields
+            idPrefix="edit-"
+            policy={next}
+            onChange={(change) => setNext({ ...next, ...change })}
+          />
           {changed && (
             <div className="consequence-panel" data-tone={widens ? "attention" : undefined} role="status" aria-live="polite">
               <h3>{widens ? `Everyone who can see ${destinationName} will see event details` : "What happens when you save"}</h3>

@@ -42,7 +42,9 @@ from calendar_sync.domain.model import (
     ProjectionHandling,
     SyncRule,
     SyncRuleId,
+    TentativeEventPolicy,
     TransformationPolicy,
+    UnansweredInvitationPolicy,
 )
 from calendar_sync.interfaces.api.dependencies import app_services, available, require_admin
 from calendar_sync.interfaces.api.schemas import (
@@ -118,6 +120,8 @@ def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
     transformation = TransformationPolicy(
         content=_projection_content(request.privacy_policy),
         all_day=_all_day(request.sync_all_day_events),
+        tentative=TentativeEventPolicy(request.tentative_events),
+        unanswered=UnansweredInvitationPolicy(request.unanswered_invitations),
     )
     try:
         rule = services.create_draft_rule.execute(
@@ -267,7 +271,13 @@ def change_rule_policy(
     content = _projection_content(request.privacy_policy)
     all_day = _all_day(request.sync_all_day_events)
     try:
-        rule = services.change_sync_rule_policy.execute(SyncRuleId(rule_id), content, all_day)
+        rule = services.change_sync_rule_policy.execute(
+            SyncRuleId(rule_id),
+            content,
+            all_day,
+            tentative=TentativeEventPolicy(request.tentative_events),
+            unanswered=UnansweredInvitationPolicy(request.unanswered_invitations),
+        )
     except RuleNotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except InvalidStateTransition as error:
@@ -365,6 +375,8 @@ def _rule_response(rule: SyncRule) -> RuleResponse:
         ),
         privacy_policy=rule.transformation.content.value,
         sync_all_day_events=rule.transformation.all_day is AllDaySyncPolicy.INCLUDE,
+        tentative_events=rule.transformation.tentative.value,
+        unanswered_invitations=rule.transformation.unanswered.value,
         state=rule.state.value,
         reprojection_required=rule.reprojection_required,
     )

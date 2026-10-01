@@ -34,6 +34,9 @@ UNRECORDED_REASONS = frozenset(
 UNRECORDED_ON_DAILY_PASS = frozenset(
     {
         SyncReason.ALL_DAY_EXCLUDED,
+        SyncReason.DECLINED,
+        SyncReason.TENTATIVE_EXCLUDED,
+        SyncReason.AWAITING_RESPONSE,
         SyncReason.SERIES_NOT_SYNCHRONIZED,
         SyncReason.SERIES_WITHOUT_OCCURRENCES,
     }

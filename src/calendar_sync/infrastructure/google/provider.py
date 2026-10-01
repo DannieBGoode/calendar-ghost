@@ -486,10 +486,11 @@ def _is_exception(instance: CalendarEvent, master: CalendarEvent) -> bool:
         return False
     if instance.status is EventStatus.CANCELLED:
         return True
-    if (instance.title, instance.description, instance.location) != (
+    if (instance.title, instance.description, instance.location, instance.response) != (
         master.title,
         master.description,
         master.location,
+        master.response,
     ):
         return True
     time, regular, original = instance.time, master.time, identity.original_start
@@ -549,11 +550,12 @@ LIVE_OCCURRENCE_PAGE_SIZE = 250
 # Instance listings run under the rule's write lock, so a long expansion is read only this far.
 OCCURRENCE_PAGE_LIMIT = 20
 # Only what translation reads. Guests and conferencing are never projected; they are read so a
-# Source Change can be described (ADR 0017), and an omitted field would read as removed.
+# Source Change can be described (ADR 0017), and an omitted field would read as removed. The
+# calendar's own attendee entry carries its Invitation Response (ADR 0018).
 OCCURRENCE_EXCEPTION_FIELDS = (
     "items(id,etag,updated,status,start,end,summary,description,location,recurringEventId,"
-    "originalStartTime,extendedProperties,htmlLink,attendees(email),attendeesOmitted,"
-    "conferenceData(entryPoints(uri)),hangoutLink),nextPageToken"
+    "originalStartTime,extendedProperties,htmlLink,attendees(email,self,responseStatus),"
+    "attendeesOmitted,conferenceData(entryPoints(uri)),hangoutLink),nextPageToken"
 )
 # Answers meaning Google cannot expand this series, rather than that the request failed.
 UNLISTABLE_SERIES_STATUSES = frozenset({400, 404, 410})

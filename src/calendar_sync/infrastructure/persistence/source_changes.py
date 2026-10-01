@@ -13,6 +13,7 @@ from calendar_sync.domain.model import (
     CalendarEndpoint,
     EventRef,
     EventTime,
+    InvitationResponse,
     SyncRuleId,
     TimedInterval,
 )
@@ -53,6 +54,8 @@ class SqliteSourceObservationRepository:
             recurrence=tuple(details["recurrence"]),
             guests=_optional_tuple(details["guests"]),
             conferencing=_optional_tuple(details["conferencing"]),
+            # Observations sealed before responses were tracked hold none.
+            response=(InvitationResponse(details["response"]) if details.get("response") else None),
         )
 
     def save(
@@ -71,6 +74,7 @@ class SqliteSourceObservationRepository:
             "recurrence": list(observation.recurrence),
             "guests": _optional_list(observation.guests),
             "conferencing": _optional_list(observation.conferencing),
+            "response": observation.response.value if observation.response else None,
         }
         sealed = self._history.seal(json.dumps(details), _observation_context(rule_id, source))
         self._connection.execute(

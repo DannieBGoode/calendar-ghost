@@ -34,7 +34,7 @@ machine and creates only the destination representation selected by each rule.
 | Area | Behavior |
 | --- | --- |
 | Events | Timed events, all-day events, recurring series, single-occurrence changes, and cancellations |
-| Policies | Busy-only or detail-copy projection; include or exclude all-day events per rule |
+| Policies | Busy-only or detail-copy projection; include or exclude all-day events; mark, sync, or skip events answered Maybe; sync unanswered invitations as Maybe or wait for an answer, per rule. Declined events are never synced |
 | Scheduling | Source and destination incremental polling every five minutes plus **Sync Now** |
 | Reconciliation | Daily full pass plus **Reconcile Now**, which reports remaining drift and records conflicts as blocked |
 | Loop prevention | Private managed-origin metadata prevents projections from becoming sources |
@@ -118,7 +118,7 @@ docker compose up -d --build
 Open <http://localhost:8000>, create the local administrator, and follow the three-step setup:
 
 1. Connect each Google identity you need.
-2. Create a directional rule and choose its privacy and all-day policies.
+2. Create a directional rule and choose its privacy, all-day, Maybe, and unanswered-invitation policies.
 3. Preview the rule, inspect the result, and enable it.
 
 **Activity** is a table of what each rule did, grouped by day: the time, the event and when it
@@ -137,7 +137,7 @@ The main sections have stable URLs at `/overview`, `/rules`, `/activity`, and `/
 can be bookmarked and browser back/forward navigation works as expected.
 
 Open **View details** on a rule (`/rules/{id}`) to see its calendars, policy, projection count, and
-latest runs. Changing its privacy or all-day policy pauses the rule until it passes a new preview,
+latest runs. Changing any of its policies pauses the rule until it passes a new preview,
 then rewrites existing projections on the next run. Changing a calendar removes the rule and creates
 a new draft; removing a rule asks whether to delete its projections (recommended) or keep them as
 ordinary events that are no longer managed. Removal never deletes an event whose ownership it cannot

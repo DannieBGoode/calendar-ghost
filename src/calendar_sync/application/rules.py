@@ -30,7 +30,9 @@ from calendar_sync.domain.model import (
     ProjectionHandling,
     SyncRule,
     SyncRuleId,
+    TentativeEventPolicy,
     TransformationPolicy,
+    UnansweredInvitationPolicy,
 )
 
 
@@ -127,7 +129,13 @@ class ChangeSyncRulePolicy:
     locks: RuleLocks = field(default_factory=RuleLocks)
 
     def execute(
-        self, rule_id: SyncRuleId, content: ProjectionContent, all_day: AllDaySyncPolicy
+        self,
+        rule_id: SyncRuleId,
+        content: ProjectionContent,
+        all_day: AllDaySyncPolicy,
+        *,
+        tentative: TentativeEventPolicy,
+        unanswered: UnansweredInvitationPolicy,
     ) -> SyncRule:
         # Waiting for any in-flight provider write means none happens under the old policy
         # once this returns; the run's next stop check then sees the paused rule.
@@ -136,7 +144,13 @@ class ChangeSyncRulePolicy:
             if rule is None:
                 raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
             changed = rule.change_policy(
-                replace(rule.transformation, content=content, all_day=all_day)
+                replace(
+                    rule.transformation,
+                    content=content,
+                    all_day=all_day,
+                    tentative=tentative,
+                    unanswered=unanswered,
+                )
             )
             if changed == rule:
                 return rule
@@ -147,7 +161,10 @@ class ChangeSyncRulePolicy:
                     rule_id=rule.id,
                     action=AuditAction.POLICY_CHANGED,
                     outcome=AuditOutcome.COMPLETED,
-                    detail=f"privacy={content.value}, all_day={all_day.value}",
+                    detail=(
+                        f"privacy={content.value}, all_day={all_day.value}, "
+                        f"tentative={tentative.value}, unanswered={unanswered.value}"
+                    ),
                 )
             )
             uow.commit()

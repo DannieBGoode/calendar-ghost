@@ -100,6 +100,22 @@ _Avoid_: Midnight event, untimed event
 A directional sync rule setting that includes or excludes all-day source events from synchronization. New rules include all-day events unless the user opts out.
 _Avoid_: All-day filter, skip all-day flag
 
+## Invitations
+
+**Invitation Response**:
+How the source calendar answered an event's invitation: accepted, tentative (shown as Maybe), declined, or awaiting a response. An event the source calendar was not invited to, such as one it organizes, counts as accepted. Only the source calendar's own response is read; other guests' responses never affect a projection.
+_Avoid_: RSVP status, attendance
+
+**Tentative Event Policy**:
+A directional sync rule setting for events the source calendar answered Maybe to: project them marked as tentative, project them like accepted events, or skip them. New rules mark them, titling the projection "Busy (tentative)" under a Busy-Only Projection and "Maybe: " followed by the title under a Details Projection.
+_Avoid_: Maybe filter
+
+**Unanswered Invitation Policy**:
+A directional sync rule setting for invitations the source calendar has not answered: treat them as answered Maybe, or project nothing until they are answered. New rules treat them as Maybe.
+_Avoid_: Pending filter
+
+Declined events are never projected.
+
 ## Transformation
 
 **Transformation Policy**:
@@ -244,6 +260,7 @@ diagnostics keep the glossary terms above.
 | Event Projection, Managed Projection | projection where precision matters (removal, counts); "events this rule wrote to Family" otherwise; never "copied event" |
 | Busy-Only Projection | "Busy only: titles, descriptions, and locations stay private" |
 | Details Projection | "Copy title, description, and location" |
+| Invitation Response | "you answered Maybe", "you declined", "you haven't answered"; "Your response" in a change |
 | Material Rule Change | "A change stops the rule from writing until you preview it again" |
 | Rule Preview, then enable | "Preview rule", then "Start syncing" |
 | Degraded Rule | "Stopped", with the cause and "Preview to restart" |

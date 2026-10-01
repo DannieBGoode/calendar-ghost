@@ -37,7 +37,9 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
     SyncRuleState,
+    TentativeEventPolicy,
     TransformationPolicy,
+    UnansweredInvitationPolicy,
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
@@ -62,6 +64,50 @@ def test_sqlite_rule_repository_round_trip(tmp_path: Path) -> None:
         restored = uow.rules.get(rule().id)
 
     assert restored == rule()
+
+
+def test_sqlite_rule_repository_keeps_the_invitation_response_policies(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = SqliteUnitOfWorkFactory(database)
+    waiting = replace(
+        rule(),
+        transformation=TransformationPolicy(
+            tentative=TentativeEventPolicy.SKIP, unanswered=UnansweredInvitationPolicy.WAIT
+        ),
+    )
+
+    with factory() as uow:
+        uow.rules.add(waiting)
+        uow.commit()
+    with factory() as uow:
+        uow.rules.save(replace(waiting, transformation=TransformationPolicy()))
+        uow.commit()
+    with factory() as uow:
+        restored = uow.rules.get(rule().id)
+
+    assert restored == replace(waiting, transformation=TransformationPolicy())
+
+
+def test_migration_15_gives_existing_rules_the_defaults_and_reprojects_them(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE sync_rules DROP COLUMN tentative_policy")
+        connection.execute("ALTER TABLE sync_rules DROP COLUMN unanswered_policy")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 15")
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        restored = uow.rules.get(rule().id)
+    assert restored == replace(rule(), reprojection_required=True)
 
 
 def test_database_migration_is_idempotent(tmp_path: Path) -> None:
@@ -170,7 +216,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    assert versions == list(range(1, 16))
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
