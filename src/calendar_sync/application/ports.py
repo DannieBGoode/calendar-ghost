@@ -26,6 +26,7 @@ from calendar_sync.domain.model import (
     SyncReason,
     SyncRule,
     SyncRuleId,
+    TransformationPolicy,
 )
 
 
@@ -94,13 +95,14 @@ class CalendarReader(Protocol):
         """
         ...
 
-    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
-        """Whether a series has an occurrence that is not cancelled.
+    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
+        """Whether a series has an occurrence that is not cancelled and that `policy` projects.
 
-        With `include_all_day` false, all-day occurrences do not count, because a rule that
-        excludes them cancels them in the destination. Only an answered lookup may return
-        `False`, because it stops a projection from being created or restored and can remove one
-        left by an interrupted create; a series whose occurrences cannot be listed counts as live.
+        An occurrence the policy excludes, such as an all-day one or one the Source Calendar
+        declined, does not count, because the rule cancels it in the destination. Only an answered
+        lookup may return `False`, because it stops a projection from being created or restored
+        and can remove one left by an interrupted create; a series whose occurrences cannot be
+        listed counts as live.
         """
         ...
 

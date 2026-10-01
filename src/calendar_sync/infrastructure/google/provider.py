@@ -29,6 +29,7 @@ from calendar_sync.domain.model import (
     OccurrenceStart,
     SyncRuleId,
     TimedInterval,
+    TransformationPolicy,
     occurrence_start,
 )
 from calendar_sync.infrastructure.google.instrumentation import record_call
@@ -374,13 +375,13 @@ class GoogleCalendarProvider:
             raise self._failure(error, series.calendar.connected_account_id) from error
         return found
 
-    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
+    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
         parameters: dict[str, Any] = {
             "calendarId": series.calendar.calendar_id.value,
             "eventId": series.event_id.value,
             "showDeleted": False,
             "maxResults": LIVE_OCCURRENCE_PAGE_SIZE,
-            "fields": "items(status,start),nextPageToken",
+            "fields": LIVE_OCCURRENCE_FIELDS,
         }
         try:
             events_api = self._service_for(series.calendar.connected_account_id).events()
@@ -389,8 +390,7 @@ class GoogleCalendarProvider:
                 # showDeleted=False should omit cancelled instances; the status is checked anyway,
                 # because counting one as live would recreate a series that can only be cancelled.
                 if any(
-                    item.get("status") != "cancelled"
-                    and (include_all_day or "date" not in item.get("start", {}))
+                    _projected(to_domain_event(item, series.calendar), policy)
                     for item in response.get("items", [])
                 ):
                     return True
@@ -543,6 +543,11 @@ class GoogleCalendarProvider:
         return instance
 
 
+def _projected(instance: CalendarEvent, policy: TransformationPolicy) -> bool:
+    """A live instance the rule projects; one it excludes is cancelled in the destination."""
+    return instance.status is EventStatus.CONFIRMED and policy.exclusion(instance) is None
+
+
 def _is_exception(instance: CalendarEvent, master: CalendarEvent) -> bool:
     """An instance that is cancelled or differs from the series' regular occurrence."""
     identity = instance.occurrence
@@ -627,6 +632,8 @@ OCCURRENCE_EXCEPTION_FIELDS = (
     "originalStartTime,extendedProperties,htmlLink,attendees(email,self,responseStatus),"
     "attendeesOmitted,conferenceData(entryPoints(uri)),hangoutLink),nextPageToken"
 )
+# What deciding whether a rule projects an instance reads: its time and its own answer (ADR 0018).
+LIVE_OCCURRENCE_FIELDS = "items(id,status,start,end,attendees(self,responseStatus)),nextPageToken"
 # How far past the latest requested start a series listing reaches, for occurrences moved later.
 OCCURRENCE_LISTING_MARGIN = timedelta(days=31)
 # Answers meaning Google cannot expand this series, rather than that the request failed.

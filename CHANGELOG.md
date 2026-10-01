@@ -70,6 +70,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- A recurring event whose remaining occurrences you all declined is no longer added back and removed again on every full run and Reconcile Now. The check for whether a series has an occurrence left to sync counted declined occurrences, so the run recreated the series, removed its declined occurrence, and Google then cancelled the whole series; Reconcile Now reported it as still different. The check now follows the rule's choices for declined, unanswered, tentative, and all-day events, so such a series stays dormant until you accept an occurrence, and Rule Preview leaves it out.
 - `CALENDAR_SYNC_LOG_LEVEL` now takes effect. The service never configured its own logging, so under Uvicorn its informational lines were dropped and container logs showed nothing about running work.
 - Refreshed Google access tokens are kept, encrypted, with their Connected Account. Every request after the first hour of a connection refreshed its token first, which added a token request to each Google call; a refresh never counts as a reauthorization and never replaces a newer one.
 - A run reads each destination series once, however many of its occurrences it re-checks, and again only after it rewrote the series. A rule with 700 recorded occurrences read the same series for every one of them, which made a full re-check take about 40 minutes on a Raspberry Pi. Occurrence writes still verify the series' ownership with their own fresh read.

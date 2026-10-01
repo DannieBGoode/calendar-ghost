@@ -231,6 +231,11 @@ dormant until an occurrence is restored. An entry such as **Removed from Work: n
 to sync** means the run removed a projection that an interrupted run had created; no action is
 needed.
 
+The same happened, with **Missing from Work, so put back again** followed by **Declined, so removed
+from Work**, when every remaining occurrence of the series was declined, awaiting an answer, or
+answered Maybe under a rule that skips those. Upgrade to a release with that fix; the next run stops
+recreating the series and keeps it dormant until you accept one of its occurrences.
+
 ## Incremental cursor expired
 
 The Google adapter must discard the expired cursor, perform a safe initial-window scan, match managed projections through origin metadata, and establish a new cursor without duplicating events.

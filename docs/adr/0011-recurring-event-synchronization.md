@@ -110,17 +110,19 @@ run stops with `RuleNotExecutable` and the cursors do not advance.
 | Moved or edited occurrence | Update the matching destination instance |
 | Cancelled occurrence | Cancel the matching destination instance and retain a `cancelled` Occurrence Mapping |
 | Cancelled series | Delete the destination master, removing its instances, and delete the Series Mapping and its Occurrence Mappings |
-| No occurrence left to project (all cancelled, or all-day under an exclusion) | Do not create or restore the destination master; the series is ignored, and a mapped series keeps its Series Mapping and Occurrence Mappings as a dormant series |
+| No occurrence left to project (all cancelled, or excluded by the rule, such as declined or all-day under an exclusion) | Do not create or restore the destination master; the series is ignored, and a mapped series keeps its Series Mapping and Occurrence Mappings as a dormant series |
 
 Google cancels a series once its last live instance is cancelled, and `showDeleted=false` lookups no
 longer find it. Creating a series whose every source occurrence is cancelled and then cancelling
 those occurrences would leave a cancelled projection that the next run reads as missing and
 recreates, indefinitely. Before creating or restoring a series projection, the application
 therefore asks the provider (`has_live_occurrences`, an `instances` listing without cancelled
-instances, cached per run) whether any source occurrence remains that the rule projects: under an
-all-day exclusion, all-day occurrences do not count, because they are cancelled in the destination
-as well. The adapter also checks each instance's status rather than relying on the filter alone.
-Only an answered lookup may report that none remain: a series Google cannot expand (400, 404, or
+instances, cached per run) whether any source occurrence remains that the rule projects: an
+occurrence its Transformation Policy excludes does not count, because it is cancelled in the
+destination as well. That covers all-day occurrences under an all-day exclusion and occurrences
+excluded by their own Invitation Response (ADR 0018), read from the calendar's own attendee entry
+on each instance; without one, the occurrence counts as accepted. The adapter also checks each
+instance's status rather than relying on the filter alone. Only an answered lookup may report that none remain: a series Google cannot expand (400, 404, or
 410) counts as live and synchronizes as before, and a listing stops after a page limit, because it
 runs under the rule's write lock, without proving the series empty. A mapped series is kept dormant
 rather than deleted, keeping its `cancelled` Occurrence Mappings. Occurrence decisions against a

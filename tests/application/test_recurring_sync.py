@@ -17,6 +17,7 @@ from calendar_sync.domain.model import (
     CalendarEvent,
     EventRef,
     EventStatus,
+    InvitationResponse,
     ManagedOrigin,
     OccurrenceStart,
     OccurrenceState,
@@ -28,8 +29,10 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
     SyncRuleState,
+    TentativeEventPolicy,
     TimedInterval,
     TransformationPolicy,
+    UnansweredInvitationPolicy,
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
@@ -251,9 +254,9 @@ def test_acknowledged_create_of_a_series_that_lost_every_occurrence_is_removed()
 class _LiveLookupCalendars(FakeCalendars):
     live_lookups: list[EventRef] = field(default_factory=list)
 
-    def has_live_occurrences(self, series: EventRef, *, include_all_day: bool) -> bool:
+    def has_live_occurrences(self, series: EventRef, policy: TransformationPolicy) -> bool:
         self.live_lookups.append(series)
-        return super().has_live_occurrences(series, include_all_day=include_all_day)
+        return super().has_live_occurrences(series, policy)
 
 
 def _dormant(
@@ -822,6 +825,102 @@ def test_series_whose_only_live_occurrence_is_all_day_is_dormant_under_an_exclud
     assert calendars.writes == []
 
 
+def _answered(
+    parent: CalendarEvent,
+    week: int,
+    response: InvitationResponse,
+    *,
+    moved_by: timedelta = timedelta(0),
+    revision: str = "occurrence-revision-1",
+) -> CalendarEvent:
+    """An occurrence the Source Calendar answered on its own."""
+    answered = occurrence(parent, week, moved_by=moved_by, revision=revision)
+    return replace(answered, response=response)
+
+
+_EXCLUDING_RESPONSES = [
+    (TransformationPolicy(), InvitationResponse.DECLINED),
+    (TransformationPolicy(tentative=TentativeEventPolicy.SKIP), InvitationResponse.TENTATIVE),
+    (
+        TransformationPolicy(unanswered=UnansweredInvitationPolicy.WAIT),
+        InvitationResponse.AWAITING,
+    ),
+]
+
+
+@pytest.mark.parametrize(("policy", "response"), _EXCLUDING_RESPONSES)
+def test_series_whose_only_occurrence_the_rule_excludes_by_its_answer_is_never_projected(
+    policy: TransformationPolicy, response: InvitationResponse
+) -> None:
+    # A "this and following" split left one occurrence, moved a week and then declined.
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    calendars.put(_answered(master, 0, response, moved_by=timedelta(days=7)))
+    factory = enabled_rule_factory(replace(rule(), transformation=policy))
+    use_case = sync_use_case(factory, calendars)
+
+    use_case.execute(rule().id)
+    use_case.execute(rule().id, full=True)
+
+    assert calendars.writes == []
+    assert factory.state.mappings == {}
+
+
+def test_series_whose_last_occurrence_is_declined_stays_dormant_without_rewrites() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:1])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(
+        calendars.put(
+            _answered(master, 0, InvitationResponse.DECLINED, revision="occurrence-revision-2")
+        )
+    )
+    use_case.execute(rule().id)
+    writes = list(calendars.writes)
+
+    # Google cancels the destination series with its last instance; full runs used to recreate it.
+    results = []
+    for _ in range(2):
+        _report_destination(calendars)
+        results.append(use_case.execute(rule().id))
+        results.append(use_case.execute(rule().id, full=True))
+
+    assert [kind for kind, _ in writes] == ["create", "cancel_occurrence"]
+    assert calendars.writes == writes
+    assert all(result.conflicts == 0 for result in results)
+    assert (rule().id, master.reference) in factory.state.mappings
+    assert _occurrence_states(factory) == {week_start(0): OccurrenceState.CANCELLED}
+    assert SyncReason.PROJECTION_MISSING.value not in {
+        entry.reason for entry in factory.state.audit
+    }
+
+
+def test_accepting_an_occurrence_of_a_dormant_declined_series_keeps_the_others_cancelled() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:2])
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    calendars.report(
+        calendars.put(_answered(master, 0, InvitationResponse.DECLINED)),
+        calendars.put(_answered(master, 1, InvitationResponse.DECLINED)),
+    )
+    use_case.execute(rule().id)
+    _report_destination(calendars)
+    use_case.execute(rule().id)
+
+    accepted = _answered(master, 1, InvitationResponse.ACCEPTED, revision="occurrence-revision-2")
+    calendars.report(calendars.put(accepted))
+    result = use_case.execute(rule().id)
+
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    assert calendars.events[destination].status is EventStatus.CONFIRMED
+    assert _states(calendars, destination) == [EventStatus.CANCELLED, EventStatus.CONFIRMED, None]
+    assert result.conflicts == 0
+
+
 def test_daily_pass_of_a_projected_live_series_asks_for_no_live_lookup() -> None:
     calendars = _LiveLookupCalendars()
     calendars.put(series(), starts=STARTS)
@@ -853,6 +952,26 @@ def test_restoring_one_occurrence_of_a_never_projected_series_keeps_the_others_c
     assert factory.state.mappings == {}
 
     calendars.report(calendars.put(occurrence(master, 1, revision="occurrence-revision-2")))
+    result = use_case.execute(rule().id)
+
+    destination = factory.state.mappings[(rule().id, master.reference)].destination
+    cancelled, confirmed = EventStatus.CANCELLED, EventStatus.CONFIRMED
+    assert _states(calendars, destination) == [cancelled, confirmed, cancelled]
+    assert result.conflicts == 0
+
+
+def test_accepting_one_occurrence_of_a_never_projected_series_keeps_the_others_cancelled() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS[:3])
+    for week in range(3):
+        calendars.put(_answered(master, week, InvitationResponse.DECLINED))
+    factory = enabled_rule_factory()
+    use_case = sync_use_case(factory, calendars)
+    use_case.execute(rule().id)
+    assert factory.state.mappings == {}
+
+    accepted = _answered(master, 1, InvitationResponse.ACCEPTED, revision="occurrence-revision-2")
+    calendars.report(calendars.put(accepted))
     result = use_case.execute(rule().id)
 
     destination = factory.state.mappings[(rule().id, master.reference)].destination
