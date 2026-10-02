@@ -18,3 +18,5 @@ web/dist/
 *.tsbuildinfo
 .conductor/settings.local.toml
 .claude/
+# Local log files written when file logging is on, e.g. by scripts/dev_preview.py.
+/logs/
