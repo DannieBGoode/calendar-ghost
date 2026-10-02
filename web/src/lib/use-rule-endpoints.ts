@@ -33,7 +33,7 @@ export function useRuleEndpoints(rules: Pick<Rule, "source" | "destination">[]) 
     const side = (endpoint: Rule["source"]) => {
       const account = accountsById.get(endpoint.connected_account_id)
       const calendars = calendarsByAccount.get(endpoint.connected_account_id)
-      return { account, calendars, name: ruleEndpointLabel(endpoint.calendar_id, account, calendars).calendar }
+      return { account, calendars, name: ruleEndpointLabel(endpoint, account, calendars).calendar }
     }
     const source = side(rule.source)
     const destination = side(rule.destination)

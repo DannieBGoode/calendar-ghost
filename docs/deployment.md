@@ -115,6 +115,12 @@ these as `policy_applied` and `declined_removed`. Rolling back works with the sa
 releases ignore the columns, rewrite the tentative titles back on their next full pass, and recreate
 projections of declined events still in the sync window.
 
+Migration 16 adds `calendar_names`, the name each calendar last had in Google. It is filled whenever
+an account's calendars are listed, so rules show their calendars' names on a reload before Google
+answers, and after their account is disconnected; deleting an account deletes its names. Existing
+rules show placeholder names until their calendars are next listed, which opening the Rules view
+does. Rolling back works with the same database: earlier releases ignore the table.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.
@@ -162,8 +168,10 @@ or another LAN host, choose one:
   value in `CALENDAR_SYNC_GOOGLE_REDIRECT_URI`, and set `CALENDAR_SYNC_SECURE_COOKIES=true`.
 
 The redirect URI must match the Google OAuth client exactly, including scheme and port. When the
-address in the browser differs from the configured redirect URI, Settings warns before you connect
-an account.
+address in the browser differs from the configured redirect URI, Settings says so in a quiet note
+at the foot of Connected accounts. For 10 minutes after you start connecting from that browser, it asks
+for the address Google returned to instead: pasting it finishes the connection at the address you
+are using, without a tunnel.
 
 ## Secrets
 

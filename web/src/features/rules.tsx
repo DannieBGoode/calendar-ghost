@@ -206,16 +206,14 @@ export function RulesView({
                     <div className="rule-direction">
                       <RuleEndpoint
                         account={source.account}
-                        accountId={rule.source.connected_account_id}
-                        calendarId={rule.source.calendar_id}
+                        endpoint={rule.source}
                         calendars={source.calendars}
                         role="Source"
                       />
                       <ArrowRight aria-hidden="true" />
                       <RuleEndpoint
                         account={destination.account}
-                        accountId={rule.destination.connected_account_id}
-                        calendarId={rule.destination.calendar_id}
+                        endpoint={rule.destination}
                         calendars={destination.calendars}
                         role="Destination"
                       />

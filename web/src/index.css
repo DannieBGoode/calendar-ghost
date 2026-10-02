@@ -377,16 +377,6 @@ p {
   line-height: 1.45;
 }
 
-.inline-attention {
-  padding: 0.75rem 0.875rem;
-  border: 1px solid var(--warning-border);
-  border-radius: 0.5rem;
-  background: var(--warning-surface);
-  color: var(--warning-foreground);
-  font-size: 0.875rem;
-  line-height: 1.45;
-}
-
 .app-shell {
   min-height: 100vh;
 }
@@ -774,7 +764,244 @@ p {
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
+}
+
+.settings-page {
+  gap: 3rem;
+}
+
+/* Each section's rows sit in one bordered group, so a section heading never reads as a row. */
+.settings-section .settings-list,
+.account-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+}
+
+.settings-section .settings-list {
+  padding: 0 1.25rem;
+}
+
+.account-group {
+  overflow: hidden;
+}
+
+.account-group .account-list {
+  padding: 0 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.account-summary {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: transparent;
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.account-summary:hover {
+  background: var(--surface);
+}
+
+.account-summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.account-stack {
+  display: flex;
+  flex: none;
+}
+
+.account-stack > .account-mark {
+  outline: 2px solid var(--background);
+}
+
+.account-stack > .account-mark + .account-mark {
+  margin-left: -0.5rem;
+}
+
+.account-summary-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.account-summary-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.account-summary-status > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--success-foreground);
+}
+
+.account-summary-status[data-attention] > svg {
+  color: var(--warning-foreground);
+}
+
+.account-summary-emails {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-summary-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.account-summary-toggle > svg,
+.inline-help-chevron {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.account-summary[aria-expanded="true"] .account-summary-toggle > svg,
+.inline-help[open] .inline-help-chevron {
+  transform: rotate(180deg);
+}
+
+/* The redirect note closes the accounts group it explains, on the quiet surface. */
+.account-group-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.inline-help.account-group-footer summary {
+  width: 100%;
+}
+
+.inline-help.account-group-footer .inline-help-chevron {
+  margin-left: auto;
+}
+
+.inline-help.account-group-footer .inline-help-body {
+  padding-bottom: 0.5rem;
+}
+
+.settings-note {
+  max-width: 66ch;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.inline-help {
+  font-size: 0.875rem;
+}
+
+.inline-help summary {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.inline-help summary::-webkit-details-marker {
+  display: none;
+}
+
+.inline-help summary {
+  align-items: flex-start;
+}
+
+.inline-help summary > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  margin-top: 0.15rem;
+}
+
+.inline-help summary:hover,
+.inline-help[open] summary {
+  color: var(--foreground);
+}
+
+.inline-help summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.inline-help-body {
+  display: flex;
+  max-width: 66ch;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding-left: 1.5rem;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+}
+
+.inline-help code,
+.oauth-return-form code {
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.25rem;
+  background: var(--muted);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.setting-help {
+  margin-top: 0.375rem;
+}
+
+.setting-help summary {
+  font-weight: 600;
+}
+
+.setting-help summary > svg {
+  margin-top: 0.2rem;
+}
+
+.setting-help .inline-help-body {
+  padding-left: 0;
+}
+
+.inline-help-body .oauth-return-form {
+  margin-top: 0;
+}
+
+.oauth-feedback.oauth-return {
+  align-items: start;
+}
+
+.oauth-return > svg {
+  margin-top: 0.1rem;
+}
+
+.oauth-return h3 {
+  font-weight: 600;
 }
 
 .oauth-feedback {
@@ -822,22 +1049,27 @@ p {
   overflow-wrap: anywhere;
 }
 
-.oauth-feedback-details {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
+.oauth-return-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
-.oauth-feedback-details summary {
-  width: fit-content;
-  border-radius: var(--radius-sm);
-  color: var(--foreground);
-  font-weight: 600;
-  cursor: pointer;
+.oauth-return-form .field-error {
+  margin-top: 0;
+  color: var(--destructive);
 }
 
-.oauth-feedback-details summary:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
+.oauth-return-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.oauth-return-row > input {
+  flex: 1 1 16rem;
+  width: auto;
 }
 
 .oauth-feedback-success {
@@ -868,13 +1100,9 @@ p {
 
 .account-empty {
   display: flex;
-  min-height: 7rem;
   align-items: center;
   gap: 1rem;
   padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  background: var(--surface);
 }
 
 .account-empty > svg {
@@ -882,6 +1110,11 @@ p {
   height: 1.5rem;
   flex: none;
   color: var(--primary);
+}
+
+.account-copy h3,
+.setting-row h3 {
+  font-weight: 600;
 }
 
 .account-empty h3,
@@ -911,8 +1144,6 @@ p {
 .account-list {
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
   list-style: none;
 }
 
@@ -1088,7 +1319,7 @@ p {
 }
 
 .setting-row {
-  min-height: 5.5rem;
+  min-height: 4.75rem;
   padding: 1rem 0;
 }
 
@@ -2850,6 +3081,39 @@ thead + .activity-day th {
 }
 
 @media (max-width: 800px) {
+  .settings-page {
+    gap: 2.5rem;
+  }
+
+  .settings-section .settings-list,
+  .account-group .account-list {
+    padding: 0 1rem;
+  }
+
+  .account-summary,
+  .account-group-footer {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+
+  .account-stack > .account-mark:nth-child(n + 2) {
+    display: none;
+  }
+
+  .inline-help-body {
+    padding-left: 0;
+  }
+
+  .oauth-feedback.oauth-return {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .oauth-return > button {
+    grid-column: 2;
+    justify-self: start;
+    margin-left: -1rem;
+  }
+
   .rule-facts {
     grid-template-columns: minmax(0, 1fr);
   }

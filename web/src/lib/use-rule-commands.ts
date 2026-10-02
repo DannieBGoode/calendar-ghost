@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 
-import { api } from "@/lib/api"
+import { api, type RuleDetail, type RuleSummary, type RunningWork } from "@/lib/api"
 import { previewSummary } from "@/lib/rule-preview"
 import {
   enabledMessage,
@@ -12,6 +12,26 @@ import {
 
 export type RuleCommand = "preview" | "enable" | "sync" | "reconcile" | "pause"
 export type RuleFeedback = { tone: "success" | "error"; text: string }
+
+const COMMAND_WORK: Partial<Record<RuleCommand, RunningWork["kind"]>> = {
+  preview: "preview",
+  sync: "sync",
+  reconcile: "reconciliation",
+}
+
+/** A successful command has finished the work that a cached rule response may still report. */
+export function clearCompletedWork<T extends { running: RunningWork | null }>(
+  rule: T | undefined,
+  command: RuleCommand,
+  commandStartedAt: number,
+): T | undefined {
+  if (!rule || (rule.running && COMMAND_WORK[command] !== rule.running.kind)) return rule
+  if (rule.running) {
+    const runningStartedAt = Date.parse(rule.running.started_at)
+    if (!Number.isFinite(runningStartedAt) || runningStartedAt > commandStartedAt) return rule
+  }
+  return { ...rule, running: null }
+}
 
 const FAILED: Record<RuleCommand, string> = {
   preview: "Preview did not complete.",
@@ -103,11 +123,14 @@ export function useRuleCommands() {
     destination: string,
     focusTarget?: () => HTMLElement | null,
   ) {
+    const commandStartedAt = Date.now()
     setPending((current) => ({ ...current, [ruleId]: command }))
-    setPendingSince((current) => ({ ...current, [ruleId]: Date.now() }))
+    setPendingSince((current) => ({ ...current, [ruleId]: commandStartedAt }))
     clearFeedback(ruleId)
+    let completed = false
     try {
       const text = await execute(ruleId, command, destination)
+      completed = true
       // A passed preview shows its result in the review that replaces the Preview button.
       if (command === "preview") announce(text)
       else notify(ruleId, { tone: "success", text })
@@ -119,6 +142,18 @@ export function useRuleCommands() {
       await Promise.all(
         [...RULE_CHANGE_QUERIES, ["rule", ruleId]].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
       )
+      if (completed) {
+        // The command response proves this rule's work has finished. Clear stale running snapshots
+        // after the refetch so a delayed or failed refresh cannot leave the spinner on screen.
+        queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) =>
+          rules?.map((rule) =>
+            rule.id === ruleId ? clearCompletedWork(rule, command, commandStartedAt)! : rule,
+          ),
+        )
+        queryClient.setQueryData<RuleDetail>(["rule", ruleId], (rule) =>
+          clearCompletedWork(rule, command, commandStartedAt),
+        )
+      }
       setPending((current) => {
         const next = { ...current }
         delete next[ruleId]

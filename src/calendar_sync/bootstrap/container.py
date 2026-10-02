@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from calendar_sync.application.accounts import (
     DeleteConnectedAccount,
     DisconnectConnectedAccount,
+    DiscoverCalendars,
     ListConnectedAccounts,
 )
 from calendar_sync.application.activity import (
@@ -124,6 +125,7 @@ class Container:
     delete_connected_account: DeleteConnectedAccount | None
     authorization: AccountAuthorization | None
     account_calendars: AccountCalendars | None
+    discover_calendars: DiscoverCalendars | None
     execute_sync_rule: ExecuteSyncRule | None
     preview_sync_rule: PreviewSyncRule | None
     reconcile_now: ReconcileNow | None
@@ -309,6 +311,11 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         ),
         authorization=adapters.google_oauth,
         account_calendars=adapters.google_oauth,
+        discover_calendars=(
+            DiscoverCalendars(adapters.google_oauth, unit_of_work)
+            if adapters.google_oauth
+            else None
+        ),
         execute_sync_rule=execute_sync_rule,
         preview_sync_rule=preview_sync_rule,
         reconcile_now=reconcile_now,

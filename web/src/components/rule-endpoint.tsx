@@ -1,26 +1,24 @@
 import { AccountAvatar } from "@/components/account-avatar"
-import type { ConnectedAccount, DiscoveredCalendar } from "@/lib/api"
+import type { ConnectedAccount, DiscoveredCalendar, RuleCalendar } from "@/lib/api"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
 export function RuleEndpoint({
   account,
-  accountId,
-  calendarId,
+  endpoint,
   calendars,
   role,
 }: {
   account: ConnectedAccount | undefined
-  accountId: string
-  calendarId: string
+  endpoint: RuleCalendar
   calendars: DiscoveredCalendar[] | undefined
   role: "Source" | "Destination"
 }) {
-  const label = ruleEndpointLabel(calendarId, account, calendars)
+  const label = ruleEndpointLabel(endpoint, account, calendars)
   return (
-    <span className="rule-endpoint" title={`${label.calendar} · ${account?.email ?? accountId}`}>
+    <span className="rule-endpoint" title={`${label.calendar} · ${account?.email ?? endpoint.connected_account_id}`}>
       <AccountAvatar
         displayName={account?.display_name ?? ""}
-        email={account?.email ?? accountId}
+        email={account?.email ?? endpoint.connected_account_id}
         avatarUrl={account?.avatar_url}
         compact
       />

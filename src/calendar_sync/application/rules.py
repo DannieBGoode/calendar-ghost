@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.errors import (
@@ -178,6 +178,8 @@ class SyncRuleSummary:
     latest_preview: RulePreviewSummary | None
     running: RuleWork | None
     """What runs for the rule in this process now, so a reloaded page can show it again."""
+    names: Mapping[CalendarEndpoint, str] = field(default_factory=dict)
+    """The last name Google gave each of the rule's calendars, when one was recorded."""
 
 
 @dataclass(slots=True)
@@ -187,14 +189,19 @@ class ListSyncRules:
 
     def execute(self) -> tuple[SyncRuleSummary, ...]:
         with self.unit_of_work() as uow:
+            rules = tuple(uow.rules.list())
+            names = uow.calendar_names.names(
+                {endpoint for rule in rules for endpoint in (rule.source, rule.destination)}
+            )
             return tuple(
                 SyncRuleSummary(
                     rule=rule,
                     last_sync=uow.run_outcomes.latest(rule.id, RunKind.SYNC),
                     latest_preview=uow.previews.latest(rule.id),
                     running=self.locks.current_work(rule.id),
+                    names=names,
                 )
-                for rule in uow.rules.list()
+                for rule in rules
             )
 
 
@@ -206,6 +213,8 @@ class SyncRuleDetails:
     last_reconciliation: RuleRunOutcome | None
     latest_preview: RulePreviewSummary | None = None
     running: RuleWork | None = None
+    names: Mapping[CalendarEndpoint, str] = field(default_factory=dict)
+    """The last name Google gave each of the rule's calendars, when one was recorded."""
 
 
 @dataclass(slots=True)
@@ -225,6 +234,7 @@ class GetSyncRuleDetails:
                 last_reconciliation=uow.run_outcomes.latest(rule_id, RunKind.RECONCILIATION),
                 latest_preview=uow.previews.latest(rule_id),
                 running=self.locks.current_work(rule_id),
+                names=uow.calendar_names.names((rule.source, rule.destination)),
             )
 
 

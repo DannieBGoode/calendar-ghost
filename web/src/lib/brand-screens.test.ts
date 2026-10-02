@@ -27,8 +27,8 @@ describe("brand screens", () => {
     expect(activitySource).toContain('<GhostMark className="empty-ghost" />')
   })
 
-  it("uses attention, not destructive, for missing configuration", () => {
-    expect(settingsSource).toContain('<div className="inline-attention" role="status">')
-    expect(stylesheet).toMatch(/\.inline-attention \{[^}]*background: var\(--warning-surface\)/)
+  it("keeps missing configuration a quiet note rather than an error", () => {
+    expect(settingsSource).toContain('<p className="settings-note" role="status">')
+    expect(settingsSource).not.toMatch(/className="inline-error" role="status">\s*Add the master key/)
   })
 })

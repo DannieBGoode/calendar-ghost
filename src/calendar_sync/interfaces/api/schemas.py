@@ -27,6 +27,11 @@ class CalendarEndpointPayload(BaseModel):
     calendar_id: str = Field(min_length=1)
 
 
+class NamedCalendarEndpointResponse(CalendarEndpointPayload):
+    # The name Google last gave the calendar, shown until Google lists its calendars again.
+    calendar_name: str | None
+
+
 class CreateRuleRequest(BaseModel):
     source: CalendarEndpointPayload
     destination: CalendarEndpointPayload
@@ -84,12 +89,16 @@ class RuleWorkResponse(BaseModel):
 
 
 class RuleSummaryResponse(RuleResponse):
+    source: NamedCalendarEndpointResponse
+    destination: NamedCalendarEndpointResponse
     last_sync: RunOutcomeResponse | None
     latest_preview: PreviewSummaryResponse | None
     running: RuleWorkResponse | None
 
 
 class RuleDetailResponse(RuleResponse):
+    source: NamedCalendarEndpointResponse
+    destination: NamedCalendarEndpointResponse
     initial_lookback_days: int
     mapping_count: int
     last_sync: RunOutcomeResponse | None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Collection, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -9,8 +10,10 @@ from typing import Self
 from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
+    CalendarNameRepository,
     ConnectedAccountRecords,
     ConnectedAccountState,
+    DiscoveredCalendar,
     EventMappingRepository,
     ExceptionReplayRepository,
     OccurrenceMappingRepository,
@@ -28,6 +31,7 @@ from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
+    CalendarId,
     ConnectedAccountId,
     EventMapping,
     EventMappingId,
@@ -53,6 +57,7 @@ class MemoryState:
     audit: list[AuditEntry] = field(default_factory=list)
     outcomes: dict[tuple[SyncRuleId, RunKind], RuleRunOutcome] = field(default_factory=dict)
     previews: dict[SyncRuleId, RulePreviewSummary] = field(default_factory=dict)
+    calendar_names: dict[CalendarEndpoint, str] = field(default_factory=dict)
     observations: dict[tuple[SyncRuleId, EventRef], tuple[SourceObservation, datetime]] = field(
         default_factory=dict
     )
@@ -71,6 +76,11 @@ class InMemoryConnectedAccountRecords:
         if self._state.accounts.get(account_id) is not ConnectedAccountState.DISCONNECTED:
             return False
         del self._state.accounts[account_id]
+        self._state.calendar_names = {
+            endpoint: name
+            for endpoint, name in self._state.calendar_names.items()
+            if endpoint.connected_account_id != account_id
+        }
         return True
 
 
@@ -321,6 +331,27 @@ class InMemoryRulePreviewRepository:
         return self._state.previews.get(rule_id)
 
 
+class InMemoryCalendarNameRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def remember(
+        self, account_id: ConnectedAccountId, calendars: Sequence[DiscoveredCalendar]
+    ) -> None:
+        if account_id not in self._state.accounts:
+            return
+        for calendar in calendars:
+            endpoint = CalendarEndpoint(account_id, CalendarId(calendar.id))
+            self._state.calendar_names[endpoint] = calendar.summary
+
+    def names(self, endpoints: Collection[CalendarEndpoint]) -> dict[CalendarEndpoint, str]:
+        return {
+            endpoint: self._state.calendar_names[endpoint]
+            for endpoint in endpoints
+            if endpoint in self._state.calendar_names
+        }
+
+
 class InMemoryUnitOfWork:
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
@@ -333,6 +364,7 @@ class InMemoryUnitOfWork:
     observations: SourceObservationRepository
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
+    calendar_names: CalendarNameRepository
 
     def __init__(self, target: MemoryState) -> None:
         self._target = target
@@ -352,6 +384,7 @@ class InMemoryUnitOfWork:
         self.observations = InMemorySourceObservationRepository(self._working)
         self.run_outcomes = InMemoryRuleRunOutcomeRepository(self._working)
         self.previews = InMemoryRulePreviewRepository(self._working)
+        self.calendar_names = InMemoryCalendarNameRepository(self._working)
         return self
 
     def __exit__(
@@ -374,6 +407,7 @@ class InMemoryUnitOfWork:
         self._target.audit = self._working.audit
         self._target.outcomes = self._working.outcomes
         self._target.previews = self._working.previews
+        self._target.calendar_names = self._working.calendar_names
         self._target.observations = self._working.observations
         self._target.change_values_forgotten_before = self._working.change_values_forgotten_before
         self._committed = True

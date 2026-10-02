@@ -254,6 +254,10 @@ Each rule row shows its direction, policy, last run, status badge, and at most o
 
 Pages carry no label above their title; the active navigation item already says where you are. Rule Details titles the page with the rule itself ("Family → Work").
 
+### Settings Groups
+
+Settings sections run from what the installation depends on to what only this browser keeps: Connected accounts, Storage, Appearance. Each section's heading and one sentence sit above a single bordered group of rows; a row pairs a title and its current state with at most its own controls, and a section with nothing to show or change does not exist. Connected accounts collapse to one summary row naming how many are connected and how many need reauthorization, and open by themselves when one does. Conditions that need no action, such as Google returning to a different address, close the group they affect as a quiet disclosure on Quiet Surface, and become an Attention Ochre step only while the administrator can act on them.
+
 ### Destructive and Privacy-Widening Changes
 
 Removal shows its choice, its consequence, and a destructive button that names the effect in one step, with a neutral "Keep rule" beside it. A change that shows event details to more people uses Attention Ochre, says who will see them, and names the effect on its button.

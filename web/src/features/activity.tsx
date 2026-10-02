@@ -877,7 +877,7 @@ function ResolvedIncidents({ incidents, context }: { incidents: Incident[]; cont
 
 function endpointName(endpoint: Rule["source"], context: RuleContext): string {
   return ruleEndpointLabel(
-    endpoint.calendar_id,
+    endpoint,
     context.accountsById.get(endpoint.connected_account_id),
     context.calendarsByAccount.get(endpoint.connected_account_id),
   ).calendar
@@ -890,16 +890,14 @@ function RuleDirection({ ruleId, context }: { ruleId: string; context: RuleConte
     <span className="rule-direction activity-direction">
       <RuleEndpoint
         account={context.accountsById.get(rule.source.connected_account_id)}
-        accountId={rule.source.connected_account_id}
-        calendarId={rule.source.calendar_id}
+        endpoint={rule.source}
         calendars={context.calendarsByAccount.get(rule.source.connected_account_id)}
         role="Source"
       />
       <ArrowRight aria-label="to" role="img" />
       <RuleEndpoint
         account={context.accountsById.get(rule.destination.connected_account_id)}
-        accountId={rule.destination.connected_account_id}
-        calendarId={rule.destination.calendar_id}
+        endpoint={rule.destination}
         calendars={context.calendarsByAccount.get(rule.destination.connected_account_id)}
         role="Destination"
       />
