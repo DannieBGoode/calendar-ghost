@@ -44,18 +44,34 @@ const AUTHORIZATION_STARTED_KEY = "calendar-sync-google-authorization-started"
 // Google's return address works once, for 10 minutes after the attempt starts.
 export const AUTHORIZATION_RETURN_MS = 10 * 60 * 1000
 
-/** Remember, in this browser, when a Google connection was last started. */
-export function recordAuthorizationStart(storage: Storage = window.localStorage, now = Date.now()) {
+type AuthorizationStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">
+
+// Reading `window.localStorage` itself throws when browser policy blocks storage, so it is
+// resolved here rather than as a default argument outside each function's guard.
+function browserStorage(): AuthorizationStorage | null {
+  if (typeof window === "undefined") return null
   try {
-    storage.setItem(AUTHORIZATION_STARTED_KEY, String(now))
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+/** Remember, in this browser, when a Google connection was last started. */
+export function recordAuthorizationStart(
+  storage: AuthorizationStorage | null = browserStorage(),
+  now = Date.now(),
+) {
+  try {
+    storage?.setItem(AUTHORIZATION_STARTED_KEY, String(now))
   } catch {
     // Without storage the page just offers its quiet help instead of the pending step.
   }
 }
 
-export function clearAuthorizationStart(storage: Storage = window.localStorage) {
+export function clearAuthorizationStart(storage: AuthorizationStorage | null = browserStorage()) {
   try {
-    storage.removeItem(AUTHORIZATION_STARTED_KEY)
+    storage?.removeItem(AUTHORIZATION_STARTED_KEY)
   } catch {
     // Nothing was recorded.
   }
@@ -63,12 +79,12 @@ export function clearAuthorizationStart(storage: Storage = window.localStorage) 
 
 /** Whether a connection started here may still be finished with Google's return address. */
 export function authorizationAwaitingReturn(
-  storage: Storage = window.localStorage,
+  storage: AuthorizationStorage | null = browserStorage(),
   now = Date.now(),
 ): boolean {
   let started: number
   try {
-    started = Number(storage.getItem(AUTHORIZATION_STARTED_KEY))
+    started = Number(storage?.getItem(AUTHORIZATION_STARTED_KEY))
   } catch {
     return false
   }

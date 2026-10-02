@@ -94,7 +94,9 @@ describe("logSummary", () => {
   })
 
   it("explains when the installation keeps no log files", () => {
-    expect(logSummary(null)).toBe("File logging is off. The container logs still have every line.")
+    expect(logSummary(null)).toBe(
+      "File logging is off. Recent lines are still in the container logs, which rotate.",
+    )
   })
 
   it("says when the logs are empty", () => {

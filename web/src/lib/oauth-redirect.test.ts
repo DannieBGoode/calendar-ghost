@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   AUTHORIZATION_RETURN_MS,
@@ -86,6 +86,10 @@ function memoryStorage(): Storage {
 }
 
 describe("authorizationAwaitingReturn", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it("is pending only while Google's return address still works", () => {
     const storage = memoryStorage()
     expect(authorizationAwaitingReturn(storage, 1_000)).toBe(false)
@@ -93,6 +97,17 @@ describe("authorizationAwaitingReturn", () => {
     expect(authorizationAwaitingReturn(storage, 1_000 + AUTHORIZATION_RETURN_MS - 1)).toBe(true)
     expect(authorizationAwaitingReturn(storage, 1_000 + AUTHORIZATION_RETURN_MS)).toBe(false)
     expect(authorizationAwaitingReturn(storage, 999)).toBe(false)
+  })
+
+  it("falls back to quiet help when browser policy blocks storage", () => {
+    vi.stubGlobal("window", {
+      get localStorage(): Storage {
+        throw new DOMException("The operation is insecure.", "SecurityError")
+      },
+    })
+    expect(() => recordAuthorizationStart()).not.toThrow()
+    expect(() => clearAuthorizationStart()).not.toThrow()
+    expect(authorizationAwaitingReturn()).toBe(false)
   })
 
   it("ends once the attempt returned", () => {
