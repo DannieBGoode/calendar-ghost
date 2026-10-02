@@ -195,10 +195,13 @@ Calendar and will no longer be managed. Unrelated accounts and rules are unchang
 
 The browser followed the configured redirect URI to an address that does not reach this
 installation, usually `localhost` while Calendar Sync runs on another host. No account was saved.
-To finish this attempt, replace the origin in the address bar with the one you use to open
-Calendar Sync, for example `localhost:18000` with `192.168.1.50:18000`, and load it within 10
-minutes; each callback works once. To stop it recurring, use an SSH tunnel or an HTTPS redirect
-URI as described in [Deployment](deployment.md#google-oauth-redirect-uri-on-a-lan-host).
+To finish this attempt, copy the whole address from the address bar, return to Settings in the
+browser you started from, paste it into **Address Google returned to** under **Finish connecting
+your Google account**, and choose **Finish connecting** within 10 minutes; each callback works
+once. From another browser, the same field is in the note at the foot of Connected accounts. Replacing the origin in the address bar by hand, for example
+`localhost:18000` with `192.168.1.50:18000`, does the same. To stop it recurring, use an HTTPS
+redirect URI or an SSH tunnel as described in
+[Deployment](deployment.md#google-oauth-redirect-uri-on-a-lan-host).
 
 ## Google Calendar permission was not granted
 

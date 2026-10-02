@@ -15,7 +15,7 @@ import { PageSkeleton } from "@/components/page-skeleton"
 import { RuleStatusBadge } from "@/components/rule-commands"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { RedirectMismatchNotice } from "@/features/settings"
+import { GoogleReturnHelp } from "@/features/settings"
 import { EventWhen, HappenedLine } from "@/components/activity-event"
 import { eventCell, formatClockTime, formatRunTime, whatHappened } from "@/lib/activity"
 import { activitySearch } from "@/lib/activity-location"
@@ -27,6 +27,7 @@ import {
   type OpenRule,
   type ViewChange,
 } from "@/lib/navigation"
+import { recordAuthorizationStart } from "@/lib/oauth-redirect"
 import { overviewHealth, overviewRules, withoutRunningRemovals, type AttentionRule } from "@/lib/overview-health"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
@@ -421,7 +422,10 @@ function OnboardingSteps({
       body: "Authorize calendar discovery and event access for one Google account.",
       action: (
         <div className="step-action">
-          <Button disabled={!googleConfigured} onClick={() => window.location.assign("/api/v1/oauth/google/start")}>
+          <Button disabled={!googleConfigured} onClick={() => {
+              recordAuthorizationStart()
+              window.location.assign("/api/v1/oauth/google/start")
+            }}>
             <KeyRound aria-hidden="true" /> Connect Google account <ExternalLink aria-hidden="true" />
           </Button>
           {!googleConfigured && (
@@ -452,7 +456,7 @@ function OnboardingSteps({
         </div>
         <span className="step-progress">Step {current + 1} of 3</span>
       </div>
-      {current === 0 && <RedirectMismatchNotice redirectUri={redirectUri} />}
+      {current === 0 && <GoogleReturnHelp redirectUri={redirectUri} />}
       <ol className="step-list">
         {steps.map((step, index) => (
           <li

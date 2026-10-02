@@ -10,9 +10,11 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
+    AccountCalendars,
     ConnectedAccount,
     ConnectedAccountRepository,
     ConnectedAccountState,
+    DiscoveredCalendar,
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
@@ -37,6 +39,22 @@ class ListConnectedAccounts:
         with self.unit_of_work() as uow:
             rules = tuple(uow.rules.list())
         return tuple(_summary(account, rules) for account in self.accounts.list())
+
+
+@dataclass(slots=True)
+class DiscoverCalendars:
+    """List an account's calendars in Google, remembering their names for its rules to show."""
+
+    calendars: AccountCalendars
+    unit_of_work: UnitOfWorkFactory
+
+    def execute(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
+        discovered = tuple(self.calendars.calendars(account_id))
+        # Recorded after Google answered, so no write lock is held across the request.
+        with self.unit_of_work() as uow:
+            uow.calendar_names.remember(account_id, discovered)
+            uow.commit()
+        return discovered
 
 
 @dataclass(slots=True)

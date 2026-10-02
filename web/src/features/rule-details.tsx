@@ -115,8 +115,10 @@ export function RuleDetailsView({
     connectedIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
   )
 
-  // Wait for calendar names so the focused heading never announces placeholder names.
-  const namesReady = calendarQueries.every((query) => !query.isPending)
+  // Wait for calendar names so the focused heading never announces placeholder names; names
+  // recorded when Google last listed the calendars serve until it answers again.
+  const namesRecorded = Boolean(rule.data?.source.calendar_name && rule.data.destination.calendar_name)
+  const namesReady = namesRecorded || calendarQueries.every((query) => !query.isPending)
   useEffect(() => {
     if (loadedRuleId && namesReady) heading.current?.focus()
   }, [loadedRuleId, namesReady])
@@ -176,12 +178,12 @@ export function RuleDetailsView({
     (account) => account?.state === "disconnected",
   )
   const sourceName = ruleEndpointLabel(
-    detail.source.calendar_id,
+    detail.source,
     sourceAccount,
     calendarsByAccount.get(detail.source.connected_account_id),
   ).calendar
   const destinationName = ruleEndpointLabel(
-    detail.destination.calendar_id,
+    detail.destination,
     destinationAccount,
     calendarsByAccount.get(detail.destination.connected_account_id),
   ).calendar
@@ -214,16 +216,14 @@ export function RuleDetailsView({
           <div className="rule-direction rule-details-direction">
             <RuleEndpoint
               account={sourceAccount}
-              accountId={detail.source.connected_account_id}
-              calendarId={detail.source.calendar_id}
+              endpoint={detail.source}
               calendars={calendarsByAccount.get(detail.source.connected_account_id)}
               role="Source"
             />
             <ArrowRight aria-hidden="true" />
             <RuleEndpoint
               account={destinationAccount}
-              accountId={detail.destination.connected_account_id}
-              calendarId={detail.destination.calendar_id}
+              endpoint={detail.destination}
               calendars={calendarsByAccount.get(detail.destination.connected_account_id)}
               role="Destination"
             />

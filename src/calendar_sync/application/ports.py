@@ -399,6 +399,24 @@ class RulePreviewRepository(Protocol):
     def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None: ...
 
 
+class CalendarNameRepository(Protocol):
+    """The name each calendar last had in Google, so a rule is named before Google answers."""
+
+    def remember(
+        self, account_id: ConnectedAccountId, calendars: Sequence[DiscoveredCalendar]
+    ) -> None:
+        """Record the listed calendars' names, writing only names that changed.
+
+        A calendar no longer listed keeps its last name, so a rule that uses it is still named.
+        Nothing is recorded for an account that no longer exists.
+        """
+        ...
+
+    def names(self, endpoints: Collection[CalendarEndpoint]) -> Mapping[CalendarEndpoint, str]:
+        """The last name recorded for each of `endpoints`, omitting those never listed."""
+        ...
+
+
 class ConnectedAccountRecords(Protocol):
     """Connected Account records inside a unit of work, without their credentials."""
 
@@ -425,6 +443,7 @@ class UnitOfWork(Protocol):
     observations: SourceObservationRepository
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
+    calendar_names: CalendarNameRepository
 
     def __enter__(self) -> Self: ...
 

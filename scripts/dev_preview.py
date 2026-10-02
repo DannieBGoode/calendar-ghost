@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
-from calendar_sync.application.accounts import ListConnectedAccounts
+from calendar_sync.application.accounts import DiscoverCalendars, ListConnectedAccounts
 from calendar_sync.application.activity import InspectActivityEvent
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.ports import (
@@ -235,6 +235,7 @@ def build_preview_container(
         ),
         authorization=cast(AccountAuthorization, google),
         account_calendars=cast(AccountCalendars, google),
+        discover_calendars=DiscoverCalendars(cast(AccountCalendars, google), adapters.unit_of_work),
     )
     _seed(adapters, path, moment)
     adapters.administrator.create_admin(PREVIEW_PASSWORD)

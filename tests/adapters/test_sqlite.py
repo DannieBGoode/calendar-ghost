@@ -16,6 +16,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditOutcome,
     ConnectedAccountState,
+    DiscoveredCalendar,
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
@@ -23,6 +24,8 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.application.rules import CreateSyncRule
 from calendar_sync.domain.model import (
+    CalendarEndpoint,
+    CalendarId,
     ConnectedAccountId,
     EventId,
     EventMapping,
@@ -216,7 +219,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == list(range(1, 16))
+    assert versions == list(range(1, 17))
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -564,6 +567,79 @@ def test_account_records_report_state_inside_the_unit_of_work(tmp_path: Path) ->
     with SqliteUnitOfWorkFactory(database)() as uow:
         assert uow.accounts.state(account.id) is ConnectedAccountState.CONNECTED
         assert uow.accounts.state(ConnectedAccountId("missing")) is None
+
+
+class _MovableClock:
+    def __init__(self, now: datetime) -> None:
+        self.moment = now
+
+    def now(self) -> datetime:
+        return self.moment
+
+
+def _calendar(calendar_id: str, name: str) -> DiscoveredCalendar:
+    return DiscoveredCalendar(calendar_id, name, "owner", primary=False)
+
+
+def test_calendar_names_record_only_changes_and_go_with_their_account(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    account = store.save("Personal", "person@example.test", "{}")
+    clock = _MovableClock(datetime(2026, 9, 1, tzinfo=UTC))
+    factory = SqliteUnitOfWorkFactory(database, clock)
+    family = CalendarEndpoint(account.id, CalendarId("family"))
+    work = CalendarEndpoint(account.id, CalendarId("work"))
+    with factory() as uow:
+        uow.calendar_names.remember(
+            account.id, [_calendar("family", "Family"), _calendar("work", "Work")]
+        )
+        uow.calendar_names.remember(ConnectedAccountId("missing"), [_calendar("other", "Other")])
+        uow.commit()
+    clock.moment = datetime(2026, 9, 2, tzinfo=UTC)
+    # Work is no longer listed, and Family's name is unchanged, so only Family's rename writes.
+    with factory() as uow:
+        uow.calendar_names.remember(account.id, [_calendar("family", "Household")])
+        uow.commit()
+    clock.moment = datetime(2026, 9, 3, tzinfo=UTC)
+    with factory() as uow:
+        uow.calendar_names.remember(account.id, [_calendar("family", "Household")])
+        uow.commit()
+
+    with factory() as uow:
+        assert uow.calendar_names.names([family, work]) == {family: "Household", work: "Work"}
+        assert uow.calendar_names.names([family]) == {family: "Household"}
+        assert uow.calendar_names.names([]) == {}
+    with sqlite3.connect(database) as connection:
+        updated = dict(
+            connection.execute("SELECT calendar_id, updated_at FROM calendar_names").fetchall()
+        )
+        assert updated == {
+            "family": "2026-09-02T00:00:00+00:00",
+            "work": "2026-09-01T00:00:00+00:00",
+        }
+    store.disconnect(account.id)
+    with factory() as uow:
+        assert uow.accounts.delete_disconnected(account.id)
+        uow.commit()
+    with factory() as uow:
+        assert uow.calendar_names.names([family, work]) == {}
+
+
+def test_memory_adapter_keeps_calendar_names_of_existing_accounts() -> None:
+    factory = InMemoryUnitOfWorkFactory()
+    account = ConnectedAccountId("account-1")
+    factory.state.accounts[account] = ConnectedAccountState.DISCONNECTED
+    family = CalendarEndpoint(account, CalendarId("family"))
+    with factory() as uow:
+        uow.calendar_names.remember(account, [_calendar("family", "Family")])
+        uow.calendar_names.remember(ConnectedAccountId("missing"), [_calendar("other", "Other")])
+        uow.commit()
+    with factory() as uow:
+        assert uow.calendar_names.names([family]) == {family: "Family"}
+        assert uow.accounts.delete_disconnected(account)
+        uow.commit()
+    assert factory.state.calendar_names == {}
 
 
 def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:

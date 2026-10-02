@@ -36,7 +36,8 @@ describe("AccountAvatar", () => {
     expect(settingsSource).not.toContain("accountInitials(")
     expect(rulesSource).not.toContain("accountInitials(")
     expect(ruleEndpointSource).not.toContain("accountInitials(")
-    expect(settingsSource.match(/<AccountAvatar/g)).toHaveLength(1)
+    // The collapsed accounts summary and each account row.
+    expect(settingsSource.match(/<AccountAvatar/g)).toHaveLength(2)
     expect(ruleEndpointSource.match(/<AccountAvatar/g)).toHaveLength(1)
   })
 })
