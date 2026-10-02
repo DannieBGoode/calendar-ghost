@@ -23,8 +23,13 @@ const COMMAND_WORK: Partial<Record<RuleCommand, RunningWork["kind"]>> = {
 export function clearCompletedWork<T extends { running: RunningWork | null }>(
   rule: T | undefined,
   command: RuleCommand,
+  commandStartedAt: number,
 ): T | undefined {
   if (!rule || (rule.running && COMMAND_WORK[command] !== rule.running.kind)) return rule
+  if (rule.running) {
+    const runningStartedAt = Date.parse(rule.running.started_at)
+    if (!Number.isFinite(runningStartedAt) || runningStartedAt > commandStartedAt) return rule
+  }
   return { ...rule, running: null }
 }
 
@@ -118,8 +123,9 @@ export function useRuleCommands() {
     destination: string,
     focusTarget?: () => HTMLElement | null,
   ) {
+    const commandStartedAt = Date.now()
     setPending((current) => ({ ...current, [ruleId]: command }))
-    setPendingSince((current) => ({ ...current, [ruleId]: Date.now() }))
+    setPendingSince((current) => ({ ...current, [ruleId]: commandStartedAt }))
     clearFeedback(ruleId)
     let completed = false
     try {
@@ -140,9 +146,13 @@ export function useRuleCommands() {
         // The command response proves this rule's work has finished. Clear stale running snapshots
         // after the refetch so a delayed or failed refresh cannot leave the spinner on screen.
         queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) =>
-          rules?.map((rule) => (rule.id === ruleId ? clearCompletedWork(rule, command)! : rule)),
+          rules?.map((rule) =>
+            rule.id === ruleId ? clearCompletedWork(rule, command, commandStartedAt)! : rule,
+          ),
         )
-        queryClient.setQueryData<RuleDetail>(["rule", ruleId], (rule) => clearCompletedWork(rule, command))
+        queryClient.setQueryData<RuleDetail>(["rule", ruleId], (rule) =>
+          clearCompletedWork(rule, command, commandStartedAt),
+        )
       }
       setPending((current) => {
         const next = { ...current }

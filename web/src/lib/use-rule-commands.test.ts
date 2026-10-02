@@ -18,6 +18,7 @@ describe("rule change refresh", () => {
   })
 
   it("clears a completed command from the cached rule work", () => {
+    const commandStartedAt = Date.parse("2026-10-02T00:00:00Z")
     const running = {
       kind: "reconciliation" as const,
       started_at: "2026-10-02T00:00:00Z",
@@ -26,11 +27,18 @@ describe("rule change refresh", () => {
       done: 0,
       stage: "reconciliation" as const,
     }
-    const completed = clearCompletedWork({ id: "rule-1", running }, "reconcile")
+    const completed = clearCompletedWork({ id: "rule-1", running }, "reconcile", commandStartedAt)
     expect(completed).toEqual({ id: "rule-1", running: null })
     expect(ruleWork({ pending: undefined, running: completed?.running })).toBeNull()
-    expect(clearCompletedWork({ id: "rule-1", running }, "sync")).toEqual({ id: "rule-1", running })
-    expect(clearCompletedWork(undefined, "reconcile")).toBeUndefined()
+    expect(clearCompletedWork({ id: "rule-1", running }, "sync", commandStartedAt)).toEqual({ id: "rule-1", running })
+    expect(
+      clearCompletedWork(
+        { id: "rule-1", running: { ...running, started_at: "2026-10-02T00:01:00Z" } },
+        "reconcile",
+        commandStartedAt,
+      ),
+    ).toEqual({ id: "rule-1", running: { ...running, started_at: "2026-10-02T00:01:00Z" } })
+    expect(clearCompletedWork(undefined, "reconcile", commandStartedAt)).toBeUndefined()
     expect(commandsSource).toContain('queryClient.setQueryData<RuleSummary[]>(["rules"]')
     expect(commandsSource).toContain('queryClient.setQueryData<RuleDetail>(["rule", ruleId]')
   })
