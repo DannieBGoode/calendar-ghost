@@ -90,7 +90,7 @@ describe("applyTheme", () => {
 
     expect(root.dataset).toEqual({ theme: "dark" })
     expect(root.style.colorScheme).toBe("dark")
-    expect(meta.content).toBe("#0e1217")
+    expect(meta.content).toBe("#0d0e19")
   })
 })
 
@@ -105,7 +105,7 @@ describe("pre-paint theme bootstrap", () => {
 
     const root = { dataset: { theme: "light" }, style: { colorScheme: "light" } }
     const meta = {
-      content: "#ffffff",
+      content: "#fbfbfe",
       setAttribute: (name: string, value: string) => {
         if (name === "content") meta.content = value
       },
@@ -126,7 +126,7 @@ describe("pre-paint theme bootstrap", () => {
   it("stays aligned with the runtime storage key and theme colors", () => {
     expect(bootstrapHtml).toContain(`const storageKey = "${THEME_STORAGE_KEY}"`)
     expect(bootstrapHtml).toContain('root.dataset.theme = theme')
-    expect(bootstrapHtml).toContain('theme === "dark" ? "#0e1217" : "#ffffff"')
+    expect(bootstrapHtml).toContain('theme === "dark" ? "#0d0e19" : "#fbfbfe"')
   })
 
   it.each([
@@ -141,7 +141,7 @@ describe("pre-paint theme bootstrap", () => {
 
     expect(root.dataset.theme).toBe(expected)
     expect(root.style.colorScheme).toBe(expected)
-    expect(meta.content).toBe(expected === "dark" ? "#0e1217" : "#ffffff")
+    expect(meta.content).toBe(expected === "dark" ? "#0d0e19" : "#fbfbfe")
   })
 
   it("falls back to the device when storage is unavailable", () => {

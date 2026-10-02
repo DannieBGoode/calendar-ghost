@@ -1,23 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   color-scheme: light;
   /* The sticky top bar's height; sticky content below it offsets by this. */
   --topbar-height: 4rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.20 0.02 250);
-  --surface: oklch(0.975 0.006 250);
-  --muted: oklch(0.955 0.009 250);
-  --muted-foreground: oklch(0.43 0.025 250);
-  --primary: oklch(0.50 0.16 250);
+  --font-sans: "Figtree Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --background: oklch(0.99 0.004 285);
+  --foreground: oklch(0.22 0.045 280);
+  --surface: oklch(0.972 0.008 285);
+  --muted: oklch(0.95 0.012 285);
+  --muted-foreground: oklch(0.45 0.035 280);
+  --primary: oklch(0.47 0.15 278);
   --primary-foreground: oklch(1 0 0);
-  --primary-soft: oklch(0.93 0.035 250);
-  --border: oklch(0.89 0.012 250);
-  --input: oklch(0.65 0.015 250);
-  --ring: oklch(0.50 0.16 250);
+  --primary-soft: oklch(0.94 0.03 280);
+  --border: oklch(0.90 0.014 285);
+  --input: oklch(0.65 0.02 285);
+  --ring: oklch(0.47 0.15 278);
   --destructive: oklch(0.50 0.18 25);
   --destructive-foreground: oklch(1 0 0);
   --destructive-soft: oklch(0.95 0.035 25);
@@ -30,7 +32,14 @@
   --warning-foreground: oklch(0.34 0.08 70);
   --warning-surface: oklch(0.975 0.022 80);
   --warning-border: oklch(0.86 0.06 80);
-  --menu-shadow: 0 12px 32px -12px oklch(0.2 0.02 250 / 0.28);
+  --brand-glow: oklch(0.97 0.02 285);
+  --brand-line: var(--primary);
+  --brand-eyes: var(--primary);
+  /* The auth intro panel is twilight in both appearances. */
+  --twilight-canvas: oklch(0.2 0.04 280);
+  --twilight-ink: oklch(0.95 0.012 285);
+  --twilight-muted: oklch(0.80 0.03 285);
+  --menu-shadow: 0 12px 32px -12px oklch(0.2 0.04 280 / 0.28);
   --radius: 0.625rem;
   --motion-fast: 180ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -40,17 +49,17 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: oklch(0.18 0.012 250);
-  --foreground: oklch(0.93 0.01 250);
-  --surface: oklch(0.22 0.014 250);
-  --muted: oklch(0.27 0.018 250);
-  --muted-foreground: oklch(0.73 0.02 250);
-  --primary: oklch(0.68 0.15 250);
-  --primary-foreground: oklch(0.16 0.02 250);
-  --primary-soft: oklch(0.27 0.055 250);
-  --border: oklch(0.36 0.018 250);
-  --input: oklch(0.52 0.02 250);
-  --ring: oklch(0.68 0.15 250);
+  --background: oklch(0.17 0.022 280);
+  --foreground: oklch(0.95 0.012 285);
+  --surface: oklch(0.21 0.026 280);
+  --muted: oklch(0.26 0.03 280);
+  --muted-foreground: oklch(0.75 0.025 285);
+  --primary: oklch(0.74 0.12 278);
+  --primary-foreground: oklch(0.17 0.03 280);
+  --primary-soft: oklch(0.28 0.06 278);
+  --border: oklch(0.34 0.03 280);
+  --input: oklch(0.52 0.03 280);
+  --ring: oklch(0.74 0.12 278);
   --destructive: oklch(0.68 0.16 25);
   --destructive-foreground: oklch(0.16 0.03 25);
   --destructive-soft: oklch(0.28 0.06 25);
@@ -63,6 +72,9 @@
   --warning-foreground: oklch(0.83 0.11 85);
   --warning-surface: oklch(0.22 0.025 80);
   --warning-border: oklch(0.42 0.06 80);
+  --brand-glow: oklch(0.93 0.03 285);
+  --brand-line: oklch(0.93 0.03 285);
+  --brand-eyes: oklch(0.2 0.04 280);
   --menu-shadow: 0 16px 40px -12px oklch(0 0 0 / 0.6);
 }
 
@@ -143,6 +155,14 @@ h1,
 h2,
 h3 {
   text-wrap: balance;
+}
+
+/* Page titles are the only place the display face appears. */
+h1 {
+  font-family: var(--font-display);
+  font-weight: 560;
+  font-variation-settings: "SOFT" 100;
+  letter-spacing: -0.015em;
 }
 
 p {
@@ -233,7 +253,6 @@ p {
   max-width: 13ch;
   font-size: clamp(2.25rem, 5vw, 4.25rem);
   line-height: 0.98;
-  letter-spacing: -0.035em;
 }
 
 .auth-copy {
@@ -481,7 +500,6 @@ p {
 .page-section h1 {
   font-size: 2rem;
   line-height: 1.15;
-  letter-spacing: -0.025em;
 }
 
 .page-intro {
@@ -537,7 +555,7 @@ p {
 }
 
 .health-copy h2 {
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .health-copy h2,
@@ -829,7 +847,12 @@ p {
 .disconnect-confirmation h3,
 .disconnect-confirmation h4 {
   font-size: 1rem;
+  font-weight: 550;
   line-height: 1.35;
+}
+
+.setting-row h2 {
+  font-weight: 550;
 }
 
 .account-empty p,
@@ -1264,7 +1287,7 @@ p {
 }
 
 .section-heading h2 {
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .recent-changes {
@@ -1732,7 +1755,7 @@ a.recent-change-rule:focus-visible {
 .rule-section > h2,
 .rule-section .section-heading h2 {
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .rule-facts {
@@ -1936,7 +1959,7 @@ a.recent-change-rule:focus-visible {
 .consequence-panel h3 {
   margin-bottom: 0.5rem;
   font-size: 0.875rem;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .consequence-panel ul {
@@ -2283,7 +2306,7 @@ thead + .activity-day th {
 }
 
 .activity-section .section-heading h2 {
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .activity-removed-rule {
