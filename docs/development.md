@@ -16,6 +16,20 @@ cd web && npm ci
 
 Run FastAPI on port 8000 and Vite on port 5173. Vite proxies `/api` and `/health` to FastAPI.
 
+## Corresponding source link
+
+The Web UI's **Source** link is injected at build time. A local Vite build uses the current Git
+revision; CI and Docker builds should set `CALENDAR_GHOST_SOURCE_URL` to the immutable commit or
+release tag URL for the source being built:
+
+```sh
+CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/google-calendar-sync/tree/<commit-or-tag> \
+  npm --prefix web run build
+```
+
+Docker Compose passes the same variable as a build argument. Downstream forks can point the link at
+their own corresponding source without changing the application code.
+
 ## Development preview
 
 To see the Web UI with realistic data without a Google account, run:
@@ -36,6 +50,14 @@ development only:
   every write.
 - It listens on `127.0.0.1` only, and `scripts/` is excluded from the Python package and the
   container image.
+
+The README screenshots in `docs/assets/` are captured from this preview at `/overview`,
+`/activity`, and `/rules`. Keep them synthetic when refreshing the media; never use a personal
+calendar export or a real provider response in repository assets.
+The preview uses the generated local portraits in `web/public/avatars/`; production accounts use
+the profile photo returned by Google when one is available. Its seed data models one fictional Sam
+across three context-specific identities (`sam@personal.example`, `sam@family.example`, and
+`sam@work.example`), keeping the screenshots recognizable while making each calendar's story clear.
 
 ## Quality checks
 

@@ -69,7 +69,7 @@ def test_preview_seeds_only_its_own_database_with_a_read_only_calendar(tmp_path:
     assert events["dinner", "source_cancelled"]["title"] == "Dinner at Marta's"
     with closing(sqlite3.connect(database)) as connection:
         rules = connection.execute("SELECT COUNT(*) FROM sync_rules").fetchone()[0]
-    assert rules == 2
+        assert rules == 3
 
 
 def test_preview_is_not_shipped_in_the_package_or_image() -> None:

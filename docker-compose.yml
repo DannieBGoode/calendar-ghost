@@ -1,6 +1,9 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        CALENDAR_GHOST_SOURCE_URL: ${CALENDAR_GHOST_SOURCE_URL:-}
     ports:
       - "8000:8000"
     environment:

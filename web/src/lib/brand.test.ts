@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
 
-import { APP_VERSION, PRODUCT_NAME, TAGLINE, documentTitle } from "./brand"
+import { APP_VERSION, PRODUCT_NAME, SOURCE_URL, TAGLINE, documentTitle } from "./brand"
 
 const stylesheet = readFileSync(new URL("../index.css", import.meta.url), "utf8")
 const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8")
@@ -18,6 +18,10 @@ describe("brand", () => {
 
   it("shows the version the bundle was built from", () => {
     expect(APP_VERSION).toBe(pkg.version)
+  })
+
+  it("exposes the corresponding source URL injected at build time", () => {
+    expect(() => new URL(SOURCE_URL)).not.toThrow()
   })
 
   it("keeps the saved appearance across the rename", () => {

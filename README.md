@@ -1,6 +1,6 @@
 # Calendar Ghost
 
-*Your busy time, everywhere it needs to be.* Self-hosted, one-way sync between Google calendars.
+*Your busy time, everywhere it needs to be.* Self-hosted, single-installation, one-way sync between Google calendars.
 
 A self-hosted, source-authoritative Google Calendar synchronizer. Define a directional rule from
 one calendar to another—including calendars owned by different Google identities—and keep a
@@ -12,6 +12,53 @@ coordinator.
 > Web UI form a working first vertical slice, but the project has not completed live-account
 > endurance testing or a production-readiness review. Use test calendars and keep backups. Do not
 > connect important calendars yet.
+
+<p align="center">
+  <img src="web/public/favicon.svg" alt="Calendar Ghost logo" width="96">
+</p>
+
+## Editions and license
+
+This repository contains the Calendar Ghost Community Edition. It is a single-installation,
+single-administrator deployment designed for self-hosting on a personal server, home lab, or small
+machine. It uses one SQLite database and does not require a Calendar Ghost account or hosted
+coordinator. There is no Community Edition subscription or license server; the operator provides
+the infrastructure and remains responsible for any hosting or provider costs.
+
+The Community Edition is genuine open-source software under the [GNU Affero General Public License,
+version 3 or later](LICENSE). AGPL permits commercial use, including a competing service, when its
+conditions are met. Calendar Ghost's official name and marks are separate from the software license;
+see [TRADEMARKS.md](TRADEMARKS.md). A future Calendar Ghost hosted service may be multi-tenant and
+offer managed operations, upgrades, backups, support, and availability; it is a separate product
+boundary rather than a requirement for using this repository.
+
+Read [Licensing and editions](docs/licensing.md) and [Data ownership and privacy](docs/data-ownership.md)
+before deploying it with real calendars.
+
+## See it in action
+
+These screenshots use synthetic data and local generated avatar portraits from the development
+preview. They contain no personal Google Calendar content and show the main self-hosted workflow:
+see rule health, inspect Activity, and manage directional rules. The preview follows one fictional
+person, Sam, across three context-specific Google identities: `sam@personal.example`,
+`sam@family.example`, and `sam@work.example`. The portraits keep him recognizable while the
+accessories and companion make each part of his life distinct.
+
+<p align="center">
+  <img src="docs/assets/calendar-ghost-overview.png" alt="Calendar Ghost overview showing rule health and recent changes" width="100%">
+</p>
+<p align="center"><em>Overview: rule health, attention items, and recent changes.</em></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/calendar-ghost-activity.png" alt="Calendar Ghost Activity showing event decisions and filters" width="100%"></td>
+    <td width="50%"><img src="docs/assets/calendar-ghost-rules.png" alt="Calendar Ghost rules showing source and destination calendars" width="100%"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Activity explains what each rule did.</em></td>
+    <td align="center"><em>Rules make source and destination ownership visible.</em></td>
+  </tr>
+</table>
 
 ## Why this project exists
 
@@ -51,6 +98,9 @@ Google Calendar is the only provider in the initial release. Outlook and CalDAV 
 possibilities, not currently supported features.
 
 ## Quick start with Docker
+
+For the complete Google Cloud, OAuth, LAN/HTTPS, backup, and recovery checklist, see the
+[self-hosting guide](docs/self-hosting.md).
 
 ### Prerequisites
 
@@ -223,8 +273,8 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
 - There is no mandatory analytics, license server, remote logging, or developer-operated backend.
 
 For deployment hardening, backup expectations, and HTTPS guidance, read
-[docs/deployment.md](docs/deployment.md). Report vulnerabilities privately as described in
-[SECURITY.md](SECURITY.md).
+[docs/deployment.md](docs/deployment.md) and the [data ownership guide](docs/data-ownership.md).
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
 
 ## Configuration reference
 
@@ -355,7 +405,10 @@ behavior should include domain tests; hard-to-reverse architectural choices shou
 
 ## License
 
-Calendar Ghost is available under the [MIT License](LICENSE).
+Calendar Ghost Community Edition is available under the [GNU Affero General Public License, version 3
+or later](LICENSE). This is an OSI-approved open-source license designed to keep source available
+when modified software is offered over a network. See [Licensing and editions](docs/licensing.md) for
+the relationship between the Community Edition and the future hosted service.
 
 The Web UI bundles the Fraunces and Figtree typefaces, which are licensed under the SIL Open Font
 License 1.1. Their notices are in [`web/public/licenses/`](web/public/licenses/) and ship with the

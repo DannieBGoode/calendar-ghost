@@ -9,10 +9,10 @@ description = "Calendar Ghost: self-hosted, one-way Google Calendar synchronizat
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
-authors = [{ name = "Google Calendar Sync contributors" }]
+authors = [{ name = "Calendar Ghost contributors" }]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
-  "License :: OSI Approved :: MIT License",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]

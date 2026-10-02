@@ -31,4 +31,16 @@ Domain tests must remain fast and independent of HTTP, SQLite, and Google. Appli
 - Update documentation when terminology, configuration, or operator behavior changes.
 - Include screenshots for visible UI changes and verify keyboard and mobile behavior.
 
-By contributing, you agree that your contribution is licensed under the MIT License.
+## License and contributions
+
+The Community Edition is licensed under the [GNU Affero General Public License, version 3 or later](LICENSE).
+Contributions are welcome under that same license. Contributors retain copyright in their work and
+must have the right to submit it under the Community Edition license.
+
+The future hosted service may have separate commercial infrastructure and terms, but the project
+will not quietly relicense community contributions into a proprietary product. Any future request
+to reuse a contribution under separate commercial terms must be handled through a contributor
+agreement that is published and reviewed before it is used for that purpose.
+
+By contributing, you agree that your contribution may be distributed as part of the Community
+Edition under the GNU Affero General Public License, version 3 or later.
