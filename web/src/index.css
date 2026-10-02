@@ -178,6 +178,23 @@ p {
   gap: 1rem;
 }
 
+.startup-ghost {
+  width: 3.5rem;
+  height: 3.5rem;
+  animation: ghost-breath 2.4s ease-in-out infinite;
+}
+
+@keyframes ghost-breath {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
 .fatal-state {
   display: flex;
   min-height: 100vh;
@@ -385,8 +402,8 @@ p {
 }
 
 .wordmark-icon svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 .primary-nav {
@@ -1974,6 +1991,7 @@ a.recent-change-rule:focus-visible {
 .app-footer {
   display: flex;
   min-height: 4rem;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
@@ -3113,6 +3131,10 @@ thead + .activity-day th {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .startup-ghost {
+    animation: none;
+  }
+
   *,
   *::before,
   *::after {
