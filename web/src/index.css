@@ -231,39 +231,39 @@ p {
 }
 
 .auth-intro {
+  /* The mark on twilight is the dark-appearance ghost in both appearances. */
+  --brand-glow: oklch(0.93 0.03 285);
+  --brand-line: oklch(0.93 0.03 285);
+  --brand-eyes: var(--twilight-canvas);
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: clamp(2.5rem, 7vw, 7rem);
-  background: var(--surface);
+  background: var(--twilight-canvas);
+  color: var(--twilight-ink);
 }
 
-.brand-mark,
 .wordmark-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--primary);
 }
 
 .brand-mark {
-  width: 2.75rem;
-  height: 2.75rem;
-  margin-bottom: 1.25rem;
-  border-radius: 0.75rem;
-  background: var(--primary-soft);
-}
-
-.brand-mark svg {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .product-name {
-  margin-bottom: 2.75rem;
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
+  font-size: 1.125rem;
   font-weight: 650;
+}
+
+.auth-tagline {
+  margin-bottom: 3rem;
+  color: var(--twilight-muted);
+  font-size: 0.9375rem;
 }
 
 .auth-intro h1 {
@@ -275,7 +275,7 @@ p {
 .auth-copy {
   max-width: 36rem;
   margin-top: 1.75rem;
-  color: var(--muted-foreground);
+  color: var(--twilight-muted);
   font-size: 1rem;
   line-height: 1.65;
 }
@@ -286,7 +286,7 @@ p {
   padding: 0;
   flex-direction: column;
   gap: 0.75rem;
-  color: var(--muted-foreground);
+  color: var(--twilight-muted);
   font-size: 0.875rem;
   list-style: none;
 }
@@ -300,7 +300,7 @@ p {
 .privacy-list svg {
   width: 1rem;
   height: 1rem;
-  color: var(--success-foreground);
+  color: oklch(0.82 0.1 155);
 }
 
 .auth-form-panel {
@@ -369,6 +369,16 @@ p {
   border-radius: 0.5rem;
   background: var(--destructive-soft);
   color: var(--destructive-soft-foreground);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.inline-attention {
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--warning-border);
+  border-radius: 0.5rem;
+  background: var(--warning-surface);
+  color: var(--warning-foreground);
   font-size: 0.875rem;
   line-height: 1.45;
 }
@@ -1598,6 +1608,9 @@ a.recent-change-rule:focus-visible {
 }
 
 .empty-note {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   padding: 1.5rem 0;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -1611,6 +1624,16 @@ a.recent-change-rule:focus-visible {
   margin-top: 0.25rem;
   color: var(--muted-foreground);
   font-size: 0.875rem;
+}
+
+.empty-ghost {
+  width: 3rem;
+  height: 3rem;
+  flex: none;
+}
+
+.empty-panel .empty-ghost {
+  margin-bottom: 1rem;
 }
 
 .rule-builder {
@@ -2811,8 +2834,13 @@ thead + .activity-day th {
     padding: 3rem 1.5rem;
   }
 
-  .product-name {
-    margin-bottom: 1.5rem;
+  .auth-tagline {
+    margin-bottom: 1.75rem;
+  }
+
+  .brand-mark {
+    width: 3.5rem;
+    height: 3.5rem;
   }
 
   .auth-intro h1 {

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Plus, ShieldAlert } from "lucide-react"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
+import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import {
@@ -158,12 +159,15 @@ export function RulesView({
       {rules.data.length === 0 ? (
         !showBuilder && (
           <section className="empty-note" aria-labelledby="no-rules-title">
-            <h2 id="no-rules-title">No rules yet</h2>
-            <p>
-              {connected.length === 0
-                ? "Connect a Google account in Settings, then create your first rule here."
-                : "Create a rule, preview its effects, then start syncing."}
-            </p>
+            <GhostMark className="empty-ghost" />
+            <div>
+              <h2 id="no-rules-title">No rules yet</h2>
+              <p>
+                {connected.length === 0
+                  ? "Connect a Google account in Settings, then create your first rule here."
+                  : "Create a rule, preview its effects, then start syncing."}
+              </p>
+            </div>
           </section>
         )
       ) : (

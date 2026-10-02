@@ -1,6 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
 import {
-  Activity,
   ArrowRight,
   ChevronDown,
   ChevronUp,
@@ -14,6 +13,7 @@ import {
 import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react"
 
 import { EventWhen, HappenedLine } from "@/components/activity-event"
+import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { RulePicker, type RulePickerOption } from "@/components/rule-picker"
@@ -441,7 +441,7 @@ function EmptyActivity({
   const filtered = Boolean(ruleId) || show !== "all" || Boolean(query)
   return (
     <div className="empty-panel">
-      <div className="empty-icon"><Activity aria-hidden="true" /></div>
+      <GhostMark className="empty-ghost" />
       <h2>{quiet ? "Nothing has changed yet" : query ? `No events named “${query}”` : filtered ? "No matching activity" : "No activity yet"}</h2>
       <p>
         {quiet

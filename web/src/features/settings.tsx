@@ -234,7 +234,7 @@ function SettingsView({
         </div>
 
         {!googleConfigured && (
-          <div className="inline-error" role="status">
+          <div className="inline-attention" role="status">
             Add the master key and Google OAuth credentials in <code>.env</code>, then restart
             before connecting an account.
           </div>
