@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#fbfbfe" />
     <script>
       (() => {
         const storageKey = "calendar-sync-theme"
@@ -26,14 +26,17 @@
         root.style.colorScheme = theme
         document
           .querySelector('meta[name="theme-color"]')
-          ?.setAttribute("content", theme === "dark" ? "#0e1217" : "#ffffff")
+          ?.setAttribute("content", theme === "dark" ? "#0d0e19" : "#fbfbfe")
       })()
     </script>
-    <meta name="description" content="Self-hosted Google Calendar synchronization" />
+    <meta
+      name="description"
+      content="Calendar Ghost: self-hosted, one-way Google Calendar sync. Your busy time, everywhere it needs to be."
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Calendar Sync</title>
-    <script type="module" crossorigin src="/assets/index-CUMgkxae.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-ewNaEaFh.css">
+    <title>Calendar Ghost</title>
+    <script type="module" crossorigin src="/assets/index-DJWjP-gJ.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Ve3hhNkH.css">
   </head>
   <body>
     <div id="root"></div>
