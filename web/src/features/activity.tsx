@@ -250,7 +250,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
       <OpenIncidents incidents={openIncidents} context={context} onAction={followIncident} />
       <ResolvedIncidents incidents={resolvedIncidents} context={context} />
 
-      <section className="workflow activity-section" aria-labelledby="activity-feed-title">
+      <section className="workflow activity-section page-card" aria-labelledby="activity-feed-title">
         <div className="section-heading activity-feed-heading">
           <div>
             <h2 id="activity-feed-title">History</h2>
@@ -795,7 +795,7 @@ function OpenIncidents({
 }) {
   if (incidents.length === 0) return null
   return (
-    <section className="workflow activity-section" aria-labelledby="incidents-title">
+    <section className="workflow activity-section page-card" aria-labelledby="incidents-title">
       <div className="section-heading">
         <div>
           <h2 id="incidents-title">Incidents</h2>

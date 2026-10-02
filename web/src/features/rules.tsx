@@ -172,7 +172,7 @@ export function RulesView({
           </section>
         )
       ) : (
-        <ul className="rule-list" aria-label="Sync rules">
+        <ul className="rule-list page-card" aria-label="Sync rules">
           {rules.data.map((rule) => {
             const { source, destination, disconnected } = endpoints(rule)
             const stopped = rule.state === "degraded" || disconnected.length > 0
@@ -391,7 +391,7 @@ function RuleBuilder({
   const destinationStatus = calendarStatus(destinationCalendars, writableDestinations.length, "writable calendars")
 
   return (
-    <section className="rule-builder" id="rule-builder" aria-labelledby="builder-title">
+    <section className="rule-builder page-card" id="rule-builder" aria-labelledby="builder-title">
       <div className="section-heading">
         <div>
           <h2 id="builder-title" ref={heading} tabIndex={-1}>Choose the calendars</h2>

@@ -280,7 +280,7 @@ export function RuleDetailsView({
         </div>
       )}
 
-      <section className="rule-section" aria-labelledby="rule-facts-title">
+      <section className="rule-section page-card" aria-labelledby="rule-facts-title">
         <h2 id="rule-facts-title">What this rule does</h2>
         <dl className="rule-facts">
           <div>
@@ -318,7 +318,7 @@ export function RuleDetailsView({
         </dl>
       </section>
 
-      <section className="rule-section" aria-labelledby="rule-runs-title">
+      <section className="rule-section page-card" aria-labelledby="rule-runs-title">
         <div className="section-heading section-heading-inline">
           <h2 id="rule-runs-title">Latest runs</h2>
           <a
@@ -483,7 +483,7 @@ function PolicyEditor({
   }
 
   return (
-    <section className="rule-section" aria-labelledby="policy-title">
+    <section className="rule-section page-card" aria-labelledby="policy-title">
       <div className="section-heading">
         <div>
           <h2 id="policy-title">What {destinationName} shows</h2>
@@ -711,7 +711,7 @@ function CalendarReplacement({
   }
 
   return (
-    <section className="rule-section" aria-labelledby="replace-title">
+    <section className="rule-section page-card" aria-labelledby="replace-title">
       <div className="section-heading">
         <div>
           <h2 id="replace-title">Calendars</h2>
@@ -945,7 +945,7 @@ function RuleRemoval({
   }, [remove.error])
 
   return (
-    <section className="rule-section rule-removal" aria-labelledby="removal-title" aria-busy={active ? true : undefined}>
+    <section className="rule-section page-card rule-removal" aria-labelledby="removal-title" aria-busy={active ? true : undefined}>
       <div className="section-heading">
         <div>
           <h2 id="removal-title">

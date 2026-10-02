@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
+  CalendarDays,
   Check,
   CheckCircle2,
   CircleDot,
@@ -10,6 +11,7 @@ import {
 } from "lucide-react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { RuleStatusBadge } from "@/components/rule-commands"
@@ -28,7 +30,13 @@ import {
   type ViewChange,
 } from "@/lib/navigation"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
-import { overviewHealth, overviewRules, withoutRunningRemovals, type AttentionRule } from "@/lib/overview-health"
+import {
+  overviewHealth,
+  overviewRules,
+  withoutRunningRemovals,
+  type AttentionRule,
+  type OverviewTone,
+} from "@/lib/overview-health"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
@@ -68,6 +76,12 @@ function attentionRule(
   return { ruleId: stopped.id, name: ruleName(endpoints(stopped)), detail: `${lastRunLabel(stopped.last_sync, now)}.` }
 }
 
+function heroCallout(tone: OverviewTone): { title: string; detail: string } {
+  if (tone === "healthy") return { title: "All good!", detail: "Your calendars are in sync." }
+  if (tone === "attention") return { title: "Needs attention", detail: "Review the affected rule to continue." }
+  return { title: "Ready when you are", detail: "Preview comes before anything is written." }
+}
+
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const now = useNow()
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })
@@ -95,32 +109,57 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   )
   const SignalIcon = health.tone === "attention" ? ShieldAlert : health.tone === "healthy" ? CheckCircle2 : CircleDot
   const action = health.action
+  const callout = heroCallout(health.tone)
+  const firstFact = dashboard.data.enabled_rules > 0
+    ? `${plural(dashboard.data.enabled_rules, "rule")} running`
+    : health.tone === "setup"
+      ? "Setup in three steps"
+      : "No rules running"
+  const secondFact = dashboard.data.last_synced_at
+    ? `Last sync ${relativeTime(dashboard.data.last_synced_at, now)}`
+    : health.tone === "setup"
+      ? "Nothing written yet"
+      : "First sync within five minutes"
 
   return (
-    <div className="page-section">
-      <h1>{health.headline}</h1>
-
-      <section className="health-strip" data-tone={health.tone} aria-labelledby="health-title">
-        <div className="health-signal"><SignalIcon aria-hidden="true" /></div>
-        <div className="health-copy">
-          <h2 id="health-title">{health.title}</h2>
-          <p>{health.detail}</p>
+    <div className="page-section overview-page">
+      <section className="health-hero" data-tone={health.tone} aria-labelledby="health-title">
+        <div className="health-hero-copy">
+          <div className="health-hero-status">
+            <SignalIcon aria-hidden="true" />
+            <span>{health.badge}</span>
+          </div>
+          <h1 id="health-title">{health.headline}</h1>
+          <p className="health-hero-detail">{health.detail}</p>
+          <div className="health-hero-facts" aria-label="Synchronization summary">
+            <span><SignalIcon aria-hidden="true" /> {firstFact}</span>
+            <span className="health-hero-separator" aria-hidden="true">•</span>
+            <span>{secondFact}</span>
+          </div>
+          {action && health.tone !== "setup" && (
+            <Button className="health-hero-action" asChild>
+              <a
+                href={action.ruleId ? appPathForRule(action.ruleId) : `${appPathForView(action.view)}${action.search ?? ""}`}
+                onClick={(event) => {
+                  if (!isPlainLeftClick(event)) return
+                  event.preventDefault()
+                  if (action.ruleId) onOpenRule(action.ruleId)
+                  else onViewChange(action.view, action.search ? { search: action.search } : undefined)
+                }}
+              >
+                {action.label} <ArrowRight aria-hidden="true" />
+              </a>
+            </Button>
+          )}
         </div>
-        {action && health.tone !== "setup" && (
-          <Button asChild>
-            <a
-              href={action.ruleId ? appPathForRule(action.ruleId) : `${appPathForView(action.view)}${action.search ?? ""}`}
-              onClick={(event) => {
-                if (!isPlainLeftClick(event)) return
-                event.preventDefault()
-                if (action.ruleId) onOpenRule(action.ruleId)
-                else onViewChange(action.view, action.search ? { search: action.search } : undefined)
-              }}
-            >
-              {action.label} <ArrowRight aria-hidden="true" />
-            </a>
-          </Button>
-        )}
+        <div className="health-hero-visual" aria-hidden="true">
+          <div className="health-hero-halo" />
+          <GhostMark className="health-hero-ghost" />
+          <div className="health-hero-callout">
+            <strong>{callout.title}</strong>
+            <span>{callout.detail}</span>
+          </div>
+        </div>
       </section>
 
       {health.tone === "setup" && (
@@ -136,13 +175,6 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
       )}
       {rules.data.some((rule) => rule.state === "enabled" || rule.last_sync) && (
         <RecentChanges rules={rules.data} endpoints={endpoints} now={now} onViewChange={onViewChange} onOpenRule={onOpenRule} />
-      )}
-      {dashboard.data.connected_accounts + dashboard.data.disconnected_accounts > 0 && (
-        <p className="overview-facts">
-          {dashboard.data.enabled_rules} of {plural(dashboard.data.sync_rules, "rule")} running ·{" "}
-          {plural(dashboard.data.connected_accounts, "Google account")} connected ·{" "}
-          {plural(dashboard.data.open_incidents, "open incident")}
-        </p>
       )}
     </div>
   )
@@ -190,9 +222,12 @@ function RecentChanges({
     .at(-1)
 
   return (
-    <section className="workflow" aria-labelledby="recent-title">
+    <section className="workflow dashboard-card" aria-labelledby="recent-title">
       <div className="section-heading section-heading-inline">
-        <h2 id="recent-title">Recent changes</h2>
+        <div>
+          <h2 id="recent-title">Recent changes</h2>
+          <p>Latest synchronization decisions and changes.</p>
+        </div>
         <SectionLink href={appPathForView("activity")} onClick={() => onViewChange("activity")}>
           All activity
         </SectionLink>
@@ -251,12 +286,17 @@ function RecentChangeItem({
   // A collapsed repeat says how often instead of "again".
   const entry = change.repeats > 1 ? { ...change.entry, repeated: false } : change.entry
   const cell = eventCell(entry, names)
+  const happened = whatHappened(entry, names)
+  const markerTone = entry.event?.cancelled ? "cancelled" : happened.tone
   const since = new Date(change.first_occurred_at).toDateString() === new Date(now).toDateString()
     ? formatClockTime(change.first_occurred_at)
     : formatRunTime(change.first_occurred_at, new Date(now))
   const search = activitySearch({ ruleId: entry.rule_id, show: "", entryId: entry.id })
   return (
-    <li>
+    <li className="recent-change-item">
+      <span className="recent-change-marker" data-tone={markerTone}>
+        <CalendarDays aria-hidden="true" />
+      </span>
       <time dateTime={entry.occurred_at} title={new Date(entry.occurred_at).toLocaleString()}>
         {relativeTime(entry.occurred_at, now)}
       </time>
@@ -273,10 +313,7 @@ function RecentChangeItem({
           {cell.state === "event" ? cell.title : cell.label}
         </a>
         {cell.state === "event" ? <EventWhen cell={cell} /> : cell.note && <span className="activity-event-when">{cell.note}</span>}
-        <HappenedLine
-          happened={whatHappened(entry, names)}
-          suffix={change.repeats > 1 ? `${change.repeats} times since ${since}` : undefined}
-        />
+        <HappenedLine happened={happened} suffix={change.repeats > 1 ? `${change.repeats} times since ${since}` : undefined} />
         {rule && endpoints ? (
           <a
             className="recent-change-rule"
@@ -314,9 +351,12 @@ function OverviewRules({
   const removingIds = useRemovingRuleIds(rules)
   const shown = overviewRules(rules, removingIds, OVERVIEW_RULE_LIMIT)
   return (
-    <section className="workflow" aria-labelledby="overview-rules-title">
+    <section className="workflow dashboard-card" aria-labelledby="overview-rules-title">
       <div className="section-heading section-heading-inline">
-        <h2 id="overview-rules-title">Rules</h2>
+        <div>
+          <h2 id="overview-rules-title">Rules</h2>
+          <p>{plural(rules.length, "rule")} configured</p>
+        </div>
         <SectionLink href={appPathForView("rules")} onClick={() => onViewChange("rules")}>
           {rules.length > shown.length ? `All ${rules.length} rules` : "Manage rules"}
         </SectionLink>
@@ -448,7 +488,7 @@ function OnboardingSteps({
     },
   ]
   return (
-    <section className="workflow" aria-labelledby="workflow-title">
+    <section className="workflow dashboard-card setup-card" aria-labelledby="workflow-title">
       <div className="section-heading">
         <div>
           <h2 id="workflow-title">Getting started</h2>
