@@ -777,7 +777,9 @@ class RecordingSmtp:
 def test_incident_email_names_the_product(monkeypatch: pytest.MonkeyPatch) -> None:
     RecordingSmtp.sent = []
     monkeypatch.setattr(notifications.smtplib, "SMTP", RecordingSmtp)
-    channel = SmtpChannel(host="smtp.example", port=587, sender="a@example.com", recipient="b@example.com")
+    channel = SmtpChannel(
+        host="smtp.example", port=587, sender="a@example.com", recipient="b@example.com"
+    )
 
     channel.send(incident())
 
