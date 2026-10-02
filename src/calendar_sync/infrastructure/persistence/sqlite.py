@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -12,9 +12,11 @@ from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
+    CalendarNameRepository,
     Clock,
     ConnectedAccountRecords,
     ConnectedAccountState,
+    DiscoveredCalendar,
     EventMappingRepository,
     ExceptionReplayRepository,
     IncidentResolution,
@@ -75,6 +77,7 @@ _FORWARD_MIGRATIONS = (
     (13, "0013_incident_accounts.sql"),
     (14, "0014_source_changes.sql"),
     (15, "0015_invitation_responses.sql"),
+    (16, "0016_calendar_names.sql"),
 )
 
 
@@ -633,6 +636,48 @@ class SqliteRulePreviewRepository:
         )
 
 
+class SqliteCalendarNameRepository:
+    def __init__(self, connection: sqlite3.Connection, clock: Clock) -> None:
+        self._connection = connection
+        self._clock = clock
+
+    def remember(
+        self, account_id: ConnectedAccountId, calendars: Sequence[DiscoveredCalendar]
+    ) -> None:
+        now = self._clock.now().isoformat()
+        # Selecting from the account row records nothing for an account deleted meanwhile.
+        self._connection.executemany(
+            """
+            INSERT INTO calendar_names (connected_account_id, calendar_id, name, updated_at)
+            SELECT id, ?, ?, ? FROM connected_accounts WHERE id = ?
+            ON CONFLICT(connected_account_id, calendar_id) DO UPDATE SET
+                name = excluded.name,
+                updated_at = excluded.updated_at
+            WHERE name != excluded.name
+            """,
+            [(calendar.id, calendar.summary, now, account_id.value) for calendar in calendars],
+        )
+
+    def names(self, endpoints: Collection[CalendarEndpoint]) -> dict[CalendarEndpoint, str]:
+        wanted = set(endpoints)
+        if not wanted:
+            return {}
+        rows = self._connection.execute(
+            "SELECT connected_account_id, calendar_id, name FROM calendar_names"
+        )
+        named = (
+            (
+                CalendarEndpoint(
+                    ConnectedAccountId(str(row["connected_account_id"])),
+                    CalendarId(str(row["calendar_id"])),
+                ),
+                str(row["name"]),
+            )
+            for row in rows
+        )
+        return {endpoint: name for endpoint, name in named if endpoint in wanted}
+
+
 class SqliteUnitOfWork:
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
@@ -645,6 +690,7 @@ class SqliteUnitOfWork:
     observations: SourceObservationRepository
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
+    calendar_names: CalendarNameRepository
 
     def __init__(
         self, database_path: Path, clock: Clock, history: HistoryCipher | None = None
@@ -670,6 +716,7 @@ class SqliteUnitOfWork:
         self.observations = SqliteSourceObservationRepository(connection, self._history)
         self.run_outcomes = SqliteRuleRunOutcomeRepository(connection)
         self.previews = SqliteRulePreviewRepository(connection)
+        self.calendar_names = SqliteCalendarNameRepository(connection, self._clock)
         return self
 
     def __exit__(

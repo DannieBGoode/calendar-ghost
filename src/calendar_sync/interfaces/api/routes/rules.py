@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
-from typing import Annotated, Protocol
+from collections.abc import Callable, Mapping
+from typing import Annotated, Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -50,6 +50,7 @@ from calendar_sync.interfaces.api.dependencies import app_services, available, r
 from calendar_sync.interfaces.api.schemas import (
     CalendarEndpointPayload,
     CreateRuleRequest,
+    NamedCalendarEndpointResponse,
     PreviewSummaryResponse,
     ProjectionChoice,
     RemovalResponse,
@@ -101,7 +102,7 @@ router = APIRouter()
 def list_rules(services: Services) -> list[RuleSummaryResponse]:
     return [
         RuleSummaryResponse(
-            **_rule_response(summary.rule).model_dump(),
+            **_named_rule_response(summary.rule, summary.names),
             last_sync=_outcome_response(summary.last_sync),
             latest_preview=_preview_response(summary.latest_preview),
             running=_work_response(summary.running),
@@ -250,7 +251,7 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
     except RuleNotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     return RuleDetailResponse(
-        **_rule_response(details.rule).model_dump(),
+        **_named_rule_response(details.rule, details.names),
         initial_lookback_days=details.rule.initial_lookback_days,
         mapping_count=details.mapping_count,
         last_sync=_outcome_response(details.last_sync),
@@ -380,6 +381,21 @@ def _rule_response(rule: SyncRule) -> RuleResponse:
         state=rule.state.value,
         reprojection_required=rule.reprojection_required,
     )
+
+
+def _named_rule_response(rule: SyncRule, names: Mapping[CalendarEndpoint, str]) -> dict[str, Any]:
+    def named(endpoint: CalendarEndpoint) -> NamedCalendarEndpointResponse:
+        return NamedCalendarEndpointResponse(
+            connected_account_id=endpoint.connected_account_id.value,
+            calendar_id=endpoint.calendar_id.value,
+            calendar_name=names.get(endpoint),
+        )
+
+    return {
+        **_rule_response(rule).model_dump(exclude={"source", "destination"}),
+        "source": named(rule.source),
+        "destination": named(rule.destination),
+    }
 
 
 def _all_day(sync_all_day_events: bool) -> AllDaySyncPolicy:

@@ -9,6 +9,7 @@ from calendar_sync.application.accounts import (
     ConnectedAccountSummary,
     DeleteConnectedAccount,
     DisconnectConnectedAccount,
+    DiscoverCalendars,
     ListConnectedAccounts,
 )
 from calendar_sync.application.errors import (
@@ -48,6 +49,8 @@ class AccountServices(Protocol):
     def authorization(self) -> AccountAuthorization | None: ...
     @property
     def account_calendars(self) -> AccountCalendars | None: ...
+    @property
+    def discover_calendars(self) -> DiscoverCalendars | None: ...
     @property
     def list_connected_accounts(self) -> ListConnectedAccounts | None: ...
     @property
@@ -164,9 +167,9 @@ def delete_account(account_id: str, services: Services) -> None:
     dependencies=[Depends(require_admin)],
 )
 def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCalendarResponse]:
-    calendars = available(services.account_calendars, "Google OAuth is not configured")
+    discover = available(services.discover_calendars, "Google OAuth is not configured")
     try:
-        discovered = calendars.calendars(ConnectedAccountId(account_id))
+        discovered = discover.execute(ConnectedAccountId(account_id))
     except ConnectedAccountNotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except ConnectedAccountDisconnected as error:

@@ -25,6 +25,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditOutcome,
     CalendarProvider,
+    DiscoveredCalendar,
     IncidentReport,
     RecordedEvent,
     RuleRunOutcome,
@@ -686,6 +687,56 @@ def test_connected_account_access_can_be_verified(
         "writable_calendars": 2,
     }
     verify_access.assert_called_once_with(ConnectedAccountId("account-1"))
+
+
+def test_rules_name_their_calendars_as_google_last_listed_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    assert adapters.accounts is not None
+    assert adapters.google_oauth is not None
+    account = adapters.accounts.save("Personal", "person@example.test", "{}")
+    with adapters.unit_of_work() as uow:
+        uow.rules.add(
+            SyncRule(
+                id=SyncRuleId("rule-1"),
+                source=endpoint(account.id.value, "family"),
+                destination=endpoint(account.id.value, "work"),
+            )
+        )
+        uow.commit()
+    listed = Mock(
+        return_value=[
+            DiscoveredCalendar("family", "Family", "owner", primary=False),
+            DiscoveredCalendar("work", "Work", "writer", primary=False),
+        ]
+    )
+    monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
+
+    def names(response: Any) -> tuple[object, object]:
+        body = response.json()
+        rule_body = body[0] if isinstance(body, list) else body
+        return (
+            rule_body["source"]["calendar_name"],
+            rule_body["destination"]["calendar_name"],
+        )
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        before = names(client.get("/api/v1/rules"))
+        discovered = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
+        after = names(client.get("/api/v1/rules"))
+        # A renamed calendar is renamed; one Google no longer lists keeps its last name.
+        listed.return_value = [DiscoveredCalendar("family", "Household", "owner", primary=False)]
+        client.get(f"/api/v1/accounts/{account.id.value}/calendars")
+        renamed = names(client.get("/api/v1/rules/rule-1"))
+
+    assert before == (None, None)
+    assert [calendar["summary"] for calendar in discovered.json()] == ["Family", "Work"]
+    assert after == ("Family", "Work")
+    assert renamed == ("Household", "Work")
 
 
 @pytest.mark.parametrize(

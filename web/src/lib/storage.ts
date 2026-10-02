@@ -61,7 +61,7 @@ export function canClearActivity(usage: DatabaseUsage): boolean {
 }
 
 export function logSummary(usage: LogUsage | null, locale?: string): string {
-  if (usage === null) return "File logging is off. Container logs are still available."
+  if (usage === null) return "File logging is off. The container logs still have every line."
   if (usage.files === 0 || !usage.oldest_at || !usage.newest_at) return "No log lines yet"
   const sameYear = usage.oldest_at.slice(0, 4) === usage.newest_at.slice(0, 4)
   return `${formatBytes(usage.bytes)} · ${day(usage.oldest_at, locale, !sameYear)} – ${day(usage.newest_at, locale)}`

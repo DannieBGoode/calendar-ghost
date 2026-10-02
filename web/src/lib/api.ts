@@ -44,10 +44,16 @@ export type Dashboard = {
   blocked_entry_id: number | null
   blocked_rule_id: string | null
 }
+export type RuleCalendar = {
+  connected_account_id: string
+  calendar_id: string
+  /** The name Google last gave the calendar; rule lists and details include it, null until listed. */
+  calendar_name?: string | null
+}
 export type Rule = {
   id: string
-  source: { connected_account_id: string; calendar_id: string }
-  destination: { connected_account_id: string; calendar_id: string }
+  source: RuleCalendar
+  destination: RuleCalendar
   privacy_policy: "busy_only" | "copy_details"
   sync_all_day_events: boolean
   tentative_events: TentativeEvents

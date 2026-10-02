@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   CheckCircle2,
+  ChevronDown,
   CircleUserRound,
   Download,
-  ExternalLink,
+  Info,
   KeyRound,
   Plus,
   ShieldAlert,
@@ -11,7 +12,7 @@ import {
   Trash2,
   Unplug,
 } from "lucide-react"
-import { useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
 import { DestructiveConfirmation } from "@/components/destructive-confirmation"
@@ -19,11 +20,20 @@ import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
+import { accountSummary } from "@/lib/account-summary"
 import { ApiError, STORAGE_LOGS_URL, api } from "@/lib/api"
-import { oauthRedirectMismatch } from "@/lib/oauth-redirect"
+import {
+  authorizationAwaitingReturn,
+  clearAuthorizationStart,
+  oauthRedirectMismatch,
+  oauthReturnAtCurrentOrigin,
+  recordAuthorizationStart,
+} from "@/lib/oauth-redirect"
 import {
   activitySummary,
   canClearActivity,
@@ -33,33 +43,140 @@ import {
   logSummary,
 } from "@/lib/storage"
 import type { ThemePreference } from "@/lib/theme"
+import { cn } from "@/lib/utils"
 
-export function RedirectMismatchNotice({ redirectUri }: { redirectUri: string | null }) {
+type GoogleReturn = {
+  mismatch: { redirectOrigin: string; redirectUri: string } | null
+  awaiting: boolean
+  dismiss: () => void
+}
+
+/**
+ * Whether Google returns somewhere else, and whether a connection started in this browser may be
+ * waiting for that return address. Read the OAuth outcome first: returning ends the attempt.
+ */
+function useGoogleReturn(redirectUri: string | null): GoogleReturn {
   const mismatch = oauthRedirectMismatch(redirectUri, window.location.origin)
-  if (!mismatch) return null
+  const [awaiting, setAwaiting] = useState(() => authorizationAwaitingReturn())
+  return {
+    mismatch: mismatch && redirectUri ? { redirectOrigin: mismatch.redirectOrigin, redirectUri } : null,
+    awaiting,
+    dismiss: () => {
+      clearAuthorizationStart()
+      setAwaiting(false)
+    },
+  }
+}
+
+/** The step that finishes a connection Google returned elsewhere; shown only while it can. */
+function GoogleReturnStep({ help }: { help: GoogleReturn }) {
+  const headingId = useId()
+  if (!help.mismatch || !help.awaiting) return null
   return (
-    <div className="oauth-feedback oauth-feedback-warning">
+    <section className="oauth-feedback oauth-feedback-warning oauth-return" aria-labelledby={headingId}>
       <ShieldAlert aria-hidden="true" />
       <div>
-        <h3>Google will return to a different address</h3>
+        <h3 id={headingId}>Finish connecting your Google account</h3>
         <p>
-          After you approve access, Google sends your browser to <code>{mismatch.redirectOrigin}</code>,
-          not <code>{mismatch.currentOrigin}</code>. If that address does not reach this
-          installation, the account will not connect.
+          Google sends your browser to <code>{help.mismatch.redirectOrigin}</code> after you approve
+          access. If that page did not load, copy its whole address from the address bar and paste it
+          here. It works once, for 10 minutes.
         </p>
-        <details className="oauth-feedback-details">
-          <summary>How to connect from this address</summary>
-          <p>
-            Open Calendar Sync at <code>{mismatch.redirectOrigin}</code>, for example through an SSH
-            tunnel, or set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address for
-            this installation. If Google lands on a connection error, replace{" "}
-            <code>{mismatch.redirectOrigin}</code> with <code>{mismatch.currentOrigin}</code> in the
-            address bar within 10 minutes.
-          </p>
-        </details>
+        <OAuthReturnForm redirectUri={help.mismatch.redirectUri} />
       </div>
-    </div>
+      <Button variant="ghost" onClick={help.dismiss}>
+        Dismiss
+      </Button>
+    </section>
   )
+}
+
+/** A quiet note that Google returns elsewhere, with the way to finish and the permanent fix. */
+function GoogleReturnNote({ help, className }: { help: GoogleReturn; className?: string }) {
+  if (!help.mismatch || help.awaiting) return null
+  return (
+    <details className={cn("inline-help", className)}>
+      <summary>
+        <Info aria-hidden="true" />
+        <span>
+          Google returns to <code>{help.mismatch.redirectOrigin}</code>, not this address
+        </span>
+        <ChevronDown className="inline-help-chevron" aria-hidden="true" />
+      </summary>
+      <div className="inline-help-body">
+        <p>
+          If its page does not load after you approve access, copy the whole address from the address
+          bar and paste it here within 10 minutes to finish connecting.
+        </p>
+        <OAuthReturnForm redirectUri={help.mismatch.redirectUri} />
+        <p>
+          To stop this, set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address of this
+          installation, for example with Tailscale Serve, and register it on your Google OAuth client.
+          Opening Calendar Sync at <code>{help.mismatch.redirectOrigin}</code>, for example through an
+          SSH tunnel, also works.
+        </p>
+      </div>
+    </details>
+  )
+}
+
+export function GoogleReturnHelp({ redirectUri }: { redirectUri: string | null }) {
+  const help = useGoogleReturn(redirectUri)
+  return (
+    <>
+      <GoogleReturnStep help={help} />
+      <GoogleReturnNote help={help} />
+    </>
+  )
+}
+
+function OAuthReturnForm({ redirectUri }: { redirectUri: string }) {
+  const fieldId = useId()
+  const [pasted, setPasted] = useState("")
+  const [invalid, setInvalid] = useState(false)
+  return (
+    <form
+      className="oauth-return-form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const target = oauthReturnAtCurrentOrigin(pasted, redirectUri, window.location.origin)
+        setInvalid(target === null)
+        if (target) window.location.assign(target)
+      }}
+    >
+      <Label htmlFor={fieldId}>Address Google returned to</Label>
+      <div className="oauth-return-row">
+        <Input
+          id={fieldId}
+          value={pasted}
+          onChange={(event) => {
+            setPasted(event.target.value)
+            setInvalid(false)
+          }}
+          placeholder={`${redirectUri}?state=…`}
+          aria-invalid={invalid}
+          aria-describedby={invalid ? `${fieldId}-error` : undefined}
+          autoComplete="off"
+          spellCheck={false}
+          required
+        />
+        <Button type="submit" variant="outline">
+          Finish connecting
+        </Button>
+      </div>
+      {invalid && (
+        <p id={`${fieldId}-error`} className="field-error" role="alert">
+          That is not the address Google returned to. Copy the whole address, starting with{" "}
+          <code>{redirectUri}?</code>
+        </p>
+      )}
+    </form>
+  )
+}
+
+function ruleUsage(count: number): string {
+  if (count === 0) return "Not used by any rule"
+  return `Used by ${count} rule${count === 1 ? "" : "s"}`
 }
 
 export function SettingsPage() {
@@ -78,7 +195,20 @@ function SettingsView({
 }) {
   const { preference, setPreference } = useTheme()
   const queryClient = useQueryClient()
-  const oauthOutcome = new URLSearchParams(window.location.search).get("google")
+  const [oauthOutcome] = useState(() => {
+    const outcome = new URLSearchParams(window.location.search).get("google")
+    if (outcome) clearAuthorizationStart()
+    return outcome
+  })
+  const returnHelp = useGoogleReturn(redirectUri)
+  const [accountsChoice, setAccountsChoice] = useState<boolean | null>(null)
+  useEffect(() => {
+    // A reload should not announce the same connection again.
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has("google")) return
+    url.searchParams.delete("google")
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
+  }, [])
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const [confirmingAccountId, setConfirmingAccountId] = useState<string | null>(null)
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null)
@@ -144,6 +274,17 @@ function SettingsView({
     },
   })
 
+  const summary = accounts.data ? accountSummary(accounts.data) : null
+  // Collapsed while every account is healthy; open when one needs attention or just connected.
+  const accountsOpen =
+    accountsChoice ??
+    Boolean(
+      summary?.needsAttention ||
+        oauthOutcome === "connected" ||
+        confirmingAccountId ||
+        deletingAccountId,
+    )
+
   function confirmDisconnect(accountId: string) {
     disconnect.reset()
     permanentDelete.reset()
@@ -167,11 +308,11 @@ function SettingsView({
   }
 
   return (
-    <div className="page-section">
+    <div className="page-section settings-page">
       <div>
-        <h1>Installation settings</h1>
+        <h1>Settings</h1>
         <p className="page-intro">
-          Manage Google identities and operational defaults for this installation.
+          Accounts and storage for this installation. Appearance applies to this browser only.
         </p>
       </div>
 
@@ -196,7 +337,7 @@ function SettingsView({
           </div>
           {googleConfigured && (
             <Button variant="outline" asChild>
-              <a href="/api/v1/oauth/google/start">Try again</a>
+              <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>Try again</a>
             </Button>
           )}
         </div>
@@ -210,7 +351,7 @@ function SettingsView({
           </div>
           {googleConfigured && (
             <Button variant="outline" asChild>
-              <a href="/api/v1/oauth/google/start">Try again</a>
+              <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>Try again</a>
             </Button>
           )}
         </div>
@@ -220,11 +361,12 @@ function SettingsView({
         <div className="section-heading">
           <div>
             <h2 id="accounts-title">Connected accounts</h2>
-            <p>Choose which Google identities this installation can use for calendar rules.</p>
+            <p>The Google accounts whose calendars your rules can read and write.</p>
           </div>
           {googleConfigured ? (
-            <Button asChild>
-              <a href="/api/v1/oauth/google/start">
+            // The next step only while nothing is connected; otherwise a routine addition.
+            <Button variant={accounts.data?.length ? "outline" : "default"} asChild>
+              <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>
                 <Plus aria-hidden="true" /> Connect Google account
               </a>
             </Button>
@@ -234,12 +376,12 @@ function SettingsView({
         </div>
 
         {!googleConfigured && (
-          <div className="inline-error" role="status">
+          <p className="settings-note" role="status">
             Add the master key and Google OAuth credentials in <code>.env</code>, then restart
             before connecting an account.
-          </div>
+          </p>
         )}
-        <RedirectMismatchNotice redirectUri={redirectUri} />
+        <GoogleReturnStep help={returnHelp} />
         {accounts.isPending && (
           <div className="account-list-loading" aria-label="Loading connected accounts">
             <Skeleton className="h-20 w-full" />
@@ -251,17 +393,60 @@ function SettingsView({
             Connected accounts could not be loaded. Reload the page and try again.
           </div>
         )}
-        {accounts.data?.length === 0 && (
-          <div className="account-empty">
-            <CircleUserRound aria-hidden="true" />
-            <div>
-              <h3>No Google accounts connected</h3>
-              <p>Connect an account to discover calendars and create a Directional Sync Rule.</p>
-            </div>
-          </div>
-        )}
-        {accounts.data && accounts.data.length > 0 && (
-          <ul className="account-list">
+        {accounts.data && (
+          <div className="account-group">
+            {accounts.data.length === 0 ? (
+              <div className="account-empty">
+                <CircleUserRound aria-hidden="true" />
+                <div>
+                  <h3>No Google accounts connected</h3>
+                  <p>Connect an account to choose its calendars for your rules.</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="account-summary"
+                  aria-expanded={accountsOpen}
+                  aria-controls={accountsOpen ? "account-list" : undefined}
+                  onClick={() => setAccountsChoice(!accountsOpen)}
+                >
+                  <span className="account-stack">
+                    {accounts.data.slice(0, 3).map((account) => (
+                      <AccountAvatar
+                        key={account.id}
+                        displayName={account.display_name}
+                        email={account.email}
+                        avatarUrl={account.avatar_url}
+                        compact
+                      />
+                    ))}
+                  </span>
+                  <span className="account-summary-copy">
+                    <span
+                      className="account-summary-status"
+                      data-attention={summary?.needsAttention || undefined}
+                    >
+                      {summary?.needsAttention ? (
+                        <ShieldAlert aria-hidden="true" />
+                      ) : (
+                        <CheckCircle2 aria-hidden="true" />
+                      )}
+                      {summary?.text}
+                    </span>
+                    <span className="account-summary-emails">
+                      {accounts.data.map((account) => account.email).join(", ")}
+                    </span>
+                  </span>
+                  <span className="account-summary-toggle">
+                    {accountsOpen ? "Hide" : "Show"}
+                    <span className="sr-only"> accounts</span>
+                    <ChevronDown aria-hidden="true" />
+                  </span>
+                </button>
+                {accountsOpen && (
+                  <ul className="account-list" id="account-list">
             {accounts.data.map((account) => {
               const connected = account.state === "connected"
               const confirming = confirmingAccountId === account.id
@@ -280,10 +465,7 @@ function SettingsView({
                       <div className="account-copy">
                         <h3>{account.display_name}</h3>
                         <p>{account.email}</p>
-                        <span>
-                          {account.rule_count} Directional Sync Rule
-                          {account.rule_count === 1 ? "" : "s"}
-                        </span>
+                        <span>{ruleUsage(account.rule_count)}</span>
                       </div>
                     </div>
                     <div className="account-actions">
@@ -321,7 +503,7 @@ function SettingsView({
                         <>
                           {googleConfigured && (
                             <Button className="account-action" variant="outline" asChild>
-                              <a href="/api/v1/oauth/google/start">
+                              <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>
                                 <KeyRound aria-hidden="true" /> Reauthorize account
                               </a>
                             </Button>
@@ -438,7 +620,12 @@ function SettingsView({
                 </li>
               )
             })}
-          </ul>
+                  </ul>
+                )}
+              </>
+            )}
+            <GoogleReturnNote help={returnHelp} className="account-group-footer" />
+          </div>
         )}
         {statusMessage && <p className="account-status-message" role="status">{statusMessage}</p>}
         {disconnect.error && (
@@ -453,17 +640,25 @@ function SettingsView({
         )}
       </section>
 
+      <StorageSection />
+
       <section className="settings-section" aria-labelledby="appearance-title">
+        <div className="section-heading">
+          <div>
+            <h2 id="appearance-title">Appearance</h2>
+            <p>Saved in this browser only.</p>
+          </div>
+        </div>
         <div className="settings-list">
           <div className="setting-row">
             <div>
-              <h2 id="appearance-title">Appearance</h2>
-              <p>Follow this device, or keep the interface light or dark in this browser.</p>
+              <h3 id="theme-title">Theme</h3>
+              <p>Follow this device, or keep the interface light or dark.</p>
             </div>
             <div className="appearance-control">
               <NativeSelect
                 id="theme-preference"
-                aria-label="Color theme"
+                aria-labelledby="theme-title"
                 value={preference}
                 onChange={(event) => setPreference(event.target.value as ThemePreference)}
               >
@@ -475,40 +670,6 @@ function SettingsView({
           </div>
         </div>
       </section>
-
-      <section className="settings-section" aria-labelledby="operations-title">
-        <div className="section-heading">
-          <div>
-            <h2 id="operations-title">Operations</h2>
-            <p>Runtime behavior and incident visibility for this installation.</p>
-          </div>
-        </div>
-        <div className="settings-list">
-          <div className="setting-row">
-            <div>
-              <h3>Scheduled sync</h3>
-              <p>Check enabled rules for changes every five minutes.</p>
-            </div>
-            <Badge variant="healthy"><CheckCircle2 aria-hidden="true" /> Active</Badge>
-          </div>
-          <div className="setting-row">
-            <div>
-              <h3>Incident notifications</h3>
-              <p>
-                Incidents always appear in Activity. Optional SMTP and webhook delivery use the
-                self-hosted environment.
-              </p>
-            </div>
-            <Button variant="outline" asChild>
-              <a href="/api/docs" target="_blank" rel="noreferrer">
-                View API docs <ExternalLink aria-hidden="true" />
-              </a>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <StorageSection />
     </div>
   )
 }
@@ -573,7 +734,7 @@ function StorageSection() {
       <div className="section-heading">
         <div>
           <h2 id="storage-title">Storage</h2>
-          <p>What this installation keeps, and clearing what it no longer needs.</p>
+          <p>Activity history and log files kept on this installation.</p>
         </div>
       </div>
       {storage.isPending && <Skeleton className="h-24 w-full" />}
@@ -643,6 +804,25 @@ function StorageSection() {
             <div>
               <h3>Logs</h3>
               <p>{logSummary(usage.logs)}</p>
+              {!usage.logs && (
+                <details className="inline-help setting-help">
+                  <summary>
+                    <span>How to turn it on</span>
+                    <ChevronDown className="inline-help-chevron" aria-hidden="true" />
+                  </summary>
+                  <div className="inline-help-body">
+                    <p>
+                      Log files are kept unless <code>CALENDAR_SYNC_LOG_DIR</code> is set to an empty
+                      value. Set it to a writable directory, such as <code>/data/logs</code> on the data
+                      volume, or remove it from <code>.env</code>, then restart the service.
+                    </p>
+                    <p>
+                      If it already names a directory, that directory could not be used:{" "}
+                      <code>docker compose logs app</code> shows the warning that says why.
+                    </p>
+                  </div>
+                </details>
+              )}
             </div>
             {usage.logs && (
               <div className="storage-actions">
