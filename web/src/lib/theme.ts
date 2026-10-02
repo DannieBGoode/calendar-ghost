@@ -4,7 +4,7 @@ export type ResolvedTheme = Exclude<ThemePreference, "system">
 export const THEME_STORAGE_KEY = "calendar-sync-theme"
 export const SYSTEM_DARK_MODE_QUERY = "(prefers-color-scheme: dark)"
 
-const THEME_COLORS: Record<ResolvedTheme, string> = {
+export const THEME_COLORS: Record<ResolvedTheme, string> = {
   light: "#fbfbfe",
   dark: "#0d0e19",
 }

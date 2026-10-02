@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1 32 32" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 -1 32 32" fill="none">
   <style>
     .body{fill:#f3f4ff;stroke:#4a4cac}.tabs{stroke:#4a4cac}.eye{fill:#4a4cac}
     @media (prefers-color-scheme: dark){.body{fill:#e5e6fc;stroke:#e5e6fc}.tabs{stroke:#e5e6fc}.eye{fill:#131428}}

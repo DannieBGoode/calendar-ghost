@@ -18,6 +18,7 @@ colors:
   healthy-surface: "oklch(0.975 0.018 155)"
   healthy-border: "oklch(0.85 0.035 155)"
   destructive: "oklch(0.50 0.18 25)"
+  daylight: "oklch(1 0 0)"
   brand-glow: "oklch(0.97 0.02 285)"
   twilight-canvas: "oklch(0.2 0.04 280)"
   twilight-ink: "oklch(0.95 0.012 285)"
@@ -78,7 +79,7 @@ spacing:
 components:
   button-primary:
     backgroundColor: "{colors.lantern-indigo}"
-    textColor: "{colors.mist}"
+    textColor: "{colors.daylight}"
     rounded: "{rounded.md}"
     padding: "10px 16px"
     height: "40px"

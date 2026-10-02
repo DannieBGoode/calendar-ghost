@@ -8,6 +8,8 @@ export function GhostMark({ className, title }: { className?: string; title?: st
   return (
     <svg
       className={cn("ghost-mark", className)}
+      width="32"
+      height="32"
       viewBox="0 -1 32 32"
       fill="none"
       role={title ? "img" : undefined}

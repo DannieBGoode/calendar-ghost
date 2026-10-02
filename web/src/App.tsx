@@ -160,7 +160,7 @@ function AuthenticatedApp() {
       </header>
       <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
-      <footer className="app-footer"><span>{PRODUCT_NAME}</span><span aria-hidden="true">·</span><span>v{APP_VERSION}</span><span aria-hidden="true">·</span><span>Runs on this device</span><span aria-hidden="true">·</span><a href="/api/docs">API documentation</a></footer>
+      <footer className="app-footer"><span>{PRODUCT_NAME}</span><span>v{APP_VERSION}</span><span>Runs on this device</span><a href="/api/docs">API documentation</a></footer>
     </div>
   )
 }
