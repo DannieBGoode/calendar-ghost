@@ -57,7 +57,7 @@ def create_app(container: Container | None = None) -> FastAPI:
                     await scheduler_task
 
     app = FastAPI(
-        title="Google Calendar Sync",
+        title="Calendar Ghost",
         version=__version__,
         lifespan=lifespan,
         docs_url="/api/docs",

@@ -847,7 +847,7 @@ def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Calendar Sync" in response.text
+    assert "Calendar Ghost" in response.text
     assert "from __future__ import annotations" not in response.text
 
 
@@ -860,7 +860,7 @@ def test_frontend_fallback_serves_each_application_section(tmp_path: Path, path:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Calendar Sync" in response.text
+    assert "Calendar Ghost" in response.text
 
 
 def test_enabled_rule_can_be_paused_through_api(tmp_path: Path) -> None:
