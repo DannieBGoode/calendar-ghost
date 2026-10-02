@@ -593,6 +593,7 @@ p {
   --health-border: var(--success-border);
   --health-soft: var(--success-soft);
   --health-ink: var(--success-foreground);
+  --brand-eyes: var(--health-ink);
   position: relative;
   display: grid;
   min-height: 18rem;
@@ -623,19 +624,16 @@ p {
 .health-hero[data-tone="healthy"] {
   --brand-glow: var(--success-soft);
   --brand-line: var(--success-foreground);
-  --brand-eyes: var(--success-surface);
 }
 
 .health-hero[data-tone="attention"] {
   --brand-glow: var(--warning-soft);
   --brand-line: var(--warning-foreground);
-  --brand-eyes: var(--warning-surface);
 }
 
 .health-hero[data-tone="setup"] {
   --brand-glow: var(--muted);
   --brand-line: var(--muted-foreground);
-  --brand-eyes: var(--surface);
 }
 
 .health-hero-copy {
