@@ -4,7 +4,7 @@ export type ActivityFailure = "session-expired" | "application-updated" | "servi
 
 export const activityFailureMessages: Record<ActivityFailure, string> = {
   "session-expired": "Your administrator session has expired. Sign in again to view operational activity.",
-  "application-updated": "Calendar Sync was updated. Reload the page to continue.",
+  "application-updated": "Calendar Ghost was updated. Reload the page to continue.",
   "service-error": "The local service returned an error; try the request again.",
   unreachable:
     "The request did not reach the local service. It may have been restarting, or a browser extension such as a content blocker may be blocking it; try the request again.",

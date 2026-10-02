@@ -44,7 +44,7 @@ describe("activity presentation", () => {
     expect(copy.explanation).toContain("Earlier versions")
   })
 
-  it("names what was observed and in which calendar, then what Calendar Sync did", () => {
+  it("names what was observed and in which calendar, then what Calendar Ghost did", () => {
     const line = (reason: string, action = "update") =>
       whatHappened(entry({ action, reason, category: "changed" }), names).text
 
@@ -193,7 +193,7 @@ describe("activity presentation", () => {
     ])
   })
 
-  it("explains that events Calendar Sync wrote are never synced again", () => {
+  it("explains that events Calendar Ghost wrote are never synced again", () => {
     expect(describeEntry(entry({ reason: "managed_projection_source" })).explanation).toContain("never synced again")
   })
 
@@ -224,7 +224,7 @@ describe("source changes", () => {
     moved_from: { all_day: false, starts: "2026-09-30T10:00:00+00:00", ends: "2026-09-30T11:00:00+00:00" },
   }
 
-  it("names the fields that changed before what Calendar Sync did", () => {
+  it("names the fields that changed before what Calendar Ghost did", () => {
     const changed = entry({
       action: "update",
       reason: "source_changed",

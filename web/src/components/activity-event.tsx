@@ -42,7 +42,7 @@ const HAPPENED_ICONS: Record<HappenedIcon, LucideIcon> = {
   rule: Settings2,
 }
 
-/** What was observed, then what Calendar Sync did; the outcome carries the tone. */
+/** What was observed, then what Calendar Ghost did; the outcome carries the tone. */
 export function HappenedLine({ happened, suffix }: { happened: Happened; suffix?: string }) {
   const Icon = HAPPENED_ICONS[happened.icon]
   return (

@@ -1,14 +1,14 @@
 ---
-name: Google Calendar Sync
-description: Calm, trustworthy control for a self-hosted calendar synchronizer
+name: Calendar Ghost
+description: A calm ghost that keeps your busy time where it needs to be
 colors:
-  status-cobalt: "oklch(0.50 0.16 250)"
-  daylight: "oklch(1 0 0)"
-  quiet-surface: "oklch(0.975 0.006 250)"
-  muted-surface: "oklch(0.955 0.009 250)"
-  calm-ink: "oklch(0.20 0.02 250)"
-  muted-ink: "oklch(0.43 0.025 250)"
-  quiet-border: "oklch(0.89 0.012 250)"
+  lantern-indigo: "oklch(0.47 0.15 278)"
+  mist: "oklch(0.99 0.004 285)"
+  quiet-surface: "oklch(0.972 0.008 285)"
+  muted-surface: "oklch(0.95 0.012 285)"
+  calm-ink: "oklch(0.22 0.045 280)"
+  muted-ink: "oklch(0.45 0.035 280)"
+  quiet-border: "oklch(0.90 0.014 285)"
   healthy-soft: "oklch(0.94 0.04 155)"
   healthy-ink: "oklch(0.31 0.09 155)"
   attention-soft: "oklch(0.94 0.055 80)"
@@ -18,15 +18,20 @@ colors:
   healthy-surface: "oklch(0.975 0.018 155)"
   healthy-border: "oklch(0.85 0.035 155)"
   destructive: "oklch(0.50 0.18 25)"
-  night: "oklch(0.18 0.012 250)"
-  night-surface: "oklch(0.22 0.014 250)"
-  night-muted-surface: "oklch(0.27 0.018 250)"
-  night-calm-ink: "oklch(0.93 0.01 250)"
-  night-muted-ink: "oklch(0.73 0.02 250)"
-  night-status-cobalt: "oklch(0.68 0.15 250)"
-  night-status-soft: "oklch(0.27 0.055 250)"
-  night-quiet-border: "oklch(0.36 0.018 250)"
-  night-input-border: "oklch(0.52 0.02 250)"
+  daylight: "oklch(1 0 0)"
+  brand-glow: "oklch(0.97 0.02 285)"
+  twilight-canvas: "oklch(0.2 0.04 280)"
+  twilight-ink: "oklch(0.95 0.012 285)"
+  twilight-muted: "oklch(0.80 0.03 285)"
+  night: "oklch(0.17 0.022 280)"
+  night-surface: "oklch(0.21 0.026 280)"
+  night-muted-surface: "oklch(0.26 0.03 280)"
+  night-calm-ink: "oklch(0.95 0.012 285)"
+  night-muted-ink: "oklch(0.75 0.025 285)"
+  night-lantern-indigo: "oklch(0.74 0.12 278)"
+  night-status-soft: "oklch(0.28 0.06 278)"
+  night-quiet-border: "oklch(0.34 0.03 280)"
+  night-input-border: "oklch(0.52 0.03 280)"
   night-healthy-soft: "oklch(0.27 0.045 155)"
   night-healthy-ink: "oklch(0.79 0.11 155)"
   night-healthy-surface: "oklch(0.22 0.025 155)"
@@ -38,25 +43,34 @@ colors:
   night-destructive: "oklch(0.68 0.16 25)"
   night-destructive-soft: "oklch(0.28 0.06 25)"
   night-destructive-ink: "oklch(0.80 0.11 25)"
+  midnight: "oklch(0.17 0.03 250)"
+  midnight-surface: "oklch(0.21 0.033 250)"
+  midnight-muted-surface: "oklch(0.26 0.038 250)"
+  midnight-calm-ink: "oklch(0.95 0.01 240)"
+  midnight-muted-ink: "oklch(0.76 0.03 240)"
+  midnight-lantern-blue: "oklch(0.75 0.12 240)"
+  midnight-quiet-border: "oklch(0.34 0.035 250)"
+  midnight-input-border: "oklch(0.53 0.035 250)"
+  midnight-twilight-canvas: "oklch(0.2 0.045 252)"
 typography:
   headline:
-    fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontFamily: "Fraunces Variable, ui-serif, Georgia, serif"
     fontSize: "2rem"
-    fontWeight: 700
+    fontWeight: 560
     lineHeight: 1.15
-    letterSpacing: "-0.025em"
+    letterSpacing: "-0.015em"
   title:
-    fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontFamily: "Figtree Variable, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "1rem"
-    fontWeight: 700
+    fontWeight: 650
     lineHeight: 1.35
   body:
-    fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontFamily: "Figtree Variable, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "1rem"
     fontWeight: 400
     lineHeight: 1.6
   label:
-    fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+    fontFamily: "Figtree Variable, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
     fontSize: "0.85rem"
     fontWeight: 600
     lineHeight: 1.4
@@ -73,19 +87,19 @@ spacing:
   xl: "40px"
 components:
   button-primary:
-    backgroundColor: "{colors.status-cobalt}"
+    backgroundColor: "{colors.lantern-indigo}"
     textColor: "{colors.daylight}"
     rounded: "{rounded.md}"
     padding: "10px 16px"
     height: "40px"
   button-outline:
-    backgroundColor: "{colors.daylight}"
+    backgroundColor: "{colors.mist}"
     textColor: "{colors.calm-ink}"
     rounded: "{rounded.md}"
     padding: "10px 16px"
     height: "40px"
   input:
-    backgroundColor: "{colors.daylight}"
+    backgroundColor: "{colors.mist}"
     textColor: "{colors.calm-ink}"
     rounded: "{rounded.md}"
     padding: "8px 12px"
@@ -97,13 +111,16 @@ components:
     padding: "4px 10px"
 ---
 
-# Design System: Google Calendar Sync
+# Design System: Calendar Ghost
 
 ## Overview
 
-**Creative North Star: "The Quiet Status Light"**
+**Creative North Star: "The Calm Ghost"**
 
-The interface feels like a quiet kitchen at 7am: cool daylight, familiar controls, and one blue appliance indicator confirming that everything is in order. It serves a nontechnical administrator first, with audit and provider evidence available through progressive disclosure.
+A friendly presence at twilight: pale, quiet, and always where you expect it. The ghost lives in
+the mark, the sign-in panel, loading, and empty states; everywhere else the interface is a calm
+household utility. It serves a nontechnical administrator first, with audit and provider evidence
+available through progressive disclosure.
 
 The layout uses a restrained top navigation and a readable central work area rather than a permanent dashboard sidebar. Stable information stays flat. Forms and workflows use familiar shadcn/ui affordances, while domain-specific health strips and directional rule rows carry the product language.
 
@@ -115,19 +132,39 @@ The layout uses a restrained top navigation and a readable central work area rat
 - Responsive state feedback without decorative entrances
 - Structural mobile layouts with unchanged text hierarchy
 
+## Brand
+
+**Name:** Calendar Ghost. **Tagline:** *"Your busy time, everywhere it needs to be."*
+
+**The mark.** A rounded calendar page with two binder tabs, drawn on a 32-unit grid; its bottom
+edge is a three-scallop ghost hem, and two dot eyes sit in the upper body. `GhostMark`
+(`web/src/components/ghost-mark.tsx`) renders it as inline SVG colored by three tokens:
+`--brand-glow` (body fill), `--brand-line` (outline and tabs), and `--brand-eyes` (the two dots).
+In light appearance the ghost is pale with an indigo outline and eyes; in dark appearance and on
+the twilight auth panel it is a solid ghost-white silhouette with dark eyes. It is decorative
+(`aria-hidden`) wherever the name sits beside it, and appears in the top-bar lockup, the auth intro
+panel, empty states, and the startup loading screen.
+
+### Named Rules
+
+**The Ghost Is Brand, Not Vocabulary Rule.** The ghost appears in the mark, the sign-in panel,
+loading, and empty states; labels and explanations always use the glossary in `CONTEXT.md`, never
+calling a Managed Projection a "ghost."
+
 ## Colors
 
-Pure neutral daylight supports a cobalt indicator color, with distinct low-chroma semantic surfaces for health and attention. Dark appearance keeps the same roles on a blue-tinted near-black canvas, increasing foreground and control contrast without turning the interface into an infrastructure console.
+A lavender-tinted neutral canvas (the "Twilight" palette) supports a single indigo indicator color, Lantern Indigo, with distinct low-chroma semantic surfaces for health and attention. Dark appearance keeps the same roles on a lavender-tinted near-black canvas, increasing foreground and control contrast without turning the interface into an infrastructure console.
 
 ### Appearance
 
 - **Device setting** is the default and follows the browser's current color-scheme preference, including changes made while the app is open.
 - **Light** and **Dark** are explicit browser-local choices. They apply before the interface paints and persist across visits without adding installation state to SQLite.
-- Semantic meaning does not change between appearances. Cobalt remains action and focus, moss remains healthy, ochre remains attention, and red remains destructive.
+- **Dark palette** chooses the colors used whenever the interface is dark, whether by choice or by following the device. **Twilight** (indigo) is the default; **Midnight** is a blue alternative with a navy canvas, cool blue-grey neutrals, and Lantern Blue in place of Lantern Indigo, and it turns the auth intro panel navy too. Like the theme, it is browser-local, applies before paint, and sets the browser chrome color. Light appearance has one palette.
+- Semantic meaning does not change between appearances or palettes. The palette's lantern color remains action and focus, moss remains healthy, ochre remains attention, and red remains destructive.
 
 ### Primary
 
-- **Status Cobalt**: Primary actions, selected navigation, focus, and active setup progress. It is never decorative.
+- **Lantern Indigo**: Primary actions, selected navigation, focus, and active setup progress. It is never decorative.
 
 ### Secondary
 
@@ -137,7 +174,7 @@ Pure neutral daylight supports a cobalt indicator color, with distinct low-chrom
 
 ### Neutral
 
-- **Daylight**: Main page and field background.
+- **Mist**: Main page and field background.
 - **Quiet Surface**: Grouped controls, intro panels, and inactive structure.
 - **Muted Surface**: Hover, selected-neutral, and skeleton states.
 - **Calm Ink**: Primary text.
@@ -146,24 +183,24 @@ Pure neutral daylight supports a cobalt indicator color, with distinct low-chrom
 
 ### Named Rules
 
-**The Quiet Indicator Rule.** Status Cobalt occupies no more than 10% of a screen. Its rarity makes action and focus immediately legible.
+**The Quiet Indicator Rule.** Lantern Indigo occupies no more than 10% of a screen. Its rarity makes action and focus immediately legible.
 
 **The Status Is Not Just Color Rule.** Healthy, degraded, running, and failed states always combine color with text and an icon.
 
 ## Typography
 
-**Display Font:** Inter with the system sans-serif stack
+**Display Font:** Fraunces (bundled variable font, SOFT axis 100), used only for page titles and the auth headline.
 
-**Body Font:** Inter with the system sans-serif stack
+**Body Font:** Figtree (bundled variable font), used for all other text and every control.
 
-**Character:** A single humanist-leaning sans family keeps small status labels and longer guidance equally legible. Weight and a compact fixed scale create hierarchy without a display face.
+**Character:** A quiet serif marks the handful of places the product wants to feel considered; a single humanist-leaning sans family keeps small status labels and longer guidance equally legible everywhere else. Both are bundled self-hosted woff2 with `font-display: swap`, so an offline Raspberry Pi renders them without a fallback to the device's system face.
 
 ### Hierarchy
 
-Product text uses four steps: 2rem headlines, 1rem titles and body, 0.875rem labels and controls, and 0.8125rem supporting metadata.
+Product text uses six steps: 2rem Fraunces page titles, 1rem Figtree section titles (weight 650), 1rem Figtree row titles (weight 550), 1rem Figtree body (weight 400), 0.875rem labels and controls (weight 600), and 0.8125rem supporting metadata. Settings and Rule Details section and row headings are aligned to these levels.
 
-- **Headline**: Screen titles at a strong but quiet scale.
-- **Title**: Rule names, grouped settings, and recovery headings.
+- **Headline**: Screen titles and the auth headline, in Fraunces at a strong but quiet scale.
+- **Title**: Section titles and row titles — rule names, grouped settings, and recovery headings — in Figtree, distinguished by weight rather than size.
 - **Body**: Instructions and explanations, capped near 70 characters per line.
 - **Label**: Field labels, navigation, compact state, and metadata in sentence case.
 
@@ -184,8 +221,8 @@ The system is flat by default. Tonal layering, dividers, and spacing establish s
 ### Buttons
 
 - **Shape:** Gently curved and compact.
-- **Primary:** Status Cobalt with a contrast-checked foreground, reserved for the next meaningful action.
-- **Hover / Focus:** A small tonal change and a visible cobalt focus ring over 180 milliseconds.
+- **Primary:** Lantern Indigo with a contrast-checked foreground, reserved for the next meaningful action.
+- **Hover / Focus:** A small tonal change and a visible indigo focus ring over 180 milliseconds.
 - **Secondary / Ghost:** Neutral structure for reversible and navigational actions.
 
 ### Chips
@@ -204,12 +241,12 @@ The system is flat by default. Tonal layering, dividers, and spacing establish s
 ### Inputs / Fields
 
 - **Style:** Canvas fill, quiet border, compact curved edge.
-- **Focus:** Cobalt border and a visible translucent ring with at least 3:1 contrast.
+- **Focus:** Indigo border and a visible translucent ring with at least 3:1 contrast.
 - **Error / Disabled:** Error text accompanies destructive color; disabled controls remain readable and explain their prerequisite nearby.
 
 ### Navigation
 
-The desktop top bar uses text labels and a two-pixel active underline. Mobile replaces it with a full-width menu using the same labels and familiar icons. Navigation never competes with the current task.
+The desktop top bar uses the ghost-mark-and-wordmark lockup, text labels, and a two-pixel active underline. Mobile replaces it with a full-width menu using the same labels and familiar icons. Navigation never competes with the current task.
 
 ### Health Strip
 

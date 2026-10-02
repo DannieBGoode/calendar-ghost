@@ -85,7 +85,7 @@ Open **Activity**, filter by the rule, and choose **Skipped** or **Blocked**. Ea
 and why no Event Projection was written; select it to see the full explanation, the event as the run
 recorded it, the event as it is in Google now, and a link to open it in Google Calendar. Common reasons:
 
-- **Blocked**: Calendar Sync could not safely write this one event, so the destination was left
+- **Blocked**: Calendar Ghost could not safely write this one event, so the destination was left
   unchanged; the rest of the rule keeps synchronizing. The entry's **What to do** says whether you
   need to act. Otherwise the daily check decides the event again, and a block still there opens an
   Incident. For a missing occurrence, **Technical details** records how the series was found and the
@@ -106,13 +106,13 @@ recorded it, the event as it is in Google now, and a link to open it in Google C
 - **Blocked**: identity or ownership was ambiguous, so nothing was written. Run **Reconcile now**
   from Rules and review any incident.
 - **Blocked: marked as written by this rule, but not linked to an event**: Reconcile now found an
-  event carrying this rule's marker that no mapping owns, so Calendar Sync will never change or
+  event carrying this rule's marker that no mapping owns, so Calendar Ghost will never change or
   delete it. Delete it in the destination calendar if you don't want it.
 - **Reconcile now says differences remain after the sync**: the check after the sync only
   reports; it changes nothing. The sync before it has just put back everything it can, so a
   remaining difference is rarely an edit made in the seconds between them. Choose **Reconcile now**
   again: a difference that is still there means the sync cannot settle it, or the check disagrees
-  with the sync about what the destination should hold. Both are Calendar Sync problems, not
+  with the sync about what the destination should hold. Both are Calendar Ghost problems, not
   something to fix in your calendars. Look in Activity for the same event being put back and then
   removed on every run, and report the rule's service log lines starting `reconciliation finished`,
   which count what the check found. The count of events checked counts a recurring series once,
@@ -136,7 +136,7 @@ from the remaining projections.
   If access cannot be restored, retry with **Keep them as ordinary events**; those events then stay in
   Google and are no longer managed.
 - **Some events were left**: the rules list reports events whose ownership could not be verified,
-  for example because their private Calendar Sync metadata names another rule or was removed.
+  for example because their private Calendar Ghost metadata names another rule or was removed.
   They were not deleted. Open **Activity**, choose **Blocked**, and delete them in Google Calendar
   yourself if they are no longer wanted.
 
@@ -145,13 +145,13 @@ from the remaining projections.
 The Activity screen names the reason it could not load audit entries and incidents:
 
 - **Your administrator session has expired.** Choose **Sign in again**.
-- **Calendar Sync was updated.** The open page predates the running service, for example after an
+- **Calendar Ghost was updated.** The open page predates the running service, for example after an
   upgrade renamed an API path. Choose **Reload page**; if the message returns, hard-refresh the tab.
 - **The local service returned an error.** The request reached the service or a reverse proxy in
   front of it. Choose **Try again**, then review container and proxy logs.
 - **The request did not reach the local service.** The service may have been restarting, or a
   browser extension blocked the request. Check `/health` as above. If the service is healthy, allow
-  Calendar Sync's address in content blockers such as uBlock Origin. Audit entries are served from
+  Calendar Ghost's address in content blockers such as uBlock Origin. Audit entries are served from
   `/api/v1/audit-entries` because common filter lists block request paths containing `/activity`.
 
 ## A rule is degraded
@@ -165,12 +165,12 @@ its mappings and last successful incremental positions, and writes nothing while
   and the other one has also lost access, recovering the rule points the incident back to Settings
   for that account.
 - **Google Calendar rejected synchronization**: Google refused a request for a reason other than
-  authorization or rate limiting, or answered in a way Calendar Sync could not use. Choose **Review
+  authorization or rate limiting, or answered in a way Calendar Ghost could not use. Choose **Review
   this rule** and check that both calendars still exist and are shared with the accounts the rule
-  uses. Calendar Sync does not record the error Google returned, so if both calendars are available,
+  uses. Calendar Ghost does not record the error Google returned, so if both calendars are available,
   recover the rule; if it stops again with the same incident, note when the incident opened when
   asking for help.
-- **Local synchronization infrastructure failed**: an unexpected error inside Calendar Sync stopped
+- **Local synchronization infrastructure failed**: an unexpected error inside Calendar Ghost stopped
   the run, not a Google condition. Review the container logs for the error, and check that the data
   volume has free space and the database is writable, before recovering the rule.
 
@@ -194,7 +194,7 @@ Calendar and will no longer be managed. Unrelated accounts and rules are unchang
 ## Google consent ends on "Unable to connect"
 
 The browser followed the configured redirect URI to an address that does not reach this
-installation, usually `localhost` while Calendar Sync runs on another host. No account was saved.
+installation, usually `localhost` while Calendar Ghost runs on another host. No account was saved.
 To finish this attempt, copy the whole address from the address bar, return to Settings in the
 browser you started from, paste it into **Address Google returned to** under **Finish connecting
 your Google account**, and choose **Finish connecting** within 10 minutes; each callback works
@@ -207,7 +207,7 @@ redirect URI or an SSH tunnel as described in
 
 The OAuth callback returns to **Settings → Connected accounts** without saving an account. Choose
 **Try again**, select the intended Google identity, and grant both calendar-list and event access.
-Calendar Sync verifies those permissions before it stores the Connected Account. Declining consent
+Calendar Ghost verifies those permissions before it stores the Connected Account. Declining consent
 does not create an account or retain Google credentials.
 
 ## A connected account fails Check access

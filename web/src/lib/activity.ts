@@ -9,27 +9,27 @@ import {
 } from "@/lib/api"
 
 /**
- * What Calendar Sync observed (`trigger`) and what it did about it (`effect`), never who caused
+ * What Calendar Ghost observed (`trigger`) and what it did about it (`effect`), never who caused
  * it. `{source}` and `{destination}` name the rule's calendars. A block says what to do next.
  */
 type ReasonCopy = { trigger?: string; effect: string; explanation: string; next?: string }
 
 /** Blocks nobody can clear by hand: the daily check decides the event again and escalates. */
 const RECHECKED =
-  "Nothing to do now. Calendar Sync decides this event again at the daily check, and opens an incident if it is still blocked then."
+  "Nothing to do now. Calendar Ghost decides this event again at the daily check, and opens an incident if it is still blocked then."
 
 // Keep in sync with SyncReason in src/calendar_sync/domain/model.py.
 const REASONS: Record<string, ReasonCopy> = {
   source_created: {
     trigger: "New in {source}",
     effect: "added to {destination}",
-    explanation: "The event was new to Calendar Sync, so it was added to {destination}.",
+    explanation: "The event was new to Calendar Ghost, so it was added to {destination}.",
   },
   projection_missing: {
     trigger: "Missing from {destination}",
     effect: "put back",
     explanation:
-      "The event Calendar Sync wrote to {destination} was no longer there, so it was written again from {source}.",
+      "The event Calendar Ghost wrote to {destination} was no longer there, so it was written again from {source}.",
   },
   source_changed: {
     trigger: "Changed in {source}",
@@ -55,7 +55,7 @@ const REASONS: Record<string, ReasonCopy> = {
   declined_removed: {
     trigger: "Declined",
     effect: "removed from {destination}",
-    explanation: "You declined this event in {source}, so the event Calendar Sync had written was removed. Declined events are never synced.",
+    explanation: "You declined this event in {source}, so the event Calendar Ghost had written was removed. Declined events are never synced.",
   },
   tentative_excluded_removed: {
     trigger: "Answered Maybe, which this rule leaves out",
@@ -83,10 +83,10 @@ const REASONS: Record<string, ReasonCopy> = {
     explanation: "The event does not belong to {source}.",
   },
   managed_projection_source: {
-    trigger: "Written by Calendar Sync",
+    trigger: "Written by Calendar Ghost",
     effect: "skipped",
     explanation:
-      "Events Calendar Sync wrote are never synced again. This prevents events from looping between calendars.",
+      "Events Calendar Ghost wrote are never synced again. This prevents events from looping between calendars.",
   },
   recurring_unsupported: {
     trigger: "Recurring event",
@@ -126,24 +126,24 @@ const REASONS: Record<string, ReasonCopy> = {
       "The event changed, but it ended before this rule's sync window and was never synced, so it was not added.",
   },
   mapping_inconsistent: {
-    trigger: "Calendar Sync's link to this event doesn't match",
+    trigger: "Calendar Ghost's link to this event doesn't match",
     effect: "blocked, {destination} left unchanged",
     explanation:
-      "Calendar Sync keeps a record of which event in {destination} belongs to which event in {source}. For this event the record points somewhere unexpected, so nothing was written rather than risk changing the wrong event.",
+      "Calendar Ghost keeps a record of which event in {destination} belongs to which event in {source}. For this event the record points somewhere unexpected, so nothing was written rather than risk changing the wrong event.",
     next: RECHECKED,
   },
   destination_identity_inconsistent: {
     trigger: "A different event is linked in {destination}",
     effect: "blocked, {destination} left unchanged",
     explanation:
-      "The event in {destination} is no longer the one Calendar Sync wrote for this event, so nothing was written rather than risk changing the wrong event.",
+      "The event in {destination} is no longer the one Calendar Ghost wrote for this event, so nothing was written rather than risk changing the wrong event.",
     next: RECHECKED,
   },
   destination_ownership_inconsistent: {
     trigger: "Not marked as written by this rule in {destination}",
     effect: "blocked, left alone",
     explanation:
-      "The event in {destination} does not carry this rule's marker, so Calendar Sync will not change or delete it.",
+      "The event in {destination} does not carry this rule's marker, so Calendar Ghost will not change or delete it.",
     next: RECHECKED,
   },
   source_unverifiable: {
@@ -198,7 +198,7 @@ const REASONS: Record<string, ReasonCopy> = {
     trigger: "Not found in the series in {destination}",
     effect: "blocked, {destination} left unchanged",
     explanation:
-      "The series in {destination} has no occurrence at this time, even after Calendar Sync checked the series itself. Nothing was written, so this occurrence may be missing or out of date in {destination}. The rest of the series is unaffected.",
+      "The series in {destination} has no occurrence at this time, even after Calendar Ghost checked the series itself. Nothing was written, so this occurrence may be missing or out of date in {destination}. The rest of the series is unaffected.",
     next: RECHECKED,
   },
   series_without_occurrences: {
@@ -217,7 +217,7 @@ const REASONS: Record<string, ReasonCopy> = {
     trigger: "Marked as written by this rule in {destination}, but not linked to an event in {source}",
     effect: "blocked, left in {destination}",
     explanation:
-      "The event in {destination} carries this rule's marker, but Calendar Sync has no record of writing it, so it will not change or delete it. Reconcile now reports it again while it is there.",
+      "The event in {destination} carries this rule's marker, but Calendar Ghost has no record of writing it, so it will not change or delete it. Reconcile now reports it again while it is there.",
     next: "If you don't want it in {destination}, delete it there yourself.",
   },
 }
@@ -419,7 +419,7 @@ export type Happened = {
 const REPAIRS = new Set(["projection_missing", "destination_drift_repaired", "occurrence_drift_repaired"])
 const MOVES = new Set(["source_changed", "occurrence_changed"])
 
-/** The What happened column: what was observed, then what Calendar Sync did, with an icon for the outcome. */
+/** The What happened column: what was observed, then what Calendar Ghost did, with an icon for the outcome. */
 export function whatHappened(
   entry: Pick<AuditEntry, "reason" | "action" | "detail" | "category"> &
     Partial<Pick<AuditEntry, "event" | "repeated" | "changed_fields">>,

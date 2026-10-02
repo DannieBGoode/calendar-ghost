@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from collections.abc import Callable
 from dataclasses import replace
@@ -10,6 +11,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
+from calendar_sync import __version__
 from calendar_sync.application.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
@@ -898,7 +900,7 @@ def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Calendar Sync" in response.text
+    assert "Calendar Ghost" in response.text
     assert "from __future__ import annotations" not in response.text
 
 
@@ -911,7 +913,38 @@ def test_frontend_fallback_serves_each_application_section(tmp_path: Path, path:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Calendar Sync" in response.text
+    assert "Calendar Ghost" in response.text
+
+
+def test_openapi_title_is_the_product_name(tmp_path: Path) -> None:
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+
+    with TestClient(app) as client:
+        response = client.get("/api/openapi.json")
+
+    assert response.status_code == 200
+    assert response.json()["info"]["title"] == "Calendar Ghost"
+
+
+def test_backend_version_matches_the_web_package_version() -> None:
+    package_json = Path(__file__).resolve().parents[2] / "web" / "package.json"
+    web_version = json.loads(package_json.read_text())["version"]
+
+    assert __version__ == web_version
+
+
+def test_woff2_assets_are_served_with_the_font_woff2_media_type(tmp_path: Path) -> None:
+    static_root = Path(__file__).resolve().parents[2] / "src/calendar_sync/interfaces/api/static"
+    woff2_files = sorted((static_root / "assets").glob("*.woff2"))
+    assert woff2_files, "expected at least one built .woff2 asset to check"
+
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+
+    with TestClient(app) as client:
+        response = client.get(f"/assets/{woff2_files[0].name}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "font/woff2"
 
 
 def test_enabled_rule_can_be_paused_through_api(tmp_path: Path) -> None:

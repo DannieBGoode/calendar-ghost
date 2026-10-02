@@ -2,12 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Activity, CalendarCheck2, LogOut, Menu, Settings2, Waypoints, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 
+import { GhostMark } from "@/components/ghost-mark"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthScreen } from "@/features/auth-screen"
 import { Dashboard } from "@/features/dashboard"
 import { api } from "@/lib/api"
+import { APP_VERSION, PRODUCT_NAME, documentTitle } from "@/lib/brand"
 import {
   appLocationFromPathname,
   appPathForLocation,
@@ -36,10 +37,10 @@ export default function App() {
   })
 
   if (setup.isPending || (setup.data?.administrator_configured && session.isPending)) {
-    return <div className="startup-loading" aria-label="Loading Calendar Sync"><Skeleton className="size-12" /><Skeleton className="h-5 w-36" /></div>
+    return <div className="startup-loading" role="status" aria-label={`Loading ${PRODUCT_NAME}`}><GhostMark className="startup-ghost" /></div>
   }
   if (setup.error || session.error) {
-    return <main className="fatal-state"><h1>Calendar Sync is unavailable</h1><p>The browser could not reach the local service.</p><Button onClick={() => window.location.reload()}>Reload page</Button></main>
+    return <main className="fatal-state"><h1>{PRODUCT_NAME} is unavailable</h1><p>The browser could not reach the local service.</p><Button onClick={() => window.location.reload()}>Reload page</Button></main>
   }
   if (!setup.data.administrator_configured) return <AuthScreen mode="setup" />
   if (!session.data?.authenticated) return <AuthScreen mode="login" />
@@ -86,7 +87,7 @@ function AuthenticatedApp() {
   // (Rule Details, the rule builder) refines this rather than being overridden by it.
   useLayoutEffect(() => {
     const title = navItems.find((item) => item.id === view)?.label ?? "Overview"
-    document.title = `${location.ruleId ? "Rule" : title} – Calendar Sync`
+    document.title = documentTitle(location.ruleId ? "Rule" : title)
     if (navigated.current) main.current?.focus({ preventScroll: true })
   }, [view, location.ruleId])
 
@@ -142,8 +143,8 @@ function AuthenticatedApp() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href={appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label="Calendar Sync overview">
-          <span className="wordmark-icon"><CalendarCheck2 /></span><span>Calendar Sync</span>
+        <a className="wordmark" href={appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label={`${PRODUCT_NAME} overview`}>
+          <span className="wordmark-icon"><GhostMark /></span><span>{PRODUCT_NAME}</span>
         </a>
         <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label="Primary navigation">
           {navItems.map((item) => {
@@ -159,7 +160,7 @@ function AuthenticatedApp() {
       </header>
       <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
-      <footer className="app-footer"><span>Local installation</span><span aria-hidden="true">·</span><a href="/api/docs">API documentation</a></footer>
+      <footer className="app-footer"><span>{PRODUCT_NAME}</span><span>v{APP_VERSION}</span><span>Runs on this device</span><a href="/api/docs">API documentation</a></footer>
     </div>
   )
 }

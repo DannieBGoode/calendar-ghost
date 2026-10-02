@@ -1,12 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { CalendarCheck2, Check, LockKeyhole } from "lucide-react"
+import { Check, LockKeyhole } from "lucide-react"
 import { useId, useState, type FormEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { GhostMark } from "@/components/ghost-mark"
 import { api } from "@/lib/api"
+import { PRODUCT_NAME, TAGLINE } from "@/lib/brand"
 
 type AuthScreenProps = { mode: "setup" | "login" }
 
@@ -39,10 +41,9 @@ export function AuthScreen({ mode }: AuthScreenProps) {
         <ThemeToggle />
       </div>
       <section className="auth-intro" aria-labelledby="auth-title">
-        <div className="brand-mark" aria-hidden="true">
-          <CalendarCheck2 />
-        </div>
-        <p className="product-name">Calendar Sync</p>
+        <GhostMark className="brand-mark" />
+        <p className="product-name">{PRODUCT_NAME}</p>
+        <p className="auth-tagline">{TAGLINE}</p>
         <h1 id="auth-title">
           {isSetup ? "Your calendars, under your control." : "Welcome back."}
         </h1>

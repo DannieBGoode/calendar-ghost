@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
@@ -26,6 +27,10 @@ from calendar_sync.interfaces.api.routes import (
     setup,
     storage,
 )
+
+# python:3.12-slim has no /etc/mime.types entry for woff2, so StaticFiles would otherwise serve
+# the bundled fonts as text/plain there; register it explicitly so the type is correct everywhere.
+mimetypes.add_type("font/woff2", ".woff2")
 
 
 class ApiServices(
@@ -57,7 +62,7 @@ def create_app(container: Container | None = None) -> FastAPI:
                     await scheduler_task
 
     app = FastAPI(
-        title="Google Calendar Sync",
+        title="Calendar Ghost",
         version=__version__,
         lifespan=lifespan,
         docs_url="/api/docs",

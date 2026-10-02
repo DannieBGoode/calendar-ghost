@@ -86,7 +86,7 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const removingIds = useRemovingRuleIds(rules.data)
 
   if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label="Loading overview" />
-  if (dashboard.error || rules.error || google.error) return <LoadFailure title="Calendar Sync could not load" />
+  if (dashboard.error || rules.error || google.error) return <LoadFailure title="Calendar Ghost could not load" />
 
   const health = overviewHealth(
     withoutRunningRemovals(dashboard.data, rules.data, removingIds),
@@ -207,7 +207,7 @@ function RecentChanges({
       ) : changes.data.length === 0 ? (
         <p className="empty-line">
           {lastCheck
-            ? `No events changed recently. Calendar Sync last checked ${relativeTime(lastCheck, now)}.`
+            ? `No events changed recently. Calendar Ghost last checked ${relativeTime(lastCheck, now)}.`
             : "The first sync runs within five minutes. Changes will appear here."}
         </p>
       ) : (

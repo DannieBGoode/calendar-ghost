@@ -1,6 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <rect width="64" height="64" rx="16" fill="#e9f1ff"/>
-  <path d="M21 12v8M43 12v8M15 26h34" stroke="#3169c6" stroke-width="5" stroke-linecap="round"/>
-  <rect x="15" y="17" width="34" height="34" rx="7" stroke="#3169c6" stroke-width="5"/>
-  <path d="m25 38 5 5 10-11" stroke="#3169c6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 -1 32 32" fill="none">
+  <style>
+    .body{fill:#f3f4ff;stroke:#4a4cac}.tabs{stroke:#4a4cac}.eye{fill:#4a4cac}
+    @media (prefers-color-scheme: dark){.body{fill:#e5e6fc;stroke:#e5e6fc}.tabs{stroke:#e5e6fc}.eye{fill:#131428}}
+  </style>
+  <path class="body" d="M6 13a6 6 0 0 1 6-6h8a6 6 0 0 1 6 6v11q-2 3-4 0q-2-3-4 0q-2 3-4 0q-2-3-4 0q-2 3-4 0Z" stroke-width="2" stroke-linejoin="round"/>
+  <path class="tabs" d="M12 4.5v4M20 4.5v4" stroke-width="2" stroke-linecap="round"/>
+  <circle class="eye" cx="13" cy="15" r="1.75"/>
+  <circle class="eye" cx="19" cy="15" r="1.75"/>
 </svg>

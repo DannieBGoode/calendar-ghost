@@ -3,13 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ffffff" />
+    <meta name="theme-color" content="#fbfbfe" />
     <script>
       (() => {
         const storageKey = "calendar-sync-theme"
+        const paletteKey = "calendar-sync-dark-palette"
         let savedTheme = null
+        let savedPalette = null
         try {
           savedTheme = localStorage.getItem(storageKey)
+          savedPalette = localStorage.getItem(paletteKey)
         } catch {
           // Storage can be unavailable in privacy-restricted browser contexts.
         }
@@ -21,19 +24,27 @@
             : prefersDark
               ? "dark"
               : "light"
+        const palette = savedPalette === "midnight" ? "midnight" : "twilight"
         const root = document.documentElement
         root.dataset.theme = theme
+        root.dataset.palette = palette
         root.style.colorScheme = theme
         document
           .querySelector('meta[name="theme-color"]')
-          ?.setAttribute("content", theme === "dark" ? "#0e1217" : "#ffffff")
+          ?.setAttribute(
+            "content",
+            theme === "light" ? "#fbfbfe" : palette === "midnight" ? "#05101c" : "#0d0e19",
+          )
       })()
     </script>
-    <meta name="description" content="Self-hosted Google Calendar synchronization" />
+    <meta
+      name="description"
+      content="Calendar Ghost: self-hosted, one-way Google Calendar sync. Your busy time, everywhere it needs to be."
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <title>Calendar Sync</title>
-    <script type="module" crossorigin src="/assets/index-Bo4QprvA.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-UboTKCYl.css">
+    <title>Calendar Ghost</title>
+    <script type="module" crossorigin src="/assets/index-2Apx5A7y.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DqWTvVfl.css">
   </head>
   <body>
     <div id="root"></div>

@@ -1,4 +1,6 @@
-# Google Calendar Sync
+# Calendar Ghost
+
+*Your busy time, everywhere it needs to be.* Self-hosted, one-way sync between Google calendars.
 
 A self-hosted, source-authoritative Google Calendar synchronizer. Define a directional rule from
 one calendar to another—including calendars owned by different Google identities—and keep a
@@ -14,7 +16,7 @@ coordinator.
 ## Why this project exists
 
 Sharing availability between personal and work calendars often means granting broad access,
-duplicating invitations, or trusting another hosted service. Google Calendar Sync runs on your own
+duplicating invitations, or trusting another hosted service. Calendar Ghost runs on your own
 machine and creates only the destination representation selected by each rule.
 
 - **Directional by design:** one rule observes exactly one source calendar and manages exactly one
@@ -123,7 +125,7 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 3. Preview the rule, inspect the result, and enable it.
 
 **Activity** is a table of what each rule did, grouped by day: the time, the event and when it
-happens, what happened as what Calendar Sync observed and what it did about it (such as
+happens, what happened as what Calendar Ghost observed and what it did about it (such as
 "Cancelled in Personal → removed from Work" or "Missing from Work → put back again"), and the rule.
 Recurring events say whether the entry was about the whole series or one occurrence. A blocked
 entry says what is now different in the destination calendar and whether anything needs doing. Each entry records its event's title and time when the run makes the decision,
@@ -353,4 +355,8 @@ behavior should include domain tests; hard-to-reverse architectural choices shou
 
 ## License
 
-Google Calendar Sync is available under the [MIT License](LICENSE).
+Calendar Ghost is available under the [MIT License](LICENSE).
+
+The Web UI bundles the Fraunces and Figtree typefaces, which are licensed under the SIL Open Font
+License 1.1. Their notices are in [`web/public/licenses/`](web/public/licenses/) and ship with the
+built interface at `/licenses/`.

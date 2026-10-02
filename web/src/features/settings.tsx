@@ -42,7 +42,7 @@ import {
   countFailedConfirmation,
   logSummary,
 } from "@/lib/storage"
-import type { ThemePreference } from "@/lib/theme"
+import type { DarkPalette, ThemePreference } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 
 type GoogleReturn = {
@@ -112,7 +112,7 @@ function GoogleReturnNote({ help, className }: { help: GoogleReturn; className?:
         <p>
           To stop this, set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address of this
           installation, for example with Tailscale Serve, and register it on your Google OAuth client.
-          Opening Calendar Sync at <code>{help.mismatch.redirectOrigin}</code>, for example through an
+          Opening Calendar Ghost at <code>{help.mismatch.redirectOrigin}</code>, for example through an
           SSH tunnel, also works.
         </p>
       </div>
@@ -193,7 +193,7 @@ function SettingsView({
   googleConfigured: boolean
   redirectUri: string | null
 }) {
-  const { preference, setPreference } = useTheme()
+  const { preference, setPreference, darkPalette, setDarkPalette } = useTheme()
   const queryClient = useQueryClient()
   const [oauthOutcome] = useState(() => {
     const outcome = new URLSearchParams(window.location.search).get("google")
@@ -665,6 +665,23 @@ function SettingsView({
                 <option value="system">Device setting</option>
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
+              </NativeSelect>
+            </div>
+          </div>
+          <div className="setting-row">
+            <div>
+              <h3 id="dark-palette-title">Dark palette</h3>
+              <p>The colors used whenever the interface is dark.</p>
+            </div>
+            <div className="appearance-control">
+              <NativeSelect
+                id="dark-palette"
+                aria-labelledby="dark-palette-title"
+                value={darkPalette}
+                onChange={(event) => setDarkPalette(event.target.value as DarkPalette)}
+              >
+                <option value="twilight">Twilight (indigo)</option>
+                <option value="midnight">Midnight (blue)</option>
               </NativeSelect>
             </div>
           </div>

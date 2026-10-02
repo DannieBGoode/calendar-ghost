@@ -85,7 +85,7 @@ class SmtpChannel(NotificationChannel):
 
     def send(self, incident: IncidentNotification) -> None:
         message = EmailMessage()
-        message["Subject"] = f"Calendar Sync incident: {incident.summary}"
+        message["Subject"] = f"Calendar Ghost incident: {incident.summary}"
         message["From"] = self.sender
         message["To"] = self.recipient
         message.set_content(
@@ -97,7 +97,7 @@ class SmtpChannel(NotificationChannel):
                     f"Category: {incident.category}",
                     f"Opened: {incident.occurred_at}",
                     "",
-                    "Open Calendar Sync Activity for current status.",
+                    "Open Calendar Ghost Activity for current status.",
                 )
             )
         )

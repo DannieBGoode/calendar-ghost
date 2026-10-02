@@ -3,10 +3,16 @@ import { describe, expect, it } from "vitest"
 import bootstrapHtml from "../../index.html?raw"
 import {
   applyTheme,
+  DARK_PALETTE_STORAGE_KEY,
+  parseDarkPalette,
   parseThemePreference,
+  readDarkPalette,
   readThemePreference,
   resolveTheme,
+  THEME_COLORS,
   THEME_STORAGE_KEY,
+  themeColor,
+  writeDarkPalette,
   writeThemePreference,
 } from "./theme"
 
@@ -65,6 +71,50 @@ describe("theme preference storage", () => {
   })
 })
 
+describe("dark palette", () => {
+  it.each(["twilight", "midnight"] as const)("accepts %s", (palette) => {
+    expect(parseDarkPalette(palette)).toBe(palette)
+  })
+
+  it.each([null, undefined, "", "dark", "blue", 1])("rejects %j", (value) => {
+    expect(parseDarkPalette(value)).toBeNull()
+  })
+
+  it("is stored under its own key beside the theme preference", () => {
+    const values = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    }
+
+    expect(writeDarkPalette("midnight", storage)).toBe(true)
+    expect(values.get(DARK_PALETTE_STORAGE_KEY)).toBe("midnight")
+    expect(values.has(THEME_STORAGE_KEY)).toBe(false)
+    expect(readDarkPalette(storage)).toBe("midnight")
+  })
+
+  it("ignores invalid or inaccessible stored palettes", () => {
+    const inaccessibleStorage = {
+      getItem: () => {
+        throw new Error("storage unavailable")
+      },
+      setItem: () => {
+        throw new Error("storage unavailable")
+      },
+    }
+
+    expect(readDarkPalette({ getItem: () => "sepia", setItem: () => undefined })).toBeNull()
+    expect(readDarkPalette(inaccessibleStorage)).toBeNull()
+    expect(writeDarkPalette("midnight", inaccessibleStorage)).toBe(false)
+  })
+
+  it("colors the browser chrome by appearance, then palette", () => {
+    expect(themeColor("light", "midnight")).toBe(THEME_COLORS.light)
+    expect(themeColor("dark", "twilight")).toBe(THEME_COLORS.twilight)
+    expect(themeColor("dark", "midnight")).toBe(THEME_COLORS.midnight)
+  })
+})
+
 describe("resolveTheme", () => {
   it("keeps an explicit light or dark preference", () => {
     expect(resolveTheme("light", true)).toBe("light")
@@ -86,11 +136,25 @@ describe("applyTheme", () => {
       querySelector: () => meta,
     } as unknown as Document
 
-    applyTheme("dark", targetDocument)
+    applyTheme("dark", "twilight", targetDocument)
 
-    expect(root.dataset).toEqual({ theme: "dark" })
+    expect(root.dataset).toEqual({ theme: "dark", palette: "twilight" })
     expect(root.style.colorScheme).toBe("dark")
-    expect(meta.content).toBe("#0e1217")
+    expect(meta.content).toBe("#0d0e19")
+  })
+
+  it("marks the dark palette and colors the browser chrome to match", () => {
+    const root = { dataset: {}, style: { colorScheme: "" } }
+    const meta = { content: "" }
+    const targetDocument = {
+      documentElement: root,
+      querySelector: () => meta,
+    } as unknown as Document
+
+    applyTheme("dark", "midnight", targetDocument)
+
+    expect(root.dataset).toEqual({ theme: "dark", palette: "midnight" })
+    expect(meta.content).toBe(THEME_COLORS.midnight)
   })
 })
 
@@ -99,21 +163,22 @@ describe("pre-paint theme bootstrap", () => {
     storedTheme: string | null,
     systemPrefersDark: boolean,
     storageUnavailable = false,
+    storedPalette: string | null = null,
   ) {
     const script = bootstrapHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1]
     if (!script) throw new Error("Theme bootstrap script was not found")
 
     const root = { dataset: { theme: "light" }, style: { colorScheme: "light" } }
     const meta = {
-      content: "#ffffff",
+      content: "#fbfbfe",
       setAttribute: (name: string, value: string) => {
         if (name === "content") meta.content = value
       },
     }
     const storage = {
-      getItem: () => {
+      getItem: (key: string) => {
         if (storageUnavailable) throw new Error("storage unavailable")
-        return storedTheme
+        return key === DARK_PALETTE_STORAGE_KEY ? storedPalette : storedTheme
       },
     }
     const targetDocument = { documentElement: root, querySelector: () => meta }
@@ -125,8 +190,23 @@ describe("pre-paint theme bootstrap", () => {
 
   it("stays aligned with the runtime storage key and theme colors", () => {
     expect(bootstrapHtml).toContain(`const storageKey = "${THEME_STORAGE_KEY}"`)
-    expect(bootstrapHtml).toContain('root.dataset.theme = theme')
-    expect(bootstrapHtml).toContain('theme === "dark" ? "#0e1217" : "#ffffff"')
+    expect(bootstrapHtml).toContain(`const paletteKey = "${DARK_PALETTE_STORAGE_KEY}"`)
+    expect(bootstrapHtml).toContain("root.dataset.theme = theme")
+    expect(bootstrapHtml).toContain("root.dataset.palette = palette")
+    for (const color of Object.values(THEME_COLORS)) expect(bootstrapHtml).toContain(color)
+  })
+
+  it.each([
+    ["saved Midnight while dark", "dark", "midnight", "midnight", THEME_COLORS.midnight],
+    ["saved Twilight while dark", "dark", "twilight", "twilight", THEME_COLORS.twilight],
+    ["no saved palette", "dark", null, "twilight", THEME_COLORS.twilight],
+    ["invalid saved palette", "dark", "sepia", "twilight", THEME_COLORS.twilight],
+    ["saved Midnight while light", "light", "midnight", "midnight", THEME_COLORS.light],
+  ] as const)("applies %s before paint", (_case, storedTheme, storedPalette, palette, color) => {
+    const { root, meta } = runBootstrap(storedTheme, false, false, storedPalette)
+
+    expect((root.dataset as Record<string, string>).palette).toBe(palette)
+    expect(meta.content).toBe(color)
   })
 
   it.each([
@@ -141,7 +221,7 @@ describe("pre-paint theme bootstrap", () => {
 
     expect(root.dataset.theme).toBe(expected)
     expect(root.style.colorScheme).toBe(expected)
-    expect(meta.content).toBe(expected === "dark" ? "#0e1217" : "#ffffff")
+    expect(meta.content).toBe(expected === "dark" ? "#0d0e19" : "#fbfbfe")
   })
 
   it("falls back to the device when storage is unavailable", () => {

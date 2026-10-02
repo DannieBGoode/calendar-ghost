@@ -1,23 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   color-scheme: light;
   /* The sticky top bar's height; sticky content below it offsets by this. */
   --topbar-height: 4rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.20 0.02 250);
-  --surface: oklch(0.975 0.006 250);
-  --muted: oklch(0.955 0.009 250);
-  --muted-foreground: oklch(0.43 0.025 250);
-  --primary: oklch(0.50 0.16 250);
+  --font-sans: "Figtree Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --background: oklch(0.99 0.004 285);
+  --foreground: oklch(0.22 0.045 280);
+  --surface: oklch(0.972 0.008 285);
+  --muted: oklch(0.95 0.012 285);
+  --muted-foreground: oklch(0.45 0.035 280);
+  --primary: oklch(0.47 0.15 278);
   --primary-foreground: oklch(1 0 0);
-  --primary-soft: oklch(0.93 0.035 250);
-  --border: oklch(0.89 0.012 250);
-  --input: oklch(0.65 0.015 250);
-  --ring: oklch(0.50 0.16 250);
+  --primary-soft: oklch(0.94 0.03 280);
+  --border: oklch(0.90 0.014 285);
+  --input: oklch(0.65 0.02 285);
+  --ring: oklch(0.47 0.15 278);
   --destructive: oklch(0.50 0.18 25);
   --destructive-foreground: oklch(1 0 0);
   --destructive-soft: oklch(0.95 0.035 25);
@@ -30,7 +32,17 @@
   --warning-foreground: oklch(0.34 0.08 70);
   --warning-surface: oklch(0.975 0.022 80);
   --warning-border: oklch(0.86 0.06 80);
-  --menu-shadow: 0 12px 32px -12px oklch(0.2 0.02 250 / 0.28);
+  --brand-glow: oklch(0.97 0.02 285);
+  --brand-line: var(--primary);
+  --brand-eyes: var(--primary);
+  /* The auth intro panel is twilight in both appearances. */
+  --twilight-canvas: oklch(0.2 0.04 280);
+  --twilight-ink: oklch(0.95 0.012 285);
+  --twilight-muted: oklch(0.80 0.03 285);
+  /* The dark-appearance ghost silhouette; also used standalone on the twilight auth panel. */
+  --ghost-white: oklch(0.93 0.03 285);
+  --twilight-healthy: oklch(0.82 0.1 155);
+  --menu-shadow: 0 12px 32px -12px oklch(0.2 0.04 280 / 0.28);
   --radius: 0.625rem;
   --motion-fast: 180ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -40,17 +52,17 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --background: oklch(0.18 0.012 250);
-  --foreground: oklch(0.93 0.01 250);
-  --surface: oklch(0.22 0.014 250);
-  --muted: oklch(0.27 0.018 250);
-  --muted-foreground: oklch(0.73 0.02 250);
-  --primary: oklch(0.68 0.15 250);
-  --primary-foreground: oklch(0.16 0.02 250);
-  --primary-soft: oklch(0.27 0.055 250);
-  --border: oklch(0.36 0.018 250);
-  --input: oklch(0.52 0.02 250);
-  --ring: oklch(0.68 0.15 250);
+  --background: oklch(0.17 0.022 280);
+  --foreground: oklch(0.95 0.012 285);
+  --surface: oklch(0.21 0.026 280);
+  --muted: oklch(0.26 0.03 280);
+  --muted-foreground: oklch(0.75 0.025 285);
+  --primary: oklch(0.74 0.12 278);
+  --primary-foreground: oklch(0.17 0.03 280);
+  --primary-soft: oklch(0.28 0.06 278);
+  --border: oklch(0.34 0.03 280);
+  --input: oklch(0.52 0.03 280);
+  --ring: oklch(0.74 0.12 278);
   --destructive: oklch(0.68 0.16 25);
   --destructive-foreground: oklch(0.16 0.03 25);
   --destructive-soft: oklch(0.28 0.06 25);
@@ -63,7 +75,30 @@
   --warning-foreground: oklch(0.83 0.11 85);
   --warning-surface: oklch(0.22 0.025 80);
   --warning-border: oklch(0.42 0.06 80);
+  --brand-glow: var(--ghost-white);
+  --brand-line: var(--ghost-white);
+  --brand-eyes: oklch(0.2 0.04 280);
   --menu-shadow: 0 16px 40px -12px oklch(0 0 0 / 0.6);
+}
+
+/* Midnight: the optional blue dark palette. Light appearance and status colors are unchanged. */
+:root[data-theme="dark"][data-palette="midnight"] {
+  --background: oklch(0.17 0.03 250);
+  --foreground: oklch(0.95 0.01 240);
+  --surface: oklch(0.21 0.033 250);
+  --muted: oklch(0.26 0.038 250);
+  --muted-foreground: oklch(0.76 0.03 240);
+  --primary: oklch(0.75 0.12 240);
+  --primary-foreground: oklch(0.17 0.03 250);
+  --primary-soft: oklch(0.28 0.06 245);
+  --border: oklch(0.34 0.035 250);
+  --input: oklch(0.53 0.035 250);
+  --ring: oklch(0.75 0.12 240);
+  --twilight-canvas: oklch(0.2 0.045 252);
+  --twilight-ink: oklch(0.95 0.01 240);
+  --twilight-muted: oklch(0.80 0.03 240);
+  --ghost-white: oklch(0.94 0.02 240);
+  --brand-eyes: oklch(0.2 0.045 252);
 }
 
 @theme inline {
@@ -145,6 +180,14 @@ h3 {
   text-wrap: balance;
 }
 
+/* Page titles are the only place the display face appears. */
+h1 {
+  font-family: var(--font-display);
+  font-weight: 560;
+  font-variation-settings: "SOFT" 100;
+  letter-spacing: -0.015em;
+}
+
 p {
   text-wrap: pretty;
 }
@@ -156,6 +199,23 @@ p {
   align-items: center;
   justify-content: center;
   gap: 1rem;
+}
+
+.startup-ghost {
+  width: 3.5rem;
+  height: 3.5rem;
+  animation: ghost-breath 2.4s ease-in-out infinite;
+}
+
+@keyframes ghost-breath {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+
+  50% {
+    opacity: 1;
+  }
 }
 
 .fatal-state {
@@ -194,52 +254,51 @@ p {
 }
 
 .auth-intro {
+  /* The mark on twilight is the dark-appearance ghost in both appearances. */
+  --brand-glow: var(--ghost-white);
+  --brand-line: var(--ghost-white);
+  --brand-eyes: var(--twilight-canvas);
   display: flex;
   flex-direction: column;
   justify-content: center;
   padding: clamp(2.5rem, 7vw, 7rem);
-  background: var(--surface);
+  background: var(--twilight-canvas);
+  color: var(--twilight-ink);
 }
 
-.brand-mark,
 .wordmark-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--primary);
 }
 
 .brand-mark {
-  width: 2.75rem;
-  height: 2.75rem;
-  margin-bottom: 1.25rem;
-  border-radius: 0.75rem;
-  background: var(--primary-soft);
-}
-
-.brand-mark svg {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .product-name {
-  margin-bottom: 2.75rem;
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
+  font-size: 1.125rem;
   font-weight: 650;
+}
+
+.auth-tagline {
+  margin-bottom: 3rem;
+  color: var(--twilight-muted);
+  font-size: 0.9375rem;
 }
 
 .auth-intro h1 {
   max-width: 13ch;
   font-size: clamp(2.25rem, 5vw, 4.25rem);
   line-height: 0.98;
-  letter-spacing: -0.035em;
 }
 
 .auth-copy {
   max-width: 36rem;
   margin-top: 1.75rem;
-  color: var(--muted-foreground);
+  color: var(--twilight-muted);
   font-size: 1rem;
   line-height: 1.65;
 }
@@ -250,7 +309,7 @@ p {
   padding: 0;
   flex-direction: column;
   gap: 0.75rem;
-  color: var(--muted-foreground);
+  color: var(--twilight-muted);
   font-size: 0.875rem;
   list-style: none;
 }
@@ -264,7 +323,7 @@ p {
 .privacy-list svg {
   width: 1rem;
   height: 1rem;
-  color: var(--success-foreground);
+  color: var(--twilight-healthy);
 }
 
 .auth-form-panel {
@@ -291,6 +350,7 @@ p {
 
 .form-heading h2 {
   font-size: 1.35rem;
+  font-weight: 650;
   line-height: 1.3;
 }
 
@@ -366,8 +426,8 @@ p {
 }
 
 .wordmark-icon svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 .primary-nav {
@@ -481,7 +541,6 @@ p {
 .page-section h1 {
   font-size: 2rem;
   line-height: 1.15;
-  letter-spacing: -0.025em;
 }
 
 .page-intro {
@@ -537,7 +596,11 @@ p {
 }
 
 .health-copy h2 {
-  font-weight: 700;
+  font-weight: 650;
+}
+
+.empty-panel h2 {
+  font-weight: 650;
 }
 
 .health-copy h2,
@@ -982,6 +1045,14 @@ p {
   line-height: 1.35;
 }
 
+.oauth-feedback h2 {
+  font-weight: 650;
+}
+
+.oauth-feedback h3 {
+  font-weight: 550;
+}
+
 .oauth-feedback p {
   margin-top: 0.25rem;
   color: var(--muted-foreground);
@@ -1072,7 +1143,12 @@ p {
 .disconnect-confirmation h3,
 .disconnect-confirmation h4 {
   font-size: 1rem;
+  font-weight: 550;
   line-height: 1.35;
+}
+
+.setting-row h2 {
+  font-weight: 550;
 }
 
 .account-empty p,
@@ -1505,7 +1581,7 @@ p {
 }
 
 .section-heading h2 {
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .recent-changes {
@@ -1799,6 +1875,9 @@ a.recent-change-rule:focus-visible {
 }
 
 .empty-note {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
   padding: 1.5rem 0;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -1806,12 +1885,23 @@ a.recent-change-rule:focus-visible {
 
 .empty-note h2 {
   font-size: 1rem;
+  font-weight: 650;
 }
 
 .empty-note p {
   margin-top: 0.25rem;
   color: var(--muted-foreground);
   font-size: 0.875rem;
+}
+
+.empty-ghost {
+  width: 3rem;
+  height: 3rem;
+  flex: none;
+}
+
+.empty-panel .empty-ghost {
+  margin-bottom: 1rem;
 }
 
 .rule-builder {
@@ -1973,7 +2063,7 @@ a.recent-change-rule:focus-visible {
 .rule-section > h2,
 .rule-section .section-heading h2 {
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .rule-facts {
@@ -2177,7 +2267,7 @@ a.recent-change-rule:focus-visible {
 .consequence-panel h3 {
   margin-bottom: 0.5rem;
   font-size: 0.875rem;
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .consequence-panel ul {
@@ -2192,6 +2282,7 @@ a.recent-change-rule:focus-visible {
 .app-footer {
   display: flex;
   min-height: 4rem;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
@@ -2199,6 +2290,18 @@ a.recent-change-rule:focus-visible {
   border-top: 1px solid var(--border);
   color: var(--muted-foreground);
   font-size: 0.8125rem;
+}
+
+.app-footer > * {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* CSS-generated separators so a wrapped line never leaves a dangling "·" after the last item on
+   a row; the mark is decorative punctuation, not content, so aria-hidden would be redundant. */
+.app-footer > * + *::before {
+  content: "·";
+  margin-inline-end: 0.5rem;
 }
 
 .app-footer a:hover {
@@ -2524,7 +2627,7 @@ thead + .activity-day th {
 }
 
 .activity-section .section-heading h2 {
-  font-weight: 700;
+  font-weight: 650;
 }
 
 .activity-removed-rule {
@@ -3044,8 +3147,23 @@ thead + .activity-day th {
     padding: 3rem 1.5rem;
   }
 
-  .product-name {
-    margin-bottom: 1.5rem;
+  /* The toggle sits over the stacked twilight panel here, so re-token it for that canvas
+     instead of the light-appearance surface tokens it uses in the two-column layout. */
+  .auth-theme-control {
+    --muted-foreground: var(--twilight-muted);
+    --foreground: var(--twilight-ink);
+    --muted: oklch(0.28 0.04 280);
+    --background: var(--twilight-canvas);
+    --ring: oklch(0.74 0.12 278);
+  }
+
+  .auth-tagline {
+    margin-bottom: 1.75rem;
+  }
+
+  .brand-mark {
+    width: 3.5rem;
+    height: 3.5rem;
   }
 
   .auth-intro h1 {
@@ -3361,9 +3479,22 @@ thead + .activity-day th {
     white-space: normal;
     overflow-wrap: anywhere;
   }
+
+  .app-footer {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .app-footer > * + *::before {
+    content: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .startup-ghost {
+    animation: none;
+  }
+
   *,
   *::before,
   *::after {

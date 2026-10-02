@@ -70,7 +70,7 @@ export function reconcileResultMessage(result: SyncResult, destination: string):
         // Mappings are counted per series while differences include single occurrences.
         `${checked} (a recurring series counts once).`,
         `${drift.length === 1 ? "1 difference remains" : `${drift.length} differences remain`} after the sync: ${driftParts(drift, destination).join(", ")}.`,
-        `If Reconcile now finds ${drift.length === 1 ? "it" : "them"} again, Calendar Sync can't settle ${drift.length === 1 ? "it" : "them"} on its own.`,
+        `If Reconcile now finds ${drift.length === 1 ? "it" : "them"} again, Calendar Ghost can't settle ${drift.length === 1 ? "it" : "them"} on its own.`,
       ].join(" ")
     : blocked
       ? `${checked}.`
@@ -110,8 +110,8 @@ const RECOVERY_CAUSES: Record<string, string> = {
 export function recoveryExplanation(outcome: RunOutcome | null, now: number = Date.now()): string {
   const cause =
     outcome && !outcome.succeeded
-      ? `${RECOVERY_CAUSES[outcome.failure_kind ?? ""] ?? "A sync could not finish"} ${relativeTime(outcome.completed_at, now)}, so Calendar Sync stopped this rule to be safe.`
-      : "Calendar Sync stopped this rule to be safe."
+      ? `${RECOVERY_CAUSES[outcome.failure_kind ?? ""] ?? "A sync could not finish"} ${relativeTime(outcome.completed_at, now)}, so Calendar Ghost stopped this rule to be safe.`
+      : "Calendar Ghost stopped this rule to be safe."
   return `${cause} Nothing was lost. Preview it to check both calendars, then start syncing again.`
 }
 

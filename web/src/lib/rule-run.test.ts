@@ -70,7 +70,7 @@ describe("run results", () => {
       "Checked 71 events this rule wrote to IO Clone (a recurring series counts once). " +
         "4 differences remain after the sync: 2 missing from IO Clone, 1 different from its source event, " +
         "1 still in IO Clone though its source event was cancelled or excluded. " +
-        "If Reconcile now finds them again, Calendar Sync can't settle them on its own.",
+        "If Reconcile now finds them again, Calendar Ghost can't settle them on its own.",
     )
     expect(message).not.toMatch(/during the check/)
   })
@@ -83,7 +83,7 @@ describe("run results", () => {
     expect(message).toBe(
       "Checked 1 event this rule wrote to Family (a recurring series counts once). " +
         "1 difference remains after the sync: 1 missing from Family. " +
-        "If Reconcile now finds it again, Calendar Sync can't settle it on its own.",
+        "If Reconcile now finds it again, Calendar Ghost can't settle it on its own.",
     )
   })
 
@@ -164,9 +164,9 @@ describe("previewReadyLabel", () => {
 describe("recoveryExplanation", () => {
   it("names the cause and reassures that nothing was lost", () => {
     expect(recoveryExplanation({ ...outcome, succeeded: false, failure_kind: "rate_limit" }, now)).toBe(
-      "Google Calendar was limiting requests 10 minutes ago, so Calendar Sync stopped this rule to be safe. Nothing was lost. Preview it to check both calendars, then start syncing again.",
+      "Google Calendar was limiting requests 10 minutes ago, so Calendar Ghost stopped this rule to be safe. Nothing was lost. Preview it to check both calendars, then start syncing again.",
     )
-    expect(recoveryExplanation(null, now)).toMatch(/^Calendar Sync stopped this rule to be safe\. Nothing was lost/)
+    expect(recoveryExplanation(null, now)).toMatch(/^Calendar Ghost stopped this rule to be safe\. Nothing was lost/)
   })
 })
 
