@@ -71,6 +71,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Reconcile Now returns a completed rule to **Enabled** immediately, without requiring a page refresh.
 - Reconcile now shows its progress without reloading the page. Rules and Rule Details refresh every two seconds while a command they sent runs, so its progress appears as soon as the service reports it. Reconcile now counts its full pass ("Syncing every event from Family to Work, then checking each one this rule wrote."), times itself from its start through the check, and stays named Reconciling after a reload: `running` reports it as one reconciliation and adds `stage`, `"sync"` during the full pass and `"reconciliation"` during the check.
 - A recurring event whose remaining occurrences you all declined is no longer added back and removed again on every full run and Reconcile Now. The check for whether a series has an occurrence left to sync counted declined occurrences, so the run recreated the series, removed its declined occurrence, and Google then cancelled the whole series; Reconcile Now reported it as still different. The check now follows the rule's choices for declined, unanswered, tentative, and all-day events, so such a series stays dormant until you accept an occurrence, and Rule Preview leaves it out.
 - `CALENDAR_SYNC_LOG_LEVEL` now takes effect. The service never configured its own logging, so under Uvicorn its informational lines were dropped and container logs showed nothing about running work.
