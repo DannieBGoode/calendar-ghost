@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { GhostMark } from "@/components/ghost-mark"
 import { api } from "@/lib/api"
-import { LICENSE_URL, PRODUCT_NAME, REPOSITORY_URL, TAGLINE } from "@/lib/brand"
+import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL, TAGLINE } from "@/lib/brand"
 
 type AuthScreenProps = { mode: "setup" | "login" }
 
@@ -112,7 +112,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
           </Button>
         </form>
         <p className="auth-legal">
-          © 2026 Calendar Ghost contributors · No warranty. Share and modify under the <a href={LICENSE_URL} target="_blank" rel="noreferrer">AGPLv3+ license</a>; view the <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">source</a>.
+          © 2026 Calendar Ghost contributors · No warranty. Share and modify under the <a href={LICENSE_URL} target="_blank" rel="noreferrer">AGPLv3+ license</a>; view the <a href={SOURCE_URL} target="_blank" rel="noreferrer">source</a>.
         </p>
       </section>
     </main>

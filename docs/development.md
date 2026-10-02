@@ -16,6 +16,20 @@ cd web && npm ci
 
 Run FastAPI on port 8000 and Vite on port 5173. Vite proxies `/api` and `/health` to FastAPI.
 
+## Corresponding source link
+
+The Web UI's **Source** link is injected at build time. A local Vite build uses the current Git
+revision; CI and Docker builds should set `CALENDAR_GHOST_SOURCE_URL` to the immutable commit or
+release tag URL for the source being built:
+
+```sh
+CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/google-calendar-sync/tree/<commit-or-tag> \
+  npm --prefix web run build
+```
+
+Docker Compose passes the same variable as a build argument. Downstream forks can point the link at
+their own corresponding source without changing the application code.
+
 ## Development preview
 
 To see the Web UI with realistic data without a Google account, run:

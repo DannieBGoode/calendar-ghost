@@ -65,11 +65,17 @@ copy another operator's client secret into your installation.
 
 ### External-app testing and verification
 
-An External app in testing is suitable for a personal or small self-hosted installation when its
-connected identities are listed as test users. Google may show a testing or unverified-app warning
-during consent. A future public hosted service is a separate OAuth product and may need its own
-Google verification and production-audience process; do not reuse one operator's self-hosted
-credentials for it.
+Testing is suitable for initial setup and short-lived development only. For a long-running
+self-hosted installation, move the OAuth consent screen's publishing status to **In production**
+before connecting calendars. Google says refresh tokens issued to an External app in **Testing**
+expire after seven days unless the app requests only basic profile scopes; Calendar Ghost requests
+Calendar scopes, so scheduled synchronization can stop after seven days until the account is
+reauthorized. See Google's [refresh-token expiration guidance](https://developers.google.com/identity/protocols/oauth2#expiration).
+
+While the app is in testing, every connected identity must be listed as a test user, and Google
+may show a testing or unverified-app warning during consent. A future public hosted service is a
+separate OAuth product and may need its own Google verification and production-audience process; do
+not reuse one operator's self-hosted credentials for it.
 
 ## 3. Configure the installation
 
@@ -92,6 +98,8 @@ CALENDAR_SYNC_MASTER_KEY=PASTE_GENERATED_KEY_HERE
 CALENDAR_SYNC_GOOGLE_CLIENT_ID=PASTE_GOOGLE_CLIENT_ID_HERE
 CALENDAR_SYNC_GOOGLE_CLIENT_SECRET=PASTE_GOOGLE_CLIENT_SECRET_HERE
 CALENDAR_SYNC_GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/oauth/google/callback
+# Optional: make the UI's Source link point to the exact checkout being built.
+# CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/google-calendar-sync/tree/<commit-or-tag>
 ```
 
 The master key encrypts stored Google credentials and seals sensitive event-history values. Back it
@@ -151,6 +159,10 @@ Before an upgrade or host migration:
   checks.
 
 For a checkout-based installation, update the source and rebuild:
+
+Before building, set `CALENDAR_GHOST_SOURCE_URL` in `.env` to the immutable commit or release tag
+URL for that checkout. Docker builds use that value to make the UI's **Source** link identify the
+corresponding source; if it is unset, the link falls back to the upstream `main` tree.
 
 ```sh
 docker compose up -d --build

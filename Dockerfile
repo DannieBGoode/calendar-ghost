@@ -4,6 +4,8 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
 COPY web ./
+ARG CALENDAR_GHOST_SOURCE_URL
+ENV CALENDAR_GHOST_SOURCE_URL=${CALENDAR_GHOST_SOURCE_URL}
 RUN npm run build:bundle
 
 FROM python:3.12-slim AS runtime

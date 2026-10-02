@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthScreen } from "@/features/auth-screen"
 import { Dashboard } from "@/features/dashboard"
 import { api } from "@/lib/api"
-import { APP_VERSION, LICENSE_URL, PRODUCT_NAME, REPOSITORY_URL, documentTitle } from "@/lib/brand"
+import { APP_VERSION, LICENSE_URL, PRODUCT_NAME, SOURCE_URL, documentTitle } from "@/lib/brand"
 import {
   appLocationFromPathname,
   appPathForLocation,
@@ -160,7 +160,7 @@ function AuthenticatedApp() {
       </header>
       <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
-      <footer className="app-footer"><span>{PRODUCT_NAME}</span><span>v{APP_VERSION}</span><span>Runs on this device</span><a href="/api/docs">API documentation</a><span className="legal-notice">© 2026 Calendar Ghost contributors · No warranty · <a href={LICENSE_URL} target="_blank" rel="noreferrer">AGPLv3+ license</a></span><a href={REPOSITORY_URL} target="_blank" rel="noreferrer">Source</a></footer>
+      <footer className="app-footer"><span>{PRODUCT_NAME}</span><span>v{APP_VERSION}</span><span>Runs on this device</span><a href="/api/docs">API documentation</a><span className="legal-notice">© 2026 Calendar Ghost contributors · No warranty · <a href={LICENSE_URL} target="_blank" rel="noreferrer">AGPLv3+ license</a></span><a href={SOURCE_URL} target="_blank" rel="noreferrer">Source</a></footer>
     </div>
   )
 }
