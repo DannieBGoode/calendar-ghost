@@ -81,6 +81,26 @@
   --menu-shadow: 0 16px 40px -12px oklch(0 0 0 / 0.6);
 }
 
+/* Midnight: the optional blue dark palette. Light appearance and status colors are unchanged. */
+:root[data-theme="dark"][data-palette="midnight"] {
+  --background: oklch(0.17 0.03 250);
+  --foreground: oklch(0.95 0.01 240);
+  --surface: oklch(0.21 0.033 250);
+  --muted: oklch(0.26 0.038 250);
+  --muted-foreground: oklch(0.76 0.03 240);
+  --primary: oklch(0.75 0.12 240);
+  --primary-foreground: oklch(0.17 0.03 250);
+  --primary-soft: oklch(0.28 0.06 245);
+  --border: oklch(0.34 0.035 250);
+  --input: oklch(0.53 0.035 250);
+  --ring: oklch(0.75 0.12 240);
+  --twilight-canvas: oklch(0.2 0.045 252);
+  --twilight-ink: oklch(0.95 0.01 240);
+  --twilight-muted: oklch(0.80 0.03 240);
+  --ghost-white: oklch(0.94 0.02 240);
+  --brand-eyes: oklch(0.2 0.045 252);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

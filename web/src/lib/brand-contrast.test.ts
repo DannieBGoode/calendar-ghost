@@ -29,6 +29,10 @@ function blocksFor(selector: string): string[] {
 
 const light = block(/:root \{([\s\S]*?)\n\}/)
 const dark = new Map([...light, ...block(/:root\[data-theme="dark"\] \{([\s\S]*?)\n\}/)])
+const midnight = new Map([
+  ...dark,
+  ...block(/:root\[data-theme="dark"\]\[data-palette="midnight"\] \{([\s\S]*?)\n\}/),
+])
 
 function resolve(tokens: Tokens, name: string): string {
   const value = tokens.get(name)
@@ -114,6 +118,7 @@ const NON_TEXT: [string, string][] = [
 describe.each([
   ["light", light],
   ["dark", dark],
+  ["dark Midnight", midnight],
 ])("%s appearance", (_name, tokens) => {
   it.each(TEXT)("keeps %s on %s at AA text contrast", (fg, bg) => {
     expect(contrast(tokens, fg, bg)).toBeGreaterThanOrEqual(4.5)
@@ -140,6 +145,17 @@ describe("Twilight identity", () => {
   })
 })
 
+describe("Midnight palette", () => {
+  it("is blue, not indigo, wherever it differs from Twilight", () => {
+    const hue = (tokens: Tokens, name: string) =>
+      Number(resolve(tokens, name).match(/oklch\([\d.]+ [\d.]+ ([\d.]+)/)?.[1])
+    for (const token of ["background", "surface", "primary", "twilight-canvas"]) {
+      expect(hue(midnight, token)).toBeGreaterThanOrEqual(230)
+      expect(hue(midnight, token)).toBeLessThanOrEqual(255)
+    }
+  })
+})
+
 describe("Mobile auth theme toggle", () => {
   it("re-tokens the ghost-variant toggle for the twilight panel at <=800px", () => {
     const blocks = blocksFor(".auth-theme-control")
@@ -157,11 +173,13 @@ describe("Mobile auth theme toggle", () => {
 describe("theme-color metadata", () => {
   it("ties the meta theme-color hexes to the background tokens", () => {
     expect(hex(light, "background")).toBe(THEME_COLORS.light)
-    expect(hex(dark, "background")).toBe(THEME_COLORS.dark)
+    expect(hex(dark, "background")).toBe(THEME_COLORS.twilight)
+    expect(hex(midnight, "background")).toBe(THEME_COLORS.midnight)
   })
 
   it("matches the pre-paint script's hardcoded hexes", () => {
     expect(html).toContain(`content="${THEME_COLORS.light}"`)
-    expect(html).toContain(`"${THEME_COLORS.dark}"`)
+    expect(html).toContain(`"${THEME_COLORS.twilight}"`)
+    expect(html).toContain(`"${THEME_COLORS.midnight}"`)
   })
 })

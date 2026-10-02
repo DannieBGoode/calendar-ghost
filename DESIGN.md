@@ -43,6 +43,15 @@ colors:
   night-destructive: "oklch(0.68 0.16 25)"
   night-destructive-soft: "oklch(0.28 0.06 25)"
   night-destructive-ink: "oklch(0.80 0.11 25)"
+  midnight: "oklch(0.17 0.03 250)"
+  midnight-surface: "oklch(0.21 0.033 250)"
+  midnight-muted-surface: "oklch(0.26 0.038 250)"
+  midnight-calm-ink: "oklch(0.95 0.01 240)"
+  midnight-muted-ink: "oklch(0.76 0.03 240)"
+  midnight-lantern-blue: "oklch(0.75 0.12 240)"
+  midnight-quiet-border: "oklch(0.34 0.035 250)"
+  midnight-input-border: "oklch(0.53 0.035 250)"
+  midnight-twilight-canvas: "oklch(0.2 0.045 252)"
 typography:
   headline:
     fontFamily: "Fraunces Variable, ui-serif, Georgia, serif"
@@ -150,7 +159,8 @@ A lavender-tinted neutral canvas (the "Twilight" palette) supports a single indi
 
 - **Device setting** is the default and follows the browser's current color-scheme preference, including changes made while the app is open.
 - **Light** and **Dark** are explicit browser-local choices. They apply before the interface paints and persist across visits without adding installation state to SQLite.
-- Semantic meaning does not change between appearances. Lantern Indigo remains action and focus, moss remains healthy, ochre remains attention, and red remains destructive.
+- **Dark palette** chooses the colors used whenever the interface is dark, whether by choice or by following the device. **Twilight** (indigo) is the default; **Midnight** is a blue alternative with a navy canvas, cool blue-grey neutrals, and Lantern Blue in place of Lantern Indigo, and it turns the auth intro panel navy too. Like the theme, it is browser-local, applies before paint, and sets the browser chrome color. Light appearance has one palette.
+- Semantic meaning does not change between appearances or palettes. The palette's lantern color remains action and focus, moss remains healthy, ochre remains attention, and red remains destructive.
 
 ### Primary
 

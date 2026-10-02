@@ -12,12 +12,18 @@ import {
 
 import {
   applyTheme,
+  DARK_PALETTE_STORAGE_KEY,
+  DEFAULT_DARK_PALETTE,
+  parseDarkPalette,
   parseThemePreference,
+  readDarkPalette,
   readThemePreference,
   resolveTheme,
   SYSTEM_DARK_MODE_QUERY,
   THEME_STORAGE_KEY,
+  writeDarkPalette,
   writeThemePreference,
+  type DarkPalette,
   type ResolvedTheme,
   type ThemePreference,
 } from "@/lib/theme"
@@ -26,6 +32,8 @@ type ThemeContextValue = {
   preference: ThemePreference
   resolvedTheme: ResolvedTheme
   setPreference: (preference: ThemePreference) => void
+  darkPalette: DarkPalette
+  setDarkPalette: (palette: DarkPalette) => void
 }
 
 type ThemeProviderProps = {
@@ -60,6 +68,9 @@ export function ThemeProvider({ children, defaultPreference = "system" }: ThemeP
     systemPrefersDark,
     () => false,
   )
+  const [darkPalette, setDarkPaletteState] = useState<DarkPalette>(
+    () => readDarkPalette() ?? DEFAULT_DARK_PALETTE,
+  )
   const resolvedTheme = resolveTheme(preference, prefersDark)
 
   const setPreference = useCallback((nextPreference: ThemePreference) => {
@@ -67,16 +78,26 @@ export function ThemeProvider({ children, defaultPreference = "system" }: ThemeP
     writeThemePreference(nextPreference)
   }, [])
 
+  const setDarkPalette = useCallback((nextPalette: DarkPalette) => {
+    setDarkPaletteState(nextPalette)
+    writeDarkPalette(nextPalette)
+  }, [])
+
   useLayoutEffect(() => {
-    applyTheme(resolvedTheme)
-  }, [resolvedTheme])
+    applyTheme(resolvedTheme, darkPalette)
+  }, [resolvedTheme, darkPalette])
 
   useEffect(() => {
     if (typeof window === "undefined") return
 
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== THEME_STORAGE_KEY && event.key !== null) return
-      setPreferenceState(parseThemePreference(event.newValue) ?? defaultPreference)
+      // A null key means another tab cleared storage, which resets both choices.
+      if (event.key === THEME_STORAGE_KEY || event.key === null) {
+        setPreferenceState(parseThemePreference(event.newValue) ?? defaultPreference)
+      }
+      if (event.key === DARK_PALETTE_STORAGE_KEY || event.key === null) {
+        setDarkPaletteState(parseDarkPalette(event.newValue) ?? DEFAULT_DARK_PALETTE)
+      }
     }
 
     window.addEventListener("storage", handleStorage)
@@ -84,8 +105,8 @@ export function ThemeProvider({ children, defaultPreference = "system" }: ThemeP
   }, [defaultPreference])
 
   const value = useMemo(
-    () => ({ preference, resolvedTheme, setPreference }),
-    [preference, resolvedTheme, setPreference],
+    () => ({ preference, resolvedTheme, setPreference, darkPalette, setDarkPalette }),
+    [preference, resolvedTheme, setPreference, darkPalette, setDarkPalette],
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
