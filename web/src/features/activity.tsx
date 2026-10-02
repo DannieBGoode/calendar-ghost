@@ -799,7 +799,7 @@ function OpenIncidents({
       <div className="section-heading">
         <div>
           <h2 id="incidents-title">Incidents</h2>
-          <p>Each stays open until Calendar Sync confirms the problem is gone.</p>
+          <p>Each stays open until Calendar Ghost confirms the problem is gone.</p>
         </div>
       </div>
       <ul className="rule-list">

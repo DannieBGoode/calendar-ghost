@@ -57,7 +57,7 @@ export function incidentGuidance(incident: Incident, rule: IncidentRuleState | n
   }
   if (RETRYING.has(incident.category)) {
     return {
-      detail: "Nothing to do now. Calendar Sync keeps retrying and closes this after the next successful sync.",
+      detail: "Nothing to do now. Calendar Ghost keeps retrying and closes this after the next successful sync.",
       action: null,
     }
   }

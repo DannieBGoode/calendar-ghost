@@ -170,7 +170,7 @@ export function overviewHealth(
     tone: "healthy",
     headline: "Synchronization is healthy",
     title: `${count(dashboard.enabled_rules, "rule")} running normally`,
-    detail: dashboard.last_synced_at ? `${lastSync} Calendar Sync checks for changes every five minutes.` : lastSync,
+    detail: dashboard.last_synced_at ? `${lastSync} Calendar Ghost checks for changes every five minutes.` : lastSync,
     badge: "Healthy",
     action: null,
   }

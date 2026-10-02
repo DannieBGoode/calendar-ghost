@@ -50,7 +50,7 @@ export function RedirectMismatchNotice({ redirectUri }: { redirectUri: string | 
         <details className="oauth-feedback-details">
           <summary>How to connect from this address</summary>
           <p>
-            Open Calendar Sync at <code>{mismatch.redirectOrigin}</code>, for example through an SSH
+            Open Calendar Ghost at <code>{mismatch.redirectOrigin}</code>, for example through an SSH
             tunnel, or set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address for
             this installation. If Google lands on a connection error, replace{" "}
             <code>{mismatch.redirectOrigin}</code> with <code>{mismatch.currentOrigin}</code> in the
