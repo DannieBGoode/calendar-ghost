@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Plus, ShieldAlert } from "lucide-react"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
+import { AccountSelect } from "@/components/account-select"
 import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -401,10 +402,17 @@ function RuleBuilder({
         <fieldset>
           <legend>Source calendar</legend>
           <div className="field-stack">
-            <Label htmlFor="source-account">Google account</Label>
-            <NativeSelect id="source-account" value={resolvedSourceAccount} onChange={(event) => { setSourceAccount(event.target.value); setSourceCalendar("") }}>
-              {accounts.map((account) => <option key={account.id} value={account.id}>{account.display_name} ({account.email})</option>)}
-            </NativeSelect>
+            <Label id="source-account-label" htmlFor="source-account">Google account</Label>
+            <AccountSelect
+              id="source-account"
+              labelId="source-account-label"
+              accounts={accounts}
+              value={resolvedSourceAccount}
+              onChange={(value) => {
+                setSourceAccount(value)
+                setSourceCalendar("")
+              }}
+            />
           </div>
           <div className="field-stack">
             <Label htmlFor="source-calendar">Calendar</Label>
@@ -424,10 +432,17 @@ function RuleBuilder({
         <fieldset>
           <legend>Destination calendar</legend>
           <div className="field-stack">
-            <Label htmlFor="destination-account">Google account</Label>
-            <NativeSelect id="destination-account" value={resolvedDestinationAccount} onChange={(event) => { setDestinationAccount(event.target.value); setDestinationCalendar("") }}>
-              {accounts.map((account) => <option key={account.id} value={account.id}>{account.display_name} ({account.email})</option>)}
-            </NativeSelect>
+            <Label id="destination-account-label" htmlFor="destination-account">Google account</Label>
+            <AccountSelect
+              id="destination-account"
+              labelId="destination-account-label"
+              accounts={accounts}
+              value={resolvedDestinationAccount}
+              onChange={(value) => {
+                setDestinationAccount(value)
+                setDestinationCalendar("")
+              }}
+            />
           </div>
           <div className="field-stack">
             <Label htmlFor="destination-calendar">Calendar you can edit</Label>
