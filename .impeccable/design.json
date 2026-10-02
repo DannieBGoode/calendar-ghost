@@ -1,19 +1,19 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-08-30T14:30:00+02:00",
-  "title": "Design System: Google Calendar Sync",
+  "title": "Design System: Calendar Ghost",
   "extensions": {
     "colorMeta": {
-      "status-cobalt": {
+      "lantern-indigo": {
         "role": "primary",
-        "displayName": "Status Cobalt",
-        "canonical": "oklch(0.50 0.16 250)",
-        "tonalRamp": ["oklch(0.15 0.06 250)", "oklch(0.25 0.09 250)", "oklch(0.35 0.12 250)", "oklch(0.50 0.16 250)", "oklch(0.62 0.13 250)", "oklch(0.74 0.09 250)", "oklch(0.86 0.05 250)", "oklch(0.95 0.02 250)"]
+        "displayName": "Lantern Indigo",
+        "canonical": "oklch(0.47 0.15 278)",
+        "tonalRamp": ["oklch(0.15 0.06 278)", "oklch(0.25 0.09 278)", "oklch(0.35 0.12 278)", "oklch(0.50 0.16 278)", "oklch(0.62 0.13 278)", "oklch(0.74 0.09 278)", "oklch(0.86 0.05 278)", "oklch(0.95 0.02 278)"]
       },
-      "daylight": {
+      "mist": {
         "role": "neutral",
-        "displayName": "Daylight",
-        "canonical": "oklch(1 0 0)",
+        "displayName": "Mist",
+        "canonical": "oklch(0.99 0.004 285)",
         "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.27 0 0)", "oklch(0.40 0 0)", "oklch(0.53 0 0)", "oklch(0.66 0 0)", "oklch(0.78 0 0)", "oklch(0.90 0 0)", "oklch(1 0 0)"]
       },
       "healthy-soft": {
@@ -51,7 +51,7 @@
       "refersTo": "button-primary",
       "description": "The next meaningful action in a workflow.",
       "html": "<button class=\"ds-btn-primary\">Save rule draft</button>",
-      "css": ".ds-btn-primary{height:40px;padding:10px 16px;border:0;border-radius:8px;background:var(--primary);color:var(--primary-foreground);font:600 14px Inter,system-ui,sans-serif;transition:background 180ms cubic-bezier(.22,1,.36,1)}.ds-btn-primary:hover{background:color-mix(in oklch,var(--primary) 90%,black)}.ds-btn-primary:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 35%,transparent);outline-offset:2px}"
+      "css": ".ds-btn-primary{height:40px;padding:10px 16px;border:0;border-radius:8px;background:var(--primary);color:var(--primary-foreground);font:600 14px Figtree Variable,system-ui,sans-serif;transition:background 180ms cubic-bezier(.22,1,.36,1)}.ds-btn-primary:hover{background:color-mix(in oklch,var(--primary) 90%,black)}.ds-btn-primary:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 35%,transparent);outline-offset:2px}"
     },
     {
       "name": "Outline Button",
@@ -59,7 +59,7 @@
       "refersTo": "button-outline",
       "description": "A reversible or secondary workflow action.",
       "html": "<button class=\"ds-btn-outline\">Preview rule</button>",
-      "css": ".ds-btn-outline{height:40px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:var(--background);color:var(--foreground);font:600 14px Inter,system-ui,sans-serif;transition:background 180ms cubic-bezier(.22,1,.36,1)}.ds-btn-outline:hover{background:var(--muted)}.ds-btn-outline:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 35%,transparent);outline-offset:2px}"
+      "css": ".ds-btn-outline{height:40px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;background:var(--background);color:var(--foreground);font:600 14px Figtree Variable,system-ui,sans-serif;transition:background 180ms cubic-bezier(.22,1,.36,1)}.ds-btn-outline:hover{background:var(--muted)}.ds-btn-outline:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 35%,transparent);outline-offset:2px}"
     },
     {
       "name": "Text Input",
@@ -67,7 +67,7 @@
       "refersTo": "input",
       "description": "A familiar local setup or configuration field.",
       "html": "<input class=\"ds-input\" value=\"Calendar name\" />",
-      "css": ".ds-input{height:40px;padding:8px 12px;border:1px solid var(--input);border-radius:8px;background:var(--background);color:var(--foreground);font:400 14px Inter,system-ui,sans-serif}.ds-input:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 30%,transparent);border-color:var(--primary)}"
+      "css": ".ds-input{height:40px;padding:8px 12px;border:1px solid var(--input);border-radius:8px;background:var(--background);color:var(--foreground);font:400 14px Figtree Variable,system-ui,sans-serif}.ds-input:focus-visible{outline:3px solid color-mix(in oklch,var(--ring) 30%,transparent);border-color:var(--primary)}"
     },
     {
       "name": "Health Badge",
@@ -75,25 +75,26 @@
       "refersTo": "health-badge",
       "description": "A text-and-color health indicator.",
       "html": "<span class=\"ds-health\">● Healthy</span>",
-      "css": ".ds-health{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--success-soft);color:var(--success-foreground);font:600 12px Inter,system-ui,sans-serif}"
+      "css": ".ds-health{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--success-soft);color:var(--success-foreground);font:600 12px Figtree Variable,system-ui,sans-serif}"
     },
     {
       "name": "Top Navigation",
       "kind": "nav",
       "description": "Task-focused navigation without a permanent sidebar.",
       "html": "<nav class=\"ds-nav\"><button class=\"ds-nav-active\">Overview</button><button>Rules</button><button>Activity</button></nav>",
-      "css": ".ds-nav{display:flex;gap:4px;border-bottom:1px solid var(--border);background:var(--background)}.ds-nav button{position:relative;padding:16px 12px;border:0;background:transparent;color:var(--muted-foreground);font:600 14px Inter,system-ui,sans-serif}.ds-nav button:hover{color:var(--foreground)}.ds-nav .ds-nav-active{color:var(--foreground)}.ds-nav .ds-nav-active:after{position:absolute;right:12px;bottom:-1px;left:12px;height:2px;background:var(--primary);content:''}"
+      "css": ".ds-nav{display:flex;gap:4px;border-bottom:1px solid var(--border);background:var(--background)}.ds-nav button{position:relative;padding:16px 12px;border:0;background:transparent;color:var(--muted-foreground);font:600 14px Figtree Variable,system-ui,sans-serif}.ds-nav button:hover{color:var(--foreground)}.ds-nav .ds-nav-active{color:var(--foreground)}.ds-nav .ds-nav-active:after{position:absolute;right:12px;bottom:-1px;left:12px;height:2px;background:var(--primary);content:''}"
     }
   ],
   "narrative": {
-    "northStar": "The Quiet Status Light",
-    "overview": "The interface feels like a quiet kitchen at 7am: cool daylight, familiar controls, and one blue appliance indicator confirming that everything is in order. Stable information stays flat, while familiar controls disappear into the task.",
+    "northStar": "The Calm Ghost",
+    "overview": "A friendly presence at twilight: pale, quiet, and always where you expect it. The ghost lives in the mark, the sign-in panel, loading, and empty states; everywhere else the interface is a calm household utility.",
     "keyCharacteristics": ["Calm operational summaries with specific next actions", "Privacy consequences visible before synchronization begins", "Human language at the surface, diagnostics one level deeper", "Responsive state feedback without decorative entrances", "Structural mobile layouts with unchanged text hierarchy"],
     "rules": [
-      { "name": "The Quiet Indicator Rule", "body": "Status Cobalt occupies no more than 10% of a screen.", "section": "colors" },
+      { "name": "The Quiet Indicator Rule", "body": "Lantern Indigo occupies no more than 10% of a screen.", "section": "colors" },
       { "name": "The Status Is Not Just Color Rule", "body": "Every status combines color with text and an icon.", "section": "colors" },
       { "name": "The Calendar Language Rule", "body": "Labels use the domain glossary and plain calendar terminology.", "section": "typography" },
-      { "name": "The Stable Surface Rule", "body": "A shadow signals a temporary layer, never a resting container.", "section": "elevation" }
+      { "name": "The Stable Surface Rule", "body": "A shadow signals a temporary layer, never a resting container.", "section": "elevation" },
+      { "name": "The Ghost Is Brand, Not Vocabulary Rule", "body": "The ghost appears in the mark, sign-in, loading, and empty states; labels use the glossary.", "section": "brand" }
     ],
     "dos": ["Do lead with current synchronization health and the next meaningful action.", "Do make rule direction, privacy policy, and exclusions readable before enablement.", "Do use list rhythm and progressive disclosure instead of nesting cards."],
     "donts": ["Don't build a generic SaaS analytics dashboard.", "Don't imitate Google Calendar's visual language.", "Don't make setup or recovery resemble a terminal.", "Don't reproduce a Datadog-style observability console."]

@@ -267,9 +267,13 @@ diagnostics keep the glossary terms above.
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
 | Connected Account | "Google account" |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
-| Audit Entry, in Activity | one line per event: what was observed, then what Calendar Sync did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
-| Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the administrator's step when one exists, otherwise that Calendar Sync checks again daily |
+| Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
+| Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the administrator's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
+
+- The product is named **Calendar Ghost**. "Ghost" is brand language for the mark and tagline;
+  the interface and documentation keep this glossary's terms, so a Managed Projection is never
+  called a "ghost" in labels, explanations, or incidents.
 
 ## Data Minimization
 

@@ -15,7 +15,7 @@ releases ignore the column, so rolling back to the previous image works with the
 
 Migration 3 adds nullable `reason` and `run_id` columns to `audit_entries` and backfills reason codes for entries written by earlier releases. Rolling back to an earlier image is safe: older releases ignore the added columns. Entries written by the older release have no reason code or run identifier and appear in Activity with their original wording.
 
-After upgrading, reload every open Calendar Sync tab. The web page is served with
+After upgrading, reload every open Calendar Ghost tab. The web page is served with
 `Cache-Control: no-cache`, so a normal reload picks up the new release. Releases before this header
 may be cached by the browser: after the first upgrade from such a release, hard-refresh each tab
 once. The upgrade that moves audit entries from `/api/v1/activity` to `/api/v1/audit-entries`
@@ -153,7 +153,7 @@ addresses such as `http://192.168.1.50:18000` and `.local` names are rejected. F
 or another LAN host, choose one:
 
 - **SSH tunnel.** Keep the default `http://localhost:<port>/api/v1/oauth/google/callback`, run
-  `ssh -N -L <port>:localhost:<port> <user>@<host>` on your computer, and open Calendar Sync at
+  `ssh -N -L <port>:localhost:<port> <user>@<host>` on your computer, and open Calendar Ghost at
   `http://localhost:<port>` while connecting or reauthorizing accounts. Synchronization does not
   need the tunnel.
 - **HTTPS name.** Serve the installation over HTTPS with a publicly resolvable name, for example

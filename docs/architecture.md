@@ -1,6 +1,6 @@
 # Architecture
 
-Google Calendar Sync is a modular monolith: one repository, one deployable application, one SQLite database, and one Docker Compose service. Conceptual bounded contexts remain explicit without becoming network services.
+Calendar Ghost is a modular monolith: one repository, one deployable application, one SQLite database, and one Docker Compose service. Conceptual bounded contexts remain explicit without becoming network services.
 
 ## Bounded contexts
 

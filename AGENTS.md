@@ -2,7 +2,7 @@
 
 This file is the canonical repository-wide instruction source for coding agents. Tool-specific
 instruction files should point here instead of duplicating these rules. Keep all guidance specific
-to Google Calendar Sync; do not vendor general-purpose agent skills or personal agent configuration.
+to Calendar Ghost; do not vendor general-purpose agent skills or personal agent configuration.
 
 ## Start here
 

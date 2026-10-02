@@ -10,7 +10,7 @@ The primary user is the administrator of a self-hosted installation, commonly ru
 
 ## Product Purpose
 
-Google Calendar Sync keeps selected calendars synchronized through explicit one-way rules without requiring a developer-operated service. Success means the administrator can understand what is synchronized, preview privacy consequences before enabling a rule, trust that destination projections match their sources, and recover safely when authorization or provider access fails.
+Calendar Ghost keeps selected calendars synchronized through explicit one-way rules without requiring a developer-operated service. Success means the administrator can understand what is synchronized, preview privacy consequences before enabling a rule, trust that destination projections match their sources, and recover safely when authorization or provider access fails.
 
 ## Brand Personality
 
