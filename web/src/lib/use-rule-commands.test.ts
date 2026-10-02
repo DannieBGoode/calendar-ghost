@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import detailsSource from "../features/rule-details.tsx?raw"
 import commandsSource from "./use-rule-commands.ts?raw"
-import { RULE_CHANGE_QUERIES } from "@/lib/use-rule-commands"
+import { clearCompletedWork, RULE_CHANGE_QUERIES } from "@/lib/use-rule-commands"
+import { ruleWork } from "@/lib/rule-work"
 
 describe("rule change refresh", () => {
   it("refetches incidents, which runs resolve and recovery previews move to another account", () => {
@@ -14,5 +15,23 @@ describe("rule change refresh", () => {
     // Rule Details refreshes after a policy change or replacement, and after a removal.
     expect(detailsSource.match(/RULE_CHANGE_QUERIES/g)?.length).toBeGreaterThanOrEqual(3)
     expect(detailsSource).not.toMatch(/\[\["rules"\]/)
+  })
+
+  it("clears a completed command from the cached rule work", () => {
+    const running = {
+      kind: "reconciliation" as const,
+      started_at: "2026-10-02T00:00:00Z",
+      handling: null,
+      total: null,
+      done: 0,
+      stage: "reconciliation" as const,
+    }
+    const completed = clearCompletedWork({ id: "rule-1", running }, "reconcile")
+    expect(completed).toEqual({ id: "rule-1", running: null })
+    expect(ruleWork({ pending: undefined, running: completed?.running })).toBeNull()
+    expect(clearCompletedWork({ id: "rule-1", running }, "sync")).toEqual({ id: "rule-1", running })
+    expect(clearCompletedWork(undefined, "reconcile")).toBeUndefined()
+    expect(commandsSource).toContain('queryClient.setQueryData<RuleSummary[]>(["rules"]')
+    expect(commandsSource).toContain('queryClient.setQueryData<RuleDetail>(["rule", ruleId]')
   })
 })
