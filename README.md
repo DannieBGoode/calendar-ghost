@@ -356,3 +356,7 @@ behavior should include domain tests; hard-to-reverse architectural choices shou
 ## License
 
 Calendar Ghost is available under the [MIT License](LICENSE).
+
+The Web UI bundles the Fraunces and Figtree typefaces, which are licensed under the SIL Open Font
+License 1.1. Their notices are in [`web/public/licenses/`](web/public/licenses/) and ship with the
+built interface at `/licenses/`.
