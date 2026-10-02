@@ -368,6 +368,25 @@ p {
   gap: 1.5rem;
 }
 
+.auth-legal {
+  margin-top: 2rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.auth-legal a,
+.legal-notice a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.auth-legal a:hover,
+.legal-notice a:hover {
+  color: var(--foreground);
+}
+
 .field-stack {
   display: flex;
   flex-direction: column;

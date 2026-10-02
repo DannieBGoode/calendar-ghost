@@ -2,6 +2,19 @@
 
 Calendar Ghost is a modular monolith: one repository, one deployable application, one SQLite database, and one Docker Compose service. Conceptual bounded contexts remain explicit without becoming network services.
 
+## Edition boundary
+
+The Community Edition is intentionally a single-installation runtime: one Installation
+Administrator, one SQLite database, one scheduler, and one application process. It has no tenant
+identifier, hosted account, billing path, or remote control plane. This keeps the self-hosted data
+boundary visible in the code and makes backups and ownership understandable to the operator.
+
+A future hosted service is a separate composition boundary. It may reuse provider-independent domain
+and application code, but multi-tenant authentication, customer isolation, billing, quotas, hosted
+operations, and managed backups must not be introduced into the Community Edition by implication.
+The initial hosted architecture should prefer one isolated application and database per customer;
+pooled multi-tenancy requires a separate persistence and security review.
+
 ## Bounded contexts
 
 - **Calendar Integration** owns provider authorization, discovery, change cursors, rate limits, provider errors, and translation. Google is the initial adapter.

@@ -2,6 +2,21 @@
 
 This glossary defines the shared language for describing provider-independent calendar synchronization.
 
+## Product Boundary
+
+**Community Edition**:
+The self-hosted, single-installation edition. One Installation Administrator operates one SQLite
+database, one scheduler, and one application process. It has no mandatory Calendar Ghost account,
+telemetry, billing path, tenant routing, or hosted control plane. The Community Edition is intended
+to remain genuine open-source software under the GNU Affero General Public License, version 3 or
+later; the name and marks are governed separately.
+
+**Hosted Service**:
+A future commercial product for operators who do not want to run the Community Edition themselves.
+It may provide managed upgrades, backups, support, availability, billing, and multi-tenant
+isolation. It is a separate composition boundary and must not be implied by adding hosted-only
+concerns to the Community Edition runtime.
+
 ## Authorization
 
 **Connected Account**:
@@ -282,7 +297,12 @@ A non-reversible digest of the normalized event projection used to compare expec
 _Avoid_: Event snapshot, content hash
 
 **Operational Record**:
-Persisted synchronization evidence limited to identities, revisions, recurrence relationships, occurrence starts, operation state, timestamps, and projection fingerprints, plus the source event's title and time on Audit Entries. Event descriptions, locations, attendee data, and conferencing data are not retained, and event titles are not included in incident notifications.
+Persisted synchronization evidence limited to identities, revisions, recurrence relationships,
+occurrence starts, operation state, timestamps, and projection fingerprints, plus the source event's
+title and time on Audit Entries. Descriptions, locations, guest addresses, recurrence rules, and
+conferencing data needed for Source Observations and Source Changes are sealed with a key derived
+from the Installation Master Key and retained only for the configured history window. They are not
+stored in plaintext, and event content is not included in incident notifications.
 _Avoid_: Event history, cached event
 
 **Audit Entry**:

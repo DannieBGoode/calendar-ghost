@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { GhostMark } from "@/components/ghost-mark"
 import { api } from "@/lib/api"
-import { PRODUCT_NAME, TAGLINE } from "@/lib/brand"
+import { LICENSE_URL, PRODUCT_NAME, REPOSITORY_URL, TAGLINE } from "@/lib/brand"
 
 type AuthScreenProps = { mode: "setup" | "login" }
 
@@ -56,7 +56,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
           <ul className="privacy-list" aria-label="Installation privacy">
             <li><Check aria-hidden="true" /> Runs on this device</li>
             <li><Check aria-hidden="true" /> No mandatory telemetry</li>
-            <li><Check aria-hidden="true" /> Event details are not retained</li>
+            <li><Check aria-hidden="true" /> Event history is local, not in a vendor cloud</li>
           </ul>
         )}
       </section>
@@ -111,6 +111,9 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                 : "Sign in"}
           </Button>
         </form>
+        <p className="auth-legal">
+          © 2026 Calendar Ghost contributors · No warranty. Share and modify under the <a href={LICENSE_URL} target="_blank" rel="noreferrer">AGPLv3+ license</a>; view the <a href={REPOSITORY_URL} target="_blank" rel="noreferrer">source</a>.
+        </p>
       </section>
     </main>
   )

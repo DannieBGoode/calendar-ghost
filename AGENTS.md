@@ -45,6 +45,12 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
 - A Sync Run writes to the destination only when the projection derived from the source differs
   from the destination's content. A new source revision alone is never a reason to write.
 
+The Community Edition is intentionally single-installation and licensed under the GNU Affero
+General Public License, version 3 or later. Keep tenant routing, billing, hosted accounts, remote
+control planes, and SaaS-only feature flags out of this runtime; the future hosted service is a
+separate composition boundary. Preserve the self-hosting promise that there is no mandatory
+Calendar Ghost account, telemetry, or hosted coordinator.
+
 Use the exact terms defined in `CONTEXT.md`. In particular, do not use “sync pair,” “event copy,” or
 “conflict” when Directional Sync Rule, Event Projection, or Drift is the intended concept.
 `tests/test_ubiquitous_language.py` fails when code or documentation uses an avoided term that

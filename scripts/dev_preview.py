@@ -95,29 +95,43 @@ def reset_preview_database(path: Path) -> None:
         candidate.unlink(missing_ok=True)
 
 
-PERSONAL = CalendarEndpoint(ConnectedAccountId("preview-personal"), CalendarId("sam@example.com"))
-FAMILY = CalendarEndpoint(ConnectedAccountId("preview-personal"), CalendarId("family@example.com"))
-WORK = CalendarEndpoint(ConnectedAccountId("preview-work"), CalendarId("sam@work.example"))
+# Three synthetic Google identities make Sam's different contexts legible: the same fictional
+# person appears in each portrait, while the email domains and styling show Personal, Family, and
+# Work. Local generated portraits keep it deterministic and offline; a real installation uses the
+# profile photo returned by Google instead.
+PERSONAL_ACCOUNT = ConnectedAccountId("preview-sam-personal")
+FAMILY_ACCOUNT = ConnectedAccountId("preview-sam-family")
+WORK_ACCOUNT = ConnectedAccountId("preview-sam-work")
+PERSONAL = CalendarEndpoint(PERSONAL_ACCOUNT, CalendarId("sam@personal.example"))
+FAMILY = CalendarEndpoint(FAMILY_ACCOUNT, CalendarId("sam@family.example"))
+WORK = CalendarEndpoint(WORK_ACCOUNT, CalendarId("sam@work.example"))
 ACCOUNTS = (
     ConnectedAccount(
-        ConnectedAccountId("preview-personal"),
+        PERSONAL_ACCOUNT,
         "Sam Rivera",
-        "sam@example.com",
+        "sam@personal.example",
         ConnectedAccountState.CONNECTED,
+        avatar_url="/avatars/sam-personal.png",
     ),
     ConnectedAccount(
-        ConnectedAccountId("preview-work"),
+        FAMILY_ACCOUNT,
+        "Sam Rivera",
+        "sam@family.example",
+        ConnectedAccountState.CONNECTED,
+        avatar_url="/avatars/sam-family.png",
+    ),
+    ConnectedAccount(
+        WORK_ACCOUNT,
         "Sam Rivera",
         "sam@work.example",
         ConnectedAccountState.CONNECTED,
+        avatar_url="/avatars/sam-work.png",
     ),
 )
 CALENDARS = {
-    "preview-personal": [
-        DiscoveredCalendar("sam@example.com", "Personal", "owner", True),
-        DiscoveredCalendar("family@example.com", "Family", "owner", False),
-    ],
-    "preview-work": [DiscoveredCalendar("sam@work.example", "Work", "owner", True)],
+    "preview-sam-personal": [DiscoveredCalendar("sam@personal.example", "Personal", "owner", True)],
+    "preview-sam-family": [DiscoveredCalendar("sam@family.example", "Family", "owner", True)],
+    "preview-sam-work": [DiscoveredCalendar("sam@work.example", "Work", "owner", True)],
 }
 
 
@@ -253,6 +267,12 @@ PREVIEW_RULES = (
         id=SyncRuleId("preview-family-work"),
         source=FAMILY,
         destination=WORK,
+        state=SyncRuleState.ENABLED,
+    ),
+    SyncRule(
+        id=SyncRuleId("preview-work-personal"),
+        source=WORK,
+        destination=PERSONAL,
         state=SyncRuleState.ENABLED,
     ),
 )

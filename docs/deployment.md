@@ -1,5 +1,8 @@
 # Deployment
 
+For the first-time, step-by-step setup—including creating a Google Cloud OAuth application—see
+the [self-hosting guide](self-hosting.md).
+
 ## Docker Compose
 
 Copy `.env.example` to `.env`, configure Google OAuth values when the adapter is enabled, and run:
@@ -7,6 +10,11 @@ Copy `.env.example` to `.env`, configure Google OAuth values when the adapter is
 ```sh
 docker compose up -d --build
 ```
+
+The Community Edition is a single-installation deployment: one administrator, one SQLite database,
+one scheduler, and one application process. It does not require a Calendar Ghost account or hosted
+control plane. Before using real calendars, read [Data ownership and privacy](data-ownership.md) for
+the local data inventory, explicit network egress, backup requirements, and deletion behavior.
 
 The named volume contains SQLite state. Back it up before upgrades. Releases run forward-only, idempotent migrations during startup so `docker compose pull && docker compose up -d` does not require wiping state. Applied versions are recorded in `schema_migrations`, and each upgrade commits atomically with its ledger row.
 
