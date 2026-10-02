@@ -38,8 +38,11 @@ keeps its database, environment, and appearance preference.
 - A rounded calendar page with two binder tabs; its bottom edge is a three-scallop ghost hem; two
   dot eyes sit in the upper body. Drawn on a 32-unit grid with strokes and fills that stay legible
   at 16px.
-- `web/src/components/ghost-mark.tsx` renders it as inline SVG using `currentColor` plus a
-  `--brand-glow` fill, decorative (`aria-hidden`) wherever the name is beside it.
+- `web/src/components/ghost-mark.tsx` renders it as inline SVG coloured by three tokens:
+  `--brand-glow` (body), `--brand-line` (outline and tabs), and `--brand-eyes`. In light the ghost
+  is pale with an indigo outline and eyes; in dark and on the twilight auth panel it is a solid
+  ghost-white silhouette with dark eyes. It is decorative (`aria-hidden`) wherever the name is
+  beside it.
 - Uses: top-bar lockup (mark + "Calendar Ghost"), large on the auth intro panel, empty states,
   and the startup loading screen.
 - `web/public/favicon.svg` is redrawn as the same mark with an embedded
@@ -62,7 +65,9 @@ Status Cobalt as the single action and focus color. Semantic roles do not change
 | `--primary-soft` | `oklch(0.94 0.03 280)` | `oklch(0.28 0.06 278)` |
 | `--border` | `oklch(0.90 0.014 285)` | `oklch(0.34 0.03 280)` |
 | `--input` | `oklch(0.65 0.02 285)` | `oklch(0.52 0.03 280)` |
-| `--brand-glow` (mark only) | `oklch(0.97 0.02 285)` | `oklch(0.93 0.03 285)` |
+| `--brand-glow` (mark body) | `oklch(0.97 0.02 285)` | `oklch(0.93 0.03 285)` |
+| `--brand-line` (mark outline) | `var(--primary)` | `oklch(0.93 0.03 285)` |
+| `--brand-eyes` (mark eyes) | `var(--primary)` | `oklch(0.2 0.04 280)` |
 
 Moss (healthy), ochre (attention), and red (destructive) keep their hues and current values,
 re-checked against the new canvases. The Quiet Indicator Rule (≤10% of a screen) and the Status
