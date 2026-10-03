@@ -82,7 +82,15 @@ across three context-specific identities (`sam@personal.example`, `sam@family.ex
 .venv/bin/mypy
 .venv/bin/lint-imports
 .venv/bin/pytest --cov
-cd web && npm run typecheck && npm run lint && npm run test && npm run build
+cd web && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run test && npm run build
+```
+
+After changing an API response or request model, regenerate the frontend types in the same commit
+([ADR 0023](adr/0023-generate-web-api-types-from-openapi.md)):
+
+```sh
+.venv/bin/python scripts/export_openapi.py
+npm --prefix web run api:types
 ```
 
 Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a personal account into the repository.
@@ -100,3 +108,8 @@ rules out.
 - Application code cannot import concrete adapters.
 - Provider dictionaries are translated at the Google adapter boundary.
 - Use constructor injection and small protocols; do not introduce a dependency-injection framework.
+- In `web/src`, features compose components, components render `lib`, and `lib` imports neither;
+  `components/ui` imports only other UI primitives. ESLint's `no-restricted-imports` enforces this.
+- ESLint bounds complexity, nesting, parameters, and length, as Ruff does for the backend. The
+  violations that predate the bounds are counted in `web/eslint-suppressions.json`. A new one fails
+  lint; after removing one, run `npx eslint . --prune-suppressions` in `web/`.

@@ -384,8 +384,10 @@ Vite proxies `/api` and `/health` to FastAPI. The OpenAPI interface is available
 .venv/bin/mypy
 .venv/bin/lint-imports
 .venv/bin/pytest --cov --cov-report=term-missing --cov-fail-under=80
+npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web run lint
+npm --prefix web run doctor
 npm --prefix web run test
 npm --prefix web run build
 docker compose build
