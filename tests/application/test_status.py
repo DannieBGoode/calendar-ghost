@@ -110,6 +110,7 @@ def test_a_running_installation_is_healthy() -> None:
     assert status.needs_attention is False
     assert status.problems == ()
     assert status.summary == "1 rule running."
+    assert status.providers == {"personal-account": "google", "work-account": "google"}
 
 
 def test_rule_names_use_last_known_calendar_names() -> None:
@@ -316,3 +317,47 @@ def test_installations_without_running_rules(
     status = assess_installation(summaries, overview, (), TICKING, NOW)
     assert status.health is health
     assert status.needs_attention is False
+
+
+def test_overdue_is_superseded_by_a_waiting_incident_on_the_same_rule() -> None:
+    incident = _incident("rule-1", "rate_limit", opened=NOW - timedelta(hours=1))
+    status = assess_installation(
+        [_summary(_rule(), succeeded_at=NOW - timedelta(days=2))],
+        _overview(open_incidents=1),
+        (incident,),
+        TICKING,
+        NOW,
+    )
+    assert status.health is InstallationHealth.WAITING
+    assert status.needs_attention is False
+    assert len(status.problems) == 1
+    assert status.problems[0].kind is ProblemKind.WAITING
+    assert status.problems[0].rule_id == "rule-1"
+
+
+def test_an_uncovered_conflict_incident_becomes_a_review_for_its_rule() -> None:
+    uncovered = _incident("rule-1", "conflict")
+    status = assess_installation(
+        [
+            _summary(_rule("rule-1")),
+            _summary(_rule("rule-2"), succeeded_at=NOW - timedelta(days=2)),
+        ],
+        _overview(open_incidents=1),
+        (uncovered,),
+        TICKING,
+        NOW,
+    )
+    by_rule = {problem.rule_id: problem.kind for problem in status.problems}
+    assert by_rule["rule-1"] is ProblemKind.REVIEW
+    assert by_rule["rule-2"] is ProblemKind.OVERDUE
+
+
+def test_a_review_worthy_incident_wins_over_a_waiting_one_regardless_of_order() -> None:
+    permanent = _incident("rule-1", "permanent")
+    waiting = _incident("rule-1", "rate_limit")
+    for incidents in ((permanent, waiting), (waiting, permanent)):
+        status = _assess([_summary(_rule())], incidents=incidents)
+        assert status.health is InstallationHealth.REVIEW
+        assert len(status.problems) == 1
+        assert status.problems[0].kind is ProblemKind.REVIEW
+        assert status.problems[0].rule_id == "rule-1"

@@ -135,6 +135,7 @@ def assess_installation(
     enabled = [s for s in visible if s.rule.state is SyncRuleState.ENABLED]
     disconnected = {a.id for a in overview.accounts if a.state == "disconnected"}
     open_incidents = tuple(incident for incident in incidents if incident.state == "open")
+    block_rule_ids = {block.rule_id for block in overview.open_blocks}
     stalled = bool(enabled) and _stalled(scheduler, now)
 
     problems: list[Problem] = []
@@ -142,13 +143,16 @@ def assess_installation(
         problems.append(
             Problem(ProblemKind.STALLED, None, "Scheduled synchronization stopped running")
         )
-    problems.extend(_stopped(visible, open_incidents, disconnected))
+    problems.extend(_stopped(visible, open_incidents, disconnected, now))
     named: set[str | None] = {problem.rule_id for problem in problems if problem.rule_id}
-    reviews, waits = _incident_problems(open_incidents, named, now)
+    reviews, waits = _incident_problems(open_incidents, named, block_rule_ids, now)
     problems.extend(reviews)
     named |= {problem.rule_id for problem in reviews if problem.rule_id}
+    # A rule already waiting on its own incident is not also overdue: the incident already
+    # explains why it hasn't synced.
+    overdue_excluded = named | {problem.rule_id for problem in waits if problem.rule_id}
     if not stalled:
-        problems.extend(_overdue(enabled, named, now))
+        problems.extend(_overdue(enabled, overdue_excluded, now))
     if overview.open_blocks:
         problems.append(_blocked(overview))
     problems.extend(problem for problem in waits if problem.rule_id not in named)
@@ -201,6 +205,7 @@ def _stopped(
     visible: Sequence[SyncRuleSummary],
     incidents: Sequence[IncidentSummary],
     disconnected: set[str],
+    now: datetime,
 ) -> list[Problem]:
     problems = []
     for summary in visible:
@@ -211,14 +216,12 @@ def _stopped(
         )
         if rule.state not in {SyncRuleState.DEGRADED, SyncRuleState.REMOVING} and not lost_account:
             continue
-        incident = next(
-            (
-                item
-                for item in incidents
-                if item.rule_id == rule.id.value and item.category != BLOCKED_CATEGORY
-            ),
-            None,
-        )
+        candidates = [
+            item
+            for item in incidents
+            if item.rule_id == rule.id.value and item.category != BLOCKED_CATEGORY
+        ]
+        incident = _primary_incident(candidates, now) if candidates else None
         if incident is not None:
             problems.append(
                 Problem(
@@ -239,26 +242,57 @@ def _stopped(
     return problems
 
 
+def _is_waiting(incident: IncidentSummary, now: datetime) -> bool:
+    """Whether a provider condition that retries by itself still has time left to do so."""
+    opened = datetime.fromisoformat(incident.opened_at)
+    return incident.category in WAITING_CATEGORIES and now - opened <= WAITING_LIMIT
+
+
+def _primary_incident(incidents: Sequence[IncidentSummary], now: datetime) -> IncidentSummary:
+    """A rule's most urgent open incident: one still worth reviewing before one merely waiting."""
+    return min(incidents, key=lambda incident: _is_waiting(incident, now))
+
+
+def _group_incidents(
+    incidents: Sequence[IncidentSummary], named: set[str | None], block_rule_ids: set[str]
+) -> list[list[IncidentSummary]]:
+    """Open incidents eligible for a Problem, grouped by rule; each unnamed incident alone.
+
+    A rule already named, such as one with a Stopped problem, is skipped here: that problem
+    already covers it. A conflict incident is skipped too, but only when an open block for the
+    same rule already describes it; an uncovered one is grouped like any other.
+    """
+    groups: dict[object, list[IncidentSummary]] = {}
+    for incident in incidents:
+        if incident.rule_id is not None and incident.rule_id in named:
+            continue
+        if incident.category == BLOCKED_CATEGORY and incident.rule_id in block_rule_ids:
+            continue
+        key: object = incident.rule_id if incident.rule_id is not None else incident
+        groups.setdefault(key, []).append(incident)
+    return list(groups.values())
+
+
 def _incident_problems(
-    incidents: Sequence[IncidentSummary], named: set[str | None], now: datetime
+    incidents: Sequence[IncidentSummary],
+    named: set[str | None],
+    block_rule_ids: set[str],
+    now: datetime,
 ) -> tuple[list[Problem], list[Problem]]:
-    """Open incidents on rules not already named: those to review, then those still waiting."""
+    """Open incidents on rules not already named: those to review, then those still waiting.
+
+    Several open incidents on the same rule yield one Problem: whichever is still worth
+    reviewing, not merely waiting, regardless of which one happens first in the given order.
+    """
     reviews: list[Problem] = []
     waits: list[Problem] = []
-    seen: set[str | None] = set(named)
-    for incident in incidents:
-        if incident.category == BLOCKED_CATEGORY or (
-            incident.rule_id is not None and incident.rule_id in seen
-        ):
-            continue
+    for group in _group_incidents(incidents, named, block_rule_ids):
+        incident = _primary_incident(group, now)
         opened = datetime.fromisoformat(incident.opened_at)
-        waiting = incident.category in WAITING_CATEGORIES and now - opened <= WAITING_LIMIT
-        kind = ProblemKind.WAITING if waiting else ProblemKind.REVIEW
-        (waits if waiting else reviews).append(
-            Problem(kind, incident.rule_id, incident.summary, opened)
-        )
-        if incident.rule_id is not None:
-            seen.add(incident.rule_id)
+        if _is_waiting(incident, now):
+            waits.append(Problem(ProblemKind.WAITING, incident.rule_id, incident.summary, opened))
+        else:
+            reviews.append(Problem(ProblemKind.REVIEW, incident.rule_id, incident.summary, opened))
     return reviews, waits
 
 
