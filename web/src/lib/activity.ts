@@ -360,8 +360,9 @@ export function describeEntry(
   entry: Pick<AuditEntry, "reason" | "action" | "detail"> & Partial<Pick<AuditEntry, "changed_fields">>,
   names: RuleNames | null = null,
 ): ReasonCopy {
-  if (changedFields(entry).length && (entry.reason === "projection_current" || entry.reason === "occurrence_current")) {
-    return { effect: named(REASONS[entry.reason].effect, names), explanation: named(UNCHANGED_BY_SOURCE_CHANGE, names) }
+  const current = entry.reason === "projection_current" || entry.reason === "occurrence_current" ? REASONS[entry.reason] : undefined
+  if (current && changedFields(entry).length) {
+    return { effect: named(current.effect, names), explanation: named(UNCHANGED_BY_SOURCE_CHANGE, names) }
   }
   const known = entry.reason ? REASONS[entry.reason] : RULE_ACTIONS[entry.action]
   const copy = known ?? {

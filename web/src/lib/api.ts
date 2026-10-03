@@ -73,11 +73,11 @@ export type FieldChange = Schemas["FieldChangeResponse"]
 export type SourceChange = Schemas["SourceChangeResponse"]
 export type RecordedEvent = Schemas["RecordedEventResponse"]
 export type ActivityFilters = {
-  ruleId?: string
-  categories?: ActivityCategory[]
-  before?: number
+  ruleId?: string | undefined
+  categories?: ActivityCategory[] | undefined
+  before?: number | undefined
   /** Matches recorded event titles, ignoring case. */
-  query?: string
+  query?: string | undefined
 }
 export type EventSnapshot = Schemas["EventSnapshotResponse"]
 export type ActivityEvent = Schemas["ActivityEventResponse"]

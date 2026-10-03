@@ -120,8 +120,8 @@ function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[
   }
 
   const review = of("review")
-  if (review.length > 0) {
-    const [named] = review
+  const [named] = review
+  if (named) {
     const others = review.length - 1
     problems.push({
       tone: "review",

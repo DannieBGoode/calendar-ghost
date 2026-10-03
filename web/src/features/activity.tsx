@@ -644,8 +644,8 @@ function ActivityDetail({
   focusRef: RefObject<boolean>
   onClose: () => void
   onOpenRule: OpenRule
-  onNewer?: () => void
-  onOlder?: () => void
+  onNewer?: (() => void) | undefined
+  onOlder?: (() => void) | undefined
 }) {
   const close = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") onClose()

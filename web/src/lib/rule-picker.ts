@@ -40,11 +40,11 @@ export function typeaheadIndex(labels: readonly string[], typed: string, from: n
   const query = typed.toLocaleLowerCase()
   if (!query) return -1
   const cycling = [...query].every((letter) => letter === query[0])
-  const needle = cycling ? query[0] : query
+  const needle = cycling ? query.charAt(0) : query
   const start = cycling || query.length === 1 ? from + 1 : from
   for (let offset = 0; offset < labels.length; offset += 1) {
     const index = (start + offset) % labels.length
-    if (labels[index].toLocaleLowerCase().startsWith(needle)) return index
+    if (labels[index]?.toLocaleLowerCase().startsWith(needle)) return index
   }
   return -1
 }

@@ -841,7 +841,7 @@ export function EndpointFields({
   legend: string
   idPrefix: string
   firstField?: RefObject<HTMLSelectElement | null>
-  errorId?: string
+  errorId?: string | undefined
   accounts: ConnectedAccount[]
   account: string
   calendar: string

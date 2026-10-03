@@ -11,7 +11,7 @@ export const REMOVAL_REFRESH_MS = 2_000
 
 export type RemovalRequest = { handling: ProjectionHandling; total: number }
 /** `done` is the service's own count; without it, progress comes from the mapping count. */
-export type ActiveRemoval = RemovalRequest & { startedAt: number; done?: number }
+export type ActiveRemoval = RemovalRequest & { startedAt: number; done?: number | undefined }
 
 const REMOVAL_KEY = "rule-removal"
 
@@ -58,7 +58,7 @@ export function useRemovingRuleIds(rules: { id: string; running: RunningWork | n
 }
 
 export function removalProgress(
-  request: RemovalRequest & { done?: number },
+  request: RemovalRequest & { done?: number | undefined },
   remaining: number,
   destination: string,
 ): { done: number | null; label: string } {

@@ -159,6 +159,12 @@ function options() {
   return Array.from(container.querySelectorAll('[role="option"]')) as HTMLDivElement[]
 }
 
+function option(index: number) {
+  const found = options()[index]
+  if (!found) throw new Error(`No option ${index}`)
+  return found
+}
+
 describe("account select", () => {
   it("renders the selected account and every avatar-enabled option", () => {
     const markup = renderAccountSelect("work")
@@ -212,15 +218,14 @@ describe("account select", () => {
     expect(listbox().hidden).toBe(true)
 
     click(first.trigger)
-    const accountOptions = options()
-    mouseMove(accountOptions[1])
+    mouseMove(option(1))
     expect(first.trigger.getAttribute("aria-activedescendant")).toContain("option-1")
-    click(accountOptions[1])
+    click(option(1))
     expect(first.onChange).toHaveBeenCalledWith("work")
     expect(first.trigger.getAttribute("aria-expanded")).toBe("false")
 
     click(first.trigger)
-    click(options()[0])
+    click(option(0))
     expect(first.onChange).toHaveBeenCalledTimes(1)
   })
 
@@ -352,9 +357,8 @@ describe("account select", () => {
       click(trigger)
       expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" })
 
-      const accountOptions = options()
-      expect(mouseDown(accountOptions[1]).defaultPrevented).toBe(true)
-      mouseMove(accountOptions[1])
+      expect(mouseDown(option(1)).defaultPrevented).toBe(true)
+      mouseMove(option(1))
       expect(scrollIntoView).toHaveBeenCalledTimes(2)
 
       act(() => {

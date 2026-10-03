@@ -7,7 +7,7 @@ export type AppLocation = { view: AppView; ruleId: string | null }
 export type ViewOptions = {
   notice?: string
   /** An attention notice stays until dismissed and offers a way to review what happened. */
-  noticeTone?: "attention"
+  noticeTone?: "attention" | undefined
   createRule?: boolean
   search?: string
 }
@@ -35,10 +35,10 @@ function normalize(pathname: string): string {
 }
 
 function ruleIdFromPath(pathname: string): string | null {
-  const match = RULE_PATH.exec(pathname)
-  if (!match) return null
+  const encoded = RULE_PATH.exec(pathname)?.[1]
+  if (encoded === undefined) return null
   try {
-    const ruleId = decodeURIComponent(match[1])
+    const ruleId = decodeURIComponent(encoded)
     return ruleId.trim() ? ruleId : null
   } catch {
     return null

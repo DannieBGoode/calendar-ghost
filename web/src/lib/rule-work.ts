@@ -44,7 +44,7 @@ export function ruleWork({
   removing = false,
 }: {
   pending: RuleCommand | undefined
-  pendingSince?: number
+  pendingSince?: number | undefined
   running: RunningWork | null | undefined
   removing?: boolean
 }): RuleWork | null {
