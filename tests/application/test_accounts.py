@@ -23,6 +23,7 @@ from calendar_sync.application.ports import (
     ConnectedAccount,
     ConnectedAccountState,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW, endpoint
@@ -130,7 +131,11 @@ def _account(
     account_id: str = ACCOUNT.value, state: ConnectedAccountState = ConnectedAccountState.CONNECTED
 ) -> ConnectedAccount:
     return ConnectedAccount(
-        ConnectedAccountId(account_id), "Personal", f"{account_id}@example.test", state
+        ConnectedAccountId(account_id),
+        "Personal",
+        f"{account_id}@example.test",
+        state,
+        provider=ProviderKind.GOOGLE,
     )
 
 

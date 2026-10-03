@@ -44,6 +44,7 @@ from calendar_sync.application.ports import (
     DiscoveredCalendar,
     RecordedEvent,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
 from calendar_sync.domain.changes import SourceChange, SourceObservation
@@ -112,6 +113,7 @@ ACCOUNTS = (
         "sam@personal.example",
         ConnectedAccountState.CONNECTED,
         avatar_url="/avatars/sam-personal.png",
+        provider=ProviderKind.GOOGLE,
     ),
     ConnectedAccount(
         FAMILY_ACCOUNT,
@@ -119,6 +121,7 @@ ACCOUNTS = (
         "sam@family.example",
         ConnectedAccountState.CONNECTED,
         avatar_url="/avatars/sam-family.png",
+        provider=ProviderKind.GOOGLE,
     ),
     ConnectedAccount(
         WORK_ACCOUNT,
@@ -126,6 +129,7 @@ ACCOUNTS = (
         "sam@work.example",
         ConnectedAccountState.CONNECTED,
         avatar_url="/avatars/sam-work.png",
+        provider=ProviderKind.GOOGLE,
     ),
 )
 CALENDARS = {

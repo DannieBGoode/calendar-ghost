@@ -34,6 +34,7 @@ from calendar_sync.application.ports import (
     RunKind,
 )
 from calendar_sync.application.preview import PreviewSyncRule
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
@@ -331,6 +332,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
         "person@example.test",
         '{"refresh_token":"synthetic-secret"}',
         avatar_url="https://lh3.googleusercontent.com/a/synthetic=s96-c",
+        provider=ProviderKind.GOOGLE,
     )
     with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
@@ -394,6 +396,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
             "id": account.id.value,
             "display_name": "Personal",
             "email": "person@example.test",
+            "provider": "google",
             "avatar_url": "https://lh3.googleusercontent.com/a/synthetic=s96-c",
             "state": "connected",
             "rule_count": 4,
@@ -445,10 +448,16 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Personal",
+        "person@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     unrelated_account = adapters.accounts.save(
-        "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Work",
+        "work@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     affected_rule = SyncRule(
         id=SyncRuleId("delete-rule"),
@@ -605,7 +614,10 @@ def test_disconnected_account_without_rules_can_be_permanently_deleted(tmp_path:
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Unused", "unused@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Unused",
+        "unused@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     adapters.accounts.disconnect(account.id)
     app = create_app(container)
@@ -625,7 +637,10 @@ def test_account_deletion_waits_for_an_in_flight_run_of_an_affected_rule(tmp_pat
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Personal",
+        "person@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     adapters.accounts.disconnect(account.id)
     with adapters.unit_of_work() as uow:
@@ -699,7 +714,9 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
     )
     assert adapters.accounts is not None
     assert adapters.google_oauth is not None
-    account = adapters.accounts.save("Personal", "person@example.test", "{}")
+    account = adapters.accounts.save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
     with adapters.unit_of_work() as uow:
         uow.rules.add(
             SyncRule(
@@ -1118,7 +1135,10 @@ def test_delete_removal_is_blocked_for_a_disconnected_destination(tmp_path: Path
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Work",
+        "work@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     adapters.accounts.disconnect(account.id)
     with adapters.unit_of_work() as uow:
@@ -2318,7 +2338,10 @@ def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Work",
+        "work@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     with adapters.unit_of_work() as uow:
         uow.rules.add(

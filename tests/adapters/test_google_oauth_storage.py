@@ -20,6 +20,7 @@ from calendar_sync.application.errors import (
     InvalidAuthorizationState,
 )
 from calendar_sync.application.ports import ConnectedAccountState
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,
@@ -70,8 +71,12 @@ def test_connected_account_upsert_preserves_identity(tmp_path: Path) -> None:
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
 
-    first = store.save("Personal", "person@example.test", '{"token":"one"}')
-    updated = store.save("Renamed", "person@example.test", '{"token":"two"}')
+    first = store.save(
+        "Personal", "person@example.test", '{"token":"one"}', provider=ProviderKind.GOOGLE
+    )
+    updated = store.save(
+        "Renamed", "person@example.test", '{"token":"two"}', provider=ProviderKind.GOOGLE
+    )
 
     assert updated.id == first.id
     assert updated.display_name == "Renamed"
@@ -86,9 +91,11 @@ def test_connected_account_avatar_round_trips_and_follows_reauthorization(
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     photo = "https://lh3.googleusercontent.com/a/synthetic=s96-c"
 
-    saved = store.save("Person", "person@example.test", "{}", avatar_url=photo)
+    saved = store.save(
+        "Person", "person@example.test", "{}", avatar_url=photo, provider=ProviderKind.GOOGLE
+    )
     listed = store.list()
-    reauthorized = store.save("Person", "person@example.test", "{}")
+    reauthorized = store.save("Person", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
 
     assert saved.avatar_url == photo
     assert listed[0].avatar_url == photo
@@ -121,7 +128,7 @@ def test_avatar_migration_upgrades_an_existing_installation(tmp_path: Path) -> N
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     with sqlite3.connect(database) as connection:
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
-    assert versions == list(range(1, 17))
+    assert versions == list(range(1, 18))
     assert [(account.id.value, account.avatar_url) for account in store.list()] == [
         ("existing", None)
     ]
@@ -134,7 +141,12 @@ def test_disconnect_discards_credentials_and_reauthorization_preserves_identity(
     initialize_database(database)
     cipher = CredentialCipher(CredentialCipher.generate_key())
     store = SqliteConnectedAccountStore(database, cipher)
-    account = store.save("Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}')
+    account = store.save(
+        "Personal",
+        "person@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
+    )
     disconnected = store.disconnect(account.id)
 
     assert disconnected.state == "disconnected"
@@ -151,7 +163,10 @@ def test_disconnect_discards_credentials_and_reauthorization_preserves_identity(
     assert b"synthetic-secret" not in cleared
 
     reauthorized = store.save(
-        "Personal", "person@example.test", '{"refresh_token":"replacement-secret"}'
+        "Personal",
+        "person@example.test",
+        '{"refresh_token":"replacement-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     assert reauthorized.id == account.id
     assert reauthorized.state == "connected"
@@ -178,10 +193,10 @@ def test_authorized_at_follows_connection_and_reauthorization_only(tmp_path: Pat
         SteppingClock(connected_at, disconnected_at, reauthorized_at),
     )
 
-    account = store.save("Personal", "person@example.test", "{}")
+    account = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
     disconnected = store.disconnect(account.id)
     listed_disconnected = store.list()
-    reauthorized = store.save("Personal", "person@example.test", "{}")
+    reauthorized = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
 
     assert account.authorized_at == connected_at.isoformat()
     assert disconnected.authorized_at is None
@@ -666,7 +681,9 @@ def test_connected_account_authorization_reflects_disconnection(tmp_path: Path) 
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    account = store.save("Work", "work@example.test", '{"refresh_token":"synthetic"}')
+    account = store.save(
+        "Work", "work@example.test", '{"refresh_token":"synthetic"}', provider=ProviderKind.GOOGLE
+    )
 
     assert store.is_connected(account.id) is True
     store.disconnect(account.id)
@@ -678,7 +695,7 @@ def test_account_state_is_stored_under_its_existing_values(tmp_path: Path) -> No
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    account = store.save("Work", "work@example.test", "{}")
+    account = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
     store.disconnect(account.id)
 
     with sqlite3.connect(database) as connection:

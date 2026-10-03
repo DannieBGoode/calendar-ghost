@@ -28,6 +28,7 @@ from calendar_sync.application.errors import (
     InvalidAuthorizationState,
 )
 from calendar_sync.application.ports import AccountAccess, ConnectedAccount, DiscoveredCalendar
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.instrumentation import record_token_refresh
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
@@ -129,6 +130,7 @@ class GoogleOAuthService:
             display_name,
             email,
             credentials.to_json(),
+            provider=ProviderKind.GOOGLE,
             avatar_url=_https_url(profile.get("picture")),
         )
 

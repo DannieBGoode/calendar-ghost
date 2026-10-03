@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from types import TracebackType
 from typing import Protocol, Self
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -649,6 +650,8 @@ class ConnectedAccount:
     avatar_url: str | None = None
     authorized_at: str | None = None
     """When the account was last connected or reauthorized; None while disconnected."""
+    provider: ProviderKind = field(kw_only=True)
+    """The calendar service the account belongs to; it never changes (ADR 0022)."""
 
 
 class ConnectedAccountRepository(AccountAuthorizations, Protocol):

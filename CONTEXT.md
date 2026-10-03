@@ -20,17 +20,22 @@ concerns to the Community Edition runtime.
 ## Authorization
 
 **Connected Account**:
-A Google identity authorized through one OAuth grant. A sync rule may use different connected accounts for its source and destination calendars.
+A calendar-service identity authorized on this installation, such as a Google account authorized through one OAuth grant. It belongs to exactly one Provider Kind. A sync rule may use different connected accounts, even of different providers, for its source and destination calendars.
 _Avoid_: Account, user, login
 
+**Provider Kind**:
+The calendar service a Connected Account belongs to, such as Google. It is recorded when the account is first connected and never changes. Every request about the account's calendars goes to that provider's adapter (ADR 0022).
+_Avoid_: Account type, integration
+
 **Disconnected Account**:
-A previously connected Google identity whose stored credentials have been removed from the installation. It remains listed so the same identity can be reauthorized without losing rule mappings or incremental positions. Enabled rules that use it become degraded immediately.
+A previously connected identity whose stored credentials have been removed from the installation. It remains listed so the same identity can be reauthorized without losing rule mappings or incremental positions. Enabled rules that use it become degraded immediately.
 _Avoid_: Deleted account, removed user
 
 A Disconnected Account may instead be permanently deleted by the Installation Administrator. This
 removes every affected Directional Sync Rule and its mappings, cursors, incidents, and audit
-activity. Existing Managed Projections remain in Google Calendar and are no longer managed because
-the installation no longer has the authorization or ownership records required to change them.
+activity. Existing Managed Projections remain in their destination calendars and are no longer
+managed because the installation no longer has the authorization or ownership records required to
+change them.
 
 ## Synchronization
 

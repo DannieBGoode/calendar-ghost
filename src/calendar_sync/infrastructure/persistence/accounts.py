@@ -13,6 +13,7 @@ from calendar_sync.application.ports import (
     ConnectedAccountState,
     IdGenerator,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.scheduling import SystemClock
@@ -38,7 +39,7 @@ class SqliteConnectedAccountStore:
         with self._connect() as connection:
             rows = connection.execute(
                 """
-                SELECT id, display_name, email, state, avatar_url, updated_at
+                SELECT id, provider, display_name, email, state, avatar_url, updated_at
                 FROM connected_accounts ORDER BY email
                 """
             ).fetchall()
@@ -48,7 +49,7 @@ class SqliteConnectedAccountStore:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT id, display_name, email, state, avatar_url, updated_at
+                SELECT id, provider, display_name, email, state, avatar_url, updated_at
                 FROM connected_accounts WHERE id = ?
                 """,
                 (account_id.value,),
@@ -65,9 +66,10 @@ class SqliteConnectedAccountStore:
         email: str,
         credential_json: str,
         *,
+        provider: ProviderKind,
         avatar_url: str | None = None,
     ) -> ConnectedAccount:
-        """Connect an account, or reauthorize the one with this email under its identity."""
+        """Connect an account, or reauthorize the one with this provider and email."""
         now = self._clock.now().isoformat()
         account_id = self._ids.new()
         encrypted = self._cipher.encrypt(credential_json)
@@ -77,7 +79,7 @@ class SqliteConnectedAccountStore:
                 INSERT INTO connected_accounts (
                     id, provider, display_name, email, avatar_url, encrypted_credentials,
                     state, created_at, updated_at
-                ) VALUES (?, 'google', ?, ?, ?, ?, 'connected', ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, 'connected', ?, ?)
                 ON CONFLICT(provider, email) DO UPDATE SET
                     display_name = excluded.display_name,
                     avatar_url = excluded.avatar_url,
@@ -85,17 +87,25 @@ class SqliteConnectedAccountStore:
                     state = 'connected',
                     updated_at = excluded.updated_at
                 """,
-                (account_id, display_name, email, avatar_url, encrypted, now, now),
+                (account_id, provider.value, display_name, email, avatar_url, encrypted, now, now),
             )
             row = connection.execute(
                 """
-                SELECT id, display_name, email, state, avatar_url, updated_at
-                FROM connected_accounts WHERE email = ?
+                SELECT id, provider, display_name, email, state, avatar_url, updated_at
+                FROM connected_accounts WHERE provider = ? AND email = ?
                 """,
-                (email,),
+                (provider.value, email),
             ).fetchone()
         assert row is not None
         return _account_from_row(row)
+
+    def provider_of(self, account_id: ConnectedAccountId) -> ProviderKind | None:
+        """The provider a Connected or Disconnected Account belongs to; None if it doesn't exist."""
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT provider FROM connected_accounts WHERE id = ?", (account_id.value,)
+            ).fetchone()
+        return ProviderKind(str(row["provider"])) if row is not None else None
 
     def credential_json(self, account_id: ConnectedAccountId) -> str:
         """The decrypted credentials of a connected account; never log or persist them."""
@@ -144,7 +154,10 @@ class SqliteConnectedAccountStore:
         cleared_credentials = self._cipher.encrypt("{}")
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT id, display_name, email, avatar_url FROM connected_accounts WHERE id = ?",
+                """
+                SELECT id, provider, display_name, email, avatar_url FROM connected_accounts
+                WHERE id = ?
+                """,
                 (account_id.value,),
             ).fetchone()
             if row is None:
@@ -170,6 +183,7 @@ class SqliteConnectedAccountStore:
             str(row["email"]),
             ConnectedAccountState.DISCONNECTED,
             _optional_text(row["avatar_url"]),
+            provider=ProviderKind(str(row["provider"])),
         )
 
     def _connect(self) -> sqlite3.Connection:
@@ -190,6 +204,7 @@ def _account_from_row(row: sqlite3.Row) -> ConnectedAccount:
         state,
         _optional_text(row["avatar_url"]),
         str(row["updated_at"]) if connected else None,
+        provider=ProviderKind(str(row["provider"])),
     )
 
 
