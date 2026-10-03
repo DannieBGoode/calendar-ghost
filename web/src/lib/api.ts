@@ -30,8 +30,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type SetupStatus = { administrator_configured: boolean }
 export type SessionStatus = { authenticated: boolean }
+export type InstallationHealth = "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy"
+export type ServerProblem = {
+  kind: "stalled" | "stopped" | "review" | "overdue" | "blocked" | "waiting"
+  rule_id: string | null
+  summary: string
+  since: string | null
+}
 export type Dashboard = {
-  health: "healthy" | "attention"
+  /** The server's verdict; the Overview never derives its own (ADR 0023). */
+  status: InstallationHealth
+  needs_attention: boolean
+  /** Every current problem, most urgent first. */
+  problems: ServerProblem[]
   connected_accounts: number
   disconnected_accounts: number
   sync_rules: number

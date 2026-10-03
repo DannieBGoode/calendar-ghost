@@ -26,7 +26,7 @@ import {
   type Happened,
 } from "@/lib/activity"
 import { activitySearch } from "@/lib/activity-location"
-import { api, type Dashboard, type Incident, type RecentChange, type RuleSummary } from "@/lib/api"
+import { api, type Dashboard, type RecentChange, type RuleSummary } from "@/lib/api"
 import {
   appPathForRule,
   appPathForView,
@@ -35,14 +35,7 @@ import {
   type ViewChange,
 } from "@/lib/navigation"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
-import {
-  overviewHealth,
-  overviewRules,
-  withoutRunningRemovals,
-  type HealthAction,
-  type OverviewTone,
-  type RuleProblem,
-} from "@/lib/overview-health"
+import { overviewHealth, overviewRules, type HealthAction, type OverviewTone } from "@/lib/overview-health"
 import { overviewHeroCallouts } from "@/lib/overview-hero"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
@@ -77,40 +70,6 @@ function ruleName(endpoints: RuleEndpoints): string {
   return `${endpoints.source.name} → ${endpoints.destination.name}`
 }
 
-// Incident summaries are written with or without a closing period.
-function sentence(text: string): string {
-  return /[.!?]$/.test(text) ? text : `${text}.`
-}
-
-// Google failures a later attempt resolves; the rule keeps retrying without the administrator.
-const WAITING_CATEGORIES = new Set(["rate_limit", "temporary"])
-
-/**
- * The problems the Overview names by rule: stopped rules, then open incidents on running ones.
- * Blocked-event incidents are left out because the dashboard's blocked events already cover them.
- */
-function ruleProblems(
-  rules: RuleSummary[],
-  incidents: Incident[] | undefined,
-  endpoints: Endpoints,
-  now: number,
-): RuleProblem[] {
-  const open = (incidents ?? []).filter((item) => item.state === "open")
-  const since = (incident: Incident) =>
-    `${sentence(incident.summary)} First seen ${relativeTime(incident.opened_at, now)}.`
-  return rules.flatMap((rule): RuleProblem[] => {
-    const name = ruleName(endpoints(rule))
-    const incident = open.find((item) => item.rule_id === rule.id)
-    if (rule.state === "degraded" || endpoints(rule).disconnected.length > 0) {
-      const detail = incident ? since(incident) : `${lastRunLabel(rule.last_sync, now)}.`
-      return [{ ruleId: rule.id, name, detail, kind: "stopped" }]
-    }
-    if (!incident || incident.category === "conflict") return []
-    const kind = WAITING_CATEGORIES.has(incident.category) ? "waiting" : "review"
-    return [{ ruleId: rule.id, name, detail: since(incident), kind }]
-  })
-}
-
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const now = useNow()
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })
@@ -120,22 +79,13 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
     refetchInterval: (query) => workRefreshInterval(query.state.data, REFRESH_INTERVAL),
   })
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
-  const incidents = useQuery({
-    queryKey: ["incidents"],
-    queryFn: api.incidents,
-    enabled: (dashboard.data?.open_incidents ?? 0) > 0,
-  })
   const { endpoints } = useRuleEndpoints(rules.data ?? [])
-  const removingIds = useRemovingRuleIds(rules.data)
 
   if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label="Loading overview" />
   if (dashboard.error || rules.error || google.error) return <LoadFailure title="Calendar Ghost could not load" />
 
-  const health = overviewHealth(
-    withoutRunningRemovals(dashboard.data, rules.data, removingIds),
-    now,
-    ruleProblems(rules.data.filter((rule) => !removingIds.has(rule.id)), incidents.data, endpoints, now),
-  )
+  const ruleNames = new Map(rules.data.map((rule) => [rule.id, ruleName(endpoints(rule))]))
+  const health = overviewHealth(dashboard.data, now, (ruleId) => ruleNames.get(ruleId) ?? null)
   const callouts = overviewHeroCallouts(health.tone)
   const followAction = (action: HealthAction) => (event: React.MouseEvent) => {
     if (!isPlainLeftClick(event)) return
