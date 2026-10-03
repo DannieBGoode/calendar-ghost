@@ -97,8 +97,8 @@ class RemovalInterrupted(ApplicationError):
     def __str__(self) -> str:
         total = self.processed + self.remaining
         return (
-            f"removal stopped after {self.processed} of {total} projections because the "
-            f"calendar provider reported {self.failure.kind.value}; retry to continue"
+            f"removal stopped after {self.processed} of {total} projections because "
+            f"{self.failure.provider_name} reported {self.failure.kind.value}; retry to continue"
         )
 
 

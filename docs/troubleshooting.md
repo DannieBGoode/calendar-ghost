@@ -45,7 +45,7 @@ Each Sync Run, scheduled or started with **Sync now**, writes:
   calendars reported, plus the mappings a reprojection rewrites, that the run has finished;
   `decided` also counts each occurrence of a recurring event, so it can be larger.
 - `run finished … in 28m14s created=… provider_calls=… token_refreshes=… rate_limited=…
-  server_errors=… slowest_call=1.3s`: the run's counts and how its Google calls went.
+  server_errors=… slowest_call=1.3s`: the run's counts and how its provider calls went.
 - `run failed … kind=rate_limit after 3m02s` (WARNING): the run stopped with this failure kind; the
   scheduler retries temporary and rate-limit failures as a new run with a new `run=` identifier.
 - `run stopped … rule changed`: the rule was paused, edited, or removed while the run was in
@@ -174,6 +174,12 @@ its mappings and last successful incremental positions, and writes nothing while
 - **Local synchronization infrastructure failed**: an unexpected error inside Calendar Ghost stopped
   the run, not a Google condition. Review the container logs for the error, and check that the data
   volume has free space and the database is writable, before recovering the rule.
+- **The calendar provider rejected synchronization**: the rule names a Connected Account that no
+  longer exists (ADR 0022's router could not find it). Re-create the rule, choosing calendars from
+  accounts that still exist.
+- **Google Calendar is not configured on this installation**: the rule's calendars belong to
+  Google, but this installation has no Google OAuth client or master key configured. Configure
+  Google OAuth and the master key, then recover the rule.
 
 To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
 syncing**. Its next run repairs drift before advancing either cursor. The next successful scheduled

@@ -131,6 +131,13 @@ answers, and after their account is disconnected; deleting an account deletes it
 rules show placeholder names until their calendars are next listed, which opening the Rules view
 does. Rolling back works with the same database: earlier releases ignore the table.
 
+Migration 17 rebuilds `connected_accounts` so its `provider` column accepts any Provider Kind; code
+validates the value, so adding a provider needs no further schema change
+([ADR 0022](adr/0022-route-calendar-requests-by-provider.md)). Every account and every recorded
+calendar name is kept. Rolling back past it means restoring the backup taken before the upgrade: a
+database that stores another provider's account cannot be opened by a release that does not know
+that Provider Kind.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

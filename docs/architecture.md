@@ -112,9 +112,11 @@ send each request to the adapter of the Provider Kind its Connected Account belo
 calendars may belong to different providers (ADR 0022). The use cases receive the routers and
 never name a provider.
 
-Every adapter, and the test fake, passes the Calendar Provider contract in
-`tests/contracts/calendar_provider.py` before it is composed. The contract states, through the
-ports alone, the ownership, idempotency, and listing guarantees the use cases rely on.
+The test fake, the router, and every new adapter pass the Calendar Provider contract in
+`tests/contracts/calendar_provider.py` before being composed. The contract states, through the
+ports alone, the ownership, idempotency, and listing guarantees the use cases rely on. The Google
+adapter predates the contract and does not run the suite; it is covered by
+`tests/adapters/test_google_provider.py` instead.
 
 ## Logging
 

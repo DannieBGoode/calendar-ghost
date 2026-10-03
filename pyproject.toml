@@ -108,6 +108,15 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Provider-neutral infrastructure does not depend on one provider's adapter"
+type = "forbidden"
+source_modules = [
+  "calendar_sync.infrastructure.providers",
+  "calendar_sync.infrastructure.provider_calls",
+]
+forbidden_modules = ["calendar_sync.infrastructure.google"]
+
+[[tool.importlinter.contracts]]
 name = "Google SDK types stay in the Google adapter"
 type = "protected"
 protected_modules = ["google", "google_auth_oauthlib", "googleapiclient"]
