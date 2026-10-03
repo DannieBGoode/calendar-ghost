@@ -129,7 +129,7 @@ def test_three_temporary_failures_open_one_incident(tmp_path: Path) -> None:
 
     with sqlite3.connect(database) as connection:
         incidents = connection.execute("SELECT summary, state FROM incidents").fetchall()
-    assert incidents == [("Google Calendar is temporarily unavailable", "open")]
+    assert incidents == [("The calendar provider is temporarily unavailable", "open")]
 
 
 def test_authentication_failure_degrades_rule_immediately(tmp_path: Path) -> None:
@@ -316,7 +316,7 @@ def test_blocked_removal_opens_one_incident_that_completed_removal_resolves(
             "rule-1",
             "authorization",
             "open",
-            "Rule Removal stopped: Google calendar access was denied",
+            "Rule Removal stopped: Access to the calendar provider was denied",
         )
     ]
     assert len(channel.incidents) == 1

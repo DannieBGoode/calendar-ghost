@@ -33,11 +33,11 @@ INTERVENTION_FAILURES = AUTHORIZATION_FAILURES | {
 }
 
 _FAILURE_SUMMARIES = {
-    ProviderFailureKind.AUTHENTICATION: "Google authorization expired",
-    ProviderFailureKind.AUTHORIZATION: "Google calendar access was denied",
-    ProviderFailureKind.RATE_LIMIT: "Google Calendar is limiting requests",
-    ProviderFailureKind.TEMPORARY: "Google Calendar is temporarily unavailable",
-    ProviderFailureKind.PERMANENT: "Google Calendar rejected synchronization",
+    ProviderFailureKind.AUTHENTICATION: "Authorization for {calendar} expired",
+    ProviderFailureKind.AUTHORIZATION: "Access to {calendar} was denied",
+    ProviderFailureKind.RATE_LIMIT: "{Calendar} is limiting requests",
+    ProviderFailureKind.TEMPORARY: "{Calendar} is temporarily unavailable",
+    ProviderFailureKind.PERMANENT: "{Calendar} rejected synchronization",
     ProviderFailureKind.INFRASTRUCTURE: "Local synchronization infrastructure failed",
 }
 
@@ -55,8 +55,12 @@ class RuleHealthPolicy:
     threshold: int = PROVIDER_INCIDENT_THRESHOLD
 
     @staticmethod
-    def summary(kind: ProviderFailureKind) -> str:
-        return _FAILURE_SUMMARIES[kind]
+    def summary(failure: ProviderFailure) -> str:
+        """What failed, naming the provider when the failure says which one (ADR 0022)."""
+        calendar = failure.provider_name
+        return _FAILURE_SUMMARIES[failure.kind].format(
+            calendar=calendar, Calendar=calendar[0].upper() + calendar[1:]
+        )
 
     @staticmethod
     def provider_key(rule_id: SyncRuleId) -> str:
@@ -80,7 +84,7 @@ class RuleHealthPolicy:
             self.provider_key(rule_id),
             rule_id,
             failure.kind.value,
-            self.summary(failure.kind),
+            self.summary(failure),
             failure.account_id,
         )
 
@@ -102,7 +106,7 @@ class RuleHealthPolicy:
             f"removal:{rule_id.value}",
             rule_id,
             failure.kind.value,
-            f"Rule Removal stopped: {self.summary(failure.kind)}",
+            f"Rule Removal stopped: {self.summary(failure)}",
             failure.account_id,
         )
 

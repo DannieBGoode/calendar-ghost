@@ -132,10 +132,10 @@ reloaded, and keeps running if you leave. Restarting the service stops it partwa
 errors are already retried with backoff before removal stops; choose **Retry removal** to continue
 from the remaining projections.
 
-- **Rule Removal stopped: Google authorization expired** or **… calendar access was denied**: an
-  Incident is open for the rule. Reauthorize the destination account in **Settings**, then retry.
-  If access cannot be restored, retry with **Keep them as ordinary events**; those events then stay in
-  Google and are no longer managed.
+- **Rule Removal stopped: Authorization for Google Calendar expired** or **Access to Google
+  Calendar was denied**: an Incident is open for the rule. Reauthorize the destination account in
+  **Settings**, then retry. If access cannot be restored, retry with **Keep them as ordinary
+  events**; those events then stay in Google and are no longer managed.
 - **Some events were left**: the rules list reports events whose ownership could not be verified,
   for example because their private Calendar Ghost metadata names another rule or was removed.
   They were not deleted. Open **Activity**, choose **Blocked**, and delete them in Google Calendar
@@ -160,11 +160,11 @@ The Activity screen names the reason it could not load audit entries and inciden
 Open **Activity**. The rule's incident says what stopped it and offers the next step. The rule keeps
 its mappings and last successful incremental positions, and writes nothing while degraded.
 
-- **Google authorization expired** or **Google calendar access was denied**: choose **Reauthorize in
-  Settings** and reauthorize the Google account Google rejected. Once that account is reauthorized,
-  the incident offers **Recover this rule** instead. If the rule's calendars belong to two accounts
-  and the other one has also lost access, recovering the rule points the incident back to Settings
-  for that account.
+- **Authorization for Google Calendar expired** or **Access to Google Calendar was denied**: choose
+  **Reauthorize in Settings** and reauthorize the Google account Google rejected. Once that account
+  is reauthorized, the incident offers **Recover this rule** instead. If the rule's calendars belong
+  to two accounts and the other one has also lost access, recovering the rule points the incident
+  back to Settings for that account.
 - **Google Calendar rejected synchronization**: Google refused a request for a reason other than
   authorization or rate limiting, or answered in a way Calendar Ghost could not use. Choose **Review
   this rule** and check that both calendars still exist and are shared with the accounts the rule

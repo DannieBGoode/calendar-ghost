@@ -51,9 +51,7 @@ class CreateSyncRule:
             # cannot be left with a rule that names it. Raising rolls the insert back.
             for endpoint in (rule.source, rule.destination):
                 if uow.accounts.state(endpoint.connected_account_id) is None:
-                    raise ConnectedAccountRequired(
-                        "connect both Google accounts before creating a rule"
-                    )
+                    raise ConnectedAccountRequired("connect both accounts before creating a rule")
             uow.commit()
         return rule
 

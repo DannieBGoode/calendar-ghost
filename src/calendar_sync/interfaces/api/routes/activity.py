@@ -174,12 +174,13 @@ async def inspect_activity_event(entry_id: int, services: Services) -> ActivityE
     except EventInspectionUnavailable as error:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "configure Google OAuth and the installation master key before inspecting events",
+            "configure a calendar provider and the installation master key before "
+            "inspecting events",
         ) from error
     except ProviderFailure as error:
         raise HTTPException(
             status.HTTP_424_FAILED_DEPENDENCY,
-            f"Google could not return this event: {error.kind.value}",
+            f"Could not read this event from {error.provider_name}: {error.kind.value}",
         ) from error
     return ActivityEventResponse(
         source=_event_snapshot(inspected.source),

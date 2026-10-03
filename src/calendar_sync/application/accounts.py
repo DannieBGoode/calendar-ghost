@@ -139,7 +139,7 @@ def _require_disconnected(
         raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
     if state is not ConnectedAccountState.DISCONNECTED:
         raise ConnectedAccountMustBeDisconnected(
-            "disconnect this Google account before deleting it permanently"
+            "disconnect this account before deleting it permanently"
         )
 
 

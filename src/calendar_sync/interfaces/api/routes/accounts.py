@@ -32,7 +32,7 @@ from calendar_sync.interfaces.api.schemas import (
     GoogleConfigurationResponse,
 )
 
-MANAGE_ACCOUNTS = "configure the installation master key before managing Google accounts"
+MANAGE_ACCOUNTS = "configure the installation master key before managing accounts"
 
 
 class GoogleConnection(Protocol):
@@ -167,7 +167,7 @@ def delete_account(account_id: str, services: Services) -> None:
     dependencies=[Depends(require_admin)],
 )
 def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCalendarResponse]:
-    discover = available(services.discover_calendars, "Google OAuth is not configured")
+    discover = available(services.discover_calendars, "no calendar provider is configured")
     try:
         discovered = discover.execute(ConnectedAccountId(account_id))
     except ConnectedAccountNotFound as error:
@@ -194,7 +194,7 @@ def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCa
     dependencies=[Depends(require_admin)],
 )
 def verify_account_access(account_id: str, services: Services) -> GoogleAccountAccessResponse:
-    calendars = available(services.account_calendars, "Google OAuth is not configured")
+    calendars = available(services.account_calendars, "no calendar provider is configured")
     try:
         access = calendars.verify_access(ConnectedAccountId(account_id))
     except ConnectedAccountNotFound as error:

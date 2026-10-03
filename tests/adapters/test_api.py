@@ -281,7 +281,7 @@ def test_rules_are_refused_for_accounts_this_installation_does_not_have(
         rules = client.get("/api/v1/rules").json()
 
     assert refused.status_code == 409
-    assert refused.json()["detail"] == "connect both Google accounts before creating a rule"
+    assert refused.json()["detail"] == "connect both accounts before creating a rule"
     assert rules == []
 
 

@@ -118,7 +118,7 @@ class SqliteConnectedAccountStore:
             raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
         if str(row["state"]) != ConnectedAccountState.CONNECTED.value:
             raise ConnectedAccountDisconnected(
-                "this Google account is disconnected; reauthorize it from Settings"
+                "this account is disconnected; reauthorize it from Settings"
             )
         return self._cipher.decrypt(bytes(row["encrypted_credentials"]))
 

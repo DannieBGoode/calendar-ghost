@@ -28,7 +28,7 @@ class NotACalendarChange(ApplicationError):
 
 
 class RemovalRequiresProvider(ApplicationError):
-    """Deleting projections needs a configured Google adapter."""
+    """Deleting projections needs a configured calendar provider."""
 
 
 class RemovalRequiresAuthorization(ApplicationError):
@@ -70,6 +70,11 @@ class ProviderFailure(ApplicationError):
     def requires_authorization(self) -> bool:
         return self.kind in AUTHORIZATION_FAILURES
 
+    @property
+    def provider_name(self) -> str:
+        """How messages name the failed provider: "Google Calendar", or a neutral phrase."""
+        return self.provider.calendar_name if self.provider else "the calendar provider"
+
     def __str__(self) -> str:
         return self.detail
 
@@ -92,8 +97,8 @@ class RemovalInterrupted(ApplicationError):
     def __str__(self) -> str:
         total = self.processed + self.remaining
         return (
-            f"removal stopped after {self.processed} of {total} projections because Google "
-            f"reported {self.failure.kind.value}; retry to continue"
+            f"removal stopped after {self.processed} of {total} projections because the "
+            f"calendar provider reported {self.failure.kind.value}; retry to continue"
         )
 
 

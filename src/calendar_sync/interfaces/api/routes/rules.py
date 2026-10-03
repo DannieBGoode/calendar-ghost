@@ -142,7 +142,7 @@ def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
 async def sync_now(rule_id: str, services: Services) -> dict[str, int | str]:
     execute_sync_rule = available(
         services.execute_sync_rule,
-        "configure Google OAuth and the installation master key before synchronizing",
+        "configure a calendar provider and the installation master key before synchronizing",
     )
     try:
         result = await asyncio.to_thread(execute_sync_rule.execute, SyncRuleId(rule_id))
@@ -165,7 +165,7 @@ async def sync_now(rule_id: str, services: Services) -> dict[str, int | str]:
 async def reconcile_now(rule_id: str, services: Services) -> dict[str, object]:
     reconcile = available(
         services.reconcile_now,
-        "configure Google OAuth and the installation master key before reconciling",
+        "configure a calendar provider and the installation master key before reconciling",
     )
     try:
         reconciled = await asyncio.to_thread(reconcile.execute, SyncRuleId(rule_id))
@@ -197,7 +197,7 @@ async def reconcile_now(rule_id: str, services: Services) -> dict[str, object]:
 async def preview_rule(rule_id: str, services: Services) -> dict[str, object]:
     preview_sync_rule = available(
         services.preview_sync_rule,
-        "configure Google OAuth and the installation master key before previewing",
+        "configure a calendar provider and the installation master key before previewing",
     )
     try:
         preview = await asyncio.to_thread(preview_sync_rule.execute, SyncRuleId(rule_id))
