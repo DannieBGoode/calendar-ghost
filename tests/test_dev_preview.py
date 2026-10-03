@@ -14,6 +14,7 @@ from calendar_sync.interfaces.api.app import create_app
 from scripts.dev_preview import (
     PREVIEW_PASSWORD,
     NotAPreviewDatabase,
+    Scenario,
     build_preview_container,
     reset_preview_database,
 )
@@ -97,3 +98,41 @@ def test_preview_shows_source_changes_with_their_values(tmp_path: Path) -> None:
 
     assert {entry["reason"] for entry in changed} == {"source_changed", "projection_current"}
     assert change["values_available"] is True
+
+
+@pytest.mark.parametrize(
+    ("scenario", "expected"),
+    [
+        (Scenario.REVIEW, {"health": "attention", "open_incidents": 1, "blocked_events": 2}),
+        (Scenario.HEALTHY, {"health": "healthy", "open_incidents": 0, "blocked_events": 0}),
+        (Scenario.STOPPED, {"open_incidents": 2, "stopped_rules": 2, "blocked_events": 0}),
+        (Scenario.WAITING, {"open_incidents": 1, "stopped_rules": 0, "enabled_rules": 3}),
+        (Scenario.SEVERAL, {"open_incidents": 3, "stopped_rules": 2, "blocked_events": 2}),
+        (Scenario.PAUSED, {"health": "healthy", "enabled_rules": 0, "sync_rules": 3}),
+        (Scenario.SETUP, {"connected_accounts": 0, "sync_rules": 0}),
+    ],
+)
+def test_preview_scenarios_seed_each_overview_state(
+    tmp_path: Path, scenario: Scenario, expected: dict[str, object]
+) -> None:
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=scenario)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        dashboard = client.get("/api/v1/dashboard").json()
+
+    assert {key: dashboard[key] for key in expected} == expected
+    if scenario is not Scenario.SETUP:
+        assert dashboard["last_synced_at"] is not None
+
+
+def test_preview_names_calendars_of_an_account_that_lost_access(tmp_path: Path) -> None:
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=Scenario.STOPPED)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        rules = client.get("/api/v1/rules").json()
+
+    personal = next(rule for rule in rules if rule["id"] == "preview-personal-work")
+    assert personal["state"] == "degraded"
+    assert personal["source"]["calendar_name"] == "Personal"

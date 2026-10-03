@@ -1,19 +1,21 @@
 import type { OverviewTone } from "./overview-health"
 
-export type HeroCallout = { title: string; detail: string }
+/** What the ghost says. It reacts to the state in a few words; the hero copy carries the facts. */
+export type HeroCallout = { title: string; detail?: string }
 
-export function overviewHeroCallout(tone: OverviewTone, blockedEvents = 0): HeroCallout {
-  if (tone === "healthy") {
-    if (blockedEvents > 0) {
-      return {
-        title: blockedEvents === 1 ? "An event needs a look" : "Some events need a look",
-        detail: "Review Activity for details.",
-      }
-    }
-    return { title: "All good!", detail: "Your calendars are in sync." }
-  }
-  if (tone === "attention") {
-    return { title: "Needs attention", detail: "Review the affected rule to continue." }
-  }
-  return { title: "Ready when you are", detail: "Preview comes before anything is written." }
+/**
+ * The ghost's lines for each state. A stopped ghost calls out for help, one line at a time around
+ * it; reduced motion keeps the first line still.
+ */
+const CALLOUTS: Record<OverviewTone, readonly HeroCallout[]> = {
+  healthy: [{ title: "All good!", detail: "Your calendars are in sync." }],
+  review: [{ title: "Almost all good" }],
+  stopped: [{ title: "Help!" }, { title: "I need a hand" }, { title: "Anyone there?" }, { title: "Over here!" }],
+  waiting: [{ title: "Hang tight…" }],
+  paused: [{ title: "Taking a break" }],
+  setup: [{ title: "Ready when you are!" }],
+}
+
+export function overviewHeroCallouts(tone: OverviewTone): readonly HeroCallout[] {
+  return CALLOUTS[tone]
 }

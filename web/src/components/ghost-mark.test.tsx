@@ -23,4 +23,16 @@ describe("GhostMark", () => {
     expect(markup).toContain("M11.5 15.5q1.5-2.2 3 0")
     expect(markup).not.toContain('cx="13"')
   })
+
+  it.each(["neutral", "happy", "concerned", "crying", "sleepy"] as const)("marks its %s expression", (expression) => {
+    const markup = renderToStaticMarkup(<GhostMark expression={expression} />)
+    expect(markup).toContain(`data-expression="${expression}"`)
+  })
+
+  it("tells worry from crying by the tears", () => {
+    const concerned = renderToStaticMarkup(<GhostMark expression="concerned" />)
+    const crying = renderToStaticMarkup(<GhostMark expression="crying" />)
+    expect(concerned).not.toContain("ghost-mark-tear")
+    expect(crying.match(/class="ghost-mark-tear/g)).toHaveLength(2)
+  })
 })

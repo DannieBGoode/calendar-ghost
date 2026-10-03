@@ -25,6 +25,7 @@ from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
@@ -43,6 +44,8 @@ from calendar_sync.application.ports import (
     ConnectedAccountState,
     DiscoveredCalendar,
     RecordedEvent,
+    RuleRunOutcome,
+    RunKind,
 )
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
@@ -197,9 +200,12 @@ class PreviewCalendar:
         return refuse
 
 
+@dataclass(frozen=True)
 class PreviewAccounts:
+    accounts: tuple[ConnectedAccount, ...]
+
     def list(self) -> tuple[ConnectedAccount, ...]:
-        return ACCOUNTS
+        return self.accounts
 
 
 class PreviewGoogle:
@@ -213,8 +219,65 @@ class PreviewGoogle:
         return refuse
 
 
+class Scenario(StrEnum):
+    """The Overview state the preview starts in, so every health state can be seen."""
+
+    REVIEW = "review"
+    """Blocked events, one persisting into an Incident; every rule keeps running."""
+    HEALTHY = "healthy"
+    STOPPED = "stopped"
+    """The Personal account's authorization expired, so both of its rules are Degraded."""
+    WAITING = "waiting"
+    """Google is limiting Family → Work's requests; the rule keeps retrying by itself."""
+    SEVERAL = "several"
+    """Stopped, waiting, and blocked at once, so the Overview lists every problem."""
+    PAUSED = "paused"
+    SETUP = "setup"
+    """A new installation: no Google account, rule, or history."""
+
+
+_EXPIRED = frozenset({Scenario.STOPPED, Scenario.SEVERAL})
+_LIMITED = frozenset({Scenario.WAITING, Scenario.SEVERAL})
+_BLOCKED = frozenset({Scenario.REVIEW, Scenario.SEVERAL})
+LIMITED_RULE = SyncRuleId("preview-family-work")
+
+
+def _scenario_accounts(scenario: Scenario) -> tuple[ConnectedAccount, ...]:
+    if scenario is Scenario.SETUP:
+        return ()
+    if scenario in _EXPIRED:
+        return tuple(
+            replace(account, state=ConnectedAccountState.DISCONNECTED)
+            if account.id == PERSONAL_ACCOUNT
+            else account
+            for account in ACCOUNTS
+        )
+    return ACCOUNTS
+
+
+def _scenario_rules(scenario: Scenario) -> tuple[SyncRule, ...]:
+    if scenario is Scenario.PAUSED:
+        return tuple(replace(rule, state=SyncRuleState.PAUSED) for rule in PREVIEW_RULES)
+    if scenario in _EXPIRED:
+        return tuple(
+            replace(rule, state=SyncRuleState.DEGRADED) if _uses_personal(rule) else rule
+            for rule in PREVIEW_RULES
+        )
+    return PREVIEW_RULES
+
+
+def _uses_personal(rule: SyncRule) -> bool:
+    return PERSONAL_ACCOUNT in {
+        rule.source.connected_account_id,
+        rule.destination.connected_account_id,
+    }
+
+
 def build_preview_container(
-    path: Path = PREVIEW_DATABASE, now: datetime | None = None
+    path: Path = PREVIEW_DATABASE,
+    now: datetime | None = None,
+    *,
+    scenario: Scenario = Scenario.REVIEW,
 ) -> Container:
     reset_preview_database(path)
     # Explicit settings: nothing is read from the environment or .env.
@@ -245,13 +308,15 @@ def build_preview_container(
             cast(CalendarProvider, PreviewCalendar(moment)),
         ),
         list_connected_accounts=ListConnectedAccounts(
-            adapters.unit_of_work, cast(ConnectedAccountRepository, PreviewAccounts())
+            adapters.unit_of_work,
+            cast(ConnectedAccountRepository, PreviewAccounts(_scenario_accounts(scenario))),
         ),
         authorization=cast(AccountAuthorization, google),
         account_calendars=cast(AccountCalendars, google),
         discover_calendars=DiscoverCalendars(cast(AccountCalendars, google), adapters.unit_of_work),
     )
-    _seed(adapters, path, moment)
+    if scenario is not Scenario.SETUP:
+        _seed(adapters, path, moment, scenario)
     adapters.administrator.create_admin(PREVIEW_PASSWORD)
     return container
 
@@ -398,13 +463,40 @@ def _preview_change(found: CalendarEvent, seeded: SeededEntry) -> SourceChange |
     return SourceChange.between(before, after)
 
 
-def _seed(adapters: Adapters, path: Path, now: datetime) -> None:
+def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> None:
     calendar = PreviewCalendar(now)
+    rules = _scenario_rules(scenario)
     with adapters.unit_of_work() as uow:
-        for rule in PREVIEW_RULES:
+        for rule in rules:
             uow.rules.add(rule)
         for seeded in _history():
             uow.audit.append(_audit_entry(seeded, calendar, now))
+        # Each rule's latest scheduled sync, so the Overview and Rules show when it last ran. A
+        # failed run keeps the last success from before authorization expired or Google pushed back.
+        for rule, minutes_ago in zip(rules, (3, 4, 2), strict=True):
+            completed = now - timedelta(minutes=minutes_ago)
+            failure = (
+                "authentication"
+                if rule.state is SyncRuleState.DEGRADED
+                else "rate_limit"
+                if scenario in _LIMITED and rule.id == LIMITED_RULE
+                else None
+            )
+            if failure is not None:
+                # The repository keeps this success as the last one when the failure follows.
+                earlier = now - timedelta(minutes=40)
+                uow.run_outcomes.record(
+                    RuleRunOutcome(rule.id, RunKind.SYNC, completed_at=earlier, succeeded=True)
+                )
+            uow.run_outcomes.record(
+                RuleRunOutcome(
+                    rule_id=rule.id,
+                    kind=RunKind.SYNC,
+                    completed_at=completed,
+                    succeeded=failure is None,
+                    failure_kind=failure,
+                )
+            )
         uow.commit()
     with closing(sqlite3.connect(path)) as connection, connection:
         # Records only, so the preview's accounts can be used by new rules; no credentials.
@@ -424,25 +516,64 @@ def _seed(adapters: Adapters, path: Path, now: datetime) -> None:
                     now.isoformat(),
                     now.isoformat(),
                 )
-                for account in ACCOUNTS
+                for account in _scenario_accounts(scenario)
             ],
         )
-        connection.execute(
+        if scenario not in _BLOCKED:
+            # A daily pass after the seeded history found nothing still blocked.
+            connection.executemany(
+                """
+                INSERT INTO rule_block_checks (rule_id, audit_floor, checked_at)
+                VALUES (?, (SELECT MAX(id) FROM audit_entries), ?)
+                """,
+                [(rule.id.value, now.isoformat()) for rule in PREVIEW_RULES],
+            )
+        # Provider Incidents, worded as the service words them.
+        provider_incidents = [
+            (rule.id, "authentication", "Google authorization expired", 60)
+            for rule in PREVIEW_RULES
+            if scenario in _EXPIRED and _uses_personal(rule)
+        ]
+        if scenario in _LIMITED:
+            provider_incidents.append(
+                (LIMITED_RULE, "rate_limit", "Google Calendar is limiting requests", 25)
+            )
+        connection.executemany(
             """
-            INSERT INTO incidents
-                (id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at)
-            VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
             """,
-            (
-                "preview-incident",
-                "preview-incident",
-                "preview-personal-work",
-                "ownership",
-                "A projection in Work is not owned by this rule, so it was left unchanged.",
-                (now - timedelta(hours=1)).isoformat(),
-                (now - timedelta(hours=1)).isoformat(),
-            ),
+            [
+                (
+                    f"provider:{rule_id.value}",
+                    f"provider:{rule_id.value}",
+                    rule_id.value,
+                    category,
+                    summary,
+                    (now - timedelta(minutes=minutes_ago)).isoformat(),
+                    (now - timedelta(minutes=2)).isoformat(),
+                )
+                for rule_id, category, summary, minutes_ago in provider_incidents
+            ],
         )
+        if scenario is Scenario.REVIEW:
+            connection.execute(
+                """
+                INSERT INTO incidents (
+                    id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at
+                ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+                """,
+                (
+                    "preview-incident",
+                    "blocked:preview-personal-work",
+                    "preview-personal-work",
+                    "conflict",
+                    "1 event could not be synced and was still blocked at the daily check.",
+                    (now - timedelta(hours=1)).isoformat(),
+                    (now - timedelta(hours=1)).isoformat(),
+                ),
+            )
         connection.executemany(
             """
             INSERT INTO incidents (
@@ -480,13 +611,26 @@ def _seed(adapters: Adapters, path: Path, now: datetime) -> None:
                 )
             ],
         )
+    # The names Google last gave each calendar, kept after an account's access expires.
+    with adapters.unit_of_work() as uow:
+        for account_id, calendars in CALENDARS.items():
+            uow.calendar_names.remember(ConnectedAccountId(account_id), calendars)
+        uow.commit()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Development-only preview with synthetic data.")
     parser.add_argument("--port", type=int, default=8001)
-    port = parser.parse_args().port
-    container = build_preview_container()
+    parser.add_argument(
+        "--scenario",
+        type=Scenario,
+        choices=list(Scenario),
+        default=Scenario.REVIEW,
+        help="the Overview state to start in (default: review)",
+    )
+    arguments = parser.parse_args()
+    port = arguments.port
+    container = build_preview_container(scenario=arguments.scenario)
 
     import uvicorn
 

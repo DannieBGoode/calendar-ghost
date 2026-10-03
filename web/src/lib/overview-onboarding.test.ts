@@ -7,9 +7,4 @@ describe("Overview onboarding", () => {
     expect(overviewSource).toContain("const done = [dashboard.connected_accounts > 0,")
     expect(overviewSource).toContain("Reauthorize your Google account")
   })
-
-  it("does not promise a first sync while the account needs attention", () => {
-    expect(overviewSource).toContain('health.tone === "attention"')
-    expect(overviewSource).toContain('"Waiting for recovery"')
-  })
 })

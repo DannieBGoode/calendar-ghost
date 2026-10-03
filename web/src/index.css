@@ -24,6 +24,8 @@
   --destructive-foreground: oklch(1 0 0);
   --destructive-soft: oklch(0.95 0.035 25);
   --destructive-soft-foreground: oklch(0.38 0.14 25);
+  --destructive-surface: oklch(0.975 0.014 25);
+  --destructive-border: oklch(0.87 0.05 25);
   --success-soft: oklch(0.94 0.04 155);
   --success-foreground: oklch(0.31 0.09 155);
   --success-surface: oklch(0.975 0.018 155);
@@ -69,6 +71,8 @@
   --destructive-foreground: oklch(0.16 0.03 25);
   --destructive-soft: oklch(0.28 0.06 25);
   --destructive-soft-foreground: oklch(0.80 0.11 25);
+  --destructive-surface: oklch(0.22 0.028 25);
+  --destructive-border: oklch(0.43 0.08 25);
   --success-soft: oklch(0.27 0.045 155);
   --success-foreground: oklch(0.79 0.11 155);
   --success-surface: oklch(0.22 0.025 155);
@@ -127,6 +131,8 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning-soft: var(--warning-soft);
   --color-warning-foreground: var(--warning-foreground);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-soft-foreground: var(--destructive-soft-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -593,7 +599,6 @@ p {
   --health-border: var(--success-border);
   --health-soft: var(--success-soft);
   --health-ink: var(--success-foreground);
-  --brand-eyes: var(--health-ink);
   position: relative;
   display: grid;
   min-height: 14.5rem;
@@ -603,15 +608,30 @@ p {
   border: 1px solid var(--health-border);
   border-radius: calc(var(--panel-radius) + 0.25rem);
   background:
-    radial-gradient(circle at 82% 54%, color-mix(in oklch, var(--health-soft) 72%, transparent), transparent 44%),
+    radial-gradient(circle at 74% 50%, color-mix(in oklch, var(--health-soft) 72%, transparent), transparent 44%),
     var(--health-surface);
 }
 
-.health-hero[data-tone="attention"] {
+.health-hero[data-tone="review"] {
   --health-surface: var(--warning-surface);
   --health-border: var(--warning-border);
   --health-soft: var(--warning-soft);
   --health-ink: var(--warning-foreground);
+}
+
+.health-hero[data-tone="stopped"] {
+  --health-surface: var(--destructive-surface);
+  --health-border: var(--destructive-border);
+  --health-soft: var(--destructive-soft);
+  --health-ink: var(--destructive-soft-foreground);
+}
+
+.health-hero[data-tone="waiting"],
+.health-hero[data-tone="paused"] {
+  --health-surface: var(--surface);
+  --health-border: var(--border);
+  --health-soft: var(--primary-soft);
+  --health-ink: var(--primary);
 }
 
 .health-hero[data-tone="setup"] {
@@ -621,19 +641,41 @@ p {
   --health-ink: var(--muted-foreground);
 }
 
+/* The ghost is filled with its state's color, like the brand mark, and its eyes are cut from the
+   surface so the face reads at every size. */
 .health-hero[data-tone="healthy"] {
-  --brand-glow: var(--success-soft);
-  --brand-line: var(--success-foreground);
+  --health-ghost: oklch(0.74 0.13 155);
 }
 
-.health-hero[data-tone="attention"] {
-  --brand-glow: var(--warning-soft);
-  --brand-line: var(--warning-foreground);
+.health-hero[data-tone="review"] {
+  --health-ghost: oklch(0.82 0.12 80);
+}
+
+.health-hero[data-tone="stopped"] {
+  --health-ghost: oklch(0.72 0.14 25);
+}
+
+.health-hero[data-tone="waiting"],
+.health-hero[data-tone="paused"] {
+  --health-ghost: oklch(0.80 0.07 278);
+  --health-ghost-eyes: var(--foreground);
 }
 
 .health-hero[data-tone="setup"] {
-  --brand-glow: var(--muted);
-  --brand-line: var(--muted-foreground);
+  --health-ghost: oklch(0.78 0.03 280);
+  --health-ghost-eyes: var(--foreground);
+}
+
+:root[data-theme="dark"] .health-hero {
+  --health-ghost: var(--health-ink);
+  --health-ghost-eyes: var(--health-surface);
+}
+
+.health-hero {
+  --health-ghost-eyes: var(--health-ink);
+  --brand-glow: var(--health-ghost);
+  --brand-line: var(--health-ghost);
+  --brand-eyes: var(--health-ghost-eyes);
 }
 
 .health-hero-copy {
@@ -647,25 +689,8 @@ p {
   padding: 2rem 2.75rem;
 }
 
-.health-hero-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  color: var(--health-ink);
-  font-size: 0.75rem;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.health-hero-status svg {
-  width: 1rem;
-  height: 1rem;
-}
-
 .health-hero h1 {
   max-width: 30ch;
-  margin-top: 0.65rem;
   font-family: var(--font-sans);
   font-size: clamp(2rem, 3vw, 2.75rem);
   font-weight: 720;
@@ -673,13 +698,9 @@ p {
   line-height: 1.08;
 }
 
-.health-hero[data-tone="healthy"] h1 {
-  margin-top: 0;
-}
-
 .health-hero-context {
   max-width: 44ch;
-  margin-top: 0.45rem;
+  margin-top: 0.6rem;
   color: var(--health-ink);
   font-weight: 650;
   line-height: 1.4;
@@ -699,16 +720,27 @@ p {
   align-items: center;
   gap: 0.6rem 0.75rem;
   margin-top: 1.25rem;
+  padding: 0;
   color: var(--muted-foreground);
   font-size: 0.8125rem;
+  list-style: none;
 }
 
-.health-hero-facts span:first-child {
+.health-hero-facts li {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+}
+
+.health-hero-facts li:first-child {
   color: var(--health-ink);
   font-weight: 650;
+}
+
+.health-hero-facts li + li::before {
+  margin-right: 0.4rem;
+  color: color-mix(in oklch, var(--health-ink) 45%, transparent);
+  content: "•";
 }
 
 .health-hero-facts svg {
@@ -716,40 +748,44 @@ p {
   height: 0.95rem;
 }
 
-.health-hero-separator {
-  color: color-mix(in oklch, var(--health-ink) 45%, transparent);
-}
-
 .health-hero-action {
   margin-top: 1.5rem;
 }
 
+/* The ghost, its glow, and its speech bubble move together, so the bubble always points at the
+   ghost's head whatever the column width. The shift leaves room for the bubble on the right. */
 .health-hero-visual {
   position: relative;
   display: flex;
   min-height: 11rem;
   align-items: center;
   justify-content: center;
+  padding-right: 9rem;
+}
+
+.health-hero-character {
+  --health-ghost-size: 7.5rem;
+  position: relative;
+  display: grid;
+  width: var(--health-ghost-size);
+  place-items: center;
 }
 
 .health-hero-halo {
   position: absolute;
-  width: min(68%, 14rem);
+  width: calc(var(--health-ghost-size) * 1.75);
   aspect-ratio: 1;
   border-radius: 50%;
-  background: color-mix(in oklch, var(--health-soft) 80%, transparent);
-  opacity: 0.78;
-  transition: opacity 280ms var(--ease-out), transform 280ms var(--ease-out);
+  background: radial-gradient(circle, color-mix(in oklch, var(--health-soft) 90%, transparent) 40%, transparent 70%);
+  opacity: 0.9;
 }
 
 .health-hero-sparks {
   position: absolute;
   z-index: 1;
-  left: calc(50% - 2rem);
-  width: min(72%, 16rem);
+  width: calc(var(--health-ghost-size) * 2);
   aspect-ratio: 1;
   pointer-events: none;
-  transform: translate(-50%, 0);
 }
 
 .health-hero-spark {
@@ -757,31 +793,30 @@ p {
   display: block;
   background: var(--health-ink);
   opacity: 0.78;
-  transition: opacity 280ms var(--ease-out), transform 280ms var(--ease-out);
 }
 
 .health-hero-spark-ray {
-  width: 1.35rem;
+  width: 1.2rem;
   height: 0.14rem;
   border-radius: 999px;
 }
 
 .health-hero-spark-ray-one {
-  top: 17%;
-  left: 25%;
-  transform: rotate(-34deg);
+  top: 15%;
+  left: 27%;
+  transform: rotate(50deg);
 }
 
 .health-hero-spark-ray-two {
-  top: 8%;
-  left: 47%;
-  transform: rotate(-4deg);
+  top: 9%;
+  left: calc(50% - 0.6rem);
+  transform: rotate(90deg);
 }
 
 .health-hero-spark-ray-three {
-  top: 17%;
-  right: 23%;
-  transform: rotate(34deg);
+  top: 15%;
+  right: 27%;
+  transform: rotate(-50deg);
 }
 
 .health-hero-spark-dot {
@@ -792,86 +827,93 @@ p {
 
 .health-hero-spark-dot-one {
   top: 36%;
-  left: 8%;
+  left: 4%;
 }
 
 .health-hero-spark-dot-two {
-  top: 29%;
-  right: 5%;
+  top: 30%;
+  right: 2%;
 }
 
 .health-hero-spark-dot-three {
-  right: 11%;
-  bottom: 20%;
+  right: 8%;
+  bottom: 18%;
 }
 
 .health-hero-spark-dot-four {
-  bottom: 25%;
-  left: 14%;
+  bottom: 22%;
+  left: 12%;
 }
 
 .health-hero-ghost {
-  --health-ghost-shift: -2rem;
   position: relative;
   z-index: 2;
-  width: clamp(5.5rem, 38%, 8rem);
+  width: 100%;
   height: auto;
-  filter: drop-shadow(0 0 0.9rem color-mix(in oklch, var(--health-ink) 35%, transparent));
-  transition: transform 280ms var(--ease-out);
+  filter: drop-shadow(0 0 1rem color-mix(in oklch, var(--health-ghost) 40%, transparent));
 }
 
 .health-hero[data-tone="setup"] .health-hero-halo {
-  opacity: 0.58;
-  transform: translateX(-2rem) scale(0.94);
+  opacity: 0.6;
 }
 
-.health-hero[data-tone="setup"] .health-hero-ghost {
-  transform: translateX(var(--health-ghost-shift));
+/* Rays are excitement: all three when healthy, two as a startle when something needs a look, and
+   none when the ghost is stopped, resting, or waiting. */
+.health-hero[data-tone="setup"] .health-hero-spark-ray,
+.health-hero[data-tone="waiting"] .health-hero-spark-ray,
+.health-hero[data-tone="paused"] .health-hero-spark-ray,
+.health-hero[data-tone="stopped"] .health-hero-spark-ray,
+.health-hero[data-tone="review"] .health-hero-spark-ray-two {
+  display: none;
 }
 
-.health-hero[data-tone="healthy"] .health-hero-halo {
-  transform: translateX(-2rem) scale(1.06);
+.health-hero[data-tone="paused"] .health-hero-halo,
+.health-hero[data-tone="stopped"] .health-hero-halo {
+  opacity: 0.6;
 }
 
 .health-hero[data-tone="healthy"] .health-hero-ghost {
   animation: health-hero-ghost-float 4.8s ease-in-out infinite;
 }
 
-.health-hero[data-tone="attention"] .health-hero-halo {
-  transform: translateX(-2rem) scale(0.98);
+.health-hero[data-tone="review"] .health-hero-ghost {
+  transform: translateY(0.15rem) rotate(2deg);
 }
 
-.health-hero[data-tone="attention"] .health-hero-ghost {
-  transform: translate(var(--health-ghost-shift), 0.15rem) rotate(2deg);
+.health-hero[data-tone="stopped"] .health-hero-ghost,
+.health-hero[data-tone="paused"] .health-hero-ghost {
+  transform: translateY(0.35rem);
 }
 
+/* The bubble sits beside the ghost with its tail at eye level. */
 .health-hero-callout {
   position: absolute;
-  z-index: 2;
-  top: 14%;
-  right: 1%;
+  z-index: 3;
+  top: 18%;
+  left: calc(100% + 1.25rem);
   display: flex;
-  max-width: 10rem;
+  width: max-content;
+  max-width: 12rem;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.65rem 0.8rem;
+  gap: 0.2rem;
+  padding: 0.7rem 0.9rem;
   border: 1px solid var(--health-border);
   border-radius: 0.75rem;
   background: color-mix(in oklch, var(--health-surface) 86%, var(--background));
   color: var(--foreground);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.35;
 }
 
 .health-hero-callout::after {
   position: absolute;
-  top: 1.1rem;
-  left: -0.35rem;
+  top: 1.15rem;
+  left: -0.36rem;
   width: 0.65rem;
   height: 0.65rem;
   border-bottom: 1px solid var(--health-border);
   border-left: 1px solid var(--health-border);
-  background: var(--health-surface);
+  background: inherit;
   content: "";
   transform: rotate(45deg);
 }
@@ -879,84 +921,200 @@ p {
 @keyframes health-hero-ghost-float {
   0%,
   100% {
-    transform: translate(var(--health-ghost-shift), -0.3rem) rotate(-2deg);
+    transform: translateY(-0.3rem) rotate(-2deg);
   }
 
   50% {
-    transform: translate(var(--health-ghost-shift), -0.62rem) rotate(1deg);
+    transform: translateY(-0.62rem) rotate(1deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .health-hero[data-tone="healthy"] .health-hero-ghost {
     animation: none;
-    transform: translate(var(--health-ghost-shift), -0.3rem) rotate(-2deg);
+    transform: translateY(-0.3rem) rotate(-2deg);
   }
 }
 
 .health-hero-callout strong {
   color: var(--health-ink);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
 }
 
 .health-hero-callout span {
   color: var(--muted-foreground);
 }
 
-.health-strip {
-  --health-surface: var(--success-surface);
-  --health-border: var(--success-border);
-  --health-soft: var(--success-soft);
-  --health-ink: var(--success-foreground);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 1rem 1.25rem;
-  padding: 1.125rem 1.25rem;
-  border: 1px solid var(--health-border);
-  border-radius: var(--radius-xl);
-  background: var(--health-surface);
+/* A stopped ghost calls out: one short line at a time, each in a new place around it, slowly. */
+.health-hero-callouts[data-calling] .health-hero-callout {
+  --call-slot: 3.5s;
+  opacity: 0;
+  animation: health-hero-call calc(var(--call-count) * var(--call-slot)) var(--ease-out) infinite;
+  animation-delay: calc(var(--call-index) * var(--call-slot));
 }
 
-.health-strip[data-tone="attention"] {
-  --health-surface: var(--warning-surface);
-  --health-border: var(--warning-border);
-  --health-soft: var(--warning-soft);
-  --health-ink: var(--warning-foreground);
+/* Every tail points at the ghost: from beside it at eye level or lower, or down onto its head. */
+.health-hero-callout[data-position="above"],
+.health-hero-callout[data-position="above-left"] {
+  top: auto;
+  bottom: calc(100% + 1rem);
 }
 
-.health-strip[data-tone="setup"] {
-  --health-surface: var(--surface);
-  --health-border: var(--border);
-  --health-soft: var(--muted);
-  --health-ink: var(--muted-foreground);
+.health-hero-callout[data-position="above"] {
+  left: 50%;
+  translate: -50% 0;
 }
 
-.health-signal {
+.health-hero-callout[data-position="above-left"] {
+  right: 45%;
+  left: auto;
+}
+
+.health-hero-callout[data-position="below"] {
+  top: 58%;
+}
+
+.health-hero-callout[data-position="above"]::after,
+.health-hero-callout[data-position="above-left"]::after {
+  top: auto;
+  bottom: -0.36rem;
+  transform: rotate(-45deg);
+}
+
+.health-hero-callout[data-position="above"]::after {
+  left: calc(50% - 0.325rem);
+}
+
+.health-hero-callout[data-position="above-left"]::after {
+  right: 1.25rem;
+  left: auto;
+}
+
+@keyframes health-hero-call {
+  0% {
+    opacity: 0;
+    transform: translateY(0.25rem) scale(0.96);
+  }
+
+  4%,
+  18% {
+    opacity: 1;
+    transform: none;
+  }
+
+  24%,
+  100% {
+    opacity: 0;
+    transform: translateY(-0.15rem);
+  }
+}
+
+/* Tears well up and fall, one eye a beat after the other. */
+.health-hero .ghost-mark-tear {
+  animation: health-hero-tear 12s ease-in-out infinite;
+}
+
+.health-hero .ghost-mark-tear-late {
+  animation-delay: 6s;
+}
+
+/* A tear wells up, hangs for a while, then slides down and fades before the next one. */
+@keyframes health-hero-tear {
+  0% {
+    opacity: 0;
+    transform: translateY(-0.4px);
+  }
+
+  15%,
+  45% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  80% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .health-hero-callouts[data-calling] .health-hero-callout {
+    animation: none;
+  }
+
+  .health-hero-callouts[data-calling] .health-hero-callout:first-child {
+    opacity: 1;
+  }
+
+  .health-hero .ghost-mark-tear {
+    animation: none;
+  }
+}
+
+/* Every other current problem, quieter than the main one but never hidden by it. */
+.health-hero-others {
   display: flex;
-  width: 2.5rem;
-  height: 2.5rem;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--health-soft);
-  color: var(--health-ink);
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--health-border);
+  font-size: 0.875rem;
 }
 
-.health-signal svg {
-  width: 1.25rem;
-  height: 1.25rem;
-}
-
-.health-copy h2 {
+.health-hero-others h2 {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
   font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.health-hero-others ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0;
+  list-style: none;
+}
+
+.health-hero-others li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
+.health-hero-others li::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--other-ink);
+  content: "";
+}
+
+.health-hero-others li[data-tone="stopped"] {
+  --other-ink: var(--destructive-soft-foreground);
+}
+
+.health-hero-others li[data-tone="review"] {
+  --other-ink: var(--warning-foreground);
+}
+
+.health-hero-others li[data-tone="waiting"] {
+  --other-ink: var(--primary);
 }
 
 .empty-panel h2 {
   font-weight: 650;
 }
 
-.health-copy h2,
 .section-heading h2,
 .setting-row h2,
 .empty-panel h2 {
@@ -964,7 +1122,6 @@ p {
   line-height: 1.35;
 }
 
-.health-copy p,
 .section-heading p,
 .setting-row p,
 .empty-panel p {
@@ -973,11 +1130,6 @@ p {
   font-size: 0.875rem;
   line-height: 1.5;
 }
-
-
-
-
-
 
 .workflow {
   display: flex;
@@ -1254,8 +1406,12 @@ p {
   color: var(--success-foreground);
 }
 
-.account-summary-status[data-attention] > svg {
+.account-summary-status[data-attention="review"] > svg {
   color: var(--warning-foreground);
+}
+
+.account-summary-status[data-attention="stopped"] > svg {
+  color: var(--destructive-soft-foreground);
 }
 
 .account-summary-emails {
@@ -1576,6 +1732,11 @@ p {
 }
 
 .account-empty p,
+.account-copy span[data-stopped] {
+  color: var(--destructive-soft-foreground);
+  font-weight: 550;
+}
+
 .account-copy p,
 .setting-row p,
 .disconnect-confirmation p {
@@ -2050,7 +2211,29 @@ p {
   color: var(--muted-foreground);
 }
 
-.recent-change-marker svg {
+/* A sign on the marker's corner: + added, − removed, ~ changed, × blocked. */
+.recent-change-sign {
+  position: absolute;
+  top: -0.3rem;
+  right: -0.3rem;
+  display: flex;
+  width: 1rem;
+  height: 1rem;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.recent-change-sign svg {
+  width: 0.625rem;
+  height: 0.625rem;
+  color: var(--background);
+  stroke-width: 3.5;
+}
+
+.recent-change-marker > svg {
   width: 1rem;
   height: 1rem;
 }
@@ -2065,12 +2248,6 @@ p {
   border-color: var(--warning-border);
   background: var(--warning-surface);
   color: var(--warning-foreground);
-}
-
-.recent-change-marker[data-tone="cancelled"] {
-  border-color: var(--destructive-soft-foreground);
-  background: var(--destructive-soft);
-  color: var(--destructive-soft-foreground);
 }
 
 .recent-changes time {
@@ -2156,11 +2333,6 @@ a.recent-change-rule:focus-visible {
   color: var(--muted-foreground);
   font-size: 0.875rem;
   line-height: 1.5;
-}
-
-.overview-facts {
-  color: var(--muted-foreground);
-  font-size: 0.8125rem;
 }
 
 .consequence-panel[data-tone="attention"] {
@@ -2998,12 +3170,34 @@ thead + .activity-day th {
   line-height: 1.4;
 }
 
-.activity-happened svg {
-  width: 0.95rem;
-  height: 0.95rem;
+/* The same sign the Overview's marker carries, in a small disc so a − never reads as a dash. */
+.activity-sign {
+  display: flex;
+  width: 1.125rem;
+  height: 1.125rem;
   flex: none;
-  margin-top: 0.1rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.05rem;
+  border-radius: 50%;
+  background: var(--success-soft);
+  color: var(--success-foreground);
+}
+
+.activity-sign svg {
+  width: 0.7rem;
+  height: 0.7rem;
+  stroke-width: 3;
+}
+
+.activity-happened[data-tone="quiet"] .activity-sign {
+  background: var(--muted);
   color: var(--muted-foreground);
+}
+
+.activity-happened[data-tone="blocked"] .activity-sign {
+  background: var(--warning-soft);
+  color: var(--warning-foreground);
 }
 
 .activity-happened[data-tone="quiet"] {
@@ -3011,7 +3205,6 @@ thead + .activity-day th {
 }
 
 /* The observation reads as plain text; the outcome carries the tone. */
-.activity-happened[data-tone="blocked"] > svg,
 .activity-happened[data-tone="blocked"] .activity-effect {
   color: var(--warning-foreground);
   font-weight: 600;
@@ -4048,42 +4241,48 @@ thead + .activity-day th {
 
   .health-hero {
     grid-template-columns: minmax(0, 1fr);
+    background:
+      radial-gradient(circle at 18% 85%, color-mix(in oklch, var(--health-soft) 72%, transparent), transparent 40%),
+      var(--health-surface);
   }
 
   .health-hero-copy {
     padding: 1.75rem 1.5rem 0.5rem;
   }
 
+  /* A smaller ghost sits under the copy with its bubble beside it, so the hero stays short and
+     the bubble never covers the face. */
   .health-hero-visual {
-    min-height: 13rem;
+    min-height: 0;
+    justify-content: flex-start;
+    padding: 1.25rem 1.5rem 1.75rem 2.25rem;
   }
 
-  .health-hero-ghost {
-    --health-ghost-shift: -0.75rem;
+  .health-hero-character {
+    --health-ghost-size: 4.5rem;
   }
 
-  .health-hero-sparks {
-    left: 50%;
+  .health-hero-spark-ray {
+    display: none;
   }
 
-  .health-hero[data-tone="setup"] .health-hero-halo,
-  .health-hero[data-tone="healthy"] .health-hero-halo,
-  .health-hero[data-tone="attention"] .health-hero-halo {
-    transform: translateX(-0.75rem) scale(1);
+  /* No room above the ghost under the copy, so every call appears beside it. */
+  .health-hero-callout,
+  .health-hero-callout[data-position] {
+    top: 8%;
+    right: auto;
+    bottom: auto;
+    left: calc(100% + 1rem);
+    max-width: min(13rem, calc(100vw - 13rem));
+    translate: none;
   }
 
-  .health-hero[data-tone="setup"] .health-hero-halo {
-    transform: translateX(-0.75rem) scale(0.94);
-  }
-
-  .health-hero[data-tone="healthy"] .health-hero-halo {
-    transform: translateX(-0.75rem) scale(1.06);
-  }
-
-  .health-hero-callout {
-    top: auto;
-    right: 8%;
-    bottom: 8%;
+  .health-hero-callout[data-position]::after {
+    top: 1.15rem;
+    right: auto;
+    bottom: auto;
+    left: -0.36rem;
+    transform: rotate(45deg);
   }
 
   .dashboard-card,
@@ -4098,16 +4297,6 @@ thead + .activity-day th {
   .rule-list.page-card {
     padding-right: 1.25rem;
     padding-left: 1.25rem;
-  }
-
-  .health-strip {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .health-strip > a {
-    grid-column: 1 / -1;
-    justify-self: start;
   }
 
   .recent-changes > li {
@@ -4157,7 +4346,7 @@ thead + .activity-day th {
     gap: 0.35rem;
   }
 
-  .health-hero-separator {
+  .health-hero-facts li + li::before {
     display: none;
   }
 

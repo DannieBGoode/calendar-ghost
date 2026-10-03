@@ -5,7 +5,6 @@ import {
   appPathForLocation,
   appPathForRule,
   appPathForView,
-  appViewFromPathname,
   isKnownAppPath,
   isPlainLeftClick,
   isViewingRule,
@@ -19,14 +18,14 @@ describe("application section URLs", () => {
     ["settings", "/settings"],
   ] as const)("maps %s to %s", (view, path) => {
     expect(appPathForView(view)).toBe(path)
-    expect(appViewFromPathname(path)).toBe(view)
+    expect(appLocationFromPathname(path).view).toBe(view)
     expect(isKnownAppPath(path)).toBe(true)
   })
 
   it("normalizes trailing slashes and falls back to Overview", () => {
-    expect(appViewFromPathname("/rules/")).toBe("rules")
-    expect(appViewFromPathname("/")).toBe("overview")
-    expect(appViewFromPathname("/unknown")).toBe("overview")
+    expect(appLocationFromPathname("/rules/").view).toBe("rules")
+    expect(appLocationFromPathname("/").view).toBe("overview")
+    expect(appLocationFromPathname("/unknown").view).toBe("overview")
     expect(isKnownAppPath("/unknown")).toBe(false)
   })
 })
@@ -56,7 +55,7 @@ describe("rule detail URLs", () => {
 
   it("keeps section URLs working", () => {
     expect(appLocationFromPathname("/rules")).toEqual({ view: "rules", ruleId: null })
-    expect(appViewFromPathname("/rules/rule-1")).toBe("rules")
+    expect(appLocationFromPathname("/rules/rule-1").view).toBe("rules")
     expect(appPathForLocation({ view: "settings", ruleId: null })).toBe(appPathForView("settings"))
   })
 

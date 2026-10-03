@@ -23,15 +23,18 @@ describe("overviewHealth", () => {
     const health = overviewHealth(healthy, now)
     expect(health.tone).toBe("healthy")
     expect(health.headline).toBe("Synchronization is healthy")
-    expect(health.title).toBe("2 rules running normally")
-    expect(health.detail).toMatch(/^Last sync 3 minutes ago\./)
+    expect(health.title).toBe("")
+    expect(health.detail).toBe("Calendar Ghost checks your calendars for changes every five minutes.")
+    expect(health.facts).toEqual(["2 rules running", "Last sync 3 minutes ago"])
     expect(health.action).toBeNull()
   })
 
-  it("stays healthy with a blocked event but says so and links to it", () => {
+  it("asks for a look at blocked events while rules keep running", () => {
     const health = overviewHealth({ ...healthy, blocked_events: 1, blocked_entry_id: 42, blocked_rule_id: "rule-1" }, now)
-    expect(health.tone).toBe("healthy")
-    expect(health.detail).toBe("1 event couldn't be synced. Last sync 3 minutes ago.")
+    expect(health.tone).toBe("review")
+    expect(health.headline).toBe("An event needs a look")
+    expect(health.detail).toBe("1 event couldn't be synced and was left unchanged. Everything else is up to date.")
+    expect(health.facts).toEqual(["2 rules running", "Last sync 3 minutes ago"])
     expect(health.action).toEqual({
       label: "See the blocked event",
       view: "activity",
@@ -39,21 +42,75 @@ describe("overviewHealth", () => {
     })
   })
 
-  it("never calls an installation with open incidents healthy", () => {
+  it("asks for a look at open incidents on running rules", () => {
     const health = overviewHealth({ ...healthy, health: "attention", open_incidents: 2 }, now)
-    expect(health.tone).toBe("attention")
-    expect(health.headline).not.toMatch(/healthy/i)
-    expect(health.title).toBe("2 incidents need attention")
+    expect(health.tone).toBe("review")
+    expect(health.headline).toBe("Something needs a look")
+    expect(health.detail).toBe("2 problems kept happening. Activity explains what happened and what to do.")
     expect(health.action).toEqual({ label: "Open Activity", view: "activity" })
   })
 
-  it("asks for reauthorization instead of setup when the only account lost access", () => {
+  it("names the running rule an incident is about", () => {
+    const health = overviewHealth({ ...healthy, open_incidents: 2 }, now, [
+      { ruleId: "rule-7", name: "Family → Work", detail: "Rule Removal stopped. First seen 1 hour ago.", kind: "review" },
+      { ruleId: "rule-8", name: "Work → Family", detail: "Rule Removal stopped. First seen 2 hours ago.", kind: "review" },
+    ])
+    expect(health.tone).toBe("review")
+    expect(health.headline).toBe("A rule needs a look")
+    expect(health.title).toBe("Family → Work")
+    expect(health.detail).toBe("Rule Removal stopped. First seen 1 hour ago. 1 other problem also needs a look.")
+    expect(health.action).toEqual({ label: "Review this rule", view: "rules", ruleId: "rule-7" })
+  })
+
+  it("only informs while Google limits requests, because the rule retries by itself", () => {
+    const health = overviewHealth({ ...healthy, open_incidents: 1 }, now, [
+      { ruleId: "rule-7", name: "Family → Work", detail: "Google Calendar is limiting requests. First seen 1 hour ago.", kind: "waiting" },
+    ])
+    expect(health.tone).toBe("waiting")
+    expect(health.headline).toBe("Waiting for Google")
+    expect(health.title).toBe("Family → Work")
+    expect(health.detail).toBe(
+      "Google Calendar is limiting requests. First seen 1 hour ago. Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard.",
+    )
+    expect(health.action).toBeNull()
+  })
+
+  it("leads with the most urgent problem and lists every other one", () => {
+    const health = overviewHealth(
+      { ...healthy, open_incidents: 2, stopped_rules: 1, blocked_events: 2, blocked_entry_id: 42, blocked_rule_id: "rule-1" },
+      now,
+      [
+        { ruleId: "rule-7", name: "Personal → Work", detail: "Google authorization expired. First seen 1 hour ago.", kind: "stopped" },
+        { ruleId: "rule-8", name: "Family → Work", detail: "Google Calendar is limiting requests. First seen 5 minutes ago.", kind: "waiting" },
+      ],
+    )
+    expect(health.tone).toBe("stopped")
+    expect(health.title).toBe("Personal → Work")
+    expect(health.others).toEqual([
+      {
+        tone: "review",
+        summary: "2 events couldn't be synced",
+        action: { label: "See blocked events", view: "activity", search: "?rule=rule-1&show=blocked&entry=42" },
+      },
+      { tone: "waiting", summary: "Family → Work is waiting for Google", action: null },
+    ])
+  })
+
+  it("never calls an installation with an open incident healthy, even before it is described", () => {
+    const health = overviewHealth({ ...healthy, open_incidents: 1 }, now, [])
+    expect(health.tone).toBe("review")
+    expect(health.headline).toBe("Something needs a look")
+  })
+
+  it("says rules stopped when an account needs reauthorization", () => {
     const health = overviewHealth(
       { ...healthy, connected_accounts: 0, disconnected_accounts: 1, stopped_rules: 2, enabled_rules: 0 },
       now,
     )
-    expect(health.tone).toBe("attention")
+    expect(health.tone).toBe("stopped")
+    expect(health.headline).toBe("2 rules stopped syncing")
     expect(health.title).toBe("1 Google account needs reauthorization")
+    expect(health.facts).toEqual(["No rules running", "Last sync 3 minutes ago"])
     expect(health.action?.view).toBe("settings")
   })
 
@@ -67,10 +124,37 @@ describe("overviewHealth", () => {
     expect(health.action?.view).toBe("settings")
   })
 
-  it("flags stopped rules even without an incident", () => {
+  it("puts a stopped rule ahead of problems on running ones", () => {
+    const health = overviewHealth({ ...healthy, open_incidents: 3, stopped_rules: 1 }, now, [
+      { ruleId: "rule-9", name: "Work → Family", detail: "Rule Removal stopped.", kind: "review" },
+      { ruleId: "rule-7", name: "Family → Work", detail: "Stopped 1 hour ago.", kind: "stopped" },
+    ])
+    expect(health.tone).toBe("stopped")
+    expect(health.headline).toBe("A rule stopped syncing")
+    expect(health.title).toBe("Family → Work")
+    expect(health.detail).toBe(
+      "Stopped 1 hour ago. It writes nothing until it is fixed. Events already synced stay where they are.",
+    )
+    expect(health.action).toEqual({ label: "Review this rule", view: "rules", ruleId: "rule-7" })
+    expect(health.others).toEqual([
+      { tone: "review", summary: "Work → Family needs a look", action: { label: "Review this rule", view: "rules", ruleId: "rule-9" } },
+    ])
+  })
+
+  it("flags stopped rules even without naming one", () => {
     const health = overviewHealth({ ...healthy, stopped_rules: 1 }, now)
-    expect(health.tone).toBe("attention")
-    expect(health.title).toBe("1 rule stopped")
+    expect(health.tone).toBe("stopped")
+    expect(health.title).toBe("")
+    expect(health.action).toEqual({ label: "Review rules", view: "rules" })
+  })
+
+  it("tells a pause apart from unfinished setup", () => {
+    const paused = overviewHealth({ ...healthy, enabled_rules: 0 }, now)
+    expect(paused.tone).toBe("paused")
+    expect(paused.facts).toEqual(["3 rules not running", "Last sync 3 minutes ago"])
+    const neverRun = overviewHealth({ ...healthy, enabled_rules: 0, last_synced_at: null }, now)
+    expect(neverRun.tone).toBe("setup")
+    expect(neverRun.headline).toBe("No rule is synchronizing")
   })
 
   it("guides setup until a rule is running", () => {
@@ -78,24 +162,34 @@ describe("overviewHealth", () => {
     expect(overviewHealth({ ...healthy, sync_rules: 0, enabled_rules: 0 }, now).headline).toBe(
       "Create your first rule",
     )
-    expect(overviewHealth({ ...healthy, enabled_rules: 0 }, now).headline).toBe("No rule is synchronizing")
+    // The Getting started steps show setup's progress, so the hero lists no facts.
+    expect(overviewHealth({ ...healthy, connected_accounts: 0 }, now).facts).toEqual([])
   })
 
   it("waits for the first run without inventing a time", () => {
-    expect(overviewHealth({ ...healthy, last_synced_at: null }, now).detail).toBe(
-      "The first sync runs within five minutes.",
-    )
+    expect(overviewHealth({ ...healthy, last_synced_at: null }, now).facts).toEqual(["2 rules running", "Not synced yet"])
+    expect(
+      overviewHealth({ ...healthy, last_synced_at: null, stopped_rules: 1 }, now).facts,
+    ).toEqual(["2 rules still running", "Waiting for recovery"])
   })
 
-  it("names the affected rule and links straight to it", () => {
-    const health = overviewHealth({ ...healthy, open_incidents: 1, stopped_rules: 2 }, now, {
-      ruleId: "rule-7",
-      name: "Family → Work",
-      detail: "Stopped 1 hour ago.",
-    })
-    expect(health.title).toBe("Family → Work needs attention")
-    expect(health.detail).toBe("Stopped 1 hour ago. 1 other problem also needs a look.")
-    expect(health.action).toEqual({ label: "Review this rule", view: "rules", ruleId: "rule-7" })
+  it("never repeats a fact in the copy the hero shows", () => {
+    const dashboards: Dashboard[] = [
+      healthy,
+      { ...healthy, last_synced_at: null },
+      { ...healthy, blocked_events: 2, blocked_entry_id: 42, blocked_rule_id: null },
+      { ...healthy, open_incidents: 1 },
+      { ...healthy, stopped_rules: 1 },
+      { ...healthy, disconnected_accounts: 1, stopped_rules: 1 },
+      { ...healthy, enabled_rules: 0 },
+    ]
+    for (const dashboard of dashboards) {
+      const health = overviewHealth(dashboard, now)
+      const copy = [health.headline, health.title, health.detail].join(" ").toLowerCase()
+      for (const fact of health.facts) {
+        expect(copy).not.toContain(fact.toLowerCase())
+      }
+    }
   })
 })
 

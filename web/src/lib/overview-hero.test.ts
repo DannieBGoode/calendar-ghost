@@ -1,27 +1,20 @@
 import { describe, expect, it } from "vitest"
 
-import { overviewHeroCallout } from "./overview-hero"
+import { overviewHeroCallouts } from "./overview-hero"
 
 describe("overview hero", () => {
-  it("provides a complete, self-contained presentation for every state", () => {
-    for (const tone of ["setup", "healthy", "attention"] as const) {
-      const callout = overviewHeroCallout(tone)
-      expect(callout.title).toBeTruthy()
-      expect(callout.detail).toBeTruthy()
-    }
+  it("gives the ghost a short reaction for every state", () => {
+    expect(overviewHeroCallouts("healthy")).toEqual([{ title: "All good!", detail: "Your calendars are in sync." }])
+    expect(overviewHeroCallouts("review")).toEqual([{ title: "Almost all good" }])
+    expect(overviewHeroCallouts("waiting")).toEqual([{ title: "Hang tight…" }])
+    expect(overviewHeroCallouts("paused")).toEqual([{ title: "Taking a break" }])
+    expect(overviewHeroCallouts("setup")).toEqual([{ title: "Ready when you are!" }])
   })
 
-  it("uses readable labels for every connectivity state", () => {
-    expect(overviewHeroCallout("setup").title).toBe("Ready when you are")
-    expect(overviewHeroCallout("healthy").title).toBe("All good!")
-    expect(overviewHeroCallout("attention").title).toBe("Needs attention")
-  })
-
-  it("does not call blocked events fully synchronized", () => {
-    expect(overviewHeroCallout("healthy", 1)).toEqual({
-      title: "An event needs a look",
-      detail: "Review Activity for details.",
-    })
-    expect(overviewHeroCallout("healthy", 2).title).toBe("Some events need a look")
+  it("has a stopped ghost call for help, starting with the plainest line", () => {
+    const calls = overviewHeroCallouts("stopped").map((callout) => callout.title)
+    expect(calls[0]).toBe("Help!")
+    expect(calls).toContain("I need a hand")
+    expect(new Set(calls).size).toBe(calls.length)
   })
 })

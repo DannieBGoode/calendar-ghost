@@ -413,6 +413,8 @@ export type Happened = {
   trigger: string | null
   effect: string
   icon: HappenedIcon
+  /** The sign for what it did to the destination calendar, the same wherever it is shown. */
+  mark: ChangeMark
   tone: "change" | "quiet" | "blocked"
 }
 
@@ -439,15 +441,35 @@ export function whatHappened(
   const effect = entry.repeated ? `${copy.effect} again` : copy.effect
   const text = trigger ? `${capitalized(trigger)} → ${effect}` : capitalized(effect)
   const line = { text, trigger: trigger ? capitalized(trigger) : null, effect: trigger ? effect : capitalized(effect) }
-  if (entry.category === "blocked") return { ...line, icon: "blocked", tone: "blocked" }
-  if (entry.category === "skipped") return { ...line, icon: "skipped", tone: "quiet" }
-  if (entry.category === "unchanged") return { ...line, icon: "current", tone: "quiet" }
-  if (entry.action === "policy_changed" || entry.action === "rule_removed") return { ...line, icon: "rule", tone: "change" }
-  if (entry.reason && REPAIRS.has(entry.reason)) return { ...line, icon: "repaired", tone: "change" }
-  if (entry.action === "create") return { ...line, icon: "added", tone: "change" }
-  if (entry.action === "delete" || entry.action === "remove_projection") return { ...line, icon: "removed", tone: "change" }
-  if (entry.action === "detach_projection") return { ...line, icon: "kept", tone: "change" }
-  return { ...line, icon: "updated", tone: "change" }
+  const happenedAs = (icon: HappenedIcon, tone: Happened["tone"]): Happened => ({
+    ...line,
+    icon,
+    mark: changeMark(icon, entry.action),
+    tone,
+  })
+  if (entry.category === "blocked") return happenedAs("blocked", "blocked")
+  if (entry.category === "skipped") return happenedAs("skipped", "quiet")
+  if (entry.category === "unchanged") return happenedAs("current", "quiet")
+  if (entry.action === "policy_changed" || entry.action === "rule_removed") return happenedAs("rule", "change")
+  if (entry.reason && REPAIRS.has(entry.reason)) return happenedAs("repaired", "change")
+  if (entry.action === "create") return happenedAs("added", "change")
+  if (entry.action === "delete" || entry.action === "remove_projection") return happenedAs("removed", "change")
+  if (entry.action === "detach_projection") return happenedAs("kept", "change")
+  return happenedAs("updated", "change")
+}
+
+/** What an entry did to the destination calendar, read like a diff: + added, − removed, ~ changed. */
+export type ChangeMark = "added" | "removed" | "changed" | "blocked" | "kept" | "current" | "skipped"
+
+/**
+ * One sign per outcome, so Activity and the Overview never show two icons for the same thing.
+ * Putting back a missing event adds it again, so it is an addition; a rule's settings change in place.
+ */
+export function changeMark(icon: HappenedIcon, action: string): ChangeMark {
+  if (icon === "added" || (icon === "repaired" && action === "create")) return "added"
+  if (action === "rule_removed") return "removed"
+  if (icon === "removed" || icon === "blocked" || icon === "kept" || icon === "current" || icon === "skipped") return icon
+  return "changed"
 }
 
 /** "Moved from 10:00 AM in Work": the earlier start, with its date only when the day changed. */

@@ -18,7 +18,7 @@ export function activitySearch(ruleId: string): string {
   return `?rule=${encodeURIComponent(ruleId)}`
 }
 
-export const APP_VIEW_PATHS: Record<AppView, string> = {
+const APP_VIEW_PATHS: Record<AppView, string> = {
   overview: "/overview",
   rules: "/rules",
   activity: "/activity",
@@ -55,10 +55,6 @@ export function appLocationFromPathname(pathname: string): AppLocation {
 /** Whether the browser is showing this rule's details right now. */
 export function isViewingRule(ruleId: string, pathname: string = window.location.pathname): boolean {
   return appLocationFromPathname(pathname).ruleId === ruleId
-}
-
-export function appViewFromPathname(pathname: string): AppView {
-  return appLocationFromPathname(pathname).view
 }
 
 export function appPathForView(view: AppView): string {
