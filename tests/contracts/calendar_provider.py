@@ -130,6 +130,25 @@ class CalendarProviderContract:
         assert found is not None
         assert found.title == "Busy"
 
+    def test_a_projection_of_another_source_event_is_never_updated_or_deleted(
+        self, harness: ProviderHarness
+    ) -> None:
+        theirs = _create(harness, "key-1", RULE_ID, "other-source")
+        source = event("source", calendar=SOURCE).reference
+
+        with pytest.raises(ProjectionOwnershipMismatch):
+            harness.provider.update_projection(
+                theirs.reference, source, RULE_ID, _projection("Changed"), "key-update"
+            )
+        with pytest.raises(ProjectionOwnershipMismatch):
+            harness.provider.delete_projection(theirs.reference, source, RULE_ID, "key-delete")
+
+        found = harness.provider.get_event(theirs.reference)
+        assert found is not None
+        assert found.status is EventStatus.CONFIRMED
+        assert found.title == "Busy"
+        assert found.revision == theirs.revision
+
     def test_a_full_listing_reports_native_events_without_a_managed_origin(
         self, harness: ProviderHarness
     ) -> None:

@@ -37,32 +37,8 @@ from calendar_sync.infrastructure.google.translation import (
     SOURCE_CALENDAR_PROPERTY,
     SOURCE_EVENT_PROPERTY,
 )
+from tests.fake_google_calendar_api import GoogleApiError
 from tests.helpers import NOW, endpoint, event, rule
-
-
-class GoogleResponse(dict[str, str]):
-    """Mirrors httplib2.Response: lower-cased headers plus an integer status."""
-
-    def __init__(self, status: int, headers: dict[str, str]) -> None:
-        super().__init__({key.lower(): value for key, value in headers.items()})
-        self.status = status
-
-
-class GoogleApiError(Exception):
-    def __init__(
-        self,
-        status: int,
-        *,
-        reason: str | None = None,
-        headers: dict[str, str] | None = None,
-    ) -> None:
-        super().__init__(f"synthetic Google status {status}")
-        self.resp = GoogleResponse(status, headers or {})
-        self.content = (
-            b""
-            if reason is None
-            else ('{"error":{"errors":[{"reason":"' + reason + '"}]}}').encode()
-        )
 
 
 def request_returning(payload: dict[str, object]) -> MagicMock:
