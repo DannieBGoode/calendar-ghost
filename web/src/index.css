@@ -677,6 +677,14 @@ p {
   margin-top: 0;
 }
 
+.health-hero-context {
+  max-width: 44ch;
+  margin-top: 0.45rem;
+  color: var(--health-ink);
+  font-weight: 650;
+  line-height: 1.4;
+}
+
 .health-hero-detail {
   max-width: 44ch;
   margin-top: 0.7rem;

@@ -16,4 +16,12 @@ describe("overview hero", () => {
     expect(overviewHeroCallout("healthy").title).toBe("All good!")
     expect(overviewHeroCallout("attention").title).toBe("Needs attention")
   })
+
+  it("does not call blocked events fully synchronized", () => {
+    expect(overviewHeroCallout("healthy", 1)).toEqual({
+      title: "An event needs a look",
+      detail: "Review Activity for details.",
+    })
+    expect(overviewHeroCallout("healthy", 2).title).toBe("Some events need a look")
+  })
 })

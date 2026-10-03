@@ -101,7 +101,7 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
     now,
     attentionRule(rules.data.filter((rule) => !removingIds.has(rule.id)), incidents.data, endpoints, now),
   )
-  const heroCallout = overviewHeroCallout(health.tone)
+  const heroCallout = overviewHeroCallout(health.tone, dashboard.data.blocked_events)
   const SignalIcon = health.tone === "attention" ? ShieldAlert : health.tone === "healthy" ? CheckCircle2 : CircleDot
   const action = health.action
   const firstFact = dashboard.data.enabled_rules > 0
@@ -126,6 +126,7 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
             </div>
           )}
           <h1 id="health-title">{health.headline}</h1>
+          {health.tone === "attention" && <p className="health-hero-context">{health.title}</p>}
           <p className="health-hero-detail">{health.detail}</p>
           <div className="health-hero-facts" aria-label="Synchronization summary">
             <span><SignalIcon aria-hidden="true" /> {firstFact}</span>
