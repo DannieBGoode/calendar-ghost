@@ -88,6 +88,7 @@ function ruleAction(problem: RuleProblem): HealthAction {
 }
 
 /** Every current problem, most urgent first. */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[] {
   const problems: Problem[] = []
   const of = (kind: RuleProblem["kind"]) => ruleProblems.filter((problem) => problem.kind === kind)
@@ -187,6 +188,7 @@ function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[
  * One health model for the Overview, so the headline, facts, and next action can never disagree.
  * The most urgent problem leads, and the hero lists the rest below it.
  */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function overviewHealth(
   dashboard: Dashboard,
   now: number = Date.now(),

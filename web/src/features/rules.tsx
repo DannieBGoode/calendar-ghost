@@ -45,6 +45,7 @@ type RulesViewProps = {
   onOpenRule: OpenRule
 }
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function RulesView({
   notice,
   createRule,
@@ -174,6 +175,7 @@ export function RulesView({
         )
       ) : (
         <ul className="rule-list page-card" aria-label="Sync rules">
+          {/* eslint-disable-next-line complexity -- debt: split this before adding to it */}
           {rules.data.map((rule) => {
             const { source, destination, disconnected } = endpoints(rule)
             const stopped = rule.state === "degraded" || disconnected.length > 0
@@ -296,6 +298,7 @@ export function RulesView({
 }
 
 /** Exported so rendered tests can exercise calendar-picker wiring without the full rules list. */
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function RuleBuilder({
   accounts,
   onCreated,

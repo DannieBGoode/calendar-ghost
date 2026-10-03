@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- debt: split this file before adding to it */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   CheckCircle2,
@@ -222,6 +223,7 @@ export function SettingsPage() {
   return <SettingsView googleConfigured={google.data.configured} redirectUri={google.data.redirect_uri} />
 }
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 function SettingsView({
   googleConfigured,
   redirectUri,
@@ -478,6 +480,7 @@ function SettingsView({
                 </button>
                 {accountsOpen && (
                   <ul className="account-list" id="account-list">
+            {/* eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it */}
             {accounts.data.map((account) => {
               const connected = account.state === "connected"
               const confirming = confirmingAccountId === account.id
@@ -736,6 +739,7 @@ function SettingsView({
   )
 }
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 function StorageSection() {
   const queryClient = useQueryClient()
   const storage = useQuery({ queryKey: ["storage"], queryFn: api.storage })

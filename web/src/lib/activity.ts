@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- debt: split this file before adding to it */
 import type { ActivityShow } from "@/lib/activity-location"
 import {
   ApiError,
@@ -358,6 +359,7 @@ function changedTrigger(fields: string[], names: RuleNames | null): string {
 }
 
 /** The entry's copy with the rule's calendars named. */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function describeEntry(
   entry: Pick<AuditEntry, "reason" | "action" | "detail"> & Partial<Pick<AuditEntry, "changed_fields">>,
   names: RuleNames | null = null,
@@ -425,6 +427,7 @@ const REPAIRS = new Set(["projection_missing", "destination_drift_repaired", "oc
 const MOVES = new Set(["source_changed", "occurrence_changed"])
 
 /** The What happened column: what was observed, then what Calendar Ghost did, with an icon for the outcome. */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function whatHappened(
   entry: Pick<AuditEntry, "reason" | "action" | "detail" | "category"> &
     Partial<Pick<AuditEntry, "event" | "repeated" | "changed_fields">>,

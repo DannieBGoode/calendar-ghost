@@ -34,6 +34,7 @@ const RETRYING = new Set(["rate_limit", "temporary"])
  * The next step for an open incident, in the terms of what its category needs. A rule action is
  * offered only while the rule still exists.
  */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function incidentGuidance(incident: Incident, rule: IncidentRuleState | null): IncidentGuidance {
   const ruleId = rule ? incident.rule_id : null
   if (AUTHORIZATION.has(incident.category)) {

@@ -26,6 +26,7 @@ export type RulePickerOption = {
  * account avatars. Focus stays on the combobox; the active option is named by
  * aria-activedescendant.
  */
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function RulePicker({
   id: comboId,
   labelId,
@@ -93,6 +94,7 @@ export function RulePicker({
     comboRef.current?.focus()
   }
 
+  // eslint-disable-next-line complexity -- debt: split this before adding to it
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     const printable = event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey
     if (!open && clearable && (event.key === "Delete" || event.key === "Backspace")) {

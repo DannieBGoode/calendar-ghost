@@ -37,6 +37,7 @@ const WORK_COMMAND: Record<Exclude<RuleWorkKind, "removal">, RuleCommand> = {
  * page sent names the work until the service reports it, and while it waits behind other work,
  * whose count is not its own. Reconcile now reports its full pass as its first stage.
  */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function ruleWork({
   pending,
   pendingSince,

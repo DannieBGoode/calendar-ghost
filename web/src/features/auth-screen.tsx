@@ -12,6 +12,7 @@ import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL, TAGLINE } from "@/lib/brand"
 
 type AuthScreenProps = { mode: "setup" | "login" }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function AuthScreen({ mode }: AuthScreenProps) {
   const passwordId = useId()
   const confirmationId = useId()

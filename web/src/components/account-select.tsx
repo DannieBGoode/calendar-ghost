@@ -56,6 +56,7 @@ export function AccountSelect({
     )
   }
 
+  // eslint-disable-next-line complexity -- debt: split this before adding to it
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     const printable = event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey
     if (!open) {

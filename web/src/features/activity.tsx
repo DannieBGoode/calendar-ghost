@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- debt: split this file before adding to it */
 import { keepPreviousData, skipToken, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
@@ -108,6 +109,7 @@ function useActivityLocation() {
 }
 
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
@@ -419,6 +421,7 @@ function rulePickerOptions(
   return { options, showAccounts: [...calendars.values()].some((ids) => ids.size > 1) }
 }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 function EmptyActivity({
   ruleId,
   show,
@@ -684,6 +687,7 @@ function ActivityDetail({
   )
 }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 function EntryDetails({
   entry,
   context,

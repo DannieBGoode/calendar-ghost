@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- debt: split this file before adding to it */
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, ArrowRight, LoaderCircle, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
 import { useEffect, useRef, useState, type SyntheticEvent, type RefObject } from "react"
@@ -71,6 +72,7 @@ import { writableCalendars } from "@/lib/writable-calendars"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function RuleDetailsView({
   ruleId,
   notice,
@@ -440,6 +442,7 @@ function useRuleExit(ruleId: string) {
   }
 }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 function PolicyEditor({
   detail,
   destinationName,
@@ -641,6 +644,7 @@ type EndpointDraft = {
 }
 
 /** Exported so rendered tests can exercise the draft without the full rule page. */
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function CalendarReplacement({
   detail,
   accounts,
@@ -892,6 +896,7 @@ export function EndpointFields({
   )
 }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 function RuleRemoval({
   detail,
   destinationName,

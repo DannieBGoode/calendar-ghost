@@ -8,6 +8,12 @@ export default {
   // here; the supply-chain check would also make the gate depend on a remote service.
   noScore: true,
   supplyChain: { enabled: false },
+  rules: {
+    // ESLint owns size and complexity for every file (complexity, max-lines-per-function), with
+    // one marked exception per existing violation, so these would only report the same debt twice.
+    "react-doctor/no-high-complexity-react-function": "off",
+    "react-doctor/no-giant-component": "off",
+  },
   ignore: {
     overrides: [
       {
@@ -15,20 +21,6 @@ export default {
         // with CSS display values, which drop the native table semantics in some browsers.
         files: ["src/features/activity.tsx"],
         rules: ["react-doctor/no-redundant-roles", "react-doctor/no-interactive-element-to-noninteractive-role"],
-      },
-      {
-        // These components are already over the size and complexity bounds. ESLint's suppression
-        // file (eslint-suppressions.json) counts them and fails on any new violation in these
-        // files, so the debt is tracked once, there. Remove a file here when it is split.
-        files: [
-          "src/features/activity.tsx",
-          "src/features/auth-screen.tsx",
-          "src/features/overview.tsx",
-          "src/features/rule-details.tsx",
-          "src/features/rules.tsx",
-          "src/features/settings.tsx",
-        ],
-        rules: ["react-doctor/no-high-complexity-react-function", "react-doctor/no-giant-component"],
       },
     ],
   },

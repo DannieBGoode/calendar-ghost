@@ -109,7 +109,8 @@ rules out.
 - Provider dictionaries are translated at the Google adapter boundary.
 - Use constructor injection and small protocols; do not introduce a dependency-injection framework.
 - In `web/src`, features compose components, components render `lib`, and `lib` imports neither;
-  `components/ui` imports only other UI primitives. ESLint's `no-restricted-imports` enforces this.
-- ESLint bounds complexity, nesting, parameters, and length, as Ruff does for the backend. The
-  violations that predate the bounds are counted in `web/eslint-suppressions.json`. A new one fails
-  lint; after removing one, run `npx eslint . --prune-suppressions` in `web/`.
+  `components/ui` imports only other UI primitives. ESLint's `no-restricted-imports` enforces this
+  for alias (`@/features/x`) and relative (`../features/x`) imports.
+- ESLint bounds complexity, nesting, parameters, and length, as Ruff does for the backend. Each
+  violation that predates the bounds carries an `eslint-disable` comment marked `debt`, like a
+  backend `# noqa`. A new violation fails lint, and so does a marker left behind after a split.

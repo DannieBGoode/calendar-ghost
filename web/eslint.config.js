@@ -5,13 +5,21 @@ import reactRefresh from "eslint-plugin-react-refresh"
 import tseslint from "typescript-eslint"
 
 // Folders depend inward, like the backend's layers: features compose components, components
-// render lib, and lib (API access, view models, and hooks) imports neither.
-const featureImports = { group: ["@/features/*", "**/features/*"], message: "Only features may import features." }
+// render lib, and lib (API access, view models, and hooks) imports neither. Each regex matches an
+// alias import (`@/features/x`) and a relative one (`../features/x`).
+const featureImports = {
+  regex: "^(?:@/|(?:\\.\\./)+)features/",
+  message: "Only features may import features.",
+}
 const componentImports = {
-  group: ["@/components/*", "**/components/*", "!@/components/ui/*"],
+  regex: "^(?:@/|(?:\\.\\./)+)components/",
+  message: "lib must not import components.",
+}
+const appComponentImports = {
+  // From components/ui, `../x` is an app component; `./x` is another primitive.
+  regex: "^(?:(?:@/|(?:\\.\\./)+)components/(?!ui/)|\\.\\./(?!\\.\\./))",
   message: "Shared UI primitives in components/ui must not depend on app components.",
 }
-const uiImports = { group: ["@/components/*", "**/components/*"], message: "lib must not import components." }
 
 export default tseslint.config(
   { ignores: ["dist", "../src/calendar_sync/interfaces/api/static", "src/lib/api-schema.ts"] },
@@ -39,8 +47,9 @@ export default tseslint.config(
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       // `||` deliberately treats an empty name or a false flag as missing.
       "@typescript-eslint/prefer-nullish-coalescing": ["error", { ignorePrimitives: { string: true, boolean: true } }],
-      // Size and complexity bounds, as Ruff's C90 and PLR rules set for the backend. Existing
-      // violations are recorded in eslint-suppressions.json: debt to shrink, not a pattern to copy.
+      // Size and complexity bounds, as Ruff's C90 and PLR rules set for the backend. Each existing
+      // violation carries an eslint-disable comment marked as debt, like the backend's `# noqa`
+      // markers: debt to shrink, not a pattern to copy. Unused markers fail lint.
       complexity: ["error", 10],
       "max-depth": ["error", 4],
       "max-params": ["error", 4],
@@ -51,7 +60,7 @@ export default tseslint.config(
   {
     files: ["src/lib/**/*.{ts,tsx}"],
     ignores: ["**/*.test.{ts,tsx}"],
-    rules: { "no-restricted-imports": ["error", { patterns: [featureImports, uiImports] }] },
+    rules: { "no-restricted-imports": ["error", { patterns: [featureImports, componentImports] }] },
   },
   {
     files: ["src/components/**/*.{ts,tsx}"],
@@ -60,7 +69,7 @@ export default tseslint.config(
   },
   {
     files: ["src/components/ui/**/*.{ts,tsx}"],
-    rules: { "no-restricted-imports": ["error", { patterns: [featureImports, componentImports] }] },
+    rules: { "no-restricted-imports": ["error", { patterns: [featureImports, appComponentImports] }] },
   },
   {
     // Tests read whole scenarios top to bottom; size limits would only split them arbitrarily.

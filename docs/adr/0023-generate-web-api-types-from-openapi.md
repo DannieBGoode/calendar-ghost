@@ -21,6 +21,9 @@ definition directly.
   settings, a database, or a provider.
 - `openapi-typescript` generates `web/src/lib/api-schema.ts` from that file. `web/src/lib/api.ts`
   names the generated types and adds no hand-written body types.
+- Each `api` method calls its route through `call(path, method)`. The path template and method
+  select the request and response types from the generated `paths`, so a method cannot name one
+  route and expect another route's body.
 - Both files are committed. `tests/test_openapi_contract.py` fails when `web/openapi.json` differs
   from the routes, and `npm run api:check` fails when `api-schema.ts` differs from the schema. A
   changed response model therefore fails the frontend type check until the UI handles it.
@@ -29,8 +32,8 @@ definition directly.
 
 - A TypeScript backend would share types directly, but rewriting the tested Python backend costs
   far more than a generated contract.
-- Generating a full API client (for example with `openapi-fetch`) would replace the small
-  `request()` helper and its error handling for little gain at this API size.
+- `openapi-fetch` provides the same route-typed calls as a dependency. A typed helper of about 30
+  lines over the existing `request()` does the same at this API size and keeps its error handling.
 - Validating responses at runtime with a schema library would catch drift only in a running page,
   not in CI.
 
@@ -40,4 +43,5 @@ A change to a response model is a two-command update (`scripts/export_openapi.py
 `npm --prefix web run api:types`) in the same commit. The schema also documents the HTTP API, which
 is a compatibility surface, so an accidental payload change shows up in review as a diff to
 `web/openapi.json`. Request bodies with a closed set of values are validated by Pydantic, so an
-unknown `privacy_policy` is rejected with FastAPI's standard 422 validation detail.
+unknown `privacy_policy` is rejected with FastAPI's standard 422 validation detail, whose messages
+the Web UI shows like any other API error.

@@ -1,4 +1,4 @@
-import type { components } from "@/lib/api-schema"
+import type { components, paths } from "@/lib/api-schema"
 
 export class ApiError extends Error {
   constructor(
@@ -14,8 +14,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json")
   const response = await fetch(path, { ...init, credentials: "same-origin", headers })
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { detail?: string } | null
-    throw new ApiError(body?.detail ?? "The request could not be completed.", response.status)
+    const body: unknown = await response.json().catch(() => null)
+    throw new ApiError(errorDetail(body) ?? "The request could not be completed.", response.status)
   }
   if (response.status === 204) return undefined as T
   try {
@@ -26,6 +26,60 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (!(error instanceof SyntaxError)) throw error
     throw new ApiError("The service returned an unreadable response.", response.status)
   }
+}
+
+/**
+ * The message in an error body: a route's own `detail` string, or the messages of FastAPI's
+ * request validation errors, whose `detail` is a list.
+ */
+export function errorDetail(body: unknown): string | null {
+  if (typeof body !== "object" || body === null || !("detail" in body)) return null
+  const { detail } = body
+  if (typeof detail === "string") return detail
+  if (!Array.isArray(detail)) return null
+  const messages = detail.flatMap((item: unknown) =>
+    typeof item === "object" && item !== null && "msg" in item && typeof item.msg === "string" ? [item.msg] : [],
+  )
+  return messages.length ? messages.join("; ") : null
+}
+
+type Method = "get" | "post" | "patch" | "delete"
+/** The methods a path declares in the schema. */
+type MethodOf<P extends keyof paths> = {
+  [M in Method]: paths[P][M] extends { responses: unknown } ? M : never
+}[Method]
+type JsonContent<R> = R extends { content: { "application/json": infer B } } ? B : undefined
+/** The body of a route's success response; undefined for 204 No Content. */
+type Success<P extends keyof paths, M extends MethodOf<P>> =
+  paths[P][M] extends { responses: infer R } ? JsonContent<R[Extract<keyof R, 200 | 201 | 204>]> : never
+type Payload<P extends keyof paths, M extends MethodOf<P>> =
+  paths[P][M] extends { requestBody: { content: { "application/json": infer B } } } ? B : never
+type CallOptions<P extends keyof paths, M extends MethodOf<P>> = {
+  /** Values for the path's `{name}` placeholders. */
+  params?: Record<string, string | number>
+  query?: URLSearchParams
+  body?: Payload<P, M>
+}
+
+/**
+ * Calls one route. Its path template and method select the request and response types from the
+ * generated schema, so a call cannot name one route and expect another route's body.
+ */
+function call<P extends keyof paths, M extends MethodOf<P>>(
+  path: P,
+  method: M,
+  { params = {}, query, body }: CallOptions<P, M> = {},
+): Promise<Success<P, M>> {
+  const filled = path.replace(/\{(\w+)\}/g, (_, name: string) => {
+    const value = params[name]
+    if (value === undefined) throw new Error(`Missing path parameter ${name} for ${path}`)
+    return encodeURIComponent(String(value))
+  })
+  const url = query?.size ? `${filled}?${query}` : filled
+  return request<Success<P, M>>(url, {
+    method: method.toUpperCase(),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
 }
 
 /** Response and request bodies, generated from the backend's OpenAPI schema (web/openapi.json). */
@@ -91,103 +145,62 @@ export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
 export const ACTIVITY_PAGE_SIZE = 100
 
 export const api = {
-  setup: () => request<SetupStatus>("/api/v1/setup"),
-  session: () => request<SessionStatus>("/api/v1/session"),
-  createAdmin: (password: string) =>
-    request<SessionStatus>("/api/v1/setup/admin", {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    }),
-  logIn: (password: string) =>
-    request<SessionStatus>("/api/v1/session", {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    }),
-  logOut: () => request<undefined>("/api/v1/session", { method: "DELETE" }),
-  dashboard: () => request<Dashboard>("/api/v1/dashboard"),
-  rules: () => request<RuleSummary[]>("/api/v1/rules"),
-  rule: (ruleId: string) => request<RuleDetail>(`/api/v1/rules/${encodeURIComponent(ruleId)}`),
+  setup: () => call("/api/v1/setup", "get"),
+  session: () => call("/api/v1/session", "get"),
+  createAdmin: (password: string) => call("/api/v1/setup/admin", "post", { body: { password } }),
+  logIn: (password: string) => call("/api/v1/session", "post", { body: { password } }),
+  logOut: () => call("/api/v1/session", "delete"),
+  dashboard: () => call("/api/v1/dashboard", "get"),
+  rules: () => call("/api/v1/rules", "get"),
+  rule: (ruleId: string) => call("/api/v1/rules/{rule_id}", "get", { params: { rule_id: ruleId } }),
   updateRulePolicy: (ruleId: string, payload: RulePolicyPayload) =>
-    request<Rule>(`/api/v1/rules/${encodeURIComponent(ruleId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+    call("/api/v1/rules/{rule_id}", "patch", { params: { rule_id: ruleId }, body: payload }),
   removeRule: (ruleId: string, projections: ProjectionHandling) =>
-    request<RemovalResult>(
-      `/api/v1/rules/${encodeURIComponent(ruleId)}?projections=${projections}`,
-      { method: "DELETE" },
-    ),
-  replaceRuleCalendars: (
-    ruleId: string,
-    payload: {
-      source: RuleEndpointPayload
-      destination: RuleEndpointPayload
-      projections: ProjectionHandling
-    },
-  ) =>
-    request<Schemas["RuleReplacementResponse"]>(
-      `/api/v1/rules/${encodeURIComponent(ruleId)}/replace`,
-      { method: "POST", body: JSON.stringify(payload) },
-    ),
-  googleConfiguration: () =>
-    request<GoogleConfiguration>("/api/v1/google/configuration"),
-  accounts: () => request<ConnectedAccount[]>("/api/v1/accounts"),
+    call("/api/v1/rules/{rule_id}", "delete", {
+      params: { rule_id: ruleId },
+      query: new URLSearchParams({ projections }),
+    }),
+  replaceRuleCalendars: (ruleId: string, payload: Schemas["ReplaceRuleRequest"]) =>
+    call("/api/v1/rules/{rule_id}/replace", "post", { params: { rule_id: ruleId }, body: payload }),
+  googleConfiguration: () => call("/api/v1/google/configuration", "get"),
+  accounts: () => call("/api/v1/accounts", "get"),
   disconnectAccount: (accountId: string) =>
-    request<ConnectedAccount>(`/api/v1/accounts/${encodeURIComponent(accountId)}/disconnect`, {
-      method: "POST",
-    }),
+    call("/api/v1/accounts/{account_id}/disconnect", "post", { params: { account_id: accountId } }),
   deleteAccount: (accountId: string) =>
-    request<undefined>(`/api/v1/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" }),
+    call("/api/v1/accounts/{account_id}", "delete", { params: { account_id: accountId } }),
   verifyAccountAccess: (accountId: string) =>
-    request<GoogleAccountAccess>(`/api/v1/accounts/${encodeURIComponent(accountId)}/verify`, {
-      method: "POST",
-    }),
+    call("/api/v1/accounts/{account_id}/verify", "post", { params: { account_id: accountId } }),
   calendars: (accountId: string) =>
-    request<DiscoveredCalendar[]>(`/api/v1/accounts/${encodeURIComponent(accountId)}/calendars`),
-  createRule: (payload: Schemas["CreateRuleRequest"]) =>
-    request<Rule>("/api/v1/rules", { method: "POST", body: JSON.stringify(payload) }),
+    call("/api/v1/accounts/{account_id}/calendars", "get", { params: { account_id: accountId } }),
+  createRule: (payload: Schemas["CreateRuleRequest"]) => call("/api/v1/rules", "post", { body: payload }),
   previewRule: (ruleId: string) =>
-    request<RulePreview>(`/api/v1/rules/${encodeURIComponent(ruleId)}/preview`, {
-      method: "POST",
-    }),
-  enableRule: (ruleId: string) =>
-    request<Rule>(`/api/v1/rules/${encodeURIComponent(ruleId)}/enable`, {
-      method: "POST",
-    }),
-  pauseRule: (ruleId: string) =>
-    request<Rule>(`/api/v1/rules/${encodeURIComponent(ruleId)}/pause`, {
-      method: "POST",
-    }),
-  syncRule: (ruleId: string) =>
-    request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/sync`, {
-      method: "POST",
-    }),
+    call("/api/v1/rules/{rule_id}/preview", "post", { params: { rule_id: ruleId } }),
+  enableRule: (ruleId: string) => call("/api/v1/rules/{rule_id}/enable", "post", { params: { rule_id: ruleId } }),
+  pauseRule: (ruleId: string) => call("/api/v1/rules/{rule_id}/pause", "post", { params: { rule_id: ruleId } }),
+  syncRule: (ruleId: string) => call("/api/v1/rules/{rule_id}/sync", "post", { params: { rule_id: ruleId } }),
   reconcileRule: (ruleId: string) =>
-    request<ReconcileResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
-      method: "POST",
-    }),
+    call("/api/v1/rules/{rule_id}/reconcile", "post", { params: { rule_id: ruleId } }),
   activity: ({ ruleId, categories, before, query }: ActivityFilters = {}) => {
     const params = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) })
     if (ruleId) params.set("rule_id", ruleId)
     for (const category of categories ?? []) params.append("category", category)
     if (before) params.set("before", String(before))
     if (query?.trim()) params.set("q", query.trim())
-    return request<AuditEntry[]>(`/api/v1/audit-entries?${params}`)
+    return call("/api/v1/audit-entries", "get", { query: params })
   },
-  activityEntry: (entryId: number) => request<AuditEntry>(`/api/v1/audit-entries/${entryId}`),
+  activityEntry: (entryId: number) =>
+    call("/api/v1/audit-entries/{entry_id}", "get", { params: { entry_id: entryId } }),
   activityEvent: (entryId: number) =>
-    request<ActivityEvent>(`/api/v1/audit-entries/${entryId}/event`),
+    call("/api/v1/audit-entries/{entry_id}/event", "get", { params: { entry_id: entryId } }),
   activityChanges: (entryId: number) =>
-    request<SourceChange>(`/api/v1/audit-entries/${entryId}/changes`),
-  incidents: () => request<Incident[]>("/api/v1/incidents"),
-  recentChanges: (limit = 5) => request<RecentChange[]>(`/api/v1/recent-changes?limit=${limit}`),
-  storage: () => request<StorageUsage>("/api/v1/storage"),
+    call("/api/v1/audit-entries/{entry_id}/changes", "get", { params: { entry_id: entryId } }),
+  incidents: () => call("/api/v1/incidents", "get"),
+  recentChanges: (limit = 5) =>
+    call("/api/v1/recent-changes", "get", { query: new URLSearchParams({ limit: String(limit) }) }),
+  storage: () => call("/api/v1/storage", "get"),
   clearableActivity: (days: number) =>
-    request<ClearableActivity>(`/api/v1/storage/activity?older_than_days=${days}`),
+    call("/api/v1/storage/activity", "get", { query: new URLSearchParams({ older_than_days: String(days) }) }),
   clearActivity: (days: number) =>
-    request<ClearedActivity>("/api/v1/storage/activity/clear", {
-      method: "POST",
-      body: JSON.stringify({ older_than_days: days }),
-    }),
-  purgeLogs: () => request<undefined>(STORAGE_LOGS_URL, { method: "DELETE" }),
+    call("/api/v1/storage/activity/clear", "post", { body: { older_than_days: days } }),
+  purgeLogs: () => call(STORAGE_LOGS_URL, "delete"),
 }

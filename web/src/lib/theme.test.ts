@@ -208,6 +208,7 @@ describe("pre-paint theme bootstrap", () => {
     ["no saved palette", "dark", null, "twilight", THEME_COLORS.twilight],
     ["invalid saved palette", "dark", "sepia", "twilight", THEME_COLORS.twilight],
     ["saved Midnight while light", "light", "midnight", "midnight", THEME_COLORS.light],
+  // eslint-disable-next-line max-params -- debt: split this before adding to it
   ] as const)("applies %s before paint", (_case, storedTheme, storedPalette, palette, color) => {
     const { root, meta } = runBootstrap(storedTheme, false, false, storedPalette)
 

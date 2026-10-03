@@ -90,10 +90,14 @@ web/ and interfaces/  ->  application/  ->  domain/
 - Ruff bounds function complexity and argument count. Existing `# noqa: C901`, `PLR0912`,
   `PLR0913`, and `PLR0915` markers are debt to shrink, not a pattern to copy: split new code
   instead of suppressing the rule.
-- ESLint applies the same kind of bounds to `web/src`. `web/eslint-suppressions.json` counts the
-  violations that predate them; it is debt to shrink, never a file to grow. Prune it with
-  `npx eslint . --prune-suppressions` after splitting a component. In `web/src`, features compose
-  components, components render `lib`, and `lib` imports neither.
+- ESLint applies the same kind of bounds to `web/src`. Each violation that predates them carries an
+  `eslint-disable` comment marked `debt`, the frontend's `# noqa`: split the code instead of adding
+  one. A marker that no longer suppresses anything fails lint, so remove it after a split.
+- In `web/src`, features compose components, components render `lib`, and `lib` imports neither;
+  `components/ui` imports only other UI primitives. ESLint's `no-restricted-imports` enforces this
+  for alias and relative imports.
+- Call the API through `api` in `web/src/lib/api.ts`. Each method names its route and HTTP method,
+  which select the generated request and response types; never pass a body type by hand.
 - React Doctor (`npm --prefix web run doctor`) fails on any warning. Fix the code; change
   `web/doctor.config.ts` only for a documented false positive.
 
