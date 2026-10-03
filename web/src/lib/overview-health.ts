@@ -250,6 +250,10 @@ export function overviewHealth(
     }
   }
   const [main, ...rest] = problemsOf(dashboard, ruleProblems)
+  const stoppedFacts = [
+    dashboard.enabled_rules > 0 ? `${count(dashboard.enabled_rules, "rule")} still running` : "No rules running",
+    lastSync ?? "Waiting for recovery",
+  ]
   if (main) {
     return {
       tone: TONE_OF[dashboard.status],
@@ -257,14 +261,43 @@ export function overviewHealth(
       title: main.title,
       detail: main.detail,
       action: main.action,
-      facts:
-        main.tone === "stopped"
-          ? [
-              dashboard.enabled_rules > 0 ? `${count(dashboard.enabled_rules, "rule")} still running` : "No rules running",
-              lastSync ?? "Waiting for recovery",
-            ]
-          : runningFacts,
+      facts: main.tone === "stopped" ? stoppedFacts : runningFacts,
       others: rest.map(({ tone, summary, action }) => ({ tone, summary, action })),
+    }
+  }
+  // The server can report attention before the client's per-rule problems explain why, such as
+  // between the dashboard poll and the next one; a generic hero for that tone still tells the
+  // truth instead of contradicting it with healthy, paused, or setup copy (ADR 0023).
+  const tone = TONE_OF[dashboard.status]
+  if (tone === "stopped" || tone === "review" || tone === "waiting") {
+    const generic = {
+      stopped: {
+        headline: "Synchronization needs attention",
+        detail: "A rule stopped syncing. Rules shows which one and what to do. Events already synced stay where they are.",
+        action: { label: "Review rules", view: "rules" } as HealthAction | null,
+        facts: stoppedFacts,
+      },
+      review: {
+        headline: "Something needs a look",
+        detail: "Activity explains what happened and what to do.",
+        action: { label: "Open Activity", view: "activity" } as HealthAction | null,
+        facts: runningFacts,
+      },
+      waiting: {
+        headline: "Waiting for the calendar provider",
+        detail: "Calendar Ghost retries by itself and catches up afterwards.",
+        action: null as HealthAction | null,
+        facts: runningFacts,
+      },
+    }[tone]
+    return {
+      tone,
+      headline: generic.headline,
+      title: "",
+      detail: generic.detail,
+      action: generic.action,
+      facts: generic.facts,
+      others: [],
     }
   }
   if (dashboard.sync_rules === 0) {

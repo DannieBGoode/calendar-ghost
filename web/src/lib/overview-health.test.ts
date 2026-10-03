@@ -257,8 +257,14 @@ describe("overviewHealth", () => {
       { ...healthy, last_synced_at: null },
       { ...healthy, status: "review", blocked_events: 2, blocked_entry_id: 42, blocked_rule_id: null },
       { ...healthy, status: "review", open_incidents: 1 },
-      { ...healthy, status: "stopped", stopped_rules: 1 },
-      { ...healthy, status: "stopped", disconnected_accounts: 1, stopped_rules: 1 },
+      { ...healthy, status: "stopped", stopped_rules: 1, problems: [problem("stopped", "rule-7", "Stopped syncing", null)] },
+      {
+        ...healthy,
+        status: "stopped",
+        disconnected_accounts: 1,
+        stopped_rules: 1,
+        problems: [problem("stopped", "rule-7", "A calendar account needs reauthorization", null)],
+      },
       { ...healthy, status: "paused", enabled_rules: 0 },
     ]
     for (const dashboard of dashboards) {
@@ -293,6 +299,50 @@ describe("overviewHealth", () => {
     expect(health.tone).toBe("review")
     expect(health.title).toBe("Family → Work")
     expect(health.detail).toBe("Not synced in over a day. Last sync yesterday.")
+  })
+
+  it("gives a generic hero for a stalled status with no problem to explain it", () => {
+    const health = overviewHealth({ ...healthy, status: "stalled", problems: [] }, now)
+    expect(health.tone).toBe("stopped")
+    expect(health.headline).not.toBe("Synchronization is healthy")
+    expect(health.headline).toBe("Synchronization needs attention")
+    expect(health.detail).toBe(
+      "A rule stopped syncing. Rules shows which one and what to do. Events already synced stay where they are.",
+    )
+    expect(health.action).toEqual({ label: "Review rules", view: "rules" })
+    expect(health.facts).toEqual(["2 rules still running", "Last sync 3 minutes ago"])
+  })
+
+  it("gives a generic hero for a stopped status with no problem to explain it", () => {
+    const health = overviewHealth({ ...healthy, status: "stopped", problems: [] }, now)
+    expect(health.tone).toBe("stopped")
+    expect(health.headline).not.toBe("Synchronization is healthy")
+    expect(health.headline).toBe("Synchronization needs attention")
+    expect(health.detail).toBe(
+      "A rule stopped syncing. Rules shows which one and what to do. Events already synced stay where they are.",
+    )
+    expect(health.action).toEqual({ label: "Review rules", view: "rules" })
+    expect(health.facts).toEqual(["2 rules still running", "Last sync 3 minutes ago"])
+  })
+
+  it("gives a generic hero for a review status with no problem to explain it", () => {
+    const health = overviewHealth({ ...healthy, status: "review", problems: [] }, now)
+    expect(health.tone).toBe("review")
+    expect(health.headline).not.toBe("Synchronization is healthy")
+    expect(health.headline).toBe("Something needs a look")
+    expect(health.detail).toBe("Activity explains what happened and what to do.")
+    expect(health.action).toEqual({ label: "Open Activity", view: "activity" })
+    expect(health.facts).toEqual(["2 rules running", "Last sync 3 minutes ago"])
+  })
+
+  it("gives a generic hero for a waiting status with no problem to explain it", () => {
+    const health = overviewHealth({ ...healthy, status: "waiting", problems: [] }, now)
+    expect(health.tone).toBe("waiting")
+    expect(health.headline).not.toBe("Synchronization is healthy")
+    expect(health.headline).toBe("Waiting for the calendar provider")
+    expect(health.detail).toBe("Calendar Ghost retries by itself and catches up afterwards.")
+    expect(health.action).toBeNull()
+    expect(health.facts).toEqual(["2 rules running", "Last sync 3 minutes ago"])
   })
 
   it("takes its tone from the server", () => {
