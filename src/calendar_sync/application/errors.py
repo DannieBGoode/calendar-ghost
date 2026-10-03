@@ -82,8 +82,8 @@ class ProviderFailure(ApplicationError):
 class ProjectionOwnershipMismatch(ProviderFailure):
     """A destination event exists, but its Managed Origin metadata does not prove ownership."""
 
-    def __init__(self, detail: str) -> None:
-        super().__init__(ProviderFailureKind.PERMANENT, detail)
+    def __init__(self, detail: str, *, provider: ProviderKind | None = None) -> None:
+        super().__init__(ProviderFailureKind.PERMANENT, detail, provider=provider)
 
 
 @dataclass(frozen=True, slots=True)

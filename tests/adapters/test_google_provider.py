@@ -385,6 +385,7 @@ def test_deleting_a_projection_owned_by_another_source_is_refused() -> None:
             destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
         )
     assert refused.value.kind is ProviderFailureKind.PERMANENT
+    assert refused.value.provider is ProviderKind.GOOGLE
     events_api.delete.assert_not_called()
 
 
@@ -1075,9 +1076,10 @@ def test_google_refuses_to_update_a_projection_this_rule_does_not_own() -> None:
     destination = EventRef(rule().destination, EventId("projection-1"))
     projection = EventProjection(time=TimedInterval(NOW, NOW + timedelta(hours=1)), title="Busy")
 
-    with pytest.raises(ProjectionOwnershipMismatch):
+    with pytest.raises(ProjectionOwnershipMismatch) as raised:
         provider.update_projection(
             destination, event().reference, rule().id, projection, "key-update"
         )
 
+    assert raised.value.provider is ProviderKind.GOOGLE
     events_api.update.assert_not_called()

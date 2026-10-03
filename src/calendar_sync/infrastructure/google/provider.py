@@ -196,7 +196,8 @@ class GoogleCalendarProvider:
             or existing.managed_origin.source != source
         ):
             raise ProjectionOwnershipMismatch(
-                "Google event does not carry compatible ownership metadata"
+                "Google event does not carry compatible ownership metadata",
+                provider=ProviderKind.GOOGLE,
             )
         try:
             payload = self._call(
@@ -231,7 +232,8 @@ class GoogleCalendarProvider:
             or existing.managed_origin.source != source
         ):
             raise ProjectionOwnershipMismatch(
-                "Google event does not carry compatible ownership metadata"
+                "Google event does not carry compatible ownership metadata",
+                provider=ProviderKind.GOOGLE,
             )
         try:
             self._call(
