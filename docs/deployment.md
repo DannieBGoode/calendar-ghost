@@ -28,7 +28,9 @@ After upgrading, reload every open Calendar Ghost tab. The web page is served wi
 may be cached by the browser: after the first upgrade from such a release, hard-refresh each tab
 once. The upgrade that moves audit entries from `/api/v1/activity` to `/api/v1/audit-entries`
 removes the old path, so a page loaded before it cannot show Activity until it is reloaded. Pages
-from this release onward recognize a removed API path and ask you to reload.
+from this release onward recognize a removed API path and ask you to reload. The favicon is served
+from a content-hashed URL, so the same reload replaces a tab icon the browser cached from an earlier
+release.
 
 Migration 4 adds `sync_rules.reprojection_required` (default `0`) and the `rule_run_outcomes`
 table, which stores only timestamps, counts, and failure categories for the Rule Details view.

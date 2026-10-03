@@ -142,11 +142,27 @@ def test_web_page_is_revalidated_so_upgrades_replace_cached_asset_references(
 
     with TestClient(app) as client:
         pages = [client.get(path) for path in ("/", "/activity", "/index.html", "/./index.html")]
-        favicon = client.get("/favicon.svg")
+        avatar = client.get("/avatars/sam-work.png")
 
     for page in pages:
         assert page.headers["cache-control"] == "no-cache"
-    assert "cache-control" not in favicon.headers
+    assert avatar.status_code == 200
+    assert "cache-control" not in avatar.headers
+
+
+def test_favicon_url_changes_with_its_content_so_browsers_replace_a_cached_icon(
+    tmp_path: Path,
+) -> None:
+    index = Path(api_module.__file__).with_name("static") / "index.html"
+    icon = re.search(r'<link rel="icon"[^>]* href="([^"]+)"', index.read_text(encoding="utf-8"))
+
+    assert icon is not None, "the committed web page links no favicon"
+    assert re.fullmatch(r"/assets/favicon-[\w-]+\.svg", icon.group(1))
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+    with TestClient(app) as client:
+        favicon = client.get(icon.group(1))
+    assert favicon.status_code == 200
+    assert favicon.headers["content-type"].startswith("image/svg+xml")
 
 
 def test_shipped_frontend_bundle_requests_audit_entries_path() -> None:
