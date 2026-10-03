@@ -277,6 +277,14 @@ class TransformationPolicy:
             and self.response_to(event) is InvitationResponse.TENTATIVE
         )
 
+    def projects(self, event: CalendarEvent) -> bool:
+        """Whether this policy projects a live event; a cancelled one is never projected.
+
+        Adapters ask this while listing a series' occurrences, so whether a series still has one
+        to project is decided here once, for every provider (ADR 0022).
+        """
+        return event.status is EventStatus.CONFIRMED and self.exclusion(event) is None
+
 
 @dataclass(frozen=True, slots=True)
 class CalendarEvent:
@@ -325,6 +333,38 @@ class CalendarEvent:
         original = self.occurrence.original_start
         boundary: date | datetime = instant if isinstance(original, datetime) else instant.date()
         return original >= boundary or (self.time is not None and not self.ended_before(instant))
+
+    def is_exception_of(self, series: CalendarEvent) -> bool:
+        """Whether this occurrence of `series` is cancelled or differs from its regular one.
+
+        Times are compared as instants, so an occurrence a provider reports in another UTC offset
+        is still the regular one.
+        """
+        identity = self.occurrence
+        if identity is None or identity.series_event_id != series.reference.event_id:
+            return False
+        if self.status is EventStatus.CANCELLED:
+            return True
+        if (self.title, self.description, self.location, self.response) != (
+            series.title,
+            series.description,
+            series.location,
+            series.response,
+        ):
+            return True
+        time, regular, original = self.time, series.time, identity.original_start
+        if isinstance(time, TimedInterval) and isinstance(regular, TimedInterval):
+            return (
+                occurrence_start(time.starts_at) != original
+                or time.ends_at - time.starts_at != regular.ends_at - regular.starts_at
+            )
+        if isinstance(time, AllDayRange) and isinstance(regular, AllDayRange):
+            return (
+                time.starts_on != original
+                or time.ends_before - time.starts_on != regular.ends_before - regular.starts_on
+            )
+        # The occurrence switched between timed and all-day.
+        return True
 
 
 @dataclass(frozen=True, slots=True)

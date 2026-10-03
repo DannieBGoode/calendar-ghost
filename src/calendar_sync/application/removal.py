@@ -175,7 +175,7 @@ class RemoveSyncRule:
         if handling is ProjectionHandling.DELETE:
             if self.provider is None or self.accounts is None:
                 raise RemovalRequiresProvider(
-                    "configure Google OAuth and the installation master key before "
+                    "configure a calendar provider and the installation master key before "
                     "deleting projections"
                 )
             if not self.accounts.is_connected(rule.destination.connected_account_id):

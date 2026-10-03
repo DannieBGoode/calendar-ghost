@@ -157,6 +157,7 @@ class ConnectedAccountResponse(BaseModel):
     id: str
     display_name: str
     email: str
+    provider: str
     avatar_url: str | None
     state: str
     rule_count: int
@@ -175,6 +176,9 @@ class DiscoveredCalendarResponse(BaseModel):
     id: str
     summary: str
     access_role: str
+    """Kept for compatibility at its original values; `writable` is the provider-neutral answer
+    (ADR 0022)."""
+    writable: bool
     primary: bool
 
 

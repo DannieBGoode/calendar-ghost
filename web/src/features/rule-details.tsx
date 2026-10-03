@@ -67,6 +67,7 @@ import { recoveryExplanation } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
 import { RULE_CHANGE_QUERIES, useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
+import { writableCalendars } from "@/lib/writable-calendars"
 
 const PREVIEWABLE_STATES = ["draft", "paused", "degraded"]
 
@@ -823,7 +824,8 @@ function CalendarReplacement({
   )
 }
 
-function EndpointFields({
+/** Exported so rendered tests can exercise calendar-option filtering without the full replacement form. */
+export function EndpointFields({
   legend,
   idPrefix,
   firstField,
@@ -848,9 +850,7 @@ function EndpointFields({
   onAccount: (value: string) => void
   onCalendar: (value: string) => void
 }) {
-  const options = (calendars ?? []).filter(
-    (item) => !writableOnly || ["writer", "owner"].includes(item.access_role),
-  )
+  const options = writableOnly ? writableCalendars(calendars) : (calendars ?? [])
   return (
     <fieldset className="endpoint-fields">
       <legend>{legend}</legend>

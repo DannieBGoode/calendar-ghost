@@ -87,6 +87,9 @@ cd web && npm run typecheck && npm run lint && npm run test && npm run build
 
 Fixtures in `tests/fixtures` are synthetic. Never copy provider responses from a personal account into the repository.
 
+A new calendar adapter adds a `CalendarProviderContract` subclass whose harness seeds Native Events
+in that adapter's backend, next to `tests/adapters/test_calendar_provider_contract.py`.
+
 ## Architecture rules
 
 `lint-imports` checks the import boundaries below through the contracts in `pyproject.toml`, and

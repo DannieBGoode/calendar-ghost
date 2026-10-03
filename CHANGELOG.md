@@ -52,6 +52,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - The Community Edition is documented as a single-installation, privacy-first deployment under the
   GNU Affero General Public License, version 3 or later, with a separate trademark policy, data
   ownership guide, and an explicit boundary for a future hosted service.
+- `provider` on Connected Account payloads (`GET /api/v1/accounts`), and `writable` on discovered
+  calendars.
+- SQLite migration 17 lets `connected_accounts.provider` hold any Provider Kind; code validates the
+  value, so adding a provider needs no schema change (see [Deployment](docs/deployment.md) for
+  rollback).
 - The new-rule account selectors show each Connected Account's photo or initials alongside its name and email.
 - An optional blue dark palette, **Midnight**, in Settings → Appearance → Dark palette. It applies whenever the interface is dark, including when it follows the device, and is saved in the browser like the theme. Twilight remains the default.
 - Connected Account management with permission checks, safe disconnection, reauthorization, and permanent local deletion.
@@ -90,6 +95,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The run log key `google_calls=` is now `provider_calls=`, and the debug and slow-call log lines
+  read `provider call provider=google op=…` and `slow provider call provider=google op=…`. Anyone
+  grepping or alerting on the old text must update it.
+- Incident summaries name the provider that failed: "Authorization for Google Calendar expired",
+  "Access to Google Calendar was denied" (unchanged for Google). Provider-neutral code no longer
+  assumes Google when it names the failed provider.
 - When Google returns to a different address than the one Calendar Ghost is open at, Settings and Overview take the address Google landed on: paste it and choose **Finish connecting** to complete the connection here, instead of editing the address bar or opening an SSH tunnel. The mismatch is no longer a permanent warning: it is a quiet note at the foot of Connected accounts, whose details lead with the permanent fix, an HTTPS redirect URI, and it asks for the address only for 10 minutes after you start connecting from that browser.
 - Settings is regrouped: Connected accounts, Storage, then Appearance, which applies to this browser only. Each section's rows sit in one bordered group under its heading, so a section heading no longer reads as an empty row. Connected accounts collapse to one summary line ("2 accounts connected", or "1 account connected, 1 needs reauthorization"), which opens by itself when an account needs attention or was just connected; the note that Google returns to a different address closes that group instead of floating beside it. Connect Google account is the primary action only while no account is connected. The Operations section is gone: it had no controls, and its "Active" badge was shown whether or not anything ran. Accounts say which rules use them in plain words, Logs explains how to turn file logging on when it is off, and a connection result is announced once rather than again on every reload.
 - The product is now called **Calendar Ghost**, with a ghost mark, a twilight palette led by Lantern Indigo, and bundled Fraunces and Figtree typefaces that render without internet access. Package, environment variable, image, and database names are unchanged, so existing installations upgrade in place and keep their appearance setting.

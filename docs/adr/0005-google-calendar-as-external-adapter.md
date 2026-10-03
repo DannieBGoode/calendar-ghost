@@ -1,5 +1,8 @@
 # Treat Google Calendar as an external adapter
 
+Amended by [ADR 0022](0022-route-calendar-requests-by-provider.md), which routes requests to one
+adapter per provider now that more providers are planned.
+
 ## Context
 
 Google exposes provider-specific event dictionaries, ETags, sync tokens, recurrence conventions, private extended properties, scopes, and error responses. Those details are not synchronization policy.

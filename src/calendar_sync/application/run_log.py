@@ -34,7 +34,7 @@ def duration(elapsed: timedelta) -> str:
 def call_summary(calls: ProviderCallTally) -> str:
     """How a run's provider calls went, for its closing line."""
     return (
-        f"google_calls={calls.calls} token_refreshes={calls.token_refreshes} "
+        f"provider_calls={calls.calls} token_refreshes={calls.token_refreshes} "
         f"rate_limited={calls.rate_limited} server_errors={calls.server_errors} "
         f"slowest_call={calls.slowest_seconds:.1f}s"
     )

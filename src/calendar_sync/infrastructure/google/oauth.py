@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, cast
@@ -27,13 +28,19 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.ports import AccountAccess, ConnectedAccount, DiscoveredCalendar
+from calendar_sync.application.ports import (
+    AccountAccess,
+    CalendarAccess,
+    ConnectedAccount,
+    DiscoveredCalendar,
+)
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
-from calendar_sync.infrastructure.google.instrumentation import record_token_refresh
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
+from calendar_sync.infrastructure.provider_calls import record_token_refresh
 
 CALENDAR_SCOPES = (
     "https://www.googleapis.com/auth/calendar.events",
@@ -43,6 +50,16 @@ CALENDAR_SCOPES = (
 # without it still connects, and the account falls back to initials.
 PROFILE_SCOPES = ("openid", "https://www.googleapis.com/auth/userinfo.profile")
 OAUTH_SCOPES = CALENDAR_SCOPES + PROFILE_SCOPES
+GOOGLE_ACCESS_ROLES: Mapping[str, CalendarAccess] = {
+    "owner": CalendarAccess.OWNER,
+    "writer": CalendarAccess.WRITER,
+    "reader": CalendarAccess.READER,
+    "freeBusyReader": CalendarAccess.FREE_BUSY,
+}
+"""Google's `accessRole` values, translated to provider-neutral access.
+
+A missing or unknown role maps to `READER`: conservative, because it is never writable.
+"""
 # Google may grant fewer scopes than requested (a declined profile) or more (previously granted
 # scopes). oauthlib rejects any difference unless relaxed; complete() enforces Calendar scopes.
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
@@ -129,6 +146,7 @@ class GoogleOAuthService:
             display_name,
             email,
             credentials.to_json(),
+            provider=ProviderKind.GOOGLE,
             avatar_url=_https_url(profile.get("picture")),
         )
 
@@ -139,12 +157,7 @@ class GoogleOAuthService:
         credentials = self._credentials(account_id)
         service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
         return tuple(
-            DiscoveredCalendar(
-                id=str(item["id"]),
-                summary=str(item.get("summary") or item["id"]),
-                access_role=str(item.get("accessRole") or "reader"),
-                primary=bool(item.get("primary")),
-            )
+            discovered_calendar(item)
             for item in self._calendar_items(service)
             if isinstance(item.get("id"), str)
         )
@@ -201,7 +214,7 @@ class GoogleOAuthService:
         return AccountAccess(
             calendars_visible=len(calendars),
             writable_calendars=sum(
-                1 for item in calendars if item.get("accessRole") in {"owner", "writer"}
+                1 for item in calendars if _google_access(item.get("accessRole")).writable
             ),
         )
 
@@ -291,6 +304,23 @@ class GoogleOAuthService:
     def _consume_state(self, state: str) -> None:
         if not self._states.consume(state):
             raise InvalidAuthorizationState("OAuth state is missing, expired, or already used")
+
+
+def discovered_calendar(item: Mapping[str, Any]) -> DiscoveredCalendar:
+    """One Google calendar list entry, without Google's access-role vocabulary."""
+    return DiscoveredCalendar(
+        id=str(item["id"]),
+        summary=str(item.get("summary") or item["id"]),
+        access=_google_access(item.get("accessRole")),
+        primary=bool(item.get("primary")),
+    )
+
+
+def _google_access(role: object) -> CalendarAccess:
+    """`role`'s provider-neutral access; a missing or unknown role is never writable."""
+    if isinstance(role, str):
+        return GOOGLE_ACCESS_ROLES.get(role, CalendarAccess.READER)
+    return CalendarAccess.READER
 
 
 def _profile_claims(id_token: object) -> dict[str, Any]:

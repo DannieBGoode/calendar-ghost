@@ -12,6 +12,7 @@ from calendar_sync.application.health import (
     RuleHealthPolicy,
 )
 from calendar_sync.application.ports import IncidentReport, IncidentResolution
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
@@ -41,7 +42,33 @@ def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
 
     assert response.degrade
     assert response.incident == IncidentReport(
-        f"provider:{RULE.value}", RULE, kind.value, RuleHealthPolicy.summary(kind), ACCOUNT
+        f"provider:{RULE.value}", RULE, kind.value, RuleHealthPolicy.summary(failure), ACCOUNT
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "summary"),
+    [
+        (ProviderFailureKind.AUTHENTICATION, "Authorization for Google Calendar expired"),
+        (ProviderFailureKind.AUTHORIZATION, "Access to Google Calendar was denied"),
+        (ProviderFailureKind.RATE_LIMIT, "Google Calendar is limiting requests"),
+        (ProviderFailureKind.TEMPORARY, "Google Calendar is temporarily unavailable"),
+        (ProviderFailureKind.PERMANENT, "Google Calendar rejected synchronization"),
+        (ProviderFailureKind.INFRASTRUCTURE, "Local synchronization infrastructure failed"),
+    ],
+)
+def test_incident_summaries_name_the_provider_that_failed(
+    kind: ProviderFailureKind, summary: str
+) -> None:
+    failure = ProviderFailure(kind, "synthetic", provider=ProviderKind.GOOGLE)
+
+    assert RuleHealthPolicy.summary(failure) == summary
+
+
+def test_a_failure_naming_no_provider_is_summarized_without_one() -> None:
+    assert (
+        RuleHealthPolicy.summary(_failure(ProviderFailureKind.RATE_LIMIT))
+        == "The calendar provider is limiting requests"
     )
 
 
@@ -86,7 +113,7 @@ def test_a_blocked_removal_names_its_cause() -> None:
         f"removal:{RULE.value}",
         RULE,
         "authorization",
-        "Rule Removal stopped: Google calendar access was denied",
+        "Rule Removal stopped: Access to the calendar provider was denied",
         ACCOUNT,
     )
 

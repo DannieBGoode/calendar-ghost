@@ -26,6 +26,7 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    CalendarAccess,
     CalendarProvider,
     DiscoveredCalendar,
     IncidentReport,
@@ -34,6 +35,7 @@ from calendar_sync.application.ports import (
     RunKind,
 )
 from calendar_sync.application.preview import PreviewSyncRule
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
@@ -71,7 +73,9 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.google.oauth import discovered_calendar
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
+from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_calendar import FakeCalendars, FixedClock
@@ -279,7 +283,7 @@ def test_rules_are_refused_for_accounts_this_installation_does_not_have(
         rules = client.get("/api/v1/rules").json()
 
     assert refused.status_code == 409
-    assert refused.json()["detail"] == "connect both Google accounts before creating a rule"
+    assert refused.json()["detail"] == "connect both accounts before creating a rule"
     assert rules == []
 
 
@@ -331,6 +335,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
         "person@example.test",
         '{"refresh_token":"synthetic-secret"}',
         avatar_url="https://lh3.googleusercontent.com/a/synthetic=s96-c",
+        provider=ProviderKind.GOOGLE,
     )
     with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
@@ -394,6 +399,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
             "id": account.id.value,
             "display_name": "Personal",
             "email": "person@example.test",
+            "provider": "google",
             "avatar_url": "https://lh3.googleusercontent.com/a/synthetic=s96-c",
             "state": "connected",
             "rule_count": 4,
@@ -445,10 +451,16 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Personal",
+        "person@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     unrelated_account = adapters.accounts.save(
-        "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Work",
+        "work@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     affected_rule = SyncRule(
         id=SyncRuleId("delete-rule"),
@@ -605,7 +617,10 @@ def test_disconnected_account_without_rules_can_be_permanently_deleted(tmp_path:
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Unused", "unused@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Unused",
+        "unused@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     adapters.accounts.disconnect(account.id)
     app = create_app(container)
@@ -625,7 +640,10 @@ def test_account_deletion_waits_for_an_in_flight_run_of_an_affected_rule(tmp_pat
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Personal", "person@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Personal",
+        "person@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     adapters.accounts.disconnect(account.id)
     with adapters.unit_of_work() as uow:
@@ -671,6 +689,7 @@ def test_connected_account_access_can_be_verified(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     assert adapters.google_oauth is not None
+    _connect_accounts(tmp_path / "test.db", "account-1")
     verify_access = Mock(return_value=AccountAccess(3, 2))
     monkeypatch.setattr(adapters.google_oauth, "verify_access", verify_access)
     app = create_app(container)
@@ -699,7 +718,9 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
     )
     assert adapters.accounts is not None
     assert adapters.google_oauth is not None
-    account = adapters.accounts.save("Personal", "person@example.test", "{}")
+    account = adapters.accounts.save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
     with adapters.unit_of_work() as uow:
         uow.rules.add(
             SyncRule(
@@ -711,8 +732,8 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
         uow.commit()
     listed = Mock(
         return_value=[
-            DiscoveredCalendar("family", "Family", "owner", primary=False),
-            DiscoveredCalendar("work", "Work", "writer", primary=False),
+            DiscoveredCalendar("family", "Family", access=CalendarAccess.OWNER, primary=False),
+            DiscoveredCalendar("work", "Work", access=CalendarAccess.OWNER, primary=False),
         ]
     )
     monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
@@ -731,7 +752,9 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
         discovered = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
         after = names(client.get("/api/v1/rules"))
         # A renamed calendar is renamed; one Google no longer lists keeps its last name.
-        listed.return_value = [DiscoveredCalendar("family", "Household", "owner", primary=False)]
+        listed.return_value = [
+            DiscoveredCalendar("family", "Household", access=CalendarAccess.OWNER, primary=False)
+        ]
         client.get(f"/api/v1/accounts/{account.id.value}/calendars")
         renamed = names(client.get("/api/v1/rules/rule-1"))
 
@@ -739,6 +762,107 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
     assert [calendar["summary"] for calendar in discovered.json()] == ["Family", "Work"]
     assert after == ("Family", "Work")
     assert renamed == ("Household", "Work")
+
+
+def test_discovered_calendars_say_whether_rules_can_write_to_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    assert adapters.accounts is not None
+    assert adapters.google_oauth is not None
+    account = adapters.accounts.save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    listed = Mock(
+        return_value=[
+            DiscoveredCalendar("family", "Family", access=CalendarAccess.OWNER, primary=True),
+            DiscoveredCalendar(
+                "holidays", "Holidays", access=CalendarAccess.FREE_BUSY, primary=False
+            ),
+        ]
+    )
+    monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
+
+    assert response.json() == [
+        {
+            "id": "family",
+            "summary": "Family",
+            "access_role": "owner",
+            "writable": True,
+            "primary": True,
+        },
+        {
+            "id": "holidays",
+            "summary": "Holidays",
+            "access_role": "freeBusyReader",
+            "writable": False,
+            "primary": False,
+        },
+    ]
+
+
+def test_discovered_calendars_report_googles_original_access_role(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every Google access role survives discovery as the exact legacy `access_role` string."""
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    assert adapters.accounts is not None
+    assert adapters.google_oauth is not None
+    account = adapters.accounts.save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    listed = Mock(
+        return_value=[
+            discovered_calendar({"id": "owned", "summary": "Owned", "accessRole": "owner"}),
+            discovered_calendar({"id": "shared", "summary": "Shared", "accessRole": "writer"}),
+            discovered_calendar({"id": "viewed", "summary": "Viewed", "accessRole": "reader"}),
+            discovered_calendar({"id": "busy", "summary": "Busy", "accessRole": "freeBusyReader"}),
+        ]
+    )
+    monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
+
+    assert response.json() == [
+        {
+            "id": "owned",
+            "summary": "Owned",
+            "access_role": "owner",
+            "writable": True,
+            "primary": False,
+        },
+        {
+            "id": "shared",
+            "summary": "Shared",
+            "access_role": "writer",
+            "writable": True,
+            "primary": False,
+        },
+        {
+            "id": "viewed",
+            "summary": "Viewed",
+            "access_role": "reader",
+            "writable": False,
+            "primary": False,
+        },
+        {
+            "id": "busy",
+            "summary": "Busy",
+            "access_role": "freeBusyReader",
+            "writable": False,
+            "primary": False,
+        },
+    ]
 
 
 @pytest.mark.parametrize(
@@ -758,6 +882,7 @@ def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     assert adapters.google_oauth is not None
+    _connect_accounts(tmp_path / "test.db", "account-1")
     monkeypatch.setattr(adapters.google_oauth, "verify_access", Mock(side_effect=failure))
     app = create_app(container)
 
@@ -1118,7 +1243,10 @@ def test_delete_removal_is_blocked_for_a_disconnected_destination(tmp_path: Path
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Work",
+        "work@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     adapters.accounts.disconnect(account.id)
     with adapters.unit_of_work() as uow:
@@ -2318,7 +2446,10 @@ def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
     )
     assert adapters.accounts is not None
     account = adapters.accounts.save(
-        "Work", "work@example.test", '{"refresh_token":"synthetic-secret"}'
+        "Work",
+        "work@example.test",
+        '{"refresh_token":"synthetic-secret"}',
+        provider=ProviderKind.GOOGLE,
     )
     with adapters.unit_of_work() as uow:
         uow.rules.add(
@@ -2469,3 +2600,25 @@ def test_recovering_a_rule_moves_its_incident_to_the_account_still_unauthorized(
     assert [(item["state"], item["account_id"]) for item in incidents] == [
         ("open", "personal-account")
     ]
+
+
+def test_calendars_of_a_provider_this_installation_has_not_configured_are_unavailable(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "test.db"
+    settings = Settings(database, master_key=CredentialCipher.generate_key())
+    _, adapters = _installation(settings)
+    assert adapters.accounts is not None
+    unconfigured = replace(
+        adapters, account_calendars=RoutingAccountCalendars(adapters.accounts, {})
+    )
+    container = replace(compose(settings, unconfigured), scheduler=None)
+    _connect_accounts(database, "account-1")
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        listed = client.get("/api/v1/accounts/account-1/calendars")
+        verified = client.post("/api/v1/accounts/account-1/verify")
+
+    assert (listed.status_code, verified.status_code) == (503, 503)
+    assert listed.json()["detail"] == "Google Calendar is not configured on this installation"

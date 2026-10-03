@@ -12,6 +12,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     EventId,
@@ -36,32 +37,8 @@ from calendar_sync.infrastructure.google.translation import (
     SOURCE_CALENDAR_PROPERTY,
     SOURCE_EVENT_PROPERTY,
 )
-from tests.helpers import NOW, endpoint, event
-
-
-class GoogleResponse(dict[str, str]):
-    """Mirrors httplib2.Response: lower-cased headers plus an integer status."""
-
-    def __init__(self, status: int, headers: dict[str, str]) -> None:
-        super().__init__({key.lower(): value for key, value in headers.items()})
-        self.status = status
-
-
-class GoogleApiError(Exception):
-    def __init__(
-        self,
-        status: int,
-        *,
-        reason: str | None = None,
-        headers: dict[str, str] | None = None,
-    ) -> None:
-        super().__init__(f"synthetic Google status {status}")
-        self.resp = GoogleResponse(status, headers or {})
-        self.content = (
-            b""
-            if reason is None
-            else ('{"error":{"errors":[{"reason":"' + reason + '"}]}}').encode()
-        )
+from tests.fake_google_calendar_api import GoogleApiError
+from tests.helpers import NOW, endpoint, event, rule
 
 
 def request_returning(payload: dict[str, object]) -> MagicMock:
@@ -384,6 +361,7 @@ def test_deleting_a_projection_owned_by_another_source_is_refused() -> None:
             destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
         )
     assert refused.value.kind is ProviderFailureKind.PERMANENT
+    assert refused.value.provider is ProviderKind.GOOGLE
     events_api.delete.assert_not_called()
 
 
@@ -1053,3 +1031,31 @@ def test_occurrence_exceptions_keep_occurrences_moved_out_of_the_window_but_not_
         "projection-1_20260915T080000Z"
     ]
     assert "timeMin" not in events_api.instances.call_args.kwargs
+
+
+def test_google_failures_name_google_and_the_account() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_raising(500)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.get_event(event().reference)
+
+    assert raised.value.provider is ProviderKind.GOOGLE
+    assert raised.value.account_id == event().reference.calendar.connected_account_id
+
+
+def test_google_refuses_to_update_a_projection_this_rule_does_not_own() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(google_event_payload("projection-1"))
+    provider = provider_with_events_api(events_api)
+    destination = EventRef(rule().destination, EventId("projection-1"))
+    projection = EventProjection(time=TimedInterval(NOW, NOW + timedelta(hours=1)), title="Busy")
+
+    with pytest.raises(ProjectionOwnershipMismatch) as raised:
+        provider.update_projection(
+            destination, event().reference, rule().id, projection, "key-update"
+        )
+
+    assert raised.value.provider is ProviderKind.GOOGLE
+    events_api.update.assert_not_called()

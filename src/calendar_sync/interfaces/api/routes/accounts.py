@@ -22,7 +22,7 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.ports import AccountAuthorization, AccountCalendars
+from calendar_sync.application.ports import AccountAuthorization, AccountCalendars, CalendarAccess
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.interfaces.api.dependencies import app_services, available, require_admin
 from calendar_sync.interfaces.api.schemas import (
@@ -32,7 +32,7 @@ from calendar_sync.interfaces.api.schemas import (
     GoogleConfigurationResponse,
 )
 
-MANAGE_ACCOUNTS = "configure the installation master key before managing Google accounts"
+MANAGE_ACCOUNTS = "configure the installation master key before managing accounts"
 
 
 class GoogleConnection(Protocol):
@@ -167,22 +167,34 @@ def delete_account(account_id: str, services: Services) -> None:
     dependencies=[Depends(require_admin)],
 )
 def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCalendarResponse]:
-    discover = available(services.discover_calendars, "Google OAuth is not configured")
+    discover = available(services.discover_calendars, "no calendar provider is configured")
     try:
         discovered = discover.execute(ConnectedAccountId(account_id))
     except ConnectedAccountNotFound as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except ConnectedAccountDisconnected as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except AuthorizationNotConfigured as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
     return [
         DiscoveredCalendarResponse(
             id=calendar.id,
             summary=calendar.summary,
-            access_role=calendar.access_role,
+            access_role=_LEGACY_ACCESS_ROLES[calendar.access],
+            writable=calendar.writable,
             primary=calendar.primary,
         )
         for calendar in discovered
     ]
+
+
+# access_role's values the field has always had, before CalendarAccess existed (ADR 0022).
+_LEGACY_ACCESS_ROLES: dict[CalendarAccess, str] = {
+    CalendarAccess.OWNER: "owner",
+    CalendarAccess.WRITER: "writer",
+    CalendarAccess.READER: "reader",
+    CalendarAccess.FREE_BUSY: "freeBusyReader",
+}
 
 
 @router.post(
@@ -191,7 +203,7 @@ def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCa
     dependencies=[Depends(require_admin)],
 )
 def verify_account_access(account_id: str, services: Services) -> GoogleAccountAccessResponse:
-    calendars = available(services.account_calendars, "Google OAuth is not configured")
+    calendars = available(services.account_calendars, "no calendar provider is configured")
     try:
         access = calendars.verify_access(ConnectedAccountId(account_id))
     except ConnectedAccountNotFound as error:
@@ -200,6 +212,8 @@ def verify_account_access(account_id: str, services: Services) -> GoogleAccountA
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     except AccountAccessCheckFailed as error:
         raise HTTPException(status.HTTP_424_FAILED_DEPENDENCY, str(error)) from error
+    except AuthorizationNotConfigured as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
     return GoogleAccountAccessResponse(
         calendar_api=True,
         calendar_list_access=True,
@@ -215,6 +229,7 @@ def _account_response(summary: ConnectedAccountSummary) -> ConnectedAccountRespo
         id=account.id.value,
         display_name=account.display_name,
         email=account.email,
+        provider=account.provider.value,
         avatar_url=account.avatar_url,
         state=account.state.value,
         rule_count=summary.rule_count,

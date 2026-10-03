@@ -40,31 +40,32 @@ Each Sync Run, scheduled or started with **Sync now**, writes:
   that calendar was listed in full instead. Expect a longer run.
 - `reprojecting remaining … mappings=N` and `pending replays … series=N`: later phases, logged only
   when the run has them.
-- `run progress … decided=412 handled=380/840 created=3 … elapsed=12m03s google_calls=1630`:
+- `run progress … decided=412 handled=380/840 created=3 … elapsed=12m03s provider_calls=1630`:
   written at most every 30 seconds while the run decides events. `handled` counts the events both
   calendars reported, plus the mappings a reprojection rewrites, that the run has finished;
   `decided` also counts each occurrence of a recurring event, so it can be larger.
-- `run finished … in 28m14s created=… google_calls=… token_refreshes=… rate_limited=…
-  server_errors=… slowest_call=1.3s`: the run's counts and how its Google calls went.
+- `run finished … in 28m14s created=… provider_calls=… token_refreshes=… rate_limited=…
+  server_errors=… slowest_call=1.3s`: the run's counts and how its provider calls went.
 - `run failed … kind=rate_limit after 3m02s` (WARNING): the run stopped with this failure kind; the
   scheduler retries temporary and rate-limit failures as a new run with a new `run=` identifier.
 - `run stopped … rule changed`: the rule was paused, edited, or removed while the run was in
   progress. Nothing needs fixing.
 
 Reconcile now and Rule Removal write one `reconciliation started`/`removal started` line and one
-`finished`, `failed`, or `interrupted` line each. A Google call slower than 10 seconds is a WARNING
-`slow google call op=events.instances status=200 took=12.4s`.
+`finished`, `failed`, or `interrupted` line each. A provider call slower than 10 seconds is a WARNING
+`slow provider call provider=google op=events.instances status=200 took=12.4s`.
 
 To judge whether a long run is still working, compare consecutive `run progress` lines for the same
 `run=`. Rules and Rule Details show the same count while a sync runs, as "380 of 840 checked". If
-`handled`, `decided`, and `google_calls` grow, the run is progressing; a large calendar on its
+`handled`, `decided`, and `provider_calls` grow, the run is progressing; a large calendar on its
 `first-run`, `daily-pass`, or `reprojection` can take many minutes. A growing `rate_limited` count
 means Google is slowing the run down and it will finish later. If no `run progress` line appears for
 several minutes and no `run finished` or `run failed` follows, the run is waiting on a single Google
-call; look for `slow google call` warnings, or turn on debug logging.
+call; look for `slow provider call` warnings, or turn on debug logging.
 
-Set `CALENDAR_SYNC_LOG_LEVEL=DEBUG` in `.env` and run `docker compose up -d` to also log every Google
-call as `google call op=events.get status=200 took=84ms`. Debug logging is verbose; set it back to
+Set `CALENDAR_SYNC_LOG_LEVEL=DEBUG` in `.env` and run `docker compose up -d` to also log every
+provider call as `provider call provider=google op=events.get status=200 took=84ms`. Debug logging
+is verbose; set it back to
 `INFO` when you are done.
 
 ## Database is large
@@ -131,10 +132,10 @@ reloaded, and keeps running if you leave. Restarting the service stops it partwa
 errors are already retried with backoff before removal stops; choose **Retry removal** to continue
 from the remaining projections.
 
-- **Rule Removal stopped: Google authorization expired** or **… calendar access was denied**: an
-  Incident is open for the rule. Reauthorize the destination account in **Settings**, then retry.
-  If access cannot be restored, retry with **Keep them as ordinary events**; those events then stay in
-  Google and are no longer managed.
+- **Rule Removal stopped: Authorization for Google Calendar expired** or **Access to Google
+  Calendar was denied**: an Incident is open for the rule. Reauthorize the destination account in
+  **Settings**, then retry. If access cannot be restored, retry with **Keep them as ordinary
+  events**; those events then stay in Google and are no longer managed.
 - **Some events were left**: the rules list reports events whose ownership could not be verified,
   for example because their private Calendar Ghost metadata names another rule or was removed.
   They were not deleted. Open **Activity**, choose **Blocked**, and delete them in Google Calendar
@@ -159,11 +160,11 @@ The Activity screen names the reason it could not load audit entries and inciden
 Open **Activity**. The rule's incident says what stopped it and offers the next step. The rule keeps
 its mappings and last successful incremental positions, and writes nothing while degraded.
 
-- **Google authorization expired** or **Google calendar access was denied**: choose **Reauthorize in
-  Settings** and reauthorize the Google account Google rejected. Once that account is reauthorized,
-  the incident offers **Recover this rule** instead. If the rule's calendars belong to two accounts
-  and the other one has also lost access, recovering the rule points the incident back to Settings
-  for that account.
+- **Authorization for Google Calendar expired** or **Access to Google Calendar was denied**: choose
+  **Reauthorize in Settings** and reauthorize the Google account Google rejected. Once that account
+  is reauthorized, the incident offers **Recover this rule** instead. If the rule's calendars belong
+  to two accounts and the other one has also lost access, recovering the rule points the incident
+  back to Settings for that account.
 - **Google Calendar rejected synchronization**: Google refused a request for a reason other than
   authorization or rate limiting, or answered in a way Calendar Ghost could not use. Choose **Review
   this rule** and check that both calendars still exist and are shared with the accounts the rule
@@ -173,6 +174,9 @@ its mappings and last successful incremental positions, and writes nothing while
 - **Local synchronization infrastructure failed**: an unexpected error inside Calendar Ghost stopped
   the run, not a Google condition. Review the container logs for the error, and check that the data
   volume has free space and the database is writable, before recovering the rule.
+- **The calendar provider rejected synchronization**: the rule names a Connected Account that no
+  longer exists (ADR 0022's router could not find it). Re-create the rule, choosing calendars from
+  accounts that still exist.
 
 To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
 syncing**. Its next run repairs drift before advancing either cursor. The next successful scheduled

@@ -17,8 +17,8 @@ from calendar_sync.application.errors import (
     ProviderFailureKind,
 )
 from calendar_sync.application.ports import Clock, CreatedProjection, ProviderChangeSet
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import (
-    AllDayRange,
     CalendarEndpoint,
     CalendarEvent,
     ConnectedAccountId,
@@ -28,11 +28,8 @@ from calendar_sync.domain.model import (
     ManagedOrigin,
     OccurrenceStart,
     SyncRuleId,
-    TimedInterval,
     TransformationPolicy,
-    occurrence_start,
 )
-from calendar_sync.infrastructure.google.instrumentation import record_call
 from calendar_sync.infrastructure.google.translation import (
     OPERATION_PROPERTY,
     RULE_PROPERTY,
@@ -40,6 +37,7 @@ from calendar_sync.infrastructure.google.translation import (
     projection_payload,
     to_domain_event,
 )
+from calendar_sync.infrastructure.provider_calls import record_call
 from calendar_sync.infrastructure.scheduling import SystemClock
 
 GoogleServiceFactory = Callable[[ConnectedAccountId], Any]
@@ -71,7 +69,13 @@ class GoogleCalendarProvider:
             rate_limited = status == 429 or (status == 403 and _is_rate_limit_error(error))
             raise
         finally:
-            record_call(operation, status, self._timer() - started, rate_limited=rate_limited)
+            record_call(
+                ProviderKind.GOOGLE,
+                operation,
+                status,
+                self._timer() - started,
+                rate_limited=rate_limited,
+            )
 
     def changes(
         self,
@@ -103,6 +107,7 @@ class GoogleCalendarProvider:
                         raise ProviderFailure(
                             ProviderFailureKind.PERMANENT,
                             "Google response did not include a synchronization token",
+                            provider=ProviderKind.GOOGLE,
                         )
                     return ProviderChangeSet(tuple(items), next_cursor, complete=not cursor)
                 parameters["pageToken"] = page_token
@@ -190,9 +195,9 @@ class GoogleCalendarProvider:
             or existing.managed_origin.rule_id != rule_id
             or existing.managed_origin.source != source
         ):
-            raise ProviderFailure(
-                ProviderFailureKind.PERMANENT,
+            raise ProjectionOwnershipMismatch(
                 "Google event does not carry compatible ownership metadata",
+                provider=ProviderKind.GOOGLE,
             )
         try:
             payload = self._call(
@@ -227,7 +232,8 @@ class GoogleCalendarProvider:
             or existing.managed_origin.source != source
         ):
             raise ProjectionOwnershipMismatch(
-                "Google event does not carry compatible ownership metadata"
+                "Google event does not carry compatible ownership metadata",
+                provider=ProviderKind.GOOGLE,
             )
         try:
             self._call(
@@ -325,12 +331,14 @@ class GoogleCalendarProvider:
                 raise ProviderFailure(
                     ProviderFailureKind.TEMPORARY,
                     "Google series could not be read while resolving an occurrence",
+                    provider=ProviderKind.GOOGLE,
                 ) from error
             raise self._failure(error, series.calendar.connected_account_id) from error
         # Pages beyond the limit were not read, so the occurrence is not proven absent.
         raise ProviderFailure(
             ProviderFailureKind.TEMPORARY,
             "Google did not finish resolving an occurrence within the page limit",
+            provider=ProviderKind.GOOGLE,
         )
 
     def list_occurrences(
@@ -390,7 +398,7 @@ class GoogleCalendarProvider:
                 # showDeleted=False should omit cancelled instances; the status is checked anyway,
                 # because counting one as live would recreate a series that can only be cancelled.
                 if any(
-                    _projected(to_domain_event(item, series.calendar), policy)
+                    policy.projects(to_domain_event(item, series.calendar))
                     for item in response.get("items", [])
                 ):
                     return True
@@ -431,7 +439,7 @@ class GoogleCalendarProvider:
                 response = self._call("events.instances", events_api.instances(**parameters))
                 for item in response.get("items", []):
                     instance = to_domain_event(item, series.calendar)
-                    if _is_exception(instance, master) and instance.occurrence_reaches(
+                    if instance.is_exception_of(master) and instance.occurrence_reaches(
                         not_ended_before
                     ):
                         exceptions.append(instance)
@@ -459,7 +467,9 @@ class GoogleCalendarProvider:
         )
         if instance is None:
             raise ProviderFailure(
-                ProviderFailureKind.PERMANENT, "Google occurrence could not be resolved"
+                ProviderFailureKind.PERMANENT,
+                "Google occurrence could not be resolved",
+                provider=ProviderKind.GOOGLE,
             )
         body = projection_payload(
             projection, rule_id, source_series, operation_key, original_start=original_start
@@ -515,7 +525,11 @@ class GoogleCalendarProvider:
     def _failure(self, error: Exception, account: ConnectedAccountId) -> ProviderFailure:
         # The clock turns a Retry-After date into the seconds the retry helper waits. The account
         # names whose access to renew when Google rejected its credentials.
-        return replace(_provider_failure(error, self._clock.now()), account_id=account)
+        return replace(
+            _provider_failure(error, self._clock.now()),
+            account_id=account,
+            provider=ProviderKind.GOOGLE,
+        )
 
     def _owned_occurrence(
         self,
@@ -539,42 +553,9 @@ class GoogleCalendarProvider:
             raise ProviderFailure(
                 ProviderFailureKind.PERMANENT,
                 "Google occurrence does not carry compatible ownership metadata",
+                provider=ProviderKind.GOOGLE,
             )
         return instance
-
-
-def _projected(instance: CalendarEvent, policy: TransformationPolicy) -> bool:
-    """A live instance the rule projects; one it excludes is cancelled in the destination."""
-    return instance.status is EventStatus.CONFIRMED and policy.exclusion(instance) is None
-
-
-def _is_exception(instance: CalendarEvent, master: CalendarEvent) -> bool:
-    """An instance that is cancelled or differs from the series' regular occurrence."""
-    identity = instance.occurrence
-    if identity is None or identity.series_event_id != master.reference.event_id:
-        return False
-    if instance.status is EventStatus.CANCELLED:
-        return True
-    if (instance.title, instance.description, instance.location, instance.response) != (
-        master.title,
-        master.description,
-        master.location,
-        master.response,
-    ):
-        return True
-    time, regular, original = instance.time, master.time, identity.original_start
-    if isinstance(time, TimedInterval) and isinstance(regular, TimedInterval):
-        return (
-            occurrence_start(time.starts_at) != original
-            or time.ends_at - time.starts_at != regular.ends_at - regular.starts_at
-        )
-    if isinstance(time, AllDayRange) and isinstance(regular, AllDayRange):
-        return (
-            time.starts_on != original
-            or time.ends_before - time.starts_on != regular.ends_before - regular.starts_on
-        )
-    # The occurrence switched between timed and all-day.
-    return True
 
 
 def _as_instant(start: OccurrenceStart) -> datetime:

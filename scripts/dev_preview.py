@@ -38,6 +38,7 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    CalendarAccess,
     CalendarProvider,
     ConnectedAccount,
     ConnectedAccountRepository,
@@ -47,6 +48,7 @@ from calendar_sync.application.ports import (
     RuleRunOutcome,
     RunKind,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
 from calendar_sync.domain.changes import SourceChange, SourceObservation
@@ -115,6 +117,7 @@ ACCOUNTS = (
         "sam@personal.example",
         ConnectedAccountState.CONNECTED,
         avatar_url="/avatars/sam-personal.png",
+        provider=ProviderKind.GOOGLE,
     ),
     ConnectedAccount(
         FAMILY_ACCOUNT,
@@ -122,6 +125,7 @@ ACCOUNTS = (
         "sam@family.example",
         ConnectedAccountState.CONNECTED,
         avatar_url="/avatars/sam-family.png",
+        provider=ProviderKind.GOOGLE,
     ),
     ConnectedAccount(
         WORK_ACCOUNT,
@@ -129,12 +133,23 @@ ACCOUNTS = (
         "sam@work.example",
         ConnectedAccountState.CONNECTED,
         avatar_url="/avatars/sam-work.png",
+        provider=ProviderKind.GOOGLE,
     ),
 )
 CALENDARS = {
-    "preview-sam-personal": [DiscoveredCalendar("sam@personal.example", "Personal", "owner", True)],
-    "preview-sam-family": [DiscoveredCalendar("sam@family.example", "Family", "owner", True)],
-    "preview-sam-work": [DiscoveredCalendar("sam@work.example", "Work", "owner", True)],
+    "preview-sam-personal": [
+        DiscoveredCalendar(
+            "sam@personal.example", "Personal", access=CalendarAccess.OWNER, primary=True
+        )
+    ],
+    "preview-sam-family": [
+        DiscoveredCalendar(
+            "sam@family.example", "Family", access=CalendarAccess.OWNER, primary=True
+        )
+    ],
+    "preview-sam-work": [
+        DiscoveredCalendar("sam@work.example", "Work", access=CalendarAccess.OWNER, primary=True)
+    ],
 }
 
 

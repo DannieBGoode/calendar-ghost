@@ -23,11 +23,11 @@ import { NativeSelect } from "@/components/ui/native-select"
 import {
   api,
   type ConnectedAccount,
-  type DiscoveredCalendar,
   type Rule,
   type TentativeEvents,
   type UnansweredInvitations,
 } from "@/lib/api"
+import { firstOtherCalendar, writableCalendars } from "@/lib/writable-calendars"
 import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
@@ -36,7 +36,6 @@ import { useNow } from "@/lib/use-now"
 import { useRuleCommands } from "@/lib/use-rule-commands"
 import { useRuleEndpoints } from "@/lib/use-rule-endpoints"
 
-const WRITABLE_ROLES = ["writer", "owner"]
 const CALENDAR_STALE_TIME = 5 * 60 * 1000
 
 type RulesViewProps = {
@@ -296,15 +295,8 @@ export function RulesView({
   )
 }
 
-function firstOtherCalendar(
-  calendars: DiscoveredCalendar[] | undefined,
-  exclude: string | null,
-): string {
-  const writable = (calendars ?? []).filter((calendar) => WRITABLE_ROLES.includes(calendar.access_role))
-  return (writable.find((calendar) => calendar.id !== exclude) ?? writable[0])?.id ?? ""
-}
-
-function RuleBuilder({
+/** Exported so rendered tests can exercise calendar-picker wiring without the full rules list. */
+export function RuleBuilder({
   accounts,
   onCreated,
 }: {
@@ -345,9 +337,7 @@ function RuleBuilder({
   })
 
   const resolvedSourceCalendar = sourceCalendar || sourceCalendars.data?.[0]?.id || ""
-  const writableDestinations = (destinationCalendars.data ?? []).filter((calendar) =>
-    WRITABLE_ROLES.includes(calendar.access_role),
-  )
+  const writableDestinations = writableCalendars(destinationCalendars.data)
   // Default to a destination other than the source so the builder never opens in an error.
   const resolvedDestinationCalendar =
     destinationCalendar ||

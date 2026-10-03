@@ -8,13 +8,14 @@ from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 
 from calendar_sync.application.errors import AccountAccessCheckFailed, ConnectedAccountDisconnected
-from calendar_sync.infrastructure.google.instrumentation import GoogleCallStats
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.security import CredentialCipher
 
 CLIENT = OAuthClientConfig(
@@ -80,7 +81,10 @@ def test_a_valid_stored_token_is_used_without_refreshing(
 ) -> None:
     store = _store(tmp_path)
     account = store.save(
-        "Work", "work@example.test", _stored("valid-token", datetime.now(UTC) + timedelta(hours=1))
+        "Work",
+        "work@example.test",
+        _stored("valid-token", datetime.now(UTC) + timedelta(hours=1)),
+        provider=ProviderKind.GOOGLE,
     )
 
     _oauth(tmp_path, store).service_for(account.id)
@@ -94,7 +98,10 @@ def test_an_expired_token_is_refreshed_once_and_kept_for_later_requests(
 ) -> None:
     store = _store(tmp_path)
     account = store.save(
-        "Work", "work@example.test", _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
+        "Work",
+        "work@example.test",
+        _stored("old-token", datetime.now(UTC) - timedelta(hours=2)),
+        provider=ProviderKind.GOOGLE,
     )
     oauth = _oauth(tmp_path, store)
 
@@ -116,7 +123,7 @@ def test_a_failed_refresh_keeps_the_stored_credentials(
 ) -> None:
     store = _store(tmp_path)
     expired = _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
-    account = store.save("Work", "work@example.test", expired)
+    account = store.save("Work", "work@example.test", expired, provider=ProviderKind.GOOGLE)
 
     def refresh(self: Credentials, _request: object) -> None:
         raise RefreshError("invalid_grant")  # type: ignore[no-untyped-call]
@@ -133,9 +140,9 @@ def test_a_failed_refresh_keeps_the_stored_credentials(
 def test_kept_credentials_never_replace_a_newer_authorization(tmp_path: Path) -> None:
     store = _store(tmp_path)
     first = _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
-    account = store.save("Work", "work@example.test", first)
+    account = store.save("Work", "work@example.test", first, provider=ProviderKind.GOOGLE)
     reauthorized = _stored("reauthorized-token", datetime.now(UTC) + timedelta(hours=1))
-    store.save("Work", "work@example.test", reauthorized)
+    store.save("Work", "work@example.test", reauthorized, provider=ProviderKind.GOOGLE)
 
     kept = store.replace_credentials(account.id, first, '{"token": "refreshed"}')
 
@@ -146,7 +153,7 @@ def test_kept_credentials_never_replace_a_newer_authorization(tmp_path: Path) ->
 def test_kept_credentials_do_not_reconnect_a_disconnected_account(tmp_path: Path) -> None:
     store = _store(tmp_path)
     first = _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
-    account = store.save("Work", "work@example.test", first)
+    account = store.save("Work", "work@example.test", first, provider=ProviderKind.GOOGLE)
     store.disconnect(account.id)
 
     assert store.replace_credentials(account.id, "{}", '{"token": "refreshed"}') is False
@@ -159,7 +166,7 @@ def test_keeping_a_refreshed_token_is_not_a_reauthorization(tmp_path: Path) -> N
     # refresh must not move the account's authorization time.
     store = _store(tmp_path)
     first = _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
-    account = store.save("Work", "work@example.test", first)
+    account = store.save("Work", "work@example.test", first, provider=ProviderKind.GOOGLE)
 
     assert store.replace_credentials(account.id, first, '{"token": "refreshed"}') is True
 
@@ -177,11 +184,17 @@ def test_a_token_refresh_is_counted_toward_the_run_and_logged_without_the_token(
 ) -> None:
     store = _store(tmp_path)
     account = store.save(
-        "Work", "work@example.test", _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
+        "Work",
+        "work@example.test",
+        _stored("old-token", datetime.now(UTC) - timedelta(hours=2)),
+        provider=ProviderKind.GOOGLE,
     )
     oauth = _oauth(tmp_path, store)
 
-    with caplog.at_level("INFO", logger="calendar_sync"), GoogleCallStats().measure() as tally:
+    with (
+        caplog.at_level("INFO", logger="calendar_sync"),
+        ContextProviderCallStats().measure() as tally,
+    ):
         oauth.service_for(account.id)
         oauth.service_for(account.id)
 
@@ -213,7 +226,10 @@ def test_an_access_check_whose_token_refresh_fails_explains_what_to_do(
 ) -> None:
     store = _store(tmp_path)
     account = store.save(
-        "Work", "work@example.test", _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
+        "Work",
+        "work@example.test",
+        _stored("old-token", datetime.now(UTC) - timedelta(hours=2)),
+        provider=ProviderKind.GOOGLE,
     )
 
     def refresh(self: Credentials, _request: object) -> None:
@@ -231,7 +247,10 @@ def test_an_access_check_of_a_disconnected_account_still_says_it_is_disconnected
 ) -> None:
     store = _store(tmp_path)
     account = store.save(
-        "Work", "work@example.test", _stored("token", datetime.now(UTC) + timedelta(hours=1))
+        "Work",
+        "work@example.test",
+        _stored("token", datetime.now(UTC) + timedelta(hours=1)),
+        provider=ProviderKind.GOOGLE,
     )
     store.disconnect(account.id)
 

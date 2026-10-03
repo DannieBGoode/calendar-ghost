@@ -15,6 +15,7 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    CalendarAccess,
     ConnectedAccountState,
     DiscoveredCalendar,
     RulePreviewSummary,
@@ -22,6 +23,7 @@ from calendar_sync.application.ports import (
     RunKind,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.rules import CreateSyncRule
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -219,7 +221,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == list(range(1, 17))
+    assert versions == list(range(1, 18))
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -497,11 +499,15 @@ def test_account_deletion_holds_the_write_lock_so_reauthorization_waits_for_it(
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    disconnected = store.save("Personal", "person@example.test", "{}")
+    disconnected = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
     store.disconnect(disconnected.id)
-    connected = store.save("Work", "work@example.test", "{}")
+    connected = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
     factory = SqliteUnitOfWorkFactory(database)
-    reauthorize = Thread(target=store.save, args=("Personal", "person@example.test", "{}"))
+    reauthorize = Thread(
+        target=store.save,
+        args=("Personal", "person@example.test", "{}"),
+        kwargs={"provider": ProviderKind.GOOGLE},
+    )
 
     with factory() as uow:
         assert uow.accounts.delete_disconnected(connected.id) is False
@@ -526,9 +532,9 @@ def test_a_rule_creation_waiting_behind_account_deletion_is_refused_afterwards(
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    deleted = store.save("Personal", "person@example.test", "{}")
+    deleted = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
     store.disconnect(deleted.id)
-    kept = store.save("Work", "work@example.test", "{}")
+    kept = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
     factory = SqliteUnitOfWorkFactory(database)
     late_rule = SyncRule(
         SyncRuleId("late"),
@@ -562,7 +568,7 @@ def test_account_records_report_state_inside_the_unit_of_work(tmp_path: Path) ->
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    account = store.save("Work", "work@example.test", "{}")
+    account = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
 
     with SqliteUnitOfWorkFactory(database)() as uow:
         assert uow.accounts.state(account.id) is ConnectedAccountState.CONNECTED
@@ -578,14 +584,14 @@ class _MovableClock:
 
 
 def _calendar(calendar_id: str, name: str) -> DiscoveredCalendar:
-    return DiscoveredCalendar(calendar_id, name, "owner", primary=False)
+    return DiscoveredCalendar(calendar_id, name, access=CalendarAccess.OWNER, primary=False)
 
 
 def test_calendar_names_record_only_changes_and_go_with_their_account(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    account = store.save("Personal", "person@example.test", "{}")
+    account = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
     clock = _MovableClock(datetime(2026, 9, 1, tzinfo=UTC))
     factory = SqliteUnitOfWorkFactory(database, clock)
     family = CalendarEndpoint(account.id, CalendarId("family"))

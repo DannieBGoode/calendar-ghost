@@ -1,4 +1,5 @@
-"""Counts and times Google calls for the run that makes them.
+"""Counts and times calendar provider calls for the run that makes them. Every adapter reports
+its calls here, so one tally covers a rule whose calendars belong to different providers.
 
 Each measured context keeps its own tally in a context variable, so runs on different threads
 never share one: the scheduler and the Web API run each rule's work on a worker thread, and the
@@ -13,17 +14,18 @@ from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 
 from calendar_sync.application.ports import ProviderCallTally
+from calendar_sync.application.providers import ProviderKind
 
 logger = logging.getLogger(__name__)
 
 # A call this slow is reported even when debug logging is off.
 SLOW_CALL_SECONDS = 10.0
 
-_current: ContextVar[ProviderCallTally | None] = ContextVar("google_call_tally", default=None)
+_current: ContextVar[ProviderCallTally | None] = ContextVar("provider_call_tally", default=None)
 
 
-class GoogleCallStats:
-    """ProviderCallStats for the Google adapter."""
+class ContextProviderCallStats:
+    """ProviderCallStats for every calendar adapter."""
 
     def measure(self) -> AbstractContextManager[ProviderCallTally]:
         return _Measuring(ProviderCallTally())
@@ -45,10 +47,17 @@ class _Measuring(AbstractContextManager[ProviderCallTally]):
         _current.reset(self._token)
 
 
-def record_call(operation: str, status: int | None, seconds: float, *, rate_limited: bool) -> None:
-    """Add one finished Google call to the current run's tally, and log it.
+def record_call(
+    provider: ProviderKind,
+    operation: str,
+    status: int | None,
+    seconds: float,
+    *,
+    rate_limited: bool,
+) -> None:
+    """Add one finished provider call to the current run's tally, and log it.
 
-    `status` is None when no HTTP answer arrived, such as when Google could not be reached.
+    `status` is None when no HTTP answer arrived, such as when the provider could not be reached.
     """
     tally = _current.get()
     if tally is not None:
@@ -60,9 +69,21 @@ def record_call(operation: str, status: int | None, seconds: float, *, rate_limi
         if status is not None and status >= 500:
             tally.server_errors += 1
     shown = "none" if status is None else str(status)
-    logger.debug("google call op=%s status=%s took=%dms", operation, shown, round(seconds * 1000))
+    logger.debug(
+        "provider call provider=%s op=%s status=%s took=%dms",
+        provider.value,
+        operation,
+        shown,
+        round(seconds * 1000),
+    )
     if seconds >= SLOW_CALL_SECONDS:
-        logger.warning("slow google call op=%s status=%s took=%.1fs", operation, shown, seconds)
+        logger.warning(
+            "slow provider call provider=%s op=%s status=%s took=%.1fs",
+            provider.value,
+            operation,
+            shown,
+            seconds,
+        )
 
 
 def record_token_refresh() -> None:

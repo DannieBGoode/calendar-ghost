@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 
 
@@ -27,7 +28,7 @@ class NotACalendarChange(ApplicationError):
 
 
 class RemovalRequiresProvider(ApplicationError):
-    """Deleting projections needs a configured Google adapter."""
+    """Deleting projections needs a configured calendar provider."""
 
 
 class RemovalRequiresAuthorization(ApplicationError):
@@ -58,6 +59,8 @@ class ProviderFailure(ApplicationError):
     retry_after_seconds: int | None = None
     account_id: ConnectedAccountId | None = None
     """The Connected Account whose request failed, when the provider knows it."""
+    provider: ProviderKind | None = None
+    """The provider that failed, when the adapter names it, so incidents can (ADR 0022)."""
 
     @property
     def retryable(self) -> bool:
@@ -67,6 +70,11 @@ class ProviderFailure(ApplicationError):
     def requires_authorization(self) -> bool:
         return self.kind in AUTHORIZATION_FAILURES
 
+    @property
+    def provider_name(self) -> str:
+        """How messages name the failed provider: "Google Calendar", or a neutral phrase."""
+        return self.provider.calendar_name if self.provider else "the calendar provider"
+
     def __str__(self) -> str:
         return self.detail
 
@@ -74,8 +82,8 @@ class ProviderFailure(ApplicationError):
 class ProjectionOwnershipMismatch(ProviderFailure):
     """A destination event exists, but its Managed Origin metadata does not prove ownership."""
 
-    def __init__(self, detail: str) -> None:
-        super().__init__(ProviderFailureKind.PERMANENT, detail)
+    def __init__(self, detail: str, *, provider: ProviderKind | None = None) -> None:
+        super().__init__(ProviderFailureKind.PERMANENT, detail, provider=provider)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,8 +97,8 @@ class RemovalInterrupted(ApplicationError):
     def __str__(self) -> str:
         total = self.processed + self.remaining
         return (
-            f"removal stopped after {self.processed} of {total} projections because Google "
-            f"reported {self.failure.kind.value}; retry to continue"
+            f"removal stopped after {self.processed} of {total} projections because "
+            f"{self.failure.provider_name} reported {self.failure.kind.value}; retry to continue"
         )
 
 

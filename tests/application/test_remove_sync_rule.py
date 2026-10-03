@@ -22,6 +22,7 @@ from calendar_sync.application.ports import (
     ConnectedAccountState,
     ProjectionDeleter,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.rules import CreateSyncRule, ReplaceSyncRuleCalendars
 from calendar_sync.domain.model import (
@@ -224,6 +225,30 @@ def test_interrupted_delete_leaves_rule_inert_and_retry_completes() -> None:
 
     assert result.detached == 2
     assert unit_of_work.state.rules == {}
+
+
+def test_removal_interrupted_names_the_provider_that_failed() -> None:
+    named = RemovalInterrupted(
+        processed=1,
+        remaining=2,
+        failure=ProviderFailure(
+            ProviderFailureKind.AUTHORIZATION, "denied", provider=ProviderKind.GOOGLE
+        ),
+    )
+    neutral = RemovalInterrupted(
+        processed=1,
+        remaining=2,
+        failure=ProviderFailure(ProviderFailureKind.AUTHORIZATION, "denied"),
+    )
+
+    assert str(named) == (
+        "removal stopped after 1 of 3 projections because Google Calendar reported "
+        "authorization; retry to continue"
+    )
+    assert str(neutral) == (
+        "removal stopped after 1 of 3 projections because the calendar provider reported "
+        "authorization; retry to continue"
+    )
 
 
 def test_replacement_rejects_a_duplicate_relationship_before_removing_anything() -> None:
