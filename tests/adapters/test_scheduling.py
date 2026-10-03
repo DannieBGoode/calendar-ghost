@@ -1,10 +1,11 @@
 import asyncio
 import sqlite3
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
 from typing import cast
+from unittest.mock import Mock
 
 import pytest
 
@@ -794,3 +795,56 @@ def test_a_failed_pass_is_logged_and_the_next_interval_runs_again(
         "Scheduled pass failed; trying again at the next interval"
     ]
     assert caplog.records[0].exc_info is not None
+
+
+class SteppingClock:
+    """A clock that moves forward by one minute each time it is read."""
+
+    def __init__(self, start: datetime) -> None:
+        self.moment = start
+
+    def now(self) -> datetime:
+        current = self.moment
+        self.moment = current + timedelta(minutes=1)
+        return current
+
+
+def test_the_scheduler_reports_when_it_started_and_its_last_completed_pass() -> None:
+    clock = SteppingClock(datetime(2026, 10, 3, 9, 0, tzinfo=UTC))
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, RecordingExecuteRule([])),
+        InMemoryUnitOfWorkFactory(),
+        cast(RunHealth, Mock()),
+        clock=clock,
+    )
+
+    before = scheduler.progress()
+    asyncio.run(scheduler.run_once())
+    after = scheduler.progress()
+
+    assert before.running_since == datetime(2026, 10, 3, 9, 0, tzinfo=UTC)
+    assert before.pass_started_at is None
+    assert before.last_completed_at is None
+    assert after.pass_started_at is None
+    assert after.last_completed_at is not None
+    assert after.last_completed_at > after.running_since
+
+
+def test_a_pass_that_raises_is_not_counted_as_completed() -> None:
+    class BrokenUnitOfWork:
+        def __call__(self) -> UnitOfWork:
+            raise sqlite3.OperationalError("database is locked")
+
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, RecordingExecuteRule([])),
+        cast(UnitOfWorkFactory, BrokenUnitOfWork()),
+        cast(RunHealth, Mock()),
+        clock=SteppingClock(datetime(2026, 10, 3, 9, 0, tzinfo=UTC)),
+    )
+
+    with pytest.raises(sqlite3.OperationalError):
+        asyncio.run(scheduler.run_once())
+
+    progress = scheduler.progress()
+    assert progress.pass_started_at is None
+    assert progress.last_completed_at is None

@@ -12,7 +12,13 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.health import RunHealth
-from calendar_sync.application.ports import Clock, RuleRunOutcome, RunKind, UnitOfWorkFactory
+from calendar_sync.application.ports import (
+    Clock,
+    RuleRunOutcome,
+    RunKind,
+    SchedulerProgress,
+    UnitOfWorkFactory,
+)
 from calendar_sync.application.retry import with_retries
 from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.synchronization import ExecuteSyncRule
@@ -41,6 +47,10 @@ class SyncScheduler:
         self._health = health
         self._interval_seconds = interval_seconds
         self._clock = clock or SystemClock()
+        # Read from request threads while the event loop writes; each is one attribute store.
+        self._running_since = self._clock.now()
+        self._pass_started_at: datetime | None = None
+        self._last_completed_at: datetime | None = None
 
     async def run_forever(self) -> None:
         while True:
@@ -54,6 +64,19 @@ class SyncScheduler:
             await asyncio.sleep(self._interval_seconds)
 
     async def run_once(self) -> None:
+        self._pass_started_at = self._clock.now()
+        try:
+            await self._run_pass()
+        finally:
+            self._pass_started_at = None
+        self._last_completed_at = self._clock.now()
+
+    def progress(self) -> SchedulerProgress:
+        return SchedulerProgress(
+            self._running_since, self._pass_started_at, self._last_completed_at
+        )
+
+    async def _run_pass(self) -> None:
         now = self._clock.now()
         today = now.astimezone(UTC).date()
         with self._unit_of_work() as uow:

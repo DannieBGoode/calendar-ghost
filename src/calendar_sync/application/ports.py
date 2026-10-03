@@ -466,6 +466,22 @@ class Clock(Protocol):
     def now(self) -> datetime: ...
 
 
+@dataclass(frozen=True, slots=True)
+class SchedulerProgress:
+    """What the scheduler did last, so Installation Status can see a scheduler that stopped."""
+
+    running_since: datetime
+    """When the scheduler was created; the baseline until its first pass completes."""
+    pass_started_at: datetime | None
+    """When the pass running now started; None between passes."""
+    last_completed_at: datetime | None
+    """When the last pass that raised nothing completed."""
+
+
+class SchedulerHeartbeat(Protocol):
+    def progress(self) -> SchedulerProgress: ...
+
+
 class IdGenerator(Protocol):
     def new(self) -> str: ...
 
