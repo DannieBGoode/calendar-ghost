@@ -9,7 +9,7 @@ const { version } = JSON.parse(readFileSync(new URL("./package.json", import.met
   version: string
 }
 
-const repositoryUrl = "https://github.com/DannieBGoode/google-calendar-sync"
+const repositoryUrl = "https://github.com/DannieBGoode/calendar-ghost"
 
 function currentRevision(): string | undefined {
   try {
