@@ -4,14 +4,13 @@ import {
   CalendarDays,
   Check,
   CheckCircle2,
-  CircleDot,
   ExternalLink,
   KeyRound,
-  ShieldAlert,
 } from "lucide-react"
 
 import { AccountAvatar } from "@/components/account-avatar"
-import { GhostMark } from "@/components/ghost-mark"
+import { ChangeSign } from "@/components/change-sign"
+import { GhostMark, type GhostExpression } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { RuleStatusBadge } from "@/components/rule-commands"
@@ -19,7 +18,13 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { GoogleReturnHelp } from "@/features/settings"
 import { EventWhen, HappenedLine } from "@/components/activity-event"
-import { eventCell, formatClockTime, formatRunTime, whatHappened } from "@/lib/activity"
+import {
+  eventCell,
+  formatClockTime,
+  formatRunTime,
+  whatHappened,
+  type Happened,
+} from "@/lib/activity"
 import { activitySearch } from "@/lib/activity-location"
 import { api, type Dashboard, type Incident, type RecentChange, type RuleSummary } from "@/lib/api"
 import {
@@ -34,9 +39,11 @@ import {
   overviewHealth,
   overviewRules,
   withoutRunningRemovals,
-  type AttentionRule,
+  type HealthAction,
+  type OverviewTone,
+  type RuleProblem,
 } from "@/lib/overview-health"
-import { overviewHeroCallout } from "@/lib/overview-hero"
+import { overviewHeroCallouts } from "@/lib/overview-hero"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
@@ -47,6 +54,20 @@ import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 import { cn } from "@/lib/utils"
 
 const REFRESH_INTERVAL = 60_000
+const GHOST_EXPRESSIONS: Record<OverviewTone, GhostExpression> = {
+  healthy: "happy",
+  review: "concerned",
+  stopped: "crying",
+  waiting: "neutral",
+  paused: "sleepy",
+  setup: "neutral",
+}
+// Where successive calls for help appear around the ghost, so they read as calling out.
+const CALLOUT_POSITIONS = ["beside", "above", "below", "above-left"] as const
+
+function healthActionPath(action: HealthAction): string {
+  return action.ruleId ? appPathForRule(action.ruleId) : `${appPathForView(action.view)}${action.search ?? ""}`
+}
 const OVERVIEW_RULE_LIMIT = 6
 const RECENT_CHANGE_LIMIT = 5
 
@@ -56,24 +77,38 @@ function ruleName(endpoints: RuleEndpoints): string {
   return `${endpoints.source.name} → ${endpoints.destination.name}`
 }
 
-function attentionRule(
+// Incident summaries are written with or without a closing period.
+function sentence(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`
+}
+
+// Google failures a later attempt resolves; the rule keeps retrying without the administrator.
+const WAITING_CATEGORIES = new Set(["rate_limit", "temporary"])
+
+/**
+ * The problems the Overview names by rule: stopped rules, then open incidents on running ones.
+ * Blocked-event incidents are left out because the dashboard's blocked events already cover them.
+ */
+function ruleProblems(
   rules: RuleSummary[],
   incidents: Incident[] | undefined,
   endpoints: Endpoints,
   now: number,
-): AttentionRule | null {
-  const byId = new Map(rules.map((rule) => [rule.id, rule]))
-  const incident = incidents?.find((item) => item.state === "open" && item.rule_id && byId.has(item.rule_id))
-  if (incident?.rule_id) {
-    return {
-      ruleId: incident.rule_id,
-      name: ruleName(endpoints(byId.get(incident.rule_id)!)),
-      detail: `${incident.summary} Since ${relativeTime(incident.opened_at, now)}.`,
+): RuleProblem[] {
+  const open = (incidents ?? []).filter((item) => item.state === "open")
+  const since = (incident: Incident) =>
+    `${sentence(incident.summary)} First seen ${relativeTime(incident.opened_at, now)}.`
+  return rules.flatMap((rule): RuleProblem[] => {
+    const name = ruleName(endpoints(rule))
+    const incident = open.find((item) => item.rule_id === rule.id)
+    if (rule.state === "degraded" || endpoints(rule).disconnected.length > 0) {
+      const detail = incident ? since(incident) : `${lastRunLabel(rule.last_sync, now)}.`
+      return [{ ruleId: rule.id, name, detail, kind: "stopped" }]
     }
-  }
-  const stopped = rules.find((rule) => rule.state === "degraded" || endpoints(rule).disconnected.length > 0)
-  if (!stopped) return null
-  return { ruleId: stopped.id, name: ruleName(endpoints(stopped)), detail: `${lastRunLabel(stopped.last_sync, now)}.` }
+    if (!incident || incident.category === "conflict") return []
+    const kind = WAITING_CATEGORIES.has(incident.category) ? "waiting" : "review"
+    return [{ ruleId: rule.id, name, detail: since(incident), kind }]
+  })
 }
 
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
@@ -99,73 +134,84 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const health = overviewHealth(
     withoutRunningRemovals(dashboard.data, rules.data, removingIds),
     now,
-    attentionRule(rules.data.filter((rule) => !removingIds.has(rule.id)), incidents.data, endpoints, now),
+    ruleProblems(rules.data.filter((rule) => !removingIds.has(rule.id)), incidents.data, endpoints, now),
   )
-  const heroCallout = overviewHeroCallout(health.tone, dashboard.data.blocked_events)
-  const SignalIcon = health.tone === "attention" ? ShieldAlert : health.tone === "healthy" ? CheckCircle2 : CircleDot
-  const action = health.action
-  const firstFact = dashboard.data.enabled_rules > 0
-    ? `${plural(dashboard.data.enabled_rules, "rule")} running`
-    : health.tone === "setup"
-      ? "Setup in three steps"
-      : "No rules running"
-  const secondFact = dashboard.data.last_synced_at
-    ? `Last sync ${relativeTime(dashboard.data.last_synced_at, now)}`
-    : health.tone === "attention"
-      ? "Waiting for recovery"
-      : health.tone === "setup"
-        ? "Nothing written yet"
-        : "First sync within five minutes"
+  const callouts = overviewHeroCallouts(health.tone)
+  const followAction = (action: HealthAction) => (event: React.MouseEvent) => {
+    if (!isPlainLeftClick(event)) return
+    event.preventDefault()
+    if (action.ruleId) onOpenRule(action.ruleId)
+    else onViewChange(action.view, action.search ? { search: action.search } : undefined)
+  }
 
   return (
     <div className="page-section overview-page">
       <section className="health-hero" data-tone={health.tone} aria-labelledby="health-title">
         <div className="health-hero-copy">
-          {health.tone !== "healthy" && (
-            <div className="health-hero-status">
-              <SignalIcon aria-hidden="true" />
-              <span>{health.badge}</span>
-            </div>
-          )}
           <h1 id="health-title">{health.headline}</h1>
-          {health.tone === "attention" && <p className="health-hero-context">{health.title}</p>}
+          {health.title && <p className="health-hero-context">{health.title}</p>}
           <p className="health-hero-detail">{health.detail}</p>
-          <div className="health-hero-facts" aria-label="Synchronization summary">
-            <span><SignalIcon aria-hidden="true" /> {firstFact}</span>
-            <span className="health-hero-separator" aria-hidden="true">•</span>
-            <span>{secondFact}</span>
-          </div>
-          {action && health.tone !== "setup" && (
+          {health.facts.length > 0 && (
+            <ul className="health-hero-facts" aria-label="Synchronization summary">
+              {health.facts.map((fact, index) => (
+                <li key={fact}>
+                  {index === 0 && health.tone === "healthy" && <CheckCircle2 aria-hidden="true" />}
+                  {fact}
+                </li>
+              ))}
+            </ul>
+          )}
+          {health.action && health.tone !== "setup" && (
             <Button className="health-hero-action" asChild>
-              <a
-                href={action.ruleId ? appPathForRule(action.ruleId) : `${appPathForView(action.view)}${action.search ?? ""}`}
-                onClick={(event) => {
-                  if (!isPlainLeftClick(event)) return
-                  event.preventDefault()
-                  if (action.ruleId) onOpenRule(action.ruleId)
-                  else onViewChange(action.view, action.search ? { search: action.search } : undefined)
-                }}
-              >
-                {action.label} <ArrowRight aria-hidden="true" />
+              <a href={healthActionPath(health.action)} onClick={followAction(health.action)}>
+                {health.action.label} <ArrowRight aria-hidden="true" />
               </a>
             </Button>
           )}
+          {health.others.length > 0 && (
+            <div className="health-hero-others">
+              <h2>Also</h2>
+              <ul>
+                {health.others.map((other) => (
+                  <li key={other.summary} data-tone={other.tone}>
+                    <span>{other.summary}</span>
+                    {other.action && (
+                      <a className="text-link" href={healthActionPath(other.action)} onClick={followAction(other.action)}>
+                        {other.action.label} <ArrowRight aria-hidden="true" />
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
         <div className="health-hero-visual" aria-hidden="true">
-          <div className="health-hero-halo" />
-          <div className="health-hero-sparks">
-            <span className="health-hero-spark health-hero-spark-ray health-hero-spark-ray-one" />
-            <span className="health-hero-spark health-hero-spark-ray health-hero-spark-ray-two" />
-            <span className="health-hero-spark health-hero-spark-ray health-hero-spark-ray-three" />
-            <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-one" />
-            <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-two" />
-            <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-three" />
-            <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-four" />
-          </div>
-          <GhostMark className="health-hero-ghost" expression={health.tone === "healthy" ? "happy" : "neutral"} />
-          <div className="health-hero-callout">
-            <strong>{heroCallout.title}</strong>
-            <span>{heroCallout.detail}</span>
+          <div className="health-hero-character">
+            <div className="health-hero-halo" />
+            <div className="health-hero-sparks">
+              <span className="health-hero-spark health-hero-spark-ray health-hero-spark-ray-one" />
+              <span className="health-hero-spark health-hero-spark-ray health-hero-spark-ray-two" />
+              <span className="health-hero-spark health-hero-spark-ray health-hero-spark-ray-three" />
+              <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-one" />
+              <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-two" />
+              <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-three" />
+              <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-four" />
+            </div>
+            <GhostMark className="health-hero-ghost" expression={GHOST_EXPRESSIONS[health.tone]} />
+            <div className="health-hero-callouts" data-calling={callouts.length > 1 ? "" : undefined}>
+              {callouts.map((callout, index) => (
+                <div
+                  key={callout.title}
+                  className="health-hero-callout"
+                  data-position={CALLOUT_POSITIONS[index % CALLOUT_POSITIONS.length]}
+                  style={{ "--call-index": index, "--call-count": callouts.length } as React.CSSProperties}
+                >
+                  <strong>{callout.title}</strong>
+                  {callout.detail && <span>{callout.detail}</span>}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
@@ -275,6 +321,19 @@ function RecentChanges({
   )
 }
 
+// The marker shows what a change did to the destination calendar with the same sign Activity uses,
+// so the line beside it carries only words.
+function ChangeMarker({ happened }: { happened: Happened }) {
+  return (
+    <span className="recent-change-marker" data-tone={happened.tone}>
+      <CalendarDays aria-hidden="true" />
+      <span className="recent-change-sign" data-mark={happened.mark}>
+        <ChangeSign mark={happened.mark} />
+      </span>
+    </span>
+  )
+}
+
 function RecentChangeItem({
   change,
   rule,
@@ -295,16 +354,13 @@ function RecentChangeItem({
   const entry = change.repeats > 1 ? { ...change.entry, repeated: false } : change.entry
   const cell = eventCell(entry, names)
   const happened = whatHappened(entry, names)
-  const markerTone = entry.event?.cancelled ? "cancelled" : happened.tone
   const since = new Date(change.first_occurred_at).toDateString() === new Date(now).toDateString()
     ? formatClockTime(change.first_occurred_at)
     : formatRunTime(change.first_occurred_at, new Date(now))
   const search = activitySearch({ ruleId: entry.rule_id, show: "", entryId: entry.id })
   return (
     <li className="recent-change-item">
-      <span className="recent-change-marker" data-tone={markerTone}>
-        <CalendarDays aria-hidden="true" />
-      </span>
+      <ChangeMarker happened={happened} />
       <time dateTime={entry.occurred_at} title={new Date(entry.occurred_at).toLocaleString()}>
         {relativeTime(entry.occurred_at, now)}
       </time>
@@ -321,7 +377,7 @@ function RecentChangeItem({
           {cell.state === "event" ? cell.title : cell.label}
         </a>
         {cell.state === "event" ? <EventWhen cell={cell} /> : cell.note && <span className="activity-event-when">{cell.note}</span>}
-        <HappenedLine happened={happened} suffix={change.repeats > 1 ? `${change.repeats} times since ${since}` : undefined} />
+        <HappenedLine happened={happened} signed={false} suffix={change.repeats > 1 ? `${change.repeats} times since ${since}` : undefined} />
         {rule && endpoints ? (
           <a
             className="recent-change-rule"

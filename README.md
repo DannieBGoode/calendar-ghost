@@ -38,21 +38,31 @@ before deploying it with real calendars.
 ## See it in action
 
 These screenshots use synthetic data and local generated avatar portraits from the development
-preview. They contain no personal Google Calendar content and show the main self-hosted workflow:
-see rule health, inspect Activity, and manage directional rules. The preview follows one fictional
-person, Sam, across three context-specific Google identities: `sam@personal.example`,
-`sam@family.example`, and `sam@work.example`. The portraits keep him recognizable while the
-accessories and companion make each part of his life distinct.
+preview, and follow your GitHub light or dark appearance. They contain no personal Google Calendar
+content and show the main self-hosted workflow: see rule health, inspect Activity, and manage
+directional rules. The preview follows one fictional person, Sam, across three context-specific
+Google identities: `sam@personal.example`, `sam@family.example`, and `sam@work.example`. The
+portraits keep him recognizable while the accessories and companion make each part of his life
+distinct.
 
 <p align="center">
-  <img src="docs/assets/calendar-ghost-overview.png" alt="Calendar Ghost overview showing rule health and recent changes" width="100%">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/calendar-ghost-overview-dark.png">
+  <img src="docs/assets/calendar-ghost-overview-light.png" alt="Calendar Ghost Overview showing healthy synchronization, rules, and recent changes" width="100%">
+</picture>
 </p>
-<p align="center"><em>Overview: rule health, attention items, and recent changes.</em></p>
+<p align="center"><em>Overview: synchronization health, rules, and recent changes marked + added, − removed, ~ changed.</em></p>
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/calendar-ghost-activity.png" alt="Calendar Ghost Activity showing event decisions and filters" width="100%"></td>
-    <td width="50%"><img src="docs/assets/calendar-ghost-rules.png" alt="Calendar Ghost rules showing source and destination calendars" width="100%"></td>
+    <td width="50%"><picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/calendar-ghost-activity-dark.png">
+      <img src="docs/assets/calendar-ghost-activity-light.png" alt="Calendar Ghost Activity showing event decisions and filters" width="100%">
+    </picture></td>
+    <td width="50%"><picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/calendar-ghost-rules-dark.png">
+      <img src="docs/assets/calendar-ghost-rules-light.png" alt="Calendar Ghost rules showing source and destination calendars" width="100%">
+    </picture></td>
   </tr>
   <tr>
     <td align="center"><em>Activity explains what each rule did.</em></td>
@@ -174,10 +184,27 @@ Open <http://localhost:8000>, create the local administrator, and follow the thr
 2. Create a directional rule and choose its privacy, all-day, Maybe, and unanswered-invitation policies.
 3. Preview the rule, inspect the result, and enable it.
 
+The **Overview** leads with one plain-language health state and at most one next action:
+
+| State | When | What to do |
+| --- | --- | --- |
+| Stopped | A rule is suspended, such as when a Google account's authorization expired | Reauthorize the account or review the rule |
+| Needs a look | Rules keep running, but events were blocked or a problem kept happening | See the blocked events or the rule |
+| Waiting for Google | Google is limiting or failing requests; the rule retries by itself | Wait; check Google's status if it lasts more than a day |
+| Paused | Every rule that synced before is paused | Start a rule again when you want |
+| Setup | Nothing is synchronizing yet | Follow the three Getting started steps |
+| Healthy | Every running rule is up to date | Nothing |
+
+When several problems are open at once, the most urgent leads and the rest are listed under it.
+Below the health state, the Overview lists the rules and the latest changes, each marked with what
+it did to the destination calendar: **+** added (including an event put back), **−** removed,
+**~** changed, or **×** blocked.
+
 **Activity** is a table of what each rule did, grouped by day: the time, the event and when it
 happens, what happened as what Calendar Ghost observed and what it did about it (such as
 "Cancelled in Personal → removed from Work" or "Missing from Work → put back again"), and the rule.
-Recurring events say whether the entry was about the whole series or one occurrence. A blocked
+Each outcome carries the same sign as on the Overview, with ✓ for an event already up to date and
+⊘ for one skipped. Recurring events say whether the entry was about the whole series or one occurrence. A blocked
 entry says what is now different in the destination calendar and whether anything needs doing. Each entry records its event's title and time when the run makes the decision,
 so Activity names events without asking Google and shows when an event was renamed. By default Activity lists changes, skips, and blocks; **All decisions** and **No change needed** also list
 the checks that found an event already up to date. Choose a rule from the picker, which shows each
@@ -201,7 +228,8 @@ account, check its Calendar API access, or disconnect it. **Check access** verif
 and event permissions with read-only requests and reports how many visible calendars can be used as
 destinations. Disconnecting removes stored Google credentials and degrades any enabled rule that
 uses the identity; mappings, Managed Projections, and incremental positions are preserved for safe
-reauthorization. Accounts connected before profile photos were supported show initials until they
+reauthorization. A disconnected account says how many of its rules stopped and offers
+**Reauthorize account**, which is disabled until Google OAuth is configured. Accounts connected before profile photos were supported show initials until they
 are connected again with **Connect Google account**, which updates the existing identity in place.
 
 Use **Settings → Storage** to see the database size, the number of Activity entries, the oldest

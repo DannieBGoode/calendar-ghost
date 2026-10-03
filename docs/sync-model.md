@@ -203,7 +203,7 @@ Three consecutive scheduled failures open one deduplicated incident, resolved by
 successful scheduled run. Only scheduled runs report their success to rule health, so Sync Now and
 Reconcile Now never resolve it. Each resolved incident records why it resolved (`sync_succeeded`,
 `blocks_cleared`, or `rule_removed`, SQLite migration 12), and reopening one resets its opening
-time, so "Since" on the Overview measures only the current episode. An authorization failure
+time, so "First seen" on the Overview measures only the current episode. An authorization failure
 opens the Incident at once and names the Connected Account Google rejected; the preview that
 recovers a stopped rule refreshes it with any other account whose authorization it finds lost,
 so Activity keeps pointing at the account still to reauthorize.

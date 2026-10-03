@@ -1,19 +1,7 @@
-import {
-  ArrowRight,
-  Check,
-  CircleSlash,
-  Pin,
-  Plus,
-  RefreshCw,
-  Repeat,
-  Settings2,
-  ShieldAlert,
-  Trash2,
-  Undo2,
-  type LucideIcon,
-} from "lucide-react"
+import { ArrowRight, Repeat } from "lucide-react"
 
-import type { EventCell, Happened, HappenedIcon } from "@/lib/activity"
+import { ChangeSign } from "@/components/change-sign"
+import type { EventCell, Happened } from "@/lib/activity"
 
 const SCOPE_LABELS = { series: "Whole series", occurrence: "One occurrence" } as const
 
@@ -30,24 +18,24 @@ export function EventWhen({ cell }: { cell: Extract<EventCell, { state: "event" 
   )
 }
 
-const HAPPENED_ICONS: Record<HappenedIcon, LucideIcon> = {
-  added: Plus,
-  updated: RefreshCw,
-  repaired: Undo2,
-  removed: Trash2,
-  kept: Pin,
-  current: Check,
-  skipped: CircleSlash,
-  blocked: ShieldAlert,
-  rule: Settings2,
-}
-
 /** What was observed, then what Calendar Ghost did; the outcome carries the tone. */
-export function HappenedLine({ happened, suffix }: { happened: Happened; suffix?: string }) {
-  const Icon = HAPPENED_ICONS[happened.icon]
+export function HappenedLine({
+  happened,
+  suffix,
+  signed = true,
+}: {
+  happened: Happened
+  suffix?: string
+  /** False where a marker beside the line already shows the sign. */
+  signed?: boolean
+}) {
   return (
     <span className="activity-happened" data-tone={happened.tone}>
-      <Icon aria-hidden="true" />
+      {signed && (
+        <span className="activity-sign" data-mark={happened.mark}>
+          <ChangeSign mark={happened.mark} />
+        </span>
+      )}
       <span>
         {happened.trigger && (
           <>
