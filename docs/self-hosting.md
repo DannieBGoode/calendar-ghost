@@ -99,7 +99,7 @@ CALENDAR_SYNC_GOOGLE_CLIENT_ID=PASTE_GOOGLE_CLIENT_ID_HERE
 CALENDAR_SYNC_GOOGLE_CLIENT_SECRET=PASTE_GOOGLE_CLIENT_SECRET_HERE
 CALENDAR_SYNC_GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/oauth/google/callback
 # Optional: make the UI's Source link point to the exact checkout being built.
-# CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/google-calendar-sync/tree/<commit-or-tag>
+# CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/calendar-ghost/tree/<commit-or-tag>
 ```
 
 The master key encrypts stored Google credentials and seals sensitive event-history values. Back it

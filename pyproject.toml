@@ -3,7 +3,7 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "google-calendar-sync"
+name = "calendar-ghost"
 version = "0.1.1"
 description = "Calendar Ghost: self-hosted, one-way Google Calendar synchronization"
 readme = "README.md"

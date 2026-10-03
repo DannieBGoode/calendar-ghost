@@ -23,7 +23,7 @@ revision; CI and Docker builds should set `CALENDAR_GHOST_SOURCE_URL` to the imm
 release tag URL for the source being built:
 
 ```sh
-CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/google-calendar-sync/tree/<commit-or-tag> \
+CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/calendar-ghost/tree/<commit-or-tag> \
   npm --prefix web run build
 ```
 
