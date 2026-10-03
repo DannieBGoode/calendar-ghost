@@ -206,8 +206,7 @@ The single local identity authorized to configure the installation, connected ac
 _Avoid_: User, owner, superuser
 
 **Public Health Status**:
-The minimal unauthenticated indication that the service is running. Calendar, account, rule, OAuth, audit, and incident details require an administrator session. Installation Status is its
-authenticated counterpart.
+The minimal unauthenticated indication that the service is running. Calendar, account, rule, OAuth, audit, and incident details require an administrator session. Installation Status is its authenticated counterpart.
 _Avoid_: Public dashboard, anonymous status page
 
 **Integration Token**:
