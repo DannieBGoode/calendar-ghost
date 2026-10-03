@@ -163,8 +163,7 @@ class FakeCalendars:
         if master.status is not EventStatus.CONFIRMED:
             return False
         return any(
-            policy.exclusion(self._instance(master, start)) is None
-            for start in self.live_starts(series)
+            policy.projects(self._instance(master, start)) for start in self.live_starts(series)
         )
 
     def occurrence_exceptions(
@@ -174,32 +173,11 @@ class FakeCalendars:
         master = self.events.get(series)
         if master is None or master.status is not EventStatus.CONFIRMED:
             return ()
-        exceptions = []
-        for instance in self.instances_of(series):
-            assert instance.occurrence is not None
-            start = instance.occurrence.original_start
-            reference = EventRef(
-                series.calendar, EventId(instance_id(series.event_id.value, start))
-            )
-            regular = self._expand(master, start, reference)
-            edited = instance.status is EventStatus.CONFIRMED and (
-                instance.time,
-                instance.title,
-                instance.description,
-                instance.location,
-                instance.response,
-            ) != (
-                regular.time,
-                regular.title,
-                regular.description,
-                regular.location,
-                regular.response,
-            )
-            if (instance.status is EventStatus.CANCELLED or edited) and instance.occurrence_reaches(
-                not_ended_before
-            ):
-                exceptions.append(instance)
-        return tuple(exceptions)
+        return tuple(
+            instance
+            for instance in self.instances_of(series)
+            if instance.is_exception_of(master) and instance.occurrence_reaches(not_ended_before)
+        )
 
     def _instance(self, master: CalendarEvent, start: OccurrenceStart) -> CalendarEvent:
         """The occurrence as stored, or as the master expands it."""

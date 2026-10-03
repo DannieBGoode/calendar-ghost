@@ -18,7 +18,6 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.ports import Clock, CreatedProjection, ProviderChangeSet
 from calendar_sync.domain.model import (
-    AllDayRange,
     CalendarEndpoint,
     CalendarEvent,
     ConnectedAccountId,
@@ -28,9 +27,7 @@ from calendar_sync.domain.model import (
     ManagedOrigin,
     OccurrenceStart,
     SyncRuleId,
-    TimedInterval,
     TransformationPolicy,
-    occurrence_start,
 )
 from calendar_sync.infrastructure.google.instrumentation import record_call
 from calendar_sync.infrastructure.google.translation import (
@@ -390,7 +387,7 @@ class GoogleCalendarProvider:
                 # showDeleted=False should omit cancelled instances; the status is checked anyway,
                 # because counting one as live would recreate a series that can only be cancelled.
                 if any(
-                    _projected(to_domain_event(item, series.calendar), policy)
+                    policy.projects(to_domain_event(item, series.calendar))
                     for item in response.get("items", [])
                 ):
                     return True
@@ -431,7 +428,7 @@ class GoogleCalendarProvider:
                 response = self._call("events.instances", events_api.instances(**parameters))
                 for item in response.get("items", []):
                     instance = to_domain_event(item, series.calendar)
-                    if _is_exception(instance, master) and instance.occurrence_reaches(
+                    if instance.is_exception_of(master) and instance.occurrence_reaches(
                         not_ended_before
                     ):
                         exceptions.append(instance)
@@ -541,40 +538,6 @@ class GoogleCalendarProvider:
                 "Google occurrence does not carry compatible ownership metadata",
             )
         return instance
-
-
-def _projected(instance: CalendarEvent, policy: TransformationPolicy) -> bool:
-    """A live instance the rule projects; one it excludes is cancelled in the destination."""
-    return instance.status is EventStatus.CONFIRMED and policy.exclusion(instance) is None
-
-
-def _is_exception(instance: CalendarEvent, master: CalendarEvent) -> bool:
-    """An instance that is cancelled or differs from the series' regular occurrence."""
-    identity = instance.occurrence
-    if identity is None or identity.series_event_id != master.reference.event_id:
-        return False
-    if instance.status is EventStatus.CANCELLED:
-        return True
-    if (instance.title, instance.description, instance.location, instance.response) != (
-        master.title,
-        master.description,
-        master.location,
-        master.response,
-    ):
-        return True
-    time, regular, original = instance.time, master.time, identity.original_start
-    if isinstance(time, TimedInterval) and isinstance(regular, TimedInterval):
-        return (
-            occurrence_start(time.starts_at) != original
-            or time.ends_at - time.starts_at != regular.ends_at - regular.starts_at
-        )
-    if isinstance(time, AllDayRange) and isinstance(regular, AllDayRange):
-        return (
-            time.starts_on != original
-            or time.ends_before - time.starts_on != regular.ends_before - regular.starts_on
-        )
-    # The occurrence switched between timed and all-day.
-    return True
 
 
 def _as_instant(start: OccurrenceStart) -> datetime:
