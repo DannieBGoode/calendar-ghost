@@ -26,6 +26,7 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    CalendarAccess,
     CalendarProvider,
     DiscoveredCalendar,
     IncidentReport,
@@ -72,6 +73,7 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.google.oauth import discovered_calendar
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
@@ -730,8 +732,8 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
         uow.commit()
     listed = Mock(
         return_value=[
-            DiscoveredCalendar("family", "Family", writable=True, primary=False),
-            DiscoveredCalendar("work", "Work", writable=True, primary=False),
+            DiscoveredCalendar("family", "Family", access=CalendarAccess.OWNER, primary=False),
+            DiscoveredCalendar("work", "Work", access=CalendarAccess.OWNER, primary=False),
         ]
     )
     monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
@@ -751,7 +753,7 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
         after = names(client.get("/api/v1/rules"))
         # A renamed calendar is renamed; one Google no longer lists keeps its last name.
         listed.return_value = [
-            DiscoveredCalendar("family", "Household", writable=True, primary=False)
+            DiscoveredCalendar("family", "Household", access=CalendarAccess.OWNER, primary=False)
         ]
         client.get(f"/api/v1/accounts/{account.id.value}/calendars")
         renamed = names(client.get("/api/v1/rules/rule-1"))
@@ -775,8 +777,10 @@ def test_discovered_calendars_say_whether_rules_can_write_to_them(
     )
     listed = Mock(
         return_value=[
-            DiscoveredCalendar("family", "Family", writable=True, primary=True),
-            DiscoveredCalendar("holidays", "Holidays", writable=False, primary=False),
+            DiscoveredCalendar("family", "Family", access=CalendarAccess.OWNER, primary=True),
+            DiscoveredCalendar(
+                "holidays", "Holidays", access=CalendarAccess.FREE_BUSY, primary=False
+            ),
         ]
     )
     monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
@@ -789,14 +793,72 @@ def test_discovered_calendars_say_whether_rules_can_write_to_them(
         {
             "id": "family",
             "summary": "Family",
-            "access_role": "writer",
+            "access_role": "owner",
             "writable": True,
             "primary": True,
         },
         {
             "id": "holidays",
             "summary": "Holidays",
+            "access_role": "freeBusyReader",
+            "writable": False,
+            "primary": False,
+        },
+    ]
+
+
+def test_discovered_calendars_report_googles_original_access_role(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every Google access role survives discovery as the exact legacy `access_role` string."""
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    assert adapters.accounts is not None
+    assert adapters.google_oauth is not None
+    account = adapters.accounts.save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    listed = Mock(
+        return_value=[
+            discovered_calendar({"id": "owned", "summary": "Owned", "accessRole": "owner"}),
+            discovered_calendar({"id": "shared", "summary": "Shared", "accessRole": "writer"}),
+            discovered_calendar({"id": "viewed", "summary": "Viewed", "accessRole": "reader"}),
+            discovered_calendar({"id": "busy", "summary": "Busy", "accessRole": "freeBusyReader"}),
+        ]
+    )
+    monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
+
+    assert response.json() == [
+        {
+            "id": "owned",
+            "summary": "Owned",
+            "access_role": "owner",
+            "writable": True,
+            "primary": False,
+        },
+        {
+            "id": "shared",
+            "summary": "Shared",
+            "access_role": "writer",
+            "writable": True,
+            "primary": False,
+        },
+        {
+            "id": "viewed",
+            "summary": "Viewed",
             "access_role": "reader",
+            "writable": False,
+            "primary": False,
+        },
+        {
+            "id": "busy",
+            "summary": "Busy",
+            "access_role": "freeBusyReader",
             "writable": False,
             "primary": False,
         },

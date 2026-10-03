@@ -38,6 +38,7 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    CalendarAccess,
     CalendarProvider,
     ConnectedAccount,
     ConnectedAccountRepository,
@@ -137,13 +138,17 @@ ACCOUNTS = (
 )
 CALENDARS = {
     "preview-sam-personal": [
-        DiscoveredCalendar("sam@personal.example", "Personal", writable=True, primary=True)
+        DiscoveredCalendar(
+            "sam@personal.example", "Personal", access=CalendarAccess.OWNER, primary=True
+        )
     ],
     "preview-sam-family": [
-        DiscoveredCalendar("sam@family.example", "Family", writable=True, primary=True)
+        DiscoveredCalendar(
+            "sam@family.example", "Family", access=CalendarAccess.OWNER, primary=True
+        )
     ],
     "preview-sam-work": [
-        DiscoveredCalendar("sam@work.example", "Work", writable=True, primary=True)
+        DiscoveredCalendar("sam@work.example", "Work", access=CalendarAccess.OWNER, primary=True)
     ],
 }
 

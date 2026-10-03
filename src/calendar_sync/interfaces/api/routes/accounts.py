@@ -22,7 +22,7 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.ports import AccountAuthorization, AccountCalendars
+from calendar_sync.application.ports import AccountAuthorization, AccountCalendars, CalendarAccess
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.interfaces.api.dependencies import app_services, available, require_admin
 from calendar_sync.interfaces.api.schemas import (
@@ -180,12 +180,21 @@ def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCa
         DiscoveredCalendarResponse(
             id=calendar.id,
             summary=calendar.summary,
-            access_role="writer" if calendar.writable else "reader",
+            access_role=_LEGACY_ACCESS_ROLES[calendar.access],
             writable=calendar.writable,
             primary=calendar.primary,
         )
         for calendar in discovered
     ]
+
+
+# access_role's values the field has always had, before CalendarAccess existed (ADR 0022).
+_LEGACY_ACCESS_ROLES: dict[CalendarAccess, str] = {
+    CalendarAccess.OWNER: "owner",
+    CalendarAccess.WRITER: "writer",
+    CalendarAccess.READER: "reader",
+    CalendarAccess.FREE_BUSY: "freeBusyReader",
+}
 
 
 @router.post(

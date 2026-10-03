@@ -1,6 +1,6 @@
 import pytest
 
-from calendar_sync.application.ports import AuditAction, AuditOutcome
+from calendar_sync.application.ports import AuditAction, AuditOutcome, CalendarAccess
 from calendar_sync.domain.model import SyncAction
 
 
@@ -38,3 +38,18 @@ def test_every_sync_decision_records_its_own_action(action: SyncAction) -> None:
 )
 def test_a_sync_decision_records_its_outcome(action: SyncAction, outcome: AuditOutcome) -> None:
     assert AuditOutcome.of(action) is outcome
+
+
+@pytest.mark.parametrize(
+    ("access", "writable"),
+    [
+        (CalendarAccess.OWNER, True),
+        (CalendarAccess.WRITER, True),
+        (CalendarAccess.READER, False),
+        (CalendarAccess.FREE_BUSY, False),
+    ],
+)
+def test_calendar_access_says_whether_it_lets_rules_write(
+    access: CalendarAccess, writable: bool
+) -> None:
+    assert access.writable is writable

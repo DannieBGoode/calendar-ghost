@@ -666,13 +666,33 @@ class ConnectedAccountRepository(AccountAuthorizations, Protocol):
         ...
 
 
+class CalendarAccess(StrEnum):
+    """What a Connected Account may do with a calendar, in provider-neutral terms."""
+
+    OWNER = "owner"
+    WRITER = "writer"
+    READER = "reader"
+    FREE_BUSY = "free_busy"
+    """Sees when the calendar is busy, but not what its events are."""
+
+    @property
+    def writable(self) -> bool:
+        """Whether rules may write projections to a calendar with this access."""
+        return self in {CalendarAccess.OWNER, CalendarAccess.WRITER}
+
+
 @dataclass(frozen=True, slots=True)
 class DiscoveredCalendar:
     id: str
     summary: str
-    writable: bool
-    """Whether rules may write projections to it, as its provider grants this account."""
+    access: CalendarAccess
+    """What this Connected Account may do with it, in provider-neutral terms."""
     primary: bool
+
+    @property
+    def writable(self) -> bool:
+        """Whether rules may write projections to it, as its provider grants this account."""
+        return self.access.writable
 
 
 @dataclass(frozen=True, slots=True)

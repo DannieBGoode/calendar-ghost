@@ -15,6 +15,7 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    CalendarAccess,
     ConnectedAccountState,
     DiscoveredCalendar,
     RulePreviewSummary,
@@ -583,7 +584,7 @@ class _MovableClock:
 
 
 def _calendar(calendar_id: str, name: str) -> DiscoveredCalendar:
-    return DiscoveredCalendar(calendar_id, name, writable=True, primary=False)
+    return DiscoveredCalendar(calendar_id, name, access=CalendarAccess.OWNER, primary=False)
 
 
 def test_calendar_names_record_only_changes_and_go_with_their_account(tmp_path: Path) -> None:

@@ -12,7 +12,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import AccountCalendars, DiscoveredCalendar
+from calendar_sync.application.ports import AccountCalendars, CalendarAccess, DiscoveredCalendar
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.providers.routing import (
@@ -83,7 +83,7 @@ def test_a_provider_this_installation_has_not_configured_stops_the_rule() -> Non
 
 
 def test_account_calendars_reach_the_accounts_provider() -> None:
-    family = DiscoveredCalendar("family", "Family", writable=True, primary=True)
+    family = DiscoveredCalendar("family", "Family", access=CalendarAccess.OWNER, primary=True)
     google = Mock()
     google.calendars.return_value = (family,)
     router = RoutingAccountCalendars(

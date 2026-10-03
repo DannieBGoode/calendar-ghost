@@ -28,7 +28,12 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.ports import AccountAccess, ConnectedAccount, DiscoveredCalendar
+from calendar_sync.application.ports import (
+    AccountAccess,
+    CalendarAccess,
+    ConnectedAccount,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
@@ -45,8 +50,16 @@ CALENDAR_SCOPES = (
 # without it still connects, and the account falls back to initials.
 PROFILE_SCOPES = ("openid", "https://www.googleapis.com/auth/userinfo.profile")
 OAUTH_SCOPES = CALENDAR_SCOPES + PROFILE_SCOPES
-WRITABLE_ACCESS_ROLES = frozenset({"owner", "writer"})
-"""Google access roles that let a Connected Account write events to a calendar."""
+GOOGLE_ACCESS_ROLES: Mapping[str, CalendarAccess] = {
+    "owner": CalendarAccess.OWNER,
+    "writer": CalendarAccess.WRITER,
+    "reader": CalendarAccess.READER,
+    "freeBusyReader": CalendarAccess.FREE_BUSY,
+}
+"""Google's `accessRole` values, translated to provider-neutral access.
+
+A missing or unknown role maps to `READER`: conservative, because it is never writable.
+"""
 # Google may grant fewer scopes than requested (a declined profile) or more (previously granted
 # scopes). oauthlib rejects any difference unless relaxed; complete() enforces Calendar scopes.
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
@@ -201,7 +214,7 @@ class GoogleOAuthService:
         return AccountAccess(
             calendars_visible=len(calendars),
             writable_calendars=sum(
-                1 for item in calendars if item.get("accessRole") in WRITABLE_ACCESS_ROLES
+                1 for item in calendars if _google_access(item.get("accessRole")).writable
             ),
         )
 
@@ -298,9 +311,16 @@ def discovered_calendar(item: Mapping[str, Any]) -> DiscoveredCalendar:
     return DiscoveredCalendar(
         id=str(item["id"]),
         summary=str(item.get("summary") or item["id"]),
-        writable=item.get("accessRole") in WRITABLE_ACCESS_ROLES,
+        access=_google_access(item.get("accessRole")),
         primary=bool(item.get("primary")),
     )
+
+
+def _google_access(role: object) -> CalendarAccess:
+    """`role`'s provider-neutral access; a missing or unknown role is never writable."""
+    if isinstance(role, str):
+        return GOOGLE_ACCESS_ROLES.get(role, CalendarAccess.READER)
+    return CalendarAccess.READER
 
 
 def _profile_claims(id_token: object) -> dict[str, Any]:
