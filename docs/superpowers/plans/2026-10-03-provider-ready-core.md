@@ -277,7 +277,7 @@ In `src/calendar_sync/infrastructure/google/provider.py`:
 
 In `tests/fake_calendar.py`, change the end of `has_live_occurrences` to:
 
-```python
+```text
         return any(
             policy.projects(self._instance(master, start)) for start in self.live_starts(series)
         )
@@ -685,7 +685,13 @@ Append to `tests/adapters/test_google_oauth_storage.py`, and import `discovered_
 ```python
 @pytest.mark.parametrize(
     ("role", "writable"),
-    [("owner", True), ("writer", True), ("reader", False), ("freeBusyReader", False), (None, False)],
+    [
+        ("owner", True),
+        ("writer", True),
+        ("reader", False),
+        ("freeBusyReader", False),
+        (None, False),
+    ],
 )
 def test_google_access_roles_decide_whether_a_calendar_is_writable(
     role: str | None, writable: bool
@@ -1429,7 +1435,7 @@ In `bootstrap/container.py`:
 
 - In `compose`, set `account_calendars=adapters.account_calendars` and:
 
-```python
+```text
         discover_calendars=(
             DiscoverCalendars(adapters.account_calendars, unit_of_work)
             if adapters.account_calendars
@@ -1738,9 +1744,7 @@ class CalendarProviderContract:
         assert second.reference == first.reference
         assert [projection.reference for projection in listed] == [first.reference]
 
-    def test_only_a_known_operation_key_finds_a_projection(
-        self, harness: ProviderHarness
-    ) -> None:
+    def test_only_a_known_operation_key_finds_a_projection(self, harness: ProviderHarness) -> None:
         created = _create(harness, "key-1")
 
         found = harness.provider.find_projection(DESTINATION, "key-1")
@@ -1880,7 +1884,7 @@ Expected: FAIL. `ProviderFailure` is raised, not `ProjectionOwnershipMismatch`.
 In `google/provider.py` `update_projection`, replace the `raise ProviderFailure(...)` for
 incompatible ownership with:
 
-```python
+```text
             raise ProjectionOwnershipMismatch(
                 "Google event does not carry compatible ownership metadata"
             )
