@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { overviewPreview } from "./overview-preview"
+import { overviewPreview, previewActivityEntries, previewIncidents, previewStorage } from "./overview-preview"
 
 describe("overview preview", () => {
   it("provides a healthy dashboard with realistic rules and recent changes", () => {
@@ -26,5 +26,21 @@ describe("overview preview", () => {
     expect(endpoints.source).toMatchObject({ name: "Daniel IOG Calendar", account: { email: "daniel@example.test" } })
     expect(endpoints.destination.name).toBe("IO Clone")
     expect(endpoints.disconnected).toEqual([])
+  })
+
+  it("provides representative activity, incident, and storage records", () => {
+    const now = Date.parse("2026-10-03T10:00:00.000Z")
+    const entries = previewActivityEntries(now, { categories: ["changed", "skipped", "blocked"] })
+
+    expect(entries.map((entry) => entry.category)).toEqual([
+      "changed",
+      "changed",
+      "skipped",
+      "blocked",
+      "changed",
+    ])
+    expect(entries.find((entry) => entry.changed_fields)?.event?.title).toBe("Quarterly planning")
+    expect(previewIncidents(now)).toHaveLength(2)
+    expect(previewStorage().database.activity_entries).toBeGreaterThan(0)
   })
 })

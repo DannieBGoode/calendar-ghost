@@ -25,8 +25,9 @@ export function activityStateFromSearch(search: string): ActivityLocationState {
   }
 }
 
-export function activitySearch(state: ActivityLocationState): string {
+export function activitySearch(state: ActivityLocationState, options: { preview?: boolean } = {}): string {
   const params = new URLSearchParams()
+  if (options.preview) params.set("preview", "1")
   if (state.ruleId) params.set("rule", state.ruleId)
   if (state.show) params.set("show", state.show)
   if (state.query?.trim()) params.set("q", state.query.trim())

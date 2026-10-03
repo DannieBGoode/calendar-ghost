@@ -1,11 +1,19 @@
+import { ACTIVITY_PAGE_SIZE } from "./api"
 import type {
+  ActivityCategory,
+  ActivityEvent,
+  ActivityFilters,
   AuditEntry,
   ConnectedAccount,
   Dashboard,
   DiscoveredCalendar,
+  Incident,
   RecentChange,
+  RuleDetail,
   RuleSummary,
   RunOutcome,
+  SourceChange,
+  StorageUsage,
 } from "./api"
 import type { RuleEndpoints } from "./use-rule-endpoints"
 
@@ -57,6 +65,16 @@ const RULE_IDS = {
   work: "preview-rule-work",
   personal: "preview-rule-personal",
 } as const
+
+export const PREVIEW_RULE_IDS = RULE_IDS
+
+export function previewAccounts(): ConnectedAccount[] {
+  return ACCOUNTS
+}
+
+export function previewCalendars(accountId: string): DiscoveredCalendar[] {
+  return CALENDARS[accountId] ?? []
+}
 
 function atMinutesAgo(now: number, minutes: number): string {
   return new Date(now - minutes * 60_000).toISOString()
@@ -150,7 +168,7 @@ function recentChange(id: number, ruleId: string, occurredAt: string, firstOccur
 }
 
 export function overviewPreview(now: number = Date.now()): OverviewPreview {
-  const latestSync = atMinutesAgo(now, 2)
+  const latestSync = atMinutesAgo(now, 0)
   const workRule = previewRule(
     RULE_IDS.work,
     { connected_account_id: DANIEL_ACCOUNT.id, calendar_id: "daniel@example.test", calendar_name: "Daniel IOG Calendar" },
@@ -194,4 +212,242 @@ export function overviewPreview(now: number = Date.now()): OverviewPreview {
     return { source: side(rule.source), destination: side(rule.destination), disconnected: [] }
   }
   return { dashboard, rules, recentChanges, endpoints }
+}
+
+type PreviewEntryOptions = {
+  id: number
+  ruleId: string
+  category: ActivityCategory
+  action: string
+  outcome: string
+  reason: string
+  title: string
+  hoursAgo: number
+  recurring?: boolean
+  cancelled?: boolean
+  changedFields?: string[] | null
+  detail?: string
+}
+
+function previewEntry(now: number, options: PreviewEntryOptions): AuditEntry {
+  const starts = atEventTime(now, options.hoursAgo)
+  const ends = new Date(Date.parse(starts) + 60 * 60_000).toISOString()
+  return {
+    id: options.id,
+    run_id: `preview-run-${Math.floor(options.id / 10)}`,
+    occurred_at: atMinutesAgo(now, options.hoursAgo * 60 + 8),
+    rule_id: options.ruleId,
+    action: options.action,
+    outcome: options.outcome,
+    category: options.category,
+    reason: options.reason,
+    detail: options.detail ?? "",
+    source_event_id: `preview-source-${options.id}`,
+    destination_event_id: `preview-projection-${options.id}`,
+    event: {
+      title: options.title,
+      all_day: false,
+      starts,
+      ends,
+      recurring: options.recurring ?? false,
+      cancelled: options.cancelled ?? false,
+      renamed_from: options.reason === "source_changed" ? "Planning session" : null,
+      moved_from: options.reason === "source_changed"
+        ? { all_day: false, starts: atEventTime(now, options.hoursAgo + 1), ends: atEventTime(now, options.hoursAgo) }
+        : null,
+    },
+    repeated: false,
+    changed_fields: options.changedFields ?? null,
+  }
+}
+
+export function previewActivityEntries(now: number = Date.now(), filters: ActivityFilters = {}): AuditEntry[] {
+  const entries = [
+    previewEntry(now, {
+      id: 206,
+      ruleId: RULE_IDS.work,
+      category: "changed",
+      action: "create",
+      outcome: "changed",
+      reason: "source_created",
+      title: "Design review",
+      hoursAgo: 2,
+    }),
+    previewEntry(now, {
+      id: 205,
+      ruleId: RULE_IDS.work,
+      category: "changed",
+      action: "update",
+      outcome: "changed",
+      reason: "source_changed",
+      title: "Quarterly planning",
+      hoursAgo: 4,
+      recurring: true,
+      changedFields: ["title", "time"],
+    }),
+    previewEntry(now, {
+      id: 204,
+      ruleId: RULE_IDS.personal,
+      category: "skipped",
+      action: "ignore",
+      outcome: "unchanged",
+      reason: "tentative_excluded",
+      title: "Yoga class",
+      hoursAgo: 7,
+    }),
+    previewEntry(now, {
+      id: 203,
+      ruleId: RULE_IDS.work,
+      category: "blocked",
+      action: "conflict",
+      outcome: "blocked",
+      reason: "destination_ownership_inconsistent",
+      title: "Client workshop",
+      hoursAgo: 10,
+    }),
+    previewEntry(now, {
+      id: 202,
+      ruleId: RULE_IDS.work,
+      category: "changed",
+      action: "delete",
+      outcome: "changed",
+      reason: "source_cancelled",
+      title: "IO R&D seminar",
+      hoursAgo: 22,
+      cancelled: true,
+    }),
+    previewEntry(now, {
+      id: 201,
+      ruleId: RULE_IDS.personal,
+      category: "unchanged",
+      action: "ignore",
+      outcome: "unchanged",
+      reason: "projection_current",
+      title: "Team stand-up",
+      hoursAgo: 26,
+    }),
+  ]
+  return entries
+    .filter((entry) => !filters.ruleId || entry.rule_id === filters.ruleId)
+    .filter((entry) => !filters.categories || filters.categories.includes(entry.category))
+    .filter((entry) => !filters.query || entry.event?.title.toLocaleLowerCase().includes(filters.query.trim().toLocaleLowerCase()))
+    .filter((entry) => !filters.before || entry.id < filters.before)
+    .sort((left, right) => right.id - left.id)
+    .slice(0, ACTIVITY_PAGE_SIZE)
+}
+
+function previewSnapshot(entry: AuditEntry, found: boolean): ActivityEvent["source"] {
+  const event = entry.event
+  return {
+    found,
+    cancelled: event?.cancelled ?? false,
+    title: event?.title ?? "",
+    all_day: event?.all_day ?? false,
+    starts: event?.starts ?? null,
+    ends: event?.ends ?? null,
+    recurring: event?.recurring ?? false,
+    web_link: found ? "https://calendar.google.com/calendar/u/0/r" : null,
+  }
+}
+
+export function previewActivityEvent(entryId: number, now: number = Date.now()): ActivityEvent {
+  const entry = previewActivityEntries(now).find((item) => item.id === entryId)
+  if (!entry) throw new Error("Preview activity entry not found")
+  return {
+    source: previewSnapshot(entry, true),
+    destination: entry.action === "delete" ? previewSnapshot(entry, false) : previewSnapshot(entry, true),
+  }
+}
+
+export function previewActivityChanges(entryId: number, now: number = Date.now()): SourceChange {
+  const entry = previewActivityEntries(now).find((item) => item.id === entryId)
+  return {
+    fields: entry?.changed_fields ?? [],
+    values_available: true,
+    changes: [
+      {
+        field: "title",
+        before: "Planning session",
+        after: entry?.event?.title ?? "Updated event",
+        before_time: null,
+        after_time: null,
+        added: [],
+        removed: [],
+      },
+      {
+        field: "time",
+        before: "9:00 AM",
+        after: "10:00 AM",
+        before_time: { all_day: false, starts: atEventTime(now, 5), ends: atEventTime(now, 4) },
+        after_time: { all_day: false, starts: atEventTime(now, 4), ends: atEventTime(now, 3) },
+        added: [],
+        removed: [],
+      },
+    ].filter((change) => entry?.changed_fields?.includes(change.field) ?? false),
+  }
+}
+
+export function previewActivityEntry(entryId: number, now: number = Date.now()): AuditEntry {
+  const entry = previewActivityEntries(now).find((item) => item.id === entryId)
+  if (!entry) throw new Error("Preview activity entry not found")
+  return entry
+}
+
+export function previewIncidents(now: number = Date.now()): Incident[] {
+  return [
+    {
+      id: "preview-incident-1",
+      rule_id: RULE_IDS.work,
+      category: "destination_ownership_inconsistent",
+      state: "open",
+      summary: "A destination event is not marked as managed",
+      opened_at: atMinutesAgo(now, 3 * 60),
+      updated_at: atMinutesAgo(now, 20),
+      resolved_at: null,
+      resolution: null,
+      account_id: DANIEL_ACCOUNT.id,
+    },
+    {
+      id: "preview-incident-2",
+      rule_id: RULE_IDS.personal,
+      category: "authorization",
+      state: "resolved",
+      summary: "Google access was renewed",
+      opened_at: atMinutesAgo(now, 3 * 24 * 60),
+      updated_at: atMinutesAgo(now, 24 * 60),
+      resolved_at: atMinutesAgo(now, 24 * 60),
+      resolution: "sync_succeeded",
+      account_id: PERSONAL_ACCOUNT.id,
+    },
+  ]
+}
+
+export function previewStorage(): StorageUsage {
+  return {
+    database: {
+      bytes: 2_840_000,
+      reclaimable_bytes: 1_120_000,
+      activity_entries: 248,
+      oldest_activity_at: "2026-07-05T08:00:00.000Z",
+    },
+    logs: {
+      bytes: 720_000,
+      files: 3,
+      oldest_at: "2026-09-29T08:00:00.000Z",
+      newest_at: "2026-10-03T09:59:00.000Z",
+    },
+    activity_ages: [30, 60, 90, 180, 365],
+  }
+}
+
+export function previewRuleDetail(ruleId: string, now: number = Date.now()): RuleDetail | null {
+  const preview = overviewPreview(now)
+  const rule = preview.rules.find((candidate) => candidate.id === ruleId)
+  if (!rule) return null
+  return {
+    ...rule,
+    initial_lookback_days: 30,
+    mapping_count: 24,
+    last_reconciliation: successfulRun(atMinutesAgo(now, 3)),
+  }
 }

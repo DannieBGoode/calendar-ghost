@@ -22,7 +22,7 @@ export function heroPreviewCopy(tone: OverviewTone): HeroPreviewCopy {
     return {
       badge: "Healthy",
       headline: "Synchronization is healthy",
-      detail: "Your calendars are in sync and ready for the next change.",
+      detail: "All systems are running normally. Calendar Ghost is watching for changes and keeping your calendars in sync.",
       firstFact: "Rules running",
       secondFact: "Last sync just now",
       callout: { title: "All good!", detail: "Your calendars are in sync." },

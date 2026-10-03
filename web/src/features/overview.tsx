@@ -40,6 +40,7 @@ import {
 } from "@/lib/overview-health"
 import { HERO_PREVIEW_TONES, HERO_TONE_LABELS, heroPreviewCopy } from "@/lib/overview-hero"
 import { overviewPreview } from "@/lib/overview-preview"
+import { previewPathForView, previewSearchForView } from "@/lib/preview-mode"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
@@ -83,21 +84,31 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const [heroPreviewTone, setHeroPreviewTone] = useState<OverviewTone | null>(null)
   const previewParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
   const heroPreviewEnabled = previewParams?.get("heroPreview") === "1"
-  const dashboardPreviewEnabled = previewParams?.get("dashboardPreview") === "1"
+  const dashboardPreviewEnabled = previewParams?.get("dashboardPreview") === "1" || previewParams?.get("preview") === "1"
   const now = useNow()
-  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })
+  const dashboard = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: api.dashboard,
+    enabled: !dashboardPreviewEnabled,
+    refetchInterval: REFRESH_INTERVAL,
+  })
   const rules = useQuery({
     queryKey: ["rules"],
     queryFn: api.rules,
+    enabled: !dashboardPreviewEnabled,
     refetchInterval: (query) => workRefreshInterval(query.state.data, REFRESH_INTERVAL),
   })
-  const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
+  const google = useQuery({
+    queryKey: ["google-configuration"],
+    queryFn: api.googleConfiguration,
+    enabled: !dashboardPreviewEnabled,
+  })
   const incidents = useQuery({
     queryKey: ["incidents"],
     queryFn: api.incidents,
-    enabled: (dashboard.data?.open_incidents ?? 0) > 0,
+    enabled: !dashboardPreviewEnabled && (dashboard.data?.open_incidents ?? 0) > 0,
   })
-  const { endpoints: liveEndpoints } = useRuleEndpoints(rules.data ?? [])
+  const { endpoints: liveEndpoints } = useRuleEndpoints(rules.data ?? [], { enabled: !dashboardPreviewEnabled })
   const preview = dashboardPreviewEnabled ? overviewPreview(now) : null
   const shownDashboard = preview?.dashboard ?? dashboard.data!
   const shownRules = preview?.rules ?? rules.data!
@@ -304,7 +315,10 @@ function RecentChanges({
           <h2 id="recent-title">Recent changes</h2>
           <p>Latest sync events and changes.</p>
         </div>
-        <SectionLink href={appPathForView("activity")} onClick={() => onViewChange("activity")}>
+        <SectionLink
+          href={previewOnly ? previewPathForView("activity") : appPathForView("activity")}
+          onClick={() => onViewChange("activity", previewOnly ? { search: previewSearchForView("activity") } : undefined)}
+        >
           All activity
         </SectionLink>
       </div>
@@ -370,7 +384,7 @@ function RecentChangeItem({
   const since = new Date(change.first_occurred_at).toDateString() === new Date(now).toDateString()
     ? formatClockTime(change.first_occurred_at)
     : formatRunTime(change.first_occurred_at, new Date(now))
-  const search = activitySearch({ ruleId: entry.rule_id, show: "", entryId: entry.id })
+  const search = activitySearch({ ruleId: entry.rule_id, show: "", entryId: entry.id }, { preview: previewOnly })
   return (
     <li className="recent-change-item">
       <span className="recent-change-marker" data-tone={markerTone}>
@@ -382,11 +396,11 @@ function RecentChangeItem({
       <div className="recent-change-body">
         <a
           className="recent-change-event"
-          href={previewOnly ? appPathForView("activity") : `${appPathForView("activity")}${search}`}
+          href={previewOnly ? previewPathForView("activity") : `${appPathForView("activity")}${search}`}
           onClick={(event) => {
             if (!isPlainLeftClick(event)) return
             event.preventDefault()
-            onViewChange("activity", previewOnly ? undefined : { search })
+            onViewChange("activity", previewOnly ? { search: previewSearchForView("activity") } : { search })
           }}
         >
           {cell.state === "event" ? cell.title : cell.label}
@@ -396,11 +410,11 @@ function RecentChangeItem({
         {rule && endpoints ? (
           <a
             className="recent-change-rule"
-            href={previewOnly ? appPathForView("rules") : appPathForRule(rule.id)}
+            href={previewOnly ? previewPathForView("rules") : appPathForRule(rule.id)}
             onClick={(event) => {
               if (!isPlainLeftClick(event)) return
               event.preventDefault()
-              if (previewOnly) onViewChange("rules")
+              if (previewOnly) onViewChange("rules", { search: previewSearchForView("rules") })
               else onOpenRule(rule.id)
             }}
           >
@@ -439,7 +453,10 @@ function OverviewRules({
           <h2 id="overview-rules-title">Rules</h2>
           <p>{rules.every((rule) => rule.state === "enabled") ? plural(rules.length, "active rule") : `${plural(rules.length, "rule")} configured`}</p>
         </div>
-        <SectionLink href={appPathForView("rules")} onClick={() => onViewChange("rules")}>
+        <SectionLink
+          href={previewOnly ? previewPathForView("rules") : appPathForView("rules")}
+          onClick={() => onViewChange("rules", previewOnly ? { search: previewSearchForView("rules") } : undefined)}
+        >
           {rules.length > shown.length ? `All ${rules.length} rules` : "Manage rules"}
         </SectionLink>
       </div>
@@ -465,11 +482,11 @@ function OverviewRules({
           return (
             <li key={rule.id}>
               <a
-                href={previewOnly ? appPathForView("rules") : appPathForRule(rule.id)}
+                href={previewOnly ? previewPathForView("rules") : appPathForRule(rule.id)}
                 onClick={(event) => {
                   if (!isPlainLeftClick(event)) return
                   event.preventDefault()
-                  if (previewOnly) onViewChange("rules")
+                  if (previewOnly) onViewChange("rules", { search: previewSearchForView("rules") })
                   else onOpenRule(rule.id)
                 }}
               >

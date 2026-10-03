@@ -612,6 +612,78 @@ p {
   outline-offset: 2px;
 }
 
+.preview-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  padding: 0.85rem 1rem;
+  background: color-mix(in oklch, var(--surface) 92%, var(--primary-soft));
+}
+
+.preview-banner-copy {
+  min-width: 0;
+}
+
+.preview-banner-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--foreground);
+  font-size: 0.8125rem;
+}
+
+.preview-banner-label svg {
+  width: 1rem;
+  height: 1rem;
+  color: var(--primary);
+}
+
+.preview-banner-copy p {
+  margin-top: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.preview-banner-nav {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--background);
+}
+
+.preview-banner-link {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+
+.preview-banner-link:hover {
+  color: var(--foreground);
+}
+
+.preview-banner-link[aria-current="page"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.preview-banner-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 .page-card,
 .dashboard-card {
   border: 1px solid var(--border);
@@ -802,7 +874,7 @@ p {
 .health-hero-sparks {
   position: absolute;
   z-index: 1;
-  left: 50%;
+  left: calc(50% - 2rem);
   width: min(72%, 16rem);
   aspect-ratio: 1;
   pointer-events: none;
@@ -868,6 +940,7 @@ p {
 }
 
 .health-hero-ghost {
+  --health-ghost-shift: -2rem;
   position: relative;
   z-index: 2;
   width: clamp(5.5rem, 38%, 8rem);
@@ -878,11 +951,15 @@ p {
 
 .health-hero[data-tone="setup"] .health-hero-halo {
   opacity: 0.58;
-  transform: scale(0.94);
+  transform: translateX(-2rem) scale(0.94);
+}
+
+.health-hero[data-tone="setup"] .health-hero-ghost {
+  transform: translateX(var(--health-ghost-shift));
 }
 
 .health-hero[data-tone="healthy"] .health-hero-halo {
-  transform: scale(1.06);
+  transform: translateX(-2rem) scale(1.06);
 }
 
 .health-hero[data-tone="healthy"] .health-hero-ghost {
@@ -890,20 +967,20 @@ p {
 }
 
 .health-hero[data-tone="attention"] .health-hero-halo {
-  transform: scale(0.98);
+  transform: translateX(-2rem) scale(0.98);
 }
 
 .health-hero[data-tone="attention"] .health-hero-ghost {
-  transform: translateY(0.15rem) rotate(2deg);
+  transform: translate(var(--health-ghost-shift), 0.15rem) rotate(2deg);
 }
 
 .health-hero-callout {
   position: absolute;
   z-index: 2;
-  top: 16%;
-  right: 12%;
+  top: 14%;
+  right: 1%;
   display: flex;
-  max-width: 11.5rem;
+  max-width: 10rem;
   flex-direction: column;
   gap: 0.15rem;
   padding: 0.65rem 0.8rem;
@@ -931,18 +1008,18 @@ p {
 @keyframes health-hero-ghost-float {
   0%,
   100% {
-    transform: translateY(-0.3rem) rotate(-2deg);
+    transform: translate(var(--health-ghost-shift), -0.3rem) rotate(-2deg);
   }
 
   50% {
-    transform: translateY(-0.62rem) rotate(1deg);
+    transform: translate(var(--health-ghost-shift), -0.62rem) rotate(1deg);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .health-hero[data-tone="healthy"] .health-hero-ghost {
     animation: none;
-    transform: translateY(-0.3rem) rotate(-2deg);
+    transform: translate(var(--health-ghost-shift), -0.3rem) rotate(-2deg);
   }
 }
 
@@ -1347,6 +1424,45 @@ p {
   padding: 0.75rem 1.25rem;
   border-top: 1px solid var(--border);
   background: var(--surface);
+}
+
+.connection-guide {
+  margin-top: 0.875rem;
+}
+
+.connection-guide-body {
+  gap: 0.875rem;
+}
+
+.connection-guide-steps {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.connection-guide-steps li {
+  padding-left: 0.25rem;
+}
+
+.connection-guide-steps li::marker {
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+.connection-guide-steps strong,
+.connection-guide-steps span,
+.connection-guide-note {
+  display: block;
+}
+
+.connection-guide-steps strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.connection-guide-note {
+  margin: 0;
 }
 
 .inline-help.account-group-footer summary {
@@ -2989,14 +3105,10 @@ td.activity-col-time {
 }
 
 .activity-day th {
-  position: sticky;
-  /* Below the sticky top bar. */
-  top: var(--topbar-height);
-  z-index: 1;
   padding: 1.5rem 0 0.5rem;
   border-bottom: 1px solid var(--border);
-  background: var(--background);
-  color: var(--foreground);
+  background: transparent;
+  color: var(--muted-foreground);
   font-size: 0.8125rem;
   font-weight: 700;
 }
@@ -4073,6 +4185,20 @@ thead + .activity-day th {
     flex-direction: column;
   }
 
+  .preview-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .preview-banner-nav {
+    width: 100%;
+  }
+
+  .preview-banner-link {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
   .hero-preview-options {
     width: 100%;
   }
@@ -4087,6 +4213,28 @@ thead + .activity-day th {
 
   .health-hero-visual {
     min-height: 13rem;
+  }
+
+  .health-hero-ghost {
+    --health-ghost-shift: -0.75rem;
+  }
+
+  .health-hero-sparks {
+    left: 50%;
+  }
+
+  .health-hero[data-tone="setup"] .health-hero-halo,
+  .health-hero[data-tone="healthy"] .health-hero-halo,
+  .health-hero[data-tone="attention"] .health-hero-halo {
+    transform: translateX(-0.75rem) scale(1);
+  }
+
+  .health-hero[data-tone="setup"] .health-hero-halo {
+    transform: translateX(-0.75rem) scale(0.94);
+  }
+
+  .health-hero[data-tone="healthy"] .health-hero-halo {
+    transform: translateX(-0.75rem) scale(1.06);
   }
 
   .health-hero-callout {

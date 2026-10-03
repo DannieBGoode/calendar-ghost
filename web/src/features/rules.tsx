@@ -6,6 +6,7 @@ import { AccountSelect } from "@/components/account-select"
 import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
+import { PreviewBanner } from "@/components/preview-banner"
 import {
   LiveAnnouncement,
   PreviewReadyNote,
@@ -29,6 +30,8 @@ import {
   type UnansweredInvitations,
 } from "@/lib/api"
 import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
+import { isPreviewMode } from "@/lib/preview-mode"
+import { overviewPreview } from "@/lib/overview-preview"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval } from "@/lib/rule-work"
@@ -39,17 +42,24 @@ import { useRuleEndpoints } from "@/lib/use-rule-endpoints"
 const WRITABLE_ROLES = ["writer", "owner"]
 const CALENDAR_STALE_TIME = 5 * 60 * 1000
 
-export function RulesView({
-  notice,
-  createRule,
-  onViewChange,
-  onOpenRule,
-}: {
+type RulesViewProps = {
   notice: { text: string; attention: boolean } | null
   createRule: boolean
   onViewChange: ViewChange
   onOpenRule: OpenRule
-}) {
+}
+
+export function RulesView(props: RulesViewProps) {
+  if (isPreviewMode()) return <PreviewRulesView onViewChange={props.onViewChange} />
+  return <LiveRulesView {...props} />
+}
+
+function LiveRulesView({
+  notice,
+  createRule,
+  onViewChange,
+  onOpenRule,
+}: RulesViewProps) {
   const now = useNow()
   const commands = useRuleCommands()
   const rules = useQuery({
@@ -290,6 +300,58 @@ export function RulesView({
           })}
         </ul>
       )}
+    </div>
+  )
+}
+
+function PreviewRulesView({ onViewChange }: { onViewChange: ViewChange }) {
+  const now = useNow()
+  const preview = overviewPreview(now)
+  return (
+    <div className="page-section">
+      <PreviewBanner current="rules" onViewChange={onViewChange} />
+      <div className="page-heading-row">
+        <div>
+          <h1>Sync rules</h1>
+          <p className="page-intro">
+            Each rule shows the events of one calendar in another, as busy time or with their
+            details. The source calendar is never changed.
+          </p>
+        </div>
+        <div className="heading-action">
+          <Button disabled><Plus aria-hidden="true" /> Create sync rule</Button>
+          <p className="action-hint">Actions are disabled in the mock preview.</p>
+        </div>
+      </div>
+      <ul className="rule-list page-card" aria-label="Sync rules in mock preview">
+        {preview.rules.map((rule) => {
+          const { source, destination } = preview.endpoints(rule)
+          return (
+            <li className="rule-row" key={rule.id}>
+              <div className="rule-main">
+                <div className="rule-summary">
+                  <h2 className="sr-only">{source.name} to {destination.name}</h2>
+                  <div className="rule-direction">
+                    <RuleEndpoint account={source.account} endpoint={rule.source} calendars={source.calendars} role="Source" />
+                    <ArrowRight aria-hidden="true" />
+                    <RuleEndpoint account={destination.account} endpoint={rule.destination} calendars={destination.calendars} role="Destination" />
+                  </div>
+                  <p className="rule-policy">
+                    <span>{rule.privacy_policy === "busy_only" ? "Busy only" : "Copy details"}{rule.sync_all_day_events ? ", including all-day events" : ", timed events only"}</span>
+                    <span className="rule-run">{lastRunLabel(rule.last_sync, now)}</span>
+                  </p>
+                </div>
+                <div className="rule-actions">
+                  <RuleStatusBadge state={rule.state} stopped={false} />
+                  <Button variant="outline" disabled>Sync now</Button>
+                  <Button variant="ghost" disabled>Details <ArrowRight aria-hidden="true" /></Button>
+                </div>
+              </div>
+              <p className="rule-note">Sample rule data is read-only here. The live page keeps these controls connected to your installation.</p>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
