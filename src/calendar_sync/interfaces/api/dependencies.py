@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Annotated, Protocol
 
-from fastapi import Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, Response, status
 
-from calendar_sync.application.ports import AdministratorAccess
+from calendar_sync.application.ports import AdministratorAccess, IntegrationTokens
+from calendar_sync.interfaces.access import StatusAccess, status_access
 
 SESSION_COOKIE = "calendar_sync_session"
 
@@ -27,6 +28,32 @@ def require_admin(
 ) -> None:
     if not services.administrator.session_is_valid(session):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "administrator session required")
+
+
+class StatusReaderServices(AdministratorServices, Protocol):
+    @property
+    def integration_tokens(self) -> IntegrationTokens: ...
+
+
+UNAUTHENTICATED = HTTPException(
+    status.HTTP_401_UNAUTHORIZED,
+    "valid credentials required",
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
+
+def require_status_reader(
+    services: Annotated[StatusReaderServices, Depends(app_services)],
+    authorization: Annotated[str | None, Header()] = None,
+    session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+) -> None:
+    access = status_access(
+        services.integration_tokens, services.administrator, authorization, session
+    )
+    if access is StatusAccess.FORBIDDEN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "token lacks the required scope")
+    if access is not StatusAccess.GRANTED:
+        raise UNAUTHENTICATED
 
 
 def available[T](use_case: T | None, detail: str) -> T:

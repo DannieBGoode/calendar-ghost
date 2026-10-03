@@ -98,7 +98,9 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
         dashboard = client.get("/api/v1/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json() == {
-            "health": "healthy",
+            "status": "setup",
+            "needs_attention": False,
+            "problems": [],
             "connected_accounts": 0,
             "disconnected_accounts": 0,
             "sync_rules": 0,
@@ -420,7 +422,13 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
     assert dashboard.json()["disconnected_accounts"] == 1
     # rule-1, validated-rule, and destination-rule degrade; the paused rule stays paused.
     assert dashboard.json()["stopped_rules"] == 3
-    assert dashboard.json()["health"] == "attention"
+    assert dashboard.json()["status"] == "stopped"
+    assert dashboard.json()["needs_attention"] is True
+    assert {problem["rule_id"] for problem in dashboard.json()["problems"]} == {
+        "destination-rule",
+        "rule-1",
+        "validated-rule",
+    }
     with adapters.unit_of_work() as uow:
         disconnected_rule = uow.rules.get(SyncRuleId("rule-1"))
     assert disconnected_rule is not None
@@ -1534,7 +1542,9 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
     assert rules["rule-1"]["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
     assert rules["rule-2"]["last_sync"]["last_succeeded_at"] is None
     assert dashboard["enabled_rules"] == 2
-    assert dashboard["health"] == "healthy"
+    # Without a master key, no scheduler can run; nothing can synchronize until one can.
+    assert dashboard["status"] == "stalled"
+    assert dashboard["needs_attention"] is True
     assert rules["rule-1"]["last_sync"]["created"] == 2
     assert rules["rule-2"]["last_sync"]["failure_kind"] == "rate_limit"
 
@@ -1790,8 +1800,9 @@ def test_dashboard_names_no_rule_when_blocks_span_rules(tmp_path: Path) -> None:
 
     assert (dashboard["blocked_events"], dashboard["blocked_entry_id"]) == (2, 2)
     assert dashboard["blocked_rule_id"] is None
-    # A block alone is reported, not an incident: the health stays healthy until it persists.
-    assert dashboard["health"] == "healthy"
+    # Without a master key, no scheduler can run; that alone explains this installation's status.
+    assert dashboard["status"] == "stalled"
+    assert dashboard["needs_attention"] is True
 
 
 def _append_audit(adapters: Adapters, *entries: AuditEntry) -> None:

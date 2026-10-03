@@ -22,6 +22,7 @@ from calendar_sync.interfaces.api.routes import (
     activity,
     health,
     incidents,
+    integrations,
     rules,
     session,
     setup,
@@ -38,6 +39,7 @@ class ApiServices(
     accounts.AccountServices,
     activity.ActivityServices,
     incidents.IncidentServices,
+    integrations.IntegrationServices,
     rules.RuleServices,
     storage.StorageServices,
     Protocol,
@@ -73,7 +75,17 @@ def create_app(container: Container | None = None) -> FastAPI:
     app.state.container = services
     # Added flat rather than through include_router, which newer FastAPI versions nest, so
     # app.routes lists every API route for UnknownApiPath and the authorization test.
-    for module in (health, setup, session, activity, accounts, rules, incidents, storage):
+    for module in (
+        health,
+        setup,
+        session,
+        activity,
+        accounts,
+        rules,
+        incidents,
+        storage,
+        integrations,
+    ):
         app.router.routes.extend(module.router.routes)
 
     # Registered after every API route so an unknown API path is a JSON error for any method

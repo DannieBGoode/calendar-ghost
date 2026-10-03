@@ -133,8 +133,17 @@ class RuleReplacementResponse(BaseModel):
     conflicts: int
 
 
+class ProblemResponse(BaseModel):
+    kind: str
+    rule_id: str | None
+    summary: str
+    since: str | None
+
+
 class DashboardResponse(BaseModel):
-    health: str
+    status: str
+    needs_attention: bool
+    problems: list[ProblemResponse]
     connected_accounts: int
     disconnected_accounts: int
     sync_rules: int
@@ -308,3 +317,75 @@ class RecentChangeResponse(BaseModel):
     entry: AuditEntryResponse
     repeats: int
     first_occurred_at: str
+
+
+class SchedulerResponse(BaseModel):
+    running: bool
+    last_pass_completed_at: str | None
+    current_pass_started_at: str | None
+
+
+class StatusCountsResponse(BaseModel):
+    rules: int
+    running: int
+    stopped: int
+    paused: int
+    overdue: int
+    open_incidents: int
+    blocked_events: int
+    disconnected_accounts: int
+
+
+class StatusCalendarResponse(BaseModel):
+    calendar: str
+    provider: str | None
+
+
+class StatusRuleResponse(BaseModel):
+    id: str
+    name: str
+    state: str
+    source: StatusCalendarResponse
+    destination: StatusCalendarResponse
+    projection: str
+    last_succeeded_at: str | None
+    running: str | None
+    problem: ProblemResponse | None
+
+
+class StatusIncidentResponse(BaseModel):
+    rule_id: str | None
+    category: str
+    summary: str
+    opened_at: str
+
+
+class StatusResponse(BaseModel):
+    status: str
+    needs_attention: bool
+    summary: str
+    version: str
+    checked_at: str
+    last_synced_at: str | None
+    scheduler: SchedulerResponse
+    counts: StatusCountsResponse
+    problems: list[ProblemResponse]
+    rules: list[StatusRuleResponse]
+    incidents: list[StatusIncidentResponse]
+
+
+class IntegrationTokenResponse(BaseModel):
+    id: str
+    name: str
+    scope: str
+    created_at: str
+    last_used_at: str | None
+    revoked_at: str | None
+
+
+class IssuedIntegrationTokenResponse(IntegrationTokenResponse):
+    token: str
+
+
+class IssueIntegrationTokenRequest(BaseModel):
+    name: str = Field(max_length=200)
