@@ -52,8 +52,23 @@ development only:
   container image.
 
 The README screenshots in `docs/assets/` are captured from this preview at `/overview`,
-`/activity`, and `/rules`. Keep them synthetic when refreshing the media; never use a personal
-calendar export or a real provider response in repository assets.
+`/activity`, and `/rules`, at 1440 × 900 (the Overview at 1440 × 1240, so its recent changes show) in
+both the light and the Twilight dark appearance
+(`calendar-ghost-<view>-light.png` and `-dark.png`), with the preview started as
+`--scenario healthy`. Keep them synthetic when refreshing the media; never use a personal calendar
+export or a real provider response in repository assets.
+
+`--scenario` starts the preview in each Overview health state:
+
+| Scenario | Overview |
+| --- | --- |
+| `review` (default) | Blocked events, one persisting into an incident, while every rule keeps running |
+| `stopped` | The Personal account's authorization expired, so both of its rules stopped |
+| `waiting` | Google is limiting Family → Work's requests; the rule retries by itself |
+| `several` | Stopped, waiting, and blocked at once, so the Overview lists every problem |
+| `paused` | Every rule paused after earlier syncs |
+| `setup` | A new installation with no Google account or rule |
+| `healthy` | Every rule running and up to date |
 The preview uses the generated local portraits in `web/public/avatars/`; production accounts use
 the profile photo returned by Google when one is available. Its seed data models one fictional Sam
 across three context-specific identities (`sam@personal.example`, `sam@family.example`, and

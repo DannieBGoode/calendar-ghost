@@ -36,7 +36,7 @@ export function RuleStatusBadge({
   }
   if (stopped || state === "disabled") {
     return (
-      <Badge variant="attention">
+      <Badge variant="stopped">
         <ShieldAlert aria-hidden="true" /> {state === "disabled" ? ruleStateLabel(state) : "Stopped"}
       </Badge>
     )

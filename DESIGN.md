@@ -141,7 +141,8 @@ edge is a three-scallop ghost hem, and two dot eyes sit in the upper body. `Ghos
 (`web/src/components/ghost-mark.tsx`) renders it as inline SVG colored by three tokens:
 `--brand-glow` (body fill), `--brand-line` (outline and tabs), and `--brand-eyes` (the two dots).
 In light appearance the ghost is pale with an indigo outline and eyes; in dark appearance and on
-the twilight auth panel it is a solid ghost-white silhouette with dark eyes. It is decorative
+the twilight auth panel it is a solid ghost-white silhouette with dark eyes. On the Overview health hero it is filled with the state's color and its face follows the state
+(see Overview Health Hero). It is decorative
 (`aria-hidden`) wherever the name sits beside it, and appears in the top-bar lockup, the auth intro
 panel, the Overview health hero, empty states, and the startup loading screen.
 
@@ -160,7 +161,7 @@ A lavender-tinted neutral canvas (the "Twilight" palette) supports a single indi
 - **Device setting** is the default and follows the browser's current color-scheme preference, including changes made while the app is open.
 - **Light** and **Dark** are explicit browser-local choices. They apply before the interface paints and persist across visits without adding installation state to SQLite.
 - **Dark palette** chooses the colors used whenever the interface is dark, whether by choice or by following the device. **Twilight** (indigo) is the default; **Midnight** is a blue alternative with a navy canvas, cool blue-grey neutrals, and Lantern Blue in place of Lantern Indigo, and it turns the auth intro panel navy too. Like the theme, it is browser-local, applies before paint, and sets the browser chrome color. Light appearance has one palette.
-- Semantic meaning does not change between appearances or palettes. The palette's lantern color remains action and focus, moss remains healthy, ochre remains attention, and red remains destructive.
+- Semantic meaning does not change between appearances or palettes. The palette's lantern color remains action and focus, moss remains healthy, ochre remains attention, and red remains destructive or stopped.
 
 ### Primary
 
@@ -169,8 +170,8 @@ A lavender-tinted neutral canvas (the "Twilight" palette) supports a single indi
 ### Secondary
 
 - **Healthy Moss**: Quiet confirmation surfaces and healthy text.
-- **Attention Ochre**: Incidents and conditions requiring action.
-- **Destructive Red**: Confirmed destructive actions and validation errors only.
+- **Attention Ochre**: Conditions to review while synchronization keeps running, such as blocked events and incidents on running rules.
+- **Destructive Red**: Confirmed destructive actions, validation errors, and stopped synchronization: a rule suspended until the administrator acts.
 
 ### Neutral
 
@@ -254,14 +255,31 @@ The desktop top bar uses the ghost-mark-and-wordmark lockup, text labels, and a 
 
 ### Overview Health Hero
 
-A single expressive Overview surface combines an icon, a plain-language state, one sentence of detail, a quiet synchronization summary, and at most one action. It is a status surface, not a metric-card grid. Its surface follows one health model: moss when healthy, ochre when attention is required, and Quiet Surface during setup. When attention is required it names the affected rule and its action opens that rule. The ghost illustration and callout belong to this Overview-only reassurance moment; other pages keep the quieter surface grammar.
+A single expressive Overview surface combines a plain-language state, one sentence of detail, a quiet synchronization summary, and at most one action, each saying something the others do not. It is a status surface, not a metric-card grid. Its surface, the ghost's fill, and the ghost's face follow one health model, most urgent first:
+
+| State | When | Surface | Ghost |
+| --- | --- | --- | --- |
+| Stopped | A rule is suspended until the administrator acts, such as reauthorizing a Google account | Destructive Red | Crying, calling for help |
+| Needs a look | Rules keep running, but events were blocked or a problem kept happening | Attention Ochre | Concerned |
+| Waiting | Google is limiting or failing requests; rules retry by themselves and nothing is asked of the administrator | Quiet Surface with Lantern Indigo | Neutral |
+| Paused | Rules have synced before, but none is running now | Quiet Surface with Lantern Indigo | Asleep |
+| Setup | Nothing is synchronizing yet; the Getting started steps carry progress | Quiet Surface | Neutral |
+| Healthy | Every running rule is up to date | Healthy Moss | Happy |
+
+Red asks the administrator to act now, ochre to take a look, and indigo only informs. When one rule is the cause, the hero names it and its action opens that rule. The most urgent problem leads; every other current problem is listed under "Also" in a few words with its own link, so one never hides another. The ghost has no mouth: its eyes, brows, and tears carry the feeling. Its speech bubble reacts in a few words and never repeats the copy; a stopped ghost calls out slowly, one line at a time in a new place around it, and reduced motion keeps the first line still. The ghost illustration and bubble belong to this Overview-only moment; other pages keep the quieter surface grammar. The development preview starts in any state with `scripts/dev_preview.py --scenario`.
 
 ### Recent Changes
 
 The Overview lists the latest runs that changed events, newest first, inside a contained timeline:
 a semantic calendar marker, relative time, the event, the rule, and one sentence in calendar language
-("Added 1 event and updated 2 in Family."). Blocked changes use Attention Ochre text and link to
-that rule's Activity. Event titles appear only on request, as each run recorded them.
+("Added 1 event and updated 2 in Family."). The marker carries a sign on its corner for what the
+change did to the destination calendar: + added (including an event put back), − removed, ~ changed
+(an event or a rule's settings), and × blocked, as a diff would mark them. Activity's What happened
+column uses the same signs in a small tinted disc, with ✓ for already up to date, ⊘ for skipped, and
+a pin for an event kept as an ordinary one, so one outcome never has two icons; the Overview line
+beside a marker carries only words. Changes are moss, a
+removal included, because removing an event is routine; blocked changes use Attention Ochre text and
+link to that rule's Activity. Event titles appear only on request, as each run recorded them.
 
 ### Rule Rows
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { ApiError } from "./api"
 import {
+  changeMark,
   describeEntry,
   entryInspection,
   eventLookupFailure,
@@ -337,5 +338,26 @@ describe("activity address", () => {
     expect(activityStateFromSearch("?rule=rule-7&category=blocked")).toEqual({ ruleId: "rule-7", show: "blocked", entryId: null, query: "" })
     expect(activityStateFromSearch("?category=everything").show).toBe("")
     expect(activityStateFromSearch("?show=skipped&category=blocked").show).toBe("skipped")
+  })
+})
+
+describe("changeMark", () => {
+  it("gives every outcome one sign, read like a diff", () => {
+    expect(changeMark("added", "create")).toBe("added")
+    expect(changeMark("repaired", "create")).toBe("added")
+    expect(changeMark("removed", "delete")).toBe("removed")
+    expect(changeMark("rule", "rule_removed")).toBe("removed")
+    expect(changeMark("repaired", "update")).toBe("changed")
+    expect(changeMark("updated", "update")).toBe("changed")
+    expect(changeMark("rule", "policy_changed")).toBe("changed")
+    expect(changeMark("blocked", "conflict")).toBe("blocked")
+    expect(changeMark("skipped", "ignore")).toBe("skipped")
+    expect(changeMark("current", "ignore")).toBe("current")
+  })
+
+  it("is what each line of What happened carries", () => {
+    expect(whatHappened(entry({ action: "create", reason: "projection_missing", category: "changed" }), null).mark).toBe(
+      "added",
+    )
   })
 })

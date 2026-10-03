@@ -174,9 +174,10 @@ function OAuthReturnForm({ redirectUri }: { redirectUri: string }) {
   )
 }
 
-function ruleUsage(count: number): string {
+function ruleUsage(count: number, connected: boolean): string {
   if (count === 0) return "Not used by any rule"
-  return `Used by ${count} rule${count === 1 ? "" : "s"}`
+  const rules = `${count} rule${count === 1 ? "" : "s"}`
+  return connected ? `Used by ${rules}` : `${rules} stopped until it is reauthorized`
 }
 
 function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
@@ -310,6 +311,8 @@ function SettingsView({
   })
 
   const summary = accounts.data ? accountSummary(accounts.data) : null
+  const names = (accounts.data ?? []).map((account) => account.display_name)
+  const sharedNames = new Set(names.filter((name, index) => names.indexOf(name) !== index))
   // Collapsed while every account is healthy; open when one needs attention or just connected.
   const accountsOpen =
     accountsChoice ??
@@ -462,7 +465,7 @@ function SettingsView({
                   <span className="account-summary-copy">
                     <span
                       className="account-summary-status"
-                      data-attention={summary?.needsAttention || undefined}
+                      data-attention={summary?.stopsRules ? "stopped" : summary?.needsAttention ? "review" : undefined}
                     >
                       {summary?.needsAttention ? (
                         <ShieldAlert aria-hidden="true" />
@@ -499,13 +502,18 @@ function SettingsView({
                         avatarUrl={account.avatar_url}
                       />
                       <div className="account-copy">
-                        <h3>{account.display_name}</h3>
-                        <p>{account.email}</p>
-                        <span>{ruleUsage(account.rule_count)}</span>
+                        {/* One person often connects several Google accounts under the same name, so the
+                            address leads when the name alone would not tell them apart. */}
+                        <h3>{sharedNames.has(account.display_name) ? account.email : account.display_name}</h3>
+                        <p>{sharedNames.has(account.display_name) ? account.display_name : account.email}</p>
+                        <span data-stopped={!connected && account.rule_count > 0 ? "" : undefined}>
+                          {ruleUsage(account.rule_count, connected)}
+                        </span>
                       </div>
                     </div>
                     <div className="account-actions">
-                      <Badge variant={connected ? "healthy" : "attention"}>
+                      {/* A disconnected account stops every rule that uses it until it is reauthorized. */}
+                      <Badge variant={connected ? "healthy" : account.rule_count > 0 ? "stopped" : "attention"}>
                         {connected ? (
                           <CheckCircle2 aria-hidden="true" />
                         ) : (
@@ -537,11 +545,20 @@ function SettingsView({
                         </>
                       ) : (
                         <>
-                          {googleConfigured && (
-                            <Button className="account-action" variant="outline" asChild>
+                          {/* The row's fix, so it stays visible even before Google is configured. */}
+                          {googleConfigured ? (
+                            <Button className="account-action" asChild>
                               <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>
                                 <KeyRound aria-hidden="true" /> Reauthorize account
                               </a>
+                            </Button>
+                          ) : (
+                            <Button
+                              className="account-action"
+                              disabled
+                              title="Add the master key and Google OAuth credentials in .env, then restart."
+                            >
+                              <KeyRound aria-hidden="true" /> Reauthorize account
                             </Button>
                           )}
                           <Button

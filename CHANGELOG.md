@@ -22,6 +22,31 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Changed
+
+- The Overview hero says each thing once: the headline gives the state, the detail explains it, the
+  facts show running rules and the last sync, and the ghost reacts in a few words. The ghost is
+  filled with its state's color, and its speech bubble sits beside it at eye level on every screen
+  size.
+- The README screenshots show the refreshed dashboard and follow the reader's light or dark
+  appearance.
+- The Overview distinguishes six health states, most urgent first: stopped (red, a crying ghost
+  calling for help) when a rule is suspended until you act, needs a look (ochre, a concerned ghost)
+  when events were blocked or a problem kept happening while rules keep running, waiting (indigo)
+  when Google is limiting requests and rules retry by themselves, paused (an asleep ghost) when
+  rules that synced before are all paused, setup, and healthy. Every other current problem is
+  listed under the main one, and stopped rule badges are red to match.
+- Recent changes and Activity mark each outcome with one sign set: + (added, including an event
+  put back), − (removed), ~ (changed), or × (blocked), with ✓ and ⊘ for events left as they were.
+  The bin, refresh, and undo icons are gone, so one outcome never has two icons.
+- A disconnected account always shows **Reauthorize account** as its main action, disabled with the
+  reason until Google OAuth is configured. While rules depend on it, its badge is red and it says
+  how many rules stopped. Accounts that share a name lead with their address. A cancelled event no longer gets a red marker, since red now means you need to act.
+- A rule whose Google account lost access is named by its calendar's last known name in the
+  development preview, as it already is in a real installation.
+- The development preview records a recent sync for each rule, and `--scenario` starts it in any of
+  those states.
+
 ### Added
 
 - The Community Edition is documented as a single-installation, privacy-first deployment under the
