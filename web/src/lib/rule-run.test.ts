@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { RunOutcome, SyncResult } from "./api"
+import type { ReconcileResult, RunOutcome, SyncResult } from "./api"
 import {
   lastRunLabel,
   previewReadyLabel,
@@ -21,8 +21,16 @@ const outcome: RunOutcome = {
   checked_mappings: 0,
   drift: 0,
   failure_kind: null,
+  last_succeeded_at: null,
 }
 const result: SyncResult = { rule_id: "r", created: 0, updated: 0, deleted: 0, ignored: 0, conflicts: 0 }
+const reconciled: ReconcileResult = {
+  ...result,
+  consistent: true,
+  checked_mappings: 0,
+  drift: [],
+  reconciliation_conflicts: [],
+}
 
 describe("lastRunLabel", () => {
   it("describes success, failure, and never-run rules", () => {
@@ -42,7 +50,7 @@ describe("run results", () => {
   })
 
   it("summarizes a reconciliation by what its sync changed and what its check found", () => {
-    const checked = { ...result, checked_mappings: 12, drift: [], reconciliation_conflicts: [] }
+    const checked = { ...reconciled, checked_mappings: 12 }
     expect(reconcileResultMessage({ ...checked, consistent: true }, "Family")).toBe(
       "Checked 12 events this rule wrote to Family: every one matches its source event.",
     )
@@ -54,7 +62,7 @@ describe("run results", () => {
   it("counts what still differs after the sync by kind, and never blames a change during the check", () => {
     const message = reconcileResultMessage(
       {
-        ...result,
+        ...reconciled,
         consistent: false,
         checked_mappings: 71,
         drift: [
@@ -77,7 +85,7 @@ describe("run results", () => {
 
   it("names one remaining difference in the singular", () => {
     const message = reconcileResultMessage(
-      { ...result, consistent: false, checked_mappings: 1, drift: [{ kind: "missing", detail: "" }] },
+      { ...reconciled, consistent: false, checked_mappings: 1, drift: [{ kind: "missing", detail: "" }] },
       "Family",
     )
     expect(message).toBe(
@@ -94,7 +102,7 @@ describe("run results", () => {
       { kind: "unexpected", detail: "" },
       { kind: "unexpected", detail: "" },
     ]
-    expect(reconcileResultMessage({ ...result, consistent: false, checked_mappings: 9, drift }, "Family")).toContain(
+    expect(reconcileResultMessage({ ...reconciled, consistent: false, checked_mappings: 9, drift }, "Family")).toContain(
       "2 different from their source events, 2 still in Family though their source events were cancelled or excluded.",
     )
   })
@@ -102,7 +110,7 @@ describe("run results", () => {
   it("never calls what the check only reported repaired", () => {
     const message = reconcileResultMessage(
       {
-        ...result,
+        ...reconciled,
         consistent: false,
         checked_mappings: 3,
         drift: [{ kind: "incorrect_projection", detail: "" }],
@@ -116,7 +124,7 @@ describe("run results", () => {
     expect(
       reconcileResultMessage(
         {
-          ...result,
+          ...reconciled,
           conflicts: 1,
           consistent: false,
           checked_mappings: 4,
@@ -129,7 +137,7 @@ describe("run results", () => {
   })
 
   it("never says every projection matches when an event was blocked", () => {
-    const checked = { ...result, checked_mappings: 4, drift: [] }
+    const checked = { ...reconciled, checked_mappings: 4 }
     const bySync = reconcileResultMessage({ ...checked, conflicts: 1, consistent: true }, "Family")
     const byCheck = reconcileResultMessage(
       {

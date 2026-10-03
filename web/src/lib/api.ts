@@ -1,3 +1,5 @@
+import type { components } from "@/lib/api-schema"
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -28,201 +30,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-export type SetupStatus = { administrator_configured: boolean }
-export type SessionStatus = { authenticated: boolean }
-export type Dashboard = {
-  health: "healthy" | "attention"
-  connected_accounts: number
-  disconnected_accounts: number
-  sync_rules: number
-  enabled_rules: number
-  stopped_rules: number
-  open_incidents: number
-  last_synced_at: string | null
-  /** Events of existing rules whose latest decision was a block; the newest one is named. */
-  blocked_events: number
-  blocked_entry_id: number | null
-  blocked_rule_id: string | null
-}
-export type RuleCalendar = {
-  connected_account_id: string
-  calendar_id: string
-  /** The name Google last gave the calendar; rule lists and details include it, null until listed. */
-  calendar_name?: string | null
-}
-export type Rule = {
-  id: string
-  source: RuleCalendar
-  destination: RuleCalendar
-  privacy_policy: "busy_only" | "copy_details"
-  sync_all_day_events: boolean
-  tentative_events: TentativeEvents
-  unanswered_invitations: UnansweredInvitations
-  state: string
-  reprojection_required: boolean
-}
+/** Response and request bodies, generated from the backend's OpenAPI schema (web/openapi.json). */
+type Schemas = components["schemas"]
+
+export type SetupStatus = Schemas["SetupStatusResponse"]
+export type SessionStatus = Schemas["SessionResponse"]
+/** `blocked_events` counts events of existing rules whose latest decision was a block. */
+export type Dashboard = Schemas["DashboardResponse"]
+/** A rule's calendar with the name Google last gave it; null until Google lists it. */
+export type RuleCalendar = Schemas["NamedCalendarEndpointResponse"]
+export type Rule = Schemas["RuleResponse"]
 /** What a rule does with events its source calendar answered Maybe to. */
-export type TentativeEvents = "sync" | "mark" | "skip"
+export type TentativeEvents = Rule["tentative_events"]
 /** What a rule does with invitations its source calendar has not answered yet. */
-export type UnansweredInvitations = "wait" | "as_tentative"
-export type ProjectionHandling = "delete" | "detach"
-export type RemovalResult = { deleted: number; detached: number; conflicts: number }
-export type RunOutcome = {
-  completed_at: string
-  succeeded: boolean
-  full_run: boolean
-  created: number
-  updated: number
-  deleted: number
-  conflicts: number
-  checked_mappings: number
-  drift: number
-  failure_kind: string | null
-  last_succeeded_at?: string | null
-}
-export type PreviewSummary = {
-  completed_at: string
-  eligible_events: number
-  excluded_events: number
-  recurring_series: number
-  occurrence_changes: number
-}
+export type UnansweredInvitations = Rule["unanswered_invitations"]
+export type ProjectionHandling = Schemas["ReplaceRuleRequest"]["projections"]
+export type RemovalResult = Schemas["RemovalResponse"]
+export type RunOutcome = Schemas["RunOutcomeResponse"]
+export type PreviewSummary = Schemas["PreviewSummaryResponse"]
 /** Work the service is running for a rule right now; it survives a page reload. */
-export type RunningWork = {
-  kind: "preview" | "sync" | "reconciliation" | "removal"
-  started_at: string
-  handling: ProjectionHandling | null
-  /** What a removal or sync handles, once it has counted it: projections, or reported events. */
-  total: number | null
-  done: number
-  /** Reconcile now's part running now: its full pass, whose counts these are, then the check. */
-  stage: "sync" | "reconciliation" | null
-}
-export type RuleSummary = Rule & {
-  last_sync: RunOutcome | null
-  latest_preview: PreviewSummary | null
-  running: RunningWork | null
-}
+export type RunningWork = Schemas["RuleWorkResponse"]
+export type RuleSummary = Schemas["RuleSummaryResponse"]
 /** One written event; an identical repair repeated among recent entries is counted on it. */
-export type RecentChange = {
-  entry: AuditEntry
-  repeats: number
-  first_occurred_at: string
-}
-export type RuleDetail = Rule & {
-  initial_lookback_days: number
-  mapping_count: number
-  last_sync: RunOutcome | null
-  last_reconciliation: RunOutcome | null
-  latest_preview: PreviewSummary | null
-  running: RunningWork | null
-}
-export type RulePolicyPayload = {
-  privacy_policy: "busy_only" | "copy_details"
-  sync_all_day_events: boolean
-  tentative_events: TentativeEvents
-  unanswered_invitations: UnansweredInvitations
-}
-export type RuleEndpointPayload = { connected_account_id: string; calendar_id: string }
-export type GoogleConfiguration = { configured: boolean; redirect_uri: string | null }
-export type ConnectedAccount = {
-  id: string
-  display_name: string
-  email: string
-  avatar_url: string | null
-  state: string
-  rule_count: number
-  /** When the account was last connected or reauthorized; null while disconnected. */
-  authorized_at: string | null
-}
-export type GoogleAccountAccess = {
-  calendar_api: boolean
-  calendar_list_access: boolean
-  event_access: boolean
-  calendars_visible: number
-  writable_calendars: number
-}
-export type DiscoveredCalendar = {
-  id: string
-  summary: string
-  writable: boolean
-  primary: boolean
-}
-export type RulePreview = {
-  rule_id: string
-  eligible_events: number
-  excluded_events: number
-  recurring_series: number
-  occurrence_changes: number
-  sample: {
-    source_event_id: string
-    projected_title: string
-    all_day: boolean
-    kind: "single" | "series" | "occurrence"
-    planned_action: "create" | "update" | "delete" | "ignore" | "conflict"
-  }[]
-}
-export type SyncResult = {
-  rule_id: string
-  created: number
-  updated: number
-  deleted: number
-  ignored: number
-  conflicts: number
-  consistent?: boolean
-  checked_mappings?: number
-  /** Reconcile Now only: what still differs after its sync. Reported, never repaired. */
-  drift?: { kind: string; detail: string }[]
-  /** Reconcile Now only: blocks the check itself recorded, beside the sync's `conflicts`. */
-  reconciliation_conflicts?: { reason: string; detail: string }[]
-}
-export type ActivityCategory = "changed" | "unchanged" | "skipped" | "blocked"
-export type AuditEntry = {
-  id: number
-  run_id: string | null
-  occurred_at: string
-  rule_id: string
-  action: string
-  outcome: string
-  category: ActivityCategory
-  reason: string | null
-  detail: string
-  source_event_id: string | null
-  destination_event_id: string | null
-  /** The source event as its run recorded it; null for entries recorded before names were kept. */
-  event: RecordedEvent | null
-  /** A repair that redoes the same event's previous one, recorded by an earlier run. */
-  repeated: boolean
-  /** The source fields this entry's Source Change touched; null when it recorded none. */
-  changed_fields: string[] | null
-}
-export type RecordedTime = { all_day: boolean; starts: string | null; ends: string | null }
-export type FieldChange = {
-  field: string
-  before: string | null
-  after: string | null
-  before_time: RecordedTime | null
-  after_time: RecordedTime | null
-  added: string[]
-  removed: string[]
-}
+export type RecentChange = Schemas["RecentChangeResponse"]
+export type RuleDetail = Schemas["RuleDetailResponse"]
+export type RulePolicyPayload = Schemas["UpdateRulePolicyRequest"]
+export type RuleEndpointPayload = Schemas["CalendarEndpointPayload"]
+export type GoogleConfiguration = Schemas["GoogleConfigurationResponse"]
+export type ConnectedAccount = Schemas["ConnectedAccountResponse"]
+export type GoogleAccountAccess = Schemas["GoogleAccountAccessResponse"]
+export type DiscoveredCalendar = Schemas["DiscoveredCalendarResponse"]
+export type RulePreview = Schemas["RulePreviewResponse"]
+export type SyncResult = Schemas["SyncResultResponse"]
+/** Reconcile Now's sync, plus what still differs after it (reported, never repaired) and the
+ * blocks the check itself recorded, beside the sync's `conflicts`. */
+export type ReconcileResult = Schemas["ReconcileResultResponse"]
+export type AuditEntry = Schemas["AuditEntryResponse"]
+export type ActivityCategory = AuditEntry["category"]
+export type RecordedTime = Schemas["RecordedTimeResponse"]
+export type FieldChange = Schemas["FieldChangeResponse"]
 /** What changed in an entry's source event; values other than titles are kept for 90 days. */
-export type SourceChange = {
-  fields: string[]
-  values_available: boolean
-  changes: FieldChange[]
-}
-export type RecordedEvent = {
-  title: string
-  all_day: boolean
-  starts: string | null
-  ends: string | null
-  recurring: boolean
-  cancelled: boolean
-  renamed_from: string | null
-  /** The time the previous entry recorded, when this entry saw the event move. */
-  moved_from: { all_day: boolean; starts: string | null; ends: string | null } | null
-}
+export type SourceChange = Schemas["SourceChangeResponse"]
+export type RecordedEvent = Schemas["RecordedEventResponse"]
 export type ActivityFilters = {
   ruleId?: string
   categories?: ActivityCategory[]
@@ -230,51 +79,15 @@ export type ActivityFilters = {
   /** Matches recorded event titles, ignoring case. */
   query?: string
 }
-export type EventSnapshot = {
-  found: boolean
-  cancelled: boolean
-  title: string
-  all_day: boolean
-  starts: string | null
-  ends: string | null
-  recurring: boolean
-  web_link: string | null
-}
-export type ActivityEvent = { source: EventSnapshot; destination: EventSnapshot | null }
-export type Incident = {
-  id: string
-  rule_id: string | null
-  category: string
-  state: "open" | "resolved"
-  summary: string
-  opened_at: string
-  updated_at: string
-  resolved_at: string | null
-  /** Why a resolved incident resolved; null while open or when the reason was not recorded. */
-  resolution: "sync_succeeded" | "blocks_cleared" | "rule_removed" | null
-  /** The Connected Account whose failure opened or last refreshed it; null when not recorded. */
-  account_id: string | null
-}
+export type EventSnapshot = Schemas["EventSnapshotResponse"]
+export type ActivityEvent = Schemas["ActivityEventResponse"]
+export type Incident = Schemas["IncidentResponse"]
 
-export type DatabaseUsage = {
-  bytes: number
-  reclaimable_bytes: number
-  activity_entries: number
-  oldest_activity_at: string | null
-}
-export type LogUsage = {
-  bytes: number
-  files: number
-  oldest_at: string | null
-  newest_at: string | null
-}
-export type StorageUsage = {
-  database: DatabaseUsage
-  logs: LogUsage | null
-  activity_ages: number[]
-}
-export type ClearableActivity = { older_than_days: number; entries: number }
-export type ClearedActivity = { removed: number; database: DatabaseUsage }
+export type DatabaseUsage = Schemas["DatabaseUsageResponse"]
+export type LogUsage = Schemas["LogUsageResponse"]
+export type StorageUsage = Schemas["StorageResponse"]
+export type ClearableActivity = Schemas["ClearableActivityResponse"]
+export type ClearedActivity = Schemas["ClearedActivityResponse"]
 export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
 
 export const ACTIVITY_PAGE_SIZE = 100
@@ -314,7 +127,7 @@ export const api = {
       projections: ProjectionHandling
     },
   ) =>
-    request<{ rule: Rule } & RemovalResult>(
+    request<Schemas["RuleReplacementResponse"]>(
       `/api/v1/rules/${encodeURIComponent(ruleId)}/replace`,
       { method: "POST", body: JSON.stringify(payload) },
     ),
@@ -333,10 +146,7 @@ export const api = {
     }),
   calendars: (accountId: string) =>
     request<DiscoveredCalendar[]>(`/api/v1/accounts/${encodeURIComponent(accountId)}/calendars`),
-  createRule: (payload: {
-    source: { connected_account_id: string; calendar_id: string }
-    destination: { connected_account_id: string; calendar_id: string }
-  } & RulePolicyPayload) =>
+  createRule: (payload: Schemas["CreateRuleRequest"]) =>
     request<Rule>("/api/v1/rules", { method: "POST", body: JSON.stringify(payload) }),
   previewRule: (ruleId: string) =>
     request<RulePreview>(`/api/v1/rules/${encodeURIComponent(ruleId)}/preview`, {
@@ -355,7 +165,7 @@ export const api = {
       method: "POST",
     }),
   reconcileRule: (ruleId: string) =>
-    request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
+    request<ReconcileResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
       method: "POST",
     }),
   activity: ({ ruleId, categories, before, query }: ActivityFilters = {}) => {

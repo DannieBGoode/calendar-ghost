@@ -63,7 +63,7 @@ import {
   type DiscoveredCalendar,
   type EventSnapshot,
   type Incident,
-  type Rule,
+  type RuleSummary,
 } from "@/lib/api"
 import {
   accessRenewedSince,
@@ -73,7 +73,7 @@ import { plural } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
 type RuleContext = {
-  rulesById: Map<string, Rule>
+  rulesById: Map<string, RuleSummary>
   accountsById: Map<string, ConnectedAccount>
   calendarsByAccount: Map<string, DiscoveredCalendar[] | undefined>
   rulesLoaded: boolean
@@ -384,7 +384,7 @@ function rulePickerOptions(
   context: RuleContext,
 ): { options: RulePickerOption[]; showAccounts: boolean } {
   const rules = [...context.rulesById.values()]
-  const endpoint = (value: Rule["source"]) => ({
+  const endpoint = (value: RuleSummary["source"]) => ({
     calendar: endpointName(value, context),
     accountId: value.connected_account_id,
     account: context.accountsById.get(value.connected_account_id),
@@ -875,7 +875,7 @@ function ResolvedIncidents({ incidents, context }: { incidents: Incident[]; cont
   )
 }
 
-function endpointName(endpoint: Rule["source"], context: RuleContext): string {
+function endpointName(endpoint: RuleSummary["source"], context: RuleContext): string {
   return ruleEndpointLabel(
     endpoint,
     context.accountsById.get(endpoint.connected_account_id),

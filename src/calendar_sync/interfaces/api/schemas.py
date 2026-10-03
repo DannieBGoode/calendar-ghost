@@ -2,15 +2,28 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+from calendar_sync.application.activity import IncidentResolutionValue, IncidentState
 
 ProjectionChoice = Literal["delete", "detach"]
 # What a rule does with events its source calendar answered Maybe to, or has not answered yet.
 TentativeChoice = Literal["sync", "mark", "skip"]
 UnansweredChoice = Literal["wait", "as_tentative"]
+PrivacyPolicy = Literal["busy_only", "copy_details"]
 
 
-class SetupStatusResponse(BaseModel):
+class ApiResponse(BaseModel):
+    """A response body. Every field is always sent, so the schema marks defaulted ones required,
+    and the frontend types generated from it (web/openapi.json) do not make them optional."""
+
+    model_config = ConfigDict(
+        json_schema_mode_override="serialization",
+        json_schema_serialization_defaults_required=True,
+    )
+
+
+class SetupStatusResponse(ApiResponse):
     administrator_configured: bool
 
 
@@ -18,7 +31,7 @@ class PasswordRequest(BaseModel):
     password: str = Field(min_length=12, max_length=256)
 
 
-class SessionResponse(BaseModel):
+class SessionResponse(ApiResponse):
     authenticated: bool
 
 
@@ -35,17 +48,17 @@ class NamedCalendarEndpointResponse(CalendarEndpointPayload):
 class CreateRuleRequest(BaseModel):
     source: CalendarEndpointPayload
     destination: CalendarEndpointPayload
-    privacy_policy: str = "busy_only"
+    privacy_policy: PrivacyPolicy = "busy_only"
     sync_all_day_events: bool = True
     tentative_events: TentativeChoice = "mark"
     unanswered_invitations: UnansweredChoice = "as_tentative"
 
 
-class RuleResponse(BaseModel):
+class RuleResponse(ApiResponse):
     id: str
     source: CalendarEndpointPayload
     destination: CalendarEndpointPayload
-    privacy_policy: str
+    privacy_policy: PrivacyPolicy
     sync_all_day_events: bool
     tentative_events: TentativeChoice
     unanswered_invitations: UnansweredChoice
@@ -53,7 +66,7 @@ class RuleResponse(BaseModel):
     reprojection_required: bool
 
 
-class RunOutcomeResponse(BaseModel):
+class RunOutcomeResponse(ApiResponse):
     completed_at: str
     succeeded: bool
     full_run: bool
@@ -67,7 +80,7 @@ class RunOutcomeResponse(BaseModel):
     last_succeeded_at: str | None
 
 
-class PreviewSummaryResponse(BaseModel):
+class PreviewSummaryResponse(ApiResponse):
     completed_at: str
     eligible_events: int
     excluded_events: int
@@ -78,7 +91,52 @@ class PreviewSummaryResponse(BaseModel):
 WorkKind = Literal["preview", "sync", "reconciliation", "removal"]
 
 
-class RuleWorkResponse(BaseModel):
+class SyncResultResponse(ApiResponse):
+    rule_id: str
+    created: int
+    updated: int
+    deleted: int
+    ignored: int
+    conflicts: int
+
+
+class DriftResponse(ApiResponse):
+    kind: str
+    detail: str
+
+
+class ReconciliationConflictResponse(ApiResponse):
+    reason: str
+    detail: str
+
+
+class ReconcileResultResponse(SyncResultResponse):
+    consistent: bool
+    checked_mappings: int
+    drift: list[DriftResponse]
+    """What is still different after the sync; reported, not repaired."""
+    reconciliation_conflicts: list[ReconciliationConflictResponse]
+    """Blocked by the reconciliation itself, beside the sync's own `conflicts`."""
+
+
+class PreviewItemResponse(ApiResponse):
+    source_event_id: str
+    projected_title: str
+    all_day: bool
+    kind: Literal["single", "series", "occurrence"]
+    planned_action: Literal["create", "update", "delete", "ignore", "conflict"]
+
+
+class RulePreviewResponse(ApiResponse):
+    rule_id: str
+    eligible_events: int
+    excluded_events: int
+    recurring_series: int
+    occurrence_changes: int
+    sample: list[PreviewItemResponse]
+
+
+class RuleWorkResponse(ApiResponse):
     kind: WorkKind
     started_at: str
     handling: Literal["delete", "detach"] | None
@@ -108,7 +166,7 @@ class RuleDetailResponse(RuleResponse):
 
 
 class UpdateRulePolicyRequest(BaseModel):
-    privacy_policy: str
+    privacy_policy: PrivacyPolicy
     sync_all_day_events: bool
     tentative_events: TentativeChoice
     unanswered_invitations: UnansweredChoice
@@ -120,21 +178,21 @@ class ReplaceRuleRequest(BaseModel):
     projections: ProjectionChoice
 
 
-class RemovalResponse(BaseModel):
+class RemovalResponse(ApiResponse):
     deleted: int
     detached: int
     conflicts: int
 
 
-class RuleReplacementResponse(BaseModel):
+class RuleReplacementResponse(ApiResponse):
     rule: RuleResponse
     deleted: int
     detached: int
     conflicts: int
 
 
-class DashboardResponse(BaseModel):
-    health: str
+class DashboardResponse(ApiResponse):
+    health: Literal["healthy", "attention"]
     connected_accounts: int
     disconnected_accounts: int
     sync_rules: int
@@ -148,12 +206,12 @@ class DashboardResponse(BaseModel):
     blocked_rule_id: str | None = None
 
 
-class GoogleConfigurationResponse(BaseModel):
+class GoogleConfigurationResponse(ApiResponse):
     configured: bool
     redirect_uri: str | None
 
 
-class ConnectedAccountResponse(BaseModel):
+class ConnectedAccountResponse(ApiResponse):
     id: str
     display_name: str
     email: str
@@ -164,7 +222,7 @@ class ConnectedAccountResponse(BaseModel):
     authorized_at: str | None
 
 
-class GoogleAccountAccessResponse(BaseModel):
+class GoogleAccountAccessResponse(ApiResponse):
     calendar_api: bool
     calendar_list_access: bool
     event_access: bool
@@ -172,7 +230,7 @@ class GoogleAccountAccessResponse(BaseModel):
     writable_calendars: int
 
 
-class DiscoveredCalendarResponse(BaseModel):
+class DiscoveredCalendarResponse(ApiResponse):
     id: str
     summary: str
     access_role: str
@@ -182,13 +240,13 @@ class DiscoveredCalendarResponse(BaseModel):
     primary: bool
 
 
-class RecordedTimeResponse(BaseModel):
+class RecordedTimeResponse(ApiResponse):
     all_day: bool = False
     starts: str | None = None
     ends: str | None = None
 
 
-class RecordedEventResponse(BaseModel):
+class RecordedEventResponse(ApiResponse):
     """The source event as its run recorded it; see ADR 0014."""
 
     title: str
@@ -202,7 +260,7 @@ class RecordedEventResponse(BaseModel):
     """The time the previous entry for this event recorded, when this entry saw it move."""
 
 
-class AuditEntryResponse(BaseModel):
+class AuditEntryResponse(ApiResponse):
     id: int
     run_id: str | None
     occurred_at: str
@@ -221,7 +279,7 @@ class AuditEntryResponse(BaseModel):
     """The source fields this entry's Source Change touched (ADR 0017); None when none."""
 
 
-class FieldChangeResponse(BaseModel):
+class FieldChangeResponse(ApiResponse):
     field: str
     before: str | None = None
     after: str | None = None
@@ -231,7 +289,7 @@ class FieldChangeResponse(BaseModel):
     removed: list[str] = []
 
 
-class SourceChangeResponse(BaseModel):
+class SourceChangeResponse(ApiResponse):
     """What changed in the entry's source event; values are kept for 90 days."""
 
     fields: list[str]
@@ -239,7 +297,7 @@ class SourceChangeResponse(BaseModel):
     changes: list[FieldChangeResponse]
 
 
-class EventSnapshotResponse(BaseModel):
+class EventSnapshotResponse(ApiResponse):
     found: bool
     cancelled: bool = False
     title: str = ""
@@ -250,45 +308,45 @@ class EventSnapshotResponse(BaseModel):
     web_link: str | None = None
 
 
-class ActivityEventResponse(BaseModel):
+class ActivityEventResponse(ApiResponse):
     source: EventSnapshotResponse
     destination: EventSnapshotResponse | None
 
 
-class IncidentResponse(BaseModel):
+class IncidentResponse(ApiResponse):
     id: str
     rule_id: str | None
     category: str
-    state: str
+    state: IncidentState
     summary: str
     opened_at: str
     updated_at: str
     resolved_at: str | None
-    resolution: str | None
+    resolution: IncidentResolutionValue | None
     account_id: str | None
 
 
-class DatabaseUsageResponse(BaseModel):
+class DatabaseUsageResponse(ApiResponse):
     bytes: int
     reclaimable_bytes: int
     activity_entries: int
     oldest_activity_at: str | None
 
 
-class LogUsageResponse(BaseModel):
+class LogUsageResponse(ApiResponse):
     bytes: int
     files: int
     oldest_at: str | None
     newest_at: str | None
 
 
-class StorageResponse(BaseModel):
+class StorageResponse(ApiResponse):
     database: DatabaseUsageResponse
     logs: LogUsageResponse | None
     activity_ages: list[int]
 
 
-class ClearableActivityResponse(BaseModel):
+class ClearableActivityResponse(ApiResponse):
     older_than_days: int
     entries: int
 
@@ -297,12 +355,12 @@ class ClearActivityRequest(BaseModel):
     older_than_days: int
 
 
-class ClearedActivityResponse(BaseModel):
+class ClearedActivityResponse(ApiResponse):
     removed: int
     database: DatabaseUsageResponse
 
 
-class RecentChangeResponse(BaseModel):
+class RecentChangeResponse(ApiResponse):
     """One written event; an identical repair repeated among recent entries is counted on it."""
 
     entry: AuditEntryResponse

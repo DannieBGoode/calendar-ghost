@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest"
 
 import { firstOtherCalendar, writableCalendars } from "./writable-calendars"
 
-const writable = { id: "work@example.test", summary: "Work", writable: true, primary: true }
-const readOnly = { id: "holidays@example.test", summary: "Holidays", writable: false, primary: false }
-const otherWritable = { id: "team@example.test", summary: "Team", writable: true, primary: false }
+const writable = { id: "work@example.test", summary: "Work", access_role: "owner", writable: true, primary: true }
+const readOnly = { id: "holidays@example.test", summary: "Holidays", access_role: "reader", writable: false, primary: false }
+const otherWritable = { id: "team@example.test", summary: "Team", access_role: "writer", writable: true, primary: false }
 
 describe("writableCalendars", () => {
   it("excludes a read-only calendar and keeps a writable one", () => {

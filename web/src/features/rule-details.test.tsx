@@ -9,6 +9,7 @@ const account: ConnectedAccount = {
   id: "personal",
   display_name: "Daniel Calatayud",
   email: "daniel@example.com",
+  provider: "google",
   avatar_url: null,
   state: "connected",
   rule_count: 0,
@@ -18,6 +19,7 @@ const account: ConnectedAccount = {
 const writableCalendar: DiscoveredCalendar = {
   id: "work@example.test",
   summary: "Work",
+  access_role: "owner",
   writable: true,
   primary: true,
 }
@@ -25,6 +27,7 @@ const writableCalendar: DiscoveredCalendar = {
 const readOnlyCalendar: DiscoveredCalendar = {
   id: "holidays@example.test",
   summary: "Holidays",
+  access_role: "reader",
   writable: false,
   primary: false,
 }

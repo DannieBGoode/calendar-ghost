@@ -179,17 +179,22 @@ class OperationsOverview:
     """Events of existing rules whose latest decision was a block, newest first."""
 
 
+# The values the incidents table allows; its CHECK constraints keep stored rows to these.
+IncidentState = Literal["open", "resolved"]
+IncidentResolutionValue = Literal["sync_succeeded", "blocks_cleared", "rule_removed"]
+
+
 @dataclass(frozen=True, slots=True)
 class IncidentSummary:
     id: str
     rule_id: str | None
     category: str
-    state: str
+    state: IncidentState
     summary: str
     opened_at: str
     updated_at: str
     resolved_at: str | None = None
-    resolution: str | None = None
+    resolution: IncidentResolutionValue | None = None
     """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
     account_id: str | None = None
     """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
