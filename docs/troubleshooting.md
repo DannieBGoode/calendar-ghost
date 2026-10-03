@@ -52,8 +52,8 @@ Each Sync Run, scheduled or started with **Sync now**, writes:
   progress. Nothing needs fixing.
 
 Reconcile now and Rule Removal write one `reconciliation started`/`removal started` line and one
-`finished`, `failed`, or `interrupted` line each. A Google call slower than 10 seconds is a WARNING
-`slow google call op=events.instances status=200 took=12.4s`.
+`finished`, `failed`, or `interrupted` line each. A provider call slower than 10 seconds is a WARNING
+`slow provider call provider=google op=events.instances status=200 took=12.4s`.
 
 To judge whether a long run is still working, compare consecutive `run progress` lines for the same
 `run=`. Rules and Rule Details show the same count while a sync runs, as "380 of 840 checked". If
@@ -61,10 +61,11 @@ To judge whether a long run is still working, compare consecutive `run progress`
 `first-run`, `daily-pass`, or `reprojection` can take many minutes. A growing `rate_limited` count
 means Google is slowing the run down and it will finish later. If no `run progress` line appears for
 several minutes and no `run finished` or `run failed` follows, the run is waiting on a single Google
-call; look for `slow google call` warnings, or turn on debug logging.
+call; look for `slow provider call` warnings, or turn on debug logging.
 
-Set `CALENDAR_SYNC_LOG_LEVEL=DEBUG` in `.env` and run `docker compose up -d` to also log every Google
-call as `google call op=events.get status=200 took=84ms`. Debug logging is verbose; set it back to
+Set `CALENDAR_SYNC_LOG_LEVEL=DEBUG` in `.env` and run `docker compose up -d` to also log every
+provider call as `provider call provider=google op=events.get status=200 took=84ms`. Debug logging
+is verbose; set it back to
 `INFO` when you are done.
 
 ## Database is large
