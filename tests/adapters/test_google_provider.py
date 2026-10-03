@@ -12,6 +12,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     EventId,
@@ -1053,3 +1054,15 @@ def test_occurrence_exceptions_keep_occurrences_moved_out_of_the_window_but_not_
         "projection-1_20260915T080000Z"
     ]
     assert "timeMin" not in events_api.instances.call_args.kwargs
+
+
+def test_google_failures_name_google_and_the_account() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_raising(500)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.get_event(event().reference)
+
+    assert raised.value.provider is ProviderKind.GOOGLE
+    assert raised.value.account_id == event().reference.calendar.connected_account_id

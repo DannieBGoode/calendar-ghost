@@ -174,6 +174,8 @@ def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCa
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
     except ConnectedAccountDisconnected as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except AuthorizationNotConfigured as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
     return [
         DiscoveredCalendarResponse(
             id=calendar.id,
@@ -201,6 +203,8 @@ def verify_account_access(account_id: str, services: Services) -> GoogleAccountA
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     except AccountAccessCheckFailed as error:
         raise HTTPException(status.HTTP_424_FAILED_DEPENDENCY, str(error)) from error
+    except AuthorizationNotConfigured as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error)) from error
     return GoogleAccountAccessResponse(
         calendar_api=True,
         calendar_list_access=True,

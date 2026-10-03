@@ -66,9 +66,10 @@ assignment lets mypy prove the container satisfies every one. `interfaces/api/de
 the shared `require_admin` session guard; `tests/adapters/test_api_authorization.py` fails if any
 `/api/` route other than setup, the session routes, and the OAuth callback lacks it.
 
-Google authorization is split the same way. `infrastructure/google/oauth.py` holds only the
-state-protected OAuth flow, configured by an `OAuthClientConfig` value that bootstrap builds from
-Settings. Connected Accounts and their credentials, encrypted by the `CredentialCipher` in
+Google authorization is split the same way. `infrastructure/google/oauth.py` holds the
+state-protected OAuth flow, Google credentials, and Google calendar discovery, configured by an
+`OAuthClientConfig` value that bootstrap builds from Settings. Connected Accounts and their
+credentials, encrypted by the `CredentialCipher` in
 `infrastructure/security.py`, live in `infrastructure/persistence/accounts.py`, which implements the
 `ConnectedAccountRepository` port. Deleting an account and its rules is the `DeleteConnectedAccount`
 use case, which deletes both in one unit of work; the adapters only delete their own records.
@@ -103,7 +104,13 @@ the roles it calls:
 | `OccurrenceWriter` | write and cancel single occurrences of an owned series | Sync Run |
 
 `CalendarProvider` combines every role for the Sync Run. Rule Preview is side-effect-free by type:
-it holds a `CalendarReader`, which declares no write. The Google adapter implements every role.
+it holds a `CalendarReader`, which declares no write.
+
+Each provider's adapter implements every role it can honor. `RoutingCalendarProvider` and
+`RoutingAccountCalendars` in `infrastructure/providers/routing.py` implement the same ports and
+send each request to the adapter of the Provider Kind its Connected Account belongs to, so a rule's
+calendars may belong to different providers (ADR 0022). The use cases receive the routers and
+never name a provider.
 
 ## Logging
 

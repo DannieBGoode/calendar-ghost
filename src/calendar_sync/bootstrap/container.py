@@ -33,6 +33,7 @@ from calendar_sync.application.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.rules import (
@@ -84,6 +85,10 @@ from calendar_sync.infrastructure.persistence.sqlite import (
 )
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
+from calendar_sync.infrastructure.providers.routing import (
+    RoutingAccountCalendars,
+    RoutingCalendarProvider,
+)
 from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
 from calendar_sync.infrastructure.security import (
     CredentialCipher,
@@ -154,6 +159,8 @@ class Adapters:
     notifications: IncidentNotifications | None = None
     accounts: SqliteConnectedAccountStore | None = None
     google_oauth: GoogleOAuthService | None = None
+    account_calendars: AccountCalendars | None = None
+    """Lists each account's calendars through its provider's adapter."""
     calendar_provider: CalendarProvider | None = None
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
     """Counts the calendar provider's calls for each run's log lines."""
@@ -219,7 +226,11 @@ def build_adapters(settings: Settings) -> Adapters:
         adapters,
         accounts=accounts,
         google_oauth=google_oauth,
-        calendar_provider=GoogleCalendarProvider(google_oauth.service_for, clock),
+        account_calendars=RoutingAccountCalendars(accounts, {ProviderKind.GOOGLE: google_oauth}),
+        calendar_provider=RoutingCalendarProvider(
+            accounts,
+            {ProviderKind.GOOGLE: GoogleCalendarProvider(google_oauth.service_for, clock)},
+        ),
         call_stats=ContextProviderCallStats(),
         notifications=_notifier(settings),
     )
@@ -310,10 +321,10 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             DeleteConnectedAccount(unit_of_work, locks) if accounts else None
         ),
         authorization=adapters.google_oauth,
-        account_calendars=adapters.google_oauth,
+        account_calendars=adapters.account_calendars,
         discover_calendars=(
-            DiscoverCalendars(adapters.google_oauth, unit_of_work)
-            if adapters.google_oauth
+            DiscoverCalendars(adapters.account_calendars, unit_of_work)
+            if adapters.account_calendars
             else None
         ),
         execute_sync_rule=execute_sync_rule,

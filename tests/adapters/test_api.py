@@ -73,6 +73,7 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
+from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_calendar import FakeCalendars, FixedClock
@@ -686,6 +687,7 @@ def test_connected_account_access_can_be_verified(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     assert adapters.google_oauth is not None
+    _connect_accounts(tmp_path / "test.db", "account-1")
     verify_access = Mock(return_value=AccountAccess(3, 2))
     monkeypatch.setattr(adapters.google_oauth, "verify_access", verify_access)
     app = create_app(container)
@@ -818,6 +820,7 @@ def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     assert adapters.google_oauth is not None
+    _connect_accounts(tmp_path / "test.db", "account-1")
     monkeypatch.setattr(adapters.google_oauth, "verify_access", Mock(side_effect=failure))
     app = create_app(container)
 
@@ -2535,3 +2538,25 @@ def test_recovering_a_rule_moves_its_incident_to_the_account_still_unauthorized(
     assert [(item["state"], item["account_id"]) for item in incidents] == [
         ("open", "personal-account")
     ]
+
+
+def test_calendars_of_a_provider_this_installation_has_not_configured_are_unavailable(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "test.db"
+    settings = Settings(database, master_key=CredentialCipher.generate_key())
+    _, adapters = _installation(settings)
+    assert adapters.accounts is not None
+    unconfigured = replace(
+        adapters, account_calendars=RoutingAccountCalendars(adapters.accounts, {})
+    )
+    container = replace(compose(settings, unconfigured), scheduler=None)
+    _connect_accounts(database, "account-1")
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        listed = client.get("/api/v1/accounts/account-1/calendars")
+        verified = client.post("/api/v1/accounts/account-1/verify")
+
+    assert (listed.status_code, verified.status_code) == (503, 503)
+    assert listed.json()["detail"] == "Google Calendar is not configured on this installation"

@@ -107,6 +107,7 @@ class GoogleCalendarProvider:
                         raise ProviderFailure(
                             ProviderFailureKind.PERMANENT,
                             "Google response did not include a synchronization token",
+                            provider=ProviderKind.GOOGLE,
                         )
                     return ProviderChangeSet(tuple(items), next_cursor, complete=not cursor)
                 parameters["pageToken"] = page_token
@@ -197,6 +198,7 @@ class GoogleCalendarProvider:
             raise ProviderFailure(
                 ProviderFailureKind.PERMANENT,
                 "Google event does not carry compatible ownership metadata",
+                provider=ProviderKind.GOOGLE,
             )
         try:
             payload = self._call(
@@ -329,12 +331,14 @@ class GoogleCalendarProvider:
                 raise ProviderFailure(
                     ProviderFailureKind.TEMPORARY,
                     "Google series could not be read while resolving an occurrence",
+                    provider=ProviderKind.GOOGLE,
                 ) from error
             raise self._failure(error, series.calendar.connected_account_id) from error
         # Pages beyond the limit were not read, so the occurrence is not proven absent.
         raise ProviderFailure(
             ProviderFailureKind.TEMPORARY,
             "Google did not finish resolving an occurrence within the page limit",
+            provider=ProviderKind.GOOGLE,
         )
 
     def list_occurrences(
@@ -463,7 +467,9 @@ class GoogleCalendarProvider:
         )
         if instance is None:
             raise ProviderFailure(
-                ProviderFailureKind.PERMANENT, "Google occurrence could not be resolved"
+                ProviderFailureKind.PERMANENT,
+                "Google occurrence could not be resolved",
+                provider=ProviderKind.GOOGLE,
             )
         body = projection_payload(
             projection, rule_id, source_series, operation_key, original_start=original_start
@@ -519,7 +525,11 @@ class GoogleCalendarProvider:
     def _failure(self, error: Exception, account: ConnectedAccountId) -> ProviderFailure:
         # The clock turns a Retry-After date into the seconds the retry helper waits. The account
         # names whose access to renew when Google rejected its credentials.
-        return replace(_provider_failure(error, self._clock.now()), account_id=account)
+        return replace(
+            _provider_failure(error, self._clock.now()),
+            account_id=account,
+            provider=ProviderKind.GOOGLE,
+        )
 
     def _owned_occurrence(
         self,
@@ -543,6 +553,7 @@ class GoogleCalendarProvider:
             raise ProviderFailure(
                 ProviderFailureKind.PERMANENT,
                 "Google occurrence does not carry compatible ownership metadata",
+                provider=ProviderKind.GOOGLE,
             )
         return instance
 
