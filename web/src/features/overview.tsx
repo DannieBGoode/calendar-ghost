@@ -111,9 +111,11 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
       : "No rules running"
   const secondFact = dashboard.data.last_synced_at
     ? `Last sync ${relativeTime(dashboard.data.last_synced_at, now)}`
-    : health.tone === "setup"
-      ? "Nothing written yet"
-      : "First sync within five minutes"
+    : health.tone === "attention"
+      ? "Waiting for recovery"
+      : health.tone === "setup"
+        ? "Nothing written yet"
+        : "First sync within five minutes"
 
   return (
     <div className="page-section overview-page">

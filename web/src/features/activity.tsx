@@ -311,31 +311,34 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
                       {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
                     </tr>
                   </thead>
-                  {groups.flatMap((group) => [
-                    ...(group.day
+                  {groups.flatMap((group, index) => {
+                    const dayId = group.day ? `activity-day-${index}` : undefined
+                    return [
+                      ...(group.day
                       ? [
                           <tbody key={`${group.key}-day`} role="rowgroup" className="activity-day">
                             <tr role="row">
-                              <th scope="rowgroup" role="rowheader" colSpan={columns}>{group.day}</th>
+                              <th id={dayId} scope="rowgroup" role="rowheader" colSpan={columns}>{group.day}</th>
                             </tr>
                           </tbody>,
                         ]
                       : []),
-                    <tbody key={group.key} role="rowgroup" className="activity-run">
-                      {group.run.entries.map((entry) => (
-                        <EntryRow
-                          key={entry.id}
-                          entry={entry}
-                          context={context}
-                          state={state}
-                          selected={entryId === entry.id}
-                          showRuleColumn={showRuleColumn}
-                          onOpen={openEntry}
-                          onFilterRule={(value) => changeFilters({ ruleId: value })}
-                        />
-                      ))}
-                    </tbody>,
-                  ])}
+                      <tbody key={group.key} role="rowgroup" className="activity-run" aria-labelledby={dayId}>
+                        {group.run.entries.map((entry) => (
+                          <EntryRow
+                            key={entry.id}
+                            entry={entry}
+                            context={context}
+                            state={state}
+                            selected={entryId === entry.id}
+                            showRuleColumn={showRuleColumn}
+                            onOpen={openEntry}
+                            onFilterRule={(value) => changeFilters({ ruleId: value })}
+                          />
+                        ))}
+                      </tbody>,
+                    ]
+                  })}
                 </table>
                 {activity.hasNextPage && (
                   <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>

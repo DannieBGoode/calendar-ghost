@@ -25,3 +25,10 @@ describe("activity for removed rules", () => {
     expect(activitySource).toContain("eventLookupFailure(event.error)")
   })
 })
+
+describe("activity date grouping", () => {
+  it("associates each date label with its following activity rowgroup", () => {
+    expect(activitySource).toContain("id={dayId}")
+    expect(activitySource).toContain("aria-labelledby={dayId}")
+  })
+})
