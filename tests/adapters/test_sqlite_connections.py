@@ -3,11 +3,15 @@
 import sqlite3
 from contextlib import closing
 from datetime import timedelta
+from importlib.resources import files
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from calendar_sync.application.errors import ProviderFailureKind
+from calendar_sync.infrastructure.persistence import sqlite as sqlite_persistence
+from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.connections import open_connection, transaction
 from calendar_sync.infrastructure.persistence.health import SqliteRuleHealthRecords
 from calendar_sync.infrastructure.persistence.sqlite import (
@@ -181,3 +185,69 @@ def test_an_orphaned_failure_count_from_an_earlier_release_is_left_alone(tmp_pat
         "temporary",
         NOW.isoformat(),
     )
+
+
+def test_an_adapter_write_that_fails_releases_the_database(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    states = SqliteAuthorizationStates(database)
+    states.store("state-1")
+
+    with pytest.raises(sqlite3.IntegrityError) as failure:
+        states.store("state-1")
+
+    # The traceback keeps the failed call's frames alive, so a connection it left open, with its
+    # write lock, would still be held here; a writer that does not wait proves it was released.
+    assert failure.value is not None
+    with closing(open_connection(database, timeout=0)) as writer, writer:
+        writer.execute("DELETE FROM oauth_states")
+    states.store("state-2")
+    assert states.consume("state-2")
+
+
+class _Text:
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def read_text(self) -> str:
+        return self._text
+
+
+class _MigrationsWithAFailure:
+    """The shipped migrations, plus one that creates a table and then fails."""
+
+    NAME = "9999_fails_halfway.sql"
+
+    def __init__(self, shipped: Any) -> None:
+        self._shipped = shipped
+
+    def joinpath(self, name: str) -> Any:
+        if name == self.NAME:
+            return _Text("CREATE TABLE half_done (id INTEGER);\nINSERT INTO missing VALUES (1);")
+        return self._shipped.joinpath(name)
+
+
+def test_a_migration_that_fails_leaves_no_partial_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = _database(tmp_path)
+    with closing(open_connection(database)) as connection:
+        applied = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
+    monkeypatch.setattr(
+        sqlite_persistence,
+        "_FORWARD_MIGRATIONS",
+        (*sqlite_persistence._FORWARD_MIGRATIONS, (9999, _MigrationsWithAFailure.NAME)),
+    )
+    monkeypatch.setattr(
+        sqlite_persistence, "files", lambda package: _MigrationsWithAFailure(files(package))
+    )
+
+    with pytest.raises(sqlite3.OperationalError):
+        initialize_database(database)
+
+    with closing(open_connection(database, timeout=0)) as connection, connection:
+        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master")}
+        versions = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
+        # The database is not left locked by the failed upgrade.
+        connection.execute("DELETE FROM oauth_states")
+    assert "half_done" not in tables
+    assert versions == applied

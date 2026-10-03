@@ -379,7 +379,7 @@ def test_an_orphaned_failure_count_from_an_earlier_release_is_left_alone(tmp_pat
         "temporary",
         NOW.isoformat(),
     )
-```
+
 
 def test_an_adapter_write_that_fails_releases_the_database(tmp_path: Path) -> None:
     database = _database(tmp_path)
