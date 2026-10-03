@@ -177,9 +177,6 @@ its mappings and last successful incremental positions, and writes nothing while
 - **The calendar provider rejected synchronization**: the rule names a Connected Account that no
   longer exists (ADR 0022's router could not find it). Re-create the rule, choosing calendars from
   accounts that still exist.
-- **Google Calendar is not configured on this installation**: the rule's calendars belong to
-  Google, but this installation has no Google OAuth client or master key configured. Configure
-  Google OAuth and the master key, then recover the rule.
 
 To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
 syncing**. Its next run repairs drift before advancing either cursor. The next successful scheduled
