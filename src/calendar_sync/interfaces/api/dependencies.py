@@ -35,11 +35,13 @@ class StatusReaderServices(AdministratorServices, Protocol):
     def integration_tokens(self) -> IntegrationTokens: ...
 
 
-UNAUTHENTICATED = HTTPException(
-    status.HTTP_401_UNAUTHORIZED,
-    "valid credentials required",
-    headers={"WWW-Authenticate": "Bearer"},
-)
+def _unauthenticated() -> HTTPException:
+    """A fresh exception every refusal, so repeated failures do not share one growing traceback."""
+    return HTTPException(
+        status.HTTP_401_UNAUTHORIZED,
+        "valid credentials required",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def require_status_reader(
@@ -53,7 +55,7 @@ def require_status_reader(
     if access is StatusAccess.FORBIDDEN:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "token lacks the required scope")
     if access is not StatusAccess.GRANTED:
-        raise UNAUTHENTICATED
+        raise _unauthenticated()
 
 
 def available[T](use_case: T | None, detail: str) -> T:

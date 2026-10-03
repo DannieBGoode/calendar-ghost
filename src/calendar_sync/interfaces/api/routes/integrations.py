@@ -59,8 +59,9 @@ def list_integration_tokens(services: Services) -> list[IntegrationTokenResponse
     dependencies=ADMIN,
 )
 def issue_integration_token(
-    payload: IssueIntegrationTokenRequest, services: Services
+    payload: IssueIntegrationTokenRequest, services: Services, response: Response
 ) -> IssuedIntegrationTokenResponse:
+    response.headers["Cache-Control"] = "no-store"
     try:
         issued = services.integration_tokens.issue(payload.name)
     except InvalidIntegrationTokenName as error:

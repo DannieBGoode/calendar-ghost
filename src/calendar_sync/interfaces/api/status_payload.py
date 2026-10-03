@@ -8,6 +8,7 @@ from calendar_sync.application.status import (
     Problem,
     ProblemKind,
     RuleStatus,
+    calendar_display_name,
 )
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 from calendar_sync.interfaces.api.schemas import (
@@ -98,6 +99,6 @@ def _calendar(
     status: InstallationStatus, rule: RuleStatus, endpoint: CalendarEndpoint
 ) -> StatusCalendarResponse:
     return StatusCalendarResponse(
-        calendar=rule.summary.names.get(endpoint, "Unnamed calendar"),
+        calendar=calendar_display_name(endpoint, rule.summary.names),
         provider=status.providers.get(endpoint.connected_account_id.value),
     )

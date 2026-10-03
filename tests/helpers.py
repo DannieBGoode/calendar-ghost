@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 
+from calendar_sync.application.ports import Clock, SchedulerProgress
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
@@ -23,6 +24,20 @@ from calendar_sync.domain.model import (
 )
 
 NOW = datetime(2026, 8, 30, 10, 0, tzinfo=UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class RecentSchedulerHeartbeat:
+    """A `SchedulerHeartbeat` that always reports a pass completed moments ago, so a test's
+    Installation Status verdict reflects its seeded rules and incidents instead of "stalled": a
+    `None` scheduler (the common case for a container built without a master key) means no
+    scheduler can run at all, which is correctly "stalled", but these tests are not about that."""
+
+    clock: Clock
+
+    def progress(self) -> SchedulerProgress:
+        now = self.clock.now()
+        return SchedulerProgress(running_since=now, pass_started_at=None, last_completed_at=now)
 
 
 def endpoint(account: str, calendar: str) -> CalendarEndpoint:

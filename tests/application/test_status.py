@@ -19,6 +19,7 @@ from calendar_sync.application.status import (
     InstallationStatus,
     ProblemKind,
     assess_installation,
+    calendar_display_name,
     rule_name,
 )
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
@@ -117,6 +118,39 @@ def test_rule_names_use_last_known_calendar_names() -> None:
     summary = _summary(_rule())
     assert rule_name(summary) == "Personal → Work"
     assert rule_name(replace(summary, names={})) == "Unnamed calendar → Unnamed calendar"
+
+
+def test_calendar_display_name_hides_a_name_that_is_the_account_email() -> None:
+    account = endpoint("personal-account", "primary")
+    assert calendar_display_name(account, {account: "person@example.test"}) == "Unnamed calendar"
+
+
+def test_calendar_display_name_hides_a_name_that_is_the_bare_calendar_id() -> None:
+    bare = endpoint("personal-account", "cal-raw-id-123")
+    names = {bare: "cal-raw-id-123"}
+    assert calendar_display_name(bare, names) == "Unnamed calendar"
+
+
+def test_calendar_display_name_shows_a_normal_name() -> None:
+    normal = endpoint("personal-account", "personal-calendar")
+    assert calendar_display_name(normal, {normal: "Personal"}) == "Personal"
+
+
+def test_calendar_display_name_hides_a_missing_name() -> None:
+    missing = endpoint("personal-account", "personal-calendar")
+    assert calendar_display_name(missing, {}) == "Unnamed calendar"
+
+
+def test_rule_names_never_show_an_email_or_a_bare_calendar_id() -> None:
+    leaky = _rule("leaky")
+    summary = replace(
+        _summary(leaky),
+        names={
+            leaky.source: "secret.person@example.test",
+            leaky.destination: leaky.destination.calendar_id.value,
+        },
+    )
+    assert rule_name(summary) == "Unnamed calendar → Unnamed calendar"
 
 
 @pytest.mark.parametrize(

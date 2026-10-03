@@ -16,7 +16,7 @@ from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.locking import RuleWorkKind
 from calendar_sync.application.ports import Clock, SchedulerHeartbeat, SchedulerProgress
 from calendar_sync.application.rules import ListSyncRules, SyncRuleSummary
-from calendar_sync.domain.model import SyncRuleState
+from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 
 STALL_AFTER = timedelta(minutes=15)
 """Three scheduler intervals without a completed pass."""
@@ -117,9 +117,20 @@ class InstallationStatus:
         return "Setup is not finished."
 
 
+def calendar_display_name(endpoint: CalendarEndpoint, names: Mapping[CalendarEndpoint, str]) -> str:
+    """The calendar's last known name, except when showing it would leak an account email or
+    bare calendar id: Google stores `summary or id` as a calendar's name (so an unnamed or
+    unlisted calendar's "name" is its id), and a primary calendar's summary is the account email
+    by default."""
+    name = names.get(endpoint)
+    if not name or name == endpoint.calendar_id.value or "@" in name:
+        return UNNAMED_CALENDAR
+    return name
+
+
 def rule_name(summary: SyncRuleSummary) -> str:
-    source = summary.names.get(summary.rule.source, UNNAMED_CALENDAR)
-    destination = summary.names.get(summary.rule.destination, UNNAMED_CALENDAR)
+    source = calendar_display_name(summary.rule.source, summary.names)
+    destination = calendar_display_name(summary.rule.destination, summary.names)
     return f"{source} → {destination}"
 
 

@@ -38,6 +38,7 @@ from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
+from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import (
@@ -79,7 +80,16 @@ from calendar_sync.infrastructure.providers.routing import RoutingAccountCalenda
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_calendar import FakeCalendars, FixedClock
-from tests.helpers import all_day_event, endpoint, event, occurrence, rule, series, week_start
+from tests.helpers import (
+    RecentSchedulerHeartbeat,
+    all_day_event,
+    endpoint,
+    event,
+    occurrence,
+    rule,
+    series,
+    week_start,
+)
 
 
 def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
@@ -1114,6 +1124,24 @@ def _installation(settings: Settings, **substitutes: Any) -> tuple[Container, Ad
     return replace(compose(settings, adapters), scheduler=None), adapters
 
 
+def _ticking(container: Container, adapters: Adapters) -> Container:
+    """`container`, but its Installation Status verdict reads a scheduler that just ran a pass.
+
+    Without a master key, `compose` never builds a scheduler, so an installation with an enabled
+    rule reads "stalled": correct for that case, but this helper is for tests about something
+    else entirely (a stopped rule, a block), which should not be masked by "stalled".
+    """
+    return replace(
+        container,
+        get_installation_status=GetInstallationStatus(
+            container.list_sync_rules,
+            adapters.operations,
+            adapters.clock,
+            RecentSchedulerHeartbeat(adapters.clock),
+        ),
+    )
+
+
 def _client_with_rule(tmp_path: Path, state: SyncRuleState = SyncRuleState.ENABLED) -> TestClient:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
     _connect_accounts(tmp_path / "test.db", "personal-account", "work-account")
@@ -1532,7 +1560,7 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
         )
         uow.commit()
 
-    with TestClient(create_app(container)) as client:
+    with TestClient(create_app(_ticking(container, adapters))) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
         dashboard = client.get("/api/v1/dashboard").json()
         rules = {item["id"]: item for item in client.get("/api/v1/rules").json()}
@@ -1542,9 +1570,10 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
     assert rules["rule-1"]["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
     assert rules["rule-2"]["last_sync"]["last_succeeded_at"] is None
     assert dashboard["enabled_rules"] == 2
-    # Without a master key, no scheduler can run; nothing can synchronize until one can.
-    assert dashboard["status"] == "stalled"
-    assert dashboard["needs_attention"] is True
+    # No connected account is seeded here, so the verdict is "setup", not "healthy"; what this
+    # test cares about is that a failed run alone does not need attention.
+    assert dashboard["status"] == "setup"
+    assert dashboard["needs_attention"] is False
     assert rules["rule-1"]["last_sync"]["created"] == 2
     assert rules["rule-2"]["last_sync"]["failure_kind"] == "rate_limit"
 
@@ -1794,15 +1823,16 @@ def test_dashboard_names_no_rule_when_blocks_span_rules(tmp_path: Path) -> None:
         _audit("conflict", "mapping_inconsistent", rule_id="rule-2", source_event_id="b"),
     )
 
-    with TestClient(create_app(container)) as client:
+    with TestClient(create_app(_ticking(container, adapters))) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
         dashboard = client.get("/api/v1/dashboard").json()
 
     assert (dashboard["blocked_events"], dashboard["blocked_entry_id"]) == (2, 2)
     assert dashboard["blocked_rule_id"] is None
-    # Without a master key, no scheduler can run; that alone explains this installation's status.
-    assert dashboard["status"] == "stalled"
-    assert dashboard["needs_attention"] is True
+    # A block alone is reported, not an incident: it does not need attention (no account is
+    # connected in this test, so the verdict is "setup" rather than "healthy").
+    assert dashboard["status"] == "setup"
+    assert dashboard["needs_attention"] is False
 
 
 def _append_audit(adapters: Adapters, *entries: AuditEntry) -> None:

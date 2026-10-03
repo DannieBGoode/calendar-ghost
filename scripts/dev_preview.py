@@ -40,6 +40,7 @@ from calendar_sync.application.ports import (
     AuditOutcome,
     CalendarAccess,
     CalendarProvider,
+    Clock,
     ConnectedAccount,
     ConnectedAccountRepository,
     ConnectedAccountState,
@@ -47,8 +48,10 @@ from calendar_sync.application.ports import (
     RecordedEvent,
     RuleRunOutcome,
     RunKind,
+    SchedulerProgress,
 )
 from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
 from calendar_sync.domain.changes import SourceChange, SourceObservation
@@ -81,6 +84,33 @@ MARKER_TABLE = "dev_preview_marker"
 
 class NotAPreviewDatabase(RuntimeError):
     """The target database was not created by this script, so it must not be changed."""
+
+
+@dataclass(frozen=True, slots=True)
+class _FixedClock:
+    """The preview's own fictional "now": its seeded history stays current no matter how long
+    after it was generated the preview is actually opened."""
+
+    moment: datetime
+
+    def now(self) -> datetime:
+        return self.moment
+
+
+@dataclass(frozen=True, slots=True)
+class _RecentSchedulerHeartbeat:
+    """Reports a pass that completed moments ago.
+
+    The preview never configures a master key, so `compose` never builds a real scheduler; without
+    this, every scenario with an enabled rule would read "stalled" instead of its own health, since
+    Installation Status correctly treats "no scheduler at all" that way for a real installation.
+    """
+
+    clock: Clock
+
+    def progress(self) -> SchedulerProgress:
+        now = self.clock.now()
+        return SchedulerProgress(running_since=now, pass_started_at=None, last_completed_at=now)
 
 
 def reset_preview_database(path: Path) -> None:
@@ -314,9 +344,10 @@ def build_preview_container(
         )
     moment = now or adapters.clock.now()
     google = PreviewGoogle()
+    composed = compose(settings, adapters)
     # Only reads are substituted: without a master key nothing synchronizes or writes.
     container = replace(
-        compose(settings, adapters),
+        composed,
         inspect_activity_event=InspectActivityEvent(
             adapters.activity,
             adapters.unit_of_work,
@@ -329,6 +360,17 @@ def build_preview_container(
         authorization=cast(AccountAuthorization, google),
         account_calendars=cast(AccountCalendars, google),
         discover_calendars=DiscoverCalendars(cast(AccountCalendars, google), adapters.unit_of_work),
+        # The preview has no scheduler (no master key is ever configured here); a heartbeat that
+        # always reports a recent pass keeps each scenario's own health visible instead of
+        # "stalled", which is correct for a real installation with no scheduler at all. The clock
+        # is pinned to the preview's own fictional `moment`, so its seeded history never reads as
+        # overdue just because real time moved on since it was generated.
+        get_installation_status=GetInstallationStatus(
+            composed.list_sync_rules,
+            adapters.operations,
+            _FixedClock(moment),
+            _RecentSchedulerHeartbeat(_FixedClock(moment)),
+        ),
     )
     if scenario is not Scenario.SETUP:
         _seed(adapters, path, moment, scenario)

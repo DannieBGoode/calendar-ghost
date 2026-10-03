@@ -103,12 +103,10 @@ def test_preview_shows_source_changes_with_their_values(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("scenario", "expected"),
     [
-        # Without a master key, no scheduler can run, so every scenario with an enabled rule is
-        # "stalled": nothing can synchronize until one can (see GetInstallationStatus wiring).
         (
             Scenario.REVIEW,
             {
-                "status": "stalled",
+                "status": "review",
                 "needs_attention": True,
                 "open_incidents": 1,
                 "blocked_events": 2,
@@ -117,8 +115,8 @@ def test_preview_shows_source_changes_with_their_values(tmp_path: Path) -> None:
         (
             Scenario.HEALTHY,
             {
-                "status": "stalled",
-                "needs_attention": True,
+                "status": "healthy",
+                "needs_attention": False,
                 "open_incidents": 0,
                 "blocked_events": 0,
             },

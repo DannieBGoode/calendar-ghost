@@ -5,9 +5,11 @@ import sqlite3
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from types import TracebackType
+from typing import Any, cast
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
@@ -22,6 +24,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
 )
 from calendar_sync.interfaces.api.app import create_app
+from calendar_sync.interfaces.api.dependencies import StatusReaderServices, require_status_reader
 from tests.helpers import endpoint
 
 PASSWORD = {"password": "correct horse battery staple"}
@@ -46,6 +49,7 @@ def _signed_in(client: TestClient) -> None:
 def _issue(client: TestClient, name: str = "Uptime Kuma") -> str:
     response = client.post("/api/v1/integration-tokens", json={"name": name})
     assert response.status_code == 201
+    assert response.headers["cache-control"] == "no-store"
     token: str = response.json()["token"]
     return token
 
@@ -71,6 +75,55 @@ def test_tokens_are_managed_only_with_an_administrator_session(tmp_path: Path) -
             ).status_code
             == 401
         )
+
+
+class _RefusingAdministrator:
+    def session_is_valid(self, token: str | None) -> bool:
+        return False
+
+
+class _RefusingTokens:
+    def authenticate(self, token: str) -> None:
+        return None
+
+
+class _RefusingServices:
+    administrator = _RefusingAdministrator()
+    integration_tokens = _RefusingTokens()
+
+
+def _traceback_depth(traceback: TracebackType | None) -> int:
+    depth = 0
+    while traceback is not None:
+        depth += 1
+        traceback = traceback.tb_next
+    return depth
+
+
+def _refuse(services: StatusReaderServices) -> HTTPException:
+    try:
+        require_status_reader(services, authorization=None, session=None)
+    except HTTPException as error:
+        return error
+    raise AssertionError("expected require_status_reader to raise")
+
+
+def test_require_status_reader_raises_an_independent_exception_each_refusal() -> None:
+    """A shared exception object would append frames to one `__traceback__` on every refusal and
+    keep each refused call's locals alive; a fresh exception per call does neither."""
+    services = cast(StatusReaderServices, _RefusingServices())
+
+    first = _refuse(services)
+    second = _refuse(services)
+    third = _refuse(services)
+
+    assert first is not second
+    assert second is not third
+    depths = [_traceback_depth(error.__traceback__) for error in (first, second, third)]
+    assert depths[0] == depths[1] == depths[2]
+    assert first.__traceback__ is not second.__traceback__
+    assert first.status_code == second.status_code == 401
+    assert first.detail == second.detail == "valid credentials required"
 
 
 def test_status_accepts_a_token_or_a_session(tmp_path: Path) -> None:
@@ -188,6 +241,24 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
             """,
             (SECRETS["account"],),
         )
+    with sqlite3.connect(database) as connection:
+        # Google stores `summary or id` as a calendar's name: a primary calendar's summary is the
+        # account email by default (source), and an unlisted or unnamed calendar's name is its own
+        # id (destination). Both must stay out of the status response.
+        connection.execute(
+            """
+            INSERT INTO calendar_names (connected_account_id, calendar_id, name, updated_at)
+            VALUES (?, ?, ?, '2026-10-03T08:00:00+00:00')
+            """,
+            (SECRETS["account"], SECRETS["calendar"], SECRETS["calendar"]),
+        )
+        connection.execute(
+            """
+            INSERT INTO calendar_names (connected_account_id, calendar_id, name, updated_at)
+            VALUES ('work-account', 'work-calendar', ?, '2026-10-03T08:00:00+00:00')
+            """,
+            (SECRETS["email"],),
+        )
     with TestClient(create_app(container)) as client:
         _signed_in(client)
         token = _issue(client)
@@ -195,7 +266,7 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
         response = client.get("/api/v1/status", headers={"Authorization": f"Bearer {token}"})
 
     assert response.json()["status"] == "stopped"
-    for value in [*SECRETS.values(), token]:
+    for value in [*SECRETS.values(), token, "Secret Person"]:
         assert value not in response.text
 
 
