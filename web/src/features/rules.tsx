@@ -295,7 +295,8 @@ export function RulesView({
   )
 }
 
-function RuleBuilder({
+/** Exported so rendered tests can exercise calendar-picker wiring without the full rules list. */
+export function RuleBuilder({
   accounts,
   onCreated,
 }: {

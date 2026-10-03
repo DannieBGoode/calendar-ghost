@@ -824,7 +824,8 @@ function CalendarReplacement({
   )
 }
 
-function EndpointFields({
+/** Exported so rendered tests can exercise calendar-option filtering without the full replacement form. */
+export function EndpointFields({
   legend,
   idPrefix,
   firstField,
