@@ -633,7 +633,15 @@ function ProjectionChoice({
   )
 }
 
-function CalendarReplacement({
+type EndpointDraft = {
+  sourceAccount: string
+  sourceCalendar: string
+  destinationAccount: string
+  destinationCalendar: string
+}
+
+/** Exported so rendered tests can exercise the draft without the full rule page. */
+export function CalendarReplacement({
   detail,
   accounts,
   destinationName,
@@ -655,10 +663,12 @@ function CalendarReplacement({
   const [open, setOpen] = useState(false)
   const [confirming, setConfirming] = useState(false)
   useDisclosureFocus(open, firstField, toggle)
-  const [sourceAccount, setSourceAccount] = useState(detail.source.connected_account_id)
-  const [sourceCalendar, setSourceCalendar] = useState(detail.source.calendar_id)
-  const [destinationAccount, setDestinationAccount] = useState(detail.destination.connected_account_id)
-  const [destinationCalendar, setDestinationCalendar] = useState(detail.destination.calendar_id)
+  // Only the administrator's edits are state; an untouched field follows the rule as it loads.
+  const [edits, setEdits] = useState<Partial<EndpointDraft>>({})
+  const sourceAccount = edits.sourceAccount ?? detail.source.connected_account_id
+  const sourceCalendar = edits.sourceCalendar ?? detail.source.calendar_id
+  const destinationAccount = edits.destinationAccount ?? detail.destination.connected_account_id
+  const destinationCalendar = edits.destinationCalendar ?? detail.destination.calendar_id
   const [handling, setHandling] = useState<ProjectionHandling>("delete")
   const effective: ProjectionHandling = destinationConnected ? handling : "detach"
   const sourceCalendars = useQuery({
@@ -704,11 +714,9 @@ function CalendarReplacement({
     if (canSubmit) setConfirming(true)
   }
 
-  function edited<T>(apply: (value: T) => void) {
-    return (value: T) => {
-      apply(value)
-      setConfirming(false)
-    }
+  function edit(change: Partial<EndpointDraft>) {
+    setEdits((current) => ({ ...current, ...change }))
+    setConfirming(false)
   }
 
   return (
@@ -744,11 +752,8 @@ function CalendarReplacement({
             calendar={sourceCalendar}
             calendars={sourceCalendars.data}
             writableOnly={false}
-            onAccount={edited((value: string) => {
-              setSourceAccount(value)
-              setSourceCalendar("")
-            })}
-            onCalendar={edited(setSourceCalendar)}
+            onAccount={(value) => edit({ sourceAccount: value, sourceCalendar: "" })}
+            onCalendar={(value) => edit({ sourceCalendar: value })}
           />
           <EndpointFields
             legend="Destination calendar"
@@ -759,16 +764,16 @@ function CalendarReplacement({
             calendars={destinationCalendars.data}
             writableOnly
             errorId={sameEndpoint ? "replace-destination-error" : undefined}
-            onAccount={edited((value: string) => {
-              setDestinationAccount(value)
-              setDestinationCalendar("")
-            })}
-            onCalendar={edited(setDestinationCalendar)}
+            onAccount={(value) => edit({ destinationAccount: value, destinationCalendar: "" })}
+            onCalendar={(value) => edit({ destinationCalendar: value })}
           />
           <ProjectionChoice
             name="replace-projections"
             value={effective}
-            onChange={edited(setHandling)}
+            onChange={(value) => {
+              setHandling(value)
+              setConfirming(false)
+            }}
             mappingCount={detail.mapping_count}
             destinationName={destinationName}
             deleteAvailable={destinationConnected}

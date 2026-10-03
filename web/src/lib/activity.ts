@@ -348,10 +348,12 @@ function changedFields(entry: Partial<Pick<AuditEntry, "reason" | "changed_field
   return entry.changed_fields ?? []
 }
 
+const FIELD_LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" })
+
 /** "Title and description changed in Personal": the fields in a sentence, then the calendar. */
 function changedTrigger(fields: string[], names: RuleNames | null): string {
   const labels = fields.map((field, index) => (index === 0 ? fieldLabel(field) : fieldLabel(field).toLowerCase()))
-  const list = new Intl.ListFormat("en", { style: "long", type: "conjunction" }).format(labels)
+  const list = FIELD_LIST.format(labels)
   return named(`${list} changed in {source}`, names)
 }
 

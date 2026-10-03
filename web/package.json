@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc -b --pretty false",
     "api:types": "openapi-typescript openapi.json --output src/lib/api-schema.ts",
-    "api:check": "openapi-typescript openapi.json --output src/lib/api-schema.ts --check"
+    "api:check": "openapi-typescript openapi.json --output src/lib/api-schema.ts --check",
+    "doctor": "react-doctor . --no-telemetry --yes"
   },
   "dependencies": {
     "@fontsource-variable/figtree": "5.3.0",
@@ -38,6 +39,7 @@
     "globals": "17.11.0",
     "happy-dom": "20.14.5",
     "openapi-typescript": "7.13.0",
+    "react-doctor": "0.9.14",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "typescript-eslint": "8.68.0",
