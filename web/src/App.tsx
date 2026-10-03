@@ -19,7 +19,6 @@ import {
   type AppView,
   type ViewOptions,
 } from "@/lib/navigation"
-import { isPreviewMode, previewPathForView, previewSearchForView } from "@/lib/preview-mode"
 import { cn } from "@/lib/utils"
 
 const navItems: { id: AppView; label: string; icon: typeof Waypoints }[] = [
@@ -63,7 +62,6 @@ function AuthenticatedApp() {
   const navigated = useRef(false)
   const queryClient = useQueryClient()
   const logout = useMutation({ mutationFn: api.logOut, onSuccess: () => queryClient.clear() })
-  const previewEnabled = isPreviewMode()
 
   useEffect(() => {
     if (!isKnownAppPath(window.location.pathname)) {
@@ -139,19 +137,19 @@ function AuthenticatedApp() {
   function followSectionLink(event: MouseEvent<HTMLAnchorElement>, next: AppView) {
     if (!isPlainLeftClick(event)) return
     event.preventDefault()
-    changeView(next, previewEnabled ? { search: previewSearchForView(next) } : undefined)
+    changeView(next)
   }
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href={previewEnabled ? previewPathForView("overview") : appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label={`${PRODUCT_NAME} overview`}>
+        <a className="wordmark" href={appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label={`${PRODUCT_NAME} overview`}>
           <span className="wordmark-icon"><GhostMark /></span><span>{PRODUCT_NAME}</span>
         </a>
         <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label="Primary navigation">
           {navItems.map((item) => {
             const Icon = item.icon
-            return <a key={item.id} href={previewEnabled ? previewPathForView(item.id) : appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{item.label}</span></a>
+            return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{item.label}</span></a>
           })}
         </nav>
         <div className="topbar-actions">

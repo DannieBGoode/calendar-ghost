@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query"
-import { useState } from "react"
 import {
   ArrowRight,
   CalendarDays,
@@ -36,11 +35,8 @@ import {
   overviewRules,
   withoutRunningRemovals,
   type AttentionRule,
-  type OverviewTone,
 } from "@/lib/overview-health"
-import { HERO_PREVIEW_TONES, HERO_TONE_LABELS, heroPreviewCopy } from "@/lib/overview-hero"
-import { overviewPreview } from "@/lib/overview-preview"
-import { previewPathForView, previewSearchForView } from "@/lib/preview-mode"
+import { overviewHeroCallout } from "@/lib/overview-hero"
 import { plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
@@ -81,113 +77,56 @@ function attentionRule(
 }
 
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
-  const [heroPreviewTone, setHeroPreviewTone] = useState<OverviewTone | null>(null)
-  const previewParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
-  const heroPreviewEnabled = previewParams?.get("heroPreview") === "1"
-  const dashboardPreviewEnabled = previewParams?.get("dashboardPreview") === "1" || previewParams?.get("preview") === "1"
   const now = useNow()
-  const dashboard = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: api.dashboard,
-    enabled: !dashboardPreviewEnabled,
-    refetchInterval: REFRESH_INTERVAL,
-  })
+  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })
   const rules = useQuery({
     queryKey: ["rules"],
     queryFn: api.rules,
-    enabled: !dashboardPreviewEnabled,
     refetchInterval: (query) => workRefreshInterval(query.state.data, REFRESH_INTERVAL),
   })
-  const google = useQuery({
-    queryKey: ["google-configuration"],
-    queryFn: api.googleConfiguration,
-    enabled: !dashboardPreviewEnabled,
-  })
+  const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
   const incidents = useQuery({
     queryKey: ["incidents"],
     queryFn: api.incidents,
-    enabled: !dashboardPreviewEnabled && (dashboard.data?.open_incidents ?? 0) > 0,
+    enabled: (dashboard.data?.open_incidents ?? 0) > 0,
   })
-  const { endpoints: liveEndpoints } = useRuleEndpoints(rules.data ?? [], { enabled: !dashboardPreviewEnabled })
-  const preview = dashboardPreviewEnabled ? overviewPreview(now) : null
-  const shownDashboard = preview?.dashboard ?? dashboard.data!
-  const shownRules = preview?.rules ?? rules.data!
-  const endpoints = preview?.endpoints ?? liveEndpoints
-  const removingIds = useRemovingRuleIds(shownRules)
-  const googleConfiguration = google.data ?? { configured: false, redirect_uri: null }
+  const { endpoints } = useRuleEndpoints(rules.data ?? [])
+  const removingIds = useRemovingRuleIds(rules.data)
 
-  if (!preview && (dashboard.isPending || rules.isPending || google.isPending)) return <PageSkeleton label="Loading overview" />
-  if (!preview && (dashboard.error || rules.error || google.error)) return <LoadFailure title="Calendar Ghost could not load" />
+  if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label="Loading overview" />
+  if (dashboard.error || rules.error || google.error) return <LoadFailure title="Calendar Ghost could not load" />
 
   const health = overviewHealth(
-    withoutRunningRemovals(shownDashboard, shownRules, removingIds),
+    withoutRunningRemovals(dashboard.data, rules.data, removingIds),
     now,
-    attentionRule(shownRules.filter((rule) => !removingIds.has(rule.id)), incidents.data, endpoints, now),
+    attentionRule(rules.data.filter((rule) => !removingIds.has(rule.id)), incidents.data, endpoints, now),
   )
-  const displayedTone = heroPreviewEnabled && heroPreviewTone ? heroPreviewTone : health.tone
-  const showingAlternateHero = heroPreviewEnabled && heroPreviewTone !== null && heroPreviewTone !== health.tone
-  const previewCopy = showingAlternateHero ? heroPreviewCopy(displayedTone) : null
-  const dashboardHealthyPreview = dashboardPreviewEnabled && displayedTone === "healthy" ? heroPreviewCopy("healthy") : null
-  const SignalIcon = displayedTone === "attention" ? ShieldAlert : displayedTone === "healthy" ? CheckCircle2 : CircleDot
-  const action = showingAlternateHero ? null : health.action
-  const callout = previewCopy?.callout ?? dashboardHealthyPreview?.callout ?? heroPreviewCopy(health.tone).callout
-  const heroDetail = previewCopy?.detail ?? dashboardHealthyPreview?.detail ?? health.detail
-  const firstFact = previewCopy?.firstFact ?? (shownDashboard.enabled_rules > 0
-    ? `${plural(shownDashboard.enabled_rules, "rule")} running`
+  const heroCallout = overviewHeroCallout(health.tone)
+  const SignalIcon = health.tone === "attention" ? ShieldAlert : health.tone === "healthy" ? CheckCircle2 : CircleDot
+  const action = health.action
+  const firstFact = dashboard.data.enabled_rules > 0
+    ? `${plural(dashboard.data.enabled_rules, "rule")} running`
     : health.tone === "setup"
       ? "Setup in three steps"
-      : "No rules running")
-  const secondFact = previewCopy?.secondFact ?? (shownDashboard.last_synced_at
-    ? `Last sync ${relativeTime(shownDashboard.last_synced_at, now)}`
+      : "No rules running"
+  const secondFact = dashboard.data.last_synced_at
+    ? `Last sync ${relativeTime(dashboard.data.last_synced_at, now)}`
     : health.tone === "setup"
       ? "Nothing written yet"
-      : "First sync within five minutes")
+      : "First sync within five minutes"
 
   return (
     <div className="page-section overview-page">
-      {(heroPreviewEnabled || dashboardPreviewEnabled) && (
-        <section className="hero-preview-toolbar" aria-labelledby="hero-preview-title">
-          <div className="hero-preview-toolbar-copy">
-            <p id="hero-preview-title" className="hero-preview-eyebrow">
-              {dashboardPreviewEnabled ? "Dashboard preview" : "Hero preview"}
-            </p>
-            <p className="hero-preview-note" aria-live="polite">
-              {dashboardPreviewEnabled
-                ? `${showingAlternateHero ? `Previewing ${HERO_TONE_LABELS[displayedTone]}. ` : ""}Mock dashboard data is on.`
-                : showingAlternateHero
-                  ? `Previewing ${HERO_TONE_LABELS[displayedTone]}. Live state: ${health.badge}.`
-                  : `Showing live state: ${health.badge}.`}
-            </p>
-          </div>
-          {heroPreviewEnabled && (
-            <div className="hero-preview-options" role="group" aria-label="Choose a hero state">
-              {HERO_PREVIEW_TONES.map((tone) => (
-                <button
-                  key={tone}
-                  type="button"
-                  className="hero-preview-option"
-                  data-active={displayedTone === tone}
-                  aria-pressed={displayedTone === tone}
-                  onClick={() => setHeroPreviewTone(tone)}
-                >
-                  {HERO_TONE_LABELS[tone]}
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      <section className="health-hero" data-tone={displayedTone} aria-labelledby="health-title">
+      <section className="health-hero" data-tone={health.tone} aria-labelledby="health-title">
         <div className="health-hero-copy">
-          {displayedTone !== "healthy" && (
+          {health.tone !== "healthy" && (
             <div className="health-hero-status">
               <SignalIcon aria-hidden="true" />
-              <span>{previewCopy?.badge ?? health.badge}</span>
+              <span>{health.badge}</span>
             </div>
           )}
-          <h1 id="health-title">{previewCopy?.headline ?? health.headline}</h1>
-          <p className="health-hero-detail">{heroDetail}</p>
+          <h1 id="health-title">{health.headline}</h1>
+          <p className="health-hero-detail">{health.detail}</p>
           <div className="health-hero-facts" aria-label="Synchronization summary">
             <span><SignalIcon aria-hidden="true" /> {firstFact}</span>
             <span className="health-hero-separator" aria-hidden="true">•</span>
@@ -220,42 +159,27 @@ export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewC
             <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-three" />
             <span className="health-hero-spark health-hero-spark-dot health-hero-spark-dot-four" />
           </div>
-          <GhostMark className="health-hero-ghost" expression={displayedTone === "healthy" ? "happy" : "neutral"} />
+          <GhostMark className="health-hero-ghost" expression={health.tone === "healthy" ? "happy" : "neutral"} />
           <div className="health-hero-callout">
-            <strong>{callout.title}</strong>
-            <span>{callout.detail}</span>
+            <strong>{heroCallout.title}</strong>
+            <span>{heroCallout.detail}</span>
           </div>
         </div>
       </section>
 
       {health.tone === "setup" && (
         <OnboardingSteps
-          dashboard={shownDashboard}
-          googleConfigured={googleConfiguration.configured}
-          redirectUri={googleConfiguration.redirect_uri}
+          dashboard={dashboard.data}
+          googleConfigured={google.data.configured}
+          redirectUri={google.data.redirect_uri}
           onViewChange={onViewChange}
         />
       )}
-      {shownRules.length > 0 && (
-        <OverviewRules
-          rules={shownRules}
-          endpoints={endpoints}
-          now={now}
-          previewOnly={dashboardPreviewEnabled}
-          onViewChange={onViewChange}
-          onOpenRule={onOpenRule}
-        />
+      {rules.data.length > 0 && (
+        <OverviewRules rules={rules.data} endpoints={endpoints} now={now} onViewChange={onViewChange} onOpenRule={onOpenRule} />
       )}
-      {shownRules.some((rule) => rule.state === "enabled" || rule.last_sync) && (
-        <RecentChanges
-          rules={shownRules}
-          endpoints={endpoints}
-          now={now}
-          previewChanges={preview?.recentChanges}
-          previewOnly={dashboardPreviewEnabled}
-          onViewChange={onViewChange}
-          onOpenRule={onOpenRule}
-        />
+      {rules.data.some((rule) => rule.state === "enabled" || rule.last_sync) && (
+        <RecentChanges rules={rules.data} endpoints={endpoints} now={now} onViewChange={onViewChange} onOpenRule={onOpenRule} />
       )}
     </div>
   )
@@ -281,16 +205,12 @@ function RecentChanges({
   rules,
   endpoints,
   now,
-  previewChanges,
-  previewOnly,
   onViewChange,
   onOpenRule,
 }: {
   rules: RuleSummary[]
   endpoints: Endpoints
   now: number
-  previewChanges?: RecentChange[]
-  previewOnly?: boolean
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
@@ -298,9 +218,7 @@ function RecentChanges({
     queryKey: ["recent-changes"],
     queryFn: () => api.recentChanges(RECENT_CHANGE_LIMIT),
     refetchInterval: REFRESH_INTERVAL,
-    enabled: previewChanges === undefined,
   })
-  const shownChanges = previewChanges ?? changes.data ?? []
   const rulesById = new Map(rules.map((rule) => [rule.id, rule]))
   const lastCheck = rules
     .map((rule) => rule.last_sync?.completed_at)
@@ -315,21 +233,18 @@ function RecentChanges({
           <h2 id="recent-title">Recent changes</h2>
           <p>Latest sync events and changes.</p>
         </div>
-        <SectionLink
-          href={previewOnly ? previewPathForView("activity") : appPathForView("activity")}
-          onClick={() => onViewChange("activity", previewOnly ? { search: previewSearchForView("activity") } : undefined)}
-        >
+        <SectionLink href={appPathForView("activity")} onClick={() => onViewChange("activity")}>
           All activity
         </SectionLink>
       </div>
-      {previewChanges === undefined && changes.isPending ? (
+      {changes.isPending ? (
         <div className="recent-loading" role="status" aria-label="Loading recent changes">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="h-12 w-full" />
         </div>
-      ) : previewChanges === undefined && changes.error ? (
+      ) : changes.error ? (
         <p className="empty-line">Recent changes could not load. Activity still has the full history.</p>
-      ) : shownChanges.length === 0 ? (
+      ) : changes.data.length === 0 ? (
         <p className="empty-line">
           {lastCheck
             ? `No events changed recently. Calendar Ghost last checked ${relativeTime(lastCheck, now)}.`
@@ -337,7 +252,7 @@ function RecentChanges({
         </p>
       ) : (
         <ol className="recent-changes">
-          {shownChanges.map((change) => {
+          {changes.data.map((change) => {
             const rule = rulesById.get(change.entry.rule_id)
             return (
               <RecentChangeItem
@@ -346,7 +261,6 @@ function RecentChanges({
                 rule={rule}
                 endpoints={rule ? endpoints(rule) : null}
                 now={now}
-                previewOnly={previewOnly}
                 onViewChange={onViewChange}
                 onOpenRule={onOpenRule}
               />
@@ -363,7 +277,6 @@ function RecentChangeItem({
   rule,
   endpoints,
   now,
-  previewOnly,
   onViewChange,
   onOpenRule,
 }: {
@@ -371,7 +284,6 @@ function RecentChangeItem({
   rule: RuleSummary | undefined
   endpoints: RuleEndpoints | null
   now: number
-  previewOnly?: boolean
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
@@ -384,7 +296,7 @@ function RecentChangeItem({
   const since = new Date(change.first_occurred_at).toDateString() === new Date(now).toDateString()
     ? formatClockTime(change.first_occurred_at)
     : formatRunTime(change.first_occurred_at, new Date(now))
-  const search = activitySearch({ ruleId: entry.rule_id, show: "", entryId: entry.id }, { preview: previewOnly })
+  const search = activitySearch({ ruleId: entry.rule_id, show: "", entryId: entry.id })
   return (
     <li className="recent-change-item">
       <span className="recent-change-marker" data-tone={markerTone}>
@@ -396,11 +308,11 @@ function RecentChangeItem({
       <div className="recent-change-body">
         <a
           className="recent-change-event"
-          href={previewOnly ? previewPathForView("activity") : `${appPathForView("activity")}${search}`}
+          href={`${appPathForView("activity")}${search}`}
           onClick={(event) => {
             if (!isPlainLeftClick(event)) return
             event.preventDefault()
-            onViewChange("activity", previewOnly ? { search: previewSearchForView("activity") } : { search })
+            onViewChange("activity", { search })
           }}
         >
           {cell.state === "event" ? cell.title : cell.label}
@@ -410,12 +322,11 @@ function RecentChangeItem({
         {rule && endpoints ? (
           <a
             className="recent-change-rule"
-            href={previewOnly ? previewPathForView("rules") : appPathForRule(rule.id)}
+            href={appPathForRule(rule.id)}
             onClick={(event) => {
               if (!isPlainLeftClick(event)) return
               event.preventDefault()
-              if (previewOnly) onViewChange("rules", { search: previewSearchForView("rules") })
-              else onOpenRule(rule.id)
+              onOpenRule(rule.id)
             }}
           >
             {endpoints.source.name} <ArrowRight aria-hidden="true" />
@@ -433,14 +344,12 @@ function OverviewRules({
   rules,
   endpoints,
   now,
-  previewOnly,
   onViewChange,
   onOpenRule,
 }: {
   rules: RuleSummary[]
   endpoints: Endpoints
   now: number
-  previewOnly?: boolean
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
@@ -453,10 +362,7 @@ function OverviewRules({
           <h2 id="overview-rules-title">Rules</h2>
           <p>{rules.every((rule) => rule.state === "enabled") ? plural(rules.length, "active rule") : `${plural(rules.length, "rule")} configured`}</p>
         </div>
-        <SectionLink
-          href={previewOnly ? previewPathForView("rules") : appPathForView("rules")}
-          onClick={() => onViewChange("rules", previewOnly ? { search: previewSearchForView("rules") } : undefined)}
-        >
+        <SectionLink href={appPathForView("rules")} onClick={() => onViewChange("rules")}>
           {rules.length > shown.length ? `All ${rules.length} rules` : "Manage rules"}
         </SectionLink>
       </div>
@@ -482,12 +388,11 @@ function OverviewRules({
           return (
             <li key={rule.id}>
               <a
-                href={previewOnly ? previewPathForView("rules") : appPathForRule(rule.id)}
+                href={appPathForRule(rule.id)}
                 onClick={(event) => {
                   if (!isPlainLeftClick(event)) return
                   event.preventDefault()
-                  if (previewOnly) onViewChange("rules", { search: previewSearchForView("rules") })
-                  else onOpenRule(rule.id)
+                  onOpenRule(rule.id)
                 }}
               >
                 <span className="overview-rule-link">{content}</span>

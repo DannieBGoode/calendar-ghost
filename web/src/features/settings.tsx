@@ -18,7 +18,6 @@ import { AccountAvatar } from "@/components/account-avatar"
 import { DestructiveConfirmation } from "@/components/destructive-confirmation"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
-import { PreviewBanner } from "@/components/preview-banner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,9 +27,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
 import { accountSummary } from "@/lib/account-summary"
 import { ApiError, STORAGE_LOGS_URL, api } from "@/lib/api"
-import { previewAccounts, previewStorage } from "@/lib/overview-preview"
-import type { ViewChange } from "@/lib/navigation"
-import { isPreviewMode } from "@/lib/preview-mode"
 import {
   authorizationAwaitingReturn,
   clearAuthorizationStart,
@@ -54,8 +50,6 @@ type GoogleReturn = {
   awaiting: boolean
   dismiss: () => void
 }
-
-const PreviewAvatar = AccountAvatar
 
 /**
  * Whether Google returns somewhere else, and whether a connection started in this browser may be
@@ -185,7 +179,7 @@ function ruleUsage(count: number): string {
   return `Used by ${count} rule${count === 1 ? "" : "s"}`
 }
 
-function ConnectionGuide({ googleConfigured, preview = false }: { googleConfigured?: boolean; preview?: boolean }) {
+function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
   return (
     <details className="inline-help connection-guide">
       <summary>
@@ -208,9 +202,7 @@ function ConnectionGuide({ googleConfigured, preview = false }: { googleConfigur
             <span>Review what will be written before anything reaches the destination.</span>
           </li>
         </ol>
-        {preview ? (
-          <p className="connection-guide-note">This preview uses synthetic accounts; actions stay disabled here.</p>
-        ) : googleConfigured ? (
+        {googleConfigured ? (
           <p className="connection-guide-note">Use the Connect Google account button above to begin.</p>
         ) : (
           <p className="connection-guide-note">
@@ -222,12 +214,7 @@ function ConnectionGuide({ googleConfigured, preview = false }: { googleConfigur
   )
 }
 
-export function SettingsPage({ onViewChange }: { onViewChange: ViewChange }) {
-  if (isPreviewMode()) return <PreviewSettingsPage onViewChange={onViewChange} />
-  return <LiveSettingsPage />
-}
-
-function LiveSettingsPage() {
+export function SettingsPage() {
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
   if (google.isPending) return <PageSkeleton label="Loading settings" />
   if (google.error) return <LoadFailure title="Settings could not load" onRetry={() => void google.refetch()} />
@@ -940,159 +927,5 @@ function StorageSection() {
         </div>
       )}
     </section>
-  )
-}
-
-function PreviewSettingsPage({ onViewChange }: { onViewChange: ViewChange }) {
-  const { preference, setPreference, darkPalette, setDarkPalette } = useTheme()
-  const accounts = previewAccounts()
-  const storage = previewStorage()
-  const [accountsChoice, setAccountsChoice] = useState<boolean | null>(null)
-  const summary = accountSummary(accounts)
-  const accountsOpen = accountsChoice ?? summary.needsAttention
-
-  return (
-    <div className="page-section settings-page">
-      <PreviewBanner current="settings" onViewChange={onViewChange} />
-      <div>
-        <h1>Settings</h1>
-        <p className="page-intro">
-          Accounts and storage for this installation. Appearance applies to this browser only.
-        </p>
-      </div>
-
-      <section className="settings-section" aria-labelledby="preview-accounts-title">
-        <div className="section-heading">
-          <div>
-            <h2 id="preview-accounts-title">Connected accounts</h2>
-            <p>The Google accounts whose calendars your rules can read and write.</p>
-          </div>
-          <Button variant="outline" disabled><Plus aria-hidden="true" /> Connect Google account</Button>
-        </div>
-        <p className="settings-note" role="status">
-          Mock accounts are connected and ready. Account actions are disabled while previewing.
-        </p>
-        <ConnectionGuide preview />
-        <div className="account-group">
-          <button
-            type="button"
-            className="account-summary"
-            aria-expanded={accountsOpen}
-            aria-controls={accountsOpen ? "preview-account-list" : undefined}
-            onClick={() => setAccountsChoice(!accountsOpen)}
-          >
-            <span className="account-stack">
-              {accounts.map((account) => (
-                <PreviewAvatar key={account.id} displayName={account.display_name} email={account.email} avatarUrl={account.avatar_url} compact />
-              ))}
-            </span>
-            <span className="account-summary-copy">
-              <span className="account-summary-status"><CheckCircle2 aria-hidden="true" /> {summary.text}</span>
-              <span className="account-summary-emails">{accounts.map((account) => account.email).join(", ")}</span>
-            </span>
-            <span className="account-summary-toggle">
-              {accountsOpen ? "Hide" : "Show"}
-              <span className="sr-only"> accounts</span>
-              <ChevronDown aria-hidden="true" />
-            </span>
-          </button>
-          {accountsOpen && (
-            <ul className="account-list" id="preview-account-list">
-              {accounts.map((account) => (
-                <li className="account-item" key={account.id}>
-                  <div className="account-main">
-                    <div className="account-identity">
-                      <PreviewAvatar displayName={account.display_name} email={account.email} avatarUrl={account.avatar_url} />
-                      <div className="account-copy">
-                        <h3>{account.display_name}</h3>
-                        <p>{account.email}</p>
-                        <span>{ruleUsage(account.rule_count)}</span>
-                      </div>
-                    </div>
-                    <div className="account-actions">
-                      <Badge variant="healthy"><CheckCircle2 aria-hidden="true" /> Connected</Badge>
-                      <Button className="account-action" variant="outline" disabled><ShieldCheck aria-hidden="true" /> Check access</Button>
-                      <Button className="account-action" variant="ghost" disabled><Unplug aria-hidden="true" /> Disconnect account</Button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
-
-      <section className="settings-section" aria-labelledby="preview-storage-title">
-        <div className="section-heading">
-          <div>
-            <h2 id="preview-storage-title">Storage</h2>
-            <p>Activity history and log files kept on this installation.</p>
-          </div>
-        </div>
-        <div className="settings-list">
-          <div className="setting-row">
-            <div>
-              <h3>Database</h3>
-              <p>{activitySummary(storage.database)}</p>
-            </div>
-            <div className="storage-actions">
-              <div className="storage-select">
-                <NativeSelect id="preview-activity-age" aria-label="Clear Activity older than" value={90} disabled>
-                  {storage.activity_ages.map((age) => <option key={age} value={age}>Older than {age} days</option>)}
-                </NativeSelect>
-              </div>
-              <Button variant="outline" disabled>Clear Activity</Button>
-            </div>
-          </div>
-          <div className="setting-row">
-            <div>
-              <h3>Logs</h3>
-              <p>{logSummary(storage.logs)}</p>
-            </div>
-            <div className="storage-actions">
-              <Button variant="outline" disabled><Download aria-hidden="true" /> Download</Button>
-              <Button variant="outline" disabled><Trash2 aria-hidden="true" /> Purge logs</Button>
-            </div>
-          </div>
-        </div>
-        <p className="settings-note" role="status">Storage totals are synthetic sample data for this visual review.</p>
-      </section>
-
-      <section className="settings-section" aria-labelledby="preview-appearance-title">
-        <div className="section-heading">
-          <div>
-            <h2 id="preview-appearance-title">Appearance</h2>
-            <p>Saved in this browser only.</p>
-          </div>
-        </div>
-        <div className="settings-list">
-          <div className="setting-row">
-            <div>
-              <h3 id="preview-theme-title">Theme</h3>
-              <p>Follow this device, or keep the interface light or dark.</p>
-            </div>
-            <div className="appearance-control">
-              <NativeSelect id="preview-theme-preference" aria-labelledby="preview-theme-title" value={preference} onChange={(event) => setPreference(event.target.value as ThemePreference)}>
-                <option value="system">Device setting</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </NativeSelect>
-            </div>
-          </div>
-          <div className="setting-row">
-            <div>
-              <h3 id="preview-dark-palette-title">Dark palette</h3>
-              <p>The colors used whenever the interface is dark.</p>
-            </div>
-            <div className="appearance-control">
-              <NativeSelect id="preview-dark-palette" aria-labelledby="preview-dark-palette-title" value={darkPalette} onChange={(event) => setDarkPalette(event.target.value as DarkPalette)}>
-                <option value="twilight">Twilight (indigo)</option>
-                <option value="midnight">Midnight (blue)</option>
-              </NativeSelect>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
   )
 }

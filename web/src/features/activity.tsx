@@ -15,7 +15,6 @@ import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type 
 import { EventWhen, HappenedLine } from "@/components/activity-event"
 import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
-import { PreviewBanner } from "@/components/preview-banner"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { RulePicker, type RulePickerOption } from "@/components/rule-picker"
 import { Badge } from "@/components/ui/badge"
@@ -66,17 +65,6 @@ import {
   type Rule,
 } from "@/lib/api"
 import {
-  overviewPreview,
-  previewAccounts,
-  previewActivityChanges,
-  previewActivityEntries,
-  previewActivityEntry,
-  previewActivityEvent,
-  previewCalendars,
-  previewIncidents,
-} from "@/lib/overview-preview"
-import { isPreviewMode, previewSearchForView } from "@/lib/preview-mode"
-import {
   accessRenewedSince,
   incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents, type IncidentAction, type IncidentRuleState } from "@/lib/incidents"
 import { isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
@@ -104,12 +92,12 @@ function ruleNames(ruleId: string, context: RuleContext): RuleNames | null {
  * Filters and the open entry live in the address so Back, reload, and shared links keep them. The
  * view remounts on every arrival, including Back and Forward, so it only reads the address once.
  */
-function useActivityLocation(previewMode: boolean) {
+function useActivityLocation() {
   const [state, setState] = useState(() => activityStateFromSearch(window.location.search))
 
   function update(next: Partial<ActivityLocationState>, history: "push" | "replace") {
     const merged = { ...state, ...next }
-    const url = `${window.location.pathname}${activitySearch(merged, { preview: previewMode })}`
+    const url = `${window.location.pathname}${activitySearch(merged)}`
     if (history === "push") window.history.pushState(null, "", url)
     else window.history.replaceState(null, "", url)
     setState(merged)
@@ -120,52 +108,34 @@ function useActivityLocation(previewMode: boolean) {
 
 
 export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
-  const previewMode = isPreviewMode()
-  const [state, update] = useActivityLocation(previewMode)
+  const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
   const query = state.query ?? ""
   const focusDetail = useRef(false)
   const activity = useInfiniteQuery({
-    queryKey: ["activity", previewMode, ruleId, show, query],
-    queryFn: ({ pageParam }) =>
-      previewMode
-        ? Promise.resolve(previewActivityEntries(Date.now(), {
-            ruleId: ruleId || undefined,
-            categories: showCategories(show),
-            before: pageParam,
-            query: query || undefined,
-          }))
-        : api.activity({
-            ruleId: ruleId || undefined,
-            categories: showCategories(show),
-            before: pageParam,
-            query: query || undefined,
-          }),
+    queryKey: ["activity", ruleId, show, query],
+    queryFn: ({ pageParam }) => api.activity({
+      ruleId: ruleId || undefined,
+      categories: showCategories(show),
+      before: pageParam,
+      query: query || undefined,
+    }),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (page) => (page.length === ACTIVITY_PAGE_SIZE ? page.at(-1)?.id : undefined),
     // Keep the current table on screen while another rule or filter loads.
     placeholderData: keepPreviousData,
   })
-  const incidents = useQuery({
-    queryKey: ["incidents", previewMode],
-    queryFn: () => (previewMode ? previewIncidents(Date.now()) : api.incidents()),
-  })
-  const rules = useQuery({
-    queryKey: ["rules", previewMode],
-    queryFn: () => (previewMode ? overviewPreview(Date.now()).rules : api.rules()),
-  })
-  const accounts = useQuery({
-    queryKey: ["accounts", previewMode],
-    queryFn: () => (previewMode ? previewAccounts() : api.accounts()),
-  })
+  const incidents = useQuery({ queryKey: ["incidents"], queryFn: api.incidents })
+  const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   // Shares the Rules view cache so calendars show their names rather than Google identifiers.
   const connectedAccountIds = (accounts.data ?? [])
     .filter((account) => account.state === "connected")
     .map((account) => account.id)
   const calendarQueries = useQueries({
     queries: connectedAccountIds.map((accountId) => ({
-      queryKey: ["calendars", previewMode, accountId],
-      queryFn: () => (previewMode ? previewCalendars(accountId) : api.calendars(accountId)),
+      queryKey: ["calendars", accountId],
+      queryFn: () => api.calendars(accountId),
       staleTime: 5 * 60 * 1000,
     })),
   })
@@ -174,8 +144,8 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const listedEntry = entries.find((item) => item.id === entryId)
   // A shared link or an older page can name an entry that is not loaded.
   const directEntry = useQuery({
-    queryKey: ["activity-entry", previewMode, entryId],
-    queryFn: () => (previewMode ? previewActivityEntry(entryId as number) : api.activityEntry(entryId as number)),
+    queryKey: ["activity-entry", entryId],
+    queryFn: () => api.activityEntry(entryId as number),
     enabled: entryId !== null && listedEntry === undefined && !activity.isPending,
     retry: false,
   })
@@ -247,11 +217,8 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   }
 
   function followIncident(action: IncidentAction) {
-    if (action.kind === "settings") onViewChange("settings", previewMode ? { search: previewSearchForView("settings") } : undefined)
-    else if (action.kind === "rule") {
-      if (previewMode) onViewChange("rules", { search: previewSearchForView("rules") })
-      else onOpenRule(action.ruleId)
-    }
+    if (action.kind === "settings") onViewChange("settings")
+    else if (action.kind === "rule") onOpenRule(action.ruleId)
     else {
       update({ ruleId: action.ruleId, show: "blocked", query: "", entryId: null }, "push")
       requestAnimationFrame(() => document.getElementById("activity-feed-title")?.scrollIntoView({ block: "start" }))
@@ -278,7 +245,6 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
 
   return (
     <div className="page-section">
-      {previewMode && <PreviewBanner current="activity" onViewChange={onViewChange} />}
       <ActivityHeading />
       <OpenIncidents incidents={openIncidents} context={context} onAction={followIncident} />
       <ResolvedIncidents incidents={resolvedIncidents} context={context} />
@@ -366,7 +332,6 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
                           showRuleColumn={showRuleColumn}
                           onOpen={openEntry}
                           onFilterRule={(value) => changeFilters({ ruleId: value })}
-                          previewMode={previewMode}
                         />
                       ))}
                     </tbody>,
@@ -387,8 +352,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
               context={context}
               focusRef={focusDetail}
               onClose={closeDetail}
-              onOpenRule={previewMode ? () => onViewChange("rules", { search: previewSearchForView("rules") }) : onOpenRule}
-              previewMode={previewMode}
+              onOpenRule={onOpenRule}
               onNewer={selectedIndex > 0 ? () => select(visibleEntries[selectedIndex - 1], "replace") : undefined}
               onOlder={
                 selectedIndex >= 0 && selectedIndex < visibleEntries.length - 1
@@ -573,7 +537,6 @@ function EntryRow({
   showRuleColumn,
   onOpen,
   onFilterRule,
-  previewMode,
 }: {
   entry: AuditEntry
   context: RuleContext
@@ -582,11 +545,10 @@ function EntryRow({
   showRuleColumn: boolean
   onOpen: (entry: AuditEntry) => void
   onFilterRule: (ruleId: string) => void
-  previewMode: boolean
 }) {
   const names = ruleNames(entry.rule_id, context)
   const cell = eventCell(entry, names)
-  const href = `${window.location.pathname}${activitySearch({ ...state, entryId: entry.id }, { preview: previewMode })}`
+  const href = `${window.location.pathname}${activitySearch({ ...state, entryId: entry.id })}`
   const follow = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!isPlainLeftClick(event)) return
     event.preventDefault()
@@ -674,7 +636,6 @@ function ActivityDetail({
   onOpenRule,
   onNewer,
   onOlder,
-  previewMode,
 }: {
   entry: AuditEntry | undefined
   loading: boolean
@@ -684,7 +645,6 @@ function ActivityDetail({
   onOpenRule: OpenRule
   onNewer?: () => void
   onOlder?: () => void
-  previewMode: boolean
 }) {
   const close = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") onClose()
@@ -718,7 +678,7 @@ function ActivityDetail({
   return (
     <aside className="activity-detail" aria-labelledby="activity-detail-title" onKeyDown={close}>
       {toolbar}
-      <EntryDetails entry={entry} context={context} focusRef={focusRef} onOpenRule={onOpenRule} previewMode={previewMode} />
+      <EntryDetails entry={entry} context={context} focusRef={focusRef} onOpenRule={onOpenRule} />
     </aside>
   )
 }
@@ -728,13 +688,11 @@ function EntryDetails({
   context,
   focusRef,
   onOpenRule,
-  previewMode,
 }: {
   entry: AuditEntry
   context: RuleContext
   focusRef: RefObject<boolean>
   onOpenRule: OpenRule
-  previewMode: boolean
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
@@ -779,9 +737,9 @@ function EntryDetails({
           <dd><RuleDirection ruleId={entry.rule_id} context={context} /></dd>
         </div>
       </dl>
-      {entry.changed_fields?.length ? <SourceChangeDetails entry={entry} names={names} previewMode={previewMode} /> : null}
+      {entry.changed_fields?.length ? <SourceChangeDetails entry={entry} names={names} /> : null}
       {inspection === "event" ? (
-        <ActivityEventDetails entry={entry} previewMode={previewMode} />
+        <ActivityEventDetails entry={entry} />
       ) : (
         entry.source_event_id && <p className="activity-event-status">{REMOVED_RULE_LOOKUP}</p>
       )}
@@ -947,10 +905,10 @@ function RuleDirection({ ruleId, context }: { ruleId: string; context: RuleConte
 }
 
 /** What the entry's run saw change in the source event, with the values before and after. */
-function SourceChangeDetails({ entry, names, previewMode }: { entry: AuditEntry; names: RuleNames | null; previewMode: boolean }) {
+function SourceChangeDetails({ entry, names }: { entry: AuditEntry; names: RuleNames | null }) {
   const change = useQuery({
-    queryKey: ["activity-changes", previewMode, entry.id],
-    queryFn: () => (previewMode ? previewActivityChanges(entry.id) : api.activityChanges(entry.id)),
+    queryKey: ["activity-changes", entry.id],
+    queryFn: () => api.activityChanges(entry.id),
     staleTime: Infinity,
     retry: false,
   })
@@ -999,10 +957,10 @@ function SourceChangeDetails({ entry, names, previewMode }: { entry: AuditEntry;
   )
 }
 
-function ActivityEventDetails({ entry, previewMode }: { entry: AuditEntry; previewMode: boolean }) {
+function ActivityEventDetails({ entry }: { entry: AuditEntry }) {
   const event = useQuery({
-    queryKey: ["activity-event", previewMode, entry.id],
-    queryFn: () => (previewMode ? previewActivityEvent(entry.id) : api.activityEvent(entry.id)),
+    queryKey: ["activity-event", entry.id],
+    queryFn: () => api.activityEvent(entry.id),
     staleTime: 60_000,
     retry: false,
   })

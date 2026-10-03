@@ -10,11 +10,8 @@ export type RuleEndpoints = {
 }
 
 /** Accounts and calendar names for a set of rules, fetched once per account rather than per rule. */
-export function useRuleEndpoints(
-  rules: Pick<Rule, "source" | "destination">[],
-  { enabled = true }: { enabled?: boolean } = {},
-) {
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts, enabled })
+export function useRuleEndpoints(rules: Pick<Rule, "source" | "destination">[]) {
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const accountsById = new Map((accounts.data ?? []).map((account) => [account.id, account]))
   const accountIds = [
     ...new Set(
@@ -25,7 +22,6 @@ export function useRuleEndpoints(
     queries: accountIds.map((accountId) => ({
       queryKey: ["calendars", accountId],
       queryFn: () => api.calendars(accountId),
-      enabled,
       staleTime: 5 * 60 * 1000,
     })),
   })
