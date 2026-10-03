@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import {
+  activityDayGroups,
   activityRows,
   describeEntry,
   entryInspection,
@@ -114,13 +115,12 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const focusDetail = useRef(false)
   const activity = useInfiniteQuery({
     queryKey: ["activity", ruleId, show, query],
-    queryFn: ({ pageParam }) =>
-      api.activity({
-        ruleId: ruleId || undefined,
-        categories: showCategories(show),
-        before: pageParam,
-        query: query || undefined,
-      }),
+    queryFn: ({ pageParam }) => api.activity({
+      ruleId: ruleId || undefined,
+      categories: showCategories(show),
+      before: pageParam,
+      query: query || undefined,
+    }),
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (page) => (page.length === ACTIVITY_PAGE_SIZE ? page.at(-1)?.id : undefined),
     // Keep the current table on screen while another rule or filter loads.
@@ -192,6 +192,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   }
   const { open: openIncidents, resolved: resolvedIncidents } = splitIncidents(incidents.data)
   const groups = activityRows(runs)
+  const days = activityDayGroups(groups)
   const visibleEntries = runs.flatMap((run) => run.entries)
   const selectedIndex = selected ? visibleEntries.findIndex((item) => item.id === selected.id) : -1
   const updating = activity.isPlaceholderData
@@ -250,7 +251,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
       <OpenIncidents incidents={openIncidents} context={context} onAction={followIncident} />
       <ResolvedIncidents incidents={resolvedIncidents} context={context} />
 
-      <section className="workflow activity-section" aria-labelledby="activity-feed-title">
+      <section className="workflow activity-section page-card" aria-labelledby="activity-feed-title">
         <div className="section-heading activity-feed-heading">
           <div>
             <h2 id="activity-feed-title">History</h2>
@@ -312,31 +313,28 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
                       {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
                     </tr>
                   </thead>
-                  {groups.flatMap((group) => [
-                    ...(group.day
-                      ? [
-                          <tbody key={`${group.key}-day`} role="rowgroup" className="activity-day">
-                            <tr role="row">
-                              <th scope="colgroup" role="rowheader" colSpan={columns}>{group.day}</th>
-                            </tr>
-                          </tbody>,
-                        ]
-                      : []),
-                    <tbody key={group.key} role="rowgroup" className="activity-run">
-                      {group.run.entries.map((entry) => (
-                        <EntryRow
-                          key={entry.id}
-                          entry={entry}
-                          context={context}
-                          state={state}
-                          selected={entryId === entry.id}
-                          showRuleColumn={showRuleColumn}
-                          onOpen={openEntry}
-                          onFilterRule={(value) => changeFilters({ ruleId: value })}
-                        />
-                      ))}
-                    </tbody>,
-                  ])}
+                  {days.map((day) => (
+                    <tbody key={day.key} role="rowgroup" className="activity-day">
+                      <tr role="row">
+                        <th scope="rowgroup" role="rowheader" colSpan={columns}>{day.day}</th>
+                      </tr>
+                      {day.runs.flatMap((run, runIndex) =>
+                        run.entries.map((entry, entryIndex) => (
+                          <EntryRow
+                            key={entry.id}
+                            entry={entry}
+                            context={context}
+                            state={state}
+                            selected={entryId === entry.id}
+                            showRuleColumn={showRuleColumn}
+                            runStart={runIndex > 0 && entryIndex === 0}
+                            onOpen={openEntry}
+                            onFilterRule={(value) => changeFilters({ ruleId: value })}
+                          />
+                        )),
+                      )}
+                    </tbody>
+                  ))}
                 </table>
                 {activity.hasNextPage && (
                   <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
@@ -536,6 +534,7 @@ function EntryRow({
   state,
   selected,
   showRuleColumn,
+  runStart,
   onOpen,
   onFilterRule,
 }: {
@@ -544,6 +543,7 @@ function EntryRow({
   state: ActivityLocationState
   selected: boolean
   showRuleColumn: boolean
+  runStart: boolean
   onOpen: (entry: AuditEntry) => void
   onFilterRule: (ruleId: string) => void
 }) {
@@ -558,7 +558,7 @@ function EntryRow({
   return (
     <tr
       role="row"
-      className="activity-row"
+      className={runStart ? "activity-row activity-run-start" : "activity-row"}
       data-selected={selected}
       // The event link is the row's keyboard target; the rest of the row is a larger mouse target.
       onClick={(event) => {
@@ -795,7 +795,7 @@ function OpenIncidents({
 }) {
   if (incidents.length === 0) return null
   return (
-    <section className="workflow activity-section" aria-labelledby="incidents-title">
+    <section className="workflow activity-section page-card" aria-labelledby="incidents-title">
       <div className="section-heading">
         <div>
           <h2 id="incidents-title">Incidents</h2>

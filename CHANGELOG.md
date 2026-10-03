@@ -2,6 +2,24 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and semantic versioning.
 
+## [0.1.1] - 2026-10-03
+
+### Added
+
+- Overview now opens with a health hero that pairs the synchronization state and next action with a more expressive Calendar Ghost illustration.
+- Settings explains the three-step connection flow in a collapsed helper beside Connected accounts.
+
+### Changed
+
+- Overview, Rules, Activity, and Rule Details now share bordered information cards, clearer section summaries, and a calmer visual rhythm.
+- Recent Changes reads as a clickable timeline with connected markers, event context, and direct links into Activity and Rules.
+- The Ghost mark gains a quiet happy expression for healthy synchronization, while the hero keeps state colors and copy aligned with the existing health model.
+- Activity day separators are quiet, non-sticky row labels, and the generated Web UI bundle is refreshed for the release.
+
+### Removed
+
+- Removed the temporary in-app synthetic-data preview layer used to review the redesign; shipped views now stay connected to the installation's live data.
+
 ## [Unreleased]
 
 ### Added

@@ -25,3 +25,12 @@ describe("activity for removed rules", () => {
     expect(activitySource).toContain("eventLookupFailure(event.error)")
   })
 })
+
+describe("activity date grouping", () => {
+  it("keeps the date heading and all its runs in one rowgroup", () => {
+    expect(activitySource).toContain("const days = activityDayGroups(groups)")
+    expect(activitySource).toContain('className="activity-day"')
+    expect(activitySource).toContain('scope="rowgroup"')
+    expect(activitySource).not.toContain("aria-labelledby={dayId}")
+  })
+})

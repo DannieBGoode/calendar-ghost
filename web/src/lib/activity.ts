@@ -523,6 +523,21 @@ export function activityRows(runs: ActivityRun[], { now = new Date() }: { now?: 
   })
 }
 
+export type ActivityDayGroup = { key: string; day: string; runs: ActivityRun[] }
+
+/** Keeps each date heading with every run it labels for native table rowgroup semantics. */
+export function activityDayGroups(groups: ActivityGroup[]): ActivityDayGroup[] {
+  return groups.reduce<ActivityDayGroup[]>((days, group) => {
+    const current = days.at(-1)
+    if (group.day !== null || !current) {
+      days.push({ key: group.key, day: group.day ?? "", runs: [group.run] })
+    } else {
+      current.runs.push(group.run)
+    }
+    return days
+  }, [])
+}
+
 /** Which part of a recurring event an entry was about; null for single events or when unknown. */
 export type EventScope = "series" | "occurrence" | null
 

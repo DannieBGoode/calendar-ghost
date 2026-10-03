@@ -115,6 +115,16 @@ const NON_TEXT: [string, string][] = [
   ["ring", "surface"],
 ]
 
+const healthHero = tokensFromBody(blocksFor(".health-hero")[0])
+
+function healthHeroTokens(theme: Tokens, tone: "healthy" | "attention" | "setup"): Tokens {
+  return new Map([
+    ...theme,
+    ...healthHero,
+    ...blocksFor(`.health-hero[data-tone="${tone}"]`).flatMap((body) => [...tokensFromBody(body)]),
+  ])
+}
+
 describe.each([
   ["light", light],
   ["dark", dark],
@@ -125,6 +135,16 @@ describe.each([
   })
   it.each(NON_TEXT)("keeps %s on %s at non-text contrast", (fg, bg) => {
     expect(contrast(tokens, fg, bg)).toBeGreaterThanOrEqual(3)
+  })
+})
+
+describe.each([
+  ["light", light],
+  ["dark", dark],
+  ["dark Midnight", midnight],
+])("health hero ghost face in %s appearance", (_name, tokens) => {
+  it.each(["healthy", "attention", "setup"] as const)("keeps the %s face visible", (tone) => {
+    expect(contrast(healthHeroTokens(tokens, tone), "brand-eyes", "brand-glow")).toBeGreaterThanOrEqual(3)
   })
 })
 

@@ -39,17 +39,19 @@ import { useRuleEndpoints } from "@/lib/use-rule-endpoints"
 const WRITABLE_ROLES = ["writer", "owner"]
 const CALENDAR_STALE_TIME = 5 * 60 * 1000
 
+type RulesViewProps = {
+  notice: { text: string; attention: boolean } | null
+  createRule: boolean
+  onViewChange: ViewChange
+  onOpenRule: OpenRule
+}
+
 export function RulesView({
   notice,
   createRule,
   onViewChange,
   onOpenRule,
-}: {
-  notice: { text: string; attention: boolean } | null
-  createRule: boolean
-  onViewChange: ViewChange
-  onOpenRule: OpenRule
-}) {
+}: RulesViewProps) {
   const now = useNow()
   const commands = useRuleCommands()
   const rules = useQuery({
@@ -172,7 +174,7 @@ export function RulesView({
           </section>
         )
       ) : (
-        <ul className="rule-list" aria-label="Sync rules">
+        <ul className="rule-list page-card" aria-label="Sync rules">
           {rules.data.map((rule) => {
             const { source, destination, disconnected } = endpoints(rule)
             const stopped = rule.state === "degraded" || disconnected.length > 0
@@ -391,7 +393,7 @@ function RuleBuilder({
   const destinationStatus = calendarStatus(destinationCalendars, writableDestinations.length, "writable calendars")
 
   return (
-    <section className="rule-builder" id="rule-builder" aria-labelledby="builder-title">
+    <section className="rule-builder page-card" id="rule-builder" aria-labelledby="builder-title">
       <div className="section-heading">
         <div>
           <h2 id="builder-title" ref={heading} tabIndex={-1}>Choose the calendars</h2>

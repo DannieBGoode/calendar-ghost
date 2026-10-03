@@ -143,13 +143,13 @@ edge is a three-scallop ghost hem, and two dot eyes sit in the upper body. `Ghos
 In light appearance the ghost is pale with an indigo outline and eyes; in dark appearance and on
 the twilight auth panel it is a solid ghost-white silhouette with dark eyes. It is decorative
 (`aria-hidden`) wherever the name sits beside it, and appears in the top-bar lockup, the auth intro
-panel, empty states, and the startup loading screen.
+panel, the Overview health hero, empty states, and the startup loading screen.
 
 ### Named Rules
 
 **The Ghost Is Brand, Not Vocabulary Rule.** The ghost appears in the mark, the sign-in panel,
-loading, and empty states; labels and explanations always use the glossary in `CONTEXT.md`, never
-calling a Managed Projection a "ghost."
+Overview health hero, loading, and empty states; labels and explanations always use the glossary
+in `CONTEXT.md`, never calling a Managed Projection a "ghost."
 
 ## Colors
 
@@ -237,6 +237,10 @@ The system is flat by default. Tonal layering, dividers, and spacing establish s
 - **Shadow Strategy:** None at rest.
 - **Border:** One quiet full border only when grouping needs a boundary.
 - **Internal Padding:** 16 to 24 pixels depending on workflow density.
+- The Overview hero, Recent Changes, Rules summary, and setup workflow use bordered cards to make
+  operational groups easy to scan. Rules, Activity, and Rule Details reuse the same panel radius,
+  Quiet Surface, and 16–24px internal padding for grouped lists and controls. A card is a boundary
+  for meaningful information, not a wrapper for every paragraph; stable list rows still use dividers.
 
 ### Inputs / Fields
 
@@ -248,13 +252,16 @@ The system is flat by default. Tonal layering, dividers, and spacing establish s
 
 The desktop top bar uses the ghost-mark-and-wordmark lockup, text labels, and a two-pixel active underline. Mobile replaces it with a full-width menu using the same labels and familiar icons. Navigation never competes with the current task.
 
-### Health Strip
+### Overview Health Hero
 
-A single horizontal summary combines an icon, a plain-language state, one sentence of detail, and at most one action. It is a status surface, not a metric-card grid. Its surface follows one health model: moss when healthy, ochre when attention is required, and Quiet Surface during setup. When attention is required it names the affected rule and its action opens that rule. Counts such as rules running and connected accounts appear once, as a quiet line at the foot of the Overview.
+A single expressive Overview surface combines an icon, a plain-language state, one sentence of detail, a quiet synchronization summary, and at most one action. It is a status surface, not a metric-card grid. Its surface follows one health model: moss when healthy, ochre when attention is required, and Quiet Surface during setup. When attention is required it names the affected rule and its action opens that rule. The ghost illustration and callout belong to this Overview-only reassurance moment; other pages keep the quieter surface grammar.
 
 ### Recent Changes
 
-The Overview lists the latest runs that changed events, newest first: a relative time, the rule, and one sentence in calendar language ("Added 1 event and updated 2 in Family."). Blocked changes use Attention Ochre text and link to that rule's Activity. Event titles appear only on request, as each run recorded them.
+The Overview lists the latest runs that changed events, newest first, inside a contained timeline:
+a semantic calendar marker, relative time, the event, the rule, and one sentence in calendar language
+("Added 1 event and updated 2 in Family."). Blocked changes use Attention Ochre text and link to
+that rule's Activity. Event titles appear only on request, as each run recorded them.
 
 ### Rule Rows
 

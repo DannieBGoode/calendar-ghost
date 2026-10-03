@@ -387,7 +387,7 @@ docs/              Architecture, operation guides, domain references, and ADRs
 
 ## Project status and support
 
-This repository currently targets `0.1.0` and follows semantic versioning. Persistent configuration
+This repository currently targets `0.1.1` and follows semantic versioning. Persistent configuration
 and SQLite migrations are treated as compatibility surfaces, but pre-alpha releases may still
 change behavior before the first stable release.
 

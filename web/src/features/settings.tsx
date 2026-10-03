@@ -179,6 +179,41 @@ function ruleUsage(count: number): string {
   return `Used by ${count} rule${count === 1 ? "" : "s"}`
 }
 
+function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
+  return (
+    <details className="inline-help connection-guide">
+      <summary>
+        <KeyRound aria-hidden="true" />
+        <span>How connecting works</span>
+        <ChevronDown className="inline-help-chevron" aria-hidden="true" />
+      </summary>
+      <div className="inline-help-body connection-guide-body">
+        <ol className="connection-guide-steps">
+          <li>
+            <strong>Connect a Google account</strong>
+            <span>Authorize calendar discovery and event access for one account.</span>
+          </li>
+          <li>
+            <strong>Choose calendars</strong>
+            <span>Create a Directional Sync Rule with one source and one destination.</span>
+          </li>
+          <li>
+            <strong>Preview before syncing</strong>
+            <span>Review what will be written before anything reaches the destination.</span>
+          </li>
+        </ol>
+        {googleConfigured ? (
+          <p className="connection-guide-note">Use the Connect Google account button above to begin.</p>
+        ) : (
+          <p className="connection-guide-note">
+            Add the master key and Google OAuth credentials in <code>.env</code>, then restart before connecting.
+          </p>
+        )}
+      </div>
+    </details>
+  )
+}
+
 export function SettingsPage() {
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
   if (google.isPending) return <PageSkeleton label="Loading settings" />
@@ -382,6 +417,7 @@ function SettingsView({
           </p>
         )}
         <GoogleReturnStep help={returnHelp} />
+        <ConnectionGuide googleConfigured={googleConfigured} />
         {accounts.isPending && (
           <div className="account-list-loading" aria-label="Loading connected accounts">
             <Skeleton className="h-20 w-full" />
