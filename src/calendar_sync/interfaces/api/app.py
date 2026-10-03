@@ -28,6 +28,7 @@ from calendar_sync.interfaces.api.routes import (
     setup,
     storage,
 )
+from calendar_sync.interfaces.mcp.server import McpNotFound, McpServices, build_mcp
 
 # python:3.12-slim has no /etc/mime.types entry for woff2, so StaticFiles would otherwise serve
 # the bundled fonts as text/plain there; register it explicitly so the type is correct everywhere.
@@ -42,6 +43,7 @@ class ApiServices(
     integrations.IntegrationServices,
     rules.RuleServices,
     storage.StorageServices,
+    McpServices,
     Protocol,
 ):
     """Everything the routers read from the composed container."""
@@ -49,6 +51,9 @@ class ApiServices(
 
 def create_app(container: Container | None = None) -> FastAPI:
     resolved = container or service_container()
+    # Typed so mypy proves the container provides what every router reads from it.
+    services: ApiServices = resolved
+    mcp = build_mcp(services)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -56,7 +61,8 @@ def create_app(container: Container | None = None) -> FastAPI:
         if resolved.scheduler is not None:
             scheduler_task = asyncio.create_task(resolved.scheduler.run_forever())
         try:
-            yield
+            async with mcp.running():
+                yield
         finally:
             if scheduler_task is not None:
                 scheduler_task.cancel()
@@ -70,8 +76,6 @@ def create_app(container: Container | None = None) -> FastAPI:
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )
-    # Typed so mypy proves the container provides what every router reads from it.
-    services: ApiServices = resolved
     app.state.container = services
     # Added flat rather than through include_router, which newer FastAPI versions nest, so
     # app.routes lists every API route for UnknownApiPath and the authorization test.
@@ -87,6 +91,10 @@ def create_app(container: Container | None = None) -> FastAPI:
         integrations,
     ):
         app.router.routes.extend(module.router.routes)
+
+    # One exact route, ahead of the API fallback and the Web UI catch-all (ADR 0023).
+    app.router.routes.append(Route("/mcp", mcp.app, include_in_schema=False))
+    app.router.routes.append(Route("/mcp/{path:path}", McpNotFound(), include_in_schema=False))
 
     # Registered after every API route so an unknown API path is a JSON error for any method
     # instead of falling through to the web page.
