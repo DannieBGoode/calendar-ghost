@@ -170,6 +170,15 @@ class OpenBlock:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountStanding:
+    """A Connected Account's state and Provider Kind; never its email or name."""
+
+    id: str
+    state: str
+    provider: str
+
+
+@dataclass(frozen=True, slots=True)
 class OperationsOverview:
     connected_accounts: int
     disconnected_accounts: int
@@ -177,6 +186,8 @@ class OperationsOverview:
     last_synced_at: str | None
     open_blocks: tuple[OpenBlock, ...]
     """Events of existing rules whose latest decision was a block, newest first."""
+    accounts: tuple[AccountStanding, ...] = ()
+    """Every Connected Account, ordered by id."""
 
 
 @dataclass(frozen=True, slots=True)
