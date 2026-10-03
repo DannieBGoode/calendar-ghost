@@ -1562,6 +1562,10 @@ p {
   line-height: 1.5;
 }
 
+.inline-help-body pre {
+  overflow-x: auto;
+}
+
 .inline-help code,
 .oauth-return-form code {
   padding: 0.1rem 0.25rem;

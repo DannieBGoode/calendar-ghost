@@ -288,6 +288,16 @@ export type ClearableActivity = { older_than_days: number; entries: number }
 export type ClearedActivity = { removed: number; database: DatabaseUsage }
 export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
 
+export type IntegrationToken = {
+  id: string
+  name: string
+  scope: "status:read"
+  created_at: string
+  last_used_at: string | null
+  revoked_at: string | null
+}
+export type IssuedIntegrationToken = IntegrationToken & { token: string }
+
 export const ACTIVITY_PAGE_SIZE = 100
 
 export const api = {
@@ -393,4 +403,12 @@ export const api = {
       body: JSON.stringify({ older_than_days: days }),
     }),
   purgeLogs: () => request<void>(STORAGE_LOGS_URL, { method: "DELETE" }),
+  integrationTokens: () => request<IntegrationToken[]>("/api/v1/integration-tokens"),
+  issueIntegrationToken: (name: string) =>
+    request<IssuedIntegrationToken>("/api/v1/integration-tokens", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  revokeIntegrationToken: (id: string) =>
+    request<void>(`/api/v1/integration-tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
 }

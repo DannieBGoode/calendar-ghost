@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleUserRound,
+  Copy,
   Download,
   Info,
   KeyRound,
@@ -27,6 +28,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
 import { accountSummary } from "@/lib/account-summary"
 import { ApiError, STORAGE_LOGS_URL, api } from "@/lib/api"
+import type { IssuedIntegrationToken } from "@/lib/api"
+import { copyToken, integrationExamples, isPlainHttp, tokenUsage } from "@/lib/integrations"
 import {
   authorizationAwaitingReturn,
   clearAuthorizationStart,
@@ -43,6 +46,7 @@ import {
   logSummary,
 } from "@/lib/storage"
 import type { DarkPalette, ThemePreference } from "@/lib/theme"
+import { useNow } from "@/lib/use-now"
 import { cn } from "@/lib/utils"
 
 type GoogleReturn = {
@@ -693,6 +697,8 @@ function SettingsView({
         )}
       </section>
 
+      <IntegrationsSection />
+
       <StorageSection />
 
       <section className="settings-section" aria-labelledby="appearance-title">
@@ -741,6 +747,162 @@ function SettingsView({
         </div>
       </section>
     </div>
+  )
+}
+
+function IntegrationsSection() {
+  const queryClient = useQueryClient()
+  const now = useNow()
+  const tokens = useQuery({ queryKey: ["integration-tokens"], queryFn: api.integrationTokens })
+  const [name, setName] = useState("")
+  const [issued, setIssued] = useState<IssuedIntegrationToken | null>(null)
+  const [revoking, setRevoking] = useState<string | null>(null)
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "unavailable">("idle")
+  const origin = window.location.origin
+  const issue = useMutation({
+    mutationFn: () => api.issueIntegrationToken(name),
+    onSuccess: async (token) => {
+      setIssued(token)
+      setName("")
+      setCopyState("idle")
+      await queryClient.invalidateQueries({ queryKey: ["integration-tokens"] })
+    },
+  })
+  const revoke = useMutation({
+    mutationFn: (id: string) => api.revokeIntegrationToken(id),
+    onSuccess: async (_result, id) => {
+      setRevoking(null)
+      // The plaintext token lives only in this component's state, shown once; if the admin
+      // revokes it right away, stop showing a secret that no longer works.
+      setIssued((current) => (current?.id === id ? null : current))
+      await queryClient.invalidateQueries({ queryKey: ["integration-tokens"] })
+    },
+  })
+
+  return (
+    <section className="settings-section" aria-labelledby="integrations-title">
+      <div className="section-heading">
+        <div>
+          <h2 id="integrations-title">Integrations</h2>
+          <p>
+            Tokens that let monitors, dashboards, and AI agents read whether synchronization is
+            healthy. They cannot change anything.
+          </p>
+        </div>
+      </div>
+      {isPlainHttp(origin) && (
+        <div className="inline-error" role="alert">
+          This page uses plain HTTP, so a token sent to it can be read on your network. Serve
+          Calendar Ghost over HTTPS before you issue one.
+        </div>
+      )}
+      <form
+        className="setting-row"
+        onSubmit={(event) => {
+          event.preventDefault()
+          issue.mutate()
+        }}
+      >
+        <div>
+          <Label htmlFor="integration-name">Name</Label>
+          <Input
+            id="integration-name"
+            value={name}
+            maxLength={80}
+            placeholder="Uptime Kuma"
+            onChange={(event) => setName(event.target.value)}
+          />
+        </div>
+        <Button type="submit" disabled={!name.trim() || issue.isPending}>
+          {issue.isPending ? "Issuing…" : "Issue token"}
+        </Button>
+      </form>
+      {issued && (
+        <div className="setting-row" role="status">
+          <div>
+            <h3>Copy the token for {issued.name} now</h3>
+            <p>It is shown only once. Store it in your password manager or the tool that uses it.</p>
+            <code>{issued.token}</code>
+            {copyState === "unavailable" && <p>Select the token and copy it.</p>}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void copyToken(issued.token, navigator.clipboard).then(setCopyState)
+            }}
+          >
+            <Copy aria-hidden="true" />
+            {copyState === "copied" ? "Copied" : "Copy token"}
+          </Button>
+        </div>
+      )}
+      {tokens.isPending && <Skeleton className="h-16 w-full" />}
+      {tokens.error && (
+        <div className="inline-error" role="alert">
+          Integration tokens could not load.
+        </div>
+      )}
+      {tokens.data && tokens.data.length > 0 && (
+        <div className="settings-list">
+          {tokens.data.map((token) => (
+            <div key={token.id}>
+              <div className="setting-row">
+                <div>
+                  <h3>{token.name}</h3>
+                  <p>{tokenUsage(token, now)}</p>
+                </div>
+                {!token.revoked_at && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-expanded={revoking === token.id}
+                    onClick={() => setRevoking(token.id)}
+                  >
+                    Revoke
+                  </Button>
+                )}
+              </div>
+              {revoking === token.id && (
+                <DestructiveConfirmation
+                  id={`revoke-${token.id}`}
+                  title={`Revoke ${token.name}?`}
+                  body="Anything that uses this token loses access right away. This cannot be undone."
+                  cancelLabel="Keep token"
+                  confirmLabel="Revoke token"
+                  pendingLabel="Revoking…"
+                  pending={revoke.isPending}
+                  onConfirm={() => revoke.mutate(token.id)}
+                  onCancel={() => setRevoking(null)}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <details className="inline-help setting-help">
+        <summary>
+          <span>Examples for monitors and agents</span>
+          <ChevronDown className="inline-help-chevron" aria-hidden="true" />
+        </summary>
+        <div className="inline-help-body">
+          {integrationExamples(origin).map((example) => (
+            <div key={example.title}>
+              <h3>{example.title}</h3>
+              <p>{example.description}</p>
+              <pre>
+                <code>{example.code}</code>
+              </pre>
+            </div>
+          ))}
+        </div>
+      </details>
+      {(issue.error ?? revoke.error) && (
+        <div className="inline-error" role="alert">
+          {(issue.error ?? revoke.error)?.message}
+        </div>
+      )}
+    </section>
   )
 }
 
