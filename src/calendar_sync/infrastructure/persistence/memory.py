@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 from copy import deepcopy
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from types import TracebackType
 from typing import Self
 
+from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
@@ -65,6 +66,16 @@ class MemoryState:
     """Entries keep their changes in memory; this records the cutoff SQLite would apply."""
 
 
+def _require_rule(state: MemoryState, rule_id: SyncRuleId) -> None:
+    # Mirror SQLite's foreign keys to sync_rules.
+    if rule_id not in state.rules:
+        raise KeyError(rule_id)
+
+
+def _duplicate_relationship() -> DuplicateDirectionalRelationship:
+    return DuplicateDirectionalRelationship("a rule already exists for this source and destination")
+
+
 class InMemoryConnectedAccountRecords:
     def __init__(self, state: MemoryState) -> None:
         self._state = state
@@ -92,16 +103,24 @@ class InMemorySyncRuleRepository:
         return self._state.rules.get(rule_id)
 
     def list(self) -> tuple[SyncRule, ...]:
-        return tuple(self._state.rules.values())
+        return tuple(sorted(self._state.rules.values(), key=lambda rule: rule.id.value))
 
     def add(self, rule: SyncRule) -> None:
-        if rule.id in self._state.rules:
-            raise KeyError(rule.id)
+        # Mirror SQLite's primary key and its unique source-and-destination constraint.
+        if rule.id in self._state.rules or self.relationship_exists(rule.source, rule.destination):
+            raise _duplicate_relationship()
         self._state.rules[rule.id] = rule
 
     def save(self, rule: SyncRule) -> None:
         if rule.id not in self._state.rules:
             raise KeyError(rule.id)
+        if any(
+            other.id != rule.id
+            and other.source == rule.source
+            and other.destination == rule.destination
+            for other in self._state.rules.values()
+        ):
+            raise _duplicate_relationship()
         self._state.rules[rule.id] = rule
 
     def remove(self, rule_id: SyncRuleId) -> None:
@@ -156,10 +175,25 @@ class InMemoryEventMappingRepository:
 
     def for_rule(self, rule_id: SyncRuleId) -> tuple[EventMapping, ...]:
         return tuple(
-            mapping for mapping in self._state.mappings.values() if mapping.rule_id == rule_id
+            sorted(
+                (
+                    mapping
+                    for mapping in self._state.mappings.values()
+                    if mapping.rule_id == rule_id
+                ),
+                key=lambda mapping: mapping.id.value,
+            )
         )
 
     def save(self, mapping: EventMapping) -> None:
+        _require_rule(self._state, mapping.rule_id)
+        same_id = next((m for m in self._state.mappings.values() if m.id == mapping.id), None)
+        if same_id is not None:
+            # Mirror SQLite's upsert by id: a mapping keeps its rule and source.
+            mapping = replace(mapping, rule_id=same_id.rule_id, source=same_id.source)
+        at_source = self._state.mappings.get((mapping.rule_id, mapping.source))
+        if at_source is not None and at_source.id != mapping.id:
+            raise ValueError("the source is already mapped by another mapping")
         for existing in self._state.mappings.values():
             if (
                 existing.rule_id == mapping.rule_id
@@ -213,10 +247,16 @@ class InMemoryOccurrenceMappingRepository:
         self._state = state
 
     def for_series(self, series_mapping_id: EventMappingId) -> tuple[OccurrenceMapping, ...]:
+        # SQLite orders by the stored ISO text; one series' starts are all dates or all instants.
         return tuple(
-            mapping
-            for key, mapping in self._state.occurrences.items()
-            if key[0] == series_mapping_id
+            sorted(
+                (
+                    mapping
+                    for key, mapping in self._state.occurrences.items()
+                    if key[0] == series_mapping_id
+                ),
+                key=lambda mapping: mapping.original_start.isoformat(),
+            )
         )
 
     def get(
@@ -228,20 +268,30 @@ class InMemoryOccurrenceMappingRepository:
         # Mirror the SQLite foreign key to event_mappings.
         if not any(m.id == mapping.series_mapping_id for m in self._state.mappings.values()):
             raise KeyError(mapping.series_mapping_id)
-        self._state.occurrences[(mapping.series_mapping_id, mapping.original_start)] = mapping
+        key = (mapping.series_mapping_id, mapping.original_start)
+        existing = self._state.occurrences.get(key)
+        if existing is not None:
+            # Mirror SQLite's upsert by series and start: the occurrence keeps its id.
+            mapping = replace(mapping, id=existing.id)
+        elif any(other.id == mapping.id for other in self._state.occurrences.values()):
+            # Mirror SQLite's primary key: one id names one occurrence.
+            raise ValueError("the occurrence id already names another occurrence")
+        self._state.occurrences[key] = mapping
 
     def delete(self, mapping: OccurrenceMapping) -> None:
         self._state.occurrences.pop((mapping.series_mapping_id, mapping.original_start), None)
 
 
 class InMemorySyncCursorRepository:
-    def __init__(self, cursors: dict[SyncRuleId, str]) -> None:
+    def __init__(self, state: MemoryState, cursors: dict[SyncRuleId, str]) -> None:
+        self._state = state
         self._cursors = cursors
 
     def get(self, rule_id: SyncRuleId) -> str | None:
         return self._cursors.get(rule_id)
 
     def save(self, rule_id: SyncRuleId, cursor: str) -> None:
+        _require_rule(self._state, rule_id)
         self._cursors[rule_id] = cursor
 
 
@@ -271,6 +321,7 @@ class InMemorySourceObservationRepository:
         observation: SourceObservation,
         observed_at: datetime,
     ) -> None:
+        _require_rule(self._state, rule_id)
         self._state.observations[(rule_id, source)] = (observation, observed_at)
 
     def forget_stale(
@@ -297,6 +348,7 @@ class InMemoryRuleRunOutcomeRepository:
         self._state = state
 
     def record(self, outcome: RuleRunOutcome) -> None:
+        _require_rule(self._state, outcome.rule_id)
         previous = self._state.outcomes.get((outcome.rule_id, outcome.kind))
         succeeded_at = (
             outcome.completed_at
@@ -325,6 +377,7 @@ class InMemoryRulePreviewRepository:
         self._state = state
 
     def record(self, summary: RulePreviewSummary) -> None:
+        _require_rule(self._state, summary.rule_id)
         self._state.previews[summary.rule_id] = summary
 
     def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None:
@@ -378,8 +431,10 @@ class InMemoryUnitOfWork:
         self.mappings = InMemoryEventMappingRepository(self._working)
         self.occurrences = InMemoryOccurrenceMappingRepository(self._working)
         self.replays = InMemoryExceptionReplayRepository(self._working)
-        self.cursors = InMemorySyncCursorRepository(self._working.cursors)
-        self.destination_cursors = InMemorySyncCursorRepository(self._working.destination_cursors)
+        self.cursors = InMemorySyncCursorRepository(self._working, self._working.cursors)
+        self.destination_cursors = InMemorySyncCursorRepository(
+            self._working, self._working.destination_cursors
+        )
         self.audit = InMemoryAuditRepository(self._working)
         self.observations = InMemorySourceObservationRepository(self._working)
         self.run_outcomes = InMemoryRuleRunOutcomeRepository(self._working)
@@ -397,19 +452,9 @@ class InMemoryUnitOfWork:
 
     def commit(self) -> None:
         assert self._working is not None
-        self._target.accounts = self._working.accounts
-        self._target.rules = self._working.rules
-        self._target.mappings = self._working.mappings
-        self._target.occurrences = self._working.occurrences
-        self._target.pending_replays = self._working.pending_replays
-        self._target.cursors = self._working.cursors
-        self._target.destination_cursors = self._working.destination_cursors
-        self._target.audit = self._working.audit
-        self._target.outcomes = self._working.outcomes
-        self._target.previews = self._working.previews
-        self._target.calendar_names = self._working.calendar_names
-        self._target.observations = self._working.observations
-        self._target.change_values_forgotten_before = self._working.change_values_forgotten_before
+        # Copies, so writes after this commit stay in the unit until it commits again.
+        for each in fields(MemoryState):
+            setattr(self._target, each.name, deepcopy(getattr(self._working, each.name)))
         self._committed = True
 
 

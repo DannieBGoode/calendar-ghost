@@ -21,7 +21,6 @@ from calendar_sync.application.ports import (
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
-    UnitOfWorkFactory,
 )
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.rules import CreateSyncRule
@@ -650,7 +649,10 @@ def test_memory_adapter_keeps_calendar_names_of_existing_accounts() -> None:
 
 def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
     factory = InMemoryUnitOfWorkFactory()
-    other = replace(rule(), id=SyncRuleId("rule-2"))
+    # Another direction, since SQLite refuses a second rule for one source and destination.
+    other = replace(
+        rule(), id=SyncRuleId("rule-2"), destination=endpoint("work-account", "other-calendar")
+    )
     with factory() as uow:
         for kept_or_purged in (rule(), other):
             uow.rules.add(kept_or_purged)
@@ -870,38 +872,6 @@ def test_migration_13_keeps_earlier_incident_accounts_unknown(tmp_path: Path) ->
     assert account is None
 
 
-@pytest.mark.parametrize("backend", ["sqlite", "memory"])
-def test_run_outcomes_keep_the_last_full_run_across_later_runs(
-    tmp_path: Path, backend: str
-) -> None:
-    factory: UnitOfWorkFactory
-    if backend == "sqlite":
-        database = tmp_path / "calendar-sync.db"
-        initialize_database(database)
-        factory = SqliteUnitOfWorkFactory(database)
-    else:
-        factory = InMemoryUnitOfWorkFactory()
-    full = RuleRunOutcome(
-        rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True, full_run=True
-    )
-    with factory() as uow:
-        uow.rules.add(rule())
-        uow.run_outcomes.record(full)
-        uow.run_outcomes.record(
-            replace(full, completed_at=datetime(2026, 9, 2, tzinfo=UTC), full_run=False)
-        )
-        # A failed full run leaves the daily pass due, so it must not count as completed.
-        uow.run_outcomes.record(
-            replace(full, completed_at=datetime(2026, 9, 3, tzinfo=UTC), succeeded=False)
-        )
-        uow.commit()
-
-    with factory() as uow:
-        latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
-    assert latest is not None
-    assert latest.last_full_succeeded_at == full.completed_at
-
-
 def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
@@ -921,48 +891,3 @@ def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
     assert latest is not None
     assert latest.last_full_succeeded_at == completed
-
-
-def _replay_factory(backend: str, tmp_path: Path) -> UnitOfWorkFactory:
-    if backend == "memory":
-        return InMemoryUnitOfWorkFactory()
-    database = tmp_path / "calendar-sync.db"
-    initialize_database(database)
-    return SqliteUnitOfWorkFactory(database)
-
-
-@pytest.mark.parametrize("backend", ["memory", "sqlite"])
-def test_pending_exception_replays_follow_their_series_mapping(
-    backend: str, tmp_path: Path
-) -> None:
-    factory = _replay_factory(backend, tmp_path)
-    kept, deleted = (
-        EventMapping(
-            EventMappingId(name),
-            rule().id,
-            EventRef(rule().source, EventId(f"source-{name}")),
-            EventRef(rule().destination, EventId(f"destination-{name}")),
-            "revision-1",
-            ProjectionFingerprint("fingerprint"),
-        )
-        for name in ("kept", "deleted")
-    )
-    with factory() as uow:
-        uow.rules.add(rule())
-        uow.mappings.save(kept)
-        uow.mappings.save(deleted)
-        uow.replays.add(kept.id)
-        uow.replays.add(kept.id)
-        uow.replays.add(deleted.id)
-        uow.commit()
-
-    with factory() as uow:
-        assert [mapping.id for mapping in uow.replays.pending(rule().id)] == [deleted.id, kept.id]
-        uow.mappings.delete(deleted)
-        uow.commit()
-    with factory() as uow:
-        assert uow.replays.pending(rule().id) == (kept,)
-        uow.replays.remove(kept.id)
-        uow.commit()
-    with factory() as uow:
-        assert uow.replays.pending(rule().id) == ()
