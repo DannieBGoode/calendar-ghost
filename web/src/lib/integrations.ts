@@ -1,4 +1,5 @@
 import type { IntegrationToken } from "@/lib/api"
+import { relativeTime } from "@/lib/relative-time"
 
 export type IntegrationExample = { title: string; description: string; code: string }
 
@@ -35,38 +36,11 @@ export function integrationExamples(origin: string): IntegrationExample[] {
   ]
 }
 
-const USAGE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
-  ["day", 86_400],
-  ["hour", 3_600],
-  ["minute", 60],
-]
-
-// Unlike the Overview's relativeTime(), this always states the number ("1 day ago", never
-// "yesterday"), because a revoked or last-used timestamp here is a precise audit fact, not a
-// casual status line.
-const usageFormat = new Intl.RelativeTimeFormat("en", { numeric: "always" })
-
-function ageOf(iso: string, now: number): string {
-  const seconds = Math.round((new Date(iso).getTime() - now) / 1000)
-  if (Number.isNaN(seconds)) return "at an unknown time"
-  if (Math.abs(seconds) < 60) return "just now"
-  for (const [unit, size] of USAGE_UNITS) {
-    if (Math.abs(seconds) >= size || unit === "minute") {
-      const value = Math.trunc(seconds / size)
-      if (unit === "day" && Math.abs(value) > 6) {
-        return `on ${new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`
-      }
-      return usageFormat.format(value, unit)
-    }
-  }
-  return "just now"
-}
-
 /** When a token was last used, that it was never used, or that it was revoked. */
 export function tokenUsage(token: IntegrationToken, now: number): string {
-  if (token.revoked_at) return `Revoked ${ageOf(token.revoked_at, now)}`
+  if (token.revoked_at) return `Revoked ${relativeTime(token.revoked_at, now)}`
   if (!token.last_used_at) return "Never used"
-  return `Last used ${ageOf(token.last_used_at, now)}`
+  return `Last used ${relativeTime(token.last_used_at, now)}`
 }
 
 export type ClipboardWriter = { writeText: (text: string) => Promise<void> }

@@ -43,7 +43,7 @@ describe("tokenUsage", () => {
   it("says when a token was last used, never used, or revoked", () => {
     expect(tokenUsage(token, now)).toBe("Last used 3 minutes ago")
     expect(tokenUsage({ ...token, last_used_at: null }, now)).toBe("Never used")
-    expect(tokenUsage({ ...token, revoked_at: "2026-10-02T12:00:00Z" }, now)).toBe("Revoked 1 day ago")
+    expect(tokenUsage({ ...token, revoked_at: "2026-10-02T12:00:00Z" }, now)).toBe("Revoked yesterday")
   })
 })
 

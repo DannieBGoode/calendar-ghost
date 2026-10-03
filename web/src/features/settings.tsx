@@ -758,6 +758,7 @@ function IntegrationsSection() {
   const [issued, setIssued] = useState<IssuedIntegrationToken | null>(null)
   const [revoking, setRevoking] = useState<string | null>(null)
   const [copyState, setCopyState] = useState<"idle" | "copied" | "unavailable">("idle")
+  const revokeTriggers = useRef<Record<string, HTMLButtonElement | null>>({})
   const origin = window.location.origin
   const issue = useMutation({
     mutationFn: () => api.issueIntegrationToken(name),
@@ -819,7 +820,7 @@ function IntegrationsSection() {
       </form>
       {issued && (
         <div className="setting-row" role="status">
-          <div>
+          <div className="token-reveal">
             <h3>Copy the token for {issued.name} now</h3>
             <p>It is shown only once. Store it in your password manager or the tool that uses it.</p>
             <code>{issued.token}</code>
@@ -854,9 +855,13 @@ function IntegrationsSection() {
                 </div>
                 {!token.revoked_at && (
                   <Button
+                    ref={(element) => {
+                      revokeTriggers.current[token.id] = element
+                    }}
                     type="button"
                     variant="outline"
                     aria-expanded={revoking === token.id}
+                    aria-controls={`revoke-${token.id}`}
                     onClick={() => setRevoking(token.id)}
                   >
                     Revoke
@@ -873,7 +878,10 @@ function IntegrationsSection() {
                   pendingLabel="Revoking…"
                   pending={revoke.isPending}
                   onConfirm={() => revoke.mutate(token.id)}
-                  onCancel={() => setRevoking(null)}
+                  onCancel={() => {
+                    setRevoking(null)
+                    revokeTriggers.current[token.id]?.focus()
+                  }}
                 />
               )}
             </div>
