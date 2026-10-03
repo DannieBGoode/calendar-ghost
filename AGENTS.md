@@ -106,6 +106,7 @@ web/ and interfaces/  ->  application/  ->  domain/
   workers without a cross-process rule lock and a reviewed persistence design.
 - Schema changes require an explicit migration strategy, SQLite-backed tests, and documentation of
   upgrade and rollback behavior.
+- Open SQLite connections only through `infrastructure/persistence/connections.py`.
 
 ## Security and data handling
 

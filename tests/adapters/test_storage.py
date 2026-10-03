@@ -214,8 +214,12 @@ def test_compacting_a_locked_database_raises_storage_busy(tmp_path: Path) -> Non
 class _BrokenConnection:
     """Stands in for a connection whose `VACUUM` fails for a reason other than contention."""
 
-    def execute(self, *args: object, **kwargs: object) -> None:
-        raise sqlite3.OperationalError("no such table: audit_entries")
+    row_factory: object = None
+
+    def execute(self, sql: str, *args: object) -> None:
+        # Only VACUUM fails, so the error comes from compacting, not from opening the connection.
+        if sql == "VACUUM":
+            raise sqlite3.OperationalError("no such table: audit_entries")
 
     def close(self) -> None:
         pass

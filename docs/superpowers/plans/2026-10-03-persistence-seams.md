@@ -819,9 +819,7 @@ class PersistenceContract:
             assert uow.previews.latest(OTHER_RULE.id) is not None
             assert uow.observations.get(OTHER_RULE.id, source) is not None
 
-    def test_purging_a_rule_removes_it_with_its_mappings(
-        self, harness: PersistenceHarness
-    ) -> None:
+    def test_purging_a_rule_removes_it_with_its_mappings(self, harness: PersistenceHarness) -> None:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
             uow.mappings.save(_mapping("series"))
@@ -857,7 +855,9 @@ class PersistenceContract:
     def test_saving_a_mapping_again_updates_it(self, harness: PersistenceHarness) -> None:
         mapping = _mapping("series")
         updated = replace(
-            mapping, source_revision="revision-2", projection_fingerprint=ProjectionFingerprint("new")
+            mapping,
+            source_revision="revision-2",
+            projection_fingerprint=ProjectionFingerprint("new"),
         )
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
@@ -921,9 +921,7 @@ class PersistenceContract:
             with pytest.raises(harness.refused):
                 uow.occurrences.save(_occurrence(_mapping("missing"), week_start(1), "1"))
 
-    def test_pending_replays_follow_their_series_mapping(
-        self, harness: PersistenceHarness
-    ) -> None:
+    def test_pending_replays_follow_their_series_mapping(self, harness: PersistenceHarness) -> None:
         kept, deleted = _mapping("kept"), _mapping("deleted")
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
@@ -1018,9 +1016,7 @@ class PersistenceContract:
             uow.rules.add(RULE)
             uow.observations.save(RULE.id, current, _observation(), NOW)
             uow.observations.save(RULE.id, ended, _observation(past), NOW)
-            uow.observations.save(
-                RULE.id, series, _observation(past, ("RRULE:FREQ=WEEKLY",)), NOW
-            )
+            uow.observations.save(RULE.id, series, _observation(past, ("RRULE:FREQ=WEEKLY",)), NOW)
             uow.observations.save(RULE.id, elsewhere, _observation(), NOW)
             uow.commit()
         with harness.unit_of_work() as uow:
@@ -1119,9 +1115,7 @@ class PersistenceContract:
 
         with harness.unit_of_work() as uow:
             # A mapping's rule and source never change; its projection and revision do.
-            assert uow.mappings.for_rule(RULE.id) == (
-                replace(moved, source=mapping.source),
-            )
+            assert uow.mappings.for_rule(RULE.id) == (replace(moved, source=mapping.source),)
             assert uow.mappings.for_source(RULE.id, moved.source) is None
 
     def test_saving_an_occurrence_again_keeps_its_identifier(
@@ -1212,7 +1206,12 @@ class TestSqliteUnitOfWork(PersistenceContract):
                         created_at, updated_at
                     ) VALUES (?, 'google', 'Synthetic', ?, x'', 'connected', ?, ?)
                     """,
-                    (account_id.value, f"{account_id.value}@example.test", NOW.isoformat(), NOW.isoformat()),
+                    (
+                        account_id.value,
+                        f"{account_id.value}@example.test",
+                        NOW.isoformat(),
+                        NOW.isoformat(),
+                    ),
                 )
 
         def disconnect(account_id: ConnectedAccountId) -> None:
@@ -1224,7 +1223,9 @@ class TestSqliteUnitOfWork(PersistenceContract):
 
         return PersistenceHarness(
             # Source Observations are sealed, so the store needs a History Cipher to keep them.
-            SqliteUnitOfWorkFactory(database, history=HistoryCipher(CredentialCipher.generate_key())),
+            SqliteUnitOfWorkFactory(
+                database, history=HistoryCipher(CredentialCipher.generate_key())
+            ),
             connect_account=connect,
             disconnect_account=disconnect,
             refused=(sqlite3.IntegrityError,),

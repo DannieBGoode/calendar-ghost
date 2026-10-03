@@ -140,6 +140,14 @@ incremental cursors commit last, after both batches complete. If the process sto
 write but before persistence commits, retrying the same operation key recovers the same managed
 projection rather than creating a duplicate.
 
+## Persistence
+
+Every SQLite connection in the application opens through
+`infrastructure/persistence/connections.py`: foreign keys are enforced, rows are read by column
+name, a writer waits up to five seconds for another's lock, and `transaction()` commits, rolls back,
+and closes in one block. A test fails if any other module under `src/calendar_sync` calls
+`sqlite3.connect`, so a setting added there applies to every adapter.
+
 ## Public compatibility surfaces
 
 Database migrations, environment configuration, HTTP API payloads, provider ownership metadata, and persisted domain states are compatibility surfaces. Releases must migrate them rather than asking operators to delete SQLite state.

@@ -1,12 +1,20 @@
 """Every SQLite connection opens through one module, with the installation's settings."""
 
 import sqlite3
+from contextlib import closing
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
+from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.connections import open_connection, transaction
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.health import SqliteRuleHealthRecords
+from calendar_sync.infrastructure.persistence.sqlite import (
+    SqliteUnitOfWorkFactory,
+    initialize_database,
+)
+from tests.helpers import NOW, rule
 
 
 def _database(tmp_path: Path) -> Path:
@@ -106,3 +114,70 @@ def test_a_connection_that_cannot_be_configured_is_closed(
         open_connection(tmp_path / "calendar-sync.db")
 
     assert unconfigurable.closed
+
+
+SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src" / "calendar_sync"
+
+
+def test_only_the_connection_module_opens_sqlite() -> None:
+    # The shipped package only; scripts/dev_preview.py seeds a throwaway preview database.
+    opening = sorted(
+        str(path.relative_to(SOURCE_ROOT))
+        for path in SOURCE_ROOT.rglob("*.py")
+        if "sqlite3.connect(" in path.read_text()
+    )
+    assert opening == ["infrastructure/persistence/connections.py"]
+
+
+def test_consecutive_failures_of_an_existing_rule_are_counted(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    records = SqliteRuleHealthRecords(database)
+    later = NOW + timedelta(minutes=5)
+
+    assert records.record_failure(rule().id, ProviderFailureKind.TEMPORARY, NOW) == 1
+    assert records.record_failure(rule().id, ProviderFailureKind.RATE_LIMIT, later) == 2
+
+    with transaction(database) as connection:
+        row = connection.execute("SELECT * FROM rule_failures").fetchone()
+    assert (row["consecutive_failures"], row["last_category"], row["updated_at"]) == (
+        2,
+        "rate_limit",
+        later.isoformat(),
+    )
+
+
+def test_a_failure_for_a_removed_rule_is_counted_without_a_record(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    records = SqliteRuleHealthRecords(database)
+
+    assert records.record_failure(rule().id, ProviderFailureKind.TEMPORARY, NOW) == 1
+    assert records.record_failure(rule().id, ProviderFailureKind.TEMPORARY, NOW) == 1
+    with transaction(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM rule_failures").fetchone()[0] == 0
+
+
+def test_an_orphaned_failure_count_from_an_earlier_release_is_left_alone(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    # Earlier releases wrote failures without enforcing foreign keys, so a row may outlive its rule.
+    with closing(sqlite3.connect(database)) as legacy, legacy:
+        legacy.execute(
+            "INSERT INTO rule_failures(rule_id, consecutive_failures, last_category, updated_at) "
+            "VALUES (?, 2, 'temporary', ?)",
+            (rule().id.value, NOW.isoformat()),
+        )
+
+    records = SqliteRuleHealthRecords(database)
+    later = NOW + timedelta(minutes=5)
+
+    assert records.record_failure(rule().id, ProviderFailureKind.RATE_LIMIT, later) == 1
+    assert records.record_failure(rule().id, ProviderFailureKind.RATE_LIMIT, later) == 1
+    with transaction(database) as connection:
+        row = connection.execute("SELECT * FROM rule_failures").fetchone()
+    assert (row["consecutive_failures"], row["last_category"], row["updated_at"]) == (
+        2,
+        "temporary",
+        NOW.isoformat(),
+    )

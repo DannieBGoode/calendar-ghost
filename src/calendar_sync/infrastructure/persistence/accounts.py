@@ -16,6 +16,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
+from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import CredentialCipher
 
@@ -36,7 +37,7 @@ class SqliteConnectedAccountStore:
         self._ids = ids or UuidIdGenerator()
 
     def list(self) -> tuple[ConnectedAccount, ...]:
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             rows = connection.execute(
                 """
                 SELECT id, provider, display_name, email, state, avatar_url, updated_at
@@ -46,7 +47,7 @@ class SqliteConnectedAccountStore:
         return tuple(_account_from_row(row) for row in rows)
 
     def get(self, account_id: ConnectedAccountId) -> ConnectedAccount | None:
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT id, provider, display_name, email, state, avatar_url, updated_at
@@ -73,7 +74,7 @@ class SqliteConnectedAccountStore:
         now = self._clock.now().isoformat()
         account_id = self._ids.new()
         encrypted = self._cipher.encrypt(credential_json)
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             connection.execute(
                 """
                 INSERT INTO connected_accounts (
@@ -101,7 +102,7 @@ class SqliteConnectedAccountStore:
 
     def provider_of(self, account_id: ConnectedAccountId) -> ProviderKind | None:
         """The provider a Connected or Disconnected Account belongs to; None if it doesn't exist."""
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             row = connection.execute(
                 "SELECT provider FROM connected_accounts WHERE id = ?", (account_id.value,)
             ).fetchone()
@@ -109,7 +110,7 @@ class SqliteConnectedAccountStore:
 
     def credential_json(self, account_id: ConnectedAccountId) -> str:
         """The decrypted credentials of a connected account; never log or persist them."""
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             row = connection.execute(
                 "SELECT encrypted_credentials, state FROM connected_accounts WHERE id = ?",
                 (account_id.value,),
@@ -130,7 +131,7 @@ class SqliteConnectedAccountStore:
         It is not an authorization, so the account's authorization time stays as it was.
         """
         encrypted = self._cipher.encrypt(credential_json)
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             # Held from the read to the write, so a reauthorization cannot land in between.
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
@@ -152,7 +153,7 @@ class SqliteConnectedAccountStore:
     def disconnect(self, account_id: ConnectedAccountId) -> ConnectedAccount:
         now = self._clock.now().isoformat()
         cleared_credentials = self._cipher.encrypt("{}")
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             row = connection.execute(
                 """
                 SELECT id, provider, display_name, email, avatar_url FROM connected_accounts
@@ -185,11 +186,6 @@ class SqliteConnectedAccountStore:
             _optional_text(row["avatar_url"]),
             provider=ProviderKind(str(row["provider"])),
         )
-
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self._database_path)
-        connection.row_factory = sqlite3.Row
-        return connection
 
 
 def _account_from_row(row: sqlite3.Row) -> ConnectedAccount:

@@ -15,6 +15,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
 from calendar_sync.application.ports import AdministratorSession, Clock
+from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.scheduling import SystemClock
 
 SESSION_LIFETIME = timedelta(days=7)
@@ -91,7 +92,7 @@ class SqliteAdminAuth:
         self._clock = clock or SystemClock()
 
     def is_configured(self) -> bool:
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             return (
                 connection.execute(
                     "SELECT 1 FROM installation_admin WHERE singleton = 1"
@@ -106,7 +107,7 @@ class SqliteAdminAuth:
         derived = _derive_password(password, salt)
         encoded = "scrypt$" + base64.urlsafe_b64encode(salt + derived).decode()
         try:
-            with self._connect() as connection:
+            with transaction(self._database_path) as connection:
                 connection.execute(
                     """
                     INSERT INTO installation_admin(singleton, password_hash, created_at)
@@ -118,7 +119,7 @@ class SqliteAdminAuth:
             raise AdminAlreadyConfigured("installation administrator already exists") from error
 
     def authenticate(self, password: str) -> AdministratorSession | None:
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             row = connection.execute(
                 "SELECT password_hash FROM installation_admin WHERE singleton = 1"
             ).fetchone()
@@ -142,7 +143,7 @@ class SqliteAdminAuth:
         if not token:
             return False
         now = self._clock.now()
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             row = connection.execute(
                 "SELECT expires_at FROM admin_sessions WHERE token_hash = ?",
                 (_token_hash(token),),
@@ -152,15 +153,10 @@ class SqliteAdminAuth:
     def revoke(self, token: str | None) -> None:
         if not token:
             return
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             connection.execute(
                 "DELETE FROM admin_sessions WHERE token_hash = ?", (_token_hash(token),)
             )
-
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self._database_path)
-        connection.row_factory = sqlite3.Row
-        return connection
 
 
 def _verify_password(password: str, encoded: str) -> bool:

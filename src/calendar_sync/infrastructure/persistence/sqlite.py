@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Collection, Sequence
+from contextlib import closing
 from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -55,6 +56,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
     change_columns,
@@ -85,7 +87,7 @@ _FORWARD_MIGRATIONS = (
 def initialize_database(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     migrations = files("calendar_sync.infrastructure.persistence")
-    with sqlite3.connect(path) as connection:
+    with closing(open_connection(path)) as connection:
         connection.executescript(migrations.joinpath("0001_initial.sql").read_text())
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
@@ -702,9 +704,7 @@ class SqliteUnitOfWork:
         self._connection: sqlite3.Connection | None = None
 
     def __enter__(self) -> Self:
-        connection = sqlite3.connect(self._database_path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
+        connection = open_connection(self._database_path)
         self._connection = connection
         self.accounts = SqliteConnectedAccountRecords(connection)
         self.rules = SqliteSyncRuleRepository(connection, self._clock)
