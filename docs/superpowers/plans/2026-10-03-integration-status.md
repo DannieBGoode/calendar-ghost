@@ -211,7 +211,7 @@ class SchedulerHeartbeat(Protocol):
 In `src/calendar_sync/infrastructure/scheduling.py`, import `SchedulerProgress` from
 `calendar_sync.application.ports`. At the end of `__init__` add:
 
-```python
+```python-fragment
         # Read from request threads while the event loop writes; each is one attribute store.
         self._running_since = self._clock.now()
         self._pass_started_at: datetime | None = None
@@ -221,19 +221,18 @@ In `src/calendar_sync/infrastructure/scheduling.py`, import `SchedulerProgress` 
 Rename the current body of `run_once` to a new private method `_run_pass` (same code, same
 signature `async def _run_pass(self) -> None`), and make `run_once`:
 
-```python
-    async def run_once(self) -> None:
-        self._pass_started_at = self._clock.now()
-        try:
-            await self._run_pass()
-        finally:
-            self._pass_started_at = None
-        self._last_completed_at = self._clock.now()
+```python-fragment
+async def run_once(self) -> None:
+    self._pass_started_at = self._clock.now()
+    try:
+        await self._run_pass()
+    finally:
+        self._pass_started_at = None
+    self._last_completed_at = self._clock.now()
 
-    def progress(self) -> SchedulerProgress:
-        return SchedulerProgress(
-            self._running_since, self._pass_started_at, self._last_completed_at
-        )
+
+def progress(self) -> SchedulerProgress:
+    return SchedulerProgress(self._running_since, self._pass_started_at, self._last_completed_at)
 ```
 
 - [ ] **Step 5: Run the scheduling tests**
@@ -331,25 +330,23 @@ class AccountStanding:
 
 Add a last field to `OperationsOverview`:
 
-```python
+```python-fragment
     accounts: tuple[AccountStanding, ...] = ()
     """Every Connected Account, ordered by id."""
 ```
 
 In `SqliteOperationsQueries.overview`, replace the account-count query with:
 
-```python
-            accounts = tuple(
-                AccountStanding(str(row["id"]), str(row["state"]), str(row["provider"]))
-                for row in connection.execute(
-                    "SELECT id, state, provider FROM connected_accounts ORDER BY id"
-                )
-            )
+```python-fragment
+accounts = tuple(
+    AccountStanding(str(row["id"]), str(row["state"]), str(row["provider"]))
+    for row in connection.execute("SELECT id, state, provider FROM connected_accounts ORDER BY id")
+)
 ```
 
 and build the counts from it:
 
-```python
+```python-fragment
         return OperationsOverview(
             connected_accounts=sum(account.state == "connected" for account in accounts),
             disconnected_accounts=sum(account.state == "disconnected" for account in accounts),
@@ -503,13 +500,17 @@ def test_rule_names_use_last_known_calendar_names() -> None:
         ),
         (
             SchedulerProgress(
-                NOW - timedelta(days=1), NOW - timedelta(hours=2, minutes=59), NOW - timedelta(hours=3)
+                NOW - timedelta(days=1),
+                NOW - timedelta(hours=2, minutes=59),
+                NOW - timedelta(hours=3),
             ),
             InstallationHealth.HEALTHY,
         ),
         (
             SchedulerProgress(
-                NOW - timedelta(days=1), NOW - timedelta(hours=3, minutes=1), NOW - timedelta(hours=4)
+                NOW - timedelta(days=1),
+                NOW - timedelta(hours=3, minutes=1),
+                NOW - timedelta(hours=4),
             ),
             InstallationHealth.STALLED,
         ),
@@ -554,7 +555,9 @@ def test_an_enabled_rule_with_a_disconnected_account_is_stopped(side: str) -> No
         replace(account, state="disconnected") if account.id == side else account
         for account in CONNECTED
     )
-    status = assess_installation([_summary(_rule())], _overview(accounts=accounts), (), TICKING, NOW)
+    status = assess_installation(
+        [_summary(_rule())], _overview(accounts=accounts), (), TICKING, NOW
+    )
     assert status.health is InstallationHealth.STOPPED
     assert status.problems[0].summary == "A calendar account needs reauthorization"
 
@@ -716,7 +719,9 @@ OVERDUE_AFTER = timedelta(hours=24)
 WAITING_LIMIT = timedelta(hours=24)
 
 # Provider conditions that retry by themselves; nothing to do unless they last.
-WAITING_CATEGORIES = frozenset({ProviderFailureKind.RATE_LIMIT.value, ProviderFailureKind.TEMPORARY.value})
+WAITING_CATEGORIES = frozenset(
+    {ProviderFailureKind.RATE_LIMIT.value, ProviderFailureKind.TEMPORARY.value}
+)
 # Blocked-event incidents; the open blocks already describe them.
 BLOCKED_CATEGORY = "conflict"
 UNNAMED_CALENDAR = "Unnamed calendar"
@@ -827,7 +832,9 @@ def assess_installation(
 
     problems: list[Problem] = []
     if stalled:
-        problems.append(Problem(ProblemKind.STALLED, None, "Scheduled synchronization stopped running"))
+        problems.append(
+            Problem(ProblemKind.STALLED, None, "Scheduled synchronization stopped running")
+        )
     problems.extend(_stopped(visible, open_incidents, disconnected))
     named: set[str | None] = {problem.rule_id for problem in problems if problem.rule_id}
     reviews, waits = _incident_problems(open_incidents, named, now)
@@ -916,7 +923,9 @@ def _stopped(
             )
         elif lost_account:
             problems.append(
-                Problem(ProblemKind.STOPPED, rule.id.value, "A calendar account needs reauthorization")
+                Problem(
+                    ProblemKind.STOPPED, rule.id.value, "A calendar account needs reauthorization"
+                )
             )
         else:
             problems.append(Problem(ProblemKind.STOPPED, rule.id.value, "Stopped syncing"))
@@ -960,7 +969,9 @@ def _overdue(
         ):
             continue
         problems.append(
-            Problem(ProblemKind.OVERDUE, summary.rule.id.value, "Not synced in over a day", succeeded)
+            Problem(
+                ProblemKind.OVERDUE, summary.rule.id.value, "Not synced in over a day", succeeded
+            )
         )
     return problems
 
@@ -1382,7 +1393,12 @@ class SqliteIntegrationTokens:
         cleaned = token_name(name)
         token = TOKEN_PREFIX + secrets.token_urlsafe(32)
         summary = IntegrationTokenSummary(
-            self._ids.new(), cleaned, IntegrationTokenScope.STATUS_READ, self._clock.now(), None, None
+            self._ids.new(),
+            cleaned,
+            IntegrationTokenScope.STATUS_READ,
+            self._clock.now(),
+            None,
+            None,
         )
         with self._connect() as connection:
             connection.execute(
@@ -1594,9 +1610,12 @@ def test_tokens_are_managed_only_with_an_administrator_session(tmp_path: Path) -
         client.cookies.clear()
         bearer = {"Authorization": f"Bearer {token}"}
         assert client.get("/api/v1/integration-tokens", headers=bearer).status_code == 401
-        assert client.post(
-            "/api/v1/integration-tokens", json={"name": "x"}, headers=bearer
-        ).status_code == 401
+        assert (
+            client.post(
+                "/api/v1/integration-tokens", json={"name": "x"}, headers=bearer
+            ).status_code
+            == 401
+        )
 
 
 def test_status_accepts_a_token_or_a_session(tmp_path: Path) -> None:
@@ -1638,9 +1657,7 @@ def test_an_invalid_bearer_header_is_refused_beside_a_valid_session(tmp_path: Pa
     container, _ = _installation(tmp_path)
     with TestClient(create_app(container)) as client:
         _signed_in(client)
-        response = client.get(
-            "/api/v1/status", headers={"Authorization": "Bearer cgs_" + "B" * 43}
-        )
+        response = client.get("/api/v1/status", headers={"Authorization": "Bearer cgs_" + "B" * 43})
     assert response.status_code == 401
 
 
@@ -1660,7 +1677,11 @@ def test_a_revoked_token_and_a_token_in_the_query_string_are_refused(tmp_path: P
         in_access_token = client.get(f"/api/v1/status?access_token={live}")
         in_header = client.get("/api/v1/status", headers={"Authorization": f"Bearer {live}"})
 
-    assert (revoked.status_code, in_query.status_code, in_access_token.status_code) == (401, 401, 401)
+    assert (revoked.status_code, in_query.status_code, in_access_token.status_code) == (
+        401,
+        401,
+        401,
+    )
     assert in_header.status_code == 200
 
 
@@ -1679,7 +1700,9 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
         )
     seeded = SyncRule(
         id=SyncRuleId("rule-1"),
-        source=CalendarEndpoint(ConnectedAccountId(SECRETS["account"]), CalendarId(SECRETS["calendar"])),
+        source=CalendarEndpoint(
+            ConnectedAccountId(SECRETS["account"]), CalendarId(SECRETS["calendar"])
+        ),
         destination=endpoint("work-account", "work-calendar"),
         state=SyncRuleState.DEGRADED,
     )
@@ -1766,7 +1789,7 @@ def _requires(dependant: Dependant, guard: object) -> bool:
 Replace `_requires_admin(route.dependant)` with `_requires(route.dependant, require_admin)`, and
 change the final assertions to:
 
-```python
+```python-fragment
     readers = {
         (method, route.path)
         for route in api_routes
@@ -1820,11 +1843,11 @@ In `bootstrap/container.py`:
 - In `compose`, build `list_sync_rules = ListSyncRules(unit_of_work, locks)` once, use it for the
   existing field, and add:
 
-```python
-        get_installation_status=GetInstallationStatus(
-            list_sync_rules, adapters.operations, clock, scheduler
-        ),
-        integration_tokens=adapters.integration_tokens,
+```python-fragment
+get_installation_status = (
+    GetInstallationStatus(list_sync_rules, adapters.operations, clock, scheduler),
+)
+integration_tokens = (adapters.integration_tokens,)
 ```
 
 `scheduler` is `None` when the installation has no master key or Google configuration. With
@@ -1958,7 +1981,7 @@ class IssueIntegrationTokenRequest(BaseModel):
 
 In `DashboardResponse`, replace `health: str` with:
 
-```python
+```python-fragment
     status: str
     needs_attention: bool
     problems: list[ProblemResponse]
@@ -2184,9 +2207,7 @@ def issue_integration_token(
         issued = services.integration_tokens.issue(payload.name)
     except InvalidIntegrationTokenName as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
-    return IssuedIntegrationTokenResponse(
-        **_token(issued.summary).model_dump(), token=issued.token
-    )
+    return IssuedIntegrationTokenResponse(**_token(issued.summary).model_dump(), token=issued.token)
 
 
 @router.delete(
@@ -2213,7 +2234,7 @@ def _token(summary: IntegrationTokenSummary) -> IntegrationTokenResponse:
 In `routes/activity.py`, add `get_installation_status` to `ActivityServices` and change the
 dashboard route body:
 
-```python
+```python-fragment
     summary = services.get_dashboard.execute()
     verdict = services.get_installation_status.execute()
     return DashboardResponse(
@@ -2321,18 +2342,25 @@ def mcp(tmp_path: Path) -> Iterator[tuple[TestClient, str]]:
                 state, created_at, updated_at
             ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01')
             """,
-            [(account, account, f"{account}@example.test") for account in ("personal-account", "work-account")],
+            [
+                (account, account, f"{account}@example.test")
+                for account in ("personal-account", "work-account")
+            ],
         )
     with adapters.unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
     with TestClient(create_app(container), base_url="http://ghost.lan:8000") as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)
-        token: str = client.post("/api/v1/integration-tokens", json={"name": "Agent"}).json()["token"]
+        token: str = client.post("/api/v1/integration-tokens", json={"name": "Agent"}).json()[
+            "token"
+        ]
         yield client, token
 
 
-def _rpc(client: TestClient, token: str | None, method: str, params: dict[str, Any] | None = None) -> Any:
+def _rpc(
+    client: TestClient, token: str | None, method: str, params: dict[str, Any] | None = None
+) -> Any:
     headers = dict(JSON_HEADERS)
     if token is not None:
         headers["Authorization"] = f"Bearer {token}"
@@ -2357,7 +2385,11 @@ def test_initialize_names_the_server_and_explains_the_statuses(mcp: Any) -> None
         client,
         token,
         "initialize",
-        {"protocolVersion": PROTOCOL, "capabilities": {}, "clientInfo": {"name": "t", "version": "1"}},
+        {
+            "protocolVersion": PROTOCOL,
+            "capabilities": {},
+            "clientInfo": {"name": "t", "version": "1"},
+        },
     ).json()["result"]
     assert result["serverInfo"]["name"] == "calendar-ghost"
     assert "needs_attention" in result["instructions"]
@@ -2583,7 +2615,9 @@ class McpGate:
         self._services = services
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        headers = {key.decode("latin-1"): value.decode("latin-1") for key, value in scope["headers"]}
+        headers = {
+            key.decode("latin-1"): value.decode("latin-1") for key, value in scope["headers"]
+        }
         access = await run_in_threadpool(
             status_access,
             self._services.integration_tokens,
@@ -2592,7 +2626,12 @@ class McpGate:
             None,
         )
         if access is StatusAccess.UNAUTHENTICATED:
-            await _json(send, 401, {"detail": "valid credentials required"}, [(b"www-authenticate", b"Bearer")])
+            await _json(
+                send,
+                401,
+                {"detail": "valid credentials required"},
+                [(b"www-authenticate", b"Bearer")],
+            )
             return
         if access is StatusAccess.FORBIDDEN:
             await _json(send, 403, {"detail": "token lacks the required scope"})
@@ -2642,26 +2681,27 @@ from calendar_sync.interfaces.mcp.server import McpNotFound, McpServices, build_
 Add `McpServices` to the `ApiServices` bases. In `create_app`, build the endpoint before
 `lifespan` is defined and run it inside the lifespan:
 
-```python
-    resolved = container or service_container()
-    services: ApiServices = resolved
-    mcp = build_mcp(services)
+```python-fragment
+resolved = container or service_container()
+services: ApiServices = resolved
+mcp = build_mcp(services)
 
-    @asynccontextmanager
-    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        scheduler_task: asyncio.Task[None] | None = None
-        if resolved.scheduler is not None:
-            scheduler_task = asyncio.create_task(resolved.scheduler.run_forever())
-        try:
-            async with mcp.running():
-                yield
-        finally:
-            ...  # unchanged scheduler cancellation
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    scheduler_task: asyncio.Task[None] | None = None
+    if resolved.scheduler is not None:
+        scheduler_task = asyncio.create_task(resolved.scheduler.run_forever())
+    try:
+        async with mcp.running():
+            yield
+    finally:
+        ...  # unchanged scheduler cancellation
 ```
 
 After the API routes are extended and before the `/api` fallback routes, register:
 
-```python
+```python-fragment
     # One exact route, ahead of the API fallback and the Web UI catch-all (ADR 0023).
     app.router.routes.append(Route("/mcp", mcp.app, include_in_schema=False))
     app.router.routes.append(Route("/mcp/{path:path}", McpNotFound(), include_in_schema=False))
