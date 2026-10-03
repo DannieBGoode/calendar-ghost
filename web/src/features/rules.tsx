@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Plus, ShieldAlert } from "lucide-react"
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type SyntheticEvent } from "react"
 
 import { AccountSelect } from "@/components/account-select"
 import { GhostMark } from "@/components/ghost-mark"
@@ -374,7 +374,7 @@ export function RuleBuilder({
       !sameEndpoint,
   )
 
-  function submit(event: FormEvent) {
+  function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
     if (canSubmit) create.mutate()
   }

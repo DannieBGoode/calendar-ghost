@@ -43,7 +43,7 @@ import {
   logSummary,
 } from "@/lib/storage"
 import type { DarkPalette, ThemePreference } from "@/lib/theme"
-import { cn } from "@/lib/utils"
+import { cn, withoutKey } from "@/lib/utils"
 
 type GoogleReturn = {
   mismatch: { redirectOrigin: string; redirectUri: string } | null
@@ -266,11 +266,7 @@ function SettingsView({
     onSuccess: async (account) => {
       setConfirmingAccountId(null)
       setStatusMessage(`${account.display_name} was disconnected.`)
-      setAccessChecks((current) => {
-        const next = { ...current }
-        delete next[account.id]
-        return next
-      })
+      setAccessChecks((current) => withoutKey(current, account.id))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
@@ -295,11 +291,7 @@ function SettingsView({
           ? `${displayName} and ${ruleCount} affected Directional Sync Rule${ruleCount === 1 ? "" : "s"} were permanently deleted.`
           : `${displayName} was permanently deleted.`,
       )
-      setAccessChecks((current) => {
-        const next = { ...current }
-        delete next[accountId]
-        return next
-      })
+      setAccessChecks((current) => withoutKey(current, accountId))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),

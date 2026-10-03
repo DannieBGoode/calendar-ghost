@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Check, LockKeyhole } from "lucide-react"
-import { useId, useState, type FormEvent } from "react"
+import { useId, useState, type SyntheticEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,7 +30,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const mismatch = isSetup && confirmation.length > 0 && password !== confirmation
   const canSubmit = password.length >= 12 && (!isSetup || password === confirmation)
 
-  function submit(event: FormEvent) {
+  function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
     if (canSubmit) mutation.mutate()
   }

@@ -64,7 +64,7 @@ describe("activityFailure with real API responses", () => {
   it("treats an unreadable success response as a service error, not a blocked request", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response("<!doctype html><title>Proxy</title>", { status: 200 })),
+      vi.fn(() => Promise.resolve(new Response("<!doctype html><title>Proxy</title>", { status: 200 }))),
     )
 
     const error = await api.activity().catch((caught: unknown) => caught)
@@ -75,7 +75,7 @@ describe("activityFailure with real API responses", () => {
 
   it("keeps a connection lost while reading the body classified as unreachable", async () => {
     const interrupted = { ok: true, status: 200, json: async () => Promise.reject(new TypeError("network error")) }
-    vi.stubGlobal("fetch", vi.fn(async () => interrupted))
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(interrupted)))
 
     const error = await api.activity().catch((caught: unknown) => caught)
 

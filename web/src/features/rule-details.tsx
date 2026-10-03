@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, ArrowRight, LoaderCircle, RefreshCw, ShieldAlert, Trash2 } from "lucide-react"
-import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react"
+import { useEffect, useRef, useState, type SyntheticEvent, type RefObject } from "react"
 
 import { DestructiveConfirmation } from "@/components/destructive-confirmation"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -478,7 +478,7 @@ function PolicyEditor({
     setOpen(false)
   }
 
-  function submit(event: FormEvent) {
+  function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
     if (changed) update.mutate()
   }
@@ -699,7 +699,7 @@ function CalendarReplacement({
   })
   const canSubmit = !unchanged && !sameEndpoint && Boolean(sourceCalendar && destinationCalendar)
 
-  function submit(event: FormEvent) {
+  function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
     if (canSubmit) setConfirming(true)
   }

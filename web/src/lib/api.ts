@@ -10,11 +10,9 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  })
+  const headers = new Headers(init?.headers)
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json")
+  const response = await fetch(path, { ...init, credentials: "same-origin", headers })
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { detail?: string } | null
     throw new ApiError(body?.detail ?? "The request could not be completed.", response.status)
@@ -105,7 +103,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ password }),
     }),
-  logOut: () => request<void>("/api/v1/session", { method: "DELETE" }),
+  logOut: () => request<undefined>("/api/v1/session", { method: "DELETE" }),
   dashboard: () => request<Dashboard>("/api/v1/dashboard"),
   rules: () => request<RuleSummary[]>("/api/v1/rules"),
   rule: (ruleId: string) => request<RuleDetail>(`/api/v1/rules/${encodeURIComponent(ruleId)}`),
@@ -139,7 +137,7 @@ export const api = {
       method: "POST",
     }),
   deleteAccount: (accountId: string) =>
-    request<void>(`/api/v1/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" }),
+    request<undefined>(`/api/v1/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" }),
   verifyAccountAccess: (accountId: string) =>
     request<GoogleAccountAccess>(`/api/v1/accounts/${encodeURIComponent(accountId)}/verify`, {
       method: "POST",
@@ -191,5 +189,5 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ older_than_days: days }),
     }),
-  purgeLogs: () => request<void>(STORAGE_LOGS_URL, { method: "DELETE" }),
+  purgeLogs: () => request<undefined>(STORAGE_LOGS_URL, { method: "DELETE" }),
 }

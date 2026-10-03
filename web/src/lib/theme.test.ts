@@ -165,7 +165,7 @@ describe("pre-paint theme bootstrap", () => {
     storageUnavailable = false,
     storedPalette: string | null = null,
   ) {
-    const script = bootstrapHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1]
+    const script = /<script>([\s\S]*?)<\/script>/.exec(bootstrapHtml)?.[1]
     if (!script) throw new Error("Theme bootstrap script was not found")
 
     const root = { dataset: { theme: "light" }, style: { colorScheme: "light" } }
@@ -182,7 +182,13 @@ describe("pre-paint theme bootstrap", () => {
       },
     }
     const targetDocument = { documentElement: root, querySelector: () => meta }
-    const execute = new Function("localStorage", "matchMedia", "document", script)
+    // Runs the inline script index.html ships, exactly as the browser would before React loads.
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const execute = new Function("localStorage", "matchMedia", "document", script) as (
+      storage: unknown,
+      matchMedia: () => { matches: boolean },
+      document: unknown,
+    ) => void
 
     execute(storage, () => ({ matches: systemPrefersDark }), targetDocument)
     return { root, meta }

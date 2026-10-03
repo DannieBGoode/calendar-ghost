@@ -115,7 +115,7 @@ function mountInteractive(
     )
   })
   return {
-    trigger: container.querySelector('[role="combobox"]') as HTMLButtonElement,
+    trigger: container.querySelector<HTMLButtonElement>('[role="combobox"]')!,
     onChange,
   }
 }
@@ -131,7 +131,9 @@ function press(
     cancelable: true,
     ...options,
   })
-  act(() => trigger.dispatchEvent(event))
+  act(() => {
+    trigger.dispatchEvent(event)
+  })
   return event
 }
 
@@ -143,20 +145,24 @@ function click(element: Element) {
 
 function mouseDown(element: Element) {
   const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true })
-  act(() => element.dispatchEvent(event))
+  act(() => {
+    element.dispatchEvent(event)
+  })
   return event
 }
 
 function mouseMove(element: Element) {
-  act(() => element.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })))
+  act(() => {
+    element.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }))
+  })
 }
 
 function listbox() {
-  return container.querySelector('[role="listbox"]') as HTMLDivElement
+  return container.querySelector<HTMLDivElement>('[role="listbox"]')!
 }
 
 function options() {
-  return Array.from(container.querySelectorAll('[role="option"]')) as HTMLDivElement[]
+  return Array.from(container.querySelectorAll<HTMLDivElement>('[role="option"]'))
 }
 
 function option(index: number) {
@@ -348,6 +354,8 @@ describe("account select", () => {
   })
 
   it("prevents pointer blur, closes on trigger blur, and scrolls the active option", () => {
+    // Saved only to restore it below; it is never called detached from an element.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     const originalScrollIntoView = Element.prototype.scrollIntoView
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView

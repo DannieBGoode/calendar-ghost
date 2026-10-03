@@ -1,4 +1,4 @@
-import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
+import { keepPreviousData, skipToken, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
   ChevronDown,
@@ -146,8 +146,8 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   // A shared link or an older page can name an entry that is not loaded.
   const directEntry = useQuery({
     queryKey: ["activity-entry", entryId],
-    queryFn: () => api.activityEntry(entryId as number),
-    enabled: entryId !== null && listedEntry === undefined && !activity.isPending,
+    queryFn: entryId === null ? skipToken : () => api.activityEntry(entryId),
+    enabled: listedEntry === undefined && !activity.isPending,
     retry: false,
   })
   const selected = listedEntry ?? (directEntry.data?.id === entryId ? directEntry.data : undefined)
@@ -337,7 +337,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
                   ))}
                 </table>
                 {activity.hasNextPage && (
-                  <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
+                  <Button variant="outline" className="activity-more" onClick={() => void activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
                     {activity.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
                   </Button>
                 )}

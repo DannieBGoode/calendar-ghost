@@ -39,7 +39,7 @@ export function movedIndex(key: string, active: number, count: number): number |
 export function typeaheadIndex(labels: readonly string[], typed: string, from: number): number {
   const query = typed.toLocaleLowerCase()
   if (!query) return -1
-  const cycling = [...query].every((letter) => letter === query[0])
+  const cycling = query.replaceAll(query.charAt(0), "") === ""
   const needle = cycling ? query.charAt(0) : query
   const start = cycling || query.length === 1 ? from + 1 : from
   for (let offset = 0; offset < labels.length; offset += 1) {

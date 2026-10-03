@@ -90,20 +90,20 @@ function click(element: Element) {
 }
 
 function selectOptions(id: string): HTMLOptionElement[] {
-  return Array.from(container.querySelectorAll(`#${id} option`)) as HTMLOptionElement[]
+  return Array.from(container.querySelectorAll<HTMLOptionElement>(`#${id} option`))
 }
 
 function selectElement(id: string): HTMLSelectElement {
-  return container.querySelector(`#${id}`) as HTMLSelectElement
+  return container.querySelector<HTMLSelectElement>(`#${id}`)!
 }
 
 /** Switches an AccountSelect combobox (scoped to its own wrapper) to the account at `targetId`. */
 function switchAccount(triggerId: string, targetId: string) {
-  const trigger = container.querySelector(`#${triggerId}`) as HTMLButtonElement
-  const wrapper = trigger.closest(".account-select") as HTMLElement
+  const trigger = container.querySelector<HTMLButtonElement>(`#${triggerId}`)!
+  const wrapper = trigger.closest<HTMLElement>(".account-select")!
   click(trigger)
   const options = Array.from(wrapper.querySelectorAll('[role="option"]'))
-  const target = options.find((option) => option.textContent?.includes(`Account ${targetId}`))
+  const target = options.find((option) => option.textContent.includes(`Account ${targetId}`))
   if (!target) throw new Error(`No account option for ${targetId}`)
   click(target)
 }
@@ -150,7 +150,7 @@ describe("RuleBuilder", () => {
     expect(destinationSelect.value).toBe("")
     expect(container.textContent).toContain("This account has no writable calendars to choose.")
 
-    const submit = container.querySelector('button[type="submit"]') as HTMLButtonElement
+    const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]')!
     expect(submit.disabled).toBe(true)
   })
 })

@@ -37,13 +37,13 @@ const midnight = new Map([
 function resolve(tokens: Tokens, name: string): string {
   const value = tokens.get(name)
   if (!value) throw new Error(`Missing --${name}`)
-  const reference = value.match(/^var\(--([\w-]+)\)$/)?.[1]
+  const reference = /^var\(--([\w-]+)\)$/.exec(value)?.[1]
   return reference ? resolve(tokens, reference) : value
 }
 
 /** The lightness, chroma, and hue of an `oklch(L C H)` value. */
 function oklch(value: string): [number, number, number] {
-  const match = value.match(/oklch\(([\d.]+) ([\d.]+) ([\d.]+)/)
+  const match = /oklch\(([\d.]+) ([\d.]+) ([\d.]+)/.exec(value)
   if (!match) throw new Error(`Not oklch: ${value}`)
   return [Number(match[1]), Number(match[2]), Number(match[3])]
 }
@@ -170,7 +170,7 @@ describe("Twilight identity", () => {
 describe("Midnight palette", () => {
   it("is blue, not indigo, wherever it differs from Twilight", () => {
     const hue = (tokens: Tokens, name: string) =>
-      Number(resolve(tokens, name).match(/oklch\([\d.]+ [\d.]+ ([\d.]+)/)?.[1])
+      Number(/oklch\([\d.]+ [\d.]+ ([\d.]+)/.exec(resolve(tokens, name))?.[1])
     for (const token of ["background", "surface", "primary", "twilight-canvas"]) {
       expect(hue(midnight, token)).toBeGreaterThanOrEqual(230)
       expect(hue(midnight, token)).toBeLessThanOrEqual(255)
