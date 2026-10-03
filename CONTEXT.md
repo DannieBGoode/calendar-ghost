@@ -193,10 +193,7 @@ A deduplicated notice sent when an incident opens or resolves. The Web UI always
 _Avoid_: Error alert, retry notification
 
 **Installation Status**:
-The server's one verdict on the installation's health (stalled, stopped, review, waiting, paused,
-setup, or healthy) with every current problem, most urgent first. The Overview, the status API, and
-MCP all show it. It names rules by their calendars and never carries event content, calendar IDs,
-or account emails.
+The server's one verdict on the installation's health (stalled, stopped, review, waiting, paused, setup, or healthy) with every current problem, most urgent first. The Overview, the status API, and MCP all show it. It names rules by their calendars and never carries event content, calendar IDs, or account emails.
 _Avoid_: Health check, status page
 
 ## Access
@@ -210,8 +207,7 @@ The minimal unauthenticated indication that the service is running. Calendar, ac
 _Avoid_: Public dashboard, anonymous status page
 
 **Integration Token**:
-A named credential the Installation Administrator issues so a monitor or AI agent can read
-Installation Status, and nothing else. Only its hash is stored; it is shown once and can be revoked.
+A named credential the Installation Administrator issues so a monitor or AI agent can read Installation Status, and nothing else. Only its hash is stored; it is shown once and can be revoked.
 _Avoid_: API key, personal access token
 
 **Installation Master Key**:
