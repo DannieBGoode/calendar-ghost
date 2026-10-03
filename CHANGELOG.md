@@ -22,8 +22,17 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Added
+
+- Monitors, homelab dashboards, and AI agents can read Installation Status with an Integration
+  Token: `GET /api/v1/status` for tools like Uptime Kuma and Homepage, and an MCP server at `/mcp`
+  for Claude Code, Codex, and other agents. Settings → Integrations issues and revokes tokens.
+- Installation Status notices a scheduler that stopped running passes and a rule that has not
+  synced in over a day.
+
 ### Changed
 
+- The Overview shows the server's health verdict, so it always agrees with the status API.
 - The Overview hero says each thing once: the headline gives the state, the detail explains it, the
   facts show running rules and the last sync, and the ghost reacts in a few words. The ghost is
   filled with its state's color, and its speech bubble sits beside it at eye level on every screen

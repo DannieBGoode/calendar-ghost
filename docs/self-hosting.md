@@ -148,7 +148,86 @@ Do not expose the service directly to the public internet. See [Google OAuth red
 LAN host](deployment.md#google-oauth-redirect-uri-on-a-lan-host) for the tunnel and reverse-proxy
 options.
 
-## 6. Back up, upgrade, and recover
+## 6. Connect monitors and agents
+
+Installation Status is the authenticated counterpart to `/health`: it reports which rules are
+running, which are stopped and why, whether the scheduler itself is still running passes, and one
+overall verdict, through `GET /api/v1/status` and an MCP server at `/mcp`. Both require an
+Integration Token, a credential you issue in **Settings → Integrations** for one monitor, dashboard,
+or agent at a time.
+
+Put the installation behind HTTPS (see [5. Use a LAN host or HTTPS](#5-use-a-lan-host-or-https))
+before issuing a token. A token is a long-lived administrator credential, and sending one over
+plain HTTP on a home network means it travels in the clear; Settings shows a warning beside the
+connection examples when the page itself was loaded over HTTP, and you can still proceed if that is
+an accepted trust decision for your network. A reverse proxy configured to log request headers will
+record the token in its own logs the same as it would record a session cookie, so review a proxy's
+logging configuration before relying on it.
+
+In **Settings → Integrations**, choose **Issue token**, name it for the tool that will use it (for
+example "Uptime Kuma"), and copy the plaintext shown there. It is not shown again; issue a new one
+and revoke the old one if it is lost. Below the list, Settings shows copy-ready examples addressed
+at this installation for each tool below.
+
+**Uptime Kuma.** Add an **HTTP(s) - Json Query** monitor:
+
+```text
+URL: https://ghost.example.lan/api/v1/status
+Headers: {"Authorization": "Bearer <token>"}
+Json Query: $.needs_attention
+Expected Value: false
+```
+
+**Homepage.** Add a `customapi` widget to the Calendar Ghost service:
+
+```yaml
+widget:
+  type: customapi
+  url: https://ghost.example.lan/api/v1/status
+  headers:
+    Authorization: Bearer {{HOMEPAGE_VAR_CALENDAR_GHOST_TOKEN}}
+  mappings:
+    - field: status
+      label: Status
+    - field: summary
+      label: Summary
+```
+
+**Claude Code.** Keep the token in an environment variable rather than typing it into a command
+line:
+
+```sh
+export CALENDAR_GHOST_TOKEN=cgs_…   # from a password manager or shell profile
+claude mcp add --transport http calendar-ghost https://ghost.example.lan/mcp \
+  --header "Authorization: Bearer ${CALENDAR_GHOST_TOKEN}"
+```
+
+**Codex.** Add to `~/.codex/config.toml` and set `CALENDAR_GHOST_TOKEN` in the environment Codex
+runs in:
+
+```toml
+[mcp_servers.calendar-ghost]
+url = "https://ghost.example.lan/mcp"
+bearer_token_env_var = "CALENDAR_GHOST_TOKEN"
+```
+
+Both `/api/v1/status` and `/mcp` answer the same verdict. Each status means:
+
+| Status | What it means | What to do |
+| --- | --- | --- |
+| `stalled` | Rules are enabled, but the scheduler is not running passes | Restart the service |
+| `stopped` | A rule is suspended, usually because a Google account lost access | Reauthorize the account in Settings |
+| `review` | An incident, blocked events, or a rule not synced in over a day needs a look | Open Activity or the named rule |
+| `waiting` | Google is limiting or failing requests | Nothing yet; it retries by itself |
+| `paused` | Rules exist and have synced before, but none is enabled | Nothing, unless you meant to resume one |
+| `setup` | No account or rule yet, or none has synced | Finish connecting an account and creating a rule |
+| `healthy` | Every enabled rule is running and up to date | Nothing |
+
+`/mcp` additionally exposes a `get_rule` tool that looks up one rule by its id or its "Source →
+Destination" name for its last synchronization and reconciliation outcome. Both tools are read-only:
+Calendar Ghost never changes a rule or a calendar through an Integration Token.
+
+## 7. Back up, upgrade, and recover
 
 Before an upgrade or host migration:
 
@@ -172,7 +251,7 @@ Do not run `docker compose down -v` as an upgrade step: removing the named volum
 database, mappings, and connected-account state. The full backup and restore procedure is in
 [Data ownership and privacy](data-ownership.md#backups-and-recovery).
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 Inspect service status and logs without exposing secrets:
 

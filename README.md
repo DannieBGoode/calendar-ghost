@@ -99,6 +99,7 @@ machine and creates only the destination representation selected by each rule.
 | Loop prevention | Private managed-origin metadata prevents projections from becoming sources |
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Authenticated Activity view, deduplication, optional SMTP, and optional webhook delivery |
+| Monitoring | Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, authorized with Integration Tokens issued in Settings |
 | Access | One local administrator password and encrypted Google OAuth credentials |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
