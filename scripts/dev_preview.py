@@ -133,9 +133,15 @@ ACCOUNTS = (
     ),
 )
 CALENDARS = {
-    "preview-sam-personal": [DiscoveredCalendar("sam@personal.example", "Personal", "owner", True)],
-    "preview-sam-family": [DiscoveredCalendar("sam@family.example", "Family", "owner", True)],
-    "preview-sam-work": [DiscoveredCalendar("sam@work.example", "Work", "owner", True)],
+    "preview-sam-personal": [
+        DiscoveredCalendar("sam@personal.example", "Personal", writable=True, primary=True)
+    ],
+    "preview-sam-family": [
+        DiscoveredCalendar("sam@family.example", "Family", writable=True, primary=True)
+    ],
+    "preview-sam-work": [
+        DiscoveredCalendar("sam@work.example", "Work", writable=True, primary=True)
+    ],
 }
 
 

@@ -670,7 +670,8 @@ class ConnectedAccountRepository(AccountAuthorizations, Protocol):
 class DiscoveredCalendar:
     id: str
     summary: str
-    access_role: str
+    writable: bool
+    """Whether rules may write projections to it, as its provider grants this account."""
     primary: bool
 
 

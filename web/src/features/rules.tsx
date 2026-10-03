@@ -36,7 +36,6 @@ import { useNow } from "@/lib/use-now"
 import { useRuleCommands } from "@/lib/use-rule-commands"
 import { useRuleEndpoints } from "@/lib/use-rule-endpoints"
 
-const WRITABLE_ROLES = ["writer", "owner"]
 const CALENDAR_STALE_TIME = 5 * 60 * 1000
 
 type RulesViewProps = {
@@ -300,7 +299,7 @@ function firstOtherCalendar(
   calendars: DiscoveredCalendar[] | undefined,
   exclude: string | null,
 ): string {
-  const writable = (calendars ?? []).filter((calendar) => WRITABLE_ROLES.includes(calendar.access_role))
+  const writable = (calendars ?? []).filter((calendar) => calendar.writable)
   return (writable.find((calendar) => calendar.id !== exclude) ?? writable[0])?.id ?? ""
 }
 
@@ -345,8 +344,8 @@ function RuleBuilder({
   })
 
   const resolvedSourceCalendar = sourceCalendar || sourceCalendars.data?.[0]?.id || ""
-  const writableDestinations = (destinationCalendars.data ?? []).filter((calendar) =>
-    WRITABLE_ROLES.includes(calendar.access_role),
+  const writableDestinations = (destinationCalendars.data ?? []).filter(
+    (calendar) => calendar.writable,
   )
   // Default to a destination other than the source so the builder never opens in an error.
   const resolvedDestinationCalendar =

@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import secrets
+from collections.abc import Mapping
 from dataclasses import dataclass
 from threading import Lock
 from typing import Any, cast
@@ -44,6 +45,8 @@ CALENDAR_SCOPES = (
 # without it still connects, and the account falls back to initials.
 PROFILE_SCOPES = ("openid", "https://www.googleapis.com/auth/userinfo.profile")
 OAUTH_SCOPES = CALENDAR_SCOPES + PROFILE_SCOPES
+WRITABLE_ACCESS_ROLES = frozenset({"owner", "writer"})
+"""Google access roles that let a Connected Account write events to a calendar."""
 # Google may grant fewer scopes than requested (a declined profile) or more (previously granted
 # scopes). oauthlib rejects any difference unless relaxed; complete() enforces Calendar scopes.
 os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
@@ -141,12 +144,7 @@ class GoogleOAuthService:
         credentials = self._credentials(account_id)
         service = build("calendar", "v3", credentials=credentials, cache_discovery=False)
         return tuple(
-            DiscoveredCalendar(
-                id=str(item["id"]),
-                summary=str(item.get("summary") or item["id"]),
-                access_role=str(item.get("accessRole") or "reader"),
-                primary=bool(item.get("primary")),
-            )
+            discovered_calendar(item)
             for item in self._calendar_items(service)
             if isinstance(item.get("id"), str)
         )
@@ -203,7 +201,7 @@ class GoogleOAuthService:
         return AccountAccess(
             calendars_visible=len(calendars),
             writable_calendars=sum(
-                1 for item in calendars if item.get("accessRole") in {"owner", "writer"}
+                1 for item in calendars if item.get("accessRole") in WRITABLE_ACCESS_ROLES
             ),
         )
 
@@ -293,6 +291,16 @@ class GoogleOAuthService:
     def _consume_state(self, state: str) -> None:
         if not self._states.consume(state):
             raise InvalidAuthorizationState("OAuth state is missing, expired, or already used")
+
+
+def discovered_calendar(item: Mapping[str, Any]) -> DiscoveredCalendar:
+    """One Google calendar list entry, without Google's access-role vocabulary."""
+    return DiscoveredCalendar(
+        id=str(item["id"]),
+        summary=str(item.get("summary") or item["id"]),
+        writable=item.get("accessRole") in WRITABLE_ACCESS_ROLES,
+        primary=bool(item.get("primary")),
+    )
 
 
 def _profile_claims(id_token: object) -> dict[str, Any]:

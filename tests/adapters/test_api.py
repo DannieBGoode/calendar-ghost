@@ -728,8 +728,8 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
         uow.commit()
     listed = Mock(
         return_value=[
-            DiscoveredCalendar("family", "Family", "owner", primary=False),
-            DiscoveredCalendar("work", "Work", "writer", primary=False),
+            DiscoveredCalendar("family", "Family", writable=True, primary=False),
+            DiscoveredCalendar("work", "Work", writable=True, primary=False),
         ]
     )
     monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
@@ -748,7 +748,9 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
         discovered = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
         after = names(client.get("/api/v1/rules"))
         # A renamed calendar is renamed; one Google no longer lists keeps its last name.
-        listed.return_value = [DiscoveredCalendar("family", "Household", "owner", primary=False)]
+        listed.return_value = [
+            DiscoveredCalendar("family", "Household", writable=True, primary=False)
+        ]
         client.get(f"/api/v1/accounts/{account.id.value}/calendars")
         renamed = names(client.get("/api/v1/rules/rule-1"))
 
@@ -756,6 +758,47 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
     assert [calendar["summary"] for calendar in discovered.json()] == ["Family", "Work"]
     assert after == ("Family", "Work")
     assert renamed == ("Household", "Work")
+
+
+def test_discovered_calendars_say_whether_rules_can_write_to_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    assert adapters.accounts is not None
+    assert adapters.google_oauth is not None
+    account = adapters.accounts.save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    listed = Mock(
+        return_value=[
+            DiscoveredCalendar("family", "Family", writable=True, primary=True),
+            DiscoveredCalendar("holidays", "Holidays", writable=False, primary=False),
+        ]
+    )
+    monkeypatch.setattr(adapters.google_oauth, "calendars", listed)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
+
+    assert response.json() == [
+        {
+            "id": "family",
+            "summary": "Family",
+            "access_role": "writer",
+            "writable": True,
+            "primary": True,
+        },
+        {
+            "id": "holidays",
+            "summary": "Holidays",
+            "access_role": "reader",
+            "writable": False,
+            "primary": False,
+        },
+    ]
 
 
 @pytest.mark.parametrize(

@@ -848,9 +848,7 @@ function EndpointFields({
   onAccount: (value: string) => void
   onCalendar: (value: string) => void
 }) {
-  const options = (calendars ?? []).filter(
-    (item) => !writableOnly || ["writer", "owner"].includes(item.access_role),
-  )
+  const options = (calendars ?? []).filter((item) => !writableOnly || item.writable)
   return (
     <fieldset className="endpoint-fields">
       <legend>{legend}</legend>

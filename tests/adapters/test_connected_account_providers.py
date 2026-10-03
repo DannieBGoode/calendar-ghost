@@ -74,7 +74,7 @@ def test_migration_17_keeps_accounts_and_their_calendar_names(tmp_path: Path) ->
     family = endpoint(account.id.value, "family")
     with SqliteUnitOfWorkFactory(database)() as uow:
         uow.calendar_names.remember(
-            account.id, [DiscoveredCalendar("family", "Family", "owner", primary=False)]
+            account.id, [DiscoveredCalendar("family", "Family", writable=True, primary=False)]
         )
         uow.commit()
     with sqlite3.connect(database) as connection:

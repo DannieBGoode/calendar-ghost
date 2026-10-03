@@ -176,6 +176,8 @@ class DiscoveredCalendarResponse(BaseModel):
     id: str
     summary: str
     access_role: str
+    """Kept for API compatibility; `writable` replaces it (ADR 0022)."""
+    writable: bool
     primary: bool
 
 

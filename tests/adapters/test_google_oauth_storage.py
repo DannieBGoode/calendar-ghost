@@ -19,7 +19,7 @@ from calendar_sync.application.errors import (
     ConnectedAccountDisconnected,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.ports import ConnectedAccountState
+from calendar_sync.application.ports import ConnectedAccountState, DiscoveredCalendar
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
@@ -28,6 +28,7 @@ from calendar_sync.infrastructure.google.oauth import (
     PROFILE_SCOPES,
     GoogleOAuthService,
     OAuthClientConfig,
+    discovered_calendar,
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
@@ -704,3 +705,23 @@ def test_account_state_is_stored_under_its_existing_values(tmp_path: Path) -> No
     assert store.get(account.id) == store.list()[0]
     assert store.list()[0].state is ConnectedAccountState.DISCONNECTED
     assert store.get(ConnectedAccountId("missing")) is None
+
+
+@pytest.mark.parametrize(
+    ("role", "writable"),
+    [
+        ("owner", True),
+        ("writer", True),
+        ("reader", False),
+        ("freeBusyReader", False),
+        (None, False),
+    ],
+)
+def test_google_access_roles_decide_whether_a_calendar_is_writable(
+    role: str | None, writable: bool
+) -> None:
+    item = {"id": "family", "summary": "Family", "accessRole": role}
+
+    assert discovered_calendar(item) == DiscoveredCalendar(
+        "family", "Family", writable=writable, primary=False
+    )

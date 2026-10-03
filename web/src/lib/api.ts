@@ -145,7 +145,7 @@ export type GoogleAccountAccess = {
 export type DiscoveredCalendar = {
   id: string
   summary: string
-  access_role: string
+  writable: boolean
   primary: boolean
 }
 export type RulePreview = {

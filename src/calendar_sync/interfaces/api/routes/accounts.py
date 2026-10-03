@@ -178,7 +178,8 @@ def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCa
         DiscoveredCalendarResponse(
             id=calendar.id,
             summary=calendar.summary,
-            access_role=calendar.access_role,
+            access_role="writer" if calendar.writable else "reader",
+            writable=calendar.writable,
             primary=calendar.primary,
         )
         for calendar in discovered
