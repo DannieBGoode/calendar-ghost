@@ -152,6 +152,8 @@ commit.
 Tests use pytest with synthetic fixtures and fake providers. Test files mirror the domain,
 application, and adapter boundaries under `tests/`. Add a regression test for every bug fix and
 exercise both the allowed and blocked path when changing ownership, deletion, or recovery logic.
+When the persistence ports or either unit of work change, extend `tests/contracts/persistence.py`
+so the in-memory and SQLite units keep the same behavior.
 
 Run the complete backend quality gate:
 

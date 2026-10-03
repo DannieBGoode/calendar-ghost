@@ -148,6 +148,13 @@ name, a writer waits up to five seconds for another's lock, and `transaction()` 
 and closes in one block. A test fails if any other module under `src/calendar_sync` calls
 `sqlite3.connect`, so a setting added there applies to every adapter.
 
+The in-memory unit of work that application tests use and the SQLite one both pass the persistence
+contract in `tests/contracts/persistence.py`. It states, through the ports alone, the behavior use
+cases rely on: writes are discarded until committed, rule removal takes a rule's records with it, a
+record without its rule or series is refused, identities stay unique, and listings come back in a
+fixed order. It does not make the two interchangeable in every respect; when a use case starts
+relying on another storage behavior, add it to the contract.
+
 ## Public compatibility surfaces
 
 Database migrations, environment configuration, HTTP API payloads, provider ownership metadata, and persisted domain states are compatibility surfaces. Releases must migrate them rather than asking operators to delete SQLite state.

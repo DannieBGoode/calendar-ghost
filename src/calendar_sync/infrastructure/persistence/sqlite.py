@@ -165,7 +165,17 @@ class SqliteSyncRuleRepository:
             ) from error
 
     def save(self, rule: SyncRule) -> None:
-        cursor = self._connection.execute(
+        try:
+            cursor = self._update(rule)
+        except sqlite3.IntegrityError as error:
+            raise DuplicateDirectionalRelationship(
+                "a rule already exists for this source and destination"
+            ) from error
+        if cursor.rowcount != 1:
+            raise KeyError(f"sync rule {rule.id.value} does not exist")
+
+    def _update(self, rule: SyncRule) -> sqlite3.Cursor:
+        return self._connection.execute(
             """
             UPDATE sync_rules SET
                 source_account_id = ?, source_calendar_id = ?,
@@ -177,8 +187,6 @@ class SqliteSyncRuleRepository:
             """,
             (*_rule_values(rule)[1:], rule.id.value),
         )
-        if cursor.rowcount != 1:
-            raise KeyError(f"sync rule {rule.id.value} does not exist")
 
     def remove(self, rule_id: SyncRuleId) -> None:
         now = self._clock.now().isoformat()
