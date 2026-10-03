@@ -27,8 +27,10 @@ describe("activity for removed rules", () => {
 })
 
 describe("activity date grouping", () => {
-  it("associates each date label with its following activity rowgroup", () => {
-    expect(activitySource).toContain("id={dayId}")
-    expect(activitySource).toContain("aria-labelledby={dayId}")
+  it("keeps the date heading and all its runs in one rowgroup", () => {
+    expect(activitySource).toContain("const days = activityDayGroups(groups)")
+    expect(activitySource).toContain('className="activity-day"')
+    expect(activitySource).toContain('scope="rowgroup"')
+    expect(activitySource).not.toContain("aria-labelledby={dayId}")
   })
 })

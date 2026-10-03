@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import {
+  activityDayGroups,
   activityRows,
   describeEntry,
   entryInspection,
@@ -191,6 +192,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   }
   const { open: openIncidents, resolved: resolvedIncidents } = splitIncidents(incidents.data)
   const groups = activityRows(runs)
+  const days = activityDayGroups(groups)
   const visibleEntries = runs.flatMap((run) => run.entries)
   const selectedIndex = selected ? visibleEntries.findIndex((item) => item.id === selected.id) : -1
   const updating = activity.isPlaceholderData
@@ -311,20 +313,13 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
                       {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
                     </tr>
                   </thead>
-                  {groups.flatMap((group, index) => {
-                    const dayId = group.day ? `activity-day-${index}` : undefined
-                    return [
-                      ...(group.day
-                      ? [
-                          <tbody key={`${group.key}-day`} role="rowgroup" className="activity-day">
-                            <tr role="row">
-                              <th id={dayId} scope="rowgroup" role="rowheader" colSpan={columns}>{group.day}</th>
-                            </tr>
-                          </tbody>,
-                        ]
-                      : []),
-                      <tbody key={group.key} role="rowgroup" className="activity-run" aria-labelledby={dayId}>
-                        {group.run.entries.map((entry) => (
+                  {days.map((day) => (
+                    <tbody key={day.key} role="rowgroup" className="activity-day">
+                      <tr role="row">
+                        <th scope="rowgroup" role="rowheader" colSpan={columns}>{day.day}</th>
+                      </tr>
+                      {day.runs.flatMap((run, runIndex) =>
+                        run.entries.map((entry, entryIndex) => (
                           <EntryRow
                             key={entry.id}
                             entry={entry}
@@ -332,13 +327,14 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
                             state={state}
                             selected={entryId === entry.id}
                             showRuleColumn={showRuleColumn}
+                            runStart={runIndex > 0 && entryIndex === 0}
                             onOpen={openEntry}
                             onFilterRule={(value) => changeFilters({ ruleId: value })}
                           />
-                        ))}
-                      </tbody>,
-                    ]
-                  })}
+                        )),
+                      )}
+                    </tbody>
+                  ))}
                 </table>
                 {activity.hasNextPage && (
                   <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
@@ -538,6 +534,7 @@ function EntryRow({
   state,
   selected,
   showRuleColumn,
+  runStart,
   onOpen,
   onFilterRule,
 }: {
@@ -546,6 +543,7 @@ function EntryRow({
   state: ActivityLocationState
   selected: boolean
   showRuleColumn: boolean
+  runStart: boolean
   onOpen: (entry: AuditEntry) => void
   onFilterRule: (ruleId: string) => void
 }) {
@@ -560,7 +558,7 @@ function EntryRow({
   return (
     <tr
       role="row"
-      className="activity-row"
+      className={runStart ? "activity-row activity-run-start" : "activity-row"}
       data-selected={selected}
       // The event link is the row's keyboard target; the rest of the row is a larger mouse target.
       onClick={(event) => {

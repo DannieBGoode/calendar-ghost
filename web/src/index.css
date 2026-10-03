@@ -2960,11 +2960,11 @@ a.recent-change-rule:focus-visible {
 }
 
 /* Rows of one run share a light divider; a full divider starts the next run. */
-.activity-run tr + tr td {
+.activity-day .activity-row + .activity-row td {
   border-top: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
 }
 
-.activity-run + .activity-run tr:first-child td {
+.activity-day .activity-row.activity-run-start td {
   border-top: 1px solid var(--border);
 }
 
@@ -3978,14 +3978,13 @@ thead + .activity-day th {
     padding: 0.75rem 0;
   }
 
-  .activity-run tr + tr,
-  .activity-run + .activity-run tr:first-child {
+  .activity-day .activity-row + .activity-row {
     border-top: 1px solid var(--border);
   }
 
   .activity-table td,
-  .activity-run tr + tr td,
-  .activity-run + .activity-run tr:first-child td {
+  .activity-day .activity-row + .activity-row td,
+  .activity-day .activity-row.activity-run-start td {
     width: auto;
     padding: 0;
     border-top: 0;

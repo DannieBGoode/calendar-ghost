@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest"
 
-import { activityRows, eventCell, formatClockTime, formatDay, formatEventTime, groupRuns, showCategories, SHOW_FILTERS } from "./activity"
+import {
+  activityDayGroups,
+  activityRows,
+  eventCell,
+  formatClockTime,
+  formatDay,
+  formatEventTime,
+  groupRuns,
+  showCategories,
+  SHOW_FILTERS,
+} from "./activity"
 import { activitySearch, activityStateFromSearch } from "./activity-location"
 import type { AuditEntry, RecordedEvent } from "./api"
 
@@ -95,6 +105,13 @@ describe("activity rows", () => {
 
     expect(groups.map((group) => group.key)).toEqual(["run-3", "run-2", "run-1"])
     expect(groups.map((group) => group.day)).toEqual(["Today", null, "Yesterday"])
+  })
+
+  it("keeps every same-day run in the date rowgroup", () => {
+    const days = activityDayGroups(activityRows(runs, { now }))
+
+    expect(days.map((day) => day.day)).toEqual(["Today", "Yesterday"])
+    expect(days.map((day) => day.runs.map((run) => run.key))).toEqual([["run-3", "run-2"], ["run-1"]])
   })
 })
 
