@@ -755,6 +755,47 @@ class AdministratorAccess(Protocol):
     def revoke(self, token: str | None) -> None: ...
 
 
+class IntegrationTokenScope(StrEnum):
+    STATUS_READ = "status:read"
+
+
+@dataclass(frozen=True, slots=True)
+class IntegrationTokenSummary:
+    """An Integration Token as the administrator sees it; never the token or its hash."""
+
+    id: str
+    name: str
+    scope: IntegrationTokenScope
+    created_at: datetime
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class IssuedIntegrationToken:
+    summary: IntegrationTokenSummary
+    token: str
+    """Shown once, when issued; only its hash is kept."""
+
+
+class IntegrationTokens(Protocol):
+    """Named credentials the administrator issues so monitors and agents can read status."""
+
+    def issue(self, name: str) -> IssuedIntegrationToken: ...
+
+    def list(self) -> Sequence[IntegrationTokenSummary]:
+        """Every token, newest first, revoked ones last."""
+        ...
+
+    def revoke(self, token_id: str) -> bool:
+        """Whether a token that was not yet revoked is revoked now."""
+        ...
+
+    def authenticate(self, token: str) -> IntegrationTokenSummary | None:
+        """The token's summary when it is well formed, known, and not revoked."""
+        ...
+
+
 class FullPassRecords(Protocol):
     """Bookkeeping that lets a successful full pass stand in for a rule's daily one."""
 

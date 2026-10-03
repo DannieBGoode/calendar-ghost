@@ -198,3 +198,7 @@ class StorageBusy(ApplicationError):
 
 class FileLoggingOff(ApplicationError):
     """The installation keeps no log files to read or purge."""
+
+
+class InvalidIntegrationTokenName(ValueError):
+    """An Integration Token name must be 1 to 80 printable characters."""

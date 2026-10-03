@@ -79,6 +79,7 @@ _FORWARD_MIGRATIONS = (
     (15, "0015_invitation_responses.sql"),
     (16, "0016_calendar_names.sql"),
     (17, "0017_provider_kinds.sql"),
+    (18, "0018_integration_tokens.sql"),
 )
 
 
