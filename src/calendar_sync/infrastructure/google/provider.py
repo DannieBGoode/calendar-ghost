@@ -195,10 +195,8 @@ class GoogleCalendarProvider:
             or existing.managed_origin.rule_id != rule_id
             or existing.managed_origin.source != source
         ):
-            raise ProviderFailure(
-                ProviderFailureKind.PERMANENT,
-                "Google event does not carry compatible ownership metadata",
-                provider=ProviderKind.GOOGLE,
+            raise ProjectionOwnershipMismatch(
+                "Google event does not carry compatible ownership metadata"
             )
         try:
             payload = self._call(

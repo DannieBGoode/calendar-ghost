@@ -37,7 +37,7 @@ from calendar_sync.infrastructure.google.translation import (
     SOURCE_CALENDAR_PROPERTY,
     SOURCE_EVENT_PROPERTY,
 )
-from tests.helpers import NOW, endpoint, event
+from tests.helpers import NOW, endpoint, event, rule
 
 
 class GoogleResponse(dict[str, str]):
@@ -1066,3 +1066,18 @@ def test_google_failures_name_google_and_the_account() -> None:
 
     assert raised.value.provider is ProviderKind.GOOGLE
     assert raised.value.account_id == event().reference.calendar.connected_account_id
+
+
+def test_google_refuses_to_update_a_projection_this_rule_does_not_own() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(google_event_payload("projection-1"))
+    provider = provider_with_events_api(events_api)
+    destination = EventRef(rule().destination, EventId("projection-1"))
+    projection = EventProjection(time=TimedInterval(NOW, NOW + timedelta(hours=1)), title="Busy")
+
+    with pytest.raises(ProjectionOwnershipMismatch):
+        provider.update_projection(
+            destination, event().reference, rule().id, projection, "key-update"
+        )
+
+    events_api.update.assert_not_called()
