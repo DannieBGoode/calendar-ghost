@@ -14,7 +14,7 @@ coordinator.
 > connect important calendars yet.
 
 <p align="center">
-  <img src="web/public/favicon.svg" alt="Calendar Ghost logo" width="96">
+  <img src="web/src/assets/favicon.svg" alt="Calendar Ghost logo" width="96">
 </p>
 
 ## Editions and license
