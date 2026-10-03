@@ -17,4 +17,10 @@ describe("GhostMark", () => {
     expect(markup).toContain('aria-label="Calendar Ghost"')
     expect(markup).not.toContain("aria-hidden")
   })
+
+  it("supports a happy expression for celebratory surfaces", () => {
+    const markup = renderToStaticMarkup(<GhostMark expression="happy" />)
+    expect(markup).toContain("M11.5 15.5q1.5-2.2 3 0")
+    expect(markup).not.toContain('cx="13"')
+  })
 })
