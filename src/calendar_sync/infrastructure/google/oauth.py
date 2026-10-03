@@ -31,11 +31,11 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.ports import AccountAccess, ConnectedAccount, DiscoveredCalendar
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
-from calendar_sync.infrastructure.google.instrumentation import record_token_refresh
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
+from calendar_sync.infrastructure.provider_calls import record_token_refresh
 
 CALENDAR_SCOPES = (
     "https://www.googleapis.com/auth/calendar.events",

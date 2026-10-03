@@ -112,8 +112,8 @@ it composes anything; Uvicorn's loggers are left as Uvicorn configures them. The
 reconciliation, and Rule Removal log their lifecycle with standard `logging`, naming rules and runs
 by identifier only. Their closing lines include how the run's provider calls went, read from the
 `ProviderCallStats` port: `measure()` returns a `ProviderCallTally` that the provider adds each
-call to while the run is in progress. The Google adapter sends every request through one helper that
-times it, and `infrastructure/google/instrumentation.py` keeps each measured run's tally in a
+call to while the run is in progress. Each adapter sends every request through one helper that
+times it, and `infrastructure/provider_calls.py` keeps each measured run's tally in a
 context variable, so runs on different worker threads never share one; its `record_token_refresh()`
 counts a renewed access token toward the current run. Use cases default to
 `UntalliedProviderCalls`, so test fakes need nothing.

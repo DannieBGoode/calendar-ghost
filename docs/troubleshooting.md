@@ -40,11 +40,11 @@ Each Sync Run, scheduled or started with **Sync now**, writes:
   that calendar was listed in full instead. Expect a longer run.
 - `reprojecting remaining … mappings=N` and `pending replays … series=N`: later phases, logged only
   when the run has them.
-- `run progress … decided=412 handled=380/840 created=3 … elapsed=12m03s google_calls=1630`:
+- `run progress … decided=412 handled=380/840 created=3 … elapsed=12m03s provider_calls=1630`:
   written at most every 30 seconds while the run decides events. `handled` counts the events both
   calendars reported, plus the mappings a reprojection rewrites, that the run has finished;
   `decided` also counts each occurrence of a recurring event, so it can be larger.
-- `run finished … in 28m14s created=… google_calls=… token_refreshes=… rate_limited=…
+- `run finished … in 28m14s created=… provider_calls=… token_refreshes=… rate_limited=…
   server_errors=… slowest_call=1.3s`: the run's counts and how its Google calls went.
 - `run failed … kind=rate_limit after 3m02s` (WARNING): the run stopped with this failure kind; the
   scheduler retries temporary and rate-limit failures as a new run with a new `run=` identifier.
@@ -57,7 +57,7 @@ Reconcile now and Rule Removal write one `reconciliation started`/`removal start
 
 To judge whether a long run is still working, compare consecutive `run progress` lines for the same
 `run=`. Rules and Rule Details show the same count while a sync runs, as "380 of 840 checked". If
-`handled`, `decided`, and `google_calls` grow, the run is progressing; a large calendar on its
+`handled`, `decided`, and `provider_calls` grow, the run is progressing; a large calendar on its
 `first-run`, `daily-pass`, or `reprojection` can take many minutes. A growing `rate_limited` count
 means Google is slowing the run down and it will finish later. If no `run progress` line appears for
 several minutes and no `run finished` or `run failed` follows, the run is waiting on a single Google

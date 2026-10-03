@@ -12,13 +12,14 @@ import pytest
 
 from calendar_sync.application.errors import ProviderFailure
 from calendar_sync.application.ports import ProviderCallTally
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import EventId, EventRef
-from calendar_sync.infrastructure.google.instrumentation import (
-    GoogleCallStats,
+from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.provider_calls import (
+    ContextProviderCallStats,
     record_call,
     record_token_refresh,
 )
-from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from tests.adapters.test_google_provider import (
     google_event_payload,
     request_raising,
@@ -58,7 +59,7 @@ def test_a_measured_run_tallies_its_calls_and_how_they_went() -> None:
     ]
     google = provider(events_api, 0.2, 1.3, 0.1, 0.1, 0.1, 0.4)
 
-    with GoogleCallStats().measure() as tally:
+    with ContextProviderCallStats().measure() as tally:
         google.get_event(EVENT)
         assert google.get_event(EVENT) is None
         for _ in range(4):
@@ -73,20 +74,20 @@ def test_a_measured_run_tallies_its_calls_and_how_they_went() -> None:
 
 
 def test_calls_outside_a_measured_run_are_not_tallied() -> None:
-    stats = GoogleCallStats()
-    record_call("events.get", 200, 0.1, rate_limited=False)
+    stats = ContextProviderCallStats()
+    record_call(ProviderKind.GOOGLE, "events.get", 200, 0.1, rate_limited=False)
     record_token_refresh()
 
     with stats.measure() as tally:
         record_token_refresh()
-        record_call("events.get", 200, 0.1, rate_limited=False)
+        record_call(ProviderKind.GOOGLE, "events.get", 200, 0.1, rate_limited=False)
 
-    record_call("events.get", 200, 0.1, rate_limited=False)
+    record_call(ProviderKind.GOOGLE, "events.get", 200, 0.1, rate_limited=False)
     assert tally == ProviderCallTally(1, 0.1, 0.1, 0, 0, 1)
 
 
 def test_token_refreshes_count_toward_the_run_that_needed_them() -> None:
-    with GoogleCallStats().measure() as tally:
+    with ContextProviderCallStats().measure() as tally:
         record_token_refresh()
         record_token_refresh()
 
@@ -94,7 +95,7 @@ def test_token_refreshes_count_toward_the_run_that_needed_them() -> None:
 
 
 def test_runs_on_different_threads_keep_separate_tallies() -> None:
-    stats = GoogleCallStats()
+    stats = ContextProviderCallStats()
     both_measuring = Barrier(2)
     tallies: dict[str, ProviderCallTally] = {}
 
@@ -102,7 +103,7 @@ def test_runs_on_different_threads_keep_separate_tallies() -> None:
         with stats.measure() as tally:
             both_measuring.wait()
             for _ in range(calls):
-                record_call("events.get", 200, 0.01, rate_limited=False)
+                record_call(ProviderKind.GOOGLE, "events.get", 200, 0.01, rate_limited=False)
             record_token_refresh()
             both_measuring.wait()
         tallies[name] = tally
@@ -131,9 +132,9 @@ def test_every_call_is_logged_at_debug_by_operation_status_and_duration(
     google.changes(CALENDAR, "sync-token-secret", datetime(2026, 7, 31, tzinfo=UTC))
 
     assert [(record.levelno, record.getMessage()) for record in caplog.records] == [
-        (logging.DEBUG, "google call op=events.get status=200 took=250ms"),
-        (logging.DEBUG, "google call op=events.get status=404 took=50ms"),
-        (logging.DEBUG, "google call op=events.list status=200 took=500ms"),
+        (logging.DEBUG, "provider call provider=google op=events.get status=200 took=250ms"),
+        (logging.DEBUG, "provider call provider=google op=events.get status=404 took=50ms"),
+        (logging.DEBUG, "provider call provider=google op=events.list status=200 took=500ms"),
     ]
     for content in (
         "family.secret@example.com",
@@ -155,7 +156,10 @@ def test_a_slow_call_is_a_warning(caplog: pytest.LogCaptureFixture) -> None:
 
     [warning] = caplog.records
     assert warning.levelno == logging.WARNING
-    assert warning.getMessage() == "slow google call op=events.instances status=200 took=12.4s"
+    assert (
+        warning.getMessage()
+        == "slow provider call provider=google op=events.instances status=200 took=12.4s"
+    )
 
 
 def test_a_call_without_an_answer_is_logged_without_a_status(
@@ -168,8 +172,8 @@ def test_a_call_without_an_answer_is_logged_without_a_status(
     events_api.get.return_value = request
     google = provider(events_api, 0.003)
 
-    with GoogleCallStats().measure() as tally, pytest.raises(ProviderFailure):
+    with ContextProviderCallStats().measure() as tally, pytest.raises(ProviderFailure):
         google.get_event(EVENT)
 
-    assert caplog.messages == ["google call op=events.get status=none took=3ms"]
+    assert caplog.messages == ["provider call provider=google op=events.get status=none took=3ms"]
     assert (tally.calls, tally.server_errors, tally.rate_limited) == (1, 0, 0)

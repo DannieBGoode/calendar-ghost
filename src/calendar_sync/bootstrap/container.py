@@ -56,7 +56,6 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
-from calendar_sync.infrastructure.google.instrumentation import GoogleCallStats
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
@@ -84,6 +83,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     initialize_database,
 )
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
+from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
 from calendar_sync.infrastructure.security import (
     CredentialCipher,
@@ -220,7 +220,7 @@ def build_adapters(settings: Settings) -> Adapters:
         accounts=accounts,
         google_oauth=google_oauth,
         calendar_provider=GoogleCalendarProvider(google_oauth.service_for, clock),
-        call_stats=GoogleCallStats(),
+        call_stats=ContextProviderCallStats(),
         notifications=_notifier(settings),
     )
 

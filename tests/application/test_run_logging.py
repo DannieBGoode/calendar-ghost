@@ -146,7 +146,7 @@ def test_a_first_run_logs_its_start_listing_and_finish(logs: pytest.LogCaptureFi
     ]
     assert lines(logs, "run finished") == [
         f"run finished rule=rule-1 run={result.run_id} in 0s created=2 updated=0 deleted=0 "
-        "ignored=0 conflicts=0 google_calls=1630 token_refreshes=1 rate_limited=2 "
+        "ignored=0 conflicts=0 provider_calls=1630 token_refreshes=1 rate_limited=2 "
         "server_errors=1 slowest_call=1.3s"
     ]
 
@@ -209,11 +209,11 @@ def test_progress_is_logged_at_most_every_thirty_seconds(logs: pytest.LogCapture
 
     assert lines(logs, "run progress") == [
         "run progress rule=rule-1 run=run-1 decided=3 handled=5 created=0 updated=0 deleted=0 "
-        "ignored=3 conflicts=0 elapsed=30s google_calls=12",
+        "ignored=3 conflicts=0 elapsed=30s provider_calls=12",
         "run progress rule=rule-1 run=run-1 decided=3 handled=5 created=0 updated=0 deleted=0 "
-        "ignored=3 conflicts=0 elapsed=1m00s google_calls=12",
+        "ignored=3 conflicts=0 elapsed=1m00s provider_calls=12",
         "run progress rule=rule-1 run=run-1 decided=3 handled=5 created=0 updated=0 deleted=0 "
-        "ignored=3 conflicts=0 elapsed=7m40s google_calls=12",
+        "ignored=3 conflicts=0 elapsed=7m40s provider_calls=12",
     ]
 
 
@@ -228,9 +228,9 @@ def test_a_long_run_reports_its_progress_as_it_decides(logs: pytest.LogCaptureFi
     # Each write takes 20 seconds; progress is checked at each decision and each handled event.
     assert lines(logs, "run progress") == [
         f"run progress rule=rule-1 run={result.run_id} decided=2 handled=2/4 created=2 "
-        "updated=0 deleted=0 ignored=0 conflicts=0 elapsed=40s google_calls=0",
+        "updated=0 deleted=0 ignored=0 conflicts=0 elapsed=40s provider_calls=0",
         f"run progress rule=rule-1 run={result.run_id} decided=4 handled=4/4 created=4 "
-        "updated=0 deleted=0 ignored=0 conflicts=0 elapsed=1m20s google_calls=0",
+        "updated=0 deleted=0 ignored=0 conflicts=0 elapsed=1m20s provider_calls=0",
     ]
     assert lines(logs, "run finished")[0].startswith(
         f"run finished rule=rule-1 run={result.run_id} in 1m20s created=4 "
@@ -247,7 +247,7 @@ def test_a_failed_run_logs_its_failure_kind_and_duration(logs: pytest.LogCapture
     [failed] = [record for record in logs.records if record.getMessage().startswith("run failed")]
     assert failed.levelno == logging.WARNING
     assert re.fullmatch(
-        f"run failed rule=rule-1 run={RUN} kind=rate_limit after 0s google_calls=0 "
+        f"run failed rule=rule-1 run={RUN} kind=rate_limit after 0s provider_calls=0 "
         "token_refreshes=0 rate_limited=0 server_errors=0 slowest_call=0.0s",
         failed.getMessage(),
     )
@@ -352,7 +352,7 @@ def test_reconciliation_logs_its_start_and_finish(logs: pytest.LogCaptureFixture
     [finished] = lines(logs, "reconciliation finished")
     assert re.fullmatch(
         f"reconciliation finished rule=rule-1 run={RUN} in 0s checked=1 drift=0 conflicts=0 "
-        "google_calls=7 token_refreshes=0 rate_limited=0 server_errors=0 slowest_call=0.0s",
+        "provider_calls=7 token_refreshes=0 rate_limited=0 server_errors=0 slowest_call=0.0s",
         finished,
     )
 
@@ -369,7 +369,7 @@ def test_a_failed_reconciliation_is_logged_as_a_warning(logs: pytest.LogCaptureF
     ]
     assert failed.levelno == logging.WARNING
     assert re.fullmatch(
-        f"reconciliation failed rule=rule-1 run={RUN} kind=temporary after 0s google_calls=0 "
+        f"reconciliation failed rule=rule-1 run={RUN} kind=temporary after 0s provider_calls=0 "
         "token_refreshes=0 rate_limited=0 server_errors=0 slowest_call=0.0s",
         failed.getMessage(),
     )
@@ -405,7 +405,7 @@ def test_removal_logs_its_start_and_finish(logs: pytest.LogCaptureFixture) -> No
         "removal started rule=rule-1 handling=delete mappings=1"
     ]
     assert lines(logs, "removal finished") == [
-        "removal finished rule=rule-1 in 0s deleted=1 detached=0 conflicts=0 google_calls=3 "
+        "removal finished rule=rule-1 in 0s deleted=1 detached=0 conflicts=0 provider_calls=3 "
         "token_refreshes=0 rate_limited=0 server_errors=0 slowest_call=0.0s"
     ]
 
@@ -426,7 +426,7 @@ def test_an_interrupted_removal_is_logged_as_a_warning(logs: pytest.LogCaptureFi
     assert interrupted.levelno == logging.WARNING
     assert interrupted.getMessage() == (
         "removal interrupted rule=rule-1 kind=authorization after 0s handled=0 remaining=1 "
-        "google_calls=3 token_refreshes=0 rate_limited=0 server_errors=0 slowest_call=0.0s"
+        "provider_calls=3 token_refreshes=0 rate_limited=0 server_errors=0 slowest_call=0.0s"
     )
 
 

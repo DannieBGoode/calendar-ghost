@@ -17,6 +17,7 @@ from calendar_sync.application.errors import (
     ProviderFailureKind,
 )
 from calendar_sync.application.ports import Clock, CreatedProjection, ProviderChangeSet
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -29,7 +30,6 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TransformationPolicy,
 )
-from calendar_sync.infrastructure.google.instrumentation import record_call
 from calendar_sync.infrastructure.google.translation import (
     OPERATION_PROPERTY,
     RULE_PROPERTY,
@@ -37,6 +37,7 @@ from calendar_sync.infrastructure.google.translation import (
     projection_payload,
     to_domain_event,
 )
+from calendar_sync.infrastructure.provider_calls import record_call
 from calendar_sync.infrastructure.scheduling import SystemClock
 
 GoogleServiceFactory = Callable[[ConnectedAccountId], Any]
@@ -68,7 +69,13 @@ class GoogleCalendarProvider:
             rate_limited = status == 429 or (status == 403 and _is_rate_limit_error(error))
             raise
         finally:
-            record_call(operation, status, self._timer() - started, rate_limited=rate_limited)
+            record_call(
+                ProviderKind.GOOGLE,
+                operation,
+                status,
+                self._timer() - started,
+                rate_limited=rate_limited,
+            )
 
     def changes(
         self,

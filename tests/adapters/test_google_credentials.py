@@ -9,13 +9,13 @@ from google.oauth2.credentials import Credentials
 
 from calendar_sync.application.errors import AccountAccessCheckFailed, ConnectedAccountDisconnected
 from calendar_sync.application.providers import ProviderKind
-from calendar_sync.infrastructure.google.instrumentation import GoogleCallStats
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.security import CredentialCipher
 
 CLIENT = OAuthClientConfig(
@@ -191,7 +191,10 @@ def test_a_token_refresh_is_counted_toward_the_run_and_logged_without_the_token(
     )
     oauth = _oauth(tmp_path, store)
 
-    with caplog.at_level("INFO", logger="calendar_sync"), GoogleCallStats().measure() as tally:
+    with (
+        caplog.at_level("INFO", logger="calendar_sync"),
+        ContextProviderCallStats().measure() as tally,
+    ):
         oauth.service_for(account.id)
         oauth.service_for(account.id)
 

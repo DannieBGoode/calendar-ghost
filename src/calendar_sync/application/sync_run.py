@@ -103,7 +103,7 @@ class SyncRunLog:
             return
         self._next_progress = now + PROGRESS_INTERVAL
         logger.info(
-            "run progress %s decided=%d handled=%s %s elapsed=%s google_calls=%d",
+            "run progress %s decided=%d handled=%s %s elapsed=%s provider_calls=%d",
             self._names(),
             sum(counts.values()),
             handled if total is None else f"{handled}/{total}",
