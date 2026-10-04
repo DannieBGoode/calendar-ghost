@@ -201,7 +201,7 @@ A lavender-tinted neutral canvas (the "Twilight" palette) supports a single indi
 Product text uses six steps: 2rem Fraunces page titles, 1rem Figtree section titles (weight 650), 1rem Figtree row titles (weight 550), 1rem Figtree body (weight 400), 0.875rem labels and controls (weight 600), and 0.8125rem supporting metadata. Settings and Rule Details section and row headings are aligned to these levels.
 
 - **Headline**: Screen titles and the auth headline, in Fraunces at a strong but quiet scale.
-- **Title**: Section titles and row titles — rule names, grouped settings, and recovery headings — in Figtree, distinguished by weight rather than size.
+- **Title**: Section titles and row titles (rule names, grouped settings, and recovery headings) in Figtree, distinguished by weight rather than size.
 - **Body**: Instructions and explanations, capped near 70 characters per line.
 - **Label**: Field labels, navigation, compact state, and metadata in sentence case.
 
@@ -291,7 +291,7 @@ Pages carry no label above their title; the active navigation item already says 
 
 ### Settings Groups
 
-Settings sections run from what the installation depends on to what only this browser keeps: Connected accounts, Storage, Appearance. Each section's heading and one sentence sit above a single bordered group of rows; a row pairs a title and its current state with at most its own controls, and a section with nothing to show or change does not exist. Connected accounts collapse to one summary row naming how many are connected and how many need reauthorization, and open by themselves when one does. Conditions that need no action, such as Google returning to a different address, close the group they affect as a quiet disclosure on Quiet Surface, and become an Attention Ochre step only while the administrator can act on them.
+Settings sections run from what the installation depends on to what only this browser keeps: Connected accounts, Storage, Integrations, Appearance. Each section's heading and one sentence sit above a single bordered group of rows; a row pairs a title and its current state with at most its own controls, and a section with nothing to show or change does not exist. Connected accounts collapse to one summary row naming how many are connected and how many need reauthorization, and open by themselves when one does. Integrations, which most administrators never use, collapse the same way to one row naming how many tokens are in use and when one was last used. A newly issued token appears once, on Quiet Surface inside the group, in a read-only field with Copy beside it; revoked tokens gather under one disclosure at the end of the group. Plain HTTP on this machine or a home network is the homelab norm and says nothing; only an address that would carry a token across the internet unencrypted gets a quiet note in the group's footer. Conditions that need no action, such as Google returning to a different address, close the group they affect as a quiet disclosure on Quiet Surface, and become an Attention Ochre step only while the administrator can act on them.
 
 ### Destructive and Privacy-Widening Changes
 
