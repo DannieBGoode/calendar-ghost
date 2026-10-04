@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-The project is currently pre-alpha and has no supported production release. Once stable releases begin, this section will list supported version lines.
+Security fixes go into the latest release. Until 1.0, only the most recent version is supported; once stable releases begin, this section will list supported version lines.
 
 ## Reporting a vulnerability
 
