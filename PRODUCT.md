@@ -16,6 +16,10 @@ Calendar Ghost keeps selected calendars synchronized through explicit one-way ru
 
 Calm, trustworthy, precise. The product should feel like a quiet household utility: clear when healthy, specific when attention is required, and never promotional or theatrical.
 
+The landing page in `site/` is a different register. There the ghost is the main character: it
+moves, reacts, and jokes in microcopy, while explanations stay plain and literal. Nothing from that
+register enters the application.
+
 ## Anti-references
 
 Do not resemble a generic SaaS analytics dashboard with oversized metric cards, dense decorative charts, promotional copy, or a permanent icon-heavy sidebar. Do not imitate Google Calendar, and do not turn routine setup or incident recovery into an infrastructure console or terminal-like experience.
