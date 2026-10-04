@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from calendar_sync.application.ports import IdGenerator, IncidentReport, Inciden
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
+from calendar_sync.infrastructure.persistence.connections import transaction
 
 
 class SqliteRuleHealthRecords:
@@ -16,31 +16,37 @@ class SqliteRuleHealthRecords:
         self._database_path = database_path
 
     def record_failure(self, rule_id: SyncRuleId, kind: ProviderFailureKind, at: datetime) -> int:
-        with sqlite3.connect(self._database_path) as connection:
+        """The rule's consecutive failures, counting this one; 1 for a rule removed meanwhile."""
+        with transaction(self._database_path) as connection:
+            # A rule removed while its run failed has no failures to count; inserting one for it
+            # would break the foreign key, so nothing is recorded.
             connection.execute(
                 """
                 INSERT INTO rule_failures(rule_id, consecutive_failures, last_category, updated_at)
-                VALUES (?, 1, ?, ?)
+                SELECT ?, 1, ?, ? WHERE EXISTS (SELECT 1 FROM sync_rules WHERE id = ?)
                 ON CONFLICT(rule_id) DO UPDATE SET
                     consecutive_failures = consecutive_failures + 1,
                     last_category = excluded.last_category,
                     updated_at = excluded.updated_at
                 """,
-                (rule_id.value, kind.value, at.isoformat()),
+                (rule_id.value, kind.value, at.isoformat(), rule_id.value),
             )
-            return int(
-                connection.execute(
-                    "SELECT consecutive_failures FROM rule_failures WHERE rule_id = ?",
-                    (rule_id.value,),
-                ).fetchone()[0]
-            )
+            # An orphaned row left by an earlier release is neither updated nor counted.
+            row = connection.execute(
+                """
+                SELECT consecutive_failures FROM rule_failures
+                WHERE rule_id = ? AND EXISTS (SELECT 1 FROM sync_rules WHERE id = ?)
+                """,
+                (rule_id.value, rule_id.value),
+            ).fetchone()
+        return 1 if row is None else int(row[0])
 
     def clear_failures(self, rule_id: SyncRuleId) -> None:
-        with sqlite3.connect(self._database_path) as connection:
+        with transaction(self._database_path) as connection:
             connection.execute("DELETE FROM rule_failures WHERE rule_id = ?", (rule_id.value,))
 
     def audit_floor(self) -> int:
-        with sqlite3.connect(self._database_path) as connection:
+        with transaction(self._database_path) as connection:
             return int(
                 connection.execute("SELECT COALESCE(MAX(id), 0) FROM audit_entries").fetchone()[0]
             )
@@ -48,7 +54,7 @@ class SqliteRuleHealthRecords:
     def record_block_check(
         self, rule_id: SyncRuleId, floor: int, run_id: str | None, at: datetime
     ) -> int | None:
-        with sqlite3.connect(self._database_path) as connection:
+        with transaction(self._database_path) as connection:
             if not connection.execute(
                 "SELECT 1 FROM sync_rules WHERE id = ?", (rule_id.value,)
             ).fetchone():
@@ -76,7 +82,7 @@ class SqliteIncidentRepository:
         self._ids = ids or UuidIdGenerator()
 
     def open(self, incident: IncidentReport, at: datetime) -> bool:
-        with sqlite3.connect(self._database_path) as connection:
+        with transaction(self._database_path) as connection:
             existing = connection.execute(
                 "SELECT state FROM incidents WHERE deduplication_key = ?", (incident.key,)
             ).fetchone()
@@ -110,7 +116,7 @@ class SqliteIncidentRepository:
         return existing is None or existing[0] != "open"
 
     def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
-        with sqlite3.connect(self._database_path) as connection:
+        with transaction(self._database_path) as connection:
             connection.execute(
                 """
                 UPDATE incidents SET

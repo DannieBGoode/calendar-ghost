@@ -1,5 +1,8 @@
 # Keep the Community Edition single-installation
 
+Superseded by [ADR 0023](0023-hosted-service-runs-the-open-codebase.md): the hosted service runs this
+open codebase, and one installation may serve many users.
+
 ## Context
 
 Calendar Ghost is intended to make self-hosted synchronization affordable and private. The current

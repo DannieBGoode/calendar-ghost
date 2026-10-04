@@ -45,11 +45,13 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
 - A Sync Run writes to the destination only when the projection derived from the source differs
   from the destination's content. A new source revision alone is never a reason to write.
 
-The Community Edition is intentionally single-installation and licensed under the GNU Affero
-General Public License, version 3 or later. Keep tenant routing, billing, hosted accounts, remote
-control planes, and SaaS-only feature flags out of this runtime; the future hosted service is a
-separate composition boundary. Preserve the self-hosting promise that there is no mandatory
-Calendar Ghost account, telemetry, or hosted coordinator.
+The Community Edition is licensed under the GNU Affero General Public License, version 3 or later.
+The future hosted service runs this same codebase with no closed components (ADR 0023). Multi-user
+support, billing, and the operator overview belong in this repository, but only after their
+persistence and isolation ADRs exist; until then the runtime stays single-installation. Billing and
+plan limits must stay behind Commercial Mode, which is off by default: with it off, every user has
+every feature. Preserve the self-hosting promise that there is no mandatory Calendar Ghost account,
+telemetry, or hosted coordinator.
 
 Use the exact terms defined in `CONTEXT.md`. In particular, do not use “sync pair,” “event copy,” or
 “conflict” when Directional Sync Rule, Event Projection, or Drift is the intended concept.
@@ -116,6 +118,7 @@ web/ and interfaces/  ->  application/  ->  domain/
   workers without a cross-process rule lock and a reviewed persistence design.
 - Schema changes require an explicit migration strategy, SQLite-backed tests, and documentation of
   upgrade and rollback behavior.
+- Open SQLite connections only through `infrastructure/persistence/connections.py`.
 
 ## Security and data handling
 
@@ -161,6 +164,8 @@ commit.
 Tests use pytest with synthetic fixtures and fake providers. Test files mirror the domain,
 application, and adapter boundaries under `tests/`. Add a regression test for every bug fix and
 exercise both the allowed and blocked path when changing ownership, deletion, or recovery logic.
+When the persistence ports or either unit of work change, extend `tests/contracts/persistence.py`
+so the in-memory and SQLite units keep the same behavior.
 
 Run the complete backend quality gate:
 
@@ -184,7 +189,7 @@ npm --prefix web run test
 npm --prefix web run build
 ```
 
-The frontend's API types are generated from the backend's OpenAPI schema (ADR 0023). After changing
+The frontend's API types are generated from the backend's OpenAPI schema (ADR 0024). After changing
 a response or request model in `interfaces/api/schemas.py`, run
 `.venv/bin/python scripts/export_openapi.py` and `npm --prefix web run api:types`, and commit both
 generated files. Never edit `web/openapi.json` or `web/src/lib/api-schema.ts` by hand.
