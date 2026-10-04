@@ -28,22 +28,22 @@ const navItems: { id: AppView; label: string; icon: typeof Waypoints }[] = [
   { id: "settings", label: "Settings", icon: Settings2 },
 ]
 
-// eslint-disable-next-line complexity -- debt: split this before adding to it
 export default function App() {
   const setup = useQuery({ queryKey: ["setup"], queryFn: api.setup })
+  const configured = setup.data?.administrator_configured === true
   const session = useQuery({
     queryKey: ["session"],
     queryFn: api.session,
-    enabled: setup.data?.administrator_configured === true,
+    enabled: configured,
   })
 
-  if (setup.isPending || (setup.data?.administrator_configured && session.isPending)) {
+  if (setup.isPending || (configured && session.isPending)) {
     return <div className="startup-loading" role="status" aria-label={`Loading ${PRODUCT_NAME}`}><GhostMark className="startup-ghost" /></div>
   }
   if (setup.error || session.error) {
     return <main className="fatal-state"><h1>{PRODUCT_NAME} is unavailable</h1><p>The browser could not reach the local service.</p><Button onClick={() => window.location.reload()}>Reload page</Button></main>
   }
-  if (!setup.data.administrator_configured) return <AuthScreen mode="setup" />
+  if (!configured) return <AuthScreen mode="setup" />
   if (!session.data?.authenticated) return <AuthScreen mode="login" />
   return <AuthenticatedApp />
 }
