@@ -45,15 +45,29 @@ export interface WideRevealProps {
   motion: Messages["motion"]
   /** The week's height in pixels, without its day header (default 380). */
   weekHeight?: number
+  /** The week's height on phones (under 640px wide), if it differs. */
+  phoneWeekHeight?: number
   /** The ghost handle's size in pixels (default 104). */
   handleSize?: number
+  /** The ghost handle's size on phones, if it differs. */
+  phoneHandleSize?: number
   /** What the ghost says while a visitor holds it, if anything. */
   heldSays?: string
 }
 
 /** The hero: Sam's week as Sam sees it, revealed over what work sees, with the ghost as handle. */
-export function WideReveal({ m, motion, weekHeight = FRAME.heightPx, handleSize = HANDLE_PX, heldSays }: WideRevealProps) {
+export function WideReveal({
+  m,
+  motion,
+  weekHeight = FRAME.heightPx,
+  phoneWeekHeight,
+  handleSize = HANDLE_PX,
+  phoneHandleSize,
+  heldSays,
+}: WideRevealProps) {
   const placed = useMemo(() => (weekHeight === FRAME.heightPx ? PLACED : placeWeek(weekHeight)), [weekHeight])
+  // Each event's place on phones, by index, when the week there has its own height.
+  const phonePlaced = useMemo(() => (phoneWeekHeight ? placeWeek(phoneWeekHeight) : null), [phoneWeekHeight])
   const frame = useRef<HTMLDivElement>(null)
   const handle = useRef<HTMLDivElement>(null)
   const [held, setHeld] = useState<number | null>(null)
@@ -91,36 +105,52 @@ export function WideReveal({ m, motion, weekHeight = FRAME.heightPx, handleSize 
     () => (
       <div className="reveal-layer reveal-work" aria-hidden="true">
         <WeekGrid days={m.days} className="reveal-week">
-          {placed.map(({ event, box }) =>
+          {placed.map(({ event, box }, index) =>
             event.kind === "work" ? (
-              <EventCard key={event.key} box={box} look="work" title={m.events[event.key].title} detail={m.events[event.key].detail} />
+              <EventCard
+                key={event.key}
+                box={box}
+                phoneBox={phonePlaced?.[index]?.box}
+                look="work"
+                title={m.events[event.key].title}
+                detail={m.events[event.key].detail}
+              />
             ) : (
-              <EventCard key={event.key} box={box} look="busy" title={m.busy} />
+              <EventCard key={event.key} box={box} phoneBox={phonePlaced?.[index]?.box} look="busy" title={m.busy} />
             ),
           )}
         </WeekGrid>
         <span className="reveal-tag reveal-tag-work">{m.workSees}</span>
       </div>
     ),
-    [m, placed],
+    [m, placed, phonePlaced],
   )
   const youLayer = useMemo(
     () => (
       <div className="reveal-layer reveal-you" aria-hidden="true">
         <WeekGrid days={m.days} className="reveal-week">
-          {placed.map(({ event, box }) => (
-            <EventCard key={event.key} box={box} look={event.kind} title={m.events[event.key].title} detail={m.events[event.key].detail} />
+          {placed.map(({ event, box }, index) => (
+            <EventCard
+              key={event.key}
+              box={box}
+              phoneBox={phonePlaced?.[index]?.box}
+              look={event.kind}
+              title={m.events[event.key].title}
+              detail={m.events[event.key].detail}
+            />
           ))}
         </WeekGrid>
         <span className="reveal-tag reveal-tag-you">{m.youSee}</span>
       </div>
     ),
-    [m, placed],
+    [m, placed, phonePlaced],
   )
   // Only a non-default size is written, so the default page renders exactly as before.
   const sizing: Record<string, string> = {}
   if (weekHeight !== FRAME.heightPx) sizing["--reveal-week-h"] = `${weekHeight}px`
   if (handleSize !== HANDLE_PX) sizing["--handle-size"] = `${handleSize}px`
+  if (phoneWeekHeight) sizing["--reveal-week-h-phone"] = `${phoneWeekHeight}px`
+  if (phoneHandleSize) sizing["--handle-size-phone"] = `${phoneHandleSize}px`
 
   return (
     <figure className="reveal">
@@ -139,7 +169,7 @@ export function WideReveal({ m, motion, weekHeight = FRAME.heightPx, handleSize 
         </div>
         <div className="reveal-rail" aria-hidden="true">
           <div ref={handle} className="reveal-handle" data-face={face}>
-            <Ghost face={face} look={eyes} alive="loop" size={handleSize} className="reveal-ghost" />
+            <Ghost face={face} look={eyes} alive="loop" className="reveal-ghost" />
             {heldSays && held !== null ? (
               <SpeechBubble side="top" className="reveal-says">
                 {heldSays}

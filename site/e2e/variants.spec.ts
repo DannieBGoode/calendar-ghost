@@ -172,3 +172,17 @@ for (const variant of VARIANTS) {
     })
   })
 }
+
+test("/bold on a phone: the headline, the call to action, and a readable part of the week fit the first screen", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" })
+  const page = await context.newPage()
+  await page.goto("/bold")
+  await expect(page.getByRole("heading", { level: 1 })).toBeInViewport()
+  await expect(page.getByRole("link", { name: en.hero.primary }).first()).toBeInViewport()
+  const frame = (await page.locator(".reveal-frame").boundingBox())!
+  // At least the day names and the morning's events, about 200px of the week, show above the fold.
+  expect(844 - frame.y).toBeGreaterThanOrEqual(200)
+  // And the whole week is shorter than a screen.
+  expect(frame.height).toBeLessThan(844 / 2)
+  await context.close()
+})

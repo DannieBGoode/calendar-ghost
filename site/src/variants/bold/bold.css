@@ -18,8 +18,9 @@
   --space-xl: clamp(3rem, 6vw, 5rem);
   --space-2xl: clamp(4.5rem, 8vw, 7.5rem);
 
-  /* Sam's own view in the hero: a lantern tint instead of the old off-palette cyan. */
-  --reveal-you: oklch(0.945 0.03 292);
+  /* Sam's own view in the hero: warm lamplight paper, so it never reads as the lavender Busy
+     tint beside it (Busy keeps its dashed indigo edge and its own tint). */
+  --reveal-you: oklch(0.972 0.022 85);
 
   /* The night band's own colors: deep Twilight indigo in both appearances. */
   --night: oklch(0.235 0.075 279);

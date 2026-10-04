@@ -37,7 +37,9 @@ const [firstLine, secondLine] = m.variants.bold.hero.titleLines
         m={m.demo}
         motion={m.motion}
         weekHeight={520}
+        phoneWeekHeight={340}
         handleSize={184}
+        phoneHandleSize={120}
         heldSays={m.variants.bold.hero.held}
       />
     </div>
@@ -78,6 +80,19 @@ const [firstLine, secondLine] = m.variants.bold.hero.titleLines
     .b-hero-demo { grid-column: 1 / -1; }
     .b-hero-demo :global(.reveal-frame) { border-radius: 0; border-inline: 0; }
     .b-hero-demo :global(.demo-foot) { padding-inline: 1.25rem; }
+  }
+
+  /* Phones: the headline, the call to action, and the top of the week share the first screen.
+     The margin note gives way to the demo's own hint under the week. */
+  @media (max-width: 639px) {
+    .b-hero-grid { row-gap: 1.25rem; }
+    .b-hero-copy h1 { margin-bottom: 1rem; }
+    .b-hero-copy .b-lead { font-size: 1.0625rem; line-height: 1.5; }
+    .b-hero-copy .ctas { margin-top: 1rem; }
+    .b-btn-big { min-height: 2.75rem; padding-inline: 1rem; font-size: 0.9375rem; }
+    .b-hero-hint { display: none; }
+    .b-hero-demo :global(.reveal) { margin-top: 0; }
+    .b-hero-demo :global(.reveal-hint) { visibility: visible; }
   }
 
   /* Wide screens: copy on the left; the week takes the rest and runs off the right edge. */

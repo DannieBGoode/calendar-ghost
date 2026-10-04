@@ -29,6 +29,20 @@ describe("WideReveal", () => {
     expect(standupTop(big)).toBeGreaterThan(standupTop(plain))
   })
 
+  it("lays the week out a second time for phones when a page asks for a shorter one there", () => {
+    const plain = renderToString(<WideReveal m={en.demo} motion={en.motion} weekHeight={520} />)
+    expect(plain).not.toContain("--top-phone")
+    expect(plain).not.toContain("--reveal-week-h-phone")
+    const html = renderToString(
+      <WideReveal m={en.demo} motion={en.motion} weekHeight={520} phoneWeekHeight={360} handleSize={184} phoneHandleSize={120} />,
+    )
+    expect(html).toContain("--reveal-week-h-phone:360px")
+    expect(html).toContain("--handle-size-phone:120px")
+    // The Standup (10:00) sits higher in the shorter phone week than in the wide one.
+    const [, wide, phone] = html.match(/--top:(\d+)px;--h:\d+px;--top-phone:(\d+)px[^>]*><span>Standup/) ?? []
+    expect(Number(phone)).toBeLessThan(Number(wide))
+  })
+
   describe("in the browser", () => {
     let container: HTMLDivElement
     beforeEach(() => {
