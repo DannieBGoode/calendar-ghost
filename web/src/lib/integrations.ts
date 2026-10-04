@@ -68,7 +68,26 @@ export function integrationExamples(origin: string): IntegrationExample[] {
       description: "Add this to ~/.codex/config.toml and set CALENDAR_GHOST_TOKEN.",
       code: `[mcp_servers.calendar-ghost]\nurl = "${mcp}"\nbearer_token_env_var = "CALENDAR_GHOST_TOKEN"`,
     },
+    {
+      title: "Claude Desktop and other apps",
+      description:
+        "Apps that start MCP servers on your computer connect through the mcp-remote bridge, which needs Node.js. In Claude Desktop, add this to the configuration file opened from Settings, Developer, Edit Config, then restart it.",
+      code: JSON.stringify({ mcpServers: { "calendar-ghost": desktopBridge(mcp) } }, null, 2),
+    },
   ]
+}
+
+// mcp-remote refuses plain HTTP except on this machine unless told otherwise.
+const BRIDGE_LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"])
+
+function desktopBridge(mcp: string) {
+  const url = new URL(mcp)
+  const allowHttp = url.protocol === "http:" && !BRIDGE_LOCAL_HOSTS.has(url.hostname)
+  return {
+    command: "npx",
+    args: ["-y", "mcp-remote", mcp, ...(allowHttp ? ["--allow-http"] : []), "--header", "Authorization:${AUTH_HEADER}"],
+    env: { AUTH_HEADER: "Bearer <token>" },
+  }
 }
 
 /** When a token was last used and issued, so tokens with the same name can be told apart. */

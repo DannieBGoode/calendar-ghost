@@ -22,7 +22,13 @@ const token: IntegrationToken = {
 describe("integrationExamples", () => {
   it("fills each example with this installation's address and reads the token from the environment", () => {
     const examples = integrationExamples("https://ghost.example.lan")
-    expect(examples.map((example) => example.title)).toEqual(["Uptime Kuma", "Homepage", "Claude Code", "Codex"])
+    expect(examples.map((example) => example.title)).toEqual([
+      "Uptime Kuma",
+      "Homepage",
+      "Claude Code",
+      "Codex",
+      "Claude Desktop and other apps",
+    ])
     const text = examples.map((example) => example.code).join("\n")
     expect(text).toContain("https://ghost.example.lan/api/v1/status")
     expect(text).toContain("https://ghost.example.lan/mcp")
@@ -30,6 +36,28 @@ describe("integrationExamples", () => {
     expect(text).toContain("${CALENDAR_GHOST_TOKEN}")
     expect(text).toContain('bearer_token_env_var = "CALENDAR_GHOST_TOKEN"')
     expect(text).not.toContain("cgs_")
+  })
+
+  it("connects desktop apps through the mcp-remote bridge, allowing plain HTTP only where needed", () => {
+    const desktop = (origin: string) => {
+      const example = integrationExamples(origin).find((item) => item.title === "Claude Desktop and other apps")
+      return JSON.parse(example?.code ?? "{}").mcpServers["calendar-ghost"]
+    }
+
+    expect(desktop("https://ghost.example.lan")).toEqual({
+      command: "npx",
+      args: ["-y", "mcp-remote", "https://ghost.example.lan/mcp", "--header", "Authorization:${AUTH_HEADER}"],
+      env: { AUTH_HEADER: "Bearer <token>" },
+    })
+    expect(desktop("http://localhost:8000").args).not.toContain("--allow-http")
+    expect(desktop("http://ghost.lan:8000").args).toEqual([
+      "-y",
+      "mcp-remote",
+      "http://ghost.lan:8000/mcp",
+      "--allow-http",
+      "--header",
+      "Authorization:${AUTH_HEADER}",
+    ])
   })
 })
 

@@ -255,6 +255,37 @@ url = "https://ghost.example.lan/mcp"
 bearer_token_env_var = "CALENDAR_GHOST_TOKEN"
 ```
 
+The same entry can be added with one command:
+
+```sh
+codex mcp add calendar-ghost --url https://ghost.example.lan/mcp \
+  --bearer-token-env-var CALENDAR_GHOST_TOKEN
+```
+
+**Claude Desktop and other apps.** Apps that only start MCP servers on your own computer connect
+through the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which needs Node.js on
+that computer. In Claude Desktop, open **Settings → Developer → Edit Config**, add this to
+`claude_desktop_config.json`, and restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "calendar-ghost": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://ghost.example.lan/mcp", "--header", "Authorization:${AUTH_HEADER}"],
+      "env": { "AUTH_HEADER": "Bearer <token>" }
+    }
+  }
+}
+```
+
+Keep `Authorization:${AUTH_HEADER}` exactly as written, with no spaces around the colon;
+`mcp-remote` fills in the token from `env`. If the address starts with `http://` and is not
+`localhost`, add `"--allow-http"` after the address. Settings shows this example already filled in
+for the address you opened it at. An app whose connector settings accept only an address, or only
+an OAuth sign-in, cannot send a token directly; connect it through this bridge if it can run local
+MCP servers.
+
 Both `/api/v1/status` and `/mcp` answer the same verdict. Each status means:
 
 | Status | What it means | What to do |
@@ -269,7 +300,9 @@ Both `/api/v1/status` and `/mcp` answer the same verdict. Each status means:
 
 **Other MCP clients.** Any client that speaks MCP over streamable HTTP and can send an
 `Authorization: Bearer` header works: point it at `https://<your address>/mcp`. The server is
-stateless and answers `POST` only.
+stateless and answers `POST` only. Calendar Ghost has no OAuth sign-in for MCP; a client that looks
+for one gets `404` and should then use the token you configured. Claude Code, Codex, and Claude
+Code through `mcp-remote` were each checked against a running installation with this release.
 
 The MCP server offers two read-only tools, and explains each status to the agent itself:
 

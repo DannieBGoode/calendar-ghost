@@ -275,10 +275,10 @@ claude mcp add --transport http calendar-ghost http://localhost:8000/mcp \
   --header "Authorization: Bearer ${CALENDAR_GHOST_TOKEN}"
 ```
 
-Then ask the agent "Is my calendar sync healthy?". Settings shows ready-made examples for each tool,
-filled in with this installation's address. The
+Then ask the agent "Is my calendar sync healthy?". Codex and apps such as Claude Desktop connect too;
+Settings shows ready-made examples for each tool, filled in with this installation's address. The
 [self-hosting guide](docs/self-hosting.md#6-connect-monitors-and-agents) explains every field, each
-status, and setup for Uptime Kuma, Homepage, Claude Code, and Codex.
+status, and setup for Uptime Kuma, Homepage, Claude Code, Codex, and Claude Desktop.
 
 ## How synchronization works
 
