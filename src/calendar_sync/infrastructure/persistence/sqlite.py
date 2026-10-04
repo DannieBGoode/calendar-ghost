@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Collection, Sequence
+from contextlib import closing
 from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -55,6 +56,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
     change_columns,
@@ -86,7 +88,7 @@ _FORWARD_MIGRATIONS = (
 def initialize_database(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     migrations = files("calendar_sync.infrastructure.persistence")
-    with sqlite3.connect(path) as connection:
+    with closing(open_connection(path)) as connection:
         connection.executescript(migrations.joinpath("0001_initial.sql").read_text())
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
@@ -164,7 +166,17 @@ class SqliteSyncRuleRepository:
             ) from error
 
     def save(self, rule: SyncRule) -> None:
-        cursor = self._connection.execute(
+        try:
+            cursor = self._update(rule)
+        except sqlite3.IntegrityError as error:
+            raise DuplicateDirectionalRelationship(
+                "a rule already exists for this source and destination"
+            ) from error
+        if cursor.rowcount != 1:
+            raise KeyError(f"sync rule {rule.id.value} does not exist")
+
+    def _update(self, rule: SyncRule) -> sqlite3.Cursor:
+        return self._connection.execute(
             """
             UPDATE sync_rules SET
                 source_account_id = ?, source_calendar_id = ?,
@@ -176,8 +188,6 @@ class SqliteSyncRuleRepository:
             """,
             (*_rule_values(rule)[1:], rule.id.value),
         )
-        if cursor.rowcount != 1:
-            raise KeyError(f"sync rule {rule.id.value} does not exist")
 
     def remove(self, rule_id: SyncRuleId) -> None:
         now = self._clock.now().isoformat()
@@ -703,9 +713,7 @@ class SqliteUnitOfWork:
         self._connection: sqlite3.Connection | None = None
 
     def __enter__(self) -> Self:
-        connection = sqlite3.connect(self._database_path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
+        connection = open_connection(self._database_path)
         self._connection = connection
         self.accounts = SqliteConnectedAccountRecords(connection)
         self.rules = SqliteSyncRuleRepository(connection, self._clock)

@@ -30,6 +30,7 @@ from calendar_sync.application.activity import (
 )
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.model import SyncAction, SyncReason
+from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import open_change_values
 from calendar_sync.infrastructure.security import HistoryCipher
 
@@ -320,8 +321,7 @@ class SqliteOperationsQueries:
 @contextmanager
 def _reading(database_path: Path) -> Iterator[sqlite3.Connection]:
     """A connection for reads only, closed afterwards; it never takes a write lock."""
-    with closing(sqlite3.connect(database_path)) as connection:
-        connection.row_factory = sqlite3.Row
+    with closing(open_connection(database_path)) as connection:
         connection.create_function("search_fold", 1, _search_fold_column, deterministic=True)
         yield connection
 

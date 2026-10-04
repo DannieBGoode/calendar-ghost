@@ -28,9 +28,10 @@ the infrastructure and remains responsible for any hosting or provider costs.
 The Community Edition is genuine open-source software under the [GNU Affero General Public License,
 version 3 or later](LICENSE). AGPL permits commercial use, including a competing service, when its
 conditions are met. Calendar Ghost's official name and marks are separate from the software license;
-see [TRADEMARKS.md](TRADEMARKS.md). A future Calendar Ghost hosted service may be multi-tenant and
-offer managed operations, upgrades, backups, support, and availability; it is a separate product
-boundary rather than a requirement for using this repository.
+see [TRADEMARKS.md](TRADEMARKS.md). A future Calendar Ghost hosted service will run this same open
+code for people who do not want to operate it, with no closed components. It will charge for running
+Calendar Ghost for you, not for features: the Community Edition will not have features removed,
+limited, or held back to push people toward it.
 
 Read [Licensing and editions](docs/licensing.md) and [Data ownership and privacy](docs/data-ownership.md)
 before deploying it with real calendars.
@@ -470,6 +471,8 @@ Calendar Ghost Community Edition is available under the [GNU Affero General Publ
 or later](LICENSE). This is an OSI-approved open-source license designed to keep source available
 when modified software is offered over a network. See [Licensing and editions](docs/licensing.md) for
 the relationship between the Community Edition and the future hosted service.
+
+Copyright (C) 2026 Calendar Ghost contributors.
 
 The Web UI bundles the Fraunces and Figtree typefaces, which are licensed under the SIL Open Font
 License 1.1. Their notices are in [`web/public/licenses/`](web/public/licenses/) and ship with the

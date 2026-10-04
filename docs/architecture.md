@@ -9,11 +9,10 @@ Administrator, one SQLite database, one scheduler, and one application process. 
 identifier, hosted account, billing path, or remote control plane. This keeps the self-hosted data
 boundary visible in the code and makes backups and ownership understandable to the operator.
 
-A future hosted service is a separate composition boundary. It may reuse provider-independent domain
-and application code, but multi-tenant authentication, customer isolation, billing, quotas, hosted
-operations, and managed backups must not be introduced into the Community Edition by implication.
-The initial hosted architecture should prefer one isolated application and database per customer;
-pooled multi-tenancy requires a separate persistence and security review.
+The future hosted service runs this same codebase (ADR 0023). Multi-user support, billing, and an
+operator overview will be added here, with billing and plan limits behind Commercial Mode, which is
+off by default. That work needs its own ADRs for persistence and per-user data isolation before it
+starts; until then, do not add user ownership, billing, or plans to the runtime piecemeal.
 
 ## Bounded contexts
 
@@ -47,7 +46,8 @@ error to HTTP. `bootstrap/container.py` composes in two steps: `build_adapters` 
 Google adapters from Settings, and `compose` wires the use cases from them into the `Container`
 the routes call. The `Container` holds use cases, query ports, and the few configuration values a
 route returns; never a concrete adapter, the unit of work, or the rule locks. Tests and the
-development preview substitute adapters before `compose`, or use cases after it. Use cases that
+development preview substitute adapters before `compose`, or use cases after it. `Adapters` holds
+ports rather than concrete classes, so a substitute needs only to honor the port. Use cases that
 need the installation master key are absent without it, and one route guard answers 503 for them.
 
 Time and identifiers come through ports too. `build_adapters` makes one `SystemClock`, one
@@ -154,6 +154,21 @@ individually to keep SQLite write locks away from later network calls; source an
 incremental cursors commit last, after both batches complete. If the process stops after a provider
 write but before persistence commits, retrying the same operation key recovers the same managed
 projection rather than creating a duplicate.
+
+## Persistence
+
+Every SQLite connection in the application opens through
+`infrastructure/persistence/connections.py`: foreign keys are enforced, rows are read by column
+name, a writer waits up to five seconds for another's lock, and `transaction()` commits, rolls back,
+and closes in one block. A test fails if any other module under `src/calendar_sync` calls
+`sqlite3.connect`, so a setting added there applies to every adapter.
+
+The in-memory unit of work that application tests use and the SQLite one both pass the persistence
+contract in `tests/contracts/persistence.py`. It states, through the ports alone, the behavior use
+cases rely on: writes are discarded until committed, rule removal takes a rule's records with it, a
+record without its rule or series is refused, identities stay unique, and listings come back in a
+fixed order. It does not make the two interchangeable in every respect; when a use case starts
+relying on another storage behavior, add it to the contract.
 
 ## Public compatibility surfaces
 
