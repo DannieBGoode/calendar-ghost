@@ -166,16 +166,9 @@ def assess_installation(
         problems.extend(_overdue(enabled, overdue_excluded, scheduler.last_pass_rule_ids, now))
     if overview.open_blocks:
         problems.append(_blocked(overview))
+    # Every open incident is now covered: by its rule's Stopped problem, by the open blocks, or
+    # by a review or waiting problem of its own. So open incidents never leave this list empty.
     problems.extend(problem for problem in waits if problem.rule_id not in named)
-    if not problems and open_incidents:
-        count = len(open_incidents)
-        problems.append(
-            Problem(
-                ProblemKind.REVIEW,
-                None,
-                f"{count} {'problem' if count == 1 else 'problems'} kept happening",
-            )
-        )
 
     first_by_rule: dict[str, Problem] = {}
     for problem in problems:
