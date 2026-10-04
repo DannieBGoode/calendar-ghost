@@ -4,6 +4,10 @@ import "@fontsource-variable/fraunces/full.css"
 import "../styles/tokens.css"
 import "../styles/global.css"
 import "../styles/demos.css"
+// Preloaded so the Latin glyphs for the headline and body text are ready before first paint,
+// instead of swapping in after layout and shifting the page (the lowest-risk fix for CLS).
+import figtreeLatinWoff2 from "@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2?url"
+import frauncesLatinWoff2 from "@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2?url"
 import { LOCALES, hasLanguagePicker, localePath, type Locale } from "../i18n"
 
 interface Props {
@@ -35,6 +39,8 @@ const alternates = hasLanguagePicker()
     <link rel="canonical" href={canonical.href} />
     {alternates.map((alt) => <link rel="alternate" hreflang={alt.locale} href={alt.href} />)}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" as="font" type="font/woff2" href={figtreeLatinWoff2} crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href={frauncesLatinWoff2} crossorigin />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfbfe" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0e19" />
     <meta property="og:type" content="website" />
