@@ -320,7 +320,8 @@ class RecentChangeResponse(BaseModel):
 
 
 class SchedulerResponse(BaseModel):
-    running: bool
+    configured: bool
+    """Whether this installation runs a scheduler; `status` says whether it is keeping up."""
     last_pass_completed_at: str | None
     current_pass_started_at: str | None
 
@@ -328,6 +329,7 @@ class SchedulerResponse(BaseModel):
 class StatusCountsResponse(BaseModel):
     rules: int
     running: int
+    """Enabled rules that are not stopped."""
     stopped: int
     paused: int
     overdue: int

@@ -35,6 +35,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
     overview = status.overview
     scheduler = status.scheduler
     states = [rule.summary.rule.state for rule in status.rules]
+    stopped = {p.rule_id for p in status.problems if p.kind is ProblemKind.STOPPED}
     return StatusResponse(
         status=status.health.value,
         needs_attention=status.needs_attention,
@@ -43,7 +44,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
         checked_at=status.checked_at.isoformat(),
         last_synced_at=overview.last_synced_at,
         scheduler=SchedulerResponse(
-            running=scheduler is not None,
+            configured=scheduler is not None,
             last_pass_completed_at=(
                 scheduler.last_completed_at.isoformat()
                 if scheduler and scheduler.last_completed_at
@@ -57,8 +58,12 @@ def status_response(status: InstallationStatus) -> StatusResponse:
         ),
         counts=StatusCountsResponse(
             rules=len(status.rules),
-            running=states.count(SyncRuleState.ENABLED),
-            stopped=sum(p.kind is ProblemKind.STOPPED for p in status.problems),
+            running=sum(
+                rule.summary.rule.state is SyncRuleState.ENABLED
+                and rule.summary.rule.id.value not in stopped
+                for rule in status.rules
+            ),
+            stopped=len(stopped),
             paused=states.count(SyncRuleState.PAUSED),
             overdue=sum(p.kind is ProblemKind.OVERDUE for p in status.problems),
             open_incidents=overview.open_incidents,

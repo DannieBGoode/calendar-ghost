@@ -25,7 +25,7 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import StatusReaderServices, require_status_reader
-from tests.helpers import endpoint
+from tests.helpers import endpoint, rule
 
 PASSWORD = {"password": "correct horse battery staple"}
 SECRETS = {
@@ -292,3 +292,43 @@ def test_the_dashboard_carries_the_server_verdict(tmp_path: Path) -> None:
     assert body["needs_attention"] is False
     assert body["problems"] == []
     assert "health" not in body
+
+
+def test_counts_never_call_a_stopped_rule_running(tmp_path: Path) -> None:
+    container, adapters = _installation(tmp_path)
+    with sqlite3.connect(tmp_path / "test.db") as connection:
+        connection.executemany(
+            """
+            INSERT INTO connected_accounts (
+                id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at
+            ) VALUES (?, 'google', ?, ?, x'00', ?, '2026-09-01', '2026-09-01')
+            """,
+            [
+                ("personal-account", "Personal", "personal@example.test", "connected"),
+                ("work-account", "Work", "work@example.test", "disconnected"),
+            ],
+        )
+    with adapters.unit_of_work() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with TestClient(create_app(container)) as client:
+        _signed_in(client)
+        body: dict[str, Any] = client.get("/api/v1/status").json()
+
+    assert body["counts"]["rules"] == 1
+    assert (body["counts"]["running"], body["counts"]["stopped"]) == (0, 1)
+
+
+def test_the_scheduler_block_says_whether_a_scheduler_is_configured(tmp_path: Path) -> None:
+    container, _ = _installation(tmp_path)
+    with TestClient(create_app(container)) as client:
+        _signed_in(client)
+        scheduler: dict[str, Any] = client.get("/api/v1/status").json()["scheduler"]
+
+    # Without a master key there is no scheduler; this installation cannot synchronize.
+    assert scheduler == {
+        "configured": False,
+        "last_pass_completed_at": None,
+        "current_pass_started_at": None,
+    }

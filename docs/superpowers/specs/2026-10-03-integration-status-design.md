@@ -205,7 +205,7 @@ never an error, so a monitor added early does not flap.
   "checked_at": "2026-10-03T10:00:00Z",
   "last_synced_at": "2026-10-03T09:58:00Z",
   "scheduler": {
-    "running": true,
+    "configured": true,
     "last_pass_completed_at": "2026-10-03T09:58:00Z",
     "current_pass_started_at": null
   },
@@ -245,6 +245,10 @@ never an error, so a monitor added early does not flap.
 ```
 
 - `summary` is one plain sentence describing the status, suitable for a dashboard tile.
+- `scheduler.configured` says whether this installation runs a scheduler at all; `status` says
+  whether it is keeping up.
+- `counts.running` counts enabled rules that are not stopped, so `running` plus `stopped` never
+  exceeds `rules`.
 - `problems` lists `{ "kind", "rule_id", "summary" }` most urgent first; `kind` is one of `stalled`,
   `stopped`, `review`, `blocked`, `overdue`, or `waiting`, and `rule_id` is null for
   installation-wide problems.
