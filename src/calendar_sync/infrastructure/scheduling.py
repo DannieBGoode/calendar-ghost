@@ -51,6 +51,7 @@ class SyncScheduler:
         self._running_since = self._clock.now()
         self._pass_started_at: datetime | None = None
         self._last_completed_at: datetime | None = None
+        self._last_pass_rule_ids: frozenset[str] = frozenset()
 
     async def run_forever(self) -> None:
         while True:
@@ -66,21 +67,26 @@ class SyncScheduler:
     async def run_once(self) -> None:
         self._pass_started_at = self._clock.now()
         try:
-            await self._run_pass()
+            listed = await self._run_pass()
         except BaseException:
             self._pass_started_at = None
             raise
         # Publish the completion before clearing the running pass, so a request thread never
         # reads "no pass running" next to the previous completion and reports a false stall.
+        self._last_pass_rule_ids = listed
         self._last_completed_at = self._clock.now()
         self._pass_started_at = None
 
     def progress(self) -> SchedulerProgress:
         return SchedulerProgress(
-            self._running_since, self._pass_started_at, self._last_completed_at
+            self._running_since,
+            self._pass_started_at,
+            self._last_completed_at,
+            self._last_pass_rule_ids,
         )
 
-    async def _run_pass(self) -> None:
+    async def _run_pass(self) -> frozenset[str]:
+        """Runs every enabled rule once; returns the ids of the rules this pass listed."""
         now = self._clock.now()
         today = now.astimezone(UTC).date()
         with self._unit_of_work() as uow:
@@ -96,6 +102,7 @@ class SyncScheduler:
             )
         for rule, full in due:
             await asyncio.to_thread(self._execute_with_retry, rule, full)
+        return frozenset(rule.id.value for rule, _ in due)
 
     def _execute_with_retry(self, rule: SyncRule, full: bool = False) -> bool:
         # Every decision of this run, including its retries, is recorded above this entry, so a

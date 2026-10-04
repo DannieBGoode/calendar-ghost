@@ -30,7 +30,9 @@ CONNECTED = (
     AccountStanding("personal-account", "connected", "google"),
     AccountStanding("work-account", "connected", "google"),
 )
-TICKING = SchedulerProgress(NOW - timedelta(days=1), None, NOW - timedelta(minutes=2))
+LISTED = frozenset({"rule-1", "rule-2", "rule-a", "rule-b", "rule-c", "rule-d"})
+"""Every rule id these tests enable, as the last completed pass listed them."""
+TICKING = SchedulerProgress(NOW - timedelta(days=1), None, NOW - timedelta(minutes=2), LISTED)
 
 
 def _rule(rule_id: str = "rule-1", state: SyncRuleState = SyncRuleState.ENABLED) -> SyncRule:
@@ -287,6 +289,23 @@ def test_a_rule_not_synced_for_a_day_is_overdue(hours: int, overdue: bool) -> No
     if overdue:
         assert status.problems[0].kind is ProblemKind.OVERDUE
         assert status.problems[0].since == NOW - timedelta(hours=hours)
+
+
+def test_a_rule_resumed_after_days_is_not_overdue_before_the_next_pass_lists_it() -> None:
+    # Resuming only flips the rule's state, so its last success is still three days old; the
+    # last completed pass ran while it was paused and did not list it.
+    resumed = _summary(_rule("rule-resumed"), succeeded_at=NOW - timedelta(days=3))
+    status = _assess([resumed])
+    assert status.health is InstallationHealth.HEALTHY
+    assert status.problems == ()
+
+
+def test_a_rule_the_last_pass_listed_that_is_still_stale_is_overdue() -> None:
+    listed = replace(TICKING, last_pass_rule_ids=frozenset({"rule-resumed"}))
+    stale = _summary(_rule("rule-resumed"), succeeded_at=NOW - timedelta(days=3))
+    status = _assess([stale], scheduler=listed)
+    assert status.health is InstallationHealth.REVIEW
+    assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.OVERDUE, "rule-resumed")]
 
 
 def test_running_and_never_synced_rules_are_never_overdue() -> None:

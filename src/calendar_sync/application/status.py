@@ -162,8 +162,8 @@ def assess_installation(
     # A rule already waiting on its own incident is not also overdue: the incident already
     # explains why it hasn't synced.
     overdue_excluded = named | {problem.rule_id for problem in waits if problem.rule_id}
-    if not stalled:
-        problems.extend(_overdue(enabled, overdue_excluded, now))
+    if not stalled and scheduler is not None:
+        problems.extend(_overdue(enabled, overdue_excluded, scheduler.last_pass_rule_ids, now))
     if overview.open_blocks:
         problems.append(_blocked(overview))
     problems.extend(problem for problem in waits if problem.rule_id not in named)
@@ -308,8 +308,16 @@ def _incident_problems(
 
 
 def _overdue(
-    enabled: Sequence[SyncRuleSummary], named: set[str | None], now: datetime
+    enabled: Sequence[SyncRuleSummary],
+    named: set[str | None],
+    listed: frozenset[str],
+    now: datetime,
 ) -> list[Problem]:
+    """Enabled rules the last completed pass listed that still have not succeeded in a day.
+
+    A rule that pass did not list, such as one resumed or reauthorized since, keeps its old last
+    success until the next pass reaches it; that alone is not a reason to look.
+    """
     problems = []
     for summary in enabled:
         succeeded = summary.last_sync.last_succeeded_at if summary.last_sync else None
@@ -317,6 +325,7 @@ def _overdue(
             succeeded is None
             or summary.running is not None
             or summary.rule.id.value in named
+            or summary.rule.id.value not in listed
             or now - succeeded <= OVERDUE_AFTER
         ):
             continue

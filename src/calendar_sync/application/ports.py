@@ -476,6 +476,8 @@ class SchedulerProgress:
     """When the pass running now started; None between passes."""
     last_completed_at: datetime | None
     """When the last pass that raised nothing completed."""
+    last_pass_rule_ids: frozenset[str] = frozenset()
+    """The rules that pass listed, so a rule resumed since then is not yet expected to have run."""
 
 
 class SchedulerHeartbeat(Protocol):

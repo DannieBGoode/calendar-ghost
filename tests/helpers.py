@@ -31,13 +31,22 @@ class RecentSchedulerHeartbeat:
     """A `SchedulerHeartbeat` that always reports a pass completed moments ago, so a test's
     Installation Status verdict reflects its seeded rules and incidents instead of "stalled": a
     `None` scheduler (the common case for a container built without a master key) means no
-    scheduler can run at all, which is correctly "stalled", but these tests are not about that."""
+    scheduler can run at all, which is correctly "stalled", but these tests are not about that.
+
+    `listed` names the rules that pass listed; only those can read "Not synced in over a day",
+    so a test about an overdue rule names it here."""
 
     clock: Clock
+    listed: frozenset[str] = frozenset()
 
     def progress(self) -> SchedulerProgress:
         now = self.clock.now()
-        return SchedulerProgress(running_since=now, pass_started_at=None, last_completed_at=now)
+        return SchedulerProgress(
+            running_since=now,
+            pass_started_at=None,
+            last_completed_at=now,
+            last_pass_rule_ids=self.listed,
+        )
 
 
 def endpoint(account: str, calendar: str) -> CalendarEndpoint:

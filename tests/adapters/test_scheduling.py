@@ -849,6 +849,7 @@ def test_a_pass_that_raises_is_not_counted_as_completed() -> None:
     progress = scheduler.progress()
     assert progress.pass_started_at is None
     assert progress.last_completed_at is None
+    assert progress.last_pass_rule_ids == frozenset()
 
 
 class ObservingClock(SteppingClock):
@@ -883,3 +884,31 @@ def test_a_completed_pass_is_published_before_the_running_pass_is_cleared() -> N
     assert all(progress.pass_started_at is not None for progress in clock.seen[1:])
     assert scheduler.progress().pass_started_at is None
     assert scheduler.progress().last_completed_at is not None
+
+
+def test_the_rules_a_pass_listed_are_published_only_when_it_completes() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    enabled = rule()
+    paused = replace(rule(state=SyncRuleState.PAUSED), id=SyncRuleId("paused-rule"))
+    unit_of_work.state.rules[enabled.id] = enabled
+    unit_of_work.state.rules[paused.id] = paused
+    seen_during_pass: list[frozenset[str]] = []
+
+    class ObservingExecuteRule:
+        def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+            seen_during_pass.append(scheduler.progress().last_pass_rule_ids)
+            return SyncRunResult(rule_id)
+
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, ObservingExecuteRule()),
+        unit_of_work,
+        cast(RunHealth, RecordingHealth()),
+        clock=SteppingClock(datetime(2026, 10, 3, 9, 0, tzinfo=UTC)),
+    )
+
+    assert scheduler.progress().last_pass_rule_ids == frozenset()
+    asyncio.run(scheduler.run_once())
+
+    assert seen_during_pass == [frozenset()]
+    # Only enabled rules are listed by a pass; a paused one is not.
+    assert scheduler.progress().last_pass_rule_ids == frozenset({enabled.id.value})

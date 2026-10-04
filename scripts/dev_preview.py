@@ -104,13 +104,20 @@ class _RecentSchedulerHeartbeat:
     The preview never configures a master key, so `compose` never builds a real scheduler; without
     this, every scenario with an enabled rule would read "stalled" instead of its own health, since
     Installation Status correctly treats "no scheduler at all" that way for a real installation.
+    Like a real pass, it lists the scenario's enabled rules, so a stale one can read overdue.
     """
 
     clock: Clock
+    listed: frozenset[str]
 
     def progress(self) -> SchedulerProgress:
         now = self.clock.now()
-        return SchedulerProgress(running_since=now, pass_started_at=None, last_completed_at=now)
+        return SchedulerProgress(
+            running_since=now,
+            pass_started_at=None,
+            last_completed_at=now,
+            last_pass_rule_ids=self.listed,
+        )
 
 
 def reset_preview_database(path: Path) -> None:
@@ -311,6 +318,12 @@ def _scenario_rules(scenario: Scenario) -> tuple[SyncRule, ...]:
     return PREVIEW_RULES
 
 
+def _enabled_rule_ids(scenario: Scenario) -> frozenset[str]:
+    return frozenset(
+        rule.id.value for rule in _scenario_rules(scenario) if rule.state is SyncRuleState.ENABLED
+    )
+
+
 def _uses_personal(rule: SyncRule) -> bool:
     return PERSONAL_ACCOUNT in {
         rule.source.connected_account_id,
@@ -369,7 +382,7 @@ def build_preview_container(
             composed.list_sync_rules,
             adapters.operations,
             _FixedClock(moment),
-            _RecentSchedulerHeartbeat(_FixedClock(moment)),
+            _RecentSchedulerHeartbeat(_FixedClock(moment), _enabled_rule_ids(scenario)),
         ),
     )
     if scenario is not Scenario.SETUP:
