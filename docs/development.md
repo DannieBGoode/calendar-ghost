@@ -82,7 +82,7 @@ across three context-specific identities (`sam@personal.example`, `sam@family.ex
 .venv/bin/mypy
 .venv/bin/lint-imports
 .venv/bin/pytest --cov
-cd web && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run test && npm run build
+cd web && npm audit --audit-level=high && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run test && npm run build
 ```
 
 After changing an API response or request model, regenerate the frontend types in the same commit

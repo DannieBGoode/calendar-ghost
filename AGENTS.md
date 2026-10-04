@@ -175,6 +175,7 @@ Run the complete backend quality gate:
 Run the complete frontend quality gate:
 
 ```sh
+npm --prefix web audit --audit-level=high
 npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web run lint

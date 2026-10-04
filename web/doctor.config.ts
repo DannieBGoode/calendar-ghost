@@ -4,8 +4,8 @@ import type { ReactDoctorConfig } from "react-doctor/api"
 // copied from props, render-time work, and accessibility. CI fails on any warning.
 export default {
   blocking: "warning",
-  // No score upload, share link, or crash reports leave CI. Dependency health is out of scope
-  // here; the supply-chain check would also make the gate depend on a remote service.
+  // No score upload, share link, or crash reports leave CI. `npm audit` checks dependency health
+  // in CI, so the supply-chain scan would only add a second remote service to the gate.
   noScore: true,
   supplyChain: { enabled: false },
   rules: {

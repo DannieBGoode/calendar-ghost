@@ -17,7 +17,7 @@ Thank you for helping make self-hosted calendar synchronization safer.
 .venv/bin/mypy
 .venv/bin/lint-imports
 .venv/bin/pytest
-cd web && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run test && npm run build
+cd web && npm audit --audit-level=high && npm run api:check && npm run typecheck && npm run lint && npm run doctor && npm run test && npm run build
 docker compose build
 ```
 
