@@ -1,6 +1,6 @@
 # Deployment
 
-For the first-time, step-by-step setup—including creating a Google Cloud OAuth application—see
+For the first-time, step-by-step setup, including creating a Google Cloud OAuth application, see
 the [self-hosting guide](self-hosting.md).
 
 ## Docker Compose
@@ -183,6 +183,10 @@ or another LAN host, choose one:
   Tailscale Serve (`https://<host>.<tailnet>.ts.net`) or your own domain behind a reverse proxy.
   Register `https://<name>/api/v1/oauth/google/callback` on the Google OAuth client, set the same
   value in `CALENDAR_SYNC_GOOGLE_REDIRECT_URI`, and set `CALENDAR_SYNC_SECURE_COOKIES=true`.
+
+If you serve the installation through a reverse proxy, pass the `Authorization` request header
+through unchanged, and route `/mcp` as well as `/api/`: monitors and agents send their Integration
+Token in that header ([self-hosting guide](self-hosting.md#6-connect-monitors-and-agents)).
 
 The redirect URI must match the Google OAuth client exactly, including scheme and port. When the
 address in the browser differs from the configured redirect URI, Settings says so in a quiet note

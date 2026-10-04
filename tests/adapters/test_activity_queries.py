@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.activity import (
+    AccountStanding,
     ActivityCategory,
     ActivityFilter,
     EntryEvents,
@@ -287,6 +288,32 @@ def test_overview_of_an_empty_installation(database: Path) -> None:
     assert overview.connected_accounts == overview.disconnected_accounts == 0
     assert overview.open_incidents == 0
     assert overview.open_blocks == ()
+
+
+def test_the_overview_lists_each_account_state_and_provider(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO connected_accounts (
+                id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at
+            ) VALUES (?, 'google', ?, ?, x'00', ?, '2026-09-01', '2026-09-01')
+            """,
+            [
+                ("acct-a", "A", "a@example.test", "connected"),
+                ("acct-b", "B", "b@example.test", "disconnected"),
+            ],
+        )
+
+    overview = SqliteOperationsQueries(database).overview()
+
+    assert overview.accounts == (
+        AccountStanding("acct-a", "connected", "google"),
+        AccountStanding("acct-b", "disconnected", "google"),
+    )
+    assert (overview.connected_accounts, overview.disconnected_accounts) == (1, 1)
 
 
 def test_incidents_list_open_ones_first_then_most_recently_updated(database: Path) -> None:

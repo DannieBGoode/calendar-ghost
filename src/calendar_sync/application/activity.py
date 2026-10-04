@@ -170,6 +170,15 @@ class OpenBlock:
 
 
 @dataclass(frozen=True, slots=True)
+class AccountStanding:
+    """A Connected Account's state and Provider Kind; never its email or name."""
+
+    id: str
+    state: str
+    provider: str
+
+
+@dataclass(frozen=True, slots=True)
 class OperationsOverview:
     connected_accounts: int
     disconnected_accounts: int
@@ -177,6 +186,8 @@ class OperationsOverview:
     last_synced_at: str | None
     open_blocks: tuple[OpenBlock, ...]
     """Events of existing rules whose latest decision was a block, newest first."""
+    accounts: tuple[AccountStanding, ...] = ()
+    """Every Connected Account, ordered by id."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -222,22 +233,11 @@ class Dashboard:
     blocked_rule_id: str | None
     """The rule every open block belongs to, when they all belong to one."""
 
-    @property
-    def healthy(self) -> bool:
-        return not (self.open_incidents or self.stopped_rules)
-
-
-@dataclass(slots=True)
-class GetDashboard:
-    unit_of_work: UnitOfWorkFactory
-    operations: OperationsQueries
-
-    def execute(self) -> Dashboard:
-        with self.unit_of_work() as uow:
-            states = [rule.state for rule in uow.rules.list()]
-        overview = self.operations.overview()
+    @classmethod
+    def of(cls, states: Sequence[SyncRuleState], overview: OperationsOverview) -> Dashboard:
+        """Counts for the Overview from the rule states and operations overview a verdict read."""
         blocks = overview.open_blocks
-        return Dashboard(
+        return cls(
             connected_accounts=overview.connected_accounts,
             disconnected_accounts=overview.disconnected_accounts,
             sync_rules=len(states),

@@ -4,6 +4,38 @@
 
 Check `docker compose ps`, then request `http://localhost:8000/health`. Review container logs without posting credentials or event payloads publicly.
 
+## A monitor or agent cannot read status
+
+`GET /api/v1/status` and `/mcp` accept an Integration Token from **Settings → Integrations**
+([self-hosting guide](self-hosting.md#6-connect-monitors-and-agents)). Check the answer with `curl -i`:
+
+- **401 `valid credentials required`.** The token is missing, mistyped, or revoked; every reason
+  gets the same answer. Send it as `Authorization: Bearer cgs_…`, never in the address. A token is
+  `cgs_` and 43 more characters; a partial copy is refused. If it was revoked or lost, issue a new
+  one. An invalid `Authorization` header is refused even when the same
+  browser is signed in, so a broken monitor credential never hides behind your session.
+- **401 behind a reverse proxy, although `curl` on the host works.** The proxy is dropping the
+  `Authorization` header. Configure it to pass the header through to Calendar Ghost.
+- **401 on any other `/api/` route.** Expected. A token reads status only; Rules, Activity, and
+  Settings need the administrator session.
+- **405 from `/mcp`.** The client sent `GET` or `DELETE`. The MCP server is stateless and answers
+  `POST` only; use a client that speaks MCP over streamable HTTP.
+- **404 from `/mcp/`.** The address has a trailing slash or a longer path. Use exactly `/mcp`.
+- **503 from `/mcp`.** The service is starting or stopping. Try again after `/health` answers.
+
+If status answers but its verdict surprises you:
+
+- **`stalled` with `"scheduler": {"configured": false}`.** This installation has no scheduler,
+  usually because the master key or Google credentials are missing from `.env`. Configure them and
+  restart.
+- **`stalled` with a configured scheduler.** No scheduled pass has completed for more than 15
+  minutes, or one has run for more than 3 hours. Check the container logs, then restart the service.
+- **A rule shows "Not synced in over a day".** The last pass tried the rule, but it has not
+  succeeded for more than 24 hours. Open the rule; a rule you just resumed is not counted until a
+  pass has tried it.
+- **"Unnamed calendar" in rule names.** Status never shows a calendar name that is an email address
+  or a calendar ID. The Web UI still shows the full name.
+
 ## Reading the logs
 
 The service writes one line per record to the container's standard error, timestamped in UTC:

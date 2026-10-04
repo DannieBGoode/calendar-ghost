@@ -21,6 +21,7 @@ dependencies = [
   "fastapi>=0.115,<1",
   "google-api-python-client>=2.160,<3",
   "google-auth-oauthlib>=1.2,<2",
+  "mcp>=2.3,<3",
   "uvicorn[standard]>=0.34,<1",
 ]
 
@@ -100,6 +101,7 @@ forbidden_modules = [
   "google",
   "google_auth_oauthlib",
   "googleapiclient",
+  "mcp",
   "pydantic",
   "smtplib",
   "sqlite3",
@@ -122,6 +124,12 @@ type = "protected"
 protected_modules = ["google", "google_auth_oauthlib", "googleapiclient"]
 # Composing or calling the adapter is fine; importing SDK types directly is not.
 allowed_importers = ["calendar_sync.infrastructure.google"]
+
+[[tool.importlinter.contracts]]
+name = "The MCP SDK stays in the MCP interface"
+type = "protected"
+protected_modules = ["mcp"]
+allowed_importers = ["calendar_sync.interfaces.mcp"]
 
 [[tool.importlinter.contracts]]
 name = "Web framework stays in interfaces"

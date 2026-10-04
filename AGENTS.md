@@ -118,7 +118,8 @@ web/ and interfaces/  ->  application/  ->  domain/
 - Validate paths against resolved trusted roots before serving files.
 - Keep administrator-only API routes behind the session dependency. Only setup, login, the
   state-protected OAuth callback, static application files, and `/health` are intentionally public;
-  `/health` is the only unauthenticated operational status route.
+  `/health` is the only unauthenticated operational status route. `/api/v1/status` and `/mcp` are
+  the only routes that accept an Integration Token, and `/mcp` accepts nothing else (ADR 0024).
 - Google writes use `sendUpdates=none`. A change that could email attendees or mutate source events
   is release-blocking.
 - Preserve least-privilege OAuth scopes and encrypted credential storage.

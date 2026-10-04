@@ -220,7 +220,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == list(range(1, 18))
+    assert versions == list(range(1, 19))
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),

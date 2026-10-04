@@ -14,6 +14,7 @@ from calendar_sync.application.activity import (
     BLOCK_ACTIONS,
     LEGACY_SKIP_REASON,
     NO_CHANGE_REASONS,
+    AccountStanding,
     ActivityEntry,
     ActivityEvent,
     ActivityFilter,
@@ -267,12 +268,12 @@ class SqliteOperationsQueries:
 
     def overview(self) -> OperationsOverview:
         with _reading(self._database_path) as connection:
-            account_states = {
-                str(row[0]): int(row[1])
+            accounts = tuple(
+                AccountStanding(str(row["id"]), str(row["state"]), str(row["provider"]))
                 for row in connection.execute(
-                    "SELECT state, COUNT(*) FROM connected_accounts GROUP BY state"
+                    "SELECT id, state, provider FROM connected_accounts ORDER BY id"
                 )
-            }
+            )
             incidents = int(
                 connection.execute(
                     "SELECT COUNT(*) FROM incidents WHERE state = 'open'"
@@ -283,11 +284,12 @@ class SqliteOperationsQueries:
             ).fetchone()[0]
             blocks = open_blocks(connection)
         return OperationsOverview(
-            connected_accounts=account_states.get("connected", 0),
-            disconnected_accounts=account_states.get("disconnected", 0),
+            connected_accounts=sum(account.state == "connected" for account in accounts),
+            disconnected_accounts=sum(account.state == "disconnected" for account in accounts),
             open_incidents=incidents,
             last_synced_at=last_synced_at,
             open_blocks=tuple(OpenBlock(entry_id, rule_id) for entry_id, rule_id in blocks),
+            accounts=accounts,
         )
 
     def incidents(self) -> list[IncidentSummary]:
