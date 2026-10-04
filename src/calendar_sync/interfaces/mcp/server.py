@@ -11,6 +11,7 @@ from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import Headers
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from calendar_sync import __version__
@@ -140,14 +141,12 @@ class McpGate:
         self._services = services
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        headers = {
-            key.decode("latin-1"): value.decode("latin-1") for key, value in scope["headers"]
-        }
+        # Starlette's Headers keeps the first of repeated headers, as /api/v1/status does.
         access = await run_in_threadpool(
             status_access,
             self._services.integration_tokens,
             self._services.administrator,
-            headers.get("authorization"),
+            Headers(scope=scope).get("authorization"),
             None,
         )
         if access is StatusAccess.UNAUTHENTICATED:

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import sqlite3
-from collections.abc import Iterator
-from dataclasses import replace
+from collections.abc import Iterator, MutableMapping
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
 
+from calendar_sync.application.ports import IntegrationTokenScope
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
 from calendar_sync.interfaces.api.app import create_app
+from calendar_sync.interfaces.mcp.server import McpEndpoint, McpServices
 from tests.helpers import rule
 
 PASSWORD = {"password": "correct horse battery staple"}
@@ -152,3 +156,72 @@ def test_paths_below_mcp_are_not_found_and_the_web_ui_is_unaffected(mcp: Any) ->
     assert web_ui.status_code == 200
     assert web_ui.headers["content-type"].startswith("text/html")
     assert "mcp" not in client.get("/api/openapi.json").text
+
+
+def test_the_first_authorization_header_decides_as_on_the_status_api(mcp: Any) -> None:
+    client, token = mcp
+    client.cookies.clear()
+    body = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    good_first = [("Authorization", f"Bearer {token}"), ("Authorization", "Bearer nope")]
+    bad_first = list(reversed(good_first))
+
+    def codes(headers: list[tuple[str, str]]) -> tuple[int, int]:
+        mcp_code = client.post("/mcp", headers=[*JSON_HEADERS.items(), *headers], json=body)
+        api_code = client.get("/api/v1/status", headers=headers)
+        return mcp_code.status_code, api_code.status_code
+
+    assert codes(good_first) == (200, 200)
+    assert codes(bad_first) == (401, 401)
+
+
+@dataclass(frozen=True)
+class _Summary:
+    scope: object
+
+
+@dataclass(frozen=True)
+class _Tokens:
+    scope: object
+
+    def authenticate(self, token: str) -> _Summary:
+        return _Summary(self.scope)
+
+
+@dataclass(frozen=True)
+class _Services:
+    integration_tokens: _Tokens
+    administrator: None = None
+    get_installation_status: None = None
+    get_sync_rule_details: None = None
+
+
+def _call_gate(scope: object) -> tuple[int, dict[str, str]]:
+    """POST /mcp with a bearer token straight to the gate of an MCP endpoint that is not running."""
+    endpoint = McpEndpoint(cast(McpServices, _Services(_Tokens(scope))))
+    sent: list[MutableMapping[str, Any]] = []
+
+    async def receive() -> MutableMapping[str, Any]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: MutableMapping[str, Any]) -> None:
+        sent.append(message)
+
+    request = {
+        "type": "http",
+        "method": "POST",
+        "path": "/mcp",
+        "headers": [(b"authorization", b"Bearer cgs_token")],
+    }
+    asyncio.run(endpoint.app(request, receive, send))
+    return sent[0]["status"], json.loads(sent[1]["body"])
+
+
+def test_a_token_without_the_status_scope_is_forbidden() -> None:
+    assert _call_gate("rules:write") == (403, {"detail": "token lacks the required scope"})
+
+
+def test_a_valid_token_before_the_server_starts_gets_service_unavailable() -> None:
+    assert _call_gate(IntegrationTokenScope.STATUS_READ) == (
+        503,
+        {"detail": "the MCP server is starting or stopping"},
+    )
