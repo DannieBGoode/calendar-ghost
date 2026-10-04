@@ -132,6 +132,28 @@ describe("IntegrationsSection", () => {
     expect(container.querySelector(".token-reveal code")?.textContent).toBe(issued.token)
   })
 
+  it("says the token was copied, then offers to copy it again", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true })
+    await renderSection()
+    await issueToken("Claude Code")
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    try {
+      click(button("Copy token"))
+      await settle()
+      expect(writeText).toHaveBeenCalledWith(issued.token)
+      expect(button("Copied")).toBeTruthy()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000)
+      })
+      expect(button("Copy token")).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("confirms a revoke and returns focus to that token's Revoke button on cancel", async () => {
     await renderSection()
     const revoke = button("Revoke", rowOf("Homepage"))

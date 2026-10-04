@@ -750,6 +750,9 @@ function SettingsView({
   )
 }
 
+// How long the Copy button says "Copied" before it offers to copy again.
+const COPIED_FOR_MS = 2000
+
 export function IntegrationsSection() {
   const queryClient = useQueryClient()
   const now = useNow()
@@ -760,6 +763,11 @@ export function IntegrationsSection() {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "unavailable">("idle")
   const revokeTriggers = useRef<Record<string, HTMLButtonElement | null>>({})
   const origin = window.location.origin
+  useEffect(() => {
+    if (copyState !== "copied") return
+    const timer = window.setTimeout(() => setCopyState("idle"), COPIED_FOR_MS)
+    return () => window.clearTimeout(timer)
+  }, [copyState])
   const issue = useMutation({
     mutationFn: () => api.issueIntegrationToken(name),
     onSuccess: async (token) => {
