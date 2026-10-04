@@ -11,8 +11,8 @@ from calendar_sync.application.activity import (
     ActivityEvent,
     ActivityFilter,
     ActivityQueries,
+    Dashboard,
     FieldChange,
-    GetDashboard,
     InspectActivityEvent,
     RecordedTime,
 )
@@ -22,6 +22,7 @@ from calendar_sync.application.errors import (
     EventInspectionUnavailable,
     ProviderFailure,
 )
+from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.domain.model import CalendarEvent, EventStatus, TimedInterval
 from calendar_sync.interfaces.api.dependencies import app_services, require_admin
 from calendar_sync.interfaces.api.schemas import (
@@ -35,13 +36,14 @@ from calendar_sync.interfaces.api.schemas import (
     RecordedTimeResponse,
     SourceChangeResponse,
 )
+from calendar_sync.interfaces.api.status_payload import problem_response
 
 
 class ActivityServices(Protocol):
     @property
     def activity(self) -> ActivityQueries: ...
     @property
-    def get_dashboard(self) -> GetDashboard: ...
+    def get_installation_status(self) -> GetInstallationStatus: ...
     @property
     def inspect_activity_event(self) -> InspectActivityEvent: ...
 
@@ -56,9 +58,13 @@ router = APIRouter()
     dependencies=[Depends(require_admin)],
 )
 def dashboard(services: Services) -> DashboardResponse:
-    summary = services.get_dashboard.execute()
+    # One read: the counts come from the same rules and overview the verdict was decided on.
+    verdict = services.get_installation_status.execute()
+    summary = Dashboard.of([rule.summary.rule.state for rule in verdict.rules], verdict.overview)
     return DashboardResponse(
-        health="healthy" if summary.healthy else "attention",
+        status=verdict.health.value,
+        needs_attention=verdict.needs_attention,
+        problems=[problem_response(problem) for problem in verdict.problems],
         connected_accounts=summary.connected_accounts,
         disconnected_accounts=summary.disconnected_accounts,
         sync_rules=summary.sync_rules,

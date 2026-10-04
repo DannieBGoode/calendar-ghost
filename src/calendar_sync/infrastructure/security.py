@@ -127,12 +127,12 @@ class SqliteAdminAuth:
                 return None
 
             token = secrets.token_urlsafe(32)
-            token_hash = _token_hash(token)
+            hashed = token_hash(token)
             now = self._clock.now()
             expires = now + SESSION_LIFETIME
             connection.execute(
                 "INSERT INTO admin_sessions(token_hash, created_at, expires_at) VALUES (?, ?, ?)",
-                (token_hash, now.isoformat(), expires.isoformat()),
+                (hashed, now.isoformat(), expires.isoformat()),
             )
             connection.execute(
                 "DELETE FROM admin_sessions WHERE expires_at <= ?", (now.isoformat(),)
@@ -146,7 +146,7 @@ class SqliteAdminAuth:
         with transaction(self._database_path) as connection:
             row = connection.execute(
                 "SELECT expires_at FROM admin_sessions WHERE token_hash = ?",
-                (_token_hash(token),),
+                (token_hash(token),),
             ).fetchone()
         return row is not None and datetime.fromisoformat(str(row["expires_at"])) > now
 
@@ -155,7 +155,7 @@ class SqliteAdminAuth:
             return
         with transaction(self._database_path) as connection:
             connection.execute(
-                "DELETE FROM admin_sessions WHERE token_hash = ?", (_token_hash(token),)
+                "DELETE FROM admin_sessions WHERE token_hash = ?", (token_hash(token),)
             )
 
 
@@ -181,5 +181,5 @@ def _derive_password(password: str, salt: bytes) -> bytes:
     )
 
 
-def _token_hash(token: str) -> str:
+def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()

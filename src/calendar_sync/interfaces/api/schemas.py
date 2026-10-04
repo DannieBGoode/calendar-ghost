@@ -11,6 +11,11 @@ ProjectionChoice = Literal["delete", "detach"]
 TentativeChoice = Literal["sync", "mark", "skip"]
 UnansweredChoice = Literal["wait", "as_tentative"]
 PrivacyPolicy = Literal["busy_only", "copy_details"]
+# The values of application.status.InstallationHealth and ProblemKind, so the schema lists them.
+InstallationHealthValue = Literal[
+    "stalled", "stopped", "review", "waiting", "paused", "setup", "healthy"
+]
+ProblemKindValue = Literal["stalled", "stopped", "review", "overdue", "blocked", "waiting"]
 
 
 class ApiResponse(BaseModel):
@@ -191,8 +196,17 @@ class RuleReplacementResponse(ApiResponse):
     conflicts: int
 
 
+class ProblemResponse(ApiResponse):
+    kind: ProblemKindValue
+    rule_id: str | None
+    summary: str
+    since: str | None
+
+
 class DashboardResponse(ApiResponse):
-    health: Literal["healthy", "attention"]
+    status: InstallationHealthValue
+    needs_attention: bool
+    problems: list[ProblemResponse]
     connected_accounts: int
     disconnected_accounts: int
     sync_rules: int
@@ -366,3 +380,77 @@ class RecentChangeResponse(ApiResponse):
     entry: AuditEntryResponse
     repeats: int
     first_occurred_at: str
+
+
+class SchedulerResponse(ApiResponse):
+    configured: bool
+    """Whether this installation runs a scheduler; `status` says whether it is keeping up."""
+    last_pass_completed_at: str | None
+    current_pass_started_at: str | None
+
+
+class StatusCountsResponse(ApiResponse):
+    rules: int
+    running: int
+    """Enabled rules that are not stopped."""
+    stopped: int
+    paused: int
+    overdue: int
+    open_incidents: int
+    blocked_events: int
+    disconnected_accounts: int
+
+
+class StatusCalendarResponse(ApiResponse):
+    calendar: str
+    provider: str | None
+
+
+class StatusRuleResponse(ApiResponse):
+    id: str
+    name: str
+    state: str
+    source: StatusCalendarResponse
+    destination: StatusCalendarResponse
+    projection: str
+    last_succeeded_at: str | None
+    running: str | None
+    problem: ProblemResponse | None
+
+
+class StatusIncidentResponse(ApiResponse):
+    rule_id: str | None
+    category: str
+    summary: str
+    opened_at: str
+
+
+class StatusResponse(ApiResponse):
+    status: InstallationHealthValue
+    needs_attention: bool
+    summary: str
+    version: str
+    checked_at: str
+    last_synced_at: str | None
+    scheduler: SchedulerResponse
+    counts: StatusCountsResponse
+    problems: list[ProblemResponse]
+    rules: list[StatusRuleResponse]
+    incidents: list[StatusIncidentResponse]
+
+
+class IntegrationTokenResponse(ApiResponse):
+    id: str
+    name: str
+    scope: Literal["status:read"]
+    created_at: str
+    last_used_at: str | None
+    revoked_at: str | None
+
+
+class IssuedIntegrationTokenResponse(IntegrationTokenResponse):
+    token: str
+
+
+class IssueIntegrationTokenRequest(BaseModel):
+    name: str = Field(max_length=200)

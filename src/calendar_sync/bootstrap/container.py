@@ -10,7 +10,6 @@ from calendar_sync.application.accounts import (
 )
 from calendar_sync.application.activity import (
     ActivityQueries,
-    GetDashboard,
     InspectActivityEvent,
     OperationsQueries,
 )
@@ -27,6 +26,7 @@ from calendar_sync.application.ports import (
     IdGenerator,
     IncidentNotifications,
     IncidentRepository,
+    IntegrationTokens,
     LogFiles,
     ProviderCallStats,
     RuleHealthRecords,
@@ -48,6 +48,7 @@ from calendar_sync.application.rules import (
     ReplaceSyncRuleCalendars,
 )
 from calendar_sync.application.run_log import UntalliedProviderCalls
+from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.application.storage import StorageAdministration
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.bootstrap.config import Settings
@@ -61,6 +62,7 @@ from calendar_sync.domain.services import (
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
+from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
 from calendar_sync.infrastructure.log_files import RotatingLogFiles
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
@@ -115,7 +117,8 @@ class Container:
     activity: ActivityQueries
     operations: OperationsQueries
     storage: StorageAdministration
-    get_dashboard: GetDashboard
+    get_installation_status: GetInstallationStatus
+    integration_tokens: IntegrationTokens
     inspect_activity_event: InspectActivityEvent
     list_sync_rules: ListSyncRules
     create_draft_rule: CreateDraftSyncRule
@@ -157,6 +160,7 @@ class Adapters:
     health_records: RuleHealthRecords
     incidents: IncidentRepository
     database_storage: DatabaseStorage
+    integration_tokens: IntegrationTokens
     notifications: IncidentNotifications | None = None
     accounts: ConnectedAccountRepository | None = None
     authorization: AccountAuthorization | None = None
@@ -208,6 +212,7 @@ def build_adapters(settings: Settings) -> Adapters:
         health_records=SqliteRuleHealthRecords(settings.database_path),
         incidents=SqliteIncidentRepository(settings.database_path, ids),
         database_storage=SqliteStorage(settings.database_path),
+        integration_tokens=SqliteIntegrationTokens(settings.database_path, clock, ids),
     )
     if not settings.master_key:
         return adapters
@@ -243,6 +248,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
     provider = adapters.calendar_provider
     accounts = adapters.accounts
     create_sync_rule = CreateSyncRule(unit_of_work)
+    list_sync_rules = ListSyncRules(unit_of_work, locks)
     rule_health = RuleHealth(
         unit_of_work,
         adapters.health_records,
@@ -301,9 +307,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         activity=adapters.activity,
         operations=adapters.operations,
         storage=StorageAdministration(adapters.database_storage, locks, clock, adapters.log_files),
-        get_dashboard=GetDashboard(unit_of_work, adapters.operations),
+        get_installation_status=GetInstallationStatus(
+            list_sync_rules, adapters.operations, clock, scheduler
+        ),
+        integration_tokens=adapters.integration_tokens,
         inspect_activity_event=InspectActivityEvent(adapters.activity, unit_of_work, provider),
-        list_sync_rules=ListSyncRules(unit_of_work, locks),
+        list_sync_rules=list_sync_rules,
         create_draft_rule=CreateDraftSyncRule(create_sync_rule, adapters.ids),
         enable_sync_rule=EnableSyncRule(unit_of_work, locks),
         pause_sync_rule=PauseSyncRule(unit_of_work, locks),
