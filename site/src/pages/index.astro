@@ -2,6 +2,7 @@
 import Layout from "../layouts/Layout.astro"
 import { messagesFor } from "../i18n"
 import Hero from "../sections/Hero.astro"
+import Week from "../sections/Week.astro"
 
 const m = messagesFor(Astro.currentLocale)
 ---
@@ -9,5 +10,6 @@ const m = messagesFor(Astro.currentLocale)
 <Layout title={m.meta.title} description={m.meta.description}>
   <main>
     <Hero m={m} />
+    <Week m={m} />
   </main>
 </Layout>
