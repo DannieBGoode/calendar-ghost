@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
+import { TRUST_DOCS } from "../src/links"
 
 /** The alternative page designs, each with the headings a visitor must find without JavaScript. */
 const VARIANTS = [
@@ -154,6 +155,12 @@ for (const variant of VARIANTS) {
         await expect.poll(() => avatar.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true)
       }
       await expect(page.locator(".mock-avatar")).toHaveCount(0)
+    })
+
+    test("each trust claim links to the documentation that proves it", async ({ page }) => {
+      await page.goto(variant.path)
+      const hrefs = await page.locator("#features a.doc-link").evaluateAll((all) => all.map((link) => link.getAttribute("href")))
+      expect(hrefs).toEqual([...TRUST_DOCS])
     })
 
     test("its section links stay on the page", async ({ page }) => {

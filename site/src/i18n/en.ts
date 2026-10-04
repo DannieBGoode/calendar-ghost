@@ -187,6 +187,8 @@ export const en = {
   },
   trust: {
     title: "Built to be trusted",
+    /** Read after a claim's title by screen readers: the title links to the proof. */
+    docs: "(read how, in the documentation)",
     cards: [
       {
         title: "Fixes itself",

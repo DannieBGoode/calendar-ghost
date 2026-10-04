@@ -1,7 +1,9 @@
 ---
+import DocLink from "../components/DocLink.astro"
 import Icon from "../components/Icon.astro"
 import type { Messages } from "../i18n"
 import type { IconName } from "../icons"
+import { TRUST_DOCS } from "../links"
 
 interface Props {
   m: Messages
@@ -30,7 +32,7 @@ const ICONS: readonly IconName[] = [
           <li>
             <h3>
               <Icon name={ICONS[index] ?? "shieldCheck"} class="claim-icon" />
-              {card.title}
+              <DocLink m={m} href={TRUST_DOCS[index] ?? TRUST_DOCS[0]}>{card.title}</DocLink>
             </h3>
             <p>{card.body}</p>
           </li>
@@ -46,7 +48,9 @@ const ICONS: readonly IconName[] = [
     list-style: none; margin: 2rem 0 0; padding: 0; display: grid; gap: 0 2.5rem;
     grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
   }
-  .claims li { padding: 1.25rem 0 1.5rem; border-top: 1px solid var(--border); }
+  .claims li { position: relative; padding: 1.25rem 0 1.5rem; border-top: 1px solid var(--border); }
+  /* The whole claim is the link's target, so it is easy to hit; its title is the link's name. */
+  .claims :global(.doc-link)::after { content: ""; position: absolute; inset: 0; }
   .claims h3 { display: flex; align-items: flex-start; gap: 0.55rem; margin-bottom: 0.4rem; }
   .claims :global(.claim-icon) {
     flex: none; width: 1.25rem; height: 1.25rem; margin-top: 0.05rem; color: var(--primary); stroke-width: 2;

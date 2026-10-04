@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
+import { TRUST_DOCS } from "../src/links"
 
 const split = (page: Page) =>
   page.locator(".reveal-frame").evaluate((frame) => getComputedStyle(frame).getPropertyValue("--split").trim())
@@ -186,4 +187,14 @@ test("calendars show Sam's portraits, never letters", async ({ page }) => {
     await expect.poll(() => avatar.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true)
   }
   await expect(page.locator(".mock-avatar")).toHaveCount(0)
+})
+
+test("each trust claim links to the documentation that proves it", async ({ page }) => {
+  await page.goto("/")
+  const links = page.locator("#features a.doc-link")
+  expect(await links.evaluateAll((all) => all.map((link) => link.getAttribute("href")))).toEqual([...TRUST_DOCS])
+  for (const [index, link] of (await links.all()).entries()) {
+    await expect(link).toContainText(en.trust.cards[index]!.title)
+    await expect(link).toContainText(en.trust.docs)
+  }
 })

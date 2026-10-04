@@ -2,12 +2,14 @@
 // Built to be trusted: four claims proved by the ghost in small looping scenes (one pause control
 // for all of them), then the other claims as a compact checklist.
 import Avatar from "../../components/Avatar.astro"
+import DocLink from "../../components/DocLink.astro"
 import Icon from "../../components/Icon.astro"
 import "./trust.css"
 import type { Messages } from "../../i18n"
 import type { IconName } from "../../icons"
 import { Ghost, SpeechBubble } from "../../islands/Ghost"
 import { LoopStage } from "../../islands/LoopStage"
+import { TRUST_DOCS } from "../../links"
 
 interface Props {
   m: Messages
@@ -16,6 +18,7 @@ interface Props {
 const { m } = Astro.props
 const copy = m.variants.bold.trust
 const [fixes, preview, emails, loops, ...rest] = m.trust.cards
+const [fixesDoc, previewDoc, emailsDoc, loopsDoc, ...restDocs] = TRUST_DOCS
 // One icon per remaining claim, in the order of `trust.cards` after the first four.
 const REST_ICONS: readonly IconName[] = ["repeat", "listChecks", "shieldCheck", "activity"]
 const previews = [
@@ -43,7 +46,7 @@ const previews = [
             </span>
             <span class="b-scene-log b-fix-log">{copy.fixLog}</span>
           </div>
-          <h3>{fixes.title}</h3>
+          <h3><DocLink m={m} href={fixesDoc}>{fixes.title}</DocLink></h3>
           <p>{fixes.body}</p>
         </li>
         <li class="b-proof b-proof-preview">
@@ -66,7 +69,7 @@ const previews = [
               <SpeechBubble side="top" className="b-scene-bubble">{copy.says.preview}</SpeechBubble>
             </span>
           </div>
-          <h3>{preview.title}</h3>
+          <h3><DocLink m={m} href={previewDoc}>{preview.title}</DocLink></h3>
           <p>{preview.body}</p>
         </li>
         <li class="b-proof b-proof-mail">
@@ -84,7 +87,7 @@ const previews = [
             </span>
             <span class="b-scene-log b-mail-count">{copy.emailsSent}</span>
           </div>
-          <h3>{emails.title}</h3>
+          <h3><DocLink m={m} href={emailsDoc}>{emails.title}</DocLink></h3>
           <p>{emails.body}</p>
         </li>
         <li class="b-proof b-proof-loop">
@@ -110,7 +113,7 @@ const previews = [
               </span>
             </div>
           </div>
-          <h3>{loops.title}</h3>
+          <h3><DocLink m={m} href={loopsDoc}>{loops.title}</DocLink></h3>
           <p>{loops.body}</p>
         </li>
       </ul>
@@ -124,7 +127,7 @@ const previews = [
             <li>
               <Icon name={REST_ICONS[index] ?? "shieldCheck"} class="b-check-icon" />
               <p>
-                <strong>{card.title}</strong> {card.body}
+                <strong><DocLink m={m} href={restDocs[index] ?? fixesDoc}>{card.title}</DocLink></strong> {card.body}
               </p>
             </li>
           ))

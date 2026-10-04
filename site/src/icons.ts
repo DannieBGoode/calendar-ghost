@@ -2,6 +2,7 @@
 // the page requests nothing from another host. Render them with components/Icon.astro.
 import Activity from "lucide-static/icons/activity.svg?raw"
 import ArrowRight from "lucide-static/icons/arrow-right.svg?raw"
+import ArrowUpRight from "lucide-static/icons/arrow-up-right.svg?raw"
 import Check from "lucide-static/icons/check.svg?raw"
 import CircleCheck from "lucide-static/icons/circle-check.svg?raw"
 import CircleSlash from "lucide-static/icons/circle-slash.svg?raw"
@@ -24,6 +25,7 @@ const Tilde = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill=
 export const ICONS = {
   activity: Activity,
   arrowRight: ArrowRight,
+  arrowUpRight: ArrowUpRight,
   check: Check,
   circleCheck: CircleCheck,
   circleSlash: CircleSlash,

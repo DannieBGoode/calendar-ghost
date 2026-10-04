@@ -47,3 +47,10 @@ a { color: var(--primary); }
 .btn-small { padding: 0.4rem 0.8rem; font-size: 0.875rem; }
 /* Sam's portrait for a calendar (components/Avatar.astro), round like the app's account photos. */
 .avatar { display: inline-block; flex: none; width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; }
+/* A claim's title that links to its proof in the documentation (components/DocLink.astro). */
+.doc-link {
+  color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in oklch, var(--primary), transparent 55%);
+}
+.doc-link:hover { color: var(--primary); text-decoration-color: currentColor; }
+.doc-link-icon { display: inline-block; width: 0.9em; height: 0.9em; margin-left: 0.15em; vertical-align: -0.08em; color: var(--primary); }
