@@ -9,11 +9,10 @@ Administrator, one SQLite database, one scheduler, and one application process. 
 identifier, hosted account, billing path, or remote control plane. This keeps the self-hosted data
 boundary visible in the code and makes backups and ownership understandable to the operator.
 
-A future hosted service is a separate composition boundary. It may reuse provider-independent domain
-and application code, but multi-tenant authentication, customer isolation, billing, quotas, hosted
-operations, and managed backups must not be introduced into the Community Edition by implication.
-The initial hosted architecture should prefer one isolated application and database per customer;
-pooled multi-tenancy requires a separate persistence and security review.
+The future hosted service runs this same codebase (ADR 0023). Multi-user support, billing, and an
+operator overview will be added here, with billing and plan limits behind Commercial Mode, which is
+off by default. That work needs its own ADRs for persistence and per-user data isolation before it
+starts; until then, do not add user ownership, billing, or plans to the runtime piecemeal.
 
 ## Bounded contexts
 

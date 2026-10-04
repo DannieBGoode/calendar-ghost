@@ -51,7 +51,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - The Community Edition is documented as a single-installation, privacy-first deployment under the
   GNU Affero General Public License, version 3 or later, with a separate trademark policy, data
-  ownership guide, and an explicit boundary for a future hosted service.
+  ownership guide. `LICENSE` holds the unmodified license text so GitHub and package tools detect
+  it, and contributions need no CLA. A future hosted service will run this same open code, with
+  billing behind a Commercial Mode that is off by default, so self-hosted installations keep every
+  feature (ADR 0023).
 - `provider` on Connected Account payloads (`GET /api/v1/accounts`), and `writable` on discovered
   calendars.
 - SQLite migration 17 lets `connected_accounts.provider` hold any Provider Kind; code validates the
