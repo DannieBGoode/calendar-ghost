@@ -16,9 +16,11 @@ interface Props {
   title: string
   description: string
   noindex?: boolean
+  /** Font files to preload. A page with its own typeface passes its own (default: Figtree and Fraunces). */
+  preloadFonts?: readonly string[]
 }
 
-const { title, description, noindex = false } = Astro.props
+const { title, description, noindex = false, preloadFonts = [figtreeLatinWoff2, frauncesLatinWoff2] } = Astro.props
 const site = Astro.site ?? new URL("https://calendarghost.com")
 const canonical = new URL(Astro.url.pathname, site)
 const ogImage = new URL("/og.png", site)
@@ -43,8 +45,7 @@ const alternates = hasLanguagePicker()
     <link rel="canonical" href={canonical.href} />
     {alternates.map((alt) => <link rel="alternate" hreflang={alt.locale} href={alt.href} />)}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="preload" as="font" type="font/woff2" href={figtreeLatinWoff2} crossorigin />
-    <link rel="preload" as="font" type="font/woff2" href={frauncesLatinWoff2} crossorigin />
+    {preloadFonts.map((href) => <link rel="preload" as="font" type="font/woff2" href={href} crossorigin />)}
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfbfe" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0e19" />
     <meta property="og:type" content="website" />

@@ -3,8 +3,8 @@
 // three tools make of it. A dashboard tile shows the summary, an uptime monitor alerts on
 // `needs_attention`, and an agent answers through the MCP server. Facts from
 // docs/self-hosting.md section 6 and ADR 0024, nothing beyond them.
-// A page can pass its own section class for spacing; the section itself needs only the shared
-// tokens.
+// A page can pass its own section class for spacing, and put something above the heading through
+// the `eyebrow` slot; the section itself needs only the shared tokens.
 import Coded from "../components/Coded.astro"
 import CopyCommand from "../components/CopyCommand.astro"
 import Icon from "../components/Icon.astro"
@@ -30,6 +30,7 @@ const beats = Array.from({ length: BEATS }, (_, index) => index === ALERT_AT)
   <div class="container">
     <div class="int-head">
       <div class="int-intro">
+        <slot name="eyebrow" />
         <h2 id="integrations-title">{copy.title}</h2>
         <p class="int-lead">{copy.body}</p>
       </div>
