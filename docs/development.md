@@ -74,6 +74,21 @@ the profile photo returned by Google when one is available. Its seed data models
 across three context-specific identities (`sam@personal.example`, `sam@family.example`, and
 `sam@work.example`), keeping the screenshots recognizable while making each calendar's story clear.
 
+## Landing page
+
+The landing page in `site/` has its own toolchain:
+
+```sh
+npm ci --prefix site
+npm --prefix site run dev          # http://localhost:4321
+npm --prefix site run check        # astro check
+npm --prefix site test             # unit tests
+npm --prefix site run build && npm --prefix site run audit:dist
+npm --prefix site run e2e          # Playwright; run `npx playwright install chromium` once
+```
+
+Cloudflare Workers Builds deploys it from `main`; other branches get preview URLs.
+
 ## Quality checks
 
 ```sh

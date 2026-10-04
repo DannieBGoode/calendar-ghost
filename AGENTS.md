@@ -103,6 +103,20 @@ web/ and interfaces/  ->  application/  ->  domain/
 - React Doctor (`npm --prefix web run doctor`) fails on any warning. Fix the code; change
   `web/doctor.config.ts` only for a documented false positive.
 
+## Landing page
+
+`site/` is the public landing page for `calendarghost.com`, an Astro site deployed by Cloudflare
+Workers Builds. It is not part of the application: it has its own `package.json`, is excluded from
+the Docker build context, and has its own `Site` workflow.
+
+- It follows the Landing Page Register Rule in `DESIGN.md`: the ghost may play, explanations stay
+  literal, and every decorative motion stops under reduced motion.
+- All copy lives in `site/src/i18n/en.ts`; components contain no literal copy. Copy must stay true
+  to `CONTEXT.md`; `tests/test_ubiquitous_language.py` searches it.
+- The page contacts no host but its own: no analytics, trackers, CDNs, remote fonts, or live
+  GitHub requests. `npm run audit:dist` and the Playwright tests enforce this.
+- Self-host commands must match the README's quick start; a unit test compares them.
+
 ## Synchronization and persistence safety
 
 - Provider writes must use stable Operation Keys and private Managed Origin metadata.
