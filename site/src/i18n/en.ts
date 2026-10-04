@@ -108,10 +108,10 @@ export const en = {
     cards: [
       {
         title: "Fixes itself",
-        body: "Someone edits or deletes a synced event? The next sync puts it back the way the source calendar says.",
+        body: "Someone edits or deletes an event Calendar Ghost added? The next sync puts it back the way the source calendar says.",
       },
       { title: "Preview first", body: "A rule cannot start until you have seen exactly what it will write." },
-      { title: "Never emails your guests", body: "Synced events never send invitations or updates to anyone." },
+      { title: "Never emails your guests", body: "Events Calendar Ghost adds never send invitations or updates to anyone." },
       {
         title: "No loops",
         body: "Events that Calendar Ghost creates are never synced again, even with rules in both directions.",
