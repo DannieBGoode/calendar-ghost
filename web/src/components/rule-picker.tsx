@@ -3,7 +3,14 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
 import type { ConnectedAccount } from "@/lib/api"
-import { movedIndex, openingIndex, typeaheadIndex } from "@/lib/rule-picker"
+import {
+  isTypeaheadKey,
+  listCommand,
+  movedIndex,
+  openingIndex,
+  typeaheadIndex,
+  type ListCommand,
+} from "@/lib/rule-picker"
 import { cn } from "@/lib/utils"
 
 export type RulePickerEndpoint = {
@@ -26,7 +33,6 @@ export type RulePickerOption = {
  * account avatars. Focus stays on the combobox; the active option is named by
  * aria-activedescendant.
  */
-// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function RulePicker({
   id: comboId,
   labelId,
@@ -57,8 +63,6 @@ export function RulePicker({
   const [active, setActive] = useState(0)
   const selectedIndex = options.findIndex((option) => option.value === value)
   const selected = options[selectedIndex] ?? options[0]
-  const current = options.filter((option) => !option.removed)
-  const removed = options.filter((option) => option.removed)
 
   useEffect(() => {
     if (!open) return
@@ -86,7 +90,7 @@ export function RulePicker({
     )
   }
 
-  const clearable = clearValue !== undefined && value !== clearValue && selectedIndex >= 0
+  const clearable = canClear(value, clearValue, selectedIndex)
 
   function clear() {
     setOpen(false)
@@ -94,62 +98,38 @@ export function RulePicker({
     comboRef.current?.focus()
   }
 
-  // eslint-disable-next-line complexity -- debt: split this before adding to it
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const printable = event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey
-    if (!open && clearable && (event.key === "Delete" || event.key === "Backspace")) {
+  function handleClosedKey(event: KeyboardEvent<HTMLDivElement>, printable: boolean) {
+    if (clearable && (event.key === "Delete" || event.key === "Backspace")) {
       event.preventDefault()
       clear()
       return
     }
-    if (!open) {
-      const index = printable ? findTyped(event.key, selectedIndex) : openingIndex(event.key, event.altKey, selectedIndex, options.length)
-      if (index === null || index < 0) return
-      event.preventDefault()
-      show(index)
-      return
-    }
-    if (event.key === "Escape") {
-      event.preventDefault()
-      setOpen(false)
-      return
-    }
-    if (event.key === "Enter" || event.key === " " || (event.altKey && event.key === "ArrowUp")) {
-      event.preventDefault()
-      choose(active)
-      return
-    }
-    if (event.key === "Tab") {
-      choose(active)
-      return
-    }
+    const index = printable ? findTyped(event.key, selectedIndex) : openingIndex(event.key, event.altKey, selectedIndex, options.length)
+    if (index === null || index < 0) return
+    event.preventDefault()
+    show(index)
+  }
+
+  function runListCommand(event: KeyboardEvent<HTMLDivElement>, command: ListCommand) {
+    // Tab keeps its default so focus still moves on.
+    if (command !== "chooseAndLeave") event.preventDefault()
+    if (command === "close") setOpen(false)
+    else choose(active)
+  }
+
+  function moveWithKey(event: KeyboardEvent<HTMLDivElement>, printable: boolean) {
     const moved = printable ? findTyped(event.key, active) : movedIndex(event.key, active, options.length)
     if (moved === null || moved < 0) return
     event.preventDefault()
     setActive(moved)
   }
 
-  function renderOption(option: RulePickerOption) {
-    const index = options.indexOf(option)
-    const isSelected = option.value === selected?.value
-    return (
-      <div
-        key={option.value || "all"}
-        id={`${id}-option-${index}`}
-        role="option"
-        aria-selected={isSelected}
-        data-index={index}
-        data-active={open && index === active}
-        className="rule-picker-option"
-        // Keep focus on the combobox while choosing with the pointer.
-        onMouseDown={(event) => event.preventDefault()}
-        onMouseMove={() => setActive(index)}
-        onClick={() => choose(index)}
-      >
-        <RuleOptionContent option={option} showAccounts={showAccounts} />
-        <Check aria-hidden="true" className="rule-picker-check" data-visible={isSelected} />
-      </div>
-    )
+  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    const printable = isTypeaheadKey(event)
+    const command = listCommand(event.key, event.altKey)
+    if (!open) handleClosedKey(event, printable)
+    else if (command) runListCommand(event, command)
+    else moveWithKey(event, printable)
   }
 
   return (
@@ -192,17 +172,84 @@ export function RulePicker({
         className="rule-picker-list"
         hidden={!open}
       >
-        {current.map(renderOption)}
-        {removed.length > 0 && (
-          <div role="group" aria-labelledby={`${id}-removed`} className="rule-picker-group">
-            <div id={`${id}-removed`} role="presentation" className="rule-picker-group-label">
-              Removed rules
-            </div>
-            {removed.map(renderOption)}
-          </div>
-        )}
+        <RulePickerOptions
+          id={id}
+          options={options}
+          selectedValue={selected?.value}
+          open={open}
+          active={active}
+          showAccounts={showAccounts}
+          onActivate={setActive}
+          onChoose={choose}
+        />
       </div>
     </div>
+  )
+}
+
+/** Clearing is offered once a known option other than the unfiltered value is chosen. */
+function canClear(value: string, clearValue: string | undefined, selectedIndex: number): boolean {
+  return clearValue !== undefined && value !== clearValue && selectedIndex >= 0
+}
+
+/** The listbox's options: current rules first, then removed ones in their own group. */
+function RulePickerOptions({
+  id,
+  options,
+  selectedValue,
+  open,
+  active,
+  showAccounts,
+  onActivate,
+  onChoose,
+}: {
+  id: string
+  options: RulePickerOption[]
+  selectedValue: string | undefined
+  open: boolean
+  active: number
+  showAccounts: boolean
+  onActivate: (index: number) => void
+  onChoose: (index: number) => void
+}) {
+  const current = options.filter((option) => !option.removed)
+  const removed = options.filter((option) => option.removed)
+
+  function renderOption(option: RulePickerOption) {
+    const index = options.indexOf(option)
+    const isSelected = option.value === selectedValue
+    return (
+      <div
+        key={option.value || "all"}
+        id={`${id}-option-${index}`}
+        role="option"
+        aria-selected={isSelected}
+        data-index={index}
+        data-active={open && index === active}
+        className="rule-picker-option"
+        // Keep focus on the combobox while choosing with the pointer.
+        onMouseDown={(event) => event.preventDefault()}
+        onMouseMove={() => onActivate(index)}
+        onClick={() => onChoose(index)}
+      >
+        <RuleOptionContent option={option} showAccounts={showAccounts} />
+        <Check aria-hidden="true" className="rule-picker-check" data-visible={isSelected} />
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {current.map(renderOption)}
+      {removed.length > 0 && (
+        <div role="group" aria-labelledby={`${id}-removed`} className="rule-picker-group">
+          <div id={`${id}-removed`} role="presentation" className="rule-picker-group-label">
+            Removed rules
+          </div>
+          {removed.map(renderOption)}
+        </div>
+      )}
+    </>
   )
 }
 

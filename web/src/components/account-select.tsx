@@ -3,7 +3,14 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
 import type { ConnectedAccount } from "@/lib/api"
-import { movedIndex, openingIndex, typeaheadIndex } from "@/lib/rule-picker"
+import {
+  isTypeaheadKey,
+  listCommand,
+  movedIndex,
+  openingIndex,
+  typeaheadIndex,
+  type ListCommand,
+} from "@/lib/rule-picker"
 
 /** A select-only account combobox whose options retain the connected account identity. */
 export function AccountSelect({
@@ -56,36 +63,35 @@ export function AccountSelect({
     )
   }
 
-  // eslint-disable-next-line complexity -- debt: split this before adding to it
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    const printable = event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey
-    if (!open) {
-      const index = printable
-        ? findTyped(event.key, selectedIndex)
-        : openingIndex(event.key, event.altKey, selectedIndex, accounts.length)
-      if (index === null || index < 0) return
-      event.preventDefault()
-      show(index)
-      return
-    }
-    if (event.key === "Escape") {
-      event.preventDefault()
-      setOpen(false)
-      return
-    }
-    if (event.key === "Enter" || event.key === " " || (event.altKey && event.key === "ArrowUp")) {
-      event.preventDefault()
-      choose(activeIndex)
-      return
-    }
-    if (event.key === "Tab") {
-      choose(activeIndex)
-      return
-    }
+  function openWithKey(event: KeyboardEvent<HTMLButtonElement>, printable: boolean) {
+    const index = printable
+      ? findTyped(event.key, selectedIndex)
+      : openingIndex(event.key, event.altKey, selectedIndex, accounts.length)
+    if (index === null || index < 0) return
+    event.preventDefault()
+    show(index)
+  }
+
+  function runListCommand(event: KeyboardEvent<HTMLButtonElement>, command: ListCommand) {
+    // Tab keeps its default so focus still moves on.
+    if (command !== "chooseAndLeave") event.preventDefault()
+    if (command === "close") setOpen(false)
+    else choose(activeIndex)
+  }
+
+  function moveWithKey(event: KeyboardEvent<HTMLButtonElement>, printable: boolean) {
     const moved = printable ? findTyped(event.key, activeIndex) : movedIndex(event.key, activeIndex, accounts.length)
     if (moved === null || moved < 0) return
     event.preventDefault()
     setActive(moved)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    const printable = isTypeaheadKey(event)
+    const command = listCommand(event.key, event.altKey)
+    if (!open) openWithKey(event, printable)
+    else if (command) runListCommand(event, command)
+    else moveWithKey(event, printable)
   }
 
   return (

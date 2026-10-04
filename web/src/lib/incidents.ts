@@ -30,30 +30,36 @@ const AUTHORIZATION = new Set(["authentication", "authorization"])
 const STOPPED = new Set(["permanent", "infrastructure"])
 const RETRYING = new Set(["rate_limit", "temporary"])
 
+/** An action on the incident's rule, offered only while the rule still exists. */
+function ruleAction(kind: "rule" | "blocked", ruleId: string | null, label: string): IncidentAction | null {
+  return ruleId ? { kind, ruleId, label } : null
+}
+
+function authorizationGuidance(ruleId: string | null, rule: IncidentRuleState | null): IncidentGuidance {
+  // Reauthorizing renews access but leaves the rule stopped; only its recovery closes this.
+  if (ruleId && rule?.accessRenewed) {
+    return {
+      detail: "Google access is renewed, but the rule stays stopped until it is recovered.",
+      action: { kind: "rule", ruleId, label: "Recover this rule" },
+    }
+  }
+  return {
+    detail: "Nothing is written until the Google account is reauthorized. Existing events stay where they are.",
+    action: { kind: "settings", label: "Reauthorize in Settings" },
+  }
+}
+
 /**
  * The next step for an open incident, in the terms of what its category needs. A rule action is
  * offered only while the rule still exists.
  */
-// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function incidentGuidance(incident: Incident, rule: IncidentRuleState | null): IncidentGuidance {
   const ruleId = rule ? incident.rule_id : null
-  if (AUTHORIZATION.has(incident.category)) {
-    // Reauthorizing renews access but leaves the rule stopped; only its recovery closes this.
-    if (ruleId && rule?.accessRenewed) {
-      return {
-        detail: "Google access is renewed, but the rule stays stopped until it is recovered.",
-        action: { kind: "rule", ruleId, label: "Recover this rule" },
-      }
-    }
-    return {
-      detail: "Nothing is written until the Google account is reauthorized. Existing events stay where they are.",
-      action: { kind: "settings", label: "Reauthorize in Settings" },
-    }
-  }
+  if (AUTHORIZATION.has(incident.category)) return authorizationGuidance(ruleId, rule)
   if (STOPPED.has(incident.category)) {
     return {
       detail: "The rule is stopped and writes nothing until it is recovered.",
-      action: ruleId ? { kind: "rule", ruleId, label: "Review this rule" } : null,
+      action: ruleAction("rule", ruleId, "Review this rule"),
     }
   }
   if (RETRYING.has(incident.category)) {
@@ -65,10 +71,10 @@ export function incidentGuidance(incident: Incident, rule: IncidentRuleState | n
   if (incident.category === "conflict") {
     return {
       detail: "The rest of the rule keeps syncing. This closes when a daily check finds nothing still blocked.",
-      action: ruleId ? { kind: "blocked", ruleId, label: "See blocked events" } : null,
+      action: ruleAction("blocked", ruleId, "See blocked events"),
     }
   }
-  return { detail: null, action: ruleId ? { kind: "rule", ruleId, label: "Review this rule" } : null }
+  return { detail: null, action: ruleAction("rule", ruleId, "Review this rule") }
 }
 
 const RESOLUTIONS: Record<NonNullable<Incident["resolution"]>, string> = {

@@ -203,13 +203,12 @@ describe("pre-paint theme bootstrap", () => {
   })
 
   it.each([
-    ["saved Midnight while dark", "dark", "midnight", "midnight", THEME_COLORS.midnight],
-    ["saved Twilight while dark", "dark", "twilight", "twilight", THEME_COLORS.twilight],
-    ["no saved palette", "dark", null, "twilight", THEME_COLORS.twilight],
-    ["invalid saved palette", "dark", "sepia", "twilight", THEME_COLORS.twilight],
-    ["saved Midnight while light", "light", "midnight", "midnight", THEME_COLORS.light],
-  // eslint-disable-next-line max-params -- debt: split this before adding to it
-  ] as const)("applies %s before paint", (_case, storedTheme, storedPalette, palette, color) => {
+    { name: "saved Midnight while dark", storedTheme: "dark", storedPalette: "midnight", palette: "midnight", color: THEME_COLORS.midnight },
+    { name: "saved Twilight while dark", storedTheme: "dark", storedPalette: "twilight", palette: "twilight", color: THEME_COLORS.twilight },
+    { name: "no saved palette", storedTheme: "dark", storedPalette: null, palette: "twilight", color: THEME_COLORS.twilight },
+    { name: "invalid saved palette", storedTheme: "dark", storedPalette: "sepia", palette: "twilight", color: THEME_COLORS.twilight },
+    { name: "saved Midnight while light", storedTheme: "light", storedPalette: "midnight", palette: "midnight", color: THEME_COLORS.light },
+  ] as const)("applies $name before paint", ({ storedTheme, storedPalette, palette, color }) => {
     const { root, meta } = runBootstrap(storedTheme, false, false, storedPalette)
 
     expect((root.dataset as Record<string, string>).palette).toBe(palette)

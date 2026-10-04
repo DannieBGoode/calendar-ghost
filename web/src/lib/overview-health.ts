@@ -87,117 +87,131 @@ function ruleAction(problem: RuleProblem): HealthAction {
   return { label: "Review this rule", view: "rules", ruleId: problem.ruleId }
 }
 
-/** Every current problem, most urgent first. */
-// eslint-disable-next-line complexity -- debt: split this before adding to it
-function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[] {
-  const problems: Problem[] = []
-  const of = (kind: RuleProblem["kind"]) => ruleProblems.filter((problem) => problem.kind === kind)
-  const stoppedHeadline =
-    dashboard.stopped_rules === 1 ? "A rule stopped syncing" : `${dashboard.stopped_rules} rules stopped syncing`
+function stoppedHeadline(dashboard: Dashboard): string {
+  return dashboard.stopped_rules === 1 ? "A rule stopped syncing" : `${dashboard.stopped_rules} rules stopped syncing`
+}
 
-  if (dashboard.disconnected_accounts > 0 && dashboard.stopped_rules > 0) {
-    const title = `${count(dashboard.disconnected_accounts, "Google account")} ${dashboard.disconnected_accounts === 1 ? "needs" : "need"} reauthorization`
-    problems.push({
-      tone: "stopped",
-      headline: stoppedHeadline,
-      title,
-      detail: `Access was removed or expired, so its rules write nothing until you reauthorize. ${ALREADY_SYNCED}`,
-      action: { label: "Reauthorize in Settings", view: "settings" },
-      summary: title,
-    })
-  } else if (dashboard.stopped_rules > 0) {
-    const stopped = of("stopped")
-    const named = dashboard.stopped_rules === 1 && stopped.length === 1 ? stopped[0] : null
-    problems.push({
-      tone: "stopped",
-      headline: stoppedHeadline,
-      title: named?.name ?? "",
-      detail: named
-        ? `${named.detail} It writes nothing until it is fixed. ${ALREADY_SYNCED}`
-        : `Stopped rules write nothing until they are fixed. ${ALREADY_SYNCED}`,
-      action: named ? ruleAction(named) : { label: "Review rules", view: "rules" },
-      summary: named ? `${named.name} stopped syncing` : stoppedHeadline,
-    })
+/** Stopped rules, either because their Google account needs reauthorization or for their own reason. */
+function stoppedProblem(dashboard: Dashboard, stopped: RuleProblem[]): Problem | null {
+  if (dashboard.disconnected_accounts > 0 && dashboard.stopped_rules > 0) return reauthorizationProblem(dashboard)
+  if (dashboard.stopped_rules > 0) return stoppedRulesProblem(dashboard, stopped)
+  return null
+}
+
+function reauthorizationProblem(dashboard: Dashboard): Problem {
+  const title = `${count(dashboard.disconnected_accounts, "Google account")} ${dashboard.disconnected_accounts === 1 ? "needs" : "need"} reauthorization`
+  return {
+    tone: "stopped",
+    headline: stoppedHeadline(dashboard),
+    title,
+    detail: `Access was removed or expired, so its rules write nothing until you reauthorize. ${ALREADY_SYNCED}`,
+    action: { label: "Reauthorize in Settings", view: "settings" },
+    summary: title,
   }
+}
 
-  const review = of("review")
-  const [named] = review
+function stoppedRulesProblem(dashboard: Dashboard, stopped: RuleProblem[]): Problem {
+  const headline = stoppedHeadline(dashboard)
+  const named = dashboard.stopped_rules === 1 && stopped.length === 1 ? stopped[0] : null
   if (named) {
-    const others = review.length - 1
-    problems.push({
-      tone: "review",
-      headline: "A rule needs a look",
+    return {
+      tone: "stopped",
+      headline,
       title: named.name,
-      detail: others > 0 ? `${named.detail} ${count(others, "other problem")} also ${others === 1 ? "needs" : "need"} a look.` : named.detail,
+      detail: `${named.detail} It writes nothing until it is fixed. ${ALREADY_SYNCED}`,
       action: ruleAction(named),
-      summary: `${named.name} needs a look`,
-    })
+      summary: `${named.name} stopped syncing`,
+    }
   }
-
-  // A block leaves the rule running; it becomes an incident only if the daily check still finds it.
-  if (dashboard.blocked_events > 0 && dashboard.blocked_entry_id !== null) {
-    const one = dashboard.blocked_events === 1
-    problems.push({
-      tone: "review",
-      headline: one ? "An event needs a look" : "Some events need a look",
-      title: "",
-      detail: `${count(dashboard.blocked_events, "event")} couldn't be synced and ${one ? "was" : "were"} left unchanged. Everything else is up to date.`,
-      action: {
-        label: one ? "See the blocked event" : "See blocked events",
-        view: "activity",
-        search: activitySearch({
-          ruleId: dashboard.blocked_rule_id ?? "",
-          show: "blocked",
-          entryId: dashboard.blocked_entry_id,
-        }),
-      },
-      summary: `${count(dashboard.blocked_events, "event")} couldn't be synced`,
-    })
+  return {
+    tone: "stopped",
+    headline,
+    title: "",
+    detail: `Stopped rules write nothing until they are fixed. ${ALREADY_SYNCED}`,
+    action: { label: "Review rules", view: "rules" },
+    summary: headline,
   }
+}
 
-  const waiting = of("waiting")
-  if (waiting.length > 0) {
-    const named = waiting.length === 1 ? waiting[0] : null
-    problems.push({
-      tone: "waiting",
-      headline: "Waiting for Google",
-      title: named?.name ?? "",
-      detail: named
-        ? `${named.detail} ${RETRYING}`
-        : `Google Calendar is limiting or failing requests for ${count(waiting.length, "rule")}. ${RETRYING}`,
-      action: null,
-      summary: named ? `${named.name} is waiting for Google` : `${count(waiting.length, "rule")} waiting for Google`,
-    })
+function reviewProblem(review: RuleProblem[]): Problem | null {
+  const [named] = review
+  if (!named) return null
+  const others = review.length - 1
+  return {
+    tone: "review",
+    headline: "A rule needs a look",
+    title: named.name,
+    detail: others > 0 ? `${named.detail} ${count(others, "other problem")} also ${others === 1 ? "needs" : "need"} a look.` : named.detail,
+    action: ruleAction(named),
+    summary: `${named.name} needs a look`,
   }
+}
 
+/** A block leaves the rule running; it becomes an incident only if the daily check still finds it. */
+function blockedProblem(dashboard: Dashboard): Problem | null {
+  if (dashboard.blocked_events <= 0 || dashboard.blocked_entry_id === null) return null
+  const one = dashboard.blocked_events === 1
+  return {
+    tone: "review",
+    headline: one ? "An event needs a look" : "Some events need a look",
+    title: "",
+    detail: `${count(dashboard.blocked_events, "event")} couldn't be synced and ${one ? "was" : "were"} left unchanged. Everything else is up to date.`,
+    action: {
+      label: one ? "See the blocked event" : "See blocked events",
+      view: "activity",
+      search: activitySearch({
+        ruleId: dashboard.blocked_rule_id ?? "",
+        show: "blocked",
+        entryId: dashboard.blocked_entry_id,
+      }),
+    },
+    summary: `${count(dashboard.blocked_events, "event")} couldn't be synced`,
+  }
+}
+
+function waitingProblem(waiting: RuleProblem[]): Problem | null {
+  if (waiting.length === 0) return null
+  const named = waiting.length === 1 ? waiting[0] : null
+  return {
+    tone: "waiting",
+    headline: "Waiting for Google",
+    title: named?.name ?? "",
+    detail: named
+      ? `${named.detail} ${RETRYING}`
+      : `Google Calendar is limiting or failing requests for ${count(waiting.length, "rule")}. ${RETRYING}`,
+    action: null,
+    summary: named ? `${named.name} is waiting for Google` : `${count(waiting.length, "rule")} waiting for Google`,
+  }
+}
+
+function openIncidentsProblem(dashboard: Dashboard): Problem {
+  return {
+    tone: "review",
+    headline: "Something needs a look",
+    title: "",
+    detail: `${count(dashboard.open_incidents, "problem")} kept happening. Activity explains what happened and what to do.`,
+    action: { label: "Open Activity", view: "activity" },
+    summary: `${count(dashboard.open_incidents, "open problem")} in Activity`,
+  }
+}
+
+/** Every current problem, most urgent first. */
+function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[] {
+  const of = (kind: RuleProblem["kind"]) => ruleProblems.filter((problem) => problem.kind === kind)
+  const problems = [
+    stoppedProblem(dashboard, of("stopped")),
+    reviewProblem(of("review")),
+    blockedProblem(dashboard),
+    waitingProblem(of("waiting")),
+  ].filter((problem) => problem !== null)
   // Never healthy with an open incident, even one not described yet, such as while it loads.
-  if (problems.length === 0 && dashboard.open_incidents > 0) {
-    problems.push({
-      tone: "review",
-      headline: "Something needs a look",
-      title: "",
-      detail: `${count(dashboard.open_incidents, "problem")} kept happening. Activity explains what happened and what to do.`,
-      action: { label: "Open Activity", view: "activity" },
-      summary: `${count(dashboard.open_incidents, "open problem")} in Activity`,
-    })
-  }
+  if (problems.length === 0 && dashboard.open_incidents > 0) problems.push(openIncidentsProblem(dashboard))
   return problems
 }
 
-/**
- * One health model for the Overview, so the headline, facts, and next action can never disagree.
- * The most urgent problem leads, and the hero lists the rest below it.
- */
-// eslint-disable-next-line complexity -- debt: split this before adding to it
-export function overviewHealth(
-  dashboard: Dashboard,
-  now: number = Date.now(),
-  ruleProblems: RuleProblem[] = [],
-): OverviewHealth {
+/** Setup that comes before any rule: connecting a Google account, or renewing the only access there was. */
+function accountSetup(dashboard: Dashboard): OverviewHealth | null {
   const accounts = dashboard.connected_accounts + dashboard.disconnected_accounts
-  const lastSync = dashboard.last_synced_at ? `Last sync ${relativeTime(dashboard.last_synced_at, now)}` : null
-  const runningFacts = [`${count(dashboard.enabled_rules, "rule")} running`, lastSync ?? "Not synced yet"]
-
   if (accounts === 0) {
     return {
       tone: "setup",
@@ -220,24 +234,35 @@ export function overviewHealth(
       others: [],
     }
   }
-  const [main, ...rest] = problemsOf(dashboard, ruleProblems)
-  if (main) {
-    return {
-      tone: main.tone,
-      headline: main.headline,
-      title: main.title,
-      detail: main.detail,
-      action: main.action,
-      facts:
-        main.tone === "stopped"
-          ? [
-              dashboard.enabled_rules > 0 ? `${count(dashboard.enabled_rules, "rule")} still running` : "No rules running",
-              lastSync ?? "Waiting for recovery",
-            ]
-          : runningFacts,
-      others: rest.map(({ tone, summary, action }) => ({ tone, summary, action })),
-    }
+  return null
+}
+
+function runningFacts(dashboard: Dashboard, lastSync: string | null): string[] {
+  return [`${count(dashboard.enabled_rules, "rule")} running`, lastSync ?? "Not synced yet"]
+}
+
+function problemFacts(dashboard: Dashboard, main: Problem, lastSync: string | null): string[] {
+  if (main.tone !== "stopped") return runningFacts(dashboard, lastSync)
+  return [
+    dashboard.enabled_rules > 0 ? `${count(dashboard.enabled_rules, "rule")} still running` : "No rules running",
+    lastSync ?? "Waiting for recovery",
+  ]
+}
+
+function problemHealth(main: Problem, rest: Problem[], facts: string[]): OverviewHealth {
+  return {
+    tone: main.tone,
+    headline: main.headline,
+    title: main.title,
+    detail: main.detail,
+    action: main.action,
+    facts,
+    others: rest.map(({ tone, summary, action }) => ({ tone, summary, action })),
   }
+}
+
+/** With no problem: still creating or enabling rules, paused on purpose, or healthy. */
+function quietHealth(dashboard: Dashboard, lastSync: string | null): OverviewHealth {
   if (dashboard.sync_rules === 0) {
     return {
       tone: "setup",
@@ -249,36 +274,55 @@ export function overviewHealth(
       others: [],
     }
   }
-  if (dashboard.enabled_rules === 0) {
-    // A rule that has synced before was paused on purpose; one that never has is still being set up.
-    if (lastSync) {
-      return {
-        tone: "paused",
-        headline: "Synchronization is paused",
-        title: "",
-        detail: "Nothing is written to your calendars until you start a rule again.",
-        facts: [`${count(dashboard.sync_rules, "rule")} not running`, lastSync],
-        action: { label: "Review rules", view: "rules" },
-        others: [],
-      }
-    }
-    return {
-      tone: "setup",
-      headline: "No rule is synchronizing",
-      title: "",
-      detail: "Preview a rule, then enable it to start writing to its destination calendar.",
-      facts: [],
-      action: { label: "Review rules", view: "rules" },
-      others: [],
-    }
-  }
+  if (dashboard.enabled_rules === 0) return notRunningHealth(dashboard, lastSync)
   return {
     tone: "healthy",
     headline: "Synchronization is healthy",
     title: "",
     detail: "Calendar Ghost checks your calendars for changes every five minutes.",
-    facts: runningFacts,
+    facts: runningFacts(dashboard, lastSync),
     action: null,
     others: [],
   }
+}
+
+function notRunningHealth(dashboard: Dashboard, lastSync: string | null): OverviewHealth {
+  // A rule that has synced before was paused on purpose; one that never has is still being set up.
+  if (lastSync) {
+    return {
+      tone: "paused",
+      headline: "Synchronization is paused",
+      title: "",
+      detail: "Nothing is written to your calendars until you start a rule again.",
+      facts: [`${count(dashboard.sync_rules, "rule")} not running`, lastSync],
+      action: { label: "Review rules", view: "rules" },
+      others: [],
+    }
+  }
+  return {
+    tone: "setup",
+    headline: "No rule is synchronizing",
+    title: "",
+    detail: "Preview a rule, then enable it to start writing to its destination calendar.",
+    facts: [],
+    action: { label: "Review rules", view: "rules" },
+    others: [],
+  }
+}
+
+/**
+ * One health model for the Overview, so the headline, facts, and next action can never disagree.
+ * The most urgent problem leads, and the hero lists the rest below it.
+ */
+export function overviewHealth(
+  dashboard: Dashboard,
+  now: number = Date.now(),
+  ruleProblems: RuleProblem[] = [],
+): OverviewHealth {
+  const lastSync = dashboard.last_synced_at ? `Last sync ${relativeTime(dashboard.last_synced_at, now)}` : null
+  const setup = accountSetup(dashboard)
+  if (setup) return setup
+  const [main, ...rest] = problemsOf(dashboard, ruleProblems)
+  if (main) return problemHealth(main, rest, problemFacts(dashboard, main, lastSync))
+  return quietHealth(dashboard, lastSync)
 }
