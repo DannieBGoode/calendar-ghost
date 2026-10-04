@@ -37,10 +37,9 @@ The Community Edition is licensed under the [GNU Affero General Public License, 
 Contributions are welcome under that same license. Contributors retain copyright in their work and
 must have the right to submit it under the Community Edition license.
 
-The future hosted service may have separate commercial infrastructure and terms, but the project
-will not quietly relicense community contributions into a proprietary product. Any future request
-to reuse a contribution under separate commercial terms must be handled through a contributor
-agreement that is published and reviewed before it is used for that purpose.
+There is no contributor license agreement (CLA) and no copyright assignment. Your contribution
+stays yours and enters the project only under the AGPL, so no one, including the maintainer, can
+relicense it under other terms without your permission.
 
 By contributing, you agree that your contribution may be distributed as part of the Community
 Edition under the GNU Affero General Public License, version 3 or later.

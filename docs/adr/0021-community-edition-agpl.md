@@ -1,5 +1,8 @@
 # License the Community Edition under AGPLv3 or later
 
+Amended by [ADR 0023](0023-hosted-service-runs-the-open-codebase.md): the hosted service runs this
+open codebase with no closed components, so the separate hosted boundary below no longer applies.
+
 ## Context
 
 Calendar Ghost is intended for self-hosting and privacy-conscious communities. Those communities
@@ -25,8 +28,11 @@ OSI-approved Open Source and would be easy to misrepresent in self-hosting forum
   separate composition boundary and must receive a deliberate architecture and legal review for
   AGPL compliance, customer isolation, proprietary additions, and operational terms.
 - Contributions are accepted under the published AGPL. Contributors retain copyright and must have
-  the right to submit their work. The project will not silently reuse community contributions under
-  separate proprietary terms.
+  the right to submit their work. There is no contributor license agreement or copyright
+  assignment, so the project cannot reuse community contributions under separate proprietary terms
+  without their authors' permission.
+- The hosted service charges for operating Calendar Ghost, not for features. The Community Edition
+  does not have features removed, limited, or held back to push people toward it.
 
 ## Consequences
 
@@ -36,9 +42,13 @@ the business must compete through managed operations, support, upgrades, backups
 trust, and product experience rather than an exclusive legal claim over the AGPL code.
 
 The project must be candid that AGPL is not a no-compete license. It must also keep the source,
-build instructions, notices, and network-source path usable for modified deployments. Before the
-first public AGPL release, copyright ownership and contribution permissions for the existing
-history must be verified; earlier MIT releases remain under the license stated by those releases.
+build instructions, notices, and network-source path usable for modified deployments. The
+maintainer wrote all code in the history before the change, so the relicensing needed no other
+contributor's permission; code published under MIT before the change remains available under MIT.
+
+Without a CLA, the project gives up the option to relicense community contributions later. That is
+deliberate: it is the clearest signal to self-hosting users that the license cannot be changed
+against them.
 
 ## Alternatives considered
 

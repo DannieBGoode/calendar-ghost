@@ -22,6 +22,7 @@ from calendar_sync.application.ports import (
     AdministratorAccess,
     CalendarProvider,
     Clock,
+    ConnectedAccountRepository,
     DatabaseStorage,
     IdGenerator,
     IncidentNotifications,
@@ -150,15 +151,16 @@ class Adapters:
     clock: Clock
     ids: IdGenerator
     run_ids: RunIdGenerator
-    administrator: SqliteAdminAuth
+    administrator: AdministratorAccess
     activity: ActivityQueries
     operations: OperationsQueries
     health_records: RuleHealthRecords
     incidents: IncidentRepository
     database_storage: DatabaseStorage
     notifications: IncidentNotifications | None = None
-    accounts: SqliteConnectedAccountStore | None = None
-    google_oauth: GoogleOAuthService | None = None
+    accounts: ConnectedAccountRepository | None = None
+    authorization: AccountAuthorization | None = None
+    """Connects and reauthorizes accounts through the provider's OAuth flow."""
     account_calendars: AccountCalendars | None = None
     """Lists each account's calendars through its provider's adapter."""
     calendar_provider: CalendarProvider | None = None
@@ -225,7 +227,7 @@ def build_adapters(settings: Settings) -> Adapters:
     return replace(
         adapters,
         accounts=accounts,
-        google_oauth=google_oauth,
+        authorization=google_oauth,
         account_calendars=RoutingAccountCalendars(accounts, {ProviderKind.GOOGLE: google_oauth}),
         calendar_provider=RoutingCalendarProvider(
             accounts,
@@ -287,7 +289,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         )
         scheduler = SyncScheduler(execute_sync_rule, unit_of_work, rule_health, clock=clock)
     google_configured = bool(
-        adapters.google_oauth and settings.google_client_id and settings.google_client_secret
+        adapters.authorization and settings.google_client_id and settings.google_client_secret
     )
     return Container(
         secure_cookies=settings.secure_cookies,
@@ -320,7 +322,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         delete_connected_account=(
             DeleteConnectedAccount(unit_of_work, locks) if accounts else None
         ),
-        authorization=adapters.google_oauth,
+        authorization=adapters.authorization,
         account_calendars=adapters.account_calendars,
         discover_calendars=(
             DiscoverCalendars(adapters.account_calendars, unit_of_work)

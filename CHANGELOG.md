@@ -60,7 +60,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - The Community Edition is documented as a single-installation, privacy-first deployment under the
   GNU Affero General Public License, version 3 or later, with a separate trademark policy, data
-  ownership guide, and an explicit boundary for a future hosted service.
+  ownership guide. `LICENSE` holds the unmodified license text so GitHub and package tools detect
+  it, and contributions need no CLA. A future hosted service will run this same open code, with
+  billing behind a Commercial Mode that is off by default, so self-hosted installations keep every
+  feature (ADR 0023).
 - `provider` on Connected Account payloads (`GET /api/v1/accounts`), and `writable` on discovered
   calendars.
 - SQLite migration 17 lets `connected_accounts.provider` hold any Provider Kind; code validates the
@@ -169,6 +172,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - The Activity page now explains why it could not load: an expired session, an updated installation that needs a reload, a service error, or a request that never reached the service, such as one stopped by a content blocker.
 - Changing the Activity rule or outcome filter keeps the page, its filters, and keyboard focus on screen while the new entries load, instead of replacing the whole page with a loading placeholder.
 - Occurrences of a recurring event that already matched their projection are listed as no change instead of as skipped.
+- Every database connection now enforces foreign keys and closes when it is done, so a failure
+  recorded for a rule removed meanwhile no longer leaves a stray failure count behind.
 
 ## [0.1.0] - 2026-08-30
 

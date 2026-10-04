@@ -10,6 +10,7 @@ from pathlib import Path
 from calendar_sync.application.errors import STORAGE_BUSY_MESSAGE, StorageBusy
 from calendar_sync.application.ports import DatabaseUsage
 from calendar_sync.infrastructure.persistence.activity_queries import _BLOCK, _TITLE_OBSERVED
+from calendar_sync.infrastructure.persistence.connections import open_connection
 
 # Entries clearing never removes, besides every entry newer than the cutoff (the caller's own
 # `occurred_at < :cutoff` condition). Activity compares an entry with the earlier entries of its
@@ -50,7 +51,7 @@ class SqliteStorage:
         self._busy_timeout = busy_timeout
 
     def usage(self) -> DatabaseUsage:
-        with closing(sqlite3.connect(self._database_path)) as connection:
+        with closing(open_connection(self._database_path)) as connection:
             page_size = int(connection.execute("PRAGMA page_size").fetchone()[0])
             pages = int(connection.execute("PRAGMA page_count").fetchone()[0])
             free = int(connection.execute("PRAGMA freelist_count").fetchone()[0])
@@ -66,7 +67,7 @@ class SqliteStorage:
 
     def clearable_activity(self, before: datetime) -> int:
         cutoff = before.astimezone(UTC).isoformat()
-        with closing(sqlite3.connect(self._database_path)) as connection:
+        with closing(open_connection(self._database_path)) as connection:
             # Interpolates only the constant protected-entries query.
             row = connection.execute(
                 f"SELECT COUNT(*) FROM audit_entries WHERE occurred_at < :cutoff "  # noqa: S608
@@ -78,7 +79,7 @@ class SqliteStorage:
     def clear_activity(self, before: datetime) -> int:
         cutoff = before.astimezone(UTC).isoformat()
         removed = 0
-        with closing(sqlite3.connect(self._database_path)) as connection:
+        with closing(open_connection(self._database_path)) as connection:
             # Chosen once, so batches never re-evaluate which entries are protected. A fresh
             # connection never carries a temp table over from an earlier call.
             # Keyed by id, so each batch reads and deletes its candidates without a full scan.
@@ -115,7 +116,7 @@ class SqliteStorage:
     def compact(self) -> None:
         try:
             with closing(
-                sqlite3.connect(
+                open_connection(
                     self._database_path, isolation_level=None, timeout=self._busy_timeout
                 )
             ) as connection:

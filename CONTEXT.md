@@ -5,17 +5,22 @@ This glossary defines the shared language for describing provider-independent ca
 ## Product Boundary
 
 **Community Edition**:
-The self-hosted, single-installation edition. One Installation Administrator operates one SQLite
-database, one scheduler, and one application process. It has no mandatory Calendar Ghost account,
-telemetry, billing path, tenant routing, or hosted control plane. The Community Edition is intended
-to remain genuine open-source software under the GNU Affero General Public License, version 3 or
-later; the name and marks are governed separately.
+The Calendar Ghost software in this repository, run on infrastructure the operator controls. Today
+one Installation Administrator operates one SQLite database, one scheduler, and one application
+process; ADR 0023 lets one installation serve many users later. It has no mandatory Calendar Ghost
+account, telemetry, or hosted control plane. The Community Edition is intended to remain genuine
+open-source software under the GNU Affero General Public License, version 3 or later; the name and
+marks are governed separately.
 
 **Hosted Service**:
-A future commercial product for operators who do not want to run the Community Edition themselves.
-It may provide managed upgrades, backups, support, availability, billing, and multi-tenant
-isolation. It is a separate composition boundary and must not be implied by adding hosted-only
-concerns to the Community Edition runtime.
+A future commercial service where the project runs the Community Edition for people who do not want
+to operate it themselves, with Commercial Mode on. It sells managed upgrades, backups, support, and
+availability. It runs the same open code, with no closed components (ADR 0023).
+
+**Commercial Mode**:
+The installation setting that enables plans, plan limits, and billing. It is off by default. When it
+is off, every user has every feature and no billing code contacts a payment provider. Only the
+Hosted Service turns it on.
 
 ## Authorization
 

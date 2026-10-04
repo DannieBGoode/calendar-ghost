@@ -21,23 +21,29 @@ The AGPL does not grant rights to use the Calendar Ghost name, logo, ghost mark,
 
 ## Hosted service
 
-The future hosted service is a separate commercial product. It may provide a multi-tenant runtime,
-managed upgrades, backups, support, and hosted availability for people who do not want to operate
-the Community Edition themselves.
+The future hosted service runs the code in this repository for people who do not want to operate it
+themselves. It has no closed components and no private fork: billing, plans, and the operator
+overview will be public code in this repository, so anyone can read what the hosted service runs.
 
-The hosted service must still comply with the AGPL for any Community Edition code it uses,
-including the network-source obligations for modified versions. Proprietary hosted components,
-customer isolation, billing, and operations need a deliberate architecture and legal review; they
-are not silently added to this single-installation repository.
+Billing and plan limits only apply when Commercial Mode is on, and it is off by default. On a
+self-hosted installation, every user has every feature, and no billing code contacts a payment
+provider. The hosted service charges for operating Calendar Ghost, not for features: the Community
+Edition will not have features removed, limited, or held back to push people toward it. See
+[ADR 0023](adr/0023-hosted-service-runs-the-open-codebase.md).
 
 ## Contributions
 
 Contributions are welcome under the AGPL. Contributors retain copyright in their work and must have
-the right to submit it under the published license. The project will not quietly relicense community
-contributions into a proprietary hosted product. If a future change requires separate commercial
-licensing, the project must publish and review a contributor agreement before relying on that right.
+the right to submit it under the published license. There is no contributor license agreement (CLA)
+and no copyright assignment, so community contributions cannot be relicensed under other terms
+without their authors' permission.
 
-Earlier releases were published under the MIT License as stated by those releases. Before the first
-public AGPL release, the project should verify copyright ownership and contribution permissions for
-the complete history. This document explains project intent and is not legal advice; the text in
+## License history
+
+Calendar Ghost was first published under the MIT License. Version 0.1.0 and the code published
+before the change to the AGPL on 2026-10-02 remain available under the MIT License. The maintainer
+wrote all code in the history up to that change, so the change needed no other contributor's
+permission.
+
+This document explains project intent and is not legal advice; the text in
 [`LICENSE`](../LICENSE) controls.
