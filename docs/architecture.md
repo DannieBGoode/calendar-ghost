@@ -60,11 +60,13 @@ check expiry and retry waits without sleeping.
 `interfaces/api/app.py` is only the factory: it installs the container, registers the routers, and
 serves the compiled Web UI after checking each requested file against the resolved static root. The
 routes live in one `APIRouter` module per resource under `interfaces/api/routes/` (session, setup,
-accounts, rules, activity, incidents, health). Each module declares a small protocol for the
+accounts, rules, activity, incidents, storage, integrations, health). Each module declares a small protocol for the
 container services it reads, since interfaces cannot import bootstrap, and the factory's typed
 assignment lets mypy prove the container satisfies every one. `interfaces/api/dependencies.py` holds
-the shared `require_admin` session guard; `tests/adapters/test_api_authorization.py` fails if any
-`/api/` route other than setup, the session routes, and the OAuth callback lacks it.
+the shared `require_admin` session guard and `require_status_reader`, which also accepts an
+Integration Token; `tests/adapters/test_api_authorization.py` fails if any `/api/` route other than
+setup, the session routes, the OAuth callback, and `GET /api/v1/status` lacks `require_admin`, and
+sends a valid token to every other route to prove each one refuses it.
 
 Google authorization is split the same way. `infrastructure/google/oauth.py` holds the
 state-protected OAuth flow, Google credentials, and Google calendar discovery, configured by an
@@ -84,6 +86,19 @@ authorization stops it, and the preview that recovers a degraded rule through `R
 when it finds an account's authorization lost. A provider failure names the Connected Account whose
 request failed, so an authorization Incident names the account to reauthorize. Scheduled runs and Rule Removal share one retry helper in
 `application/retry.py`, which retries only temporary and rate-limited failures.
+
+Installation Status follows the same direction ([ADR 0023](adr/0023-integration-tokens-installation-status-and-mcp.md)).
+`application/status.py` decides the one verdict the Overview, `GET /api/v1/status`, and MCP share:
+`assess_installation` is a pure function of the rule summaries, the operations overview, open
+incidents, and the scheduler's `SchedulerProgress`, read through the `SchedulerHeartbeat` port that
+`SyncScheduler` implements in memory. `interfaces/access.py` holds the one access decision both
+transports use: a present `Authorization` header decides alone, and only the status API also
+accepts the administrator session. `interfaces/api/status_payload.py` translates a verdict into the
+response both transports return. `interfaces/mcp/` serves the MCP SDK's stateless streamable HTTP
+app as one exact `/mcp` route behind a gate that refuses a request before the SDK sees it, and
+creates a fresh SDK server for each application lifespan. Only `interfaces/mcp` may import the
+`mcp` package. Integration Tokens are stored by `infrastructure/integration_tokens.py` behind the
+`IntegrationTokens` port, as SHA-256 hashes.
 
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
@@ -142,4 +157,4 @@ projection rather than creating a duplicate.
 
 ## Public compatibility surfaces
 
-Database migrations, environment configuration, HTTP API payloads, provider ownership metadata, and persisted domain states are compatibility surfaces. Releases must migrate them rather than asking operators to delete SQLite state.
+Database migrations, environment configuration, HTTP API payloads, provider ownership metadata, and persisted domain states are compatibility surfaces. The `GET /api/v1/status` payload, the Integration Token format, and the MCP tool names and results are read by monitors, dashboards, and agents outside this repository, so a change to them must stay backward compatible or be announced as a breaking change. Releases must migrate them rather than asking operators to delete SQLite state.

@@ -165,10 +165,53 @@ that would carry a token across the internet unencrypted. A reverse proxy config
 record the token in its own logs the same as it would record a session cookie, so review a proxy's
 logging configuration before relying on it.
 
-In **Settings → Integrations**, choose **Issue token**, name it for the tool that will use it (for
-example "Uptime Kuma"), and copy the plaintext shown there. It is not shown again; issue a new one
-and revoke the old one if it is lost. Below the list, Settings shows copy-ready examples addressed
-at this installation for each tool below.
+To issue a token:
+
+1. Open **Settings → Integrations** and choose **Show**. The group stays collapsed to one line, such
+   as "2 tokens · last used 3 minutes ago", until you open it.
+2. Under **Issue a token**, name the tool that will use it, for example "Uptime Kuma", and choose
+   **Issue token**.
+3. Copy the token, then choose **Done**. It is shown only once. If you lose it, issue a new one and
+   revoke the old one.
+
+Each token row says when it was issued and last used, so you can tell which ones are still in use.
+**Revoke** cuts a token off immediately; revoked tokens move under one disclosure at the end of the
+group. **Examples for monitors and AI assistants**, at the foot of the group, repeats the setups
+below, filled in with the address you opened Settings at.
+
+Check a token from any machine that will use it:
+
+```sh
+curl -H "Authorization: Bearer $CALENDAR_GHOST_TOKEN" https://ghost.example.lan/api/v1/status
+```
+
+A healthy installation answers like this (shortened):
+
+```json
+{
+  "status": "healthy",
+  "needs_attention": false,
+  "summary": "2 rules running.",
+  "last_synced_at": "2026-10-04T09:58:00+00:00",
+  "scheduler": { "configured": true, "last_pass_completed_at": "2026-10-04T09:58:00+00:00", "current_pass_started_at": null },
+  "counts": { "rules": 2, "running": 2, "stopped": 0, "paused": 0, "overdue": 0, "open_incidents": 0, "blocked_events": 0, "disconnected_accounts": 0 },
+  "problems": [],
+  "rules": [{ "id": "…", "name": "Work → Family", "state": "enabled", "last_succeeded_at": "…", "problem": null }],
+  "incidents": []
+}
+```
+
+- `status` is the one verdict, explained in the table below. Alert on `needs_attention`: it is
+  `true` only for `stalled`, `stopped`, and `review`.
+- `summary` is one sentence for a dashboard tile.
+- `problems` lists every current problem, most urgent first, each with a `kind` (`stalled`,
+  `stopped`, `review`, `overdue`, `blocked`, or `waiting`), the rule it concerns, and a summary.
+- `rules` names each rule by its calendars. A calendar with no name, or whose name is an email
+  address or its calendar ID, appears as "Unnamed calendar", so status never reveals one.
+- The answer never contains event content, calendar IDs, account emails, or token data.
+
+Use only the `Authorization` header. A token in the address, such as `?token=`, is refused, so it
+never lands in browser history or access logs.
 
 **Uptime Kuma.** Add an **HTTP(s) - Json Query** monitor:
 
@@ -224,9 +267,22 @@ Both `/api/v1/status` and `/mcp` answer the same verdict. Each status means:
 | `setup` | No account or rule yet, or none has synced | Finish connecting an account and creating a rule |
 | `healthy` | Every enabled rule is running and up to date | Nothing |
 
-`/mcp` additionally exposes a `get_rule` tool that looks up one rule by its id or its "Source →
-Destination" name for its last synchronization and reconciliation outcome. Both tools are read-only:
-Calendar Ghost never changes a rule or a calendar through an Integration Token.
+**Other MCP clients.** Any client that speaks MCP over streamable HTTP and can send an
+`Authorization: Bearer` header works: point it at `https://<your address>/mcp`. The server is
+stateless and answers `POST` only.
+
+The MCP server offers two read-only tools, and explains each status to the agent itself:
+
+- `get_status` returns the same answer as `/api/v1/status`.
+- `get_rule` takes a rule id or its "Source → Destination" name and adds the rule's last
+  synchronization and reconciliation outcome: when it ran, whether it succeeded, and how many events
+  it created, updated, deleted, or found in conflict.
+
+Ask the agent in plain words, for example "Is my calendar sync healthy?", "Why did Work → Family
+stop?", or "When did each rule last sync?". Calendar Ghost never changes a rule or a calendar through
+an Integration Token.
+
+If a monitor or agent cannot connect, see [Troubleshooting](troubleshooting.md#a-monitor-or-agent-cannot-read-status).
 
 ## 7. Back up, upgrade, and recover
 

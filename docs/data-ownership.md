@@ -18,6 +18,8 @@ The SQLite database contains operational state needed to synchronize calendars:
   are retained for the configured history window described in [Deployment](deployment.md).
 - Password hashes and administrator session hashes. Plaintext administrator passwords and session
   tokens are never stored.
+- Integration Tokens: each token's name, scope, and issue, last-use, and revocation times, with a
+  SHA-256 hash of the token. The token itself is shown once when issued and never stored.
 
 Service log lines contain identifiers, counts, timings, and provider status categories. They do not
 contain event titles, descriptions, locations, guests, calendar identifiers, account emails, or
@@ -32,6 +34,11 @@ The installation communicates with:
 2. A webhook URL or SMTP server only when the Installation Administrator explicitly configures an
    Incident Notification channel. Notifications contain an incident category, rule identifier,
    summary, and timestamp; they do not contain event content.
+3. Monitors, dashboards, and AI agents the Installation Administrator gives an Integration Token.
+   They ask for Installation Status; Calendar Ghost never contacts them. Status contains rule
+   identifiers and states, calendar names, Provider Kinds, incident summaries, and times; it never
+   contains event content, calendar identifiers, or account emails. An agent may pass what it reads
+   to its own model provider, so issue tokens only to tools you trust with that.
 
 The service does not contact a Calendar Ghost account, send analytics, or upload the database.
 
