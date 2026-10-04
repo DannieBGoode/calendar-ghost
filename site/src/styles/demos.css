@@ -183,3 +183,15 @@
 @media (prefers-reduced-motion: reduce) and (max-width: 639px) {
   .crossing-traveler { transform: translate(112.8%, 0); }
 }
+/* Before hydration (including no JavaScript), the loop is paused at its 0% frame, where the
+   traveler is invisible. Show the same landed state as reduced motion until the island hydrates. */
+.crossing[data-hydrated="false"] .crossing-traveler,
+.crossing[data-hydrated="false"] .crossing-traveler * { animation: none !important; }
+.crossing[data-hydrated="false"] .crossing-traveler { transform: translate(138.1%, 0); }
+.crossing[data-hydrated="false"] .crossing-card { background: var(--event-busy); border-left-color: var(--primary); }
+.crossing[data-hydrated="false"] .crossing-fades { opacity: 0; }
+.crossing[data-hydrated="false"] .crossing-busy { opacity: 1; }
+.crossing[data-hydrated="false"] .crossing-carrier { opacity: 0; }
+@media (max-width: 639px) {
+  .crossing[data-hydrated="false"] .crossing-traveler { transform: translate(112.8%, 0); }
+}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { crossingFields, type CrossingMode } from "../demo/crossing"
 import type { Messages } from "../i18n"
 import { GhostMark } from "./GhostMark"
@@ -16,14 +16,23 @@ export function Crossing({ m }: { m: Pick<Messages, "crossing" | "demo"> }) {
   const stage = useRef<HTMLDivElement>(null)
   const carrier = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<CrossingMode>("busy")
+  // Without JavaScript (or before hydration), the loop is paused at its 0% frame, where the
+  // traveler is invisible. Show the landed state until the island has taken over.
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => setHydrated(true), [])
   const onScreen = useOnScreen(stage)
   const pageVisible = usePageVisible()
-  const eyes = usePointerEyes(carrier)
+  const eyes = usePointerEyes(carrier, onScreen)
   const fields = crossingFields(mode)
   const dentist = m.demo.events.dentist
 
   return (
-    <div className="crossing" data-mode={mode} data-playing={onScreen && pageVisible ? "true" : "false"}>
+    <div
+      className="crossing"
+      data-mode={mode}
+      data-playing={onScreen && pageVisible ? "true" : "false"}
+      data-hydrated={hydrated ? "true" : "false"}
+    >
       <div className="crossing-controls">
         <div className="crossing-switch" role="group" aria-label={m.crossing.switchLabel}>
           {MODES.map((option) => (

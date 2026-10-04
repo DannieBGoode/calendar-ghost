@@ -45,6 +45,8 @@ test("without JavaScript, the content and the hero's resting state are there", a
   await expect(page.getByText(en.faq.items[0]!.q)).toBeVisible()
   await expect(page.getByRole("img", { name: en.app.overview.alt })).toBeVisible()
   expect(await split(page)).toBe("55%")
+  await expect(page.locator('button[data-copy="self-host-command-0"]')).toBeHidden()
+  await expect(page.locator(".crossing-stage").getByText(en.demo.busy).first()).toBeVisible()
   await context.close()
 })
 
