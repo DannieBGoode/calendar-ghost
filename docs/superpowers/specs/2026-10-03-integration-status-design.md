@@ -318,10 +318,11 @@ package may be imported only inside `interfaces/mcp`.
 
 ## Transport security
 
-A token is a long-lived administrator credential, so the self-hosting guide recommends serving
-Calendar Ghost over HTTPS through a reverse proxy before issuing one. Sending a token over plain
-HTTP on a home network is the administrator's explicit trust decision: Settings shows a warning
-beside the examples when the page itself was loaded over HTTP, and the guide explains the risk.
+A token only reads status. Plain HTTP on this machine or a home network is the homelab norm, so
+Settings says nothing there. When Settings is open at an address that would carry a token across
+the internet unencrypted, a quiet note in the Integrations group's footer recommends HTTPS, for
+example Tailscale Serve or a reverse proxy. (Revised 2026-10-04 after a design critique: the first
+version showed a red warning on every plain-HTTP visit.)
 
 ## Testing
 
@@ -352,7 +353,7 @@ beside the examples when the page itself was loaded over HTTP, and the guide exp
   `get_rule` by name, by id, and ambiguous; a `ghost.lan` Host header accepted with a token.
 - **Frontend.** The Overview renders each server status and problem with its wording and action
   and no longer derives tone; Settings → Integrations issues, shows once, copies, revokes, and
-  warns on HTTP.
+  notes plain HTTP only for addresses outside this machine and the home network.
 
 ## Documentation
 

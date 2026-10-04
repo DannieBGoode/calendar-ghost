@@ -156,11 +156,12 @@ overall verdict, through `GET /api/v1/status` and an MCP server at `/mcp`. Both 
 Integration Token, a credential you issue in **Settings → Integrations** for one monitor, dashboard,
 or agent at a time.
 
-Put the installation behind HTTPS (see [5. Use a LAN host or HTTPS](#5-use-a-lan-host-or-https))
-before issuing a token. A token is a long-lived administrator credential, and sending one over
-plain HTTP on a home network means it travels in the clear; Settings shows a warning beside the
-connection examples when the page itself was loaded over HTTP, and you can still proceed if that is
-an accepted trust decision for your network. A reverse proxy configured to log request headers will
+A token only reads status, and plain HTTP on this machine or your home network is normal for a
+homelab: anyone on that network could read a token sent to it, and nothing more. Before you use a
+token from outside your home network, put the installation behind HTTPS (see
+[5. Use a LAN host or HTTPS](#5-use-a-lan-host-or-https)), for example with Tailscale Serve or a
+reverse proxy. Settings notes this in the Integrations group only when it is open at an address
+that would carry a token across the internet unencrypted. A reverse proxy configured to log request headers will
 record the token in its own logs the same as it would record a session cookie, so review a proxy's
 logging configuration before relying on it.
 
