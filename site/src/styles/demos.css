@@ -179,15 +179,17 @@
   border-bottom: 1px dashed var(--border);
 }
 .crossing-original, .crossing-existing { left: 44px; right: 8px; height: 54px; }
-.crossing-original { top: 98px; }
-.crossing-existing { top: 158px; }
+/* The Dentist runs 15:00 to 16:30, so its place, guest, and link chips fit inside the card even
+   when they wrap; the work event starts at 16:30, below it. */
+.crossing-original { top: 98px; height: 86px; }
+.crossing-existing { top: 188px; }
 .crossing-traveler {
   position: absolute; left: 0; top: 0; width: 42%; height: 100%; pointer-events: none;
   animation: crossing-move 9s cubic-bezier(0.45, 0, 0.25, 1) infinite;
 }
 .crossing-card {
   --event-edge: var(--event-personal-edge);
-  left: 44px; right: 8px; top: 98px; height: 54px;
+  left: 44px; right: 8px; top: 98px; height: 86px;
   border: 0; box-shadow: inset 0 0 0 1px var(--event-personal-edge);
   background: var(--event-personal);
 }
@@ -207,6 +209,8 @@
 .crossing-chips > small {
   display: inline-block; margin: 3px 3px 0 0; padding: 1px 5px; border-radius: 4px;
   background: color-mix(in oklch, var(--background), transparent 30%); font-size: 0.6875rem; font-weight: 500;
+  /* A chip never breaks inside a word; a long meeting link shortens with an ellipsis instead. */
+  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top;
 }
 .crossing-fades { animation: crossing-fade 9s infinite; }
 /* The ghost holds the card by its top edge, hem over the card. */
