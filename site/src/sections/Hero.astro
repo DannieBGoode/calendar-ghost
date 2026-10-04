@@ -8,13 +8,13 @@ interface Props {
 }
 
 const { m } = Astro.props
+// One sentence per line. The copy is shared with /bold until one design is chosen.
+const [firstLine, secondLine] = m.variants.bold.hero.titleLines
 ---
 
 <section class="hero section" aria-labelledby="hero-title">
   <div class="container hero-copy">
-    <p class="chip">{m.hero.chip}</p>
-    <h1 id="hero-title">{m.hero.title}</h1>
-    <p class="lead">{m.hero.sub}</p>
+    <h1 id="hero-title"><span>{firstLine}</span> <span>{secondLine}</span></h1>
     <div class="ctas">
       <a class="btn btn-primary" href="#self-host">{m.hero.primary}</a>
       <a class="btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
@@ -30,6 +30,7 @@ const { m } = Astro.props
 <style>
   .hero { padding-top: clamp(2.5rem, 6vw, 5rem); }
   .hero-copy { text-align: center; display: flex; flex-direction: column; align-items: center; }
-  .hero-copy .lead { margin-inline: auto; }
+  .hero-copy h1 { margin-bottom: 1.75rem; }
+  .hero-copy h1 span { display: block; }
   .hero-copy .ctas { justify-content: center; }
 </style>
