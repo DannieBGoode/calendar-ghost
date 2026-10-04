@@ -25,7 +25,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 ### Changed
 
 - The Web UI's API types are generated from the backend's OpenAPI schema
-  ([ADR 0023](docs/adr/0023-generate-web-api-types-from-openapi.md)), so a changed response fails
+  ([ADR 0024](docs/adr/0024-generate-web-api-types-from-openapi.md)), so a changed response fails
   the frontend type check instead of breaking a page. The sync, reconcile, and preview routes now
   declare their response bodies, which are unchanged, and each Web UI call is typed by the route it
   names. An unknown `privacy_policy` in a rule request is still rejected with 422, now with

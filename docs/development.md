@@ -86,7 +86,7 @@ cd web && npm audit --audit-level=high && npm run api:check && npm run typecheck
 ```
 
 After changing an API response or request model, regenerate the frontend types in the same commit
-([ADR 0023](adr/0023-generate-web-api-types-from-openapi.md)):
+([ADR 0024](adr/0024-generate-web-api-types-from-openapi.md)):
 
 ```sh
 .venv/bin/python scripts/export_openapi.py

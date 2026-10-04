@@ -189,7 +189,7 @@ npm --prefix web run test
 npm --prefix web run build
 ```
 
-The frontend's API types are generated from the backend's OpenAPI schema (ADR 0023). After changing
+The frontend's API types are generated from the backend's OpenAPI schema (ADR 0024). After changing
 a response or request model in `interfaces/api/schemas.py`, run
 `.venv/bin/python scripts/export_openapi.py` and `npm --prefix web run api:types`, and commit both
 generated files. Never edit `web/openapi.json` or `web/src/lib/api-schema.ts` by hand.
