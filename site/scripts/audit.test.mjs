@@ -31,6 +31,11 @@ describe("thirdPartyRequests", () => {
       "https://fonts.gstatic.com/f.woff2",
     ])
   })
+
+  it("finds an unquoted remote src and allows an unquoted relative one", () => {
+    expect(thirdPartyRequests(`<img src=https://evil.com/a.png>`, HOST)).toEqual(["https://evil.com/a.png"])
+    expect(thirdPartyRequests(`<img src=/_astro/a.webp>`, HOST)).toEqual([])
+  })
 })
 
 describe("missingHeadTags", () => {
