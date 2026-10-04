@@ -176,11 +176,14 @@ its own progress:
 ### Overdue rules
 
 Beneath a healthy scheduler, an enabled rule is **overdue** when it has succeeded before, has no
-running work, and its last successful Sync Run is more than 24 hours old. Every pass attempts every
-enabled rule, so a rule that keeps failing already opens an incident; an overdue rule without one
-means something the incident rules do not cover, and it makes the status `review`. Rules that have
-never succeeded are not overdue: their failures open incidents, and no reliable start time exists to
-measure them from.
+running work, was listed by the last completed pass, and its last successful Sync Run is more than
+24 hours old. Every pass attempts every enabled rule, so a rule that keeps failing already opens an
+incident; an overdue rule without one means something the incident rules do not cover, and it makes
+the status `review`. Rules that have never succeeded are not overdue: their failures open incidents,
+and no reliable start time exists to measure them from. A rule the last completed pass did not list,
+such as one resumed or reauthorized since, is not overdue either: resuming only changes its state, so
+its last success stays old until the next pass runs it. The heartbeat reports the ids of the rules
+its last completed pass listed for this reason.
 
 ### Lasting provider waits
 

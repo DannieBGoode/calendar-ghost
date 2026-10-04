@@ -47,29 +47,33 @@ Homepage that show one tile per service.
   caught up yet, such as between one dashboard poll and the next: a generic hero for that tone
   still tells the truth instead of contradicting it with healthy, paused, or setup copy.
 - **The scheduler reports its own heartbeat.** `SchedulerHeartbeat` in `application/ports.py`
-  exposes when the current pass started, if one is running, and when the last pass completed
-  without raising. With enabled rules and no scheduler available at all, such as when no
-  installation master key is configured, the status is `stalled`: a dead process already fails
-  `/health`, so this is reserved for a live process whose scheduler is not doing its job. The status
-  is also `stalled` when no pass has completed within 15 minutes (three scheduler intervals),
-  counted from process start before the first pass, or when a running pass started more than 3
-  hours ago; a full pass took 40 minutes on a Raspberry Pi, so 3 hours is far beyond a slow pass. A
-  pass that raises does not count as completed, so repeated failing passes also become `stalled`
-  within 15 minutes.
+  exposes when the current pass started, if one is running, when the last pass completed without
+  raising, and which rules that pass listed. A completed pass is published before the running one is
+  cleared, so a reader never sees no pass running next to the previous completion. With enabled
+  rules and no scheduler available at all, such as when no installation master key is configured,
+  the status is `stalled`: a dead process already fails `/health`, so this is reserved for a live
+  process whose scheduler is not doing its job. The status is also `stalled` when no pass has
+  completed within 15 minutes (three scheduler intervals), counted from process start before the
+  first pass, or when a running pass started more than 3 hours ago; a full pass took 40 minutes on a
+  Raspberry Pi, so 3 hours is far beyond a slow pass. A pass that raises does not count as
+  completed, so repeated failing passes also become `stalled` within 15 minutes.
 - **Overdue rules, at 24 hours.** Beneath a healthy scheduler, an enabled rule that has succeeded
-  before, has no running work, and whose last successful run is more than 24 hours old is
-  `overdue`. A rule is excluded from being counted overdue when it already has any other problem,
-  such as a stopped or reviewed incident, because that problem already explains why it has not
-  synced; a rule that has never succeeded is never overdue, since no reliable start time exists to
-  measure it from.
+  before, has no running work, was listed by the last completed pass, and whose last successful run
+  is more than 24 hours old is `overdue`. Resuming or reauthorizing a rule only changes its state,
+  so a rule paused for three days comes back with a three-day-old last success; reading it as
+  overdue before any pass has run it would be a false alarm. The heartbeat therefore also reports
+  the ids of the rules its last completed pass listed, and only those can be overdue. A rule is
+  excluded from being counted overdue when it already has any other problem, such as a stopped or
+  reviewed incident, because that problem already explains why it has not synced; a rule that has
+  never succeeded is never overdue, since no reliable start time exists to measure it from.
 - **Provider waits escalate after 24 hours.** A rate-limit or temporary provider incident is
   `waiting` while it is under 24 hours old, because it retries by itself and nothing needs doing.
   Past 24 hours it becomes `review`, so a monitor alerts on an outage that is not clearing on its
   own. When a rule has several open incidents, the one still worth reviewing outranks one that is
-  merely waiting, regardless of which happened to open first. A blocked (conflict) incident is
-  covered by a rule's `overdue`/`review`/`stopped` problem only when an open block already exists
-  for that same rule; an incident in the `conflict` category with no matching open block is treated
-  like any other.
+  merely waiting, regardless of which happened to open first. The open blocks become one `blocked`
+  problem. An incident in the `conflict` category is left out of the problem list only when an open
+  block exists for the same rule, because that `blocked` problem already describes it; a conflict
+  incident with no matching open block becomes a problem for its rule like any other incident.
 - **MCP at `/mcp`, stateless JSON, POST only, bearer only.** `interfaces/mcp/server.py` builds the
   official `mcp` Python SDK's server once per application lifespan, inside the existing `lifespan`
   beside the scheduler, because the SDK's session manager runs only once and tests start the same
@@ -106,11 +110,13 @@ Homepage that show one tile per service.
   more restricted scope would add a choice nobody has asked for; any future scope, such as one
   letting an agent act on rules, needs its own design review and threat model, and existing tokens
   never gain it implicitly.
-- **An in-memory heartbeat with no process-start baseline.** Rejected: without counting from process
-  start, a freshly started service with enabled rules would read `stalled` until the first pass
-  completed, which is correct, but a definition that instead treated "no pass yet" as healthy would
-  hide a scheduler that failed to start at all. Counting from process start keeps both cases
-  distinguishable.
+- **An in-memory heartbeat with no process-start baseline.** Rejected: until the first pass
+  completes, such a heartbeat has nothing to measure from, so it must choose between two wrong
+  answers. If "no pass yet" reads `stalled`, every restart raises a false alarm until the first pass
+  completes, which can take 40 minutes on a Raspberry Pi. If it reads healthy, a scheduler that never
+  starts, or whose every pass fails, stays hidden for as long as the process runs. Counting from
+  process start avoids both: a fresh service has 15 minutes to start its first pass and 3 hours to
+  finish it, and a scheduler that completes no pass reads `stalled` 15 minutes after start.
 
 ## Consequences
 
