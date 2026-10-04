@@ -1,0 +1,53 @@
+---
+// The Rules list (web/src/features/rules.tsx): three rules for Sam's calendars, without the app's
+// header, menus, or actions.
+import Icon from "../components/Icon.astro"
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+type Calendar = "family" | "personal" | "work"
+const RULES: readonly [Calendar, Calendar][] = [
+  ["family", "work"],
+  ["personal", "work"],
+  ["work", "personal"],
+]
+const copy = m.app.rules
+---
+
+<div class="mock mock-rules" role="img" aria-label={copy.alt}>
+  <ul>
+    {
+      RULES.map(([source, destination], index) => (
+        <li class="mock-rule">
+          <div class="mock-rule-route">
+            {[source, destination].map((calendar, side) => (
+              <>
+                {side === 1 && <Icon name="arrowRight" class="mock-icon mock-arrow" />}
+                <span class="mock-endpoint">
+                  <span class="mock-avatar" data-calendar={calendar}>
+                    {m.demo.calendars[calendar].slice(0, 1)}
+                  </span>
+                  <span class="mock-endpoint-text">
+                    <b>{m.demo.calendars[calendar]}</b>
+                    <small>{copy.accounts[calendar]}</small>
+                  </span>
+                </span>
+              </>
+            ))}
+          </div>
+          <p class="mock-rule-meta">
+            {copy.policy} · {copy.synced[index]}
+          </p>
+          <span class="mock-badge">
+            <Icon name="circleCheck" class="mock-icon" />
+            {copy.enabled}
+          </span>
+        </li>
+      ))
+    }
+  </ul>
+</div>

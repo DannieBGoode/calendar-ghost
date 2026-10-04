@@ -1,21 +1,37 @@
 ---
+import Icon from "../components/Icon.astro"
 import type { Messages } from "../i18n"
+import type { IconName } from "../icons"
 
 interface Props {
   m: Messages
 }
 
 const { m } = Astro.props
+// One icon per claim, in the order of `trust.cards`.
+const ICONS: readonly IconName[] = [
+  "rotateCcw",
+  "eye",
+  "mailX",
+  "refreshCwOff",
+  "repeat",
+  "listChecks",
+  "shieldCheck",
+  "activity",
+]
 ---
 
 <section id="features" class="section" aria-labelledby="trust-title">
   <div class="container">
     <h2 id="trust-title">{m.trust.title}</h2>
-    <ul class="cards">
+    <ul class="claims">
       {
-        m.trust.cards.map((card) => (
+        m.trust.cards.map((card, index) => (
           <li>
-            <h3>{card.title}</h3>
+            <h3>
+              <Icon name={ICONS[index] ?? "shieldCheck"} class="claim-icon" />
+              {card.title}
+            </h3>
             <p>{card.body}</p>
           </li>
         ))
@@ -25,7 +41,15 @@ const { m } = Astro.props
 </section>
 
 <style>
-  .cards { list-style: none; margin: 2rem 0 0; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
-  .cards li { padding: 1.25rem; border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface); }
-  .cards p { margin: 0; color: var(--muted-foreground); font-size: 0.9375rem; }
+  /* A list of claims, not a grid of boxes: a hairline above each, the icon leading its title. */
+  .claims {
+    list-style: none; margin: 2rem 0 0; padding: 0; display: grid; gap: 0 2.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
+  }
+  .claims li { padding: 1.25rem 0 1.5rem; border-top: 1px solid var(--border); }
+  .claims h3 { display: flex; align-items: flex-start; gap: 0.55rem; margin-bottom: 0.4rem; }
+  .claims :global(.claim-icon) {
+    flex: none; width: 1.25rem; height: 1.25rem; margin-top: 0.05rem; color: var(--primary); stroke-width: 2;
+  }
+  .claims p { margin: 0; color: var(--muted-foreground); font-size: 0.9375rem; }
 </style>

@@ -1,0 +1,51 @@
+---
+// Three rows of Activity history (web/src/features/activity-table.tsx): what the source calendar
+// showed, then what Calendar Ghost did about it, with the app's sign for each outcome.
+import Icon from "../components/Icon.astro"
+import type { Messages } from "../i18n"
+import type { IconName } from "../icons"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+// Skipped is quiet; removed and updated are changes the rule made (web/src/components/change-sign.tsx).
+const SIGNS: readonly { icon: IconName; tone: "quiet" | "done" }[] = [
+  { icon: "circleSlash", tone: "quiet" },
+  { icon: "minus", tone: "done" },
+  { icon: "tilde", tone: "done" },
+]
+const copy = m.app.activity
+---
+
+<div class="mock mock-activity" role="img" aria-label={copy.alt}>
+  <ol>
+    {
+      copy.rows.map((row, index) => (
+        <li class="mock-act">
+          <span class="mock-act-time">{row.time}</span>
+          <span class="mock-act-event">
+            <b>{row.title}</b>
+            <small>{row.when}</small>
+          </span>
+          <span class="mock-act-happened" data-tone={SIGNS[index]?.tone}>
+            <span class="mock-sign">
+              <Icon name={SIGNS[index]?.icon ?? "minus"} class="mock-icon" />
+            </span>
+            <span>
+              {row.trigger}
+              <Icon name="arrowRight" class="mock-icon mock-arrow" />
+              {row.effect}
+            </span>
+          </span>
+          <span class="mock-act-rule">
+            {m.demo.calendars.personal}
+            <Icon name="arrowRight" class="mock-icon mock-arrow" />
+            {m.demo.calendars.work}
+          </span>
+        </li>
+      ))
+    }
+  </ol>
+</div>

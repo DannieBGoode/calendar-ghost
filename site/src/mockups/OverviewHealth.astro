@@ -1,0 +1,46 @@
+---
+// The Overview's health hero (web/src/features/overview-hero.tsx) in its healthy state, drawn
+// with the site's tokens so it follows light and dark. A picture of the app: one accessible name,
+// its parts presentational.
+import Icon from "../components/Icon.astro"
+import type { Messages } from "../i18n"
+import { Ghost, SpeechBubble } from "../islands/Ghost"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const copy = m.app.overview
+---
+
+<div class="mock mock-health" role="img" aria-label={copy.alt}>
+  <div class="mock-health-layout">
+    <div class="mock-health-copy">
+      <p class="mock-health-title">{copy.headline}</p>
+      <p class="mock-health-detail">{copy.detail}</p>
+      <p class="mock-health-facts">
+        <span class="mock-health-ok"><Icon name="circleCheck" class="mock-icon" />{copy.running}</span>
+        <span>{copy.lastSync}</span>
+      </p>
+    </div>
+    <div class="mock-health-visual">
+      <div class="ghost-says">
+        <span class="mock-health-character">
+          <span class="mock-health-halo"></span>
+          <span class="mock-health-ray mock-health-ray-1"></span>
+          <span class="mock-health-ray mock-health-ray-2"></span>
+          <span class="mock-health-ray mock-health-ray-3"></span>
+          <span class="mock-health-dot mock-health-dot-1"></span>
+          <span class="mock-health-dot mock-health-dot-2"></span>
+          <span class="mock-health-dot mock-health-dot-3"></span>
+          <Ghost face="happy" tone="moss" alive="brief" float className="mock-health-ghost" />
+        </span>
+        <SpeechBubble className="speech-bubble-inline mock-health-bubble">
+          <strong>{copy.bubbleTitle}</strong>
+          <small>{copy.bubbleBody}</small>
+        </SpeechBubble>
+      </div>
+    </div>
+  </div>
+</div>

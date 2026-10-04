@@ -1,0 +1,118 @@
+/* Focused mockups of the app's screens (src/mockups/), modeled on web/src/index.css and drawn
+   with the site's tokens so they follow light and dark and stay crisp at any size. */
+.mock {
+  container-type: inline-size;
+  border: 1px solid var(--border); border-radius: calc(var(--panel-radius) + 0.25rem);
+  background: var(--surface); color: var(--foreground); font-family: var(--font-sans);
+  overflow: hidden;
+}
+.mock ul, .mock ol { list-style: none; margin: 0; padding: 0; }
+.mock p { margin: 0; }
+.mock-icon { width: 1em; height: 1em; flex: none; }
+.mock-arrow { width: 0.85em; height: 0.85em; margin-inline: 0.35rem; color: var(--muted-foreground); vertical-align: -0.1em; }
+
+/* The Overview health hero, healthy. */
+.mock-health {
+  border-color: var(--success-border);
+  background: radial-gradient(circle at 78% 50%, color-mix(in oklch, var(--success-soft) 80%, transparent), transparent 46%), var(--success-surface);
+}
+/* The mockup is the size container, so its layout lives one level in. */
+.mock-health-layout { display: grid; align-items: center; }
+.mock-health-copy { padding: clamp(1.5rem, 4cqi, 2.5rem) clamp(1.25rem, 4.5cqi, 2.75rem) 0; }
+.mock-health-title {
+  font-size: clamp(1.5rem, 4.4cqi, 2.6rem); font-weight: 720; letter-spacing: -0.035em; line-height: 1.08;
+}
+.mock-health-detail { max-width: 42ch; margin-top: 0.7rem !important; color: var(--muted-foreground); font-size: 0.9375rem; line-height: 1.55; }
+.mock-health-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.75rem; margin-top: 1.1rem !important; font-size: 0.8125rem; color: var(--muted-foreground); }
+.mock-health-facts > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.mock-health-facts > span + span::before { content: "•"; margin-right: 0.4rem; color: color-mix(in oklch, var(--success-foreground) 45%, transparent); }
+.mock-health-ok { color: var(--success-foreground); font-weight: 650; }
+.mock-health-visual { display: flex; justify-content: center; padding: 1.75rem 1rem 2rem; }
+.mock-health-character { position: relative; display: grid; place-items: center; }
+.mock-health-ghost { --ghost-size: clamp(120px, 26cqi, 168px); position: relative; z-index: 1; }
+.mock-health-halo {
+  position: absolute; width: 150%; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in oklch, var(--success-soft) 90%, transparent) 38%, transparent 68%);
+}
+/* The app's rays (excitement) and dots, around the ghost's head. */
+.mock-health-ray, .mock-health-dot { position: absolute; background: var(--success-foreground); opacity: 0.75; }
+.mock-health-ray { width: 0.95rem; height: 0.14rem; border-radius: 999px; }
+.mock-health-ray-1 { top: 2%; left: 18%; transform: rotate(50deg); }
+.mock-health-ray-2 { top: -6%; left: calc(50% - 0.475rem); transform: rotate(90deg); }
+.mock-health-ray-3 { top: 2%; right: 18%; transform: rotate(-50deg); }
+.mock-health-dot { width: 0.26rem; height: 0.26rem; border-radius: 50%; }
+.mock-health-dot-1 { top: 34%; left: -6%; }
+.mock-health-dot-2 { bottom: 14%; left: 2%; }
+.mock-health-dot-3 { bottom: 8%; right: -4%; }
+.mock-health-bubble { --bubble-bg: color-mix(in oklch, var(--success-surface) 80%, var(--background)); --bubble-edge: var(--success-border); }
+.mock-health-bubble strong { color: var(--success-foreground); }
+@container (min-width: 40rem) {
+  .mock-health-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); min-height: 15rem; }
+  /* The mockup is the size container, so its layout lives one level in. */
+.mock-health-layout { display: grid; align-items: center; }
+.mock-health-copy { padding-bottom: clamp(1.5rem, 4cqi, 2.5rem); }
+  .mock-health-visual { padding: 1.5rem 1.5rem 1.5rem 0; }
+}
+
+/* The Rules list. */
+.mock-rules { padding: 0.25rem 1.25rem; }
+.mock-rule {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem 1rem;
+  padding: 1.05rem 0;
+}
+.mock-rule + .mock-rule { border-top: 1px solid var(--border); }
+.mock-rule-route { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.2rem; min-width: 0; }
+.mock-endpoint { display: inline-flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.mock-endpoint-text { display: grid; line-height: 1.3; min-width: 0; }
+.mock-endpoint b { font-size: 0.9375rem; font-weight: 650; }
+.mock-endpoint small { font-size: 0.8125rem; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mock-avatar {
+  display: inline-grid; place-items: center; flex: none; width: 2rem; height: 2rem; border-radius: 50%;
+  font-size: 0.8125rem; font-weight: 700; color: var(--foreground); border: 1px solid var(--event-edge, var(--border));
+}
+.mock-avatar[data-calendar="family"] { --event-edge: var(--event-family-edge); background: var(--event-family); }
+.mock-avatar[data-calendar="personal"] { --event-edge: var(--event-personal-edge); background: var(--event-personal); }
+.mock-avatar[data-calendar="work"] { --event-edge: color-mix(in oklch, var(--primary), transparent 50%); background: var(--primary-soft); }
+.mock-rule-meta { grid-column: 1 / -1; font-size: 0.8125rem; color: var(--muted-foreground); }
+.mock-badge {
+  grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; gap: 0.35rem;
+  padding: 0.3rem 0.7rem 0.3rem 0.45rem; border-radius: 999px;
+  background: var(--success-soft); color: var(--success-foreground); font-size: 0.8125rem; font-weight: 650;
+}
+.mock-badge .mock-icon { width: 1.15rem; height: 1.15rem; }
+/* The addresses need room; the Overview's own rules list leaves them out too. */
+@container (max-width: 36rem) {
+  .mock-endpoint small { display: none; }
+}
+@container (max-width: 22rem) {
+  .mock-rule { grid-template-columns: minmax(0, 1fr); }
+  .mock-badge { grid-column: 1; grid-row: 3; justify-self: start; }
+}
+
+/* Activity history. */
+.mock-activity { padding: 0.25rem 1.25rem; }
+.mock-act {
+  display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 1.15fr) auto; gap: 0.35rem 1rem;
+  align-items: start; padding: 0.95rem 0; font-size: 0.875rem; line-height: 1.4;
+}
+.mock-act + .mock-act { border-top: 1px solid var(--border); }
+.mock-act-time { color: var(--muted-foreground); font-size: 0.8125rem; padding-top: 0.05rem; }
+.mock-act-event { display: grid; }
+.mock-act-event b { font-weight: 650; }
+.mock-act-event small { color: var(--muted-foreground); font-size: 0.8125rem; }
+.mock-act-happened { display: flex; align-items: flex-start; gap: 0.45rem; }
+.mock-act-happened[data-tone="quiet"] { color: var(--muted-foreground); }
+.mock-sign {
+  display: inline-grid; place-items: center; flex: none; width: 1.125rem; height: 1.125rem; margin-top: 0.05rem;
+  border-radius: 50%; background: var(--success-soft); color: var(--success-foreground);
+}
+.mock-act-happened[data-tone="quiet"] .mock-sign { background: var(--muted); color: var(--muted-foreground); }
+.mock-sign .mock-icon { width: 0.7rem; height: 0.7rem; stroke-width: 3; }
+.mock-act-rule { display: inline-flex; align-items: center; white-space: nowrap; color: var(--muted-foreground); font-size: 0.8125rem; }
+.mock-act-rule .mock-arrow { margin-inline: 0.25rem; }
+@container (max-width: 34rem) {
+  .mock-act { grid-template-columns: minmax(0, 1fr) auto; }
+  .mock-act-time { grid-column: 1; grid-row: 1; }
+  .mock-act-rule { grid-column: 2; grid-row: 1; }
+  .mock-act-event, .mock-act-happened { grid-column: 1 / -1; }
+}

@@ -1,0 +1,43 @@
+---
+import type { Messages } from "../i18n"
+import ActivityHistory from "../mockups/ActivityHistory.astro"
+import OverviewHealth from "../mockups/OverviewHealth.astro"
+import RulesList from "../mockups/RulesList.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="section" aria-labelledby="app-title">
+  <div class="container">
+    <h2 id="app-title">{m.app.title}</h2>
+    <p class="lead">{m.app.body}</p>
+    <div class="mockups">
+      <figure class="mockups-overview">
+        <OverviewHealth m={m} />
+        <figcaption>{m.app.overview.caption}</figcaption>
+      </figure>
+      <figure>
+        <RulesList m={m} />
+        <figcaption>{m.app.rules.caption}</figcaption>
+      </figure>
+      <figure>
+        <ActivityHistory m={m} />
+        <figcaption>{m.app.activity.caption}</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<style>
+  .mockups { display: grid; gap: 2rem 1.75rem; margin-top: 2rem; align-items: start; }
+  @media (min-width: 1024px) {
+    .mockups { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+    .mockups-overview { grid-column: 1 / -1; }
+  }
+  figure { margin: 0; min-width: 0; }
+  figcaption { margin-top: 0.6rem; color: var(--muted-foreground); font-size: 0.9375rem; }
+</style>
