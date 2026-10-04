@@ -301,4 +301,68 @@ test.describe("/journey", () => {
     const home = await page.locator('link[rel="preload"][as="font"]').evaluateAll((links) => links.map((link) => link.getAttribute("href")))
     expect(home.some((href) => href?.includes("young-serif"))).toBe(false)
   })
+
+  for (const width of [1440, 1600, 1920]) {
+    test(`at ${width}px the travelling ghost rides the margin and never covers the content`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height: 900 } })
+      const page = await context.newPage()
+      await page.goto("/journey")
+      const carrier = page.locator(".j-rail-carrier")
+      const contentLeft = (await page.locator("#features .j-wrap").boundingBox())!.x
+      for (const section of ["#how-it-works", "#features", "#integrations", "#self-host"]) {
+        await page.locator(section).scrollIntoViewIfNeeded()
+        await expect(carrier).toBeVisible()
+        const box = (await carrier.boundingBox())!
+        expect(box.x).toBeGreaterThanOrEqual(0)
+        expect(box.x + box.width).toBeLessThanOrEqual(contentLeft - 8)
+      }
+      await context.close()
+    })
+  }
+
+  test("below 1440px there is no margin to ride, so the travelling ghost does not show", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1366, height: 900 } })
+    const page = await context.newPage()
+    await page.goto("/journey")
+    await page.locator("#features").scrollIntoViewIfNeeded()
+    await expect(page.locator(".j-rail-carrier")).toBeHidden()
+    await context.close()
+  })
+
+  test("at the last stop the travelling ghost becomes the ending's ghost and sets down what the hero chose", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
+    const page = await context.newPage()
+    await page.goto("/journey")
+    await mode(page, "details").click()
+    await page.locator("#self-host").scrollIntoViewIfNeeded()
+    await expect(page.locator(".j-rail-carrier")).toBeVisible()
+    await page.locator(".j-end-scene").scrollIntoViewIfNeeded()
+    await expect(page.locator(".journey")).toHaveAttribute("data-delivered", "")
+    // One ghost: the margin's hides once the ending's has taken over.
+    await expect(page.locator(".j-rail-ghost")).toBeHidden()
+    await expect(page.locator(".j-end-scene")).toHaveAttribute("data-awake", "rail")
+    const card = page.locator(".j-end .j-carry-card:visible")
+    await expect(card).toContainText(en.demo.events.dentist.title)
+    await expect.poll(() => page.locator(".j-end-flyer").evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
+    await context.close()
+  })
+
+  test("with reduced motion the ending is simply landed; without JavaScript it shows Busy and one ghost", async ({ browser }) => {
+    const still = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" })
+    const page = await still.newPage()
+    await page.goto("/journey")
+    await page.locator(".j-end-scene").scrollIntoViewIfNeeded()
+    await expect(page.locator(".j-rail-ghost")).toBeHidden()
+    expect(await page.locator(".j-end-flyer").evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
+    await still.close()
+
+    const plain = await browser.newContext({ viewport: { width: 1440, height: 900 }, javaScriptEnabled: false })
+    const noScript = await plain.newPage()
+    await noScript.goto("/journey")
+    await noScript.locator(".j-end-scene").scrollIntoViewIfNeeded()
+    await expect(noScript.locator(".j-rail-carrier")).toBeHidden()
+    await expect(noScript.locator(".j-end-flyer")).toBeVisible()
+    await expect(noScript.locator(".j-end .j-carry-card:visible")).toContainText(en.demo.busy)
+    await plain.close()
+  })
 })

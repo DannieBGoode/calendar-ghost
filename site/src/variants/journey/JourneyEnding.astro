@@ -1,8 +1,10 @@
 ---
-// The last stop, in the ghost's own voice. It flies down with the plan picked in the hero, sets it
-// down on Work's calendar, steps back and waves; the call to action is what it says. Forked from
-// sections/Footer.astro because the call to action is the ghost speaking and the footer is the
-// end of the journey's night sky.
+// The last stop, in the ghost's own voice. The ghost that carried the Dentist down the margin
+// arrives here (on wide screens it flies down from the margin and becomes this scene's ghost; on
+// narrower ones it flies in from above), sets the card into the slot on Work's calendar, steps
+// back and waves. The card is the hero's choice: Busy, or the title. The call to action is what
+// the ghost says. Forked from sections/Footer.astro because the call to action is the ghost
+// speaking and the footer is the end of the journey's night sky.
 import Avatar from "../../components/Avatar.astro"
 import type { Messages } from "../../i18n"
 import { Ghost } from "../../islands/Ghost"
@@ -22,14 +24,15 @@ const { m } = Astro.props
   <div class="j-wrap">
     <Stop m={m} n={9} name="end" />
     <div class="j-end-grid">
-      <div class="j-end-scene" data-wake aria-hidden="true">
+      <div class="j-end-scene" aria-hidden="true">
         <span class="j-end-shelf">
           <span class="j-end-shelf-head"><Avatar calendar="work" />{m.demo.calendars.work}</span>
           <span class="j-end-slot"></span>
         </span>
+        <span class="j-end-puff"></span>
         <span class="j-end-drop"><Carried m={m} /></span>
         <span class="j-end-flyer">
-          <span class="j-end-wave"><Ghost face="proud" then="wink" tone="moss" alive="brief" size={190} /></span>
+          <span class="j-end-wave"><Ghost face="happy" then="wink" tone="moss" size={190} /></span>
         </span>
       </div>
       <div class="j-end-speech">
@@ -51,6 +54,62 @@ const { m } = Astro.props
   </div>
 </footer>
 
+<script>
+  // The arrival, once, when the scene is well in view. Where the margin's ghost is showing, it
+  // flies down (transform only) to where this scene's ghost starts, then hands over: it hides, and
+  // this scene's ghost, in the same place, carries on. Otherwise this scene's ghost flies in from
+  // above. With reduced motion everything is simply in place. Without JavaScript the margin's
+  // ghost never shows and this scene rests on its final frame.
+  const journey = document.querySelector<HTMLElement>(".journey")
+  const scene = document.querySelector<HTMLElement>(".j-end-scene")
+  const carrier = document.querySelector<HTMLElement>(".j-rail-carrier")
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)")
+  /** Where this scene's ghost starts after a hand-off, from where it rests, in rem (see below). */
+  const START = { x: -6.5, y: 1.1 }
+
+  function arrive(from: "rail" | "above") {
+    if (journey) journey.dataset.delivered = ""
+    if (scene) scene.dataset.awake = from
+  }
+
+  function deliver() {
+    const railGhost = carrier?.querySelector<HTMLElement>(".ghost")
+    const sceneGhost = scene?.querySelector<HTMLElement>(".j-end-flyer .ghost")
+    const railShown = Boolean(carrier && railGhost && carrier.offsetParent !== null)
+    if (!carrier || !railGhost || !sceneGhost || !railShown || reduced.matches) {
+      arrive("above")
+      return
+    }
+    const rem = parseFloat(getComputedStyle(document.documentElement).fontSize)
+    const from = railGhost.getBoundingClientRect()
+    const to = sceneGhost.getBoundingClientRect()
+    const dx = to.left + START.x * rem + to.width / 2 - (from.left + from.width / 2)
+    const dy = to.top + START.y * rem - from.top
+    carrier.classList.add("is-flying")
+    carrier.style.transform = `translate(${dx}px, ${dy}px) scale(${to.width / from.width})`
+    let handed = false
+    const handOver = () => {
+      if (handed) return
+      handed = true
+      arrive("rail")
+    }
+    carrier.addEventListener("transitionend", handOver, { once: true })
+    window.setTimeout(handOver, 1400)
+  }
+
+  if (scene) {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return
+        observer.disconnect()
+        deliver()
+      },
+      { threshold: 0.6 },
+    )
+    observer.observe(scene)
+  }
+</script>
+
 <style>
   /* The night sky at the end of the trip: the hero's dotted sky, after dark, whatever the device
      uses. The band re-declares the dark Twilight tokens so everything inside draws for the dark. */
@@ -70,8 +129,6 @@ const { m } = Astro.props
     --event-busy: oklch(0.45 0.09 278 / 0.6);
     --event-personal: oklch(0.45 0.09 155 / 0.9);
     --event-personal-edge: oklch(0.72 0.12 155);
-    --event-family: oklch(0.5 0.09 80 / 0.85);
-    --event-family-edge: oklch(0.8 0.12 80);
     position: relative; overflow: hidden; padding-block: var(--space-2xl) 2rem; color: var(--foreground);
     background:
       radial-gradient(circle at 1px 1px, oklch(0.9 0.04 285 / 0.22) 1px, transparent 1.6px) 0 0 / 22px 22px,
@@ -81,12 +138,12 @@ const { m } = Astro.props
   .j-end a:not(.btn) { color: var(--foreground); }
   .j-end :global(.btn) { border-color: var(--border); }
 
-  .j-end-grid { display: grid; gap: var(--space-lg); align-items: center; margin-bottom: var(--space-xl); }
+  .j-end-grid { display: grid; gap: var(--space-lg); align-items: end; margin-bottom: var(--space-xl); }
   .j-end-grid > * { min-width: 0; }
   @media (min-width: 900px) { .j-end-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(2rem, 5vw, 5rem); } }
 
-  /* The scene: Work's calendar with the slot, the plan set down in it, the ghost above. */
-  .j-end-scene { position: relative; height: 22rem; max-width: 26rem; }
+  /* The scene: Work's calendar with the slot, the plan set down in it, the ghost beside it. */
+  .j-end-scene { position: relative; height: 18rem; max-width: 26rem; }
   .j-end-shelf {
     position: absolute; left: 0; right: 0; bottom: 0; height: 8.5rem; display: grid; align-content: start; gap: 0.7rem;
     padding: 0.85rem 1rem; border: 1px solid var(--border); border-radius: 1.1rem; background: var(--surface);
@@ -94,9 +151,13 @@ const { m } = Astro.props
   .j-end-shelf-head { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.875rem; }
   .j-end-shelf-head :global(.avatar) { width: 1.6rem; height: 1.6rem; }
   .j-end-slot { height: 3.6rem; border: 1.5px dashed var(--border); border-radius: 0.7rem; }
-  .j-end-drop { position: absolute; left: 1rem; right: 1rem; bottom: 1rem; height: 3.6rem; transform-origin: 50% 100%; }
-  .j-end-drop :global(.j-carry), .j-end-drop :global(.j-carry-card) { display: grid; width: 100%; height: 100%; }
+  .j-end-drop, .j-end-puff { position: absolute; left: 1rem; right: 1rem; bottom: 1rem; height: 3.6rem; }
+  .j-end-drop { transform-origin: 50% 100%; }
+  .j-end-drop :global(.j-carry), .j-end-drop :global(.j-carry-card) { width: 100%; height: 100%; }
   .j-end-drop :global(.j-carry-card) { align-content: center; padding: 0.4rem 0.9rem; font-size: 0.9375rem; border-radius: 0.7rem; }
+  .j-end-drop :global(.j-carry-card small) { font-size: 0.8125rem; }
+  /* The landing beat: a ring that spreads from the slot as the card settles. */
+  .j-end-puff { border: 2px solid var(--primary); border-radius: 0.9rem; opacity: 0; }
   .j-end-flyer { position: absolute; right: -0.5rem; bottom: 6.5rem; line-height: 0; }
   .j-end-wave { display: block; transform-origin: 50% 90%; }
   .j-end-flyer :global(.ghost) { --ghost-cutout: transparent; }
@@ -121,31 +182,61 @@ const { m } = Astro.props
   }
   .j-end-meta p { margin: 0; }
 
-  /* Once, when it is first well in view: down it comes, the plan settles, the ghost steps back and
-     waves. Without JavaScript or with reduced motion, the scene simply shows how it ends. */
+  /* The ghost's face: happy while it carries, a wink once the card is down. */
   .j-end-scene :global(.ghost[data-sequence] .ghost-face-first) { animation: none; opacity: 0; }
   .j-end-scene :global(.ghost[data-sequence] .ghost-face-then) { animation: none; opacity: 1; }
+
+  /* The arrival (the script above sets data-awake to where the ghost comes from). Under two
+     seconds of flight and setting down, then a wave; all of it over within five seconds. Without
+     JavaScript, or with reduced motion, the scene simply shows how it ends. */
   @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
     .j-end-scene:not([data-awake]) .j-end-drop, .j-end-scene:not([data-awake]) .j-end-flyer { opacity: 0; }
-    .j-end-scene[data-awake] .j-end-drop { animation: j-end-drop 2.1s cubic-bezier(0.45, 0, 0.25, 1) both; }
-    .j-end-scene[data-awake] .j-end-flyer { animation: j-end-fly 2.9s cubic-bezier(0.45, 0, 0.25, 1) both; }
-    .j-end-scene[data-awake] .j-end-wave { animation: j-end-wave 1.5s ease-in-out 2.9s both; }
-    .j-end-scene[data-awake] :global(.ghost-face-first) { animation: j-end-face-first 2.4s both !important; }
-    .j-end-scene[data-awake] :global(.ghost-face-then) { animation: j-end-face-then 2.4s both !important; }
+
+    .j-end-scene[data-awake="rail"] .j-end-flyer { animation: j-end-handed 1.6s cubic-bezier(0.45, 0, 0.25, 1) both; }
+    .j-end-scene[data-awake="rail"] .j-end-drop { animation: j-end-set 1.6s cubic-bezier(0.45, 0, 0.25, 1) both; }
+    .j-end-scene[data-awake="rail"] .j-end-puff { animation: j-end-puff 600ms var(--ease-out) 380ms both; }
+    .j-end-scene[data-awake="rail"] .j-end-wave { animation: j-end-wave 1.4s ease-in-out 1.6s both; }
+    .j-end-scene[data-awake="rail"] :global(.ghost-face-first) { animation: j-end-face-first 1s both !important; }
+    .j-end-scene[data-awake="rail"] :global(.ghost-face-then) { animation: j-end-face-then 1s both !important; }
+
+    .j-end-scene[data-awake="above"] .j-end-flyer { animation: j-end-from-above 2.4s cubic-bezier(0.45, 0, 0.25, 1) both; }
+    .j-end-scene[data-awake="above"] .j-end-drop { animation: j-end-drop-above 2.4s cubic-bezier(0.45, 0, 0.25, 1) both; }
+    .j-end-scene[data-awake="above"] .j-end-puff { animation: j-end-puff 600ms var(--ease-out) 1.2s both; }
+    .j-end-scene[data-awake="above"] .j-end-wave { animation: j-end-wave 1.4s ease-in-out 2.4s both; }
+    .j-end-scene[data-awake="above"] :global(.ghost-face-first) { animation: j-end-face-first 1.8s both !important; }
+    .j-end-scene[data-awake="above"] :global(.ghost-face-then) { animation: j-end-face-then 1.8s both !important; }
   }
-  @keyframes j-end-drop {
-    0% { opacity: 0; transform: translate(4rem, -15rem); }
-    12% { opacity: 1; }
-    80% { transform: translate(0, -0.6rem); }
-    90% { transform: translate(0, 0) scale(1.03, 0.95); }
-    100% { opacity: 1; transform: none; }
+  /* Handed over from the margin: holding the card just over the slot, it sets it down, then steps
+     back up beside it. */
+  @keyframes j-end-handed {
+    0% { transform: translate(-6.5rem, 1.1rem); }
+    24%, 34% { transform: translate(-6.5rem, 2.3rem); }
+    70%, 100% { transform: none; }
   }
-  @keyframes j-end-fly {
-    0% { opacity: 0; transform: translate(-6.5rem, -14.5rem); }
+  @keyframes j-end-set {
+    0% { opacity: 0; transform: translateY(-1.2rem); }
+    6% { opacity: 1; }
+    24% { transform: none; }
+    30% { transform: scale(1.03, 0.92); }
+    38%, 100% { opacity: 1; transform: none; }
+  }
+  /* Flying in from above when there was no margin to ride down. */
+  @keyframes j-end-from-above {
+    0% { opacity: 0; transform: translate(-6.5rem, -12rem); }
     10% { opacity: 1; }
-    58% { transform: translate(-6.5rem, 0.4rem); }
-    72% { transform: translate(-6.5rem, 0.4rem); }
-    100% { opacity: 1; transform: none; }
+    50%, 58% { transform: translate(-6.5rem, 2.3rem); }
+    82%, 100% { opacity: 1; transform: none; }
+  }
+  @keyframes j-end-drop-above {
+    0% { opacity: 0; transform: translateY(-14.6rem); }
+    10% { opacity: 1; }
+    50% { transform: none; }
+    54% { transform: scale(1.03, 0.92); }
+    60%, 100% { opacity: 1; transform: none; }
+  }
+  @keyframes j-end-puff {
+    0% { opacity: 0.7; transform: scale(0.97); }
+    100% { opacity: 0; transform: scale(1.12, 1.35); }
   }
   @keyframes j-end-wave {
     0%, 100% { transform: none; }

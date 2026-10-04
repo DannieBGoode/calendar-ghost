@@ -32,11 +32,13 @@ const m = messagesFor(Astro.currentLocale)
     <main>
       <JourneyHero m={m} />
       <div class="j-route">
-        <!-- On wide screens, the ghost rides down the margin with the plan picked above. -->
+        <!-- On wide screens, the ghost rides down the margin with the Dentist from the hero. -->
         <div class="j-rail" aria-hidden="true">
           <div class="j-rail-ghost">
-            <Ghost face="happy" size={72} />
-            <Carried m={m} />
+            <div class="j-rail-carrier">
+              <Ghost face="happy" size={72} />
+              <Carried m={m} />
+            </div>
           </div>
         </div>
         <JourneyWeek m={m} />
