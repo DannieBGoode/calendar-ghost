@@ -51,6 +51,14 @@ def test_an_issued_token_authenticates_and_only_its_hash_is_stored(tmp_path: Pat
     assert token_hash(issued.token) in repr(stored)
 
 
+def test_an_issued_token_never_shows_the_token_in_its_repr(tmp_path: Path) -> None:
+    tokens, _, _ = _tokens(tmp_path)
+    issued = tokens.issue("Uptime Kuma")
+
+    assert issued.token not in repr(issued)
+    assert issued.summary.id in repr(issued)
+
+
 def test_unknown_malformed_and_revoked_tokens_are_refused(tmp_path: Path) -> None:
     tokens, _, _ = _tokens(tmp_path)
     issued = tokens.issue("Claude Code")

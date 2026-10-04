@@ -774,8 +774,9 @@ class IntegrationTokenSummary:
 @dataclass(frozen=True, slots=True)
 class IssuedIntegrationToken:
     summary: IntegrationTokenSummary
-    token: str
-    """Shown once, when issued; only its hash is kept."""
+    token: str = field(repr=False)
+    """Shown once, when issued; only its hash is kept. Kept out of the repr, so a log line or
+    traceback that prints this value never shows the token."""
 
 
 class IntegrationTokens(Protocol):
