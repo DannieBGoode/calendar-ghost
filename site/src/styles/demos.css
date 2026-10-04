@@ -16,7 +16,9 @@
     opacity 450ms var(--ease-out), transform 450ms cubic-bezier(0.3, 1.4, 0.5, 1);
 }
 .cal-event > span, .cal-event > small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cal-event > small { font-weight: 500; font-size: 0.625rem; opacity: 0.75; }
+/* Full foreground color (not a faded opacity) so detail text reaches the same contrast ratio as
+   the title in every event color, in both themes. */
+.cal-event > small { font-weight: 500; font-size: 0.625rem; }
 .cal-event.is-short > small { display: none; }
 .cal-event.is-work { background: var(--event-work); border-left-color: var(--primary); }
 .cal-event.is-personal { background: var(--event-personal); border-left-color: var(--event-personal-edge); }
