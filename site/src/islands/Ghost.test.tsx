@@ -12,6 +12,17 @@ describe("Ghost", () => {
     }
   })
 
+  it("is drawn flat: no cheeks, no shine, no gradient, plain eyes", () => {
+    for (const face of GHOST_FACES) {
+      for (const tone of ["moss", "lantern", "mist"] as const) {
+        const html = renderToString(<Ghost face={face} tone={tone} float />)
+        expect(html).not.toMatch(/cheek|blush|shine|gradient/i)
+        // An open eye is one ellipse, with no catchlight circle on it.
+        expect(html).not.toContain("<circle")
+      }
+    }
+  })
+
   it("gives each face its own drawing", () => {
     const faces = GHOST_FACES.map((face) => renderToString(<Ghost face={face} />).replace(/data-face="\w+"/, ""))
     expect(new Set(faces).size).toBe(GHOST_FACES.length)

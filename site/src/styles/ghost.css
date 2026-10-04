@@ -1,12 +1,12 @@
-/* The ghost character (src/islands/Ghost.tsx) and its speech bubble.
-   Tones: moss is the Overview's healthy ghost, lantern the indigo brand, mist the pale ghost.
-   Each tone sets the body, a deeper shade for the binder tabs, the ink of the face, and the
-   small lights and props around it. Dark appearance lightens the body and darkens the face. */
+/* The ghost character (src/islands/Ghost.tsx) and its speech bubble. The art is flat, like the
+   app's ghost: one fill, an outline a shade deeper in the same hue, a deeper shade for the binder
+   tabs, and the face. No cheeks, no shine, no gradients.
+   Tones: moss is the Overview's healthy ghost, lantern the indigo brand, mist the pale ghost. Each
+   tone sets the body, its outline, the tabs, the ink of the face, and the small props around it.
+   Dark appearance lightens the body and darkens the face. */
 .ghost {
   --ghost-size: 96px;
   --ghost-cutout: transparent;
-  --ghost-shine: oklch(0.99 0.01 285 / 0.8);
-  --ghost-blush: oklch(0.80 0.11 30 / 0.75);
   --ghost-aside: var(--ghost-ink);
   --ghost-spark: oklch(0.80 0.14 85);
   --ghost-sweat: oklch(0.78 0.08 230);
@@ -21,14 +21,14 @@
 .ghost svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .ghost[data-tone="moss"] {
   --ghost-body: oklch(0.76 0.135 155);
-  --ghost-edge: oklch(0.68 0.13 155);
-  --ghost-tab: oklch(0.64 0.13 155);
+  --ghost-edge: oklch(0.67 0.13 155);
+  --ghost-tab: oklch(0.67 0.13 155);
   --ghost-ink: oklch(0.29 0.075 155);
 }
 .ghost[data-tone="lantern"] {
   --ghost-body: oklch(0.71 0.125 278);
   --ghost-edge: oklch(0.62 0.13 278);
-  --ghost-tab: oklch(0.58 0.14 278);
+  --ghost-tab: oklch(0.62 0.13 278);
   --ghost-ink: oklch(0.22 0.07 280);
 }
 .ghost[data-tone="mist"] {
@@ -36,32 +36,26 @@
   --ghost-edge: oklch(0.80 0.05 280);
   --ghost-tab: oklch(0.86 0.04 282);
   --ghost-ink: oklch(0.32 0.11 278);
-  --ghost-shine: oklch(0.99 0.005 285);
 }
 @media (prefers-color-scheme: dark) {
-  .ghost {
-    --ghost-shine: oklch(0.99 0.01 285 / 0.7);
-    --ghost-blush: oklch(0.80 0.10 30 / 0.8);
-    --ghost-aside: var(--ghost-body);
-  }
+  .ghost { --ghost-aside: var(--ghost-body); }
   .ghost[data-tone="moss"] {
     --ghost-body: oklch(0.80 0.12 155);
-    --ghost-edge: oklch(0.80 0.12 155);
-    --ghost-tab: oklch(0.69 0.12 155);
+    --ghost-edge: oklch(0.72 0.12 155);
+    --ghost-tab: oklch(0.72 0.12 155);
     --ghost-ink: oklch(0.22 0.04 155);
   }
   .ghost[data-tone="lantern"] {
     --ghost-body: oklch(0.79 0.105 278);
-    --ghost-edge: oklch(0.79 0.105 278);
-    --ghost-tab: oklch(0.68 0.12 278);
+    --ghost-edge: oklch(0.71 0.115 278);
+    --ghost-tab: oklch(0.71 0.115 278);
     --ghost-ink: oklch(0.2 0.045 280);
   }
   .ghost[data-tone="mist"] {
     --ghost-body: oklch(0.94 0.025 285);
-    --ghost-edge: oklch(0.94 0.025 285);
+    --ghost-edge: oklch(0.84 0.04 285);
     --ghost-tab: oklch(0.84 0.04 285);
     --ghost-ink: oklch(0.2 0.04 280);
-    --ghost-shine: oklch(0.99 0.005 285);
   }
 }
 
@@ -69,7 +63,6 @@
 .ghost-tab { fill: var(--ghost-tab); }
 /* A ring of the surface around the silhouette, so the ghost reads on top of busy demos. */
 .ghost-cutout { fill: var(--ghost-cutout); stroke: var(--ghost-cutout); stroke-width: 5; stroke-linejoin: round; }
-.ghost-shine { fill: none; stroke: var(--ghost-shine); stroke-width: 2.4; stroke-linecap: round; opacity: 0.6; }
 .ghost-shadow { fill: var(--ghost-shadow); }
 
 /* Every moving part turns around its own middle. */

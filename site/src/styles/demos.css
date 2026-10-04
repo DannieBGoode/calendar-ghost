@@ -188,7 +188,7 @@
 /* The ghost holds the card by its top edge, hem over the card. */
 .crossing-traveler .crossing-carrier { position: absolute; right: -4px; top: 30px; width: 88px; height: 88px; animation: crossing-carry 9s infinite; }
 .crossing-carrier .ghost { --ghost-cutout: var(--surface); --ghost-size: 100%; }
-.crossing-bubble { top: 4%; font-size: 0.8125rem; animation: crossing-bubble 9s infinite; }
+.crossing .crossing-bubble { top: 4%; font-size: 0.8125rem; animation: crossing-bubble 9s infinite; }
 .crossing-traveler .ghost[data-sequence] .ghost-face-first { animation: crossing-face-first 9s infinite; }
 .crossing-traveler .ghost[data-sequence] .ghost-face-then { animation: crossing-face-then 9s infinite; }
 .crossing[data-playing="false"] .crossing-traveler,
@@ -221,6 +221,8 @@
   .crossing { --cross-x: 112.8%; }
   .crossing-cal, .crossing-traveler { width: 47%; }
   .crossing-traveler .crossing-carrier { top: 42px; width: 68px; height: 68px; }
+  /* Higher and a little smaller, so the bubble sits over the empty first hour, not the event. */
+  .crossing .crossing-bubble { top: -0.75rem; max-width: 11.5rem; padding: 0.45rem 0.7rem; font-size: 0.75rem; }
 }
 /* Landed: where the event ends up, with what crossed over and the ghost pleased about it. This
    is the state under reduced motion, and before hydration (including without JavaScript), when

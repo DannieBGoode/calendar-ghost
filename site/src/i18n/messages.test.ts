@@ -35,6 +35,11 @@ describe("English copy", () => {
     expect(strings(en).filter(([, text]) => /pre-?alpha/i.test(text))).toEqual([])
   })
 
+  it("says in the With details bubble what crossed over and what stayed home", () => {
+    expect(en.ghost.crossingBusy).toBe("Dentist? What dentist?")
+    expect(en.ghost.crossingDetails).toBe("Title and place came along. The guest list stayed home.")
+  })
+
   it("lists everything that never crosses over", () => {
     expect(en.crossing.alwaysStays).toEqual([
       "Guests",

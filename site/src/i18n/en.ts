@@ -46,7 +46,7 @@ export const en = {
   /** What the ghost says in its speech bubbles. Jokes only: never the only place a fact lives. */
   ghost: {
     crossingBusy: "Dentist? What dentist?",
-    crossingDetails: "Dr. Ruiz stays home.",
+    crossingDetails: "Title and place came along. The guest list stayed home.",
     footer: "Zzz. Checking again in five minutes.",
     notFound: "This page never crossed over.",
   },

@@ -3,7 +3,8 @@ import type { CSSProperties, ReactNode } from "react"
 /**
  * The ghost as a character: the mark's silhouette (a calendar page with two binder tabs and a
  * three-scallop hem) filled with a tone, with the Overview's faces and a few landing-page ones.
- * Like the app's ghost it has no mouth: eyes, brows, cheeks, and small props carry the feeling.
+ * Like the app's ghost it is flat (one fill, an outline a shade deeper, no shine) and has no
+ * mouth: eyes, brows, and small props carry the feeling.
  *
  * Everything is drawn on a 64-unit grid. The body spans x 12 to 52 and y 8 to 54; the margin
  * around it holds what floats outside the body (sparkles, sweat, "z"s, startle rays).
@@ -45,12 +46,7 @@ const FEATURE = {
 } as const
 
 function OpenEye({ x, y, rx = 3.6, ry = 4.3 }: { x: number; y: number; rx?: number; ry?: number }) {
-  return (
-    <>
-      <ellipse cx={x} cy={y} rx={rx} ry={ry} fill="var(--ghost-ink)" />
-      <circle cx={x + rx * 0.36} cy={y - ry * 0.38} r={Math.max(1, rx * 0.36)} fill="var(--ghost-shine)" />
-    </>
-  )
+  return <ellipse cx={x} cy={y} rx={rx} ry={ry} fill="var(--ghost-ink)" />
 }
 
 /** Two open eyes in one group, so a blink closes both together. */
@@ -66,15 +62,6 @@ function OpenEyes({ y = 32, rx, ry }: { y?: number; rx?: number; ry?: number }) 
 /** Closed, smiling eyes (∩), as on the Overview's healthy ghost. */
 const SMILE_EYES = "M21 33.5Q25 28 29 33.5M35 33.5Q39 28 43 33.5"
 
-function Cheeks() {
-  return (
-    <g className="ghost-cheeks" fill="var(--ghost-blush)">
-      <ellipse cx="18.5" cy="38.5" rx="3.3" ry="2" />
-      <ellipse cx="45.5" cy="38.5" rx="3.3" ry="2" />
-    </g>
-  )
-}
-
 /** A four-point sparkle centered on (x, y): four concave arcs that meet in sharp points. */
 function sparkle(x: number, y: number, r: number): string {
   const c = `${x} ${y}`
@@ -84,17 +71,11 @@ function sparkle(x: number, y: number, r: number): string {
 function Face({ face, look }: { face: GhostFace; look: { x: number; y: number } }) {
   switch (face) {
     case "happy":
-      return (
-        <>
-          <Cheeks />
-          <path d={SMILE_EYES} {...FEATURE} />
-        </>
-      )
+      return <path d={SMILE_EYES} {...FEATURE} />
     case "proud":
       // Chin up, eyes shut with satisfaction, a little sparkle: look what I carried.
       return (
         <>
-          <Cheeks />
           <path d="M21 32.5Q25 28.2 29 32.5M35 32.5Q39 28.2 43 32.5" {...FEATURE} />
           <g className="ghost-sparkles" fill="var(--ghost-spark)">
             <path d={sparkle(53, 9, 5)} />
@@ -137,7 +118,6 @@ function Face({ face, look }: { face: GhostFace; look: { x: number; y: number } 
     case "wink":
       return (
         <>
-          <Cheeks />
           <g className="ghost-eyes">
             <OpenEye x={EYE_X[0]} y={32} />
           </g>
@@ -204,7 +184,6 @@ export function Ghost({
               <rect key={x} className="ghost-tab" x={x} y="8.5" width="5" height="9" rx="2.5" />
             ))}
             <path className="ghost-body" d={BODY} />
-            <path className="ghost-shine" d="M17.2 31C17.2 25 19.6 20.6 24 18.8" />
             {then ? (
               <>
                 <g className="ghost-face ghost-face-first">
