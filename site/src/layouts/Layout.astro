@@ -1,0 +1,51 @@
+---
+import "@fontsource-variable/figtree"
+import "@fontsource-variable/fraunces/full.css"
+import "../styles/tokens.css"
+import "../styles/global.css"
+import "../styles/demos.css"
+import { LOCALES, hasLanguagePicker, localePath, type Locale } from "../i18n"
+
+interface Props {
+  title: string
+  description: string
+  noindex?: boolean
+}
+
+const { title, description, noindex = false } = Astro.props
+const site = Astro.site ?? new URL("https://calendarghost.com")
+const canonical = new URL(Astro.url.pathname, site)
+const ogImage = new URL("/og.png", site)
+const lang = Astro.currentLocale ?? "en"
+const alternates = hasLanguagePicker()
+  ? (Object.keys(LOCALES) as Locale[]).map((locale) => ({
+      locale,
+      href: new URL(localePath(locale, Astro.url.pathname), site).href,
+    }))
+  : []
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.href} />
+    {alternates.map((alt) => <link rel="alternate" hreflang={alt.locale} href={alt.href} />)}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfbfe" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0e19" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical.href} />
+    <meta property="og:image" content={ogImage.href} />
+    <meta name="twitter:card" content="summary_large_image" />
+    {noindex && <meta name="robots" content="noindex" />}
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

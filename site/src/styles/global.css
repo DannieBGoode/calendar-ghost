@@ -1,0 +1,47 @@
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--foreground);
+  background: var(--background);
+  text-rendering: optimizeLegibility;
+}
+h1, h2 {
+  font-family: var(--font-display);
+  font-weight: 560;
+  font-variation-settings: "SOFT" 100;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  margin: 0 0 0.75rem;
+}
+h1 { font-size: clamp(2.25rem, 5vw + 1rem, 4rem); }
+h2 { font-size: clamp(1.75rem, 2.5vw + 1rem, 2.5rem); }
+h3 { font-size: 1rem; font-weight: 650; margin: 0 0 0.25rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--primary); }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.container { width: min(72rem, 100% - 2.5rem); margin-inline: auto; }
+.section { padding-block: clamp(4rem, 8vw, 7rem); }
+.lead { font-size: 1.125rem; color: var(--muted-foreground); max-width: 46ch; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.chip {
+  display: inline-block; font-size: 0.8125rem; font-weight: 600; color: var(--muted-foreground);
+  border: 1px solid var(--border); border-radius: 999px; padding: 0.25rem 0.75rem; margin: 0 0 1rem;
+}
+.ctas { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.75rem; padding: 0.6rem 1.1rem;
+  border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface);
+  color: var(--foreground); font: 600 0.9375rem/1 var(--font-sans); text-decoration: none; cursor: pointer;
+  transition: background 180ms var(--ease-out);
+}
+.btn:hover { background: var(--muted); }
+.btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+.btn-primary:hover { background: color-mix(in oklch, var(--primary), var(--foreground) 12%); }
+.btn-small { min-height: 2.25rem; padding: 0.4rem 0.8rem; font-size: 0.875rem; }

@@ -20,3 +20,9 @@ web/dist/
 .claude/
 # Local log files written when file logging is on, e.g. by scripts/dev_preview.py.
 /logs/
+
+# Landing page build and tool output.
+site/.astro/
+site/.wrangler/
+site/test-results/
+site/playwright-report/

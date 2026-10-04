@@ -1,0 +1,12 @@
+---
+import Layout from "../layouts/Layout.astro"
+import { messagesFor } from "../i18n"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<Layout title={m.meta.title} description={m.meta.description}>
+  <main class="container section">
+    <h1>{m.hero.title}</h1>
+  </main>
+</Layout>
