@@ -4,14 +4,20 @@ import { SAM_WEEK } from "../demo/week"
 import type { Messages } from "../i18n"
 import { format } from "../i18n/format"
 import { EventCard } from "./EventCard"
-import { Ghost, type GhostFace } from "./Ghost"
+import { Ghost, SpeechBubble, type GhostFace } from "./Ghost"
 import { useAnimationFrame, useOnScreen, usePageVisible, usePointerEyes, useReducedMotion } from "./hooks"
 import { MotionToggle } from "./MotionToggle"
 import { REVEAL_REST, clampPercent, shouldAnimate, sweepPercent, sweepTimeFor } from "./motion"
 import { WeekGrid } from "./WeekGrid"
 
 const FRAME = { heightPx: 380, headerPx: 36, gapPx: 3 }
-const PLACED = SAM_WEEK.map((event) => ({ event, box: eventBox(event, FRAME) }))
+const HANDLE_PX = 104
+
+/** Sam's week laid out in a week `heightPx` tall. */
+function placeWeek(heightPx: number) {
+  return SAM_WEEK.map((event) => ({ event, box: eventBox(event, { ...FRAME, heightPx }) }))
+}
+const PLACED = placeWeek(FRAME.heightPx)
 
 /** Two decimals is enough to smooth the sweep; trimmed so whole percentages render without them. */
 function splitStyle(percent: number): string {
@@ -34,8 +40,20 @@ function useHandleFace(held: boolean): GhostFace {
   return startled ? "surprised" : "happy"
 }
 
+export interface WideRevealProps {
+  m: Messages["demo"]
+  motion: Messages["motion"]
+  /** The week's height in pixels, without its day header (default 380). */
+  weekHeight?: number
+  /** The ghost handle's size in pixels (default 104). */
+  handleSize?: number
+  /** What the ghost says while a visitor holds it, if anything. */
+  heldSays?: string
+}
+
 /** The hero: Sam's week as Sam sees it, revealed over what work sees, with the ghost as handle. */
-export function WideReveal({ m, motion }: { m: Messages["demo"]; motion: Messages["motion"] }) {
+export function WideReveal({ m, motion, weekHeight = FRAME.heightPx, handleSize = HANDLE_PX, heldSays }: WideRevealProps) {
+  const placed = useMemo(() => (weekHeight === FRAME.heightPx ? PLACED : placeWeek(weekHeight)), [weekHeight])
   const frame = useRef<HTMLDivElement>(null)
   const handle = useRef<HTMLDivElement>(null)
   const [held, setHeld] = useState<number | null>(null)
@@ -73,7 +91,7 @@ export function WideReveal({ m, motion }: { m: Messages["demo"]; motion: Message
     () => (
       <div className="reveal-layer reveal-work" aria-hidden="true">
         <WeekGrid days={m.days} className="reveal-week">
-          {PLACED.map(({ event, box }) =>
+          {placed.map(({ event, box }) =>
             event.kind === "work" ? (
               <EventCard key={event.key} box={box} look="work" title={m.events[event.key].title} detail={m.events[event.key].detail} />
             ) : (
@@ -84,21 +102,25 @@ export function WideReveal({ m, motion }: { m: Messages["demo"]; motion: Message
         <span className="reveal-tag reveal-tag-work">{m.workSees}</span>
       </div>
     ),
-    [m],
+    [m, placed],
   )
   const youLayer = useMemo(
     () => (
       <div className="reveal-layer reveal-you" aria-hidden="true">
         <WeekGrid days={m.days} className="reveal-week">
-          {PLACED.map(({ event, box }) => (
+          {placed.map(({ event, box }) => (
             <EventCard key={event.key} box={box} look={event.kind} title={m.events[event.key].title} detail={m.events[event.key].detail} />
           ))}
         </WeekGrid>
         <span className="reveal-tag reveal-tag-you">{m.youSee}</span>
       </div>
     ),
-    [m],
+    [m, placed],
   )
+  // Only a non-default size is written, so the default page renders exactly as before.
+  const sizing: Record<string, string> = {}
+  if (weekHeight !== FRAME.heightPx) sizing["--reveal-week-h"] = `${weekHeight}px`
+  if (handleSize !== HANDLE_PX) sizing["--handle-size"] = `${handleSize}px`
 
   return (
     <figure className="reveal">
@@ -106,7 +128,7 @@ export function WideReveal({ m, motion }: { m: Messages["demo"]; motion: Message
         ref={frame}
         className="reveal-frame"
         data-playing={paused ? "false" : "true"}
-        style={{ "--split": splitStyle(splitValue) } as CSSProperties}
+        style={{ ...sizing, "--split": splitStyle(splitValue) } as CSSProperties}
       >
         {workLayer}
         {youLayer}
@@ -117,7 +139,12 @@ export function WideReveal({ m, motion }: { m: Messages["demo"]; motion: Message
         </div>
         <div className="reveal-rail" aria-hidden="true">
           <div ref={handle} className="reveal-handle" data-face={face}>
-            <Ghost face={face} look={eyes} alive="loop" size={104} className="reveal-ghost" />
+            <Ghost face={face} look={eyes} alive="loop" size={handleSize} className="reveal-ghost" />
+            {heldSays && held !== null ? (
+              <SpeechBubble side="top" className="reveal-says">
+                {heldSays}
+              </SpeechBubble>
+            ) : null}
           </div>
         </div>
         <input

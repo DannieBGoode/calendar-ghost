@@ -4,7 +4,7 @@ import { eventBox } from "../demo/layout"
 import { SAM_WEEK } from "../demo/week"
 import type { Messages } from "../i18n"
 import { EventCard } from "./EventCard"
-import { Ghost } from "./Ghost"
+import { Ghost, type GhostTone } from "./Ghost"
 import { useAnimationFrame, useOnScreen, usePageVisible, usePointerEyes, useReducedMotion } from "./hooks"
 import { shouldAnimate } from "./motion"
 import { MotionToggle } from "./MotionToggle"
@@ -19,10 +19,13 @@ export function HauntedWeek({
   m,
   motion,
   summary,
+  ghostTone = "moss",
 }: {
   m: Messages["demo"]
   motion: Messages["motion"]
   summary: string
+  /** The roaming ghost's tone (default moss, the healthy green). */
+  ghostTone?: GhostTone
 }) {
   const root = useRef<HTMLDivElement>(null)
   const ghost = useRef<HTMLDivElement>(null)
@@ -82,7 +85,7 @@ export function HauntedWeek({
           style={{ "--haunt-x": `${frame.ghost.xPct}%`, "--haunt-y": `${frame.ghost.yPct}%` } as CSSProperties}
         >
           <div ref={ghost} className="haunt-ghost" style={{ opacity: frame.ghost.visible ? 1 : 0 }}>
-            <Ghost face={face} look={eyes} alive="loop" size={84} />
+            <Ghost face={face} tone={ghostTone} look={eyes} alive="loop" size={84} />
           </div>
         </div>
         <span className="haunt-label">{m.workCalendar}</span>

@@ -1,5 +1,5 @@
 ---
-import { SELF_HOST_COMMANDS } from "../content/self-host"
+import SelfHostCommands from "../components/SelfHostCommands.astro"
 import type { Messages } from "../i18n"
 import { GUIDE_URL } from "../links"
 
@@ -20,80 +20,19 @@ const { m } = Astro.props
     </div>
     <div>
       <h3>{m.selfHost.stepsTitle}</h3>
-      <ol class="commands">
-        {
-          SELF_HOST_COMMANDS.map((command, index) => (
-            <li>
-              <p>{m.selfHost.steps[index]}</p>
-              <div class="command">
-                <code id={`self-host-command-${index}`}>{command}</code>
-                <button
-                  type="button"
-                  class="btn btn-small"
-                  hidden
-                  data-copy={`self-host-command-${index}`}
-                  data-label={m.selfHost.copy}
-                  data-copied={m.selfHost.copied}
-                  data-selected={m.selfHost.selected}
-                >
-                  {m.selfHost.copy}
-                </button>
-              </div>
-            </li>
-          ))
-        }
-      </ol>
+      <SelfHostCommands m={m} />
       <p class="note">{m.selfHost.oauthNote}</p>
       <a class="btn btn-primary" href={GUIDE_URL}>{m.selfHost.guide}</a>
     </div>
   </div>
-  <p class="sr-only" role="status" data-copy-status></p>
 </section>
-
-<script>
-  // Copy buttons appear only with JavaScript. Without the Clipboard API (plain HTTP on a LAN,
-  // older browsers) the command is selected so the visitor can copy it by hand. The result also
-  // goes to a visually hidden live region, since a button's own text change is not reliably
-  // announced by screen readers.
-  const status = document.querySelector<HTMLElement>("[data-copy-status]")
-  for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
-    button.hidden = false
-    button.addEventListener("click", async () => {
-      const code = document.getElementById(button.dataset.copy ?? "")
-      if (!code) return
-      let message: string
-      try {
-        await navigator.clipboard.writeText(code.textContent ?? "")
-        message = button.dataset.copied ?? ""
-      } catch {
-        const range = document.createRange()
-        range.selectNodeContents(code)
-        const selection = window.getSelection()
-        selection?.removeAllRanges()
-        selection?.addRange(range)
-        message = button.dataset.selected ?? ""
-      }
-      button.textContent = message
-      if (status) status.textContent = message
-      window.setTimeout(() => {
-        button.textContent = button.dataset.label ?? ""
-        if (status) status.textContent = ""
-      }, 2500)
-    })
-  }
-</script>
 
 <style>
   .self-host { display: grid; gap: 2.5rem; }
   /* Grid and flex children default to their content's width; a long command must not widen the
      page, so every box on the way down may shrink, and the command scrolls inside its own box. */
-  .self-host > div, .commands li { min-width: 0; }
+  .self-host > div { min-width: 0; }
   @media (min-width: 960px) { .self-host { grid-template-columns: 1fr 1.2fr; } }
   .needs { padding-left: 1.1rem; color: var(--muted-foreground); }
-  .commands { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: 1rem; }
-  .commands p { margin: 0 0 0.35rem; font-weight: 600; font-size: 0.9375rem; }
-  .command { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.6rem 0.6rem 0.9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-  .command code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.875rem; padding-block: 0.35rem; }
-  .command .btn { flex: none; }
   .note { color: var(--muted-foreground); }
 </style>

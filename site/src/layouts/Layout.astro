@@ -60,9 +60,9 @@ const alternates = hasLanguagePicker()
   <body>
     <slot />
     <script>
-      // A ghost that idles briefly (Ghost.tsx, alive="brief") wakes once, when it is first well in
-      // view, so its few seconds of life happen where someone can see them. Without JavaScript it
-      // simply stays still.
+      // A ghost that idles briefly (Ghost.tsx, alive="brief"), or any scene marked `data-wake` that
+      // plays once, wakes when it is first well in view, so its few seconds of life happen where
+      // someone can see them. Without JavaScript it simply stays still.
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
@@ -73,7 +73,7 @@ const alternates = hasLanguagePicker()
         },
         { threshold: 0.6 },
       )
-      for (const ghost of document.querySelectorAll('.ghost[data-alive="brief"]')) observer.observe(ghost)
+      for (const sleeper of document.querySelectorAll('.ghost[data-alive="brief"], [data-wake]')) observer.observe(sleeper)
     </script>
   </body>
 </html>

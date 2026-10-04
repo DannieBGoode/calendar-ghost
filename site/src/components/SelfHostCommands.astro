@@ -1,0 +1,81 @@
+---
+// The self-host commands, each with a copy button, shared by every page that offers them. The
+// commands come from content/self-host.ts, which a unit test keeps in step with the README.
+import { SELF_HOST_COMMANDS } from "../content/self-host"
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<ol class="commands">
+  {
+    SELF_HOST_COMMANDS.map((command, index) => (
+      <li>
+        <p>{m.selfHost.steps[index]}</p>
+        <div class="command">
+          <code id={`self-host-command-${index}`}>{command}</code>
+          <button
+            type="button"
+            class="btn btn-small"
+            hidden
+            data-copy={`self-host-command-${index}`}
+            data-label={m.selfHost.copy}
+            data-copied={m.selfHost.copied}
+            data-selected={m.selfHost.selected}
+          >
+            {m.selfHost.copy}
+          </button>
+        </div>
+      </li>
+    ))
+  }
+</ol>
+<p class="sr-only" role="status" data-copy-status></p>
+
+<script>
+  // Copy buttons appear only with JavaScript. Without the Clipboard API (plain HTTP on a LAN,
+  // older browsers) the command is selected so the visitor can copy it by hand. The result also
+  // goes to a visually hidden live region, since a button's own text change is not reliably
+  // announced by screen readers.
+  const status = document.querySelector<HTMLElement>("[data-copy-status]")
+  for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+    button.hidden = false
+    button.addEventListener("click", async () => {
+      const code = document.getElementById(button.dataset.copy ?? "")
+      if (!code) return
+      let message: string
+      try {
+        await navigator.clipboard.writeText(code.textContent ?? "")
+        message = button.dataset.copied ?? ""
+      } catch {
+        const range = document.createRange()
+        range.selectNodeContents(code)
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        message = button.dataset.selected ?? ""
+      }
+      button.textContent = message
+      if (status) status.textContent = message
+      window.setTimeout(() => {
+        button.textContent = button.dataset.label ?? ""
+        if (status) status.textContent = ""
+      }, 2500)
+    })
+  }
+</script>
+
+<style>
+  /* Grid and flex children default to their content's width; a long command must not widen the
+     page, so every box on the way down may shrink, and the command scrolls inside its own box. */
+  .commands li { min-width: 0; }
+  .commands { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: 1rem; }
+  .commands p { margin: 0 0 0.35rem; font-weight: 600; font-size: 0.9375rem; }
+  .command { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.6rem 0.6rem 0.9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .command code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.875rem; padding-block: 0.35rem; }
+  .command .btn { flex: none; }
+</style>

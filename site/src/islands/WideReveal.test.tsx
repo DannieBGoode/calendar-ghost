@@ -17,6 +17,18 @@ describe("WideReveal", () => {
     expect(html.split(`>${en.demo.events.dentist.title}<`).length - 1).toBe(1)
   })
 
+  it("keeps the default size unless a page asks for another", () => {
+    const plain = renderToString(<WideReveal m={en.demo} motion={en.motion} />)
+    expect(plain).not.toContain("--reveal-week-h")
+    expect(plain).not.toContain("--handle-size")
+    const big = renderToString(<WideReveal m={en.demo} motion={en.motion} weekHeight={520} handleSize={184} />)
+    expect(big).toContain("--reveal-week-h:520px")
+    expect(big).toContain("--handle-size:184px")
+    // The week's events are laid out for the taller week: the Standup (10:00) sits lower.
+    const standupTop = (html: string) => Number(html.match(/top:(\d+)px[^>]*><span>Standup/)?.[1])
+    expect(standupTop(big)).toBeGreaterThan(standupTop(plain))
+  })
+
   describe("in the browser", () => {
     let container: HTMLDivElement
     beforeEach(() => {
@@ -77,6 +89,19 @@ describe("WideReveal", () => {
 
       await act(async () => new Promise((resolve) => setTimeout(resolve, 500)))
       expect(ghost()).toBe("happy")
+      await act(async () => root.unmount())
+    })
+
+    it("says its line only while a visitor holds it", async () => {
+      const root = createRoot(container)
+      await act(async () => root.render(<WideReveal m={en.demo} motion={en.motion} heldSays="Wheee!" />))
+      const bubble = () => container.querySelector(".reveal-says")?.textContent
+      expect(bubble()).toBeUndefined()
+      const slider = container.querySelector<HTMLInputElement>("input[type=range]")!
+      await act(async () => slider.focus())
+      expect(bubble()).toBe("Wheee!")
+      await act(async () => slider.blur())
+      expect(bubble()).toBeUndefined()
       await act(async () => root.unmount())
     })
   })
