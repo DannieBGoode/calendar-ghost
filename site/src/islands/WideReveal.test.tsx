@@ -43,5 +43,27 @@ describe("WideReveal", () => {
       expect(slider.getAttribute("aria-valuetext")).toBe("30% of the week shows your view")
       await act(async () => root.unmount())
     })
+
+    it("pins the position when the slider gains focus, so it does not drift for a keyboard user", async () => {
+      const root = createRoot(container)
+      await act(async () => root.render(<WideReveal m={en.demo} />))
+      const slider = container.querySelector<HTMLInputElement>("input[type=range]")!
+      const frame = container.querySelector<HTMLElement>(".reveal-frame")!
+
+      await act(async () => {
+        slider.focus()
+      })
+
+      const pinnedSplit = frame.style.getPropertyValue("--split")
+      expect(pinnedSplit).toBe(`${slider.value}%`)
+      expect(slider.getAttribute("aria-valuetext")).toBe(`${slider.value}% of the week shows your view`)
+
+      // A later tick (where an in-progress sweep would otherwise move the value) must not move it.
+      await act(async () => {})
+
+      expect(frame.style.getPropertyValue("--split")).toBe(pinnedSplit)
+      expect(slider.getAttribute("aria-valuetext")).toBe(`${slider.value}% of the week shows your view`)
+      await act(async () => root.unmount())
+    })
   })
 })

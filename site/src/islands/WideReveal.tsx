@@ -37,7 +37,7 @@ export function WideReveal({ m }: { m: Messages["demo"] }) {
   return (
     <figure className="reveal">
       <div ref={frame} className="reveal-frame" style={{ "--split": `${split}%` } as CSSProperties}>
-        <div className="reveal-layer reveal-work">
+        <div className="reveal-layer reveal-work" aria-hidden="true">
           <WeekGrid days={m.days} className="reveal-week">
             {PLACED.map(({ event, box }) =>
               event.kind === "work" ? (
@@ -49,7 +49,7 @@ export function WideReveal({ m }: { m: Messages["demo"] }) {
           </WeekGrid>
           <span className="reveal-tag reveal-tag-work">{m.workSees}</span>
         </div>
-        <div className="reveal-layer reveal-you">
+        <div className="reveal-layer reveal-you" aria-hidden="true">
           <WeekGrid days={m.days} className="reveal-week">
             {PLACED.map(({ event, box }) => (
               <EventCard key={event.key} box={box} look={event.kind} title={m.events[event.key].title} detail={m.events[event.key].detail} />
@@ -71,6 +71,7 @@ export function WideReveal({ m }: { m: Messages["demo"] }) {
           aria-label={m.sliderLabel}
           aria-valuetext={format(m.sliderValueText, { percent: split })}
           onChange={(event) => setHeld(clampPercent(Number(event.currentTarget.value)))}
+          onFocus={() => setHeld(split)}
           onPointerMove={(event) => {
             if (event.pointerType !== "mouse" || event.buttons !== 0) return
             const box = event.currentTarget.getBoundingClientRect()
