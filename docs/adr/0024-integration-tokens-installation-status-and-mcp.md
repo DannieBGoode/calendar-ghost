@@ -127,7 +127,12 @@ Homepage that show one tile per service.
   ships; existing tokens never gain a new scope implicitly.
 - A reverse proxy configured to log request headers will record Integration Tokens, the same as it
   would record a session cookie. The self-hosting guide says so, and recommends HTTPS before a
-  token is issued.
+  token is used from outside the home network.
 - `import-linter` gains an `interfaces/mcp` contract mirroring `interfaces/api`, and the `mcp`
   package may be imported only inside `interfaces/mcp`, so the dependency cannot leak into
   provider-neutral or domain code.
+- Integration Tokens and Installation Status belong to the installation, which today has one
+  Installation Administrator. When one installation serves many users
+  ([ADR 0023](0023-hosted-service-runs-the-open-codebase.md)), a token will need an owner, and status
+  read through it will need to cover only that user's rules. Adding that is a new scope decision,
+  not a change to existing tokens.

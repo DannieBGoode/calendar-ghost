@@ -92,7 +92,7 @@ def create_app(container: Container | None = None) -> FastAPI:
     ):
         app.router.routes.extend(module.router.routes)
 
-    # One exact route, ahead of the API fallback and the Web UI catch-all (ADR 0023).
+    # One exact route, ahead of the API fallback and the Web UI catch-all (ADR 0024).
     app.router.routes.append(Route("/mcp", mcp.app, include_in_schema=False))
     app.router.routes.append(Route("/mcp/{path:path}", McpNotFound(), include_in_schema=False))
     # MCP clients look for OAuth metadata here before they use a bearer token. Calendar Ghost has

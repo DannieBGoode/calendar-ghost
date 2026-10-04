@@ -285,7 +285,7 @@ pinned to `mcp>=2.3,<3`:
 - **Host checks.** The SDK's DNS-rebinding protection restricts Host and Origin to localhost by
   default and would refuse `ghost.lan` with 421. That protection exists for unauthenticated local
   servers: a hostile page can rebind its domain to the LAN but cannot supply the bearer token. With
-  every request authenticated, the allowlist is turned off and ADR 0023 records why.
+  every request authenticated, the allowlist is turned off and ADR 0024 records why.
 - **Tools**, each annotated `readOnlyHint: true`:
   - `get_status`: the Installation Status, identical to `/api/v1/status`.
   - `get_rule(rule)`: one rule by id or by its "Work → Personal" name, adding the last Sync Run's
@@ -357,7 +357,7 @@ version showed a red warning on every plain-HTTP visit.)
 
 ## Documentation
 
-- **ADR 0023**, "Integration Tokens, Installation Status, and MCP": the access model, why the
+- **ADR 0024**, "Integration Tokens, Installation Status, and MCP": the access model, why the
   dashboard API is not exposed to tokens, why `/health` stays liveness only, why the MCP Host
   allowlist is off, why one token level is enough, and why the badge is deferred.
 - **`CONTEXT.md`.** Add Integration Token and Installation Status under Access and Health; Public

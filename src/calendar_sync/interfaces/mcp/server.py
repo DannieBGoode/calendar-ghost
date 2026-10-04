@@ -106,7 +106,7 @@ def _sdk_app(services: McpServices) -> tuple[ASGIApp, StreamableHTTPSessionManag
         }
 
     # Stateless JSON: no per-client session to keep in the single process. The Host allowlist is
-    # off because every request carries a bearer token a rebinding page cannot supply (ADR 0023).
+    # off because every request carries a bearer token a rebinding page cannot supply (ADR 0024).
     sdk = server.streamable_http_app(
         streamable_http_path="/mcp",
         json_response=True,

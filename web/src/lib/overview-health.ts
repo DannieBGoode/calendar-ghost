@@ -35,7 +35,7 @@ export type OverviewHealth = {
   others: OtherProblem[]
 }
 
-/** The server's verdict, translated to the Overview's tone vocabulary; the Overview never derives its own (ADR 0023). */
+/** The server's verdict, translated to the Overview's tone vocabulary; the Overview never derives its own (ADR 0024). */
 const TONE_OF: Record<InstallationHealth, OverviewTone> = {
   stalled: "stopped",
   stopped: "stopped",
@@ -214,7 +214,7 @@ function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[
 
 /**
  * One health model for the Overview, so the headline, facts, and next action can never disagree.
- * The server decides the tone (ADR 0023); the most urgent problem leads, and the hero lists the
+ * The server decides the tone (ADR 0024); the most urgent problem leads, and the hero lists the
  * rest below it.
  */
 export function overviewHealth(
@@ -267,7 +267,7 @@ export function overviewHealth(
   }
   // The server can report attention before the client's per-rule problems explain why, such as
   // between the dashboard poll and the next one; a generic hero for that tone still tells the
-  // truth instead of contradicting it with healthy, paused, or setup copy (ADR 0023).
+  // truth instead of contradicting it with healthy, paused, or setup copy (ADR 0024).
   const tone = TONE_OF[dashboard.status]
   if (tone === "stopped" || tone === "review" || tone === "waiting") {
     const generic = {

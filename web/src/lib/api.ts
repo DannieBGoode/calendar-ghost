@@ -38,7 +38,7 @@ export type ServerProblem = {
   since: string | null
 }
 export type Dashboard = {
-  /** The server's verdict; the Overview never derives its own (ADR 0023). */
+  /** The server's verdict; the Overview never derives its own (ADR 0024). */
   status: InstallationHealth
   needs_attention: boolean
   /** Every current problem, most urgent first. */

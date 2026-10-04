@@ -1,4 +1,4 @@
--- Integration Tokens let monitors and agents read Installation Status (ADR 0023).
+-- Integration Tokens let monitors and agents read Installation Status (ADR 0024).
 -- Only a SHA-256 hash of each token is kept; UNIQUE indexes it for lookup.
 CREATE TABLE integration_tokens (
     id TEXT PRIMARY KEY,

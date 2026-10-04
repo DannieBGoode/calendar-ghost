@@ -3,8 +3,8 @@ from __future__ import annotations
 import logging
 import secrets
 import sqlite3
-from collections.abc import Generator, Sequence
-from contextlib import contextmanager
+from collections.abc import Sequence
+from contextlib import AbstractContextManager
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,6 +17,7 @@ from calendar_sync.application.ports import (
     IntegrationTokenSummary,
     IssuedIntegrationToken,
 )
+from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash
 
 logger = logging.getLogger(__name__)
@@ -97,19 +98,8 @@ class SqliteIntegrationTokens:
                 summary = _record_use(connection, summary, now)
         return summary
 
-    @contextmanager
-    def _connect(self) -> Generator[sqlite3.Connection]:
-        connection = sqlite3.connect(self._database_path)
-        connection.row_factory = sqlite3.Row
-        try:
-            yield connection
-        except BaseException:
-            connection.rollback()
-            raise
-        else:
-            connection.commit()
-        finally:
-            connection.close()
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return transaction(self._database_path)
 
 
 def _record_use(

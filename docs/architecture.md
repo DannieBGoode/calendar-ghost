@@ -87,7 +87,7 @@ when it finds an account's authorization lost. A provider failure names the Conn
 request failed, so an authorization Incident names the account to reauthorize. Scheduled runs and Rule Removal share one retry helper in
 `application/retry.py`, which retries only temporary and rate-limited failures.
 
-Installation Status follows the same direction ([ADR 0023](adr/0023-integration-tokens-installation-status-and-mcp.md)).
+Installation Status follows the same direction ([ADR 0024](adr/0024-integration-tokens-installation-status-and-mcp.md)).
 `application/status.py` decides the one verdict the Overview, `GET /api/v1/status`, and MCP share:
 `assess_installation` is a pure function of the rule summaries, the operations overview, open
 incidents, and the scheduler's `SchedulerProgress`, read through the `SchedulerHeartbeat` port that

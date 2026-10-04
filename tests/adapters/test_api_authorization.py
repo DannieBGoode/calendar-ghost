@@ -22,7 +22,7 @@ PUBLIC_API_ROUTES = {
     ("DELETE", "/api/v1/session"),
     ("GET", "/api/v1/oauth/google/callback"),
 }
-# Readable with an administrator session or an Integration Token (ADR 0023).
+# Readable with an administrator session or an Integration Token (ADR 0024).
 STATUS_READER_ROUTES = {("GET", "/api/v1/status")}
 
 

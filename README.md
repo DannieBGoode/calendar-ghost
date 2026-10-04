@@ -331,7 +331,7 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
 - Integration Tokens read Installation Status only, through `GET /api/v1/status` and `/mcp`; every
   other route refuses them. Only a SHA-256 hash of each token is stored, the token is shown once,
   and it can be revoked at any time. Status names rules by their calendars and never contains event
-  content, calendar IDs, or account emails ([ADR 0023](docs/adr/0023-integration-tokens-installation-status-and-mcp.md)).
+  content, calendar IDs, or account emails ([ADR 0024](docs/adr/0024-integration-tokens-installation-status-and-mcp.md)).
 - There is no mandatory analytics, license server, remote logging, or developer-operated backend.
 
 For deployment hardening, backup expectations, and HTTPS guidance, read
