@@ -5,6 +5,15 @@ interface Step {
   body: string
 }
 
+/** One row of the Activity mockup: when, which event, what the source showed, what was done. */
+interface ActivityRow {
+  time: string
+  title: string
+  when: string
+  trigger: string
+  effect: string
+}
+
 // Every user-visible word on the site. A new language copies this module and
 // `satisfies Messages`, so a missing key fails `astro check`. Fixed-length lists (the five
 // weekdays, the three self-host steps matched to `SELF_HOST_COMMANDS`, the five things that
@@ -28,9 +37,21 @@ export const en = {
     star: "Star on GitHub",
     menu: "Menu",
     language: "Language",
+    newTab: "(opens in a new tab)",
+  },
+  motion: {
+    pause: "Pause animation",
+    play: "Play animation",
+  },
+  /** What the ghost says in its speech bubbles. Jokes only: never the only place a fact lives. */
+  ghost: {
+    crossingBusy: "Dentist? What dentist?",
+    crossingDetails: "Dr. Ruiz stays home.",
+    footer: "Zzz. Checking again in five minutes.",
+    notFound: "This page never crossed over.",
   },
   hero: {
-    chip: "Pre-alpha · Open source (AGPL) · Google Calendar",
+    chip: "Open source (AGPL) · Self-hosted · Google Calendar",
     title: "Sync your calendars. Keep your privacy.",
     sub: "Calendar Ghost copies events from one Google calendar to another, on your own server. You choose what crosses over. Guests and meeting links always stay behind.",
     primary: "Self-host it",
@@ -107,18 +128,55 @@ export const en = {
   },
   app: {
     title: "See the app",
-    body: "Real screens, with made-up data for Sam's three calendars.",
+    body: "The app's own screens, redrawn with made-up data for Sam's calendars.",
     overview: {
-      alt: "Calendar Ghost Overview showing healthy synchronization, rules, and recent changes",
+      alt: "Calendar Ghost Overview: synchronization is healthy, with 3 rules running",
       caption: "Overview: one plain answer to “is everything in sync?”",
+      headline: "Synchronization is healthy",
+      detail: "Calendar Ghost checks your calendars for changes every five minutes.",
+      running: "3 rules running",
+      lastSync: "Last sync 2 minutes ago",
+      bubbleTitle: "All good!",
+      bubbleBody: "Your calendars are in sync.",
     },
     rules: {
-      alt: "Calendar Ghost Rules showing source and destination calendars",
+      alt: "Calendar Ghost Rules: Family to Work, Personal to Work, and Work to Personal, each Busy only and enabled",
       caption: "Rules: each one reads one calendar and writes one other.",
+      policy: "Busy only, including all-day events",
+      enabled: "Enabled",
+      accounts: { family: "sam@family.example", personal: "sam@personal.example", work: "sam@work.example" },
+      synced: ["Last synced 4 minutes ago", "Last synced 3 minutes ago", "Last synced 2 minutes ago"] as [
+        string,
+        string,
+        string,
+      ],
     },
     activity: {
-      alt: "Calendar Ghost Activity showing what each rule did",
+      alt: "Calendar Ghost Activity: what happened to three events, and why",
       caption: "Activity: what happened to each event, and why.",
+      rows: [
+        {
+          time: "7:01 PM",
+          title: "Dentist appointment",
+          when: "Mon, Oct 5, 1:00 PM – 2:00 PM",
+          trigger: "Not answered yet",
+          effect: "skipped",
+        },
+        {
+          time: "7:01 PM",
+          title: "School pickup",
+          when: "Tue, Oct 6, 5:00 PM – 6:00 PM",
+          trigger: "Declined",
+          effect: "removed from Work",
+        },
+        {
+          time: "7:01 PM",
+          title: "PTA meeting",
+          when: "Sun, Oct 11, 8:00 PM – 9:00 PM",
+          trigger: "Your response changed in Personal",
+          effect: "updated in Work",
+        },
+      ] as [ActivityRow, ActivityRow, ActivityRow],
     },
   },
   trust: {
@@ -179,7 +237,7 @@ export const en = {
   faq: {
     title: "Questions",
     items: [
-      { q: "Is it free?", a: "Yes. It is open source under AGPL-3.0. You run it and pay only for your own server." },
+      { q: "Is it free?", a: "Yes. It is open source under AGPL-3.0." },
       {
         q: "Can it sync both ways?",
         a: "Yes, with two rules, one in each direction. Calendar Ghost never syncs its own events back.",
@@ -187,7 +245,7 @@ export const en = {
       { q: "Outlook, iCloud, or CalDAV?", a: "Not yet. Google Calendar is the only provider today." },
       {
         q: "Is it ready for my real calendars?",
-        a: "Not yet. It is pre-alpha: use test calendars and keep backups.",
+        a: "Yes. Like any self-hosted software, you run it at your own risk, so keep backups.",
       },
       { q: "Is there a hosted version?", a: "Not yet. If one comes, it will run this same open code." },
     ],

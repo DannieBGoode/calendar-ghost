@@ -24,7 +24,11 @@ describe("English copy", () => {
 
   it("states the approved headline and scope chip", () => {
     expect(en.hero.title).toBe("Sync your calendars. Keep your privacy.")
-    expect(en.hero.chip).toBe("Pre-alpha · Open source (AGPL) · Google Calendar")
+    expect(en.hero.chip).toBe("Open source (AGPL) · Self-hosted · Google Calendar")
+  })
+
+  it("never calls the app pre-alpha", () => {
+    expect(strings(en).filter(([, text]) => /pre-?alpha/i.test(text))).toEqual([])
   })
 
   it("lists everything that never crosses over", () => {
