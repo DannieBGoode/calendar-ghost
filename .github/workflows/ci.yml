@@ -49,6 +49,9 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    # A build takes 4 to 8 minutes; a stalled emulated arm64 step fails here instead of after
+    # GitHub's six-hour default.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4
