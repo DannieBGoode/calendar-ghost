@@ -5,7 +5,7 @@ import { SAM_WEEK } from "../demo/week"
 import type { Messages } from "../i18n"
 import { EventCard } from "./EventCard"
 import { GhostMark } from "./GhostMark"
-import { useAnimationFrame, useOnScreen, usePageVisible, useReducedMotion } from "./hooks"
+import { useAnimationFrame, useOnScreen, usePageVisible, usePointerEyes, useReducedMotion } from "./hooks"
 import { shouldAnimate } from "./motion"
 import { WeekGrid } from "./WeekGrid"
 
@@ -14,12 +14,14 @@ const WORK = SAM_WEEK.filter((event) => event.kind === "work").map((event) => ({
 const INCOMING = SAM_WEEK.filter((event) => event.kind !== "work").map((event) => ({ event, box: eventBox(event, FRAME) }))
 const INCOMING_DAYS = INCOMING.map(({ event }) => event.day)
 
-export function HauntedWeek({ m }: { m: Messages["demo"] }) {
+export function HauntedWeek({ m, summary }: { m: Messages["demo"]; summary: string }) {
   const root = useRef<HTMLDivElement>(null)
+  const ghost = useRef<HTMLDivElement>(null)
   const [ms, setMs] = useState(HAUNTED_STILL_MS)
   const reducedMotion = useReducedMotion()
   const onScreen = useOnScreen(root)
   const pageVisible = usePageVisible()
+  const eyes = usePointerEyes(ghost, onScreen)
   const animating = shouldAnimate({ onScreen, pageVisible, reducedMotion, held: false })
   useAnimationFrame(setMs, animating)
   const frame = hauntedFrame(animating ? ms : HAUNTED_STILL_MS, INCOMING_DAYS)
@@ -47,13 +49,15 @@ export function HauntedWeek({ m }: { m: Messages["demo"] }) {
           })}
         </WeekGrid>
         <div
+          ref={ghost}
           className="haunt-ghost"
           style={{ left: `${frame.ghost.xPct}%`, top: `${frame.ghost.yPct}%`, opacity: frame.ghost.visible ? 1 : 0 }}
         >
-          <GhostMark />
+          <GhostMark eyes={eyes} />
         </div>
         <span className="haunt-label">{m.workCalendar}</span>
       </div>
+      <figcaption className="sr-only">{summary}</figcaption>
     </figure>
   )
 }
