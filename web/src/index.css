@@ -1845,7 +1845,11 @@ p {
   font-weight: 550;
 }
 
-.account-empty p,
+/* An installation with no account yet is not failing, so its next step reads as quiet help. */
+.account-empty p {
+  color: var(--muted-foreground);
+}
+
 .account-copy span[data-stopped] {
   color: var(--destructive-soft-foreground);
   font-weight: 550;
