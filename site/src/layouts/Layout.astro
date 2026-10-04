@@ -8,7 +8,7 @@ import "../styles/demos.css"
 // instead of swapping in after layout and shifting the page (the lowest-risk fix for CLS).
 import figtreeLatinWoff2 from "@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2?url"
 import frauncesLatinWoff2 from "@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2?url"
-import { LOCALES, hasLanguagePicker, localePath, type Locale } from "../i18n"
+import { LOCALES, hasLanguagePicker, localePath, stripLocale, type Locale } from "../i18n"
 
 interface Props {
   title: string
@@ -21,10 +21,11 @@ const site = Astro.site ?? new URL("https://calendarghost.com")
 const canonical = new URL(Astro.url.pathname, site)
 const ogImage = new URL("/og.png", site)
 const lang = Astro.currentLocale ?? "en"
+const unprefixedPath = stripLocale(Astro.url.pathname)
 const alternates = hasLanguagePicker()
   ? (Object.keys(LOCALES) as Locale[]).map((locale) => ({
       locale,
-      href: new URL(localePath(locale, Astro.url.pathname), site).href,
+      href: new URL(localePath(locale, unprefixedPath), site).href,
     }))
   : []
 ---

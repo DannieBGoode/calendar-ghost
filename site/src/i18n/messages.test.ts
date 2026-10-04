@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { en } from "./en"
 import { format } from "./format"
-import { hasLanguagePicker, localePath, messagesFor } from "./index"
+import { hasLanguagePicker, localePath, messagesFor, stripLocale, type Locale } from "./index"
 
 function strings(value: unknown, path = "en"): [string, string][] {
   if (typeof value === "string") return [[path, value]]
@@ -51,6 +51,28 @@ describe("locales", () => {
   it("serves English without a prefix", () => {
     expect(localePath("en", "/")).toBe("/")
     expect(localePath("en", "/404")).toBe("/404")
+  })
+
+  it("strips a locale prefix with an exact segment match, leaving English untouched", () => {
+    const locales = ["en", "es"]
+    expect(stripLocale("/es/", locales)).toBe("/")
+    expect(stripLocale("/es", locales)).toBe("/")
+    expect(stripLocale("/es/features", locales)).toBe("/features")
+    // "esperanto" is not the "es" segment, so it is left alone.
+    expect(stripLocale("/esperanto", locales)).toBe("/esperanto")
+    // The default locale never carries a prefix, so nothing is stripped.
+    expect(stripLocale("/en/features", locales)).toBe("/en/features")
+    expect(stripLocale("/features", locales)).toBe("/features")
+  })
+
+  it("composes with localePath without doubling the prefix", () => {
+    // "es" stands in for a second locale that does not exist yet; cast past the real, narrower
+    // `Locale` union (today only "en") to exercise the composition `Layout.astro` and
+    // `LanguagePicker.astro` use once one does.
+    const locales = ["en", "es"]
+    const fakeLocale = "es" as Locale
+    expect(localePath(fakeLocale, stripLocale("/es/features", locales))).toBe("/es/features")
+    expect(localePath("en", stripLocale("/es/features", locales))).toBe("/features")
   })
 })
 

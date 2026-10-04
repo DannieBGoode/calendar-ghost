@@ -1,5 +1,5 @@
 ---
-import { LOCALES, hasLanguagePicker, localePath, type Locale, type Messages } from "../i18n"
+import { LOCALES, hasLanguagePicker, localePath, stripLocale, type Locale, type Messages } from "../i18n"
 
 interface Props {
   m: Messages
@@ -7,7 +7,7 @@ interface Props {
 
 const { m } = Astro.props
 const locales = Object.keys(LOCALES) as Locale[]
-const path = Astro.url.pathname
+const path = stripLocale(Astro.url.pathname)
 ---
 
 {

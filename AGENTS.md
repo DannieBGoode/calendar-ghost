@@ -116,6 +116,9 @@ the Docker build context, and has its own `Site` workflow.
 - The page contacts no host but its own: no analytics, trackers, CDNs, remote fonts, or live
   GitHub requests. `npm run audit:dist` and the Playwright tests enforce this.
 - Self-host commands must match the README's quick start; a unit test compares them.
+- To add a language: add its code to `astro.config.mjs` `locales`, and add a module under
+  `site/src/i18n/` that `satisfies Messages` and is registered in `LOCALES`. Then add its pages
+  under `site/src/pages/<locale>/`.
 
 ## Synchronization and persistence safety
 
