@@ -2,6 +2,7 @@ import { Check, ChevronDown } from "lucide-react"
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { useI18n } from "@/i18n/provider"
 import type { ConnectedAccount } from "@/lib/api"
 import {
   isTypeaheadKey,
@@ -26,6 +27,7 @@ export function AccountSelect({
   accounts: ConnectedAccount[]
   onChange: (value: string) => void
 }) {
+  const { t, locale } = useI18n()
   const id = useId()
   const listId = `${id}-list`
   const listRef = useRef<HTMLDivElement>(null)
@@ -60,6 +62,7 @@ export function AccountSelect({
       accounts.map((account) => `${account.display_name} ${account.email}`),
       typed.current.text,
       from,
+      locale,
     )
   }
 
@@ -110,7 +113,7 @@ export function AccountSelect({
         onKeyDown={handleKeyDown}
         onBlur={() => setOpen(false)}
       >
-        {selected ? <AccountOptionContent account={selected} /> : <span>No Google accounts</span>}
+        {selected ? <AccountOptionContent account={selected} /> : <span>{t("rules.accountSelect.empty")}</span>}
         <ChevronDown aria-hidden="true" className="account-select-chevron" data-open={open} />
       </button>
       <div

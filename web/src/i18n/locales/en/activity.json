@@ -1,0 +1,454 @@
+{
+  "page": {
+    "loading": "Loading activity",
+    "title": "What your rules did",
+    "intro": "Every event a rule added, updated, removed, skipped, or blocked, and why. Events are named as each run found them."
+  },
+  "failure": {
+    "title": "Activity is temporarily unavailable",
+    "retrying": "Trying again…",
+    "message": {
+      "sessionExpired": "Your administrator session has expired. Sign in again to view operational activity.",
+      "applicationUpdated": "Calendar Ghost was updated. Reload the page to continue.",
+      "serviceError": "The local service returned an error; try the request again.",
+      "unreachable": "The request did not reach the local service. It may have been restarting, or a browser extension such as a content blocker may be blocking it; try the request again."
+    },
+    "action": {
+      "signIn": "Sign in again",
+      "reload": "Reload page",
+      "retry": "Try again"
+    }
+  },
+  "names": {
+    "source": "the source calendar",
+    "destination": "the destination calendar",
+    "loadingDestination": "the destination"
+  },
+  "ruleName": "{source} to {destination}",
+  "removedRule": "Removed rule",
+  "removedRuleNumbered": "Removed rule {number}",
+  "history": {
+    "title": "History",
+    "intro": "Newest first. Select an entry to see what happened and why.",
+    "updating": "Updating activity…",
+    "found": {
+      "one": "{count} entry found for “{query}”.",
+      "other": "{count} entries found for “{query}”."
+    },
+    "foundMore": {
+      "one": "More than {count} entry found for “{query}”.",
+      "other": "More than {count} entries found for “{query}”."
+    },
+    "caption": "Synchronization history, newest first",
+    "column": {
+      "time": "Time",
+      "event": "Event",
+      "happened": "What happened",
+      "rule": "Rule"
+    },
+    "loadOlder": "Load older activity",
+    "loadingOlder": "Loading older activity…"
+  },
+  "filters": {
+    "rule": "Rule",
+    "allRules": "All rules",
+    "showAllRules": "Show all rules",
+    "show": "Show",
+    "showAll": "Show all decisions",
+    "option": {
+      "default": "Changes, skips, and blocks",
+      "all": "All decisions",
+      "changed": "Changes",
+      "skipped": "Skipped",
+      "blocked": "Blocked",
+      "unchanged": "No change needed"
+    }
+  },
+  "search": {
+    "label": "Event",
+    "placeholder": "Search event titles",
+    "clear": "Clear search"
+  },
+  "empty": {
+    "quiet": {
+      "title": "Nothing has changed yet",
+      "body": "No rule has added, updated, removed, skipped, or blocked an event. Checks that found everything already up to date are hidden."
+    },
+    "search": {
+      "title": "No events named “{query}”",
+      "body": "Search matches event titles as each run recorded them. Check the spelling, show all decisions, or clear the search."
+    },
+    "filtered": {
+      "title": "No matching activity",
+      "body": "No recorded decisions match these filters. Show all decisions, or choose a different rule."
+    },
+    "none": {
+      "title": "No activity yet",
+      "body": "Synchronization decisions will appear here after an enabled rule completes its first run."
+    }
+  },
+  "row": {
+    "spokenTime": "{time}, {day}",
+    "filterRule": "Show only {source} to {destination}",
+    "filterRemovedRule": "Show only this removed rule"
+  },
+  "day": {
+    "today": "Today",
+    "yesterday": "Yesterday"
+  },
+  "runTime": {
+    "today": "Today at {time}",
+    "yesterday": "Yesterday at {time}",
+    "day": "{day} at {time}"
+  },
+  "cell": {
+    "ruleLabel": "{source} → {destination} rule",
+    "wholeRule": "Applies to the whole rule",
+    "nameNotRecorded": "Event name not recorded",
+    "recordedBefore": "Recorded before event names were kept",
+    "cancelledEvent": "Cancelled event",
+    "noTitle": "(No title)",
+    "cancelledIn": "Cancelled in {source}",
+    "renamedFrom": "Renamed from “{title}”"
+  },
+  "event": {
+    "noteAndWhen": "{note} · {when}",
+    "scope": {
+      "series": "Whole series",
+      "occurrence": "One occurrence"
+    },
+    "repeats": "Repeats"
+  },
+  "happened": {
+    "line": "{trigger} → {effect}",
+    "spoken": "{trigger}, so {effect}",
+    "again": "{effect} again",
+    "movedFrom": "Moved from {when} in {source}",
+    "fieldsChanged": "{fields} changed in {source}"
+  },
+  "reason": {
+    "recheck": "Nothing to do now. Calendar Ghost decides this event again at the daily check, and opens an incident if it is still blocked then.",
+    "unknown": {
+      "explanation": "This version of Calendar Ghost cannot describe this entry yet. Its recorded detail is below.",
+      "effect": "Something happened"
+    },
+    "unchangedBySourceChange": "The event changed in {source}, and {destination} already matched it, so nothing was written for this entry.",
+    "sourceCreated": {
+      "trigger": "New in {source}",
+      "effect": "added to {destination}",
+      "explanation": "The event was new to Calendar Ghost, so it was added to {destination}."
+    },
+    "projectionMissing": {
+      "trigger": "Missing from {destination}",
+      "effect": "put back",
+      "explanation": "The event Calendar Ghost wrote to {destination} was no longer there, so it was written again from {source}."
+    },
+    "sourceChanged": {
+      "trigger": "Changed in {source}",
+      "effect": "updated in {destination}",
+      "explanation": "The event changed in {source}, so {destination} was updated to match."
+    },
+    "destinationDriftRepaired": {
+      "trigger": "Edited in {destination}",
+      "effect": "changed back to match {source}",
+      "explanation": "The event in {destination} no longer matched {source}. {source} decides what the event looks like, so the edit was replaced."
+    },
+    "sourceCancelled": {
+      "trigger": "Cancelled in {source}",
+      "effect": "removed from {destination}",
+      "explanation": "The event was cancelled or deleted in {source}, so it was removed from {destination}."
+    },
+    "allDayExcludedRemoved": {
+      "trigger": "All-day, which this rule leaves out",
+      "effect": "removed from {destination}",
+      "explanation": "This rule syncs timed events only, so the all-day event it had written was removed."
+    },
+    "declinedRemoved": {
+      "trigger": "Declined",
+      "effect": "removed from {destination}",
+      "explanation": "You declined this event in {source}, so the event Calendar Ghost had written was removed. Declined events are never synced."
+    },
+    "tentativeExcludedRemoved": {
+      "trigger": "Answered Maybe, which this rule leaves out",
+      "effect": "removed from {destination}",
+      "explanation": "This rule doesn't sync events you answered Maybe to, so the event it had written was removed."
+    },
+    "awaitingResponseRemoved": {
+      "trigger": "Not answered yet",
+      "effect": "removed from {destination}",
+      "explanation": "This rule waits for you to answer an invitation before syncing it, so the event it had written was removed. It is added again once you accept, or answer Maybe if this rule syncs those."
+    },
+    "policyApplied": {
+      "trigger": "Rule settings changed",
+      "effect": "rewritten in {destination}",
+      "explanation": "The rule's settings changed, so the event it had written was rewritten to match them."
+    },
+    "projectionCurrent": {
+      "effect": "already up to date",
+      "explanation": "The event in {destination} already matches {source}."
+    },
+    "outsideSourceCalendar": {
+      "trigger": "From another calendar",
+      "effect": "skipped",
+      "explanation": "The event does not belong to {source}."
+    },
+    "managedProjectionSource": {
+      "trigger": "Written by Calendar Ghost",
+      "effect": "skipped",
+      "explanation": "Events Calendar Ghost wrote are never synced again. This prevents events from looping between calendars."
+    },
+    "recurringUnsupported": {
+      "trigger": "Recurring event",
+      "effect": "skipped",
+      "explanation": "Earlier versions did not sync recurring events. Nothing was written."
+    },
+    "cancelledWithoutProjection": {
+      "trigger": "Cancelled in {source}",
+      "effect": "nothing to remove",
+      "explanation": "The event was cancelled before it was ever added to {destination}."
+    },
+    "allDayExcluded": {
+      "trigger": "All-day event",
+      "effect": "skipped",
+      "explanation": "This rule syncs timed events only. Edit the rule to include all-day events."
+    },
+    "declined": {
+      "trigger": "Declined",
+      "effect": "skipped",
+      "explanation": "You declined this event in {source}. Declined events are never synced."
+    },
+    "tentativeExcluded": {
+      "trigger": "Answered Maybe",
+      "effect": "skipped",
+      "explanation": "This rule doesn't sync events you answered Maybe to. Edit the rule to sync them."
+    },
+    "awaitingResponse": {
+      "trigger": "Not answered yet",
+      "effect": "skipped",
+      "explanation": "This rule waits for you to answer an invitation before syncing it. It is synced once you accept, or answer Maybe if this rule syncs those."
+    },
+    "beforeSyncWindow": {
+      "trigger": "Ended before the sync window",
+      "effect": "skipped",
+      "explanation": "The event changed, but it ended before this rule's sync window and was never synced, so it was not added."
+    },
+    "mappingInconsistent": {
+      "trigger": "Calendar Ghost's link to this event doesn't match",
+      "effect": "blocked, {destination} left unchanged",
+      "explanation": "Calendar Ghost keeps a record of which event in {destination} belongs to which event in {source}. For this event the record points somewhere unexpected, so nothing was written rather than risk changing the wrong event."
+    },
+    "destinationIdentityInconsistent": {
+      "trigger": "A different event is linked in {destination}",
+      "effect": "blocked, {destination} left unchanged",
+      "explanation": "The event in {destination} is no longer the one Calendar Ghost wrote for this event, so nothing was written rather than risk changing the wrong event."
+    },
+    "destinationOwnershipInconsistent": {
+      "trigger": "Not marked as written by this rule in {destination}",
+      "effect": "blocked, left alone",
+      "explanation": "The event in {destination} does not carry this rule's marker, so Calendar Ghost will not change or delete it."
+    },
+    "sourceUnverifiable": {
+      "trigger": "Couldn't be read in {source}",
+      "effect": "blocked, {destination} left unchanged",
+      "explanation": "Its source event in {source} could not be read, so the event in {destination} was left as it is rather than risk deleting it.",
+      "next": "If this repeats, check in Settings that the Google account for {source} is still connected."
+    },
+    "occurrenceChanged": {
+      "trigger": "Changed in {source}",
+      "effect": "updated in {destination}",
+      "explanation": "This occurrence was moved or edited in {source}, so it was updated in {destination}. The rest of the series is unchanged."
+    },
+    "occurrenceCancelled": {
+      "trigger": "Cancelled in {source}",
+      "effect": "removed from {destination}",
+      "explanation": "This occurrence was cancelled in {source}, so it was removed from {destination}. The rest of the series is unchanged."
+    },
+    "occurrenceRemovedFromSeries": {
+      "trigger": "No longer in the series in {source}",
+      "effect": "removed from {destination}",
+      "explanation": "The series in {source} no longer includes this occurrence, so it was removed from {destination}."
+    },
+    "occurrenceDriftRepaired": {
+      "trigger": "Edited or deleted in {destination}",
+      "effect": "put back to match {source}",
+      "explanation": "This occurrence in {destination} no longer matched {source}. {source} decides what the event looks like, so it was restored."
+    },
+    "occurrenceCurrent": {
+      "effect": "already up to date",
+      "explanation": "This occurrence in {destination} already matches {source}."
+    },
+    "occurrenceAlreadyCancelled": {
+      "effect": "already up to date",
+      "explanation": "This occurrence is cancelled in both calendars."
+    },
+    "occurrenceRetired": {
+      "trigger": "Gone from both calendars",
+      "effect": "cleaned up",
+      "explanation": "The occurrence no longer exists in either calendar, so its record was removed. Nothing was written."
+    },
+    "seriesNotSynchronized": {
+      "trigger": "Its series isn't synced",
+      "effect": "skipped",
+      "explanation": "This occurrence belongs to a recurring event this rule does not sync."
+    },
+    "destinationOccurrenceMissing": {
+      "trigger": "Not found in the series in {destination}",
+      "effect": "blocked, {destination} left unchanged",
+      "explanation": "The series in {destination} has no occurrence at this time, even after Calendar Ghost checked the series itself. Nothing was written, so this occurrence may be missing or out of date in {destination}. The rest of the series is unaffected."
+    },
+    "seriesWithoutOccurrences": {
+      "trigger": "Every occurrence cancelled in {source}",
+      "effect": "skipped",
+      "explanation": "Every occurrence of this recurring event is cancelled in {source}, or is an all-day occurrence this rule leaves out, so there is nothing to show in {destination}. It is synced again if an occurrence comes back."
+    },
+    "seriesWithoutOccurrencesRemoved": {
+      "trigger": "No occurrence left in {source}",
+      "effect": "removed from {destination}",
+      "explanation": "Every occurrence of this recurring event is cancelled in {source}, or is an all-day occurrence this rule leaves out, so the series left from an interrupted run was removed."
+    },
+    "projectionUnmapped": {
+      "trigger": "Marked as written by this rule in {destination}, but not linked to an event in {source}",
+      "effect": "blocked, left in {destination}",
+      "explanation": "The event in {destination} carries this rule's marker, but Calendar Ghost has no record of writing it, so it will not change or delete it. Reconcile now reports it again while it is there.",
+      "next": "If you don't want it in {destination}, delete it there yourself."
+    }
+  },
+  "action": {
+    "create": "added to {destination}",
+    "update": "updated in {destination}",
+    "delete": "removed from {destination}",
+    "ignore": "skipped",
+    "conflict": "blocked"
+  },
+  "ruleAction": {
+    "policyChanged": {
+      "effect": "rule settings changed",
+      "explanation": "The rule needs a new preview, and the events it wrote are rewritten on the next run after it is enabled."
+    },
+    "removeProjection": {
+      "trigger": "Rule removed",
+      "effect": "removed from {destination}",
+      "explanation": "The administrator chose to delete the events this rule wrote when removing it."
+    },
+    "detachProjection": {
+      "trigger": "Rule removed",
+      "effect": "kept in {destination}, no longer synced",
+      "explanation": "The event stays in {destination} and is no longer updated or deleted."
+    },
+    "removalConflict": {
+      "trigger": "Not verifiably written by this rule",
+      "effect": "left in {destination} during Rule Removal",
+      "explanation": "The event's ownership could not be verified, so it was not deleted. It stays in {destination} and is no longer managed."
+    },
+    "ruleRemoved": {
+      "effect": "rule removed",
+      "explanation": "The rule and its records of which events it wrote were removed. Its activity history is kept."
+    }
+  },
+  "field": {
+    "title": "Title",
+    "time": "Time",
+    "description": "Description",
+    "location": "Location",
+    "guests": "Guests",
+    "recurrence": "Repeat pattern",
+    "conferencing": "Video call links",
+    "response": "Your response"
+  },
+  "fieldInSentence": {
+    "title": "title",
+    "time": "time",
+    "description": "description",
+    "location": "location",
+    "guests": "guests",
+    "recurrence": "repeat pattern",
+    "conferencing": "video call links",
+    "response": "your response"
+  },
+  "response": {
+    "accepted": "Yes",
+    "tentative": "Maybe",
+    "declined": "No",
+    "needsAction": "Not answered"
+  },
+  "lookup": {
+    "removedRule": "This rule was removed, so its events can no longer be looked up.",
+    "notConfigured": "Google is not configured, so the event cannot be looked up.",
+    "failed": "Google could not return this event right now. The account may need reauthorization in Settings.",
+    "loading": "Looking up the event in Google…",
+    "sourceEvent": "Source event",
+    "managedProjection": "Managed projection",
+    "missing": "No longer exists in Google Calendar.",
+    "cancelled": "Cancelled",
+    "cancelledAndWhen": "Cancelled · {when}",
+    "openInGoogle": "Open in Google Calendar"
+  },
+  "detail": {
+    "label": "Entry details",
+    "close": "Close",
+    "newer": "Newer entry",
+    "older": "Older entry",
+    "loading": "Loading this entry…",
+    "missing": "This entry is no longer in the activity history.",
+    "whatToDo": "<strong>What to do:</strong> {next}",
+    "openRule": "Open rule",
+    "recorded": "Recorded",
+    "rule": "Rule",
+    "diagnostics": {
+      "summary": "Technical details",
+      "entry": "Entry",
+      "run": "Run",
+      "decision": "Decision",
+      "sourceEventId": "Source event ID",
+      "projectionEventId": "Projection event ID",
+      "recordedDetail": "Recorded detail"
+    }
+  },
+  "changes": {
+    "heading": "What changed in {source}",
+    "loading": "Loading what changed…",
+    "failed": "What changed could not be loaded right now.",
+    "unavailable": "No longer available",
+    "before": "Before",
+    "after": "After",
+    "added": "Added",
+    "removed": "Removed",
+    "empty": "(empty)",
+    "valuesUnavailable": "Some values are no longer available. They are kept for 90 days, and cannot be read after the installation master key changes."
+  },
+  "incidents": {
+    "title": "Incidents",
+    "intro": "Each stays open until Calendar Ghost confirms the problem is gone.",
+    "open": "Open",
+    "installation": "Installation",
+    "since": "Since {time}",
+    "lastSeen": "Last seen {time}",
+    "resolvedLabel": "Resolved incidents",
+    "hideResolved": "Hide resolved incidents",
+    "showResolved": {
+      "one": "Show {count} resolved incident",
+      "other": "Show {count} resolved incidents"
+    },
+    "resolved": "Resolved",
+    "opened": "Opened {time}",
+    "closed": "Closed {time}",
+    "guidance": {
+      "accessRenewed": "Google access is renewed, but the rule stays stopped until it is recovered.",
+      "authorization": "Nothing is written until the Google account is reauthorized. Existing events stay where they are.",
+      "stopped": "The rule is stopped and writes nothing until it is recovered.",
+      "retrying": "Nothing to do now. Calendar Ghost keeps retrying and closes this after the next successful sync.",
+      "conflict": "The rest of the rule keeps syncing. This closes when a daily check finds nothing still blocked."
+    },
+    "action": {
+      "recover": "Recover this rule",
+      "reauthorize": "Reauthorize in Settings",
+      "review": "Review this rule",
+      "seeBlocked": "See blocked events"
+    },
+    "resolution": {
+      "syncSucceeded": "Resolved by a successful sync.",
+      "blocksCleared": "Resolved when the daily check found nothing still blocked.",
+      "ruleRemoved": "Closed when the rule was removed."
+    }
+  }
+}

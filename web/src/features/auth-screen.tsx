@@ -7,12 +7,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { GhostMark } from "@/components/ghost-mark"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
+import { rich } from "@/i18n/rich"
+import type { I18n } from "@/i18n/translator"
 import { api } from "@/lib/api"
-import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL, TAGLINE } from "@/lib/brand"
+import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL } from "@/lib/brand"
 
 type AuthScreenProps = { mode: "setup" | "login" }
 
 export function AuthScreen({ mode }: AuthScreenProps) {
+  const i18n = useI18n()
+  const { t } = i18n
   const passwordId = useId()
   const confirmationId = useId()
   const queryClient = useQueryClient()
@@ -45,7 +51,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
       <AuthFormPanel isSetup={isSetup}>
         <form onSubmit={submit} className="auth-form">
           <div className="field-stack">
-            <Label htmlFor={passwordId}>Password</Label>
+            <Label htmlFor={passwordId}>{t("auth.password")}</Label>
             <Input
               id={passwordId}
               type="password"
@@ -57,7 +63,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
               minLength={12}
               autoFocus
             />
-            <p id={`${passwordId}-hint`} className="field-hint">At least 12 characters.</p>
+            <p id={`${passwordId}-hint`} className="field-hint">{t("auth.passwordHint")}</p>
           </div>
           {isSetup && (
             <ConfirmationField
@@ -68,10 +74,10 @@ export function AuthScreen({ mode }: AuthScreenProps) {
             />
           )}
           {mutation.error && (
-            <div className="inline-error" role="alert">{mutation.error.message}</div>
+            <div className="inline-error" role="alert">{apiErrorMessage(i18n, mutation.error)}</div>
           )}
           <Button type="submit" size="lg" disabled={!canSubmit || mutation.isPending}>
-            {submitLabel(isSetup, mutation.isPending)}
+            {submitLabel(i18n, isSetup, mutation.isPending)}
           </Button>
         </form>
       </AuthFormPanel>
@@ -80,24 +86,19 @@ export function AuthScreen({ mode }: AuthScreenProps) {
 }
 
 function AuthIntro({ isSetup }: { isSetup: boolean }) {
+  const { t } = useI18n()
   return (
     <section className="auth-intro" aria-labelledby="auth-title">
       <GhostMark className="brand-mark" />
       <p className="product-name">{PRODUCT_NAME}</p>
-      <p className="auth-tagline">{TAGLINE}</p>
-      <h1 id="auth-title">
-        {isSetup ? "Your calendars, under your control." : "Welcome back."}
-      </h1>
-      <p className="auth-copy">
-        {isSetup
-          ? "Create the local administrator who can connect accounts, preview rules, and respond when synchronization needs attention."
-          : "Sign in to check synchronization health and manage this installation."}
-      </p>
+      <p className="auth-tagline">{t("auth.tagline")}</p>
+      <h1 id="auth-title">{isSetup ? t("auth.setup.heading") : t("auth.login.heading")}</h1>
+      <p className="auth-copy">{isSetup ? t("auth.setup.intro") : t("auth.login.intro")}</p>
       {isSetup && (
-        <ul className="privacy-list" aria-label="Installation privacy">
-          <li><Check aria-hidden="true" /> Runs on this device</li>
-          <li><Check aria-hidden="true" /> No mandatory telemetry</li>
-          <li><Check aria-hidden="true" /> Event history is local, not in a vendor cloud</li>
+        <ul className="privacy-list" aria-label={t("auth.setup.privacyLabel")}>
+          <li><Check aria-hidden="true" /> {t("auth.setup.privacy.runsHere")}</li>
+          <li><Check aria-hidden="true" /> {t("auth.setup.privacy.noTelemetry")}</li>
+          <li><Check aria-hidden="true" /> {t("auth.setup.privacy.localHistory")}</li>
         </ul>
       )}
     </section>
@@ -105,18 +106,30 @@ function AuthIntro({ isSetup }: { isSetup: boolean }) {
 }
 
 function AuthFormPanel({ isSetup, children }: { isSetup: boolean; children: ReactNode }) {
+  const { t } = useI18n()
   return (
-    <section className="auth-form-panel" aria-label={isSetup ? "Create administrator" : "Sign in"}>
+    <section className="auth-form-panel" aria-label={isSetup ? t("auth.createAdministrator") : t("auth.signIn")}>
       <div className="form-heading">
         <LockKeyhole aria-hidden="true" />
         <div>
-          <h2>{isSetup ? "Create administrator" : "Administrator sign in"}</h2>
-          <p>{isSetup ? "This password stays on your installation." : "Use your local administrator password."}</p>
+          <h2>{isSetup ? t("auth.createAdministrator") : t("auth.administratorSignIn")}</h2>
+          <p>{isSetup ? t("auth.setup.passwordNote") : t("auth.login.passwordNote")}</p>
         </div>
       </div>
       {children}
       <p className="auth-legal">
-        © 2026 Calendar Ghost contributors · No warranty. Share and modify under the <a href={LICENSE_URL} target="_blank" rel="noreferrer">AGPLv3+ license</a>; view the <a href={SOURCE_URL} target="_blank" rel="noreferrer">source</a>.
+        {rich(t("auth.legal"), {
+          license: (text) => (
+            <a href={LICENSE_URL} target="_blank" rel="noreferrer">
+              {text}
+            </a>
+          ),
+          source: (text) => (
+            <a href={SOURCE_URL} target="_blank" rel="noreferrer">
+              {text}
+            </a>
+          ),
+        })}
       </p>
     </section>
   )
@@ -133,9 +146,10 @@ function ConfirmationField({
   mismatch: boolean
   onChange: (value: string) => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="field-stack">
-      <Label htmlFor={id}>Confirm password</Label>
+      <Label htmlFor={id}>{t("auth.confirmPassword")}</Label>
       <Input
         id={id}
         type="password"
@@ -145,12 +159,12 @@ function ConfirmationField({
         aria-invalid={mismatch}
         required
       />
-      {mismatch && <p className="field-error" role="alert">Passwords do not match.</p>}
+      {mismatch && <p className="field-error" role="alert">{t("auth.passwordMismatch")}</p>}
     </div>
   )
 }
 
-function submitLabel(isSetup: boolean, pending: boolean): string {
-  if (pending) return "Please wait…"
-  return isSetup ? "Create administrator" : "Sign in"
+function submitLabel({ t }: I18n, isSetup: boolean, pending: boolean): string {
+  if (pending) return t("auth.pleaseWait")
+  return isSetup ? t("auth.createAdministrator") : t("auth.signIn")
 }

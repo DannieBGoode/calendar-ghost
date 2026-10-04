@@ -1,14 +1,69 @@
 /* @vitest-environment happy-dom */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, createElement } from "react"
+import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { IntegrationsSection } from "./settings"
-import { api, type IntegrationToken, type IssuedIntegrationToken } from "@/lib/api"
+import { ThemeProvider } from "@/components/theme-provider"
+import { StaticI18nProvider } from "@/i18n/provider"
+import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
+import type { I18n } from "@/i18n/translator"
+import {
+  api,
+  type ConnectedAccount,
+  type IntegrationToken,
+  type IssuedIntegrationToken,
+} from "@/lib/api"
+import { integrationExamples } from "@/lib/integrations"
+
+import { IntegrationsSection, SettingsPage } from "./settings"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+const REDIRECT_URI = "http://localhost:18000/api/v1/oauth/google/callback"
+
+const connected: ConnectedAccount = {
+  id: "acct-a",
+  provider: "google",
+  display_name: "Dana Calendar",
+  email: "dana@example.test",
+  avatar_url: null,
+  state: "connected",
+  rule_count: 2,
+  authorized_at: "2026-09-30T10:00:00+00:00",
+}
+const disconnected: ConnectedAccount = {
+  id: "acct-b",
+  provider: "google",
+  display_name: "Robin Archive",
+  email: "robin@example.test",
+  avatar_url: null,
+  state: "disconnected",
+  rule_count: 1,
+  authorized_at: null,
+}
+
+type StorageUsage = Awaited<ReturnType<typeof api.storage>>
+
+const usage: StorageUsage = {
+  database: {
+    bytes: 48.2 * 1024 * 1024,
+    reclaimable_bytes: 1.2 * 1024 * 1024,
+    activity_entries: 61204,
+    oldest_activity_at: "2026-06-12T09:00:00+00:00",
+  },
+  logs: { bytes: 7.9 * 1024 * 1024, files: 2, oldest_at: "2026-09-12T08:00:00+00:00", newest_at: "2026-10-01T18:04:12+00:00" },
+  activity_ages: [30, 90, 180, 365],
+}
+
+const sourceOnlyAccess: Awaited<ReturnType<typeof api.verifyAccountAccess>> = {
+  calendar_api: true,
+  calendar_list_access: true,
+  event_access: true,
+  calendars_visible: 3,
+  writable_calendars: 0,
+}
 
 const kuma: IntegrationToken = {
   id: "token-kuma",
@@ -26,6 +81,77 @@ const issued: IssuedIntegrationToken = {
   token: "cgs_synthetic-token-shown-once",
 }
 
+// A few seconds before "now", so `format.relative` resolves to the catalog's "just now" rather
+// than Intl wording such as "3 days ago", which bypasses the pseudo locale.
+const justNow = new Date(Date.now() - 10_000).toISOString()
+const PUBLIC_ORIGIN = "http://ghost.example.com"
+/** Integration Tokens in every state the section shows: never used, used, and revoked. */
+const pseudoTokens: IntegrationToken[] = [
+  { ...kuma, created_at: justNow },
+  { ...homepage, created_at: justNow, last_used_at: justNow },
+  { ...kuma, id: "token-old", name: "Old monitor", created_at: justNow, revoked_at: justNow },
+]
+
+/** Account names, emails, avatar initials, and the Google return address the fixtures introduce. */
+const FIXTURE_TEXT = [
+  "Dana Calendar",
+  "dana@example.test",
+  "Robin Archive",
+  "robin@example.test",
+  "DC",
+  "RA",
+  REDIRECT_URI,
+  "http://localhost:18000",
+  ...dateWords(),
+  // Integration Token names and the issued token are administrator data and a server secret.
+  ...pseudoTokens.map((token) => token.name),
+  issued.name,
+  issued.token,
+  // Each example's code block is configuration for another tool, shown as is, never translated.
+  ...integrationExamples(testI18n(), PUBLIC_ORIGIN).map((example) => example.code),
+]
+
+type Scenario = {
+  configured?: boolean
+  redirectUri?: string | null
+  accounts?: ConnectedAccount[]
+  storage?: StorageUsage
+  clearable?: Response
+  cleared?: Response
+  tokens?: IntegrationToken[]
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
+}
+
+function mockFetch({
+  configured = true,
+  redirectUri = REDIRECT_URI,
+  accounts = [connected, disconnected],
+  storage = usage,
+  clearable,
+  cleared,
+  tokens = [kuma, homepage],
+}: Scenario) {
+  const responses: Record<string, Response> = {
+    "/api/v1/google/configuration": jsonResponse({ configured, redirect_uri: redirectUri }),
+    "/api/v1/accounts": jsonResponse(accounts),
+    "/api/v1/storage": jsonResponse(storage),
+    "/api/v1/storage/activity": clearable ?? jsonResponse({ older_than_days: 90, entries: 41880 }),
+    "/api/v1/storage/activity/clear": cleared ?? jsonResponse({ removed: 41880, database: usage.database }),
+    "/api/v1/integration-tokens": jsonResponse(tokens),
+  }
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: string | URL) => {
+      const path = String(input).split("?")[0] ?? ""
+      const verify = /^\/api\/v1\/accounts\/.+\/verify$/.test(path)
+      return Promise.resolve(responses[path] ?? jsonResponse(verify ? sourceOnlyAccess : {}))
+    }),
+  )
+}
+
 let container: HTMLDivElement
 let root: Root | null = null
 let clipboard: PropertyDescriptor | undefined
@@ -40,9 +166,6 @@ beforeEach(() => {
   document.body.append(container)
   clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard")
   address = window.location.href
-  vi.spyOn(api, "integrationTokens").mockResolvedValue([kuma, homepage])
-  vi.spyOn(api, "issueIntegrationToken").mockResolvedValue(issued)
-  vi.spyOn(api, "revokeIntegrationToken").mockResolvedValue(undefined)
 })
 
 afterEach(() => {
@@ -51,13 +174,144 @@ afterEach(() => {
     root = null
   }
   container.remove()
+  localStorage.clear()
   if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard)
   else Reflect.deleteProperty(navigator, "clipboard")
   page().happyDOM.setURL(address)
+  window.history.replaceState(null, "", "/")
   vi.restoreAllMocks()
 })
 
-async function settle() {
+async function settle(times = 6) {
+  for (let i = 0; i < times; i += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+}
+
+async function renderSettings(i18n: I18n, scenario: Scenario = {}) {
+  mockFetch(scenario)
+  root = createRoot(container)
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  act(() => {
+    root?.render(
+      <StaticI18nProvider i18n={i18n}>
+        <ThemeProvider>
+          <QueryClientProvider client={queryClient}>
+            <SettingsPage />
+          </QueryClientProvider>
+        </ThemeProvider>
+      </StaticI18nProvider>,
+    )
+  })
+  await settle()
+  return container
+}
+
+function button(name: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll("button")].find((candidate) => candidate.textContent.includes(name))
+  if (!found) throw new Error(`no button "${name}"`)
+  return found
+}
+
+async function click(target: HTMLElement) {
+  act(() => target.click())
+  await settle()
+}
+
+describe("SettingsPage", () => {
+  it("has no untranslated text with a connected and a disconnected account", async () => {
+    // A public plain-HTTP address, so the Integrations transport note shows too.
+    page().happyDOM.setURL(`${PUBLIC_ORIGIN}/settings`)
+    vi.spyOn(api, "issueIntegrationToken").mockResolvedValue(issued)
+    await renderSettings(pseudoI18n(), { tokens: pseudoTokens })
+    expect(container.querySelector(".account-list")).not.toBeNull()
+    expect(container.querySelector("details.inline-help")).not.toBeNull()
+
+    // Integrations, opened, with a token just issued and a revoke waiting for confirmation.
+    await click(container.querySelector<HTMLButtonElement>("[aria-labelledby='integrations-title'] .group-summary")!)
+    const input = container.querySelector<HTMLInputElement>("#integration-name")!
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, issued.name)
+      input.dispatchEvent(new Event("input", { bubbles: true }))
+    })
+    act(() => {
+      input.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    })
+    await settle()
+    await click(container.querySelector<HTMLButtonElement>("[aria-controls='revoke-token-homepage']")!)
+    expect(container.querySelector(".token-reveal")).not.toBeNull()
+    expect(container.querySelector("#revoke-token-homepage")).not.toBeNull()
+    expect(container.querySelector(".revoked-tokens")).not.toBeNull()
+    expect(container.querySelector(".integration-examples")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+  })
+
+  it("ignores an unknown connection outcome", async () => {
+    window.history.replaceState(null, "", "/settings?google=surprise")
+    await renderSettings(testI18n())
+    expect(container.querySelector(".oauth-feedback h2")).toBeNull()
+  })
+
+  it("keeps the English copy", async () => {
+    window.history.replaceState(null, "", "/settings?google=connected")
+    await renderSettings(testI18n())
+    expect(container.querySelector(".oauth-feedback h2")?.textContent).toBe("Google account connected")
+    const rows = [...container.querySelectorAll(".account-copy span")].map((span) => span.textContent)
+    expect(rows).toEqual(["Used by 2 rules", "1 rule stopped until it is reauthorized"])
+    // The visible word stands beside one screen reader phrase, rather than a glued " accounts".
+    expect(container.querySelector(".account-summary-toggle [aria-hidden='true']")?.textContent).toBe("Hide")
+    expect(container.querySelector(".account-summary-toggle .sr-only")?.textContent).toBe("Hide accounts")
+    expect(container.querySelector(".account-summary-emails")?.textContent).toBe("dana@example.test, robin@example.test")
+    const summaries = [...container.querySelectorAll(".setting-row p")].map((paragraph) => paragraph.textContent)
+    expect(summaries).toContain("48.2 MB · 61,204 Activity entries since Jun 12, 2026 · 1.2 MB can be reclaimed")
+    expect(summaries).toContain("7.9 MB · Sep 12 – Oct 1, 2026")
+
+    await click(container.querySelector<HTMLButtonElement>(".account-action")!)
+    expect(container.querySelector(".account-access-result p")?.textContent).toBe(
+      "Calendar-list and event permissions are available. 3 calendars are visible and 0 can be used as a destination. This account can still be used as a source.",
+    )
+    await click(button("Delete account"))
+    expect(container.querySelector("#delete-acct-b p")?.textContent).toBe(
+      "This cannot be undone. The account record and 1 affected Directional Sync Rule, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed.",
+    )
+    await click(button("Disconnect account"))
+    expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
+      "Stored Google credentials will be removed. 2 affected rules will require reauthorization before they can run.",
+    )
+  })
+
+  it("explains a failed count with the server's detail", async () => {
+    await renderSettings(testI18n(), {
+      clearable: jsonResponse({ detail: "older_than_days must be one of 30, 90." }, 422),
+    })
+    await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
+    expect(container.querySelector("#clear-activity-confirmation p")?.textContent).toBe(
+      "The entries to remove could not be counted: older_than_days must be one of 30, 90.",
+    )
+  })
+
+  it("says the old Activity was cleared when its space could not be reclaimed", async () => {
+    await renderSettings(testI18n(), {
+      cleared: jsonResponse(
+        {
+          detail:
+            "Old Activity was cleared, but its space could not be reclaimed while a rule is synchronizing. Try again when it finishes.",
+        },
+        409,
+      ),
+    })
+    await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
+    await click(container.querySelector<HTMLButtonElement>("#clear-activity-confirmation .confirmation-actions button:last-child")!)
+    expect(container.querySelector("#clear-activity-confirmation")).toBeNull()
+    expect(container.querySelector("[aria-labelledby='storage-title'] [role='alert']")?.textContent).toBe(
+      "Old Activity was cleared, but its space could not be reclaimed while a rule is synchronizing. Try again when it finishes.",
+    )
+  })
+})
+
+async function tick() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
@@ -67,23 +321,29 @@ async function renderSection() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   root = createRoot(container)
   act(() => {
-    root?.render(createElement(QueryClientProvider, { client: queryClient }, createElement(IntegrationsSection)))
+    root?.render(
+      <StaticI18nProvider i18n={testI18n()}>
+        <QueryClientProvider client={queryClient}>
+          <IntegrationsSection />
+        </QueryClientProvider>
+      </StaticI18nProvider>,
+    )
   })
   // Wait for the token list to load or fail, however long a busy test run takes.
-  for (let tick = 0; tick < 50; tick++) {
-    await settle()
+  for (let attempt = 0; attempt < 50; attempt++) {
+    await tick()
     if (container.querySelector(".group-summary, .integration-load-error")) return
   }
   throw new Error("The Integrations section never finished loading")
 }
 
-function click(element: Element) {
+function press(element: Element) {
   act(() => {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
   })
 }
 
-function button(label: string, scope: ParentNode = container): HTMLButtonElement {
+function labelledButton(label: string, scope: ParentNode = container): HTMLButtonElement {
   const found = Array.from(scope.querySelectorAll("button")).find((item) => item.textContent.trim() === label)
   if (!found) throw new Error(`No button labelled ${label}`)
   return found
@@ -100,8 +360,8 @@ function summary(): HTMLButtonElement {
 }
 
 async function openGroup() {
-  click(summary())
-  await settle()
+  press(summary())
+  await tick()
 }
 
 async function issueToken(name: string) {
@@ -114,10 +374,16 @@ async function issueToken(name: string) {
   act(() => {
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   })
-  await settle()
+  await tick()
 }
 
 describe("IntegrationsSection", () => {
+  beforeEach(() => {
+    vi.spyOn(api, "integrationTokens").mockResolvedValue([kuma, homepage])
+    vi.spyOn(api, "issueIntegrationToken").mockResolvedValue(issued)
+    vi.spyOn(api, "revokeIntegrationToken").mockResolvedValue(undefined)
+  })
+
   it("stays collapsed to a summary of the tokens in use", async () => {
     await renderSection()
 
@@ -157,7 +423,7 @@ describe("IntegrationsSection", () => {
     await openGroup()
     await issueToken("Claude Code")
 
-    click(button("Done"))
+    press(labelledButton("Done"))
 
     expect(container.querySelector(".token-reveal")).toBeNull()
     expect(document.activeElement).toBe(container.querySelector("#integration-name"))
@@ -169,8 +435,8 @@ describe("IntegrationsSection", () => {
     await openGroup()
     await issueToken("Claude Code")
 
-    click(button("Copy token"))
-    await settle()
+    press(labelledButton("Copy token"))
+    await tick()
 
     expect(container.textContent).toContain("Select the token and copy it.")
     expect(container.querySelector<HTMLInputElement>(".token-field input")!.value).toBe(issued.token)
@@ -185,15 +451,15 @@ describe("IntegrationsSection", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
 
     try {
-      click(button("Copy token"))
-      await settle()
+      press(labelledButton("Copy token"))
+      await tick()
       expect(writeText).toHaveBeenCalledWith(issued.token)
-      expect(button("Copied")).toBeTruthy()
+      expect(labelledButton("Copied")).toBeTruthy()
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2000)
       })
-      expect(button("Copy token")).toBeTruthy()
+      expect(labelledButton("Copy token")).toBeTruthy()
     } finally {
       vi.useRealTimers()
     }
@@ -202,17 +468,17 @@ describe("IntegrationsSection", () => {
   it("confirms a revoke and returns focus to that token's Revoke button on cancel", async () => {
     await renderSection()
     await openGroup()
-    const revoke = button("Revoke", rowOf("Homepage"))
+    const revoke = labelledButton("Revoke", rowOf("Homepage"))
 
-    click(revoke)
+    press(revoke)
     const confirmation = container.querySelector<HTMLElement>("#revoke-token-homepage")!
     expect(confirmation).not.toBeNull()
     expect(confirmation.textContent).toContain("Revoke Homepage?")
     expect(revoke.getAttribute("aria-expanded")).toBe("true")
     // A revoked token stays listed, so the button does not show a trash can.
-    expect(button("Revoke token", confirmation).querySelector("svg")).toBeNull()
+    expect(labelledButton("Revoke token", confirmation).querySelector("svg")).toBeNull()
 
-    click(button("Keep token", confirmation))
+    press(labelledButton("Keep token", confirmation))
 
     expect(container.querySelector("#revoke-token-homepage")).toBeNull()
     expect(document.activeElement).toBe(revoke)
@@ -222,10 +488,10 @@ describe("IntegrationsSection", () => {
   it("announces a revoke and keeps focus in the group", async () => {
     await renderSection()
     await openGroup()
-    click(button("Revoke", rowOf("Homepage")))
+    press(labelledButton("Revoke", rowOf("Homepage")))
 
-    click(button("Revoke token", container.querySelector<HTMLElement>("#revoke-token-homepage")!))
-    await settle()
+    press(labelledButton("Revoke token", container.querySelector<HTMLElement>("#revoke-token-homepage")!))
+    await tick()
 
     expect(api.revokeIntegrationToken).toHaveBeenCalledWith("token-homepage")
     expect(container.querySelector('[role="status"]')?.textContent).toBe(
@@ -265,8 +531,8 @@ describe("IntegrationsSection", () => {
     await renderSection()
 
     expect(container.textContent).toContain("Integration tokens could not load.")
-    click(button("Try again"))
-    await settle()
+    press(labelledButton("Try again"))
+    await tick()
 
     expect(summary().textContent).toContain("1 token · never used")
   })

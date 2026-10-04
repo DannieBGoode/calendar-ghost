@@ -1,5 +1,6 @@
 import { useQueries, useQuery } from "@tanstack/react-query"
 
+import { useI18n } from "@/i18n/provider"
 import { api, type ConnectedAccount, type DiscoveredCalendar, type Rule } from "@/lib/api"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
@@ -11,6 +12,7 @@ export type RuleEndpoints = {
 
 /** Accounts and calendar names for a set of rules, fetched once per account rather than per rule. */
 export function useRuleEndpoints(rules: Pick<Rule, "source" | "destination">[]) {
+  const i18n = useI18n()
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const accountsById = new Map((accounts.data ?? []).map((account) => [account.id, account]))
   const accountIds = [
@@ -33,7 +35,7 @@ export function useRuleEndpoints(rules: Pick<Rule, "source" | "destination">[]) 
     const side = (endpoint: Rule["source"]) => {
       const account = accountsById.get(endpoint.connected_account_id)
       const calendars = calendarsByAccount.get(endpoint.connected_account_id)
-      return { account, calendars, name: ruleEndpointLabel(endpoint, account, calendars).calendar }
+      return { account, calendars, name: ruleEndpointLabel(i18n, endpoint, account, calendars).calendar }
     }
     const source = side(rule.source)
     const destination = side(rule.destination)

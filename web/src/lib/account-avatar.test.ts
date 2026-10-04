@@ -25,16 +25,21 @@ const settingsSource = [
 
 describe("accountInitials", () => {
   it("uses the first and last words of a full display name", () => {
-    expect(accountInitials("Daniel Calatayud", "daniel@example.com")).toBe("DC")
+    expect(accountInitials("Daniel Calatayud", "daniel@example.com", "en")).toBe("DC")
   })
 
   it("uses a structured email name when the display name is only a calendar label", () => {
-    expect(accountInitials("Personal", "daniel.calatayud@example.com")).toBe("DC")
+    expect(accountInitials("Personal", "daniel.calatayud@example.com", "en")).toBe("DC")
   })
 
   it("falls back safely when identity fields are sparse", () => {
-    expect(accountInitials("", "daniel@example.com")).toBe("DA")
-    expect(accountInitials("", "")).toBe("?")
+    expect(accountInitials("", "daniel@example.com", "en")).toBe("DA")
+    expect(accountInitials("", "", "en")).toBe("?")
+  })
+
+  it("uppercases by the UI language's rules", () => {
+    expect(accountInitials("", "ilker@example.com", "tr")).toBe("İL")
+    expect(accountInitials("", "ilker@example.com", "en")).toBe("IL")
   })
 })
 
@@ -46,7 +51,7 @@ describe("AccountAvatar", () => {
 
   it("falls back to initials when there is no photo or it fails to load", () => {
     expect(avatarSource).toContain("onError={() => setFailedUrl(photo)}")
-    expect(avatarSource).toContain("accountInitials(displayName, email)")
+    expect(avatarSource).toContain("accountInitials(displayName, email, locale)")
   })
 
   it("is used for every account identity in the dashboard", () => {

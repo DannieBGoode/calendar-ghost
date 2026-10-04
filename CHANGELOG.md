@@ -30,6 +30,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   and revokes tokens and shows setup examples for each tool.
 - Installation Status notices a scheduler that stopped running passes and a rule that has not
   synced in over a day.
+- The Web UI is ready for translation: catalogs, plural rules, and locale-aware dates and numbers.
 
 ### Changed
 
@@ -48,6 +49,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Rule Details, Settings, Activity, Rules, and Overview are split into section files, and the
   activity copy into focused modules, so every frontend file and function is within the
   complexity and size bounds. The screens render the same markup.
+- Large numbers are grouped.
+- An Activity entry whose action this version does not know reads "Something happened" instead of
+  its raw action code, and its recorded detail moves to Technical details instead of standing in
+  for the explanation.
+- Error alerts no longer show the browser's own wording: a request that cannot reach the service
+  says "The browser could not reach Calendar Ghost.", and other unexpected failures say "The request
+  could not be completed." Server details and request validation messages still show as sent.
 - The Overview hero says each thing once: the headline gives the state, the detail explains it, the
   facts show running rules and the last sync, and the ghost reacts in a few words. The ghost is
   filled with its state's color, and its speech bubble sits beside it at eye level on every screen

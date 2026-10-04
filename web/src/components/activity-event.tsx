@@ -1,17 +1,24 @@
 import { ArrowRight, Repeat } from "lucide-react"
 
 import { ChangeSign } from "@/components/change-sign"
+import { useI18n } from "@/i18n/provider"
+import type { MessageKey } from "@/i18n/types"
 import type { EventCell, Happened } from "@/lib/activity"
 
-const SCOPE_LABELS = { series: "Whole series", occurrence: "One occurrence" } as const
+const SCOPE_LABELS: Record<"series" | "occurrence", MessageKey> = {
+  series: "activity.event.scope.series",
+  occurrence: "activity.event.scope.occurrence",
+}
 
 export function EventWhen({ cell }: { cell: Extract<EventCell, { state: "event" }> }) {
+  const { t } = useI18n()
+  const { note, when } = cell
   return (
     <span className="activity-event-when">
-      {[cell.note, cell.when].filter(Boolean).join(" · ")}
+      {note && when ? t("activity.event.noteAndWhen", { note, when }) : note || when}
       {cell.recurring && (
         <span className="activity-recurring">
-          <Repeat aria-hidden="true" /> {cell.scope ? SCOPE_LABELS[cell.scope] : "Repeats"}
+          <Repeat aria-hidden="true" /> {t(cell.scope ? SCOPE_LABELS[cell.scope] : "activity.event.repeats")}
         </span>
       )}
     </span>
@@ -29,6 +36,7 @@ export function HappenedLine({
   /** False where a marker beside the line already shows the sign. */
   signed?: boolean
 }) {
+  const { t } = useI18n()
   return (
     <span className="activity-happened" data-tone={happened.tone}>
       {signed && (
@@ -37,17 +45,21 @@ export function HappenedLine({
         </span>
       )}
       <span>
-        {happened.trigger && (
+        {happened.trigger ? (
           <>
-            <span className="activity-trigger">{happened.trigger}</span>
-            <ArrowRight aria-hidden="true" className="activity-happened-arrow" />
-            <span className="sr-only">, so </span>
+            {/* The arrow reads as a sentence to screen readers, so they get one. */}
+            <span aria-hidden="true">
+              <span className="activity-trigger">{happened.trigger}</span>
+              <ArrowRight className="activity-happened-arrow" />
+              <span className="activity-effect">{happened.effect}</span>
+            </span>
+            <span className="sr-only">{t("activity.happened.spoken", { trigger: happened.trigger, effect: happened.effect })}</span>
           </>
+        ) : (
+          <span className="activity-effect">{happened.effect}</span>
         )}
-        <span className="activity-effect">{happened.effect}</span>
         {suffix && <span className="activity-happened-suffix"> · {suffix}</span>}
       </span>
     </span>
   )
 }
-

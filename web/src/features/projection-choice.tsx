@@ -1,7 +1,8 @@
 import type { RefObject } from "react"
 
+import { useI18n } from "@/i18n/provider"
 import type { ProjectionHandling } from "@/lib/api"
-import { plural, removalConsequence } from "@/lib/rule-change"
+import { removalConsequence } from "@/lib/rule-change"
 
 /** What Rule Removal and Rule Replacement do with the projections a rule wrote. */
 export function ProjectionChoice({
@@ -21,9 +22,11 @@ export function ProjectionChoice({
   destinationName: string
   deleteAvailable: boolean
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   return (
     <fieldset className="projection-choice" aria-describedby={`${name}-consequence`}>
-      <legend>Projections this rule wrote</legend>
+      <legend>{t("ruleDetails.projections.legend")}</legend>
       <div className="radio-options">
         <label className="radio-row">
           <input
@@ -36,13 +39,9 @@ export function ProjectionChoice({
             onChange={() => onChange("delete")}
           />
           <span>
-            <strong>
-              Delete {plural(mappingCount, "projection")} from {destinationName} (recommended)
-            </strong>
+            <strong>{t("ruleDetails.projections.delete", { count: mappingCount, destination: destinationName })}</strong>
             <small>
-              {deleteAvailable
-                ? "Only events this rule manages are deleted."
-                : "Reauthorize the destination account in Settings to delete projections."}
+              {deleteAvailable ? t("ruleDetails.projections.deleteHint") : t("ruleDetails.projections.deleteUnavailable")}
             </small>
           </span>
         </label>
@@ -56,13 +55,13 @@ export function ProjectionChoice({
             onChange={() => onChange("detach")}
           />
           <span>
-            <strong>Keep them as ordinary events</strong>
-            <small>They stay in {destinationName} and are never updated or deleted again.</small>
+            <strong>{t("ruleDetails.projections.keep")}</strong>
+            <small>{t("ruleDetails.projections.keepHint", { destination: destinationName })}</small>
           </span>
         </label>
       </div>
       <p id={`${name}-consequence`} className="consequence-text">
-        {removalConsequence(value, mappingCount, destinationName)}
+        {removalConsequence(i18n, value, mappingCount, destinationName)}
       </p>
     </fieldset>
   )

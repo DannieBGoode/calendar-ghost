@@ -10,6 +10,7 @@ import {
   type RuleDetail,
   type RuleSummary,
   type SyncResult,
+  UnreadableResponseError,
 } from "./api"
 
 function stubFetch(status = 200, body: unknown = {}) {
@@ -121,5 +122,50 @@ describe("errorDetail", () => {
     const error = await api.rules().catch((caught: unknown) => caught)
     expect(error).toBeInstanceOf(ApiError)
     expect((error as ApiError).message).toBe("Input should be 'busy_only' or 'copy_details'")
+    expect((error as ApiError).detail).toBe("Input should be 'busy_only' or 'copy_details'")
+  })
+})
+
+function respond(status: number, body: string, contentType = "application/json") {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(new Response(body, { status, headers: { "Content-Type": contentType } }))),
+  )
+}
+
+async function failure(): Promise<ApiError> {
+  try {
+    await api.session()
+  } catch (error) {
+    if (error instanceof ApiError) return error
+    throw error
+  }
+  throw new Error("expected a failure")
+}
+
+describe("request errors", () => {
+  it("keeps the status and detail", async () => {
+    respond(409, JSON.stringify({ detail: "storage is busy" }))
+    const error = await failure()
+    expect([error.status, error.detail]).toEqual([409, "storage is busy"])
+  })
+
+  it("has no detail for a validation list without messages", async () => {
+    respond(422, JSON.stringify({ detail: [{ loc: ["body", "password"] }] }))
+    const error = await failure()
+    expect(error.detail).toBeNull()
+    expect(error.message).toBe("The request could not be completed.")
+  })
+
+  it("survives a body that is not JSON", async () => {
+    respond(502, "<html>Bad gateway</html>", "text/html")
+    const error = await failure()
+    expect([error.status, error.detail]).toEqual([502, null])
+  })
+
+  it("marks a successful response whose body is not JSON as unreadable", async () => {
+    respond(200, "<html>Fallback</html>", "text/html")
+    const error = await failure()
+    expect(error).toBeInstanceOf(UnreadableResponseError)
   })
 })

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
+
 import { emptyHistoryCopy, entrySteps, historyStatus } from "./activity-history"
 import type { AuditEntry } from "./api"
+
+const i18n = testI18n()
 
 function entry(id: number): AuditEntry {
   return {
@@ -24,37 +28,37 @@ function entry(id: number): AuditEntry {
 
 describe("emptyHistoryCopy", () => {
   it("treats an empty default view as good news", () => {
-    expect(emptyHistoryCopy({ ruleId: "", show: "", query: "" }).title).toBe("Nothing has changed yet")
+    expect(emptyHistoryCopy(i18n, { ruleId: "", show: "", query: "" }).title).toBe("Nothing has changed yet")
   })
 
   it("names the searched title before any other filter", () => {
-    const copy = emptyHistoryCopy({ ruleId: "rule-1", show: "blocked", query: "Dentist" })
+    const copy = emptyHistoryCopy(i18n, { ruleId: "rule-1", show: "blocked", query: "Dentist" })
     expect(copy.title).toBe("No events named “Dentist”")
     expect(copy.body).toContain("clear the search")
   })
 
   it("blames the rule or decision filter when no search is set", () => {
-    expect(emptyHistoryCopy({ ruleId: "rule-1", show: "all", query: "" }).title).toBe("No matching activity")
-    expect(emptyHistoryCopy({ ruleId: "", show: "blocked", query: "" }).title).toBe("No matching activity")
+    expect(emptyHistoryCopy(i18n, { ruleId: "rule-1", show: "all", query: "" }).title).toBe("No matching activity")
+    expect(emptyHistoryCopy(i18n, { ruleId: "", show: "blocked", query: "" }).title).toBe("No matching activity")
   })
 
   it("waits for the first run when every decision of every rule is shown", () => {
-    expect(emptyHistoryCopy({ ruleId: "", show: "all", query: "" }).title).toBe("No activity yet")
+    expect(emptyHistoryCopy(i18n, { ruleId: "", show: "all", query: "" }).title).toBe("No activity yet")
   })
 })
 
 describe("historyStatus", () => {
   it("announces an update before any search result", () => {
-    expect(historyStatus({ updating: true, query: "Dentist", more: false, count: 2 })).toBe("Updating activity…")
+    expect(historyStatus(i18n, { updating: true, query: "Dentist", more: false, count: 2 })).toBe("Updating activity…")
   })
 
   it("stays silent without a search", () => {
-    expect(historyStatus({ updating: false, query: "", more: true, count: 2 })).toBe("")
+    expect(historyStatus(i18n, { updating: false, query: "", more: true, count: 2 })).toBe("")
   })
 
   it("counts search results and says when older pages may hold more", () => {
-    expect(historyStatus({ updating: false, query: "Dentist", more: false, count: 1 })).toBe("1 entry found for “Dentist”.")
-    expect(historyStatus({ updating: false, query: "Dentist", more: true, count: 2 })).toBe(
+    expect(historyStatus(i18n, { updating: false, query: "Dentist", more: false, count: 1 })).toBe("1 entry found for “Dentist”.")
+    expect(historyStatus(i18n, { updating: false, query: "Dentist", more: true, count: 2 })).toBe(
       "More than 2 entries found for “Dentist”.",
     )
   })

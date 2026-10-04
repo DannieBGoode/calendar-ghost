@@ -74,6 +74,24 @@ the profile photo returned by Google when one is available. Its seed data models
 across three context-specific identities (`sam@personal.example`, `sam@family.example`, and
 `sam@work.example`), keeping the screenshots recognizable while making each calendar's story clear.
 
+## Adding a language
+
+1. Copy `web/src/i18n/locales/en/` to `web/src/i18n/locales/<tag>/` and translate the values.
+   Keep every key, every `{placeholder}`, the literal "Calendar Ghost", and rich-text tags
+   unchanged.
+2. Give every plural message the forms `Intl.PluralRules("<tag>").resolvedOptions().pluralCategories`
+   lists for that language. English only needs `one` and `other`; other languages may need more.
+3. Register the language in `web/src/i18n/locales/index.ts`:
+   `{ tag, load: () => import("./<tag>").then((module) => module.default) }`.
+4. Run the frontend gate (`npm --prefix web run typecheck && npm --prefix web run lint && npm --prefix web run test`).
+5. Open the app with `?locale=pseudo` in dev to check layouts take the longer pseudo-text, then
+   open it with the new language and read every screen.
+
+Translator notes: the glossary in `CONTEXT.md` lists the product's terms (Directional Sync Rule,
+Source Calendar, Event Projection, Drift, Conflict, Incident, Activity). Translate each one
+consistently and never mix two translations of the same term in one language. Keep sentences short
+and plain, the same register as the English copy.
+
 ## Quality checks
 
 ```sh

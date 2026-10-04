@@ -24,9 +24,9 @@ const detailsSource = [
 describe("Rule Details presentation", () => {
   it("defaults Rule Removal to deleting mapped projections and names the effect on its button", () => {
     expect(detailsSource).toContain('useState<ProjectionHandling>("delete")')
-    expect(detailsSource).toContain("removalConfirmLabel(effective, detail.mapping_count)")
+    expect(detailsSource).toContain("removalConfirmLabel(i18n, effective, detail.mapping_count)")
     expect(detailsSource).toContain("aria-describedby={`${name}-consequence`}")
-    expect(detailsSource).toContain("Removal incomplete")
+    expect(detailsSource).toContain("ruleDetails.removal.incompleteTitle")
   })
 
   it("shows consequences before saving a Material Rule Change", () => {
@@ -37,7 +37,7 @@ describe("Rule Details presentation", () => {
   it("confirms a Rule Replacement separately and names its destructive effect", () => {
     expect(detailsSource).toContain('id="replace-confirmation"')
     expect(detailsSource).toContain("replacementConfirmLabel(")
-    expect(detailsSource).toContain("Review replacement")
+    expect(detailsSource).toContain("ruleDetails.replacement.review")
   })
 
   it("keeps keyboard focus inside destructive confirmations", () => {
@@ -46,10 +46,10 @@ describe("Rule Details presentation", () => {
   })
 
   it("reports the removal outcome on the rules list, including events left in place", () => {
-    expect(detailsSource).toContain("const outcome = removalOutcome(result, destinationName)")
+    expect(detailsSource).toContain("finish(removalOutcome(i18n, result, destinationName))")
     expect(detailsSource).toContain('noticeTone: outcome.attention ? "attention" : undefined')
     expect(rulesSource).toContain("notice.attention")
-    expect(rulesSource).toContain("Review in Activity")
+    expect(rulesSource).toContain("rules.list.reviewInActivity")
   })
 
   it("does not refetch a removed rule before leaving its page", () => {
@@ -59,6 +59,6 @@ describe("Rule Details presentation", () => {
   it("links every rule row to its details and renders the details route", () => {
     expect(rulesSource).toContain("appPathForRule(rule.id)")
     expect(dashboardSource).toContain("<RuleDetailsView")
-    expect(rulesSource).toContain("Preview required")
+    expect(rulesSource).toContain("rules.list.reprojectionRequired")
   })
 })

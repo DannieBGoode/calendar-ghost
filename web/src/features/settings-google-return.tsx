@@ -4,28 +4,27 @@ import { useId, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useI18n } from "@/i18n/provider"
+import { codeTag, rich } from "@/i18n/rich"
 import { oauthReturnAtCurrentOrigin } from "@/lib/oauth-redirect"
 import { type GoogleReturn, useGoogleReturn } from "@/lib/use-google-return"
 import { cn } from "@/lib/utils"
 
 /** The step that finishes a connection Google returned elsewhere; shown only while it can. */
 export function GoogleReturnStep({ help }: { help: GoogleReturn }) {
+  const { t } = useI18n()
   const headingId = useId()
   if (!help.mismatch || !help.awaiting) return null
   return (
     <section className="oauth-feedback oauth-feedback-warning oauth-return" aria-labelledby={headingId}>
       <ShieldAlert aria-hidden="true" />
       <div>
-        <h3 id={headingId}>Finish connecting your Google account</h3>
-        <p>
-          Google sends your browser to <code>{help.mismatch.redirectOrigin}</code> after you approve
-          access. If that page did not load, copy its whole address from the address bar and paste it
-          here. It works once, for 10 minutes.
-        </p>
+        <h3 id={headingId}>{t("settings.googleReturn.step.title")}</h3>
+        <p>{rich(t("settings.googleReturn.step.body", { origin: help.mismatch.redirectOrigin }), { code: codeTag })}</p>
         <OAuthReturnForm redirectUri={help.mismatch.redirectUri} />
       </div>
       <Button variant="ghost" onClick={help.dismiss}>
-        Dismiss
+        {t("settings.googleReturn.step.dismiss")}
       </Button>
     </section>
   )
@@ -33,28 +32,20 @@ export function GoogleReturnStep({ help }: { help: GoogleReturn }) {
 
 /** A quiet note that Google returns elsewhere, with the way to finish and the permanent fix. */
 export function GoogleReturnNote({ help, className }: { help: GoogleReturn; className?: string }) {
+  const { t } = useI18n()
   if (!help.mismatch || help.awaiting) return null
+  const origin = help.mismatch.redirectOrigin
   return (
     <details className={cn("inline-help", className)}>
       <summary>
         <Info aria-hidden="true" />
-        <span>
-          Google returns to <code>{help.mismatch.redirectOrigin}</code>, not this address
-        </span>
+        <span>{rich(t("settings.googleReturn.note.summary", { origin }), { code: codeTag })}</span>
         <ChevronDown className="inline-help-chevron" aria-hidden="true" />
       </summary>
       <div className="inline-help-body">
-        <p>
-          If its page does not load after you approve access, copy the whole address from the address
-          bar and paste it here within 10 minutes to finish connecting.
-        </p>
+        <p>{t("settings.googleReturn.note.body")}</p>
         <OAuthReturnForm redirectUri={help.mismatch.redirectUri} />
-        <p>
-          To stop this, set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address of this
-          installation, for example with Tailscale Serve, and register it on your Google OAuth client.
-          Opening Calendar Ghost at <code>{help.mismatch.redirectOrigin}</code>, for example through an
-          SSH tunnel, also works.
-        </p>
+        <p>{rich(t("settings.googleReturn.note.fix", { origin }), { code: codeTag })}</p>
       </div>
     </details>
   )
@@ -71,6 +62,7 @@ export function GoogleReturnHelp({ redirectUri }: { redirectUri: string | null }
 }
 
 function OAuthReturnForm({ redirectUri }: { redirectUri: string }) {
+  const { t } = useI18n()
   const fieldId = useId()
   const [pasted, setPasted] = useState("")
   const [invalid, setInvalid] = useState(false)
@@ -84,7 +76,7 @@ function OAuthReturnForm({ redirectUri }: { redirectUri: string }) {
         if (target) window.location.assign(target)
       }}
     >
-      <Label htmlFor={fieldId}>Address Google returned to</Label>
+      <Label htmlFor={fieldId}>{t("settings.googleReturn.form.label")}</Label>
       <div className="oauth-return-row">
         <Input
           id={fieldId}
@@ -93,7 +85,7 @@ function OAuthReturnForm({ redirectUri }: { redirectUri: string }) {
             setPasted(event.target.value)
             setInvalid(false)
           }}
-          placeholder={`${redirectUri}?state=…`}
+          placeholder={t("settings.googleReturn.form.placeholder", { redirectUri })}
           aria-invalid={invalid}
           aria-describedby={invalid ? `${fieldId}-error` : undefined}
           autoComplete="off"
@@ -101,13 +93,12 @@ function OAuthReturnForm({ redirectUri }: { redirectUri: string }) {
           required
         />
         <Button type="submit" variant="outline">
-          Finish connecting
+          {t("settings.googleReturn.form.submit")}
         </Button>
       </div>
       {invalid && (
         <p id={`${fieldId}-error`} className="field-error" role="alert">
-          That is not the address Google returned to. Copy the whole address, starting with{" "}
-          <code>{redirectUri}?</code>
+          {rich(t("settings.googleReturn.form.invalid", { start: `${redirectUri}?` }), { code: codeTag })}
         </p>
       )}
     </form>

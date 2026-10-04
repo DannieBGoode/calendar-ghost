@@ -21,6 +21,102 @@ const appComponentImports = {
   message: "Shared UI primitives in components/ui must not depend on app components.",
 }
 
+// Attributes and props whose values are identifiers, addresses, or settings, never words a person
+// reads. Every other attribute, including text props of our own components such as `body`,
+// `legend`, `description`, or `confirmLabel`, may not hold literal text. `data-*` is non-text too.
+const NON_TEXT_ATTRIBUTES = new Set([
+  "className",
+  "id",
+  "key",
+  "href",
+  "src",
+  "type",
+  "variant",
+  "size",
+  "role",
+  "name",
+  "value",
+  "rel",
+  "target",
+  "method",
+  "autoComplete",
+  "inputMode",
+  "htmlFor",
+  "dateTime",
+  "aria-hidden",
+  "aria-controls",
+  "aria-describedby",
+  "aria-labelledby",
+  "aria-activedescendant",
+  "aria-current",
+  "aria-expanded",
+  "aria-haspopup",
+  "aria-invalid",
+  "aria-live",
+  "aria-busy",
+  "aria-selected",
+  "aria-orientation",
+  "scope",
+  "referrerPolicy",
+  "decoding",
+  // SVG geometry and paint.
+  "d",
+  "fill",
+  "stroke",
+  "strokeLinecap",
+  "strokeLinejoin",
+  // Our components' element ids and modes.
+  "labelId",
+  "errorId",
+  "idPrefix",
+  "describedBy",
+  "mode",
+  "kind",
+  "state",
+])
+const hasLetters = (text) => /\p{L}/u.test(text)
+
+/** The literal strings an expression can produce, through conditional and logical branches. */
+function literalTexts(node) {
+  if (!node) return []
+  if (node.type === "Literal") return typeof node.value === "string" && hasLetters(node.value) ? [node] : []
+  if (node.type === "TemplateLiteral") return node.quasis.some((quasi) => hasLetters(quasi.value.cooked ?? "")) ? [node] : []
+  if (node.type === "ConditionalExpression") return [...literalTexts(node.consequent), ...literalTexts(node.alternate)]
+  if (node.type === "LogicalExpression") return [...literalTexts(node.left), ...literalTexts(node.right)]
+  return []
+}
+
+/** Reports English written straight into JSX; copy belongs in web/src/i18n/locales (ADR 0026). */
+const noLiteralUiText = {
+  meta: {
+    type: "problem",
+    schema: [],
+    messages: { literal: "Move this text into a catalog under web/src/i18n/locales/en and render it with t()." },
+  },
+  create(context) {
+    const report = (nodes) => {
+      for (const node of nodes) context.report({ node, messageId: "literal" })
+    }
+    return {
+      JSXText(node) {
+        if (hasLetters(node.value)) context.report({ node, messageId: "literal" })
+      },
+      JSXExpressionContainer(node) {
+        // Children only; attribute values are checked with their attribute's name below.
+        if (node.parent.type === "JSXElement" || node.parent.type === "JSXFragment") report(literalTexts(node.expression))
+      },
+      JSXAttribute(node) {
+        if (node.name.type !== "JSXIdentifier") return
+        const name = node.name.name
+        if (NON_TEXT_ATTRIBUTES.has(name) || name.startsWith("data-")) return
+        report(literalTexts(node.value?.type === "JSXExpressionContainer" ? node.value.expression : node.value))
+      },
+    }
+  },
+}
+
+export const localRules = { "no-literal-ui-text": noLiteralUiText }
+
 export default tseslint.config(
   { ignores: ["dist", "../src/calendar_sync/interfaces/api/static", "src/lib/api-schema.ts"] },
   {
@@ -79,5 +175,11 @@ export default tseslint.config(
       "max-lines-per-function": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
     },
+  },
+  {
+    files: ["src/**/*.tsx"],
+    ignores: ["src/**/*.test.tsx", "src/i18n/**"],
+    plugins: { "calendar-ghost": { rules: localRules } },
+    rules: { "calendar-ghost/no-literal-ui-text": "error" },
   },
 )

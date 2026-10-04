@@ -4,10 +4,15 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    /** The server's English detail, including validation messages; null when it sent none. */
+    public readonly detail: string | null = null,
   ) {
     super(message)
   }
 }
+
+/** The server answered, but its body was not JSON; a proxy fallback page is the usual cause. */
+export class UnreadableResponseError extends ApiError {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
@@ -15,7 +20,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, credentials: "same-origin", headers })
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null)
-    throw new ApiError(errorDetail(body) ?? "The request could not be completed.", response.status)
+    const detail = errorDetail(body)
+    throw new ApiError(detail ?? "The request could not be completed.", response.status, detail)
   }
   if (response.status === 204) return undefined as T
   try {
@@ -24,7 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // The request reached a server, so an unparseable body is a service failure, not a
     // connectivity one; a proxy fallback page is the usual cause.
     if (!(error instanceof SyntaxError)) throw error
-    throw new ApiError("The service returned an unreadable response.", response.status)
+    throw new UnreadableResponseError("The service returned an unreadable response.", response.status)
   }
 }
 

@@ -209,6 +209,8 @@ Product text uses six steps: 2rem Fraunces page titles, 1rem Figtree section tit
 
 **The Calendar Language Rule.** Labels use the domain glossary and plain calendar terminology. Provider codes, tokens, and infrastructure terms remain in diagnostic details.
 
+**The Room To Grow Rule.** Leave room for about 35% longer text in other languages; check layouts with `?locale=pseudo`.
+
 ## Elevation
 
 The system is flat by default. Tonal layering, dividers, and spacing establish structure. Only transient menus, dialogs, and toasts may lift above the page; stable panels never use decorative shadows.

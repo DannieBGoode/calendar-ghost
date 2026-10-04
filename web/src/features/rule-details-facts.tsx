@@ -1,47 +1,47 @@
 import { ArrowRight } from "lucide-react"
 
+import { useI18n } from "@/i18n/provider"
 import type { RuleDetail, RunOutcome } from "@/lib/api"
 import { tentativeFact, unansweredFact } from "@/lib/invitation-responses"
 import { activitySearch, appPathForView, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
-import { plural, runOutcomeSummary } from "@/lib/rule-change"
-import { relativeTime } from "@/lib/relative-time"
+import { runOutcomeSummary } from "@/lib/rule-change"
 
 export function RuleFacts({ detail, destinationName }: { detail: RuleDetail; destinationName: string }) {
+  const i18n = useI18n()
+  const { t } = i18n
   return (
     <section className="rule-section page-card" aria-labelledby="rule-facts-title">
-      <h2 id="rule-facts-title">What this rule does</h2>
+      <h2 id="rule-facts-title">{t("ruleDetails.facts.title")}</h2>
       <dl className="rule-facts">
         <div>
-          <dt>Event information</dt>
+          <dt>{t("ruleDetails.facts.eventInformation")}</dt>
           <dd>
-            {detail.privacy_policy === "busy_only"
-              ? "Busy only: titles, descriptions, and locations stay private"
-              : "Title, description, and location are copied"}
+            {detail.privacy_policy === "busy_only" ? t("ruleDetails.facts.busyOnly") : t("ruleDetails.facts.copyDetails")}
           </dd>
         </div>
         <div>
-          <dt>All-day events</dt>
-          <dd>{detail.sync_all_day_events ? "Included" : "Excluded; timed events only"}</dd>
+          <dt>{t("ruleDetails.facts.allDay")}</dt>
+          <dd>{detail.sync_all_day_events ? t("ruleDetails.facts.allDayIncluded") : t("ruleDetails.facts.allDayExcluded")}</dd>
         </div>
         <div>
-          <dt>Events you answered Maybe</dt>
-          <dd>{tentativeFact(detail)}</dd>
+          <dt>{t("ruleDetails.facts.tentative")}</dt>
+          <dd>{tentativeFact(i18n, detail)}</dd>
         </div>
         <div>
-          <dt>Invitations you haven't answered</dt>
-          <dd>{unansweredFact(detail)}</dd>
+          <dt>{t("ruleDetails.facts.unanswered")}</dt>
+          <dd>{unansweredFact(i18n, detail)}</dd>
         </div>
         <div>
-          <dt>Declined events</dt>
-          <dd>Not synced</dd>
+          <dt>{t("ruleDetails.facts.declined")}</dt>
+          <dd>{t("ruleDetails.facts.declinedValue")}</dd>
         </div>
         <div>
-          <dt>Starting point</dt>
-          <dd>Includes events from the past {plural(detail.initial_lookback_days, "day")} onward</dd>
+          <dt>{t("ruleDetails.facts.startingPoint")}</dt>
+          <dd>{t("ruleDetails.facts.startingPointValue", { count: detail.initial_lookback_days })}</dd>
         </div>
         <div>
-          <dt>Projections</dt>
-          <dd>{plural(detail.mapping_count, "projection")} this rule manages in {destinationName}</dd>
+          <dt>{t("ruleDetails.facts.projections")}</dt>
+          <dd>{t("ruleDetails.facts.projectionsValue", { count: detail.mapping_count, destination: destinationName })}</dd>
         </div>
       </dl>
     </section>
@@ -61,10 +61,11 @@ export function RuleRuns({
   now: number
   onViewChange: ViewChange
 }) {
+  const { t } = useI18n()
   return (
     <section className="rule-section page-card" aria-labelledby="rule-runs-title">
       <div className="section-heading section-heading-inline">
-        <h2 id="rule-runs-title">Latest runs</h2>
+        <h2 id="rule-runs-title">{t("ruleDetails.runs.title")}</h2>
         <a
           className="text-link"
           href={`${appPathForView("activity")}${activitySearch(detail.id)}`}
@@ -74,20 +75,23 @@ export function RuleRuns({
             onViewChange("activity", { search: activitySearch(detail.id) })
           }}
         >
-          This rule's activity <ArrowRight aria-hidden="true" />
+          {t("ruleDetails.runs.activityLink")} <ArrowRight aria-hidden="true" />
         </a>
       </div>
       <dl className="rule-facts">
         <OutcomeFact
-          label="Last sync"
-          explanation={`Applies changes made in ${sourceName} since the previous run. Runs every five minutes.`}
+          label={t("ruleDetails.runs.lastSync")}
+          explanation={t("ruleDetails.runs.syncExplanation", { source: sourceName })}
           outcome={detail.last_sync}
           kind="sync"
           now={now}
         />
         <OutcomeFact
-          label="Last reconciliation"
-          explanation={`Compares the events this rule wrote to ${destinationName} from the past ${plural(detail.initial_lookback_days, "day")} onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now.`}
+          label={t("ruleDetails.runs.lastReconciliation")}
+          explanation={t("ruleDetails.runs.reconciliationExplanation", {
+            count: detail.initial_lookback_days,
+            destination: destinationName,
+          })}
           outcome={detail.last_reconciliation}
           kind="reconciliation"
           now={now}
@@ -110,18 +114,19 @@ function OutcomeFact({
   kind: "sync" | "reconciliation"
   now: number
 }) {
+  const i18n = useI18n()
   return (
     <div>
       <dt>{label}</dt>
       <dd>
-        {runOutcomeSummary(outcome, kind)}
+        {runOutcomeSummary(i18n, outcome, kind)}
         {outcome && (
           <time
             dateTime={outcome.completed_at}
             className="rule-fact-time"
-            title={new Date(outcome.completed_at).toLocaleString()}
+            title={i18n.format.dateTime(outcome.completed_at)}
           >
-            {relativeTime(outcome.completed_at, now)}
+            {i18n.format.relative(outcome.completed_at, now)}
           </time>
         )}
         <span className="rule-fact-explanation">{explanation}</span>

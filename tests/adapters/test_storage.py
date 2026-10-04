@@ -277,7 +277,7 @@ def test_clearing_keeps_what_activity_reads_across_the_cutoff(tmp_path: Path) ->
     assert _snapshot() == before
 
 
-# Regression: Codex review P2 — clearing deadlocked with a concurrent writer
+# Regression: Codex review P2: clearing deadlocked with a concurrent writer
 # Found by /codex review on 2026-10-01
 def test_clearing_waits_for_a_concurrent_writer_instead_of_failing(tmp_path: Path) -> None:
     path = _database(tmp_path)
@@ -306,7 +306,7 @@ def test_clearing_waits_for_a_concurrent_writer_instead_of_failing(tmp_path: Pat
     assert removed == 99
 
 
-# Regression: PR #34 review — after the clock stepped back, clearing removed the entry a recent
+# Regression: PR #34 review: after the clock stepped back, clearing removed the entry a recent
 # one is compared with, because protection picked entries by time while Activity walks by id.
 def test_clearing_after_the_clock_stepped_back_keeps_what_recent_entries_compare_with(
     tmp_path: Path,
@@ -342,7 +342,7 @@ def test_clearing_after_the_clock_stepped_back_keeps_what_recent_entries_compare
     assert _snapshot() == before
 
 
-# Regression: PR #34 review — with the clock stepped back past the cutoff, clearing between a
+# Regression: PR #34 review: with the clock stepped back past the cutoff, clearing between a
 # pass and its block check removed the earlier block the check compares with.
 def test_clearing_keeps_what_a_block_check_reads_when_the_new_block_looks_old(
     tmp_path: Path,

@@ -201,7 +201,7 @@ def test_no_event_content_reaches_the_log_files(tmp_path: Path) -> None:
         assert content not in text
 
 
-# Regression: Codex review P2 — log files that are links could expose or truncate other files
+# Regression: Codex review P2: log files that are links could expose or truncate other files
 # Found by /codex review on 2026-10-01
 def test_a_rotated_log_that_links_outside_the_directory_is_never_served(tmp_path: Path) -> None:
     directory = tmp_path / "logs"
@@ -234,7 +234,7 @@ def test_a_current_log_that_is_a_link_turns_file_logging_off(
     assert "file logging is off" in capsys.readouterr().err
 
 
-# Regression: PR #34 review — configuring logging again kept writing to the first files
+# Regression: PR #34 review: configuring logging again kept writing to the first files
 def test_configuring_logging_again_writes_to_the_newest_files(tmp_path: Path) -> None:
     first = RotatingLogFiles(tmp_path / "first")
     second = RotatingLogFiles(tmp_path / "second")
@@ -265,7 +265,7 @@ def _file_handlers() -> list[logging.Handler]:
     ]
 
 
-# Regression: PR #34 review — turning file logging off kept writing to the earlier files
+# Regression: PR #34 review: turning file logging off kept writing to the earlier files
 @pytest.mark.parametrize("turned_off", ["no directory", "unusable directory"])
 def test_turning_file_logging_off_stops_writing_to_the_earlier_files(
     tmp_path: Path, turned_off: str

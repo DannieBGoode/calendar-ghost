@@ -1,3 +1,5 @@
+import type { I18n } from "@/i18n/translator"
+import type { MessageKey } from "@/i18n/types"
 import type { ConnectedAccount, Incident } from "@/lib/api"
 
 /** What the administrator can do about an open incident, if anything. */
@@ -35,17 +37,17 @@ function ruleAction(kind: "rule" | "blocked", ruleId: string | null, label: stri
   return ruleId ? { kind, ruleId, label } : null
 }
 
-function authorizationGuidance(ruleId: string | null, rule: IncidentRuleState | null): IncidentGuidance {
+function authorizationGuidance(i18n: I18n, ruleId: string | null, rule: IncidentRuleState | null): IncidentGuidance {
   // Reauthorizing renews access but leaves the rule stopped; only its recovery closes this.
   if (ruleId && rule?.accessRenewed) {
     return {
-      detail: "Google access is renewed, but the rule stays stopped until it is recovered.",
-      action: { kind: "rule", ruleId, label: "Recover this rule" },
+      detail: i18n.t("activity.incidents.guidance.accessRenewed"),
+      action: { kind: "rule", ruleId, label: i18n.t("activity.incidents.action.recover") },
     }
   }
   return {
-    detail: "Nothing is written until the Google account is reauthorized. Existing events stay where they are.",
-    action: { kind: "settings", label: "Reauthorize in Settings" },
+    detail: i18n.t("activity.incidents.guidance.authorization"),
+    action: { kind: "settings", label: i18n.t("activity.incidents.action.reauthorize") },
   }
 }
 
@@ -53,39 +55,35 @@ function authorizationGuidance(ruleId: string | null, rule: IncidentRuleState | 
  * The next step for an open incident, in the terms of what its category needs. A rule action is
  * offered only while the rule still exists.
  */
-export function incidentGuidance(incident: Incident, rule: IncidentRuleState | null): IncidentGuidance {
+export function incidentGuidance(i18n: I18n, incident: Incident, rule: IncidentRuleState | null): IncidentGuidance {
+  const { t } = i18n
   const ruleId = rule ? incident.rule_id : null
-  if (AUTHORIZATION.has(incident.category)) return authorizationGuidance(ruleId, rule)
+  if (AUTHORIZATION.has(incident.category)) return authorizationGuidance(i18n, ruleId, rule)
   if (STOPPED.has(incident.category)) {
     return {
-      detail: "The rule is stopped and writes nothing until it is recovered.",
-      action: ruleAction("rule", ruleId, "Review this rule"),
+      detail: t("activity.incidents.guidance.stopped"),
+      action: ruleAction("rule", ruleId, t("activity.incidents.action.review")),
     }
   }
-  if (RETRYING.has(incident.category)) {
-    return {
-      detail: "Nothing to do now. Calendar Ghost keeps retrying and closes this after the next successful sync.",
-      action: null,
-    }
-  }
+  if (RETRYING.has(incident.category)) return { detail: t("activity.incidents.guidance.retrying"), action: null }
   if (incident.category === "conflict") {
     return {
-      detail: "The rest of the rule keeps syncing. This closes when a daily check finds nothing still blocked.",
-      action: ruleAction("blocked", ruleId, "See blocked events"),
+      detail: t("activity.incidents.guidance.conflict"),
+      action: ruleAction("blocked", ruleId, t("activity.incidents.action.seeBlocked")),
     }
   }
-  return { detail: null, action: ruleAction("rule", ruleId, "Review this rule") }
+  return { detail: null, action: ruleAction("rule", ruleId, t("activity.incidents.action.review")) }
 }
 
-const RESOLUTIONS: Record<NonNullable<Incident["resolution"]>, string> = {
-  sync_succeeded: "Resolved by a successful sync.",
-  blocks_cleared: "Resolved when the daily check found nothing still blocked.",
-  rule_removed: "Closed when the rule was removed.",
+const RESOLUTIONS: Record<NonNullable<Incident["resolution"]>, MessageKey> = {
+  sync_succeeded: "activity.incidents.resolution.syncSucceeded",
+  blocks_cleared: "activity.incidents.resolution.blocksCleared",
+  rule_removed: "activity.incidents.resolution.ruleRemoved",
 }
 
 /** Why a resolved incident closed; null when it closed before the reason was recorded. */
-export function incidentResolution(incident: Incident): string | null {
-  return incident.resolution ? RESOLUTIONS[incident.resolution] : null
+export function incidentResolution(i18n: I18n, incident: Incident): string | null {
+  return incident.resolution ? i18n.t(RESOLUTIONS[incident.resolution]) : null
 }
 
 /** When a resolved incident closed; older ones only know when they were last updated. */

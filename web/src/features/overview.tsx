@@ -10,6 +10,9 @@ import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { Button } from "@/components/ui/button"
 import { GoogleReturnHelp } from "@/features/settings"
+import { useI18n } from "@/i18n/provider"
+import { codeTag, rich } from "@/i18n/rich"
+import type { I18n } from "@/i18n/translator"
 import { HealthHero } from "@/features/overview-hero"
 import { OverviewRules, RecentChanges, REFRESH_INTERVAL } from "@/features/overview-sections"
 import { api, type Dashboard } from "@/lib/api"
@@ -26,8 +29,8 @@ import { useNow } from "@/lib/use-now"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 import { cn } from "@/lib/utils"
 
-function ruleName(endpoints: RuleEndpoints): string {
-  return `${endpoints.source.name} → ${endpoints.destination.name}`
+function ruleName(i18n: I18n, endpoints: RuleEndpoints): string {
+  return i18n.t("overview.ruleName", { source: endpoints.source.name, destination: endpoints.destination.name })
 }
 
 /** What the Overview reads: the dashboard, the rules and their endpoints, and Google setup. */
@@ -44,14 +47,16 @@ function useOverviewData() {
 }
 
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const now = useNow()
   const { dashboard, rules, google, endpoints } = useOverviewData()
 
-  if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label="Loading overview" />
-  if (dashboard.error || rules.error || google.error) return <LoadFailure title="Calendar Ghost could not load" />
+  if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label={t("overview.loading")} />
+  if (dashboard.error || rules.error || google.error) return <LoadFailure title={t("overview.loadFailure")} />
 
-  const ruleNames = new Map(rules.data.map((rule) => [rule.id, ruleName(endpoints(rule))]))
-  const health = overviewHealth(dashboard.data, now, (ruleId) => ruleNames.get(ruleId) ?? null)
+  const ruleNames = new Map(rules.data.map((rule) => [rule.id, ruleName(i18n, endpoints(rule))]))
+  const health = overviewHealth(i18n, dashboard.data, now, (ruleId) => ruleNames.get(ruleId) ?? null)
 
   return (
     <div className="page-section overview-page">
@@ -86,6 +91,7 @@ function OnboardingSteps({
   redirectUri: string | null
   onViewChange: ViewChange
 }) {
+  const { t } = useI18n()
   // Only an authorized account lets the next step work; a disconnected one must be renewed first.
   const reauthorize = dashboard.connected_accounts === 0 && dashboard.disconnected_accounts > 0
   const done = [dashboard.connected_accounts > 0, dashboard.sync_rules > 0, dashboard.enabled_rules > 0]
@@ -106,8 +112,8 @@ function OnboardingSteps({
   )
   const steps = [
     reauthorize ? {
-      title: "Reauthorize your Google account",
-      body: "Its access was removed or expired. Renew it in Settings before creating a rule.",
+      title: t("overview.onboarding.steps.reauthorize.title"),
+      body: t("overview.onboarding.steps.reauthorize.body"),
       action: (
         <Button asChild>
           <a
@@ -118,48 +124,48 @@ function OnboardingSteps({
               onViewChange("settings")
             }}
           >
-            Reauthorize in Settings <ArrowRight aria-hidden="true" />
+            {t("overview.health.action.reauthorizeInSettings")} <ArrowRight aria-hidden="true" />
           </a>
         </Button>
       ),
     } : {
-      title: "Connect a Google account",
-      body: "Authorize calendar discovery and event access for one Google account.",
+      title: t("overview.onboarding.steps.connect.title"),
+      body: t("overview.onboarding.steps.connect.body"),
       action: (
         <div className="step-action">
           <Button disabled={!googleConfigured} onClick={() => {
               recordAuthorizationStart()
               window.location.assign("/api/v1/oauth/google/start")
             }}>
-            <KeyRound aria-hidden="true" /> Connect Google account <ExternalLink aria-hidden="true" />
+            <KeyRound aria-hidden="true" /> {t("overview.onboarding.steps.connect.action")} <ExternalLink aria-hidden="true" />
           </Button>
           {!googleConfigured && (
             <p className="configuration-note">
-              Add the master key and Google OAuth credentials in <code>.env</code>, then restart.
+              {rich(t("overview.onboarding.steps.connect.configurationNote"), { code: codeTag })}
             </p>
           )}
         </div>
       ),
     },
     {
-      title: "Create a rule",
-      body: "Choose one source calendar, one destination calendar, and what the destination may show.",
-      action: rulesLink("Create a rule", true),
+      title: t("overview.onboarding.steps.createRule.title"),
+      body: t("overview.onboarding.steps.createRule.body"),
+      action: rulesLink(t("overview.health.action.createRule"), true),
     },
     {
-      title: "Preview and start syncing",
-      body: "Review exactly what will be written before the first event reaches the destination.",
-      action: rulesLink("Review rules", false),
+      title: t("overview.onboarding.steps.preview.title"),
+      body: t("overview.onboarding.steps.preview.body"),
+      action: rulesLink(t("overview.health.action.reviewRules"), false),
     },
   ]
   return (
     <section className="workflow dashboard-card setup-card" aria-labelledby="workflow-title">
       <div className="section-heading">
         <div>
-          <h2 id="workflow-title">Getting started</h2>
-          <p>Nothing is written to Google until a rule passes preview and you start it.</p>
+          <h2 id="workflow-title">{t("overview.onboarding.title")}</h2>
+          <p>{t("overview.onboarding.intro")}</p>
         </div>
-        <span className="step-progress">Step {current + 1} of 3</span>
+        <span className="step-progress">{t("overview.onboarding.stepProgress", { current: current + 1 })}</span>
       </div>
       {current === 0 && <GoogleReturnHelp redirectUri={redirectUri} />}
       <ol className="step-list">
@@ -170,7 +176,7 @@ function OnboardingSteps({
             aria-current={index === current ? "step" : undefined}
           >
             <span className="step-number">
-              {done[index] && <span className="sr-only">Done: </span>}
+              {done[index] && <span className="sr-only">{t("overview.onboarding.doneSr")}</span>}
               {done[index] ? <Check aria-hidden="true" /> : index + 1}
             </span>
             <div className="step-content">

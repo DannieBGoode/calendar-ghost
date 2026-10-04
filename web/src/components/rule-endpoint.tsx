@@ -1,6 +1,13 @@
 import { AccountAvatar } from "@/components/account-avatar"
+import { useI18n } from "@/i18n/provider"
+import type { MessageKey } from "@/i18n/types"
 import type { ConnectedAccount, DiscoveredCalendar, RuleCalendar } from "@/lib/api"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
+
+const ROLE_LABEL_KEYS: Record<"Source" | "Destination", MessageKey> = {
+  Source: "rules.endpoint.role.source",
+  Destination: "rules.endpoint.role.destination",
+}
 
 export function RuleEndpoint({
   account,
@@ -13,7 +20,8 @@ export function RuleEndpoint({
   calendars: DiscoveredCalendar[] | undefined
   role: "Source" | "Destination"
 }) {
-  const label = ruleEndpointLabel(endpoint, account, calendars)
+  const i18n = useI18n()
+  const label = ruleEndpointLabel(i18n, endpoint, account, calendars)
   return (
     <span className="rule-endpoint" title={`${label.calendar} · ${account?.email ?? endpoint.connected_account_id}`}>
       <AccountAvatar
@@ -23,7 +31,7 @@ export function RuleEndpoint({
         compact
       />
       <span className="rule-endpoint-copy">
-        <span className="sr-only">{role}: </span>
+        <span className="sr-only">{i18n.t(ROLE_LABEL_KEYS[role])}</span>
         <span className="rule-endpoint-calendar">{label.calendar}</span>
         <span className="rule-endpoint-account">{label.account}</span>
       </span>

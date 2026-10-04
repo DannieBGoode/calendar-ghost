@@ -3,6 +3,7 @@ import type { KeyboardEvent, MouseEvent } from "react"
 
 import { EventWhen } from "@/components/activity-event"
 import { HappenedLabel } from "@/features/activity-labels"
+import { useI18n } from "@/i18n/provider"
 import { eventCell, formatClockTime, formatDay, type ActivityDayGroup, type EventCell } from "@/lib/activity"
 import { activitySearch, type ActivityLocationState } from "@/lib/activity-location"
 import { ruleNames, type RuleContext } from "@/lib/activity-rule-context"
@@ -26,6 +27,7 @@ export function ActivityTable({
   onFilterRule: (ruleId: string) => void
   onStep: (rowLink: string | undefined) => void
 }) {
+  const { t } = useI18n()
   const columns = showRuleColumn ? 4 : 3
 
   function moveSelection(event: KeyboardEvent<HTMLTableElement>) {
@@ -43,13 +45,15 @@ export function ActivityTable({
   return (
     // Explicit roles keep table semantics where narrow screens restyle the rows.
     <table className="activity-table" role="table" onKeyDown={moveSelection}>
-      <caption className="sr-only">Synchronization history, newest first</caption>
+      <caption className="sr-only">{t("activity.history.caption")}</caption>
       <thead role="rowgroup">
         <tr role="row">
-          <th scope="col" role="columnheader" className="activity-col-time">Time</th>
-          <th scope="col" role="columnheader" className="activity-col-event">Event</th>
-          <th scope="col" role="columnheader" className="activity-col-happened">What happened</th>
-          {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
+          <th scope="col" role="columnheader" className="activity-col-time">{t("activity.history.column.time")}</th>
+          <th scope="col" role="columnheader" className="activity-col-event">{t("activity.history.column.event")}</th>
+          <th scope="col" role="columnheader" className="activity-col-happened">{t("activity.history.column.happened")}</th>
+          {showRuleColumn && (
+            <th scope="col" role="columnheader" className="activity-col-rule">{t("activity.history.column.rule")}</th>
+          )}
         </tr>
       </thead>
       {days.map((day) => (
@@ -97,8 +101,10 @@ function EntryRow({
   onOpen: (entry: AuditEntry) => void
   onFilterRule: (ruleId: string) => void
 }) {
+  const { i18n } = context
+  const { t } = i18n
   const names = ruleNames(entry.rule_id, context)
-  const cell = eventCell(entry, names)
+  const cell = eventCell(i18n, entry, names)
   const href = `${window.location.pathname}${activitySearch({ ...state, entryId: entry.id })}`
   const follow = (event: MouseEvent<HTMLAnchorElement>) => {
     if (!isPlainLeftClick(event)) return
@@ -116,8 +122,10 @@ function EntryRow({
       }}
     >
       <td role="cell" className="activity-col-time">
-        <time dateTime={entry.occurred_at}>{formatClockTime(entry.occurred_at)}</time>
-        <span className="sr-only">, {formatDay(entry.occurred_at)}</span>
+        <time dateTime={entry.occurred_at} aria-hidden="true">{formatClockTime(i18n, entry.occurred_at)}</time>
+        <span className="sr-only">
+          {t("activity.row.spokenTime", { time: formatClockTime(i18n, entry.occurred_at), day: formatDay(i18n, entry.occurred_at) })}
+        </span>
       </td>
       <td role="cell" className="activity-col-event">
         <a
@@ -139,7 +147,11 @@ function EntryRow({
             type="button"
             className="activity-rule-name"
             onClick={() => onFilterRule(entry.rule_id)}
-            aria-label={names ? `Show only ${names.source} to ${names.destination}` : "Show only this removed rule"}
+            aria-label={
+              names
+                ? t("activity.row.filterRule", { source: names.source, destination: names.destination })
+                : t("activity.row.filterRemovedRule")
+            }
           >
             {names ? (
               <>
@@ -148,7 +160,7 @@ function EntryRow({
                 <span>{names.destination}</span>
               </>
             ) : (
-              <span>Removed rule</span>
+              <span>{t("activity.removedRule")}</span>
             )}
           </button>
         </td>

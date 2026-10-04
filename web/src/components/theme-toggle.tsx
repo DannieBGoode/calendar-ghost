@@ -2,15 +2,17 @@ import { Moon, Sun } from "lucide-react"
 
 import { useTheme } from "@/components/theme-provider"
 import { Button } from "@/components/ui/button"
+import { useI18n } from "@/i18n/provider"
 
 type ThemeToggleProps = {
   className?: string
 }
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
+  const { t } = useI18n()
   const { resolvedTheme, setPreference } = useTheme()
   const darkModeEnabled = resolvedTheme === "dark"
-  const title = darkModeEnabled ? "Switch to light mode" : "Switch to dark mode"
+  const title = darkModeEnabled ? t("common.themeToggle.switchToLight") : t("common.themeToggle.switchToDark")
 
   return (
     <Button
@@ -18,7 +20,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       className={className}
       variant="ghost"
       size="icon"
-      aria-label="Dark mode"
+      aria-label={t("common.themeToggle.label")}
       aria-pressed={darkModeEnabled}
       title={title}
       onClick={() => setPreference(darkModeEnabled ? "light" : "dark")}

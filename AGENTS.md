@@ -160,6 +160,9 @@ The production frontend is committed under `src/calendar_sync/interfaces/api/sta
 change under `web/`, run the frontend build and include the regenerated static assets in the same
 commit.
 
+User-visible Web UI text lives in `web/src/i18n/locales/en/` and renders through `t()`; dates and
+numbers go through `i18n.format`. Never use em dashes.
+
 ## Testing
 
 Tests use pytest with synthetic fixtures and fake providers. Test files mirror the domain,

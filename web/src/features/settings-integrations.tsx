@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
 import type { IntegrationToken, IssuedIntegrationToken } from "@/lib/api"
 import { copyToken, integrationExamples, integrationSummary, needsTransportNote, tokenUsage } from "@/lib/integrations"
 import { useIntegrationTokens, type CopyState, type IntegrationTokens } from "@/lib/use-integration-tokens"
@@ -16,6 +18,8 @@ import { useNow } from "@/lib/use-now"
  * accounts does, because most administrators never need it.
  */
 export function IntegrationsSection() {
+  const i18n = useI18n()
+  const { t } = i18n
   const now = useNow()
   const integrations = useIntegrationTokens()
   const [open, setOpen] = useState(false)
@@ -25,19 +29,16 @@ export function IntegrationsSection() {
     <section className="settings-section" aria-labelledby="integrations-title">
       <div className="section-heading">
         <div>
-          <h2 id="integrations-title">Integrations</h2>
-          <p>
-            Optional. Tokens let monitors, dashboards, and AI assistants read whether
-            synchronization is healthy. They cannot change anything.
-          </p>
+          <h2 id="integrations-title">{t("settings.integrations.title")}</h2>
+          <p>{t("settings.integrations.intro")}</p>
         </div>
       </div>
       {tokens.isPending && <Skeleton className="h-16 w-full" />}
       {tokens.error && (
         <div className="inline-error integration-load-error" role="alert">
-          <span>Integration tokens could not load.</span>
+          <span>{t("settings.integrations.loadError")}</span>
           <Button type="button" variant="outline" onClick={() => void tokens.refetch()}>
-            Try again
+            {t("settings.integrations.tryAgain")}
           </Button>
         </div>
       )}
@@ -53,12 +54,16 @@ export function IntegrationsSection() {
           >
             <KeyRound className="group-summary-icon" aria-hidden="true" />
             <span className="account-summary-copy">
-              <span className="account-summary-status">{integrationSummary(tokens.data, now)}</span>
-              <span className="account-summary-emails">For monitors, dashboards, and AI assistants</span>
+              <span className="account-summary-status">{integrationSummary(i18n, tokens.data, now)}</span>
+              <span className="account-summary-emails">{t("settings.integrations.summaryDetail")}</span>
             </span>
             <span className="account-summary-toggle">
-              {open ? "Hide" : "Show"}
-              <span className="sr-only"> integrations</span>
+              <span aria-hidden="true">
+                {open ? t("settings.integrations.toggle.hide") : t("settings.integrations.toggle.show")}
+              </span>
+              <span className="sr-only">
+                {open ? t("settings.integrations.toggle.hideIntegrations") : t("settings.integrations.toggle.showIntegrations")}
+              </span>
               <ChevronDown aria-hidden="true" />
             </span>
           </button>
@@ -114,6 +119,8 @@ function IssueTokenForm({
   integrations: IntegrationTokens
   nameInput: RefObject<HTMLInputElement | null>
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const { name, setName, issue } = integrations
   return (
     <form
@@ -124,25 +131,25 @@ function IssueTokenForm({
       }}
     >
       <div className="integration-issue-field">
-        <Label htmlFor="integration-name">Issue a token</Label>
-        <p id="integration-name-hint">Name the tool that will use it.</p>
+        <Label htmlFor="integration-name">{t("settings.integrations.issue.label")}</Label>
+        <p id="integration-name-hint">{t("settings.integrations.issue.hint")}</p>
         <Input
           ref={nameInput}
           id="integration-name"
           value={name}
           maxLength={80}
-          placeholder="For example, Uptime Kuma"
+          placeholder={t("settings.integrations.issue.placeholder")}
           aria-describedby="integration-name-hint"
           onChange={(event) => setName(event.target.value)}
         />
         {issue.error && (
           <p className="field-error" role="alert">
-            {issue.error.message}
+            {apiErrorMessage(i18n, issue.error)}
           </p>
         )}
       </div>
       <Button type="submit" disabled={!name.trim() || issue.isPending}>
-        {issue.isPending ? "Issuing…" : "Issue token"}
+        {issue.isPending ? t("settings.integrations.issue.pending") : t("settings.integrations.issue.submit")}
       </Button>
     </form>
   )
@@ -159,6 +166,7 @@ function TokenReveal({
   onCopied: (state: CopyState) => void
   onDone: () => void
 }) {
+  const { t } = useI18n()
   const revealHeading = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
     revealHeading.current?.focus()
@@ -168,14 +176,14 @@ function TokenReveal({
     <div className="setting-row token-reveal">
       <div className="token-reveal-copy">
         <h3 ref={revealHeading} tabIndex={-1}>
-          Copy the token for {issued.name} now
+          {t("settings.integrations.reveal.title", { name: issued.name })}
         </h3>
-        <p>It is shown only once. Store it in your password manager or the tool that uses it.</p>
+        <p>{t("settings.integrations.reveal.body")}</p>
         <div className="token-field">
           <Input
             readOnly
             value={issued.token}
-            aria-label={`Token for ${issued.name}`}
+            aria-label={t("settings.integrations.reveal.tokenLabel", { name: issued.name })}
             onFocus={(event) => event.currentTarget.select()}
           />
           <Button
@@ -186,13 +194,13 @@ function TokenReveal({
             }}
           >
             {copyState === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            {copyState === "copied" ? "Copied" : "Copy token"}
+            {copyState === "copied" ? t("settings.integrations.reveal.copied") : t("settings.integrations.reveal.copy")}
           </Button>
         </div>
-        {copyState === "unavailable" && <p>Select the token and copy it.</p>}
+        {copyState === "unavailable" && <p>{t("settings.integrations.reveal.copyUnavailable")}</p>}
       </div>
       <Button type="button" variant="ghost" onClick={onDone}>
-        Done
+        {t("settings.integrations.reveal.done")}
       </Button>
     </div>
   )
@@ -207,6 +215,8 @@ function ActiveToken({
   now: number
   integrations: IntegrationTokens
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const trigger = useRef<HTMLButtonElement>(null)
   const { revoking, setRevoking, revoke } = integrations
   return (
@@ -214,7 +224,7 @@ function ActiveToken({
       <div className="setting-row">
         <div>
           <h3>{token.name}</h3>
-          <p>{tokenUsage(token, now)}</p>
+          <p>{tokenUsage(i18n, token, now)}</p>
         </div>
         <Button
           ref={trigger}
@@ -227,18 +237,18 @@ function ActiveToken({
             setRevoking(token.id)
           }}
         >
-          Revoke
+          {t("settings.integrations.revoke.action")}
         </Button>
       </div>
       {revoking === token.id && (
         <>
           <DestructiveConfirmation
             id={`revoke-${token.id}`}
-            title={`Revoke ${token.name}?`}
-            body="Anything that uses this token loses access right away. This cannot be undone."
-            cancelLabel="Keep token"
-            confirmLabel="Revoke token"
-            pendingLabel="Revoking…"
+            title={t("settings.integrations.revoke.title", { name: token.name })}
+            body={t("settings.integrations.revoke.body")}
+            cancelLabel={t("settings.integrations.revoke.keep")}
+            confirmLabel={t("settings.integrations.revoke.confirm")}
+            pendingLabel={t("settings.integrations.revoke.pending")}
             pending={revoke.isPending}
             confirmIcon={null}
             onConfirm={() => revoke.mutate(token)}
@@ -249,7 +259,7 @@ function ActiveToken({
           />
           {revoke.error && (
             <p className="field-error" role="alert">
-              {revoke.error.message}
+              {apiErrorMessage(i18n, revoke.error)}
             </p>
           )}
         </>
@@ -259,18 +269,18 @@ function ActiveToken({
 }
 
 function RevokedTokens({ revoked, now }: { revoked: IntegrationToken[]; now: number }) {
+  const i18n = useI18n()
+  const { t } = i18n
   return (
     <details className="inline-help setting-help revoked-tokens">
       <summary>
-        <span>
-          {revoked.length} revoked {revoked.length === 1 ? "token" : "tokens"}
-        </span>
+        <span>{t("settings.integrations.revokedCount", { count: revoked.length })}</span>
         <ChevronDown className="inline-help-chevron" aria-hidden="true" />
       </summary>
       <ul className="inline-help-body">
         {revoked.map((token) => (
           <li key={token.id}>
-            {token.name} · {tokenUsage(token, now)}
+            {t("settings.integrations.revokedItem", { name: token.name, usage: tokenUsage(i18n, token, now) })}
           </li>
         ))}
       </ul>
@@ -279,33 +289,31 @@ function RevokedTokens({ revoked, now }: { revoked: IntegrationToken[]; now: num
 }
 
 function IntegrationsFooter({ origin }: { origin: string }) {
+  const i18n = useI18n()
+  const { t } = i18n
   return (
     <div className="group-footer">
       {needsTransportNote(origin) && (
         <details className="inline-help">
           <summary>
             <Info aria-hidden="true" />
-            <span>This address uses plain HTTP</span>
+            <span>{t("settings.integrations.transport.summary")}</span>
             <ChevronDown className="inline-help-chevron" aria-hidden="true" />
           </summary>
           <div className="inline-help-body">
-            <p>
-              A token sent to this address crosses the internet unencrypted. Serve Calendar Ghost
-              over HTTPS, for example with Tailscale Serve or a reverse proxy, before you use
-              tokens from outside your home network.
-            </p>
+            <p>{t("settings.integrations.transport.body")}</p>
           </div>
         </details>
       )}
       <details className="inline-help">
         <summary>
           <Info aria-hidden="true" />
-          <span>Examples for monitors and AI assistants</span>
+          <span>{t("settings.integrations.examples.summary")}</span>
           <ChevronDown className="inline-help-chevron" aria-hidden="true" />
         </summary>
         <div className="inline-help-body integration-examples">
-          <p>Replace the token placeholder in each example with the token you copied.</p>
-          {integrationExamples(origin).map((example) => (
+          <p>{t("settings.integrations.examples.intro")}</p>
+          {integrationExamples(i18n, origin).map((example) => (
             <div key={example.title}>
               <h3>{example.title}</h3>
               <p>{example.description}</p>

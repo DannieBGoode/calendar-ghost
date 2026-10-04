@@ -2,6 +2,7 @@ import { ArrowRight, Check, ChevronDown, X } from "lucide-react"
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { useI18n } from "@/i18n/provider"
 import type { ConnectedAccount } from "@/lib/api"
 import {
   isTypeaheadKey,
@@ -40,7 +41,7 @@ export function RulePicker({
   options,
   showAccounts,
   clearValue,
-  clearLabel = "Clear",
+  clearLabel,
   onChange,
 }: {
   id: string
@@ -54,6 +55,8 @@ export function RulePicker({
   clearLabel?: string
   onChange: (value: string) => void
 }) {
+  const { t, locale } = useI18n()
+  const resolvedClearLabel = clearLabel ?? t("rules.picker.clear")
   const id = useId()
   const listId = `${id}-list`
   const listRef = useRef<HTMLDivElement>(null)
@@ -87,6 +90,7 @@ export function RulePicker({
       options.map((option) => option.name),
       typed.current.text,
       from,
+      locale,
     )
   }
 
@@ -157,8 +161,8 @@ export function RulePicker({
         <button
           type="button"
           className="rule-picker-clear"
-          aria-label={clearLabel}
-          title={clearLabel}
+          aria-label={resolvedClearLabel}
+          title={resolvedClearLabel}
           onClick={clear}
         >
           <X aria-hidden="true" />
@@ -212,6 +216,7 @@ function RulePickerOptions({
   onActivate: (index: number) => void
   onChoose: (index: number) => void
 }) {
+  const { t } = useI18n()
   const current = options.filter((option) => !option.removed)
   const removed = options.filter((option) => option.removed)
 
@@ -244,7 +249,7 @@ function RulePickerOptions({
       {removed.length > 0 && (
         <div role="group" aria-labelledby={`${id}-removed`} className="rule-picker-group">
           <div id={`${id}-removed`} role="presentation" className="rule-picker-group-label">
-            Removed rules
+            {t("rules.picker.removedRules")}
           </div>
           {removed.map(renderOption)}
         </div>

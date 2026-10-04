@@ -26,7 +26,7 @@ describe("brand screens", () => {
   it("introduces sign-in and setup with the mark, name, and tagline", () => {
     expect(authSource).toContain('<GhostMark className="brand-mark" />')
     expect(authSource).toContain("{PRODUCT_NAME}")
-    expect(authSource).toContain("{TAGLINE}")
+    expect(authSource).toContain('t("auth.tagline")')
     expect(authSource).not.toContain("CalendarCheck2")
   })
 

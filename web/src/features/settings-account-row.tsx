@@ -3,14 +3,16 @@ import { CheckCircle2, KeyRound, ShieldAlert, ShieldCheck, Trash2, Unplug } from
 import { AccountAvatar } from "@/components/account-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import type { ConnectedAccount } from "@/lib/api"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
 import type { AccessCheck, AccountCommands } from "@/lib/use-account-commands"
 
-function ruleUsage(count: number, connected: boolean): string {
-  if (count === 0) return "Not used by any rule"
-  const rules = `${count} rule${count === 1 ? "" : "s"}`
-  return connected ? `Used by ${rules}` : `${rules} stopped until it is reauthorized`
+function ruleUsage({ t }: I18n, count: number, connected: boolean): string {
+  if (count === 0) return t("settings.accounts.usage.none")
+  return connected ? t("settings.accounts.usage.used", { count }) : t("settings.accounts.usage.stopped", { count })
 }
 
 export function AccountRow({
@@ -24,6 +26,7 @@ export function AccountRow({
   googleConfigured: boolean
   commands: AccountCommands
 }) {
+  const i18n = useI18n()
   const { verifyAccess } = commands
   const connected = account.state === "connected"
   const access = commands.accessChecks[account.id]
@@ -47,7 +50,7 @@ export function AccountRow({
       {access && <AccessResult access={access} />}
       {verifyAccess.error && verifyAccess.variables === account.id && (
         <div className="inline-error account-access-error" role="alert">
-          {verifyAccess.error.message}
+          {apiErrorMessage(i18n, verifyAccess.error)}
         </div>
       )}
       {commands.confirmingAccountId === account.id && (
@@ -69,6 +72,7 @@ function AccountIdentity({
   sharedName: boolean
   connected: boolean
 }) {
+  const i18n = useI18n()
   return (
     <div className="account-identity">
       <AccountAvatar
@@ -82,7 +86,7 @@ function AccountIdentity({
         <h3>{sharedName ? account.email : account.display_name}</h3>
         <p>{sharedName ? account.display_name : account.email}</p>
         <span data-stopped={!connected && account.rule_count > 0 ? "" : undefined}>
-          {ruleUsage(account.rule_count, connected)}
+          {ruleUsage(i18n, account.rule_count, connected)}
         </span>
       </div>
     </div>
@@ -91,6 +95,7 @@ function AccountIdentity({
 
 /** A disconnected account stops every rule that uses it until it is reauthorized. */
 function AccountStateBadge({ account, connected }: { account: ConnectedAccount; connected: boolean }) {
+  const { t } = useI18n()
   return (
     <Badge variant={connected ? "healthy" : account.rule_count > 0 ? "stopped" : "attention"}>
       {connected ? (
@@ -98,7 +103,7 @@ function AccountStateBadge({ account, connected }: { account: ConnectedAccount; 
       ) : (
         <ShieldAlert aria-hidden="true" />
       )}
-      {connected ? "Connected" : "Disconnected"}
+      {connected ? t("settings.accounts.state.connected") : t("settings.accounts.state.disconnected")}
     </Badge>
   )
 }
@@ -110,6 +115,7 @@ function ConnectedAccountActions({
   account: ConnectedAccount
   commands: AccountCommands
 }) {
+  const { t } = useI18n()
   const { verifyAccess, disconnect, permanentDelete } = commands
   const confirming = commands.confirmingAccountId === account.id
   const checking = verifyAccess.isPending && verifyAccess.variables === account.id
@@ -122,7 +128,7 @@ function ConnectedAccountActions({
         disabled={disconnect.isPending || permanentDelete.isPending || verifyAccess.isPending}
       >
         <ShieldCheck aria-hidden="true" />
-        {checking ? "Checking access…" : "Check access"}
+        {checking ? t("settings.accounts.actions.checkingAccess") : t("settings.accounts.actions.checkAccess")}
       </Button>
       <Button
         className="account-action"
@@ -132,7 +138,7 @@ function ConnectedAccountActions({
         aria-expanded={confirming}
         aria-controls={confirming ? `disconnect-${account.id}` : undefined}
       >
-        <Unplug aria-hidden="true" /> Disconnect account
+        <Unplug aria-hidden="true" /> {t("settings.accounts.actions.disconnect")}
       </Button>
     </>
   )
@@ -147,6 +153,7 @@ function DisconnectedAccountActions({
   googleConfigured: boolean
   commands: AccountCommands
 }) {
+  const { t } = useI18n()
   const { disconnect, permanentDelete } = commands
   const deleting = commands.deletingAccountId === account.id
   return (
@@ -155,16 +162,16 @@ function DisconnectedAccountActions({
       {googleConfigured ? (
         <Button className="account-action" asChild>
           <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>
-            <KeyRound aria-hidden="true" /> Reauthorize account
+            <KeyRound aria-hidden="true" /> {t("settings.accounts.actions.reauthorize")}
           </a>
         </Button>
       ) : (
         <Button
           className="account-action"
           disabled
-          title="Add the master key and Google OAuth credentials in .env, then restart."
+          title={t("settings.accounts.actions.reauthorizeUnavailable")}
         >
-          <KeyRound aria-hidden="true" /> Reauthorize account
+          <KeyRound aria-hidden="true" /> {t("settings.accounts.actions.reauthorize")}
         </Button>
       )}
       <Button
@@ -175,24 +182,24 @@ function DisconnectedAccountActions({
         aria-expanded={deleting}
         aria-controls={deleting ? `delete-${account.id}` : undefined}
       >
-        <Trash2 aria-hidden="true" /> Delete account
+        <Trash2 aria-hidden="true" /> {t("settings.accounts.actions.delete")}
       </Button>
     </>
   )
 }
 
 function AccessResult({ access }: { access: AccessCheck }) {
+  const { t } = useI18n()
   return (
     <div className="account-access-result" role="status">
       <ShieldCheck aria-hidden="true" />
       <div>
-        <h4>Calendar API access confirmed</h4>
+        <h4>{t("settings.accounts.access.title")}</h4>
         <p>
-          Calendar-list and event permissions are available. {access.calendars_visible} calendar
-          {access.calendars_visible === 1 ? " is" : "s are"} visible and {access.writable_calendars} can be used as a destination.
-          {access.writable_calendars === 0
-            ? " This account can still be used as a source."
-            : ""}
+          {t(
+            access.writable_calendars === 0 ? "settings.accounts.access.bodySourceOnly" : "settings.accounts.access.body",
+            { count: access.calendars_visible, writable: access.writable_calendars },
+          )}
         </p>
       </div>
     </div>
@@ -206,6 +213,7 @@ function DisconnectConfirmation({
   account: ConnectedAccount
   commands: AccountCommands
 }) {
+  const { t } = useI18n()
   const { disconnect } = commands
   return (
     <div
@@ -216,12 +224,12 @@ function DisconnectConfirmation({
     >
       <div>
         <h4 id={`disconnect-title-${account.id}`}>
-          Disconnect {account.display_name}?
+          {t("settings.accounts.disconnect.title", { name: account.display_name })}
         </h4>
         <p>
-          Stored Google credentials will be removed. {account.rule_count > 0
-            ? `${account.rule_count} affected rule${account.rule_count === 1 ? "" : "s"} will require reauthorization before they can run.`
-            : "No Directional Sync Rules currently use this account."}
+          {account.rule_count > 0
+            ? t("settings.accounts.disconnect.bodyWithRules", { count: account.rule_count })
+            : t("settings.accounts.disconnect.bodyWithoutRules")}
         </p>
       </div>
       <div className="confirmation-actions">
@@ -230,7 +238,7 @@ function DisconnectConfirmation({
           onClick={() => commands.setConfirmingAccountId(null)}
           disabled={disconnect.isPending}
         >
-          Keep account
+          {t("settings.accounts.actions.keep")}
         </Button>
         <Button
           variant="destructive"
@@ -238,7 +246,7 @@ function DisconnectConfirmation({
           disabled={disconnect.isPending}
         >
           <Unplug aria-hidden="true" />
-          {disconnect.isPending ? "Disconnecting…" : "Disconnect account"}
+          {disconnect.isPending ? t("settings.accounts.disconnect.pending") : t("settings.accounts.actions.disconnect")}
         </Button>
       </div>
     </div>
@@ -252,6 +260,7 @@ function DeleteConfirmation({
   account: ConnectedAccount
   commands: AccountCommands
 }) {
+  const { t } = useI18n()
   const { permanentDelete } = commands
   return (
     <div
@@ -262,15 +271,12 @@ function DeleteConfirmation({
     >
       <div>
         <h4 id={`delete-title-${account.id}`}>
-          Delete {account.display_name} permanently?
+          {t("settings.accounts.delete.title", { name: account.display_name })}
         </h4>
         <p>
-          This cannot be undone. The account record
           {account.rule_count > 0
-            ? ` and ${account.rule_count} affected Directional Sync Rule${account.rule_count === 1 ? "" : "s"}, including their mappings, cursors, incidents, and audit activity,`
-            : ""} will be removed. {account.rule_count > 0
-            ? "Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed."
-            : "No Directional Sync Rules currently use this account."}
+            ? t("settings.accounts.delete.bodyWithRules", { count: account.rule_count })
+            : t("settings.accounts.delete.bodyWithoutRules")}
         </p>
       </div>
       <div className="confirmation-actions">
@@ -279,7 +285,7 @@ function DeleteConfirmation({
           onClick={() => commands.setDeletingAccountId(null)}
           disabled={permanentDelete.isPending}
         >
-          Keep account
+          {t("settings.accounts.actions.keep")}
         </Button>
         <Button
           variant="destructive"
@@ -287,7 +293,7 @@ function DeleteConfirmation({
           disabled={permanentDelete.isPending}
         >
           <Trash2 aria-hidden="true" />
-          {permanentDelete.isPending ? "Deleting…" : "Delete permanently"}
+          {permanentDelete.isPending ? t("settings.accounts.delete.pending") : t("settings.accounts.delete.confirm")}
         </Button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
+import { useI18n } from "@/i18n/provider"
 import type { RulePolicyPayload, TentativeEvents, UnansweredInvitations } from "@/lib/api"
 import { TENTATIVE_OPTIONS, UNANSWERED_OPTIONS, tentativeHint, unansweredHint } from "@/lib/invitation-responses"
 
@@ -15,12 +16,14 @@ export function InvitationResponseFields({
   policy: ResponsePolicy
   onChange: (change: Pick<RulePolicyPayload, "tentative_events" | "unanswered_invitations">) => void
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const tentativeId = `${idPrefix}tentative-events`
   const unansweredId = `${idPrefix}unanswered-invitations`
   return (
     <>
       <div className="field-stack">
-        <Label htmlFor={tentativeId}>Events you answered Maybe</Label>
+        <Label htmlFor={tentativeId}>{t("rules.invitations.tentative.label")}</Label>
         <NativeSelect
           id={tentativeId}
           value={policy.tentative_events}
@@ -33,13 +36,13 @@ export function InvitationResponseFields({
           }
         >
           {TENTATIVE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
           ))}
         </NativeSelect>
-        <p id={`${tentativeId}-hint`} className="field-hint">{tentativeHint(policy)}</p>
+        <p id={`${tentativeId}-hint`} className="field-hint">{tentativeHint(i18n, policy)}</p>
       </div>
       <div className="field-stack">
-        <Label htmlFor={unansweredId}>Invitations you haven't answered</Label>
+        <Label htmlFor={unansweredId}>{t("rules.invitations.unanswered.label")}</Label>
         <NativeSelect
           id={unansweredId}
           value={policy.unanswered_invitations}
@@ -52,10 +55,10 @@ export function InvitationResponseFields({
           }
         >
           {UNANSWERED_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <option key={option.value} value={option.value}>{t(option.labelKey)}</option>
           ))}
         </NativeSelect>
-        <p id={`${unansweredId}-hint`} className="field-hint">{unansweredHint(policy)}</p>
+        <p id={`${unansweredId}-hint`} className="field-hint">{unansweredHint(i18n, policy)}</p>
       </div>
     </>
   )

@@ -6,6 +6,9 @@ import { DestructiveConfirmation } from "@/components/destructive-confirmation"
 import { Button } from "@/components/ui/button"
 import { NativeSelect } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
+import { codeTag, rich } from "@/i18n/rich"
 import { ApiError, type LogUsage, STORAGE_LOGS_URL, api } from "@/lib/api"
 import {
   activitySummary,
@@ -18,6 +21,7 @@ import {
 
 /** The storage usage, the open confirmation, and the commands that clear Activity or purge logs. */
 function useStorageCommands() {
+  const i18n = useI18n()
   const queryClient = useQueryClient()
   const storage = useQuery({ queryKey: ["storage"], queryFn: api.storage })
   const [days, setDays] = useState(90)
@@ -33,7 +37,7 @@ function useStorageCommands() {
     onSuccess: async (cleared) => {
       setConfirming(null)
       setMessage(
-        clearedActivityMessage(cleared.removed, storage.data?.database.reclaimable_bytes ?? 0),
+        clearedActivityMessage(i18n, cleared.removed, storage.data?.database.reclaimable_bytes ?? 0),
       )
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["storage"] }),
@@ -54,18 +58,19 @@ function useStorageCommands() {
     mutationFn: api.purgeLogs,
     onSuccess: async () => {
       setConfirming(null)
-      setMessage("The logs were purged.")
+      setMessage(i18n.t("settings.storage.logs.purged"))
       await queryClient.invalidateQueries({ queryKey: ["storage"] })
     },
   })
   const confirmation = clearable.data
     ? clearActivityConfirmation(
+        i18n,
         clearable.data.entries,
         days,
         storage.data?.database.reclaimable_bytes ?? 0,
       )
     : clearable.error
-      ? countFailedConfirmation(clearable.error.message)
+      ? countFailedConfirmation(i18n, clearable.error)
       : null
   return {
     storage,
@@ -87,6 +92,8 @@ type StorageCommands = ReturnType<typeof useStorageCommands>
 type StorageUsage = NonNullable<StorageCommands["storage"]["data"]>
 
 export function StorageSection() {
+  const i18n = useI18n()
+  const { t } = i18n
   const commands = useStorageCommands()
   const { storage, message, clear, purge } = commands
   const usage = storage.data
@@ -95,14 +102,14 @@ export function StorageSection() {
     <section className="settings-section" aria-labelledby="storage-title">
       <div className="section-heading">
         <div>
-          <h2 id="storage-title">Storage</h2>
-          <p>Activity history and log files kept on this installation.</p>
+          <h2 id="storage-title">{t("settings.storage.title")}</h2>
+          <p>{t("settings.storage.intro")}</p>
         </div>
       </div>
       {storage.isPending && <Skeleton className="h-24 w-full" />}
       {storage.error && (
         <div className="inline-error" role="alert">
-          Storage usage could not load.
+          {t("settings.storage.loadError")}
         </div>
       )}
       {usage && (
@@ -114,7 +121,7 @@ export function StorageSection() {
       {message && <p role="status">{message}</p>}
       {(clear.error ?? purge.error) && (
         <div className="inline-error" role="alert">
-          {(clear.error ?? purge.error)?.message}
+          {apiErrorMessage(i18n, clear.error ?? purge.error)}
         </div>
       )}
     </section>
@@ -122,27 +129,29 @@ export function StorageSection() {
 }
 
 function ActivityStorage({ usage, commands }: { usage: StorageUsage; commands: StorageCommands }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const { days, setDays, confirming, setConfirming, setMessage, clear, busy } = commands
   const clearTrigger = useRef<HTMLButtonElement>(null)
   return (
     <>
       <div className="setting-row">
         <div>
-          <h3>Database</h3>
-          <p>{activitySummary(usage.database)}</p>
+          <h3>{t("settings.storage.database")}</h3>
+          <p>{activitySummary(i18n, usage.database)}</p>
         </div>
         <div className="storage-actions">
           <div className="storage-select">
             <NativeSelect
               id="activity-age"
-              aria-label="Clear Activity older than"
+              aria-label={t("settings.storage.age.label")}
               value={days}
               disabled={busy}
               onChange={(event) => setDays(Number(event.target.value))}
             >
               {usage.activity_ages.map((age) => (
                 <option key={age} value={age}>
-                  Older than {age} days
+                  {t("settings.storage.age.option", { count: age })}
                 </option>
               ))}
             </NativeSelect>
@@ -160,7 +169,7 @@ function ActivityStorage({ usage, commands }: { usage: StorageUsage; commands: S
               setConfirming("activity")
             }}
           >
-            Clear Activity
+            {t("settings.storage.clear.action")}
           </Button>
         </div>
       </div>
@@ -184,15 +193,16 @@ function ClearActivityConfirmation({
   commands: StorageCommands
   onCancel: () => void
 }) {
+  const { t } = useI18n()
   const { days, confirmation, clearable, clear } = commands
   return (
     <DestructiveConfirmation
       id="clear-activity-confirmation"
-      title={`Clear Activity older than ${days} days?`}
-      body={confirmation?.body ?? "Counting the entries that would be removed…"}
-      cancelLabel="Keep Activity"
-      confirmLabel={confirmation?.confirmLabel ?? "Clear Activity"}
-      pendingLabel={confirmation?.pendingLabel ?? "Clearing…"}
+      title={t("settings.storage.clear.title", { count: days })}
+      body={confirmation?.body ?? t("settings.storage.clear.counting")}
+      cancelLabel={t("settings.storage.clear.keep")}
+      confirmLabel={confirmation?.confirmLabel ?? t("settings.storage.clear.action")}
+      pendingLabel={confirmation?.pendingLabel ?? t("settings.storage.clear.pending")}
       pending={clear.isPending || clearable.isRefetching}
       confirmDisabled={!confirmation?.canConfirm}
       onConfirm={() => (clearable.error ? void clearable.refetch() : clear.mutate())}
@@ -202,21 +212,23 @@ function ClearActivityConfirmation({
 }
 
 function LogStorage({ logs, commands }: { logs: LogUsage | null; commands: StorageCommands }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const { confirming, setConfirming, setMessage, purge, busy } = commands
   const purgeTrigger = useRef<HTMLButtonElement>(null)
   return (
     <>
       <div className="setting-row">
         <div>
-          <h3>Logs</h3>
-          <p>{logSummary(logs)}</p>
+          <h3>{t("settings.storage.logs.title")}</h3>
+          <p>{logSummary(i18n, logs)}</p>
           {!logs && <LogSetupHelp />}
         </div>
         {logs && (
           <div className="storage-actions">
             <Button variant="outline" asChild>
               <a href={STORAGE_LOGS_URL} download>
-                <Download aria-hidden="true" /> Download
+                <Download aria-hidden="true" /> {t("settings.storage.logs.download")}
               </a>
             </Button>
             <Button
@@ -232,7 +244,7 @@ function LogStorage({ logs, commands }: { logs: LogUsage | null; commands: Stora
                 setConfirming("logs")
               }}
             >
-              Purge logs
+              {t("settings.storage.logs.purge")}
             </Button>
           </div>
         )}
@@ -240,11 +252,11 @@ function LogStorage({ logs, commands }: { logs: LogUsage | null; commands: Stora
       {confirming === "logs" && (
         <DestructiveConfirmation
           id="purge-logs-confirmation"
-          title="Purge the logs?"
-          body="Every log line kept on this installation is deleted. Download them first if you may need them. This cannot be undone."
-          cancelLabel="Keep logs"
-          confirmLabel="Purge logs"
-          pendingLabel="Purging…"
+          title={t("settings.storage.logs.purgeTitle")}
+          body={t("settings.storage.logs.purgeBody")}
+          cancelLabel={t("settings.storage.logs.keep")}
+          confirmLabel={t("settings.storage.logs.purge")}
+          pendingLabel={t("settings.storage.logs.purging")}
           pending={purge.isPending}
           onConfirm={() => purge.mutate()}
           onCancel={() => {
@@ -258,22 +270,16 @@ function LogStorage({ logs, commands }: { logs: LogUsage | null; commands: Stora
 }
 
 function LogSetupHelp() {
+  const { t } = useI18n()
   return (
     <details className="inline-help setting-help">
       <summary>
-        <span>How to turn it on</span>
+        <span>{t("settings.storage.logs.help.summary")}</span>
         <ChevronDown className="inline-help-chevron" aria-hidden="true" />
       </summary>
       <div className="inline-help-body">
-        <p>
-          Log files are kept unless <code>CALENDAR_SYNC_LOG_DIR</code> is set to an empty
-          value. Set it to a writable directory, such as <code>/data/logs</code> on the data
-          volume, or remove it from <code>.env</code>, then restart the service.
-        </p>
-        <p>
-          If it already names a directory, that directory could not be used:{" "}
-          <code>docker compose logs app</code> shows the warning that says why.
-        </p>
+        <p>{rich(t("settings.storage.logs.help.body"), { code: codeTag })}</p>
+        <p>{rich(t("settings.storage.logs.help.unusable"), { code: codeTag })}</p>
       </div>
     </details>
   )

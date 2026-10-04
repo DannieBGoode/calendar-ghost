@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
+
 import {
   activityFailure,
   activityFailureActions,
@@ -9,17 +11,19 @@ import {
 } from "./activity-failure"
 import { ApiError, api } from "./api"
 
+const { t } = testI18n()
+
 const blocked = new TypeError("Failed to fetch")
 
 describe("activityFailure", () => {
   it("blames connectivity or a content blocker only when no HTTP response arrived", () => {
     expect(activityFailure([blocked, null])).toBe("unreachable")
-    expect(activityFailureMessages.unreachable).toContain("a browser extension such as a content blocker")
+    expect(t(activityFailureMessages.unreachable)).toContain("a browser extension such as a content blocker")
   })
 
   it("reports server errors without suggesting the request was blocked", () => {
     expect(activityFailure([new ApiError("boom", 500), null])).toBe("service-error")
-    expect(activityFailureMessages["service-error"]).not.toContain("content blocker")
+    expect(t(activityFailureMessages["service-error"])).not.toContain("content blocker")
   })
 
   it("asks for a reload when a page from an older release calls a removed API path", () => {
@@ -51,7 +55,7 @@ describe("activityFailure", () => {
   it("labels reload recoveries differently from in-place retries", () => {
     const failures: ActivityFailure[] = ["session-expired", "application-updated", "service-error", "unreachable"]
     for (const failure of failures) {
-      expect(activityFailureActions[failure] === "Try again").toBe(!activityFailureRequiresReload(failure))
+      expect(t(activityFailureActions[failure]) === "Try again").toBe(!activityFailureRequiresReload(failure))
     }
   })
 })

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "../i18n/testing"
 import type { Dashboard, ServerProblem } from "./api"
 import { overviewHealth, overviewRules } from "./overview-health"
 
+const i18n = testI18n()
 const now = Date.parse("2026-09-28T12:00:00Z")
 const healthy: Dashboard = {
   status: "healthy",
@@ -35,7 +37,7 @@ const problem = (
 
 describe("overviewHealth", () => {
   it("reports the last successful sync when everything is quiet", () => {
-    const health = overviewHealth(healthy, now)
+    const health = overviewHealth(i18n, healthy, now)
     expect(health.tone).toBe("healthy")
     expect(health.headline).toBe("Synchronization is healthy")
     expect(health.title).toBe("")
@@ -46,6 +48,7 @@ describe("overviewHealth", () => {
 
   it("asks for a look at blocked events while rules keep running", () => {
     const health = overviewHealth(
+      i18n,
       { ...healthy, status: "review", blocked_events: 1, blocked_entry_id: 42, blocked_rule_id: "rule-1" },
       now,
     )
@@ -61,7 +64,7 @@ describe("overviewHealth", () => {
   })
 
   it("asks for a look at open incidents on running rules", () => {
-    const health = overviewHealth({ ...healthy, status: "review", open_incidents: 2 }, now)
+    const health = overviewHealth(i18n, { ...healthy, status: "review", open_incidents: 2 }, now)
     expect(health.tone).toBe("review")
     expect(health.headline).toBe("Something needs a look")
     expect(health.detail).toBe("2 problems kept happening. Activity explains what happened and what to do.")
@@ -70,6 +73,7 @@ describe("overviewHealth", () => {
 
   it("names the running rule an incident is about", () => {
     const health = overviewHealth(
+      i18n,
       {
         ...healthy,
         status: "review",
@@ -91,6 +95,7 @@ describe("overviewHealth", () => {
 
   it("only informs while Google limits requests, because the rule retries by itself", () => {
     const health = overviewHealth(
+      i18n,
       {
         ...healthy,
         status: "waiting",
@@ -111,6 +116,7 @@ describe("overviewHealth", () => {
 
   it("leads with the most urgent problem and lists every other one", () => {
     const health = overviewHealth(
+      i18n,
       {
         ...healthy,
         status: "stopped",
@@ -140,13 +146,14 @@ describe("overviewHealth", () => {
   })
 
   it("never calls an installation with an open incident healthy, even before it is described", () => {
-    const health = overviewHealth({ ...healthy, status: "review", open_incidents: 1 }, now, ruleName)
+    const health = overviewHealth(i18n, { ...healthy, status: "review", open_incidents: 1 }, now, ruleName)
     expect(health.tone).toBe("review")
     expect(health.headline).toBe("Something needs a look")
   })
 
   it("says rules stopped when an account needs reauthorization", () => {
     const health = overviewHealth(
+      i18n,
       {
         ...healthy,
         status: "stopped",
@@ -171,6 +178,7 @@ describe("overviewHealth", () => {
 
   it("asks for reauthorization before setup when only a disconnected account remains", () => {
     const health = overviewHealth(
+      i18n,
       { ...healthy, status: "setup", connected_accounts: 0, disconnected_accounts: 1, sync_rules: 0, enabled_rules: 0 },
       now,
     )
@@ -181,6 +189,7 @@ describe("overviewHealth", () => {
 
   it("puts a stopped rule ahead of problems on running ones", () => {
     const health = overviewHealth(
+      i18n,
       {
         ...healthy,
         status: "stopped",
@@ -208,6 +217,7 @@ describe("overviewHealth", () => {
 
   it("flags stopped rules even without naming one", () => {
     const health = overviewHealth(
+      i18n,
       { ...healthy, status: "stopped", stopped_rules: 1, problems: [problem("stopped", "rule-gone", "Stopped syncing", null)] },
       now,
       ruleName,
@@ -218,27 +228,28 @@ describe("overviewHealth", () => {
   })
 
   it("tells a pause apart from unfinished setup", () => {
-    const paused = overviewHealth({ ...healthy, status: "paused", enabled_rules: 0 }, now)
+    const paused = overviewHealth(i18n, { ...healthy, status: "paused", enabled_rules: 0 }, now)
     expect(paused.tone).toBe("paused")
     expect(paused.facts).toEqual(["3 rules not running", "Last sync 3 minutes ago"])
-    const neverRun = overviewHealth({ ...healthy, status: "setup", enabled_rules: 0, last_synced_at: null }, now)
+    const neverRun = overviewHealth(i18n, { ...healthy, status: "setup", enabled_rules: 0, last_synced_at: null }, now)
     expect(neverRun.tone).toBe("setup")
     expect(neverRun.headline).toBe("No rule is synchronizing")
   })
 
   it("guides setup until a rule is running", () => {
-    expect(overviewHealth({ ...healthy, status: "setup", connected_accounts: 0 }, now).tone).toBe("setup")
-    expect(overviewHealth({ ...healthy, status: "setup", sync_rules: 0, enabled_rules: 0 }, now).headline).toBe(
+    expect(overviewHealth(i18n, { ...healthy, status: "setup", connected_accounts: 0 }, now).tone).toBe("setup")
+    expect(overviewHealth(i18n, { ...healthy, status: "setup", sync_rules: 0, enabled_rules: 0 }, now).headline).toBe(
       "Create your first rule",
     )
     // The Getting started steps show setup's progress, so the hero lists no facts.
-    expect(overviewHealth({ ...healthy, status: "setup", connected_accounts: 0 }, now).facts).toEqual([])
+    expect(overviewHealth(i18n, { ...healthy, status: "setup", connected_accounts: 0 }, now).facts).toEqual([])
   })
 
   it("waits for the first run without inventing a time", () => {
-    expect(overviewHealth({ ...healthy, last_synced_at: null }, now).facts).toEqual(["2 rules running", "Not synced yet"])
+    expect(overviewHealth(i18n, { ...healthy, last_synced_at: null }, now).facts).toEqual(["2 rules running", "Not synced yet"])
     expect(
       overviewHealth(
+        i18n,
         {
           ...healthy,
           status: "stopped",
@@ -268,7 +279,7 @@ describe("overviewHealth", () => {
       { ...healthy, status: "paused", enabled_rules: 0 },
     ]
     for (const dashboard of dashboards) {
-      const health = overviewHealth(dashboard, now)
+      const health = overviewHealth(i18n, dashboard, now)
       const copy = [health.headline, health.title, health.detail].join(" ").toLowerCase()
       for (const fact of health.facts) {
         expect(copy).not.toContain(fact.toLowerCase())
@@ -278,6 +289,7 @@ describe("overviewHealth", () => {
 
   it("says synchronization stopped running when the scheduler stalls", () => {
     const health = overviewHealth(
+      i18n,
       { ...healthy, status: "stalled", needs_attention: true, problems: [problem("stalled", null, "Scheduled synchronization stopped running", null)] },
       now,
       ruleName,
@@ -292,6 +304,7 @@ describe("overviewHealth", () => {
 
   it("asks for a look at a rule that has not synced in over a day", () => {
     const health = overviewHealth(
+      i18n,
       { ...healthy, status: "review", problems: [problem("overdue", "rule-7", "Not synced in over a day", "2026-09-27T10:00:00Z")] },
       now,
       ruleName,
@@ -302,7 +315,7 @@ describe("overviewHealth", () => {
   })
 
   it("gives a generic hero for a stalled status with no problem to explain it", () => {
-    const health = overviewHealth({ ...healthy, status: "stalled", problems: [] }, now)
+    const health = overviewHealth(i18n, { ...healthy, status: "stalled", problems: [] }, now)
     expect(health.tone).toBe("stopped")
     expect(health.headline).not.toBe("Synchronization is healthy")
     expect(health.headline).toBe("Synchronization needs attention")
@@ -314,7 +327,7 @@ describe("overviewHealth", () => {
   })
 
   it("gives a generic hero for a stopped status with no problem to explain it", () => {
-    const health = overviewHealth({ ...healthy, status: "stopped", problems: [] }, now)
+    const health = overviewHealth(i18n, { ...healthy, status: "stopped", problems: [] }, now)
     expect(health.tone).toBe("stopped")
     expect(health.headline).not.toBe("Synchronization is healthy")
     expect(health.headline).toBe("Synchronization needs attention")
@@ -326,7 +339,7 @@ describe("overviewHealth", () => {
   })
 
   it("gives a generic hero for a review status with no problem to explain it", () => {
-    const health = overviewHealth({ ...healthy, status: "review", problems: [] }, now)
+    const health = overviewHealth(i18n, { ...healthy, status: "review", problems: [] }, now)
     expect(health.tone).toBe("review")
     expect(health.headline).not.toBe("Synchronization is healthy")
     expect(health.headline).toBe("Something needs a look")
@@ -336,7 +349,7 @@ describe("overviewHealth", () => {
   })
 
   it("gives a generic hero for a waiting status with no problem to explain it", () => {
-    const health = overviewHealth({ ...healthy, status: "waiting", problems: [] }, now)
+    const health = overviewHealth(i18n, { ...healthy, status: "waiting", problems: [] }, now)
     expect(health.tone).toBe("waiting")
     expect(health.headline).not.toBe("Synchronization is healthy")
     expect(health.headline).toBe("Waiting for the calendar provider")
@@ -347,9 +360,9 @@ describe("overviewHealth", () => {
 
   it("takes its tone from the server", () => {
     for (const status of ["stopped", "review", "waiting", "paused", "setup", "healthy"] as const) {
-      expect(overviewHealth({ ...healthy, status }, now, ruleName).tone).toBe(status)
+      expect(overviewHealth(i18n, { ...healthy, status }, now, ruleName).tone).toBe(status)
     }
-    expect(overviewHealth({ ...healthy, status: "stalled" }, now, ruleName).tone).toBe("stopped")
+    expect(overviewHealth(i18n, { ...healthy, status: "stalled" }, now, ruleName).tone).toBe("stopped")
   })
 })
 

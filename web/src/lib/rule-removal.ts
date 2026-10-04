@@ -1,7 +1,8 @@
 import { useMutationState } from "@tanstack/react-query"
 
+import { apiErrorMessage } from "@/i18n/api-errors"
+import type { I18n } from "@/i18n/translator"
 import { ApiError, type ProjectionHandling, type RunningWork } from "@/lib/api"
-import { plural } from "@/lib/rule-change"
 
 /**
  * Rule details refresh this often while a removal runs. The service commits each deleted
@@ -58,26 +59,27 @@ export function useRemovingRuleIds(rules: { id: string; running: RunningWork | n
 }
 
 export function removalProgress(
+  i18n: I18n,
   request: RemovalRequest & { done?: number | undefined },
   remaining: number,
   destination: string,
 ): { done: number | null; label: string } {
-  if (request.total === 0) return { done: null, label: "Removing the rule…" }
+  if (request.total === 0) return { done: null, label: i18n.t("ruleDetails.removal.progress.removing") }
   if (request.handling === "detach") {
     return {
       done: null,
-      label: `Keeping ${plural(request.total, "event")} in ${destination} as ordinary events…`,
+      label: i18n.t("ruleDetails.removal.progress.keeping", { count: request.total, destination }),
     }
   }
   const done = Math.min(request.total, Math.max(0, request.done ?? request.total - remaining))
   // Conflicted events leave the count too, but stay in Google, so this is not a deletion count.
-  return { done, label: `Handled ${done} of ${plural(request.total, "projection")} in ${destination}` }
+  return { done, label: i18n.t("ruleDetails.removal.progress.handled", { done, count: request.total, destination }) }
 }
 
-export function elapsedLabel(milliseconds: number): string {
+export function elapsedLabel(i18n: I18n, milliseconds: number): string {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000))
-  if (seconds < 60) return `${seconds} s`
-  return `${Math.floor(seconds / 60)} min ${seconds % 60} s`
+  if (seconds < 60) return i18n.t("ruleDetails.elapsed.seconds", { seconds })
+  return i18n.t("ruleDetails.elapsed.minutes", { minutes: Math.floor(seconds / 60), seconds: seconds % 60 })
 }
 
 /**
@@ -89,8 +91,7 @@ export function removalConnectionLost(error: unknown): boolean {
   return !(error instanceof ApiError) || error.status === 502 || error.status === 504
 }
 
-export function removalErrorMessage(error: Error): string {
-  return removalConnectionLost(error)
-    ? "The connection closed before the removal finished. It may still be running, so wait a minute, then check this page before retrying."
-    : error.message
+/** A lost connection may hide a running removal; any other failure shows the server's explanation. */
+export function removalErrorMessage(i18n: I18n, error: Error): string {
+  return removalConnectionLost(error) ? i18n.t("ruleDetails.removal.connectionLost") : apiErrorMessage(i18n, error)
 }

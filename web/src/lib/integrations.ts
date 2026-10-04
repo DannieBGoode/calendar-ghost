@@ -1,5 +1,5 @@
+import type { I18n } from "@/i18n/translator"
 import type { IntegrationToken } from "@/lib/api"
-import { relativeTime } from "@/lib/relative-time"
 
 export type IntegrationExample = { title: string; description: string; code: string }
 
@@ -47,34 +47,34 @@ export function needsTransportNote(origin: string): boolean {
 }
 
 /** Copy-ready examples for monitors, dashboards, and AI agents, addressed at this installation. */
-export function integrationExamples(origin: string): IntegrationExample[] {
+export function integrationExamples(i18n: I18n, origin: string): IntegrationExample[] {
   const status = `${origin}/api/v1/status`
   const mcp = `${origin}/mcp`
+  // Each code block is configuration for another tool, copied as is, so it is never translated.
   return [
     {
-      title: "Uptime Kuma",
-      description: "Add an HTTP(s) - Json Query monitor. Alert when the result is not false.",
+      title: i18n.t("settings.integrations.examples.uptimeKuma.title"),
+      description: i18n.t("settings.integrations.examples.uptimeKuma.description"),
       code: `URL: ${status}\nHeaders: {"Authorization": "Bearer <token>"}\nJson Query: $.needs_attention\nExpected Value: false`,
     },
     {
-      title: "Homepage",
-      description: "Add a customapi widget to the Calendar Ghost service.",
+      title: i18n.t("settings.integrations.examples.homepage.title"),
+      description: i18n.t("settings.integrations.examples.homepage.description"),
       code: `widget:\n  type: customapi\n  url: ${status}\n  headers:\n    Authorization: Bearer {{HOMEPAGE_VAR_CALENDAR_GHOST_TOKEN}}\n  mappings:\n    - field: status\n      label: Status\n    - field: summary\n      label: Summary`,
     },
     {
-      title: "Claude Code",
-      description: "Keep the token in an environment variable, then add the server.",
+      title: i18n.t("settings.integrations.examples.claudeCode.title"),
+      description: i18n.t("settings.integrations.examples.claudeCode.description"),
       code: `claude mcp add --transport http calendar-ghost ${mcp} \\\n  --header "Authorization: Bearer \${CALENDAR_GHOST_TOKEN}"`,
     },
     {
-      title: "Codex",
-      description: "Add this to ~/.codex/config.toml and set CALENDAR_GHOST_TOKEN.",
+      title: i18n.t("settings.integrations.examples.codex.title"),
+      description: i18n.t("settings.integrations.examples.codex.description"),
       code: `[mcp_servers.calendar-ghost]\nurl = "${mcp}"\nbearer_token_env_var = "CALENDAR_GHOST_TOKEN"`,
     },
     {
-      title: "Claude Desktop and other apps",
-      description:
-        "Apps that start MCP servers on your computer connect through the mcp-remote bridge, which needs Node.js. In Claude Desktop, add this to the configuration file opened from Settings, Developer, Edit Config, then restart it.",
+      title: i18n.t("settings.integrations.examples.desktop.title"),
+      description: i18n.t("settings.integrations.examples.desktop.description"),
       code: JSON.stringify({ mcpServers: { "calendar-ghost": desktopBridge(mcp) } }, null, 2),
     },
   ]
@@ -94,21 +94,24 @@ function desktopBridge(mcp: string) {
 }
 
 /** When a token was last used and issued, so tokens with the same name can be told apart. */
-export function tokenUsage(token: IntegrationToken, now: number): string {
-  if (token.revoked_at) return `Revoked ${relativeTime(token.revoked_at, now)}`
-  const used = token.last_used_at ? `Last used ${relativeTime(token.last_used_at, now)}` : "Never used"
-  return `${used} · issued ${relativeTime(token.created_at, now)}`
+export function tokenUsage(i18n: I18n, token: IntegrationToken, now: number): string {
+  const relative = (iso: string) => i18n.format.relative(iso, now)
+  if (token.revoked_at) return i18n.t("settings.integrations.usage.revoked", { relative: relative(token.revoked_at) })
+  const issued = relative(token.created_at)
+  return token.last_used_at
+    ? i18n.t("settings.integrations.usage.used", { used: relative(token.last_used_at), issued })
+    : i18n.t("settings.integrations.usage.neverUsed", { issued })
 }
 
 /** One line for the collapsed Integrations group: how many tokens are in use, and the latest use. */
-export function integrationSummary(tokens: IntegrationToken[], now: number): string {
+export function integrationSummary(i18n: I18n, tokens: IntegrationToken[], now: number): string {
   const active = tokens.filter((token) => !token.revoked_at)
-  if (active.length === 0) return "No tokens yet"
-  const count = `${active.length} ${active.length === 1 ? "token" : "tokens"}`
+  if (active.length === 0) return i18n.t("settings.integrations.summary.none")
+  const count = active.length
   const uses = active.flatMap((token) => (token.last_used_at ? [token.last_used_at] : []))
-  if (uses.length === 0) return `${count} · never used`
+  if (uses.length === 0) return i18n.t("settings.integrations.summary.neverUsed", { count })
   const latest = uses.reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b))
-  return `${count} · last used ${relativeTime(latest, now)}`
+  return i18n.t("settings.integrations.summary.lastUsed", { count, relative: i18n.format.relative(latest, now) })
 }
 
 export type ClipboardWriter = { writeText: (text: string) => Promise<void> }

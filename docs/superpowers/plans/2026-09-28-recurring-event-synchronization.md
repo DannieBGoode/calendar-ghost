@@ -357,7 +357,7 @@ git commit -m "feat: model occurrence starts, occurrence mappings, and series ti
   `time_zone`) and raises `DomainValidationError` for events carrying `occurrence`;
   `SyncDecisionService.decide_occurrence(rule, source_series, series_mapping, original_start,
   source_occurrence, occurrence_mapping, destination_series, destination_occurrence, *,
-  destination_reported=False) -> SyncDecision` — `UPDATE` writes or restores the destination
+  destination_reported=False) -> SyncDecision`: `UPDATE` writes or restores the destination
   occurrence (projection set), `DELETE` cancels it, `IGNORE` with `OCCURRENCE_CURRENT` carries the
   projection. Test helpers `SERIES_START`, `week_start(week)`, `series(...)`, `occurrence(...)`,
   `instance_id(series_id, start)`.
@@ -3827,7 +3827,7 @@ response and `"kind": item.kind, "planned_action": item.planned_action.value` to
 
 - [ ] **Step 4: Implement the web summary**
 
-`web/src/lib/api.ts` — extend `RulePreview`:
+`web/src/lib/api.ts`: extend `RulePreview`:
 
 ```ts
 export type RulePreview = {
@@ -4013,7 +4013,7 @@ git commit -m "feat: explain occurrence decisions in the Activity feed"
   Start and series time zones.
 - `docs/sync-model.md`: rewrite "Recurrence" per ADR 0011 (identity, ordering, source updates
   table, drift, reprojection, preview); mention occurrence checks in "Reconciliation".
-- `docs/deployment.md`: upgrade note — migration 5 resets incremental cursors; enabled rules
+- `docs/deployment.md`: upgrade note: migration 5 resets incremental cursors; enabled rules
   backfill recurring events on their next run; pause rules before upgrading to preview first; back
   up the database.
 - `docs/troubleshooting.md`: entry for "Blocked: the occurrence was not found in the destination

@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { ProjectionChoice } from "@/features/projection-choice"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
 import {
   api,
   type ConnectedAccount,
@@ -13,7 +15,7 @@ import {
   type ProjectionHandling,
   type RuleDetail,
 } from "@/lib/api"
-import { removalConsequence, removalOutcome, replacementConfirmLabel } from "@/lib/rule-change"
+import { removalConsequence, removalResultSentences, replacementConfirmLabel } from "@/lib/rule-change"
 import { endpointDraft, replacementReadiness, type EndpointDraft } from "@/lib/rule-replacement"
 import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
 import { useRuleExit, useRuleInvalidation } from "@/lib/use-rule-refresh"
@@ -33,6 +35,8 @@ export function CalendarReplacement({
   destinationConnected: boolean
   onReplaced: (ruleId: string, notice: string) => void
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const invalidate = useRuleInvalidation(detail.id)
   const leave = useRuleExit(detail.id)
   const connected = accounts.filter((account) => account.state === "connected")
@@ -65,11 +69,9 @@ export function CalendarReplacement({
         projections: effective,
       }),
     onSuccess: async (result) => {
-      const outcome = removalOutcome(result, destinationName)
-      onReplaced(
-        result.rule.id,
-        `Calendars replaced. This is the new draft rule; preview it before it starts syncing.${outcome.attention ? ` ${outcome.message.replace("The rule was removed. ", "")}` : ""}`,
-      )
+      // Only a replacement that left events in place reports what happened to the old projections.
+      const left = result.conflicts > 0 ? removalResultSentences(i18n, result, destinationName) : []
+      onReplaced(result.rule.id, [t("ruleDetails.replacement.replaced"), ...left].join(" "))
       await leave()
     },
     // An interrupted replacement leaves the new draft and a retryable old rule behind.
@@ -80,8 +82,8 @@ export function CalendarReplacement({
     <section className="rule-section page-card" aria-labelledby="replace-title">
       <div className="section-heading">
         <div>
-          <h2 id="replace-title">Calendars</h2>
-          <p>Changing a calendar removes this rule and creates a new draft with the same policy.</p>
+          <h2 id="replace-title">{t("ruleDetails.replacement.title")}</h2>
+          <p>{t("ruleDetails.replacement.intro")}</p>
         </div>
         {!open && (
           <Button
@@ -94,7 +96,7 @@ export function CalendarReplacement({
             aria-expanded={open}
             aria-controls="replace-form"
           >
-            Replace calendars…
+            {t("ruleDetails.replacement.open")}
           </Button>
         )}
       </div>
@@ -155,6 +157,8 @@ function ReplacementForm({
   onReplace: () => void
   onCancel: () => void
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const returnFocus = useRef<HTMLButtonElement>(null)
   const [confirming, setConfirming] = useState(false)
   const { sameEndpoint, canSubmit } = replacementReadiness(detail, draft)
@@ -172,7 +176,7 @@ function ReplacementForm({
   return (
     <form id="replace-form" className="rule-edit-form" onSubmit={submit}>
       <EndpointFields
-        legend="Source calendar"
+        legend={t("ruleDetails.replacement.sourceLegend")}
         idPrefix="replace-source"
         firstField={firstField}
         accounts={accounts}
@@ -184,7 +188,7 @@ function ReplacementForm({
         onCalendar={(value) => edit({ sourceCalendar: value })}
       />
       <EndpointFields
-        legend="Destination calendar"
+        legend={t("ruleDetails.replacement.destinationLegend")}
         idPrefix="replace-destination"
         accounts={accounts}
         account={draft.destinationAccount}
@@ -208,10 +212,10 @@ function ReplacementForm({
       />
       {sameEndpoint && (
         <p id="replace-destination-error" className="field-error" role="alert">
-          Choose a destination different from the source calendar.
+          {t("ruleDetails.replacement.sameEndpoint")}
         </p>
       )}
-      {error && <div className="inline-error" role="alert">{error.message}</div>}
+      {error && <div className="inline-error" role="alert">{apiErrorMessage(i18n, error)}</div>}
       <div className="form-actions">
         <Button
           ref={returnFocus}
@@ -221,7 +225,7 @@ function ReplacementForm({
           aria-expanded={confirming}
           aria-controls="replace-confirmation"
         >
-          Review replacement
+          {t("ruleDetails.replacement.review")}
         </Button>
         <Button
           type="button"
@@ -232,17 +236,19 @@ function ReplacementForm({
           }}
           disabled={pending}
         >
-          Cancel
+          {t("ruleDetails.replacement.cancel")}
         </Button>
       </div>
       {confirming && (
         <DestructiveConfirmation
           id="replace-confirmation"
-          title="Remove this rule and create a new draft?"
-          body={`${removalConsequence(effective, detail.mapping_count, destinationName)} The new draft keeps this rule's policy and needs a preview before it can be enabled.`}
-          cancelLabel="Keep current rule"
-          confirmLabel={replacementConfirmLabel(effective, detail.mapping_count)}
-          pendingLabel="Replacing…"
+          title={t("ruleDetails.replacement.confirmTitle")}
+          body={t("ruleDetails.replacement.confirmBody", {
+            consequence: removalConsequence(i18n, effective, detail.mapping_count, destinationName),
+          })}
+          cancelLabel={t("ruleDetails.replacement.keep")}
+          confirmLabel={replacementConfirmLabel(i18n, effective, detail.mapping_count)}
+          pendingLabel={t("ruleDetails.replacement.pending")}
           pending={pending}
           onConfirm={onReplace}
           onCancel={() => {
@@ -281,22 +287,25 @@ export function EndpointFields({
   onAccount: (value: string) => void
   onCalendar: (value: string) => void
 }) {
+  const { t } = useI18n()
   const options = writableOnly ? writableCalendars(calendars) : (calendars ?? [])
   return (
     <fieldset className="endpoint-fields">
       <legend>{legend}</legend>
       <div className="field-stack">
-        <Label htmlFor={`${idPrefix}-account`}>Google account</Label>
+        <Label htmlFor={`${idPrefix}-account`}>{t("ruleDetails.endpointFields.account")}</Label>
         <NativeSelect ref={firstField} id={`${idPrefix}-account`} value={account} onChange={(event) => onAccount(event.target.value)}>
           {accounts.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.display_name} ({item.email})
+              {t("ruleDetails.endpointFields.accountOption", { name: item.display_name, email: item.email })}
             </option>
           ))}
         </NativeSelect>
       </div>
       <div className="field-stack">
-        <Label htmlFor={`${idPrefix}-calendar`}>{writableOnly ? "Calendar you can edit" : "Calendar"}</Label>
+        <Label htmlFor={`${idPrefix}-calendar`}>
+          {writableOnly ? t("ruleDetails.endpointFields.writableCalendar") : t("ruleDetails.endpointFields.calendar")}
+        </Label>
         <NativeSelect
           id={`${idPrefix}-calendar`}
           value={calendar}
@@ -305,7 +314,7 @@ export function EndpointFields({
           aria-describedby={errorId}
         >
           <option value="" disabled>
-            Choose a calendar
+            {t("ruleDetails.endpointFields.chooseCalendar")}
           </option>
           {options.map((item) => (
             <option key={item.id} value={item.id}>
