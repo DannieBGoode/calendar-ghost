@@ -812,13 +812,13 @@ export function IntegrationsSection() {
           issue.mutate()
         }}
       >
-        <div>
+        <div className="w-full max-w-xs">
           <Label htmlFor="integration-name">Name</Label>
           <Input
             id="integration-name"
             value={name}
             maxLength={80}
-            placeholder="Uptime Kuma"
+            placeholder="For example, Uptime Kuma"
             onChange={(event) => setName(event.target.value)}
           />
         </div>

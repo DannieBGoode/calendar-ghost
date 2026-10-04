@@ -1564,6 +1564,9 @@ p {
 
 .inline-help-body pre {
   overflow-x: auto;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--muted);
 }
 
 .inline-help code,
@@ -1574,6 +1577,13 @@ p {
   color: var(--foreground);
   font-size: 0.8125rem;
   overflow-wrap: anywhere;
+}
+
+/* A block of code is one shaded box; its lines keep their spaces and never wrap mid-word. */
+.inline-help-body pre code {
+  padding: 0;
+  background: none;
+  overflow-wrap: normal;
 }
 
 .token-reveal {
