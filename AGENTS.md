@@ -97,7 +97,7 @@ web/ and interfaces/  ->  application/  ->  domain/
   `components/ui` imports only other UI primitives. ESLint's `no-restricted-imports` enforces this
   for alias and relative imports.
 - Call the API through `api` in `web/src/lib/api.ts`. Each method names its route and HTTP method,
-  which select the generated request and response types; never pass a body type by hand.
+  which select the generated path, query, body, and response types; never pass a type by hand.
 - React Doctor (`npm --prefix web run doctor`) fails on any warning. Fix the code; change
   `web/doctor.config.ts` only for a documented false positive.
 

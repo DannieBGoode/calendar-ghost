@@ -21,9 +21,10 @@ definition directly.
   settings, a database, or a provider.
 - `openapi-typescript` generates `web/src/lib/api-schema.ts` from that file. `web/src/lib/api.ts`
   names the generated types and adds no hand-written body types.
-- Each `api` method calls its route through `call(path, method)`. The path template and method
-  select the request and response types from the generated `paths`, so a method cannot name one
-  route and expect another route's body.
+- Each `api` method calls its route through `call(path, method, inputs)`. The path template and
+  method select every type from the generated `paths`: the path values, query, and body the route
+  requires, and the body it returns. A call cannot leave out a required input, send one the route
+  does not declare, or expect another route's body.
 - Both files are committed. `tests/test_openapi_contract.py` fails when `web/openapi.json` differs
   from the routes, and `npm run api:check` fails when `api-schema.ts` differs from the schema. A
   changed response model therefore fails the frontend type check until the UI handles it.

@@ -48,35 +48,60 @@ type Method = "get" | "post" | "patch" | "delete"
 type MethodOf<P extends keyof paths> = {
   [M in Method]: paths[P][M] extends { responses: unknown } ? M : never
 }[Method]
+type Operation<P extends keyof paths, M extends MethodOf<P>> = paths[P][M]
 type JsonContent<R> = R extends { content: { "application/json": infer B } } ? B : undefined
 /** The body of a route's success response; undefined for 204 No Content. */
-type Success<P extends keyof paths, M extends MethodOf<P>> =
-  paths[P][M] extends { responses: infer R } ? JsonContent<R[Extract<keyof R, 200 | 201 | 204>]> : never
-type Payload<P extends keyof paths, M extends MethodOf<P>> =
-  paths[P][M] extends { requestBody: { content: { "application/json": infer B } } } ? B : never
-type CallOptions<P extends keyof paths, M extends MethodOf<P>> = {
-  /** Values for the path's `{name}` placeholders. */
-  params?: Record<string, string | number>
-  query?: URLSearchParams
-  body?: Payload<P, M>
+type Success<O> = O extends { responses: infer R } ? JsonContent<R[Extract<keyof R, 200 | 201 | 204>]> : never
+type QueryValue = string | number | boolean | readonly (string | number)[] | null | undefined
+
+/**
+ * What a route takes besides its path and method. Each part is required exactly when the schema
+ * requires it, and absent when the route declares none.
+ */
+type Inputs<O> = (O extends { parameters: { path: infer Path } } ? { params: Path } : { params?: never }) &
+  (O extends { parameters: { query: infer Query } }
+    ? { query: Query }
+    : O extends { parameters: { query?: infer Query } }
+      ? [Query] extends [undefined]
+        ? { query?: never }
+        : { query?: Query }
+      : { query?: never }) &
+  (O extends { requestBody: { content: { "application/json": infer Body } } } ? { body: Body } : { body?: never })
+/** The inputs argument, optional only when the route requires none. */
+type InputArgs<O> = Record<never, never> extends Inputs<O> ? [inputs?: Inputs<O>] : [inputs: Inputs<O>]
+
+function queryString(query: Readonly<Record<string, QueryValue>>): string {
+  const search = new URLSearchParams()
+  for (const [name, value] of Object.entries(query)) {
+    if (value === null || value === undefined) continue
+    if (Array.isArray(value)) for (const item of value) search.append(name, String(item))
+    else search.set(name, String(value))
+  }
+  return search.size ? `?${search}` : ""
 }
 
 /**
- * Calls one route. Its path template and method select the request and response types from the
- * generated schema, so a call cannot name one route and expect another route's body.
+ * Calls one route. Its path template and method select every type from the generated schema:
+ * the path values, query, and body it requires, and the body it returns. A call cannot name one
+ * route and expect another route's body, or leave out an input the route requires.
  */
-function call<P extends keyof paths, M extends MethodOf<P>>(
+/** Exported for the type tests in api.test.ts; app code calls `api`. */
+export function call<P extends keyof paths, M extends MethodOf<P>>(
   path: P,
   method: M,
-  { params = {}, query, body }: CallOptions<P, M> = {},
-): Promise<Success<P, M>> {
+  ...[inputs]: InputArgs<Operation<P, M>>
+): Promise<Success<Operation<P, M>>> {
+  const { params, query, body } = (inputs ?? {}) as {
+    params?: Readonly<Record<string, string | number>>
+    query?: Readonly<Record<string, QueryValue>>
+    body?: unknown
+  }
   const filled = path.replace(/\{(\w+)\}/g, (_, name: string) => {
-    const value = params[name]
+    const value = params?.[name]
     if (value === undefined) throw new Error(`Missing path parameter ${name} for ${path}`)
     return encodeURIComponent(String(value))
   })
-  const url = query?.size ? `${filled}?${query}` : filled
-  return request<Success<P, M>>(url, {
+  return request<Success<Operation<P, M>>>(`${filled}${query ? queryString(query) : ""}`, {
     method: method.toUpperCase(),
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
@@ -158,7 +183,7 @@ export const api = {
   removeRule: (ruleId: string, projections: ProjectionHandling) =>
     call("/api/v1/rules/{rule_id}", "delete", {
       params: { rule_id: ruleId },
-      query: new URLSearchParams({ projections }),
+      query: { projections },
     }),
   replaceRuleCalendars: (ruleId: string, payload: Schemas["ReplaceRuleRequest"]) =>
     call("/api/v1/rules/{rule_id}/replace", "post", { params: { rule_id: ruleId }, body: payload }),
@@ -180,14 +205,16 @@ export const api = {
   syncRule: (ruleId: string) => call("/api/v1/rules/{rule_id}/sync", "post", { params: { rule_id: ruleId } }),
   reconcileRule: (ruleId: string) =>
     call("/api/v1/rules/{rule_id}/reconcile", "post", { params: { rule_id: ruleId } }),
-  activity: ({ ruleId, categories, before, query }: ActivityFilters = {}) => {
-    const params = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) })
-    if (ruleId) params.set("rule_id", ruleId)
-    for (const category of categories ?? []) params.append("category", category)
-    if (before) params.set("before", String(before))
-    if (query?.trim()) params.set("q", query.trim())
-    return call("/api/v1/audit-entries", "get", { query: params })
-  },
+  activity: ({ ruleId, categories, before, query }: ActivityFilters = {}) =>
+    call("/api/v1/audit-entries", "get", {
+      query: {
+        limit: ACTIVITY_PAGE_SIZE,
+        rule_id: ruleId || null,
+        category: categories ?? null,
+        before: before ?? null,
+        q: query?.trim() || null,
+      },
+    }),
   activityEntry: (entryId: number) =>
     call("/api/v1/audit-entries/{entry_id}", "get", { params: { entry_id: entryId } }),
   activityEvent: (entryId: number) =>
@@ -196,10 +223,10 @@ export const api = {
     call("/api/v1/audit-entries/{entry_id}/changes", "get", { params: { entry_id: entryId } }),
   incidents: () => call("/api/v1/incidents", "get"),
   recentChanges: (limit = 5) =>
-    call("/api/v1/recent-changes", "get", { query: new URLSearchParams({ limit: String(limit) }) }),
+    call("/api/v1/recent-changes", "get", { query: { limit } }),
   storage: () => call("/api/v1/storage", "get"),
   clearableActivity: (days: number) =>
-    call("/api/v1/storage/activity", "get", { query: new URLSearchParams({ older_than_days: String(days) }) }),
+    call("/api/v1/storage/activity", "get", { query: { older_than_days: days } }),
   clearActivity: (days: number) =>
     call("/api/v1/storage/activity/clear", "post", { body: { older_than_days: days } }),
   purgeLogs: () => call(STORAGE_LOGS_URL, "delete"),

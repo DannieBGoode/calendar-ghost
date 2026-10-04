@@ -3,6 +3,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest"
 import {
   ApiError,
   api,
+  call,
   errorDetail,
   type ReconcileResult,
   type Rule,
@@ -34,6 +35,36 @@ describe("api routes", () => {
     expectTypeOf(api.syncRule).returns.resolves.toEqualTypeOf<SyncResult>()
     expectTypeOf(api.reconcileRule).returns.resolves.toEqualTypeOf<ReconcileResult>()
     expectTypeOf(api.logOut).returns.resolves.toEqualTypeOf<undefined>()
+  })
+
+  it("rejects a call that leaves out or invents a route input", () => {
+    // Type checks only: the calls are never made.
+    const wrongCalls = () => [
+      // @ts-expect-error The rule route needs its rule_id.
+      call("/api/v1/rules/{rule_id}", "get"),
+      // @ts-expect-error Creating a rule needs a body.
+      call("/api/v1/rules", "post"),
+      // @ts-expect-error Removing a rule needs the projections query.
+      call("/api/v1/rules/{rule_id}", "delete", { params: { rule_id: "r" } }),
+      // @ts-expect-error The dashboard takes no body.
+      call("/api/v1/dashboard", "get", { body: {} }),
+      // @ts-expect-error Activity has no `rule` query parameter.
+      call("/api/v1/audit-entries", "get", { query: { rule: "r" } }),
+      // @ts-expect-error The dashboard route declares no POST.
+      call("/api/v1/dashboard", "post"),
+    ]
+    expectTypeOf(wrongCalls).toBeFunction()
+  })
+
+  it("sends every activity filter as the query the route declares", async () => {
+    const fetch = stubFetch(200, [])
+    await api.activity({ ruleId: "rule-1", categories: ["changed", "blocked"], before: 42, query: " lunch " })
+    expect(requested(fetch).url).toBe(
+      "/api/v1/audit-entries?limit=100&rule_id=rule-1&category=changed&category=blocked&before=42&q=lunch",
+    )
+    const unfiltered = stubFetch(200, [])
+    await api.activity()
+    expect(requested(unfiltered).url).toBe("/api/v1/audit-entries?limit=100")
   })
 
   it("fills and encodes path parameters", async () => {
