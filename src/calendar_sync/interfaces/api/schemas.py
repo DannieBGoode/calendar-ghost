@@ -196,11 +196,20 @@ class RuleReplacementResponse(ApiResponse):
     conflicts: int
 
 
+class IncidentMessageResponse(ApiResponse):
+    """What an Incident says as a stable code and parameters the Web UI translates (ADR 0026)."""
+
+    code: str
+    params: dict[str, str | int | None]
+
+
 class ProblemResponse(ApiResponse):
     kind: ProblemKindValue
     rule_id: str | None
     summary: str
     since: str | None
+    message: IncidentMessageResponse | None
+    """The message of the Incident behind the problem; None when no Incident names it."""
 
 
 class DashboardResponse(ApiResponse):
@@ -338,6 +347,8 @@ class IncidentResponse(ApiResponse):
     resolved_at: str | None
     resolution: IncidentResolutionValue | None
     account_id: str | None
+    message: IncidentMessageResponse | None
+    """None for an Incident recorded before messages, or one whose message is unreadable."""
 
 
 class DatabaseUsageResponse(ApiResponse):

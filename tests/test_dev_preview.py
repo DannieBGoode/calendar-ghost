@@ -155,3 +155,28 @@ def test_preview_names_calendars_of_an_account_that_lost_access(tmp_path: Path) 
     personal = next(rule for rule in rules if rule["id"] == "preview-personal-work")
     assert personal["state"] == "degraded"
     assert personal["source"]["calendar_name"] == "Personal"
+
+
+def _incident_messages(path: Path, scenario: Scenario) -> dict[str, object]:
+    container = build_preview_container(path, NOW, scenario=scenario)
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        incidents = client.get("/api/v1/incidents").json()
+    return {incident["id"]: incident["message"] for incident in incidents}
+
+
+def test_preview_incidents_carry_messages_and_one_keeps_only_its_summary(tmp_path: Path) -> None:
+    review = _incident_messages(tmp_path / "dev-preview.db", Scenario.REVIEW)
+    stopped = _incident_messages(tmp_path / "dev-preview.db", Scenario.STOPPED)
+
+    assert review["preview-incident"] == {"code": "events_still_blocked", "params": {"count": 1}}
+    assert review["preview-resolved-sync_succeeded"] == {
+        "code": "provider_failure",
+        "params": {"kind": "temporary", "provider": "google"},
+    }
+    # Kept without a message so the Web UI's fallback to the stored summary stays visible.
+    assert review["preview-resolved-rule_removed"] is None
+    assert stopped["provider:preview-personal-work"] == {
+        "code": "provider_failure",
+        "params": {"kind": "authentication", "provider": "google"},
+    }

@@ -147,7 +147,25 @@ describe("request errors", () => {
   it("keeps the status and detail", async () => {
     respond(409, JSON.stringify({ detail: "storage is busy" }))
     const error = await failure()
-    expect([error.status, error.detail]).toEqual([409, "storage is busy"])
+    expect([error.status, error.detail, error.code, error.params]).toEqual([409, "storage is busy", null, {}])
+  })
+
+  it("keeps the server's code and params", async () => {
+    respond(424, JSON.stringify({ detail: "removal stopped", code: "removal_interrupted", params: { processed: 2, provider: "google", kind: null } }))
+    const error = await failure()
+    expect([error.code, error.params, error.detail]).toEqual([
+      "removal_interrupted",
+      { processed: 2, provider: "google", kind: null },
+      "removal stopped",
+    ])
+  })
+
+  it("drops params that are not text, numbers, or null", async () => {
+    respond(422, JSON.stringify({ detail: "x", code: "invalid_request", params: { field: "name", nested: { a: 1 }, flag: true } }))
+    expect((await failure()).params).toEqual({ field: "name" })
+    respond(422, JSON.stringify({ detail: "x", code: 7, params: ["field"] }))
+    const malformed = await failure()
+    expect([malformed.code, malformed.params]).toEqual([null, {}])
   })
 
   it("has no detail for a validation list without messages", async () => {

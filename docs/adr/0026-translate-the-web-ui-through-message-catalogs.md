@@ -31,10 +31,29 @@ locale-correct number and date formatting.
   `toLocale*()` call and bare `Intl` constructor moved there.
 - **Language choice**: the administrator's saved choice, then the first matching
   `navigator.languages` entry (`navigator.language` when that list is empty), then English.
-- **Server text stays English for now.** API error details, Incident summaries, and Installation
-  Status problem summaries the UI shows stay English until a follow-up gives them codes.
-  Configuration examples for other tools, such as the Integrations code blocks, are copied as is
-  and never translated.
+- **Every API error body carries a stable code.** A non-2xx JSON response is
+  `{"detail": ..., "code": ..., "params": {...}}`. `detail` keeps its English text for API
+  clients and logs, and the HTTP status does not change; `code` names the condition, never the
+  status, and never changes once shipped. `interfaces/api/problems.py` builds every error:
+  `problem(status, code, detail, **params)` for a route's own condition and `problem_from(status,
+  error)` for a use-case exception, looked up along the exception's MRO. Request validation keeps
+  FastAPI's list as `detail`, with `code` `invalid_request` and params naming the first error's
+  `field`, `reason`, and any `min_length` or `max_length`. The MCP gate's HTTP refusals use the
+  same shape; MCP tool errors travel inside the MCP protocol and stay English.
+- **Incidents store a message code and parameters** beside their English `summary` (migration
+  19): `provider_failure` and `removal_stopped` with `kind` and `provider`, and
+  `events_still_blocked` with `count`. The Incidents API and each Installation Status problem
+  that comes from an Incident return it as `message: {code, params}`, or null for an Incident
+  recorded earlier or one whose stored parameters cannot be read. The summary stays the fallback
+  and the text of the incident email and logs.
+- **The Web UI translates codes and falls back to English.** An error alert shows
+  `common.apiError.<code>` (`<code>_<reason>` first for a validation error) filled with the
+  params and the provider's display name; without a message, or with a param the server left
+  out, it shows the server's `detail`, then a generic sentence, never an unfilled placeholder. An
+  Incident without a known message shows its stored summary. Installation Status problems that
+  no Incident names, such as "Not synced in over a day", stay English until a follow-up gives
+  them codes. Configuration examples for other tools, such as the Integrations code blocks, are
+  copied as is and never translated.
 - **Diagnostics, logs, and the incident email stay English.** Provider error text, Audit Entry
   `detail`, Drift `detail`, and reconciliation conflict `detail` are shown as recorded, under a
   translated diagnostic label such as "Recorded detail."
@@ -67,6 +86,9 @@ touching any call site, since call sites never parse ICU syntax themselves.
 - English is the source of truth. A key missing from another catalog falls back to English rather
   than breaking the build, but the catalog tests still require matching keys and placeholders so a
   translation cannot silently drift out of date.
+- New server text the UI shows needs a stable code: a pytest guard fails if a module under
+  `interfaces/api/` other than `problems.py` constructs an `HTTPException`, and another fails if
+  a code the server sends has no English message in `common.apiError`.
 - New copy must go through the catalogs: the `calendar-ghost/no-literal-ui-text` ESLint rule flags
   literal JSX text and common text attributes, the catalog tests check keys and placeholders, and
   pseudo-locale render checks fail when a visible text node is not wrapped in `t()`.

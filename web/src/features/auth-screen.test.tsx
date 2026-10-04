@@ -54,26 +54,44 @@ async function renderAuth(i18n: I18n, mode: "setup" | "login") {
   return { container }
 }
 
+/** Submits the login form against a server that answers 401 with `body`; returns the alert. */
+async function logInFailing(i18n: I18n, body: object): Promise<Element | null> {
+  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(body, 401))))
+  const { container } = await renderAuth(i18n, "login")
+  const input = container.querySelector<HTMLInputElement>("input[type=password]")!
+  act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, "a very long password")
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+  const form = container.querySelector("form")!
+  await act(async () => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+  return container.querySelector('[role="alert"]')
+}
+
 describe("AuthScreen", () => {
   it("translates the setup screen", async () => {
     const { container } = await renderAuth(pseudoI18n(), "setup")
     expect(untranslatedText(container)).toEqual([])
   })
 
-  it("shows the server's detail when the password is incorrect", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse({ detail: "incorrect password" }, 401))))
-    const { container } = await renderAuth(testI18n(), "login")
-    const input = container.querySelector<HTMLInputElement>("input[type=password]")!
-    act(() => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, "a very long password")
-      input.dispatchEvent(new Event("input", { bubbles: true }))
-    })
-    const form = container.querySelector("form")!
-    await act(async () => {
-      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    const alert = container.querySelector('[role="alert"]')
+  it("translates the server's code when the password is incorrect", async () => {
+    const body = { detail: "incorrect password", code: "incorrect_password", params: {} }
+    const alert = await logInFailing(testI18n(), body)
+    expect(alert?.textContent).toBe("That password is incorrect.")
+  })
+
+  it("has no untranslated text in a coded error", async () => {
+    const body = { detail: "incorrect password", code: "incorrect_password", params: {} }
+    const alert = await logInFailing(pseudoI18n(), body)
+    expect(alert).not.toBeNull()
+    expect(untranslatedText(alert!)).toEqual([])
+  })
+
+  it("shows the server's detail for an error without a known code", async () => {
+    const alert = await logInFailing(testI18n(), { detail: "incorrect password" })
     expect(alert?.textContent).toBe("incorrect password")
   })
 })

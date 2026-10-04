@@ -579,6 +579,14 @@ class AccountAuthorizations(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class IncidentMessage:
+    """What an Incident says, as a stable code and parameters the Web UI translates (ADR 0026)."""
+
+    code: str
+    params: Mapping[str, str | int | None] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class IncidentReport:
     """An Incident to open or refresh; repeated reports under one key update one Incident."""
 
@@ -589,6 +597,8 @@ class IncidentReport:
     """Operational wording only; never an event title or other event content."""
     account_id: ConnectedAccountId | None = None
     """The Connected Account whose failure opened or last refreshed the Incident, if known."""
+    message: IncidentMessage | None = None
+    """The summary as a code and parameters; the English `summary` stays for email and logs."""
 
 
 class IncidentResolution(StrEnum):

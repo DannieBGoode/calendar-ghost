@@ -138,6 +138,14 @@ calendar name is kept. Rolling back past it means restoring the backup taken bef
 database that stores another provider's account cannot be opened by a release that does not know
 that Provider Kind.
 
+Migration 19 adds the nullable `message_code` and `message_params` columns to `incidents`: what
+each Incident says as a stable code and JSON parameters, which the Web UI translates
+([ADR 0026](adr/0026-translate-the-web-ui-through-message-catalogs.md)). No row is rewritten:
+Incidents recorded earlier keep no message and the Web UI shows their stored English summary.
+Rolling back works with the same database: earlier releases ignore the columns. An earlier release
+that refreshes an open Incident updates its summary but not its message, so after upgrading again
+that Incident can show a stale message until it is next refreshed.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

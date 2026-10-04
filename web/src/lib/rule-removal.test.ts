@@ -106,6 +106,15 @@ describe("rule removal failures", () => {
     expect(removalConnectionLost(unconfigured)).toBe(false)
     expect(removalErrorMessage(i18n, unconfigured)).toBe(unconfiguredDetail)
   })
+
+  it("translates a coded interruption with how far the removal got", () => {
+    const params = { processed: 3, remaining: 7, total: 10, provider: "google", kind: "rate_limit" }
+    const interrupted = new ApiError("removal stopped", 424, "removal stopped", { code: "removal_interrupted", params })
+    expect(removalConnectionLost(interrupted)).toBe(false)
+    expect(removalErrorMessage(i18n, interrupted)).toBe(
+      "Removal stopped after 3 of 10 projections because Google Calendar reported a problem. Retry to continue.",
+    )
+  })
 })
 
 describe("rule removal presentation", () => {

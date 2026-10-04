@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -90,8 +91,8 @@ class SqliteIncidentRepository:
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, account_id, category, state,
-                    summary, opened_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)
+                    summary, opened_at, updated_at, message_code, message_params
+                ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
                 ON CONFLICT(deduplication_key) DO UPDATE SET
                     account_id = excluded.account_id,
                     category = excluded.category,
@@ -100,7 +101,9 @@ class SqliteIncidentRepository:
                     summary = excluded.summary,
                     updated_at = excluded.updated_at,
                     resolved_at = NULL,
-                    resolution = NULL
+                    resolution = NULL,
+                    message_code = excluded.message_code,
+                    message_params = excluded.message_params
                 """,
                 (
                     self._ids.new(),
@@ -111,6 +114,10 @@ class SqliteIncidentRepository:
                     incident.summary,
                     at.isoformat(),
                     at.isoformat(),
+                    incident.message.code if incident.message else None,
+                    json.dumps(dict(incident.message.params), sort_keys=True)
+                    if incident.message
+                    else None,
                 ),
             )
         return existing is None or existing[0] != "open"

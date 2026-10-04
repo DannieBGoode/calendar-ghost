@@ -11,7 +11,7 @@ from calendar_sync.application.health import (
     RuleHealth,
     RuleHealthPolicy,
 )
-from calendar_sync.application.ports import IncidentReport, IncidentResolution
+from calendar_sync.application.ports import IncidentMessage, IncidentReport, IncidentResolution
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
@@ -20,6 +20,7 @@ from tests.helpers import NOW, rule
 
 RULE = SyncRuleId("rule-1")
 ACCOUNT = ConnectedAccountId("work-account")
+DENIED = ProviderFailure(ProviderFailureKind.AUTHORIZATION, "403", provider=ProviderKind.GOOGLE)
 INTERVENTION = (
     ProviderFailureKind.AUTHENTICATION,
     ProviderFailureKind.AUTHORIZATION,
@@ -42,7 +43,12 @@ def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
 
     assert response.degrade
     assert response.incident == IncidentReport(
-        f"provider:{RULE.value}", RULE, kind.value, RuleHealthPolicy.summary(failure), ACCOUNT
+        f"provider:{RULE.value}",
+        RULE,
+        kind.value,
+        RuleHealthPolicy.summary(failure),
+        account_id=ACCOUNT,
+        message=IncidentMessage("provider_failure", {"kind": kind.value, "provider": None}),
     )
 
 
@@ -100,6 +106,7 @@ def test_persisting_blocks_open_one_incident_that_names_how_many() -> None:
         RULE,
         "conflict",
         "1 event could not be synced and was still blocked at the daily check.",
+        message=IncidentMessage("events_still_blocked", {"count": 1}),
     )
     assert two is not None
     assert two.summary == "2 events could not be synced and were still blocked at the daily check."
@@ -114,7 +121,8 @@ def test_a_blocked_removal_names_its_cause() -> None:
         RULE,
         "authorization",
         "Rule Removal stopped: Access to the calendar provider was denied",
-        ACCOUNT,
+        account_id=ACCOUNT,
+        message=IncidentMessage("removal_stopped", {"kind": "authorization", "provider": None}),
     )
 
 
@@ -212,3 +220,26 @@ def test_recovery_refreshes_the_incident_with_the_account_still_unauthorized() -
     # Refreshing an open Incident notifies nobody, and a preview is not a failed sync run.
     assert notifications.opened == []
     assert records.failures == {}
+
+
+def test_every_incident_report_carries_a_message() -> None:
+    policy = RuleHealthPolicy()
+    provider = policy.provider_incident(RULE, DENIED)
+    blocked = policy.after_full_pass(RULE, 3)
+    removal = policy.removal_blocked(RULE, DENIED)
+    assert provider.message == IncidentMessage(
+        "provider_failure", {"kind": "authorization", "provider": "google"}
+    )
+    assert blocked is not None
+    assert blocked.message == IncidentMessage("events_still_blocked", {"count": 3})
+    assert removal.message == IncidentMessage(
+        "removal_stopped", {"kind": "authorization", "provider": "google"}
+    )
+
+
+def test_a_failure_without_a_provider_has_a_null_provider() -> None:
+    failure = ProviderFailure(ProviderFailureKind.INFRASTRUCTURE, "disk")
+    report = RuleHealthPolicy().provider_incident(RULE, failure)
+    assert report.message == IncidentMessage(
+        "provider_failure", {"kind": "infrastructure", "provider": None}
+    )

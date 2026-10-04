@@ -292,15 +292,19 @@ describe("SettingsPage", () => {
     )
   })
 
+  it("explains a failed count from the error code, not the server's English", async () => {
+    await renderSettings(testI18n(), {
+      clearable: jsonResponse({ detail: "older_than_days must be one of 30, 90.", code: "invalid_activity_age", params: {} }, 422),
+    })
+    await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
+    expect(container.querySelector("#clear-activity-confirmation p")?.textContent).toBe(
+      "The entries to remove could not be counted: Choose one of the offered ages for clearing Activity.",
+    )
+  })
+
   it("says the old Activity was cleared when its space could not be reclaimed", async () => {
     await renderSettings(testI18n(), {
-      cleared: jsonResponse(
-        {
-          detail:
-            "Old Activity was cleared, but its space could not be reclaimed while a rule is synchronizing. Try again when it finishes.",
-        },
-        409,
-      ),
+      cleared: jsonResponse({ detail: "Database is locked.", code: "storage_busy", params: {} }, 409),
     })
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
     await click(container.querySelector<HTMLButtonElement>("#clear-activity-confirmation .confirmation-actions button:last-child")!)

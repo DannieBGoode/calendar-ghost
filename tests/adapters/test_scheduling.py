@@ -20,6 +20,7 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    IncidentMessage,
     IncidentReport,
     IncidentResolution,
     RuleRunOutcome,
@@ -735,6 +736,98 @@ def test_incidents_open_once_refresh_while_open_and_reopen_after_resolving(
             None,
         )
     ]
+
+
+def test_incident_messages_round_trip_and_refresh(tmp_path: Path) -> None:
+    database = tmp_path / "calendar.db"
+    initialize_database(database)
+    incidents = SqliteIncidentRepository(database)
+    queries = SqliteOperationsQueries(database)
+    at = datetime(2026, 10, 3, tzinfo=UTC)
+    first = IncidentReport(
+        "provider:r1",
+        SyncRuleId("r1"),
+        "rate_limit",
+        "Google Calendar is limiting requests",
+        message=IncidentMessage("provider_failure", {"kind": "rate_limit", "provider": "google"}),
+    )
+    incidents.open(first, at)
+    assert queries.incidents()[0].message == first.message
+    refreshed = replace(
+        first,
+        category="authorization",
+        summary="Access to Google Calendar was denied",
+        message=IncidentMessage(
+            "provider_failure", {"kind": "authorization", "provider": "google"}
+        ),
+    )
+    incidents.open(refreshed, at)
+    assert queries.incidents()[0].message == refreshed.message
+    # A refresh that changes the code replaces the code as well as the params.
+    recoded = replace(
+        refreshed,
+        message=IncidentMessage("removal_stopped", {"kind": "permanent", "provider": None}),
+    )
+    incidents.open(recoded, at)
+    assert queries.incidents()[0].message == recoded.message
+
+
+def test_refreshing_a_legacy_incident_records_its_message(tmp_path: Path) -> None:
+    database = tmp_path / "calendar.db"
+    initialize_database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, category, state, summary, opened_at,
+                updated_at, message_code, message_params
+            ) VALUES ('legacy', 'provider:r1', NULL, 'temporary', 'open', 'Old', ?, ?, NULL, NULL)
+            """,
+            ("2026-10-01T00:00:00+00:00", "2026-10-01T00:00:00+00:00"),
+        )
+    report = IncidentReport(
+        "provider:r1",
+        SyncRuleId("r1"),
+        "rate_limit",
+        "Google Calendar is limiting requests",
+        message=IncidentMessage("provider_failure", {"kind": "rate_limit", "provider": "google"}),
+    )
+
+    opened = SqliteIncidentRepository(database).open(report, datetime(2026, 10, 3, tzinfo=UTC))
+
+    with sqlite3.connect(database) as connection:
+        stored = connection.execute(
+            "SELECT id, message_code, message_params FROM incidents"
+        ).fetchall()
+    assert opened is False
+    assert stored == [
+        ("legacy", "provider_failure", '{"kind": "rate_limit", "provider": "google"}')
+    ]
+
+
+def test_legacy_and_corrupt_incident_messages_read_as_none(tmp_path: Path) -> None:
+    database = tmp_path / "calendar.db"
+    initialize_database(database)
+    with sqlite3.connect(database) as connection:
+        for key, code, params in (
+            ("a", None, None),
+            ("b", "provider_failure", "{not json"),
+            ("c", "x", "[1]"),
+            ("d", "provider_failure", '{"kind": []}'),
+            ("e", "events_still_blocked", '{"count": true}'),
+        ):
+            connection.execute(
+                """
+                INSERT INTO incidents (
+                    id, deduplication_key, rule_id, category, state, summary, opened_at,
+                    updated_at, message_code, message_params
+                ) VALUES (?, ?, NULL, 'temporary', 'open', 'Old', ?, ?, ?, ?)
+                """,
+                (key, key, "2026-10-01T00:00:00+00:00", "2026-10-01T00:00:00+00:00", code, params),
+            )
+    assert [incident.message for incident in SqliteOperationsQueries(database).incidents()] == [
+        None
+    ] * 5
 
 
 def test_each_scheduler_pass_forgets_change_values_of_every_rule() -> None:

@@ -832,6 +832,18 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /**
+         * IncidentMessageResponse
+         * @description What an Incident says as a stable code and parameters the Web UI translates (ADR 0026).
+         */
+        IncidentMessageResponse: {
+            /** Code */
+            code: string;
+            /** Params */
+            params: {
+                [key: string]: string | number | null;
+            };
+        };
         /** IncidentResponse */
         IncidentResponse: {
             /** Account Id */
@@ -840,6 +852,7 @@ export interface components {
             category: string;
             /** Id */
             id: string;
+            message: components["schemas"]["IncidentMessageResponse"] | null;
             /** Opened At */
             opened_at: string;
             /** Resolution */
@@ -965,6 +978,7 @@ export interface components {
              * @enum {string}
              */
             kind: "stalled" | "stopped" | "review" | "overdue" | "blocked" | "waiting";
+            message: components["schemas"]["IncidentMessageResponse"] | null;
             /** Rule Id */
             rule_id: string | null;
             /** Since */

@@ -42,8 +42,12 @@ def test_storage_without_file_logging_reports_no_logs(tmp_path: Path) -> None:
     client = _client(tmp_path, file_logging=False)
 
     assert client.get("/api/v1/storage").json()["logs"] is None
-    assert client.get("/api/v1/storage/logs").status_code == 404
-    assert client.delete("/api/v1/storage/logs").status_code == 404
+    no_logs = client.get("/api/v1/storage/logs")
+    purge_without_logs = client.delete("/api/v1/storage/logs")
+    assert no_logs.status_code == 404
+    assert no_logs.json()["code"] == "file_logging_off"
+    assert purge_without_logs.status_code == 404
+    assert purge_without_logs.json()["code"] == "file_logging_off"
 
 
 def test_clearable_activity_is_counted_for_an_offered_age_only(tmp_path: Path) -> None:
@@ -53,7 +57,9 @@ def test_clearable_activity_is_counted_for_an_offered_age_only(tmp_path: Path) -
         "older_than_days": 90,
         "entries": 0,
     }
-    assert client.get("/api/v1/storage/activity", params={"older_than_days": 7}).status_code == 422
+    invalid_age = client.get("/api/v1/storage/activity", params={"older_than_days": 7})
+    assert invalid_age.status_code == 422
+    assert invalid_age.json()["code"] == "invalid_activity_age"
 
 
 def test_clearing_activity_answers_what_was_removed(tmp_path: Path) -> None:
@@ -86,6 +92,7 @@ def test_clearing_while_a_rule_runs_is_a_conflict(
 
     assert response.status_code == 409
     assert response.json()["detail"].startswith("Old Activity was cleared")
+    assert response.json()["code"] == "storage_busy"
 
 
 def test_logs_download_as_one_dated_text_file(tmp_path: Path) -> None:

@@ -54,6 +54,14 @@ describe("createI18n", () => {
     expect(() => i18n.t(key("nope"))).toThrow("missing message")
   })
 
+  it("reports whether a key built at runtime has a message", () => {
+    const i18n = createI18n({ locale: "fr", catalog: french, fallback: english })
+    expect(i18n.has("greeting")).toBe(true)
+    expect(i18n.has("onlyEnglish")).toBe(true)
+    expect(i18n.has("rules")).toBe(true)
+    expect(i18n.has("absent")).toBe(false)
+  })
+
   it("leaves the placeholder and warns once outside tests", () => {
     vi.stubEnv("MODE", "production")
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined)

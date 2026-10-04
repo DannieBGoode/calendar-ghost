@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from calendar_sync.application.activity import OperationsQueries
 from calendar_sync.interfaces.api.dependencies import app_services, require_admin
 from calendar_sync.interfaces.api.schemas import IncidentResponse
+from calendar_sync.interfaces.api.status_payload import message_response
 
 
 class IncidentServices(Protocol):
@@ -36,6 +37,7 @@ def list_incidents(services: Services) -> list[IncidentResponse]:
             resolved_at=incident.resolved_at,
             resolution=incident.resolution,
             account_id=incident.account_id,
+            message=message_response(incident.message),
         )
         for incident in services.operations.incidents()
     ]

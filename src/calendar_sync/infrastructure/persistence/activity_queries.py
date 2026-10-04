@@ -28,6 +28,7 @@ from calendar_sync.application.activity import (
     RecordedTime,
     activity_category,
 )
+from calendar_sync.application.ports import IncidentMessage
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.model import SyncAction, SyncReason
 from calendar_sync.infrastructure.persistence.connections import open_connection
@@ -297,7 +298,7 @@ class SqliteOperationsQueries:
             rows = connection.execute(
                 """
                 SELECT id, rule_id, account_id, category, state, summary, opened_at,
-                    updated_at, resolved_at, resolution
+                    updated_at, resolved_at, resolution, message_code, message_params
                 FROM incidents ORDER BY state ASC, updated_at DESC LIMIT 100
                 """
             ).fetchall()
@@ -313,6 +314,7 @@ class SqliteOperationsQueries:
                 resolved_at=row["resolved_at"],
                 resolution=row["resolution"],
                 account_id=row["account_id"],
+                message=_incident_message(row["message_code"], row["message_params"]),
             )
             for row in rows
         ]
@@ -328,6 +330,22 @@ def _reading(database_path: Path) -> Iterator[sqlite3.Connection]:
 
 def _text(value: object) -> str | None:
     return None if value is None else str(value)
+
+
+def _incident_message(code: str | None, params: str | None) -> IncidentMessage | None:
+    """The stored message, or None when recorded before messages or with unreadable params."""
+    if code is None:
+        return None
+    try:
+        parsed = json.loads(params) if params else {}
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict) or not all(
+        (isinstance(value, str | int) and not isinstance(value, bool)) or value is None
+        for value in parsed.values()
+    ):
+        return None
+    return IncidentMessage(code, parsed)
 
 
 @lru_cache(maxsize=4096)

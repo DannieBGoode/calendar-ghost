@@ -8,6 +8,8 @@ export type I18n = {
   /** The tag formats use, such as "en-GB" when the browser prefers it (see `resolveFormatLocale`). */
   formatLocale: string
   t: (key: MessageKey, params?: MessageParams) => string
+  /** Whether a key built from server data, such as an error code, has a message. */
+  has: (key: string) => key is MessageKey
   format: Formatters
 }
 
@@ -81,5 +83,6 @@ export function createI18n({ locale, formatLocale = locale, catalog, fallback = 
       .join("")
   }
 
-  return { locale, formatLocale, t, format: createFormatters(formatLocale, t, locale) }
+  const has = (key: string): key is MessageKey => resolve(key) !== undefined
+  return { locale, formatLocale, t, has, format: createFormatters(formatLocale, t, locale) }
 }

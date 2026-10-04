@@ -14,6 +14,7 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     Clock,
+    IncidentMessage,
     IncidentNotifications,
     IncidentReport,
     IncidentRepository,
@@ -46,6 +47,16 @@ _FAILURE_SUMMARIES = {
 class FailureResponse:
     degrade: bool
     incident: IncidentReport | None
+
+
+def _failure_message(code: str, failure: ProviderFailure) -> IncidentMessage:
+    return IncidentMessage(
+        code,
+        {
+            "kind": failure.kind.value,
+            "provider": failure.provider.value if failure.provider else None,
+        },
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,7 +96,8 @@ class RuleHealthPolicy:
             rule_id,
             failure.kind.value,
             self.summary(failure),
-            failure.account_id,
+            account_id=failure.account_id,
+            message=_failure_message("provider_failure", failure),
         )
 
     def after_full_pass(self, rule_id: SyncRuleId, persisting: int) -> IncidentReport | None:
@@ -99,6 +111,7 @@ class RuleHealthPolicy:
             rule_id,
             "conflict",
             f"{events} could not be synced and {verb} still blocked at the daily check.",
+            message=IncidentMessage("events_still_blocked", {"count": persisting}),
         )
 
     def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> IncidentReport:
@@ -107,7 +120,8 @@ class RuleHealthPolicy:
             rule_id,
             failure.kind.value,
             f"Rule Removal stopped: {self.summary(failure)}",
-            failure.account_id,
+            account_id=failure.account_id,
+            message=_failure_message("removal_stopped", failure),
         )
 
 

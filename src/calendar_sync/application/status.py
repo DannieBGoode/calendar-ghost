@@ -14,7 +14,12 @@ from calendar_sync.application.activity import (
 )
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.locking import RuleWorkKind
-from calendar_sync.application.ports import Clock, SchedulerHeartbeat, SchedulerProgress
+from calendar_sync.application.ports import (
+    Clock,
+    IncidentMessage,
+    SchedulerHeartbeat,
+    SchedulerProgress,
+)
 from calendar_sync.application.rules import ListSyncRules, SyncRuleSummary
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 
@@ -75,6 +80,8 @@ class Problem:
     summary: str
     """Operational wording only; never event content."""
     since: datetime | None = None
+    message: IncidentMessage | None = None
+    """The message of the Incident behind this problem, for the Web UI to translate (ADR 0026)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -233,6 +240,7 @@ def _stopped(
                     rule.id.value,
                     incident.summary,
                     datetime.fromisoformat(incident.opened_at),
+                    incident.message,
                 )
             )
         elif lost_account:
@@ -292,11 +300,18 @@ def _incident_problems(
     waits: list[Problem] = []
     for group in _group_incidents(incidents, named, block_rule_ids):
         incident = _primary_incident(group, now)
-        opened = datetime.fromisoformat(incident.opened_at)
-        if _is_waiting(incident, now):
-            waits.append(Problem(ProblemKind.WAITING, incident.rule_id, incident.summary, opened))
+        waiting = _is_waiting(incident, now)
+        problem = Problem(
+            ProblemKind.WAITING if waiting else ProblemKind.REVIEW,
+            incident.rule_id,
+            incident.summary,
+            datetime.fromisoformat(incident.opened_at),
+            incident.message,
+        )
+        if waiting:
+            waits.append(problem)
         else:
-            reviews.append(Problem(ProblemKind.REVIEW, incident.rule_id, incident.summary, opened))
+            reviews.append(problem)
     return reviews, waits
 
 

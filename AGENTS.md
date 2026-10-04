@@ -161,7 +161,8 @@ change under `web/`, run the frontend build and include the regenerated static a
 commit.
 
 User-visible Web UI text lives in `web/src/i18n/locales/en/` and renders through `t()`; dates and
-numbers go through `i18n.format`. Never use em dashes.
+numbers go through `i18n.format`. Server text the UI shows carries a stable code: raise API errors
+through `interfaces/api/problems.py` and give Incidents a message (ADR 0026). Never use em dashes.
 
 ## Testing
 
