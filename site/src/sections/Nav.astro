@@ -38,6 +38,18 @@ const links = [
   </div>
 </header>
 
+<script>
+  // Progressive enhancement: without it, the phone menu stays open (its native behavior) until
+  // the visitor taps elsewhere. With it, picking a link closes the menu right away.
+  for (const details of document.querySelectorAll<HTMLDetailsElement>("details.nav-narrow")) {
+    for (const link of details.querySelectorAll("a")) {
+      link.addEventListener("click", () => {
+        details.open = false
+      })
+    }
+  }
+</script>
+
 <style>
   .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in oklch, var(--background), transparent 12%); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
   .nav-inner { display: flex; align-items: center; justify-content: space-between; min-height: 4rem; gap: 1rem; }
