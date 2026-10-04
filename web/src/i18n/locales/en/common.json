@@ -30,6 +30,83 @@
   "apiError": {
     "generic": "The request could not be completed.",
     "network": "The browser could not reach Calendar Ghost.",
-    "unreadableResponse": "The service returned an unreadable response."
+    "unreadableResponse": "The service returned an unreadable response.",
+    "account_access_check_failed": "Calendar Ghost could not check this account's calendars. Try again shortly.",
+    "account_disconnected": "This account is disconnected. Reauthorize it in Settings first.",
+    "account_management_unavailable": "Managing accounts needs the installation master key to be configured.",
+    "account_must_be_disconnected": "Disconnect this account before you delete it permanently.",
+    "account_not_found": "This account is no longer connected. Reload to see the current accounts.",
+    "account_required": "Connect both accounts before you create a rule between their calendars.",
+    "activity_entry_not_found": "This Activity entry no longer exists. It may have been cleared.",
+    "activity_rule_removed": "This entry's rule was removed, so its events cannot be looked up.",
+    "authorization_failed": "Google did not authorize the account. Try connecting it again.",
+    "authorization_not_configured": "This calendar provider is not configured on this installation.",
+    "bad_request": "The request could not be completed.",
+    "conflict": "That change conflicts with the current state. Reload and try again.",
+    "credentials_required": "Sign in again, or use a valid Integration Token.",
+    "dependency_failed": "A calendar provider did not respond as expected. Try again shortly.",
+    "duplicate_relationship": "A rule from this calendar to that calendar already exists.",
+    "event_inspection_unavailable": "Looking up events needs a configured calendar provider and the installation master key.",
+    "file_logging_off": "File logging is off, so there are no log files to download or delete.",
+    "gone": "That item is no longer available.",
+    "incorrect_password": "That password is incorrect.",
+    "insufficient_scope": "This Integration Token is not allowed to read Installation Status.",
+    "integration_token_not_found": "This Integration Token no longer exists. Reload to see the current tokens.",
+    "invalid_activity_age": "Choose one of the offered ages for clearing Activity.",
+    "invalid_authorization_state": "This sign-in link expired or was already used. Start again from Settings.",
+    "invalid_integration_token_name": "Give the token a name of 1 to 80 characters, without line breaks or other control characters.",
+    "invalid_request": "Some of the information is not valid. Check it and try again.",
+    "invalid_request_string_too_long": {
+      "one": "Use at most {count} character.",
+      "other": "Use at most {count} characters."
+    },
+    "invalid_request_string_too_short": {
+      "one": "Use at least {count} character.",
+      "other": "Use at least {count} characters."
+    },
+    "invalid_rule": "This rule is not valid. Check its calendars and settings.",
+    "invalid_state_transition": "This rule cannot change to that state right now. Reload and try again.",
+    "mcp_not_running": "The MCP server is starting or stopping. Try again in a moment.",
+    "method_not_allowed": "This page is out of date. Reload it and try again.",
+    "not_a_calendar_change": "The calendars are unchanged. To change what the rule does, edit its settings instead.",
+    "not_found": "That item no longer exists. Reload to see the current state.",
+    "oauth_result_missing": "Google did not return a sign-in result. Try connecting the account again.",
+    "password_policy": "Choose a password of at least 12 characters.",
+    "provider_failed": "{Provider} reported a problem. Try again shortly.",
+    "provider_not_configured": "No calendar provider is configured on this installation.",
+    "removal_interrupted": "Removal stopped after {processed} of {total} projections because {provider} reported a problem. Retry to continue.",
+    "removal_requires_authorization": "Reauthorize the destination account before deleting projections, or keep them as detached events.",
+    "removal_requires_provider": "Deleting projections needs a configured calendar provider and the installation master key.",
+    "replacement_interrupted": "The new draft rule was created, but removing the previous rule stopped after {processed} of {total} projections. Open the previous rule to retry its removal.",
+    "request_failed": "The request could not be completed.",
+    "rule_execution_unavailable": "Running rules needs a configured calendar provider and the installation master key.",
+    "rule_not_executable": "This rule cannot run in its current state. Reload to see what it is doing.",
+    "rule_not_found": "This rule no longer exists.",
+    "service_unavailable": "This part of Calendar Ghost is not configured yet.",
+    "session_required": "Your session ended. Sign in again.",
+    "setup_complete": "Calendar Ghost is already set up. Sign in instead.",
+    "source_change_not_found": "This entry recorded no source change.",
+    "source_event_not_found": "This entry has no source event to show.",
+    "storage_busy": "Old Activity was cleared, but its space could not be reclaimed while a rule is synchronizing. Try again when it finishes."
+  },
+  "provider": {
+    "google": "Google Calendar",
+    "unknown": "the calendar provider",
+    "unknownStart": "The calendar provider"
+  },
+  "incident": {
+    "failure": {
+      "authentication": "Authorization for {provider} expired",
+      "authorization": "Access to {provider} was denied",
+      "rate_limit": "{Provider} is limiting requests",
+      "temporary": "{Provider} is temporarily unavailable",
+      "permanent": "{Provider} rejected synchronization",
+      "infrastructure": "Local synchronization infrastructure failed"
+    },
+    "eventsStillBlocked": {
+      "one": "{count} event could not be synced and was still blocked at the daily check.",
+      "other": "{count} events could not be synced and were still blocked at the daily check."
+    },
+    "removalStopped": "Rule Removal stopped: {reason}"
   }
 }

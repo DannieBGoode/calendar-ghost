@@ -31,6 +31,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Installation Status notices a scheduler that stopped running passes and a rule that has not
   synced in over a day.
 - The Web UI is ready for translation: catalogs, plural rules, and locale-aware dates and numbers.
+- Every Web API error body carries a stable `code` and `params` beside its unchanged English
+  `detail` and status ([ADR 0026](docs/adr/0026-translate-the-web-ui-through-message-catalogs.md)).
+  The MCP endpoint's HTTP refusals use the same shape.
+- Incidents record what they say as a message code and parameters (migration 19), returned as
+  `message` by the Incidents API and on each Installation Status problem an Incident explains.
 
 ### Changed
 
@@ -55,7 +60,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   for the explanation.
 - Error alerts no longer show the browser's own wording: a request that cannot reach the service
   says "The browser could not reach Calendar Ghost.", and other unexpected failures say "The request
-  could not be completed." Server details and request validation messages still show as sent.
+  could not be completed."
+- Error alerts explain a known server error, including a rejected field, in a full sentence of the
+  Web UI's language, such as "That password is incorrect." for a wrong password. The server's
+  English detail shows only for an error this version has no message for. Incidents and the Overview's problem sentences
+  render each Incident's message in the Web UI's language, keeping the stored summary for
+  Incidents recorded earlier.
 - The Overview hero says each thing once: the headline gives the state, the detail explains it, the
   facts show running rules and the last sync, and the ghost reacts in a few words. The ghost is
   filled with its state's color, and its speech bubble sits beside it at eye level on every screen

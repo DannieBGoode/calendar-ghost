@@ -19,6 +19,7 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     ProviderFailure,
     ProviderFailureKind,
+    RemovalInterrupted,
 )
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
@@ -201,6 +202,25 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
                 "2026-08-30T10:00:00+00:00",
             ),
         )
+        connection.execute(
+            """
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at, message_code, message_params
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
+            """,
+            (
+                "incident-2",
+                "provider:rule-2",
+                "rule-1",
+                "rate_limit",
+                "Google Calendar is limiting requests",
+                "2026-08-30T09:00:00+00:00",
+                "2026-08-30T09:00:00+00:00",
+                "provider_failure",
+                '{"kind": "rate_limit", "provider": "google"}',
+            ),
+        )
 
     app = create_app(container)
     with TestClient(app) as client:
@@ -209,12 +229,18 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
 
         activity = client.get("/api/v1/audit-entries").json()
         incidents = client.get("/api/v1/incidents").json()
+        by_id = {incident["id"]: incident for incident in incidents}
 
         assert activity[0]["action"] == "create"
         assert activity[0]["event"] is None
         assert incidents[0]["summary"] == "Google authorization expired"
         assert (incidents[0]["resolved_at"], incidents[0]["resolution"]) == (None, None)
         assert incidents[0]["account_id"] is None
+        assert by_id["incident-1"]["message"] is None
+        assert by_id["incident-2"]["message"] == {
+            "code": "provider_failure",
+            "params": {"kind": "rate_limit", "provider": "google"},
+        }
 
 
 def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: Path) -> None:
@@ -225,11 +251,8 @@ def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: P
         assert client.get("/api/v1/dashboard").status_code == 200
 
         assert client.delete("/api/v1/session").status_code == 204
-        assert client.get("/api/v1/dashboard").status_code == 401
-        assert (
-            client.post("/api/v1/session", json={"password": "this password is wrong"}).status_code
-            == 401
-        )
+        unauthorized = client.get("/api/v1/dashboard")
+        wrong_password = client.post("/api/v1/session", json={"password": "this password is wrong"})
         assert (
             client.post(
                 "/api/v1/session", json={"password": "correct horse battery staple"}
@@ -237,6 +260,11 @@ def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: P
             == 200
         )
         assert client.get("/api/v1/dashboard").status_code == 200
+
+    assert unauthorized.status_code == 401
+    assert unauthorized.json()["code"] == "session_required"
+    assert wrong_password.status_code == 401
+    assert wrong_password.json()["code"] == "incorrect_password"
 
 
 def test_admin_setup_is_single_use_and_secure_cookie_setting_is_honored(tmp_path: Path) -> None:
@@ -288,6 +316,7 @@ def test_rule_validation_rejects_unknown_policy_same_endpoint_and_duplicate(
         assert same_endpoint.status_code == 422
         assert first.status_code == 201
         assert duplicate.status_code == 409
+        assert duplicate.json()["code"] == "duplicate_relationship"
 
 
 def test_rules_are_refused_for_accounts_this_installation_does_not_have(
@@ -322,9 +351,14 @@ def test_google_routes_report_unconfigured_installation(tmp_path: Path) -> None:
             "configured": False,
             "redirect_uri": None,
         }
-        assert client.get("/api/v1/oauth/google/start").status_code == 503
+        oauth_start = client.get("/api/v1/oauth/google/start")
         assert client.get("/api/v1/accounts").json() == []
-        assert client.post("/api/v1/rules/missing/preview").status_code == 503
+        preview = client.post("/api/v1/rules/missing/preview")
+
+    assert oauth_start.status_code == 503
+    assert oauth_start.json()["code"] == "account_management_unavailable"
+    assert preview.status_code == 503
+    assert preview.json()["code"] == "rule_execution_unavailable"
 
 
 def test_google_configuration_reports_redirect_uri_to_administrators(tmp_path: Path) -> None:
@@ -438,9 +472,11 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
     assert disconnected.json()["authorized_at"] is None
     assert disconnected_calendars.status_code == 409
     assert "reauthorize" in disconnected_calendars.json()["detail"]
+    assert disconnected_calendars.json()["code"] == "account_disconnected"
     assert disconnected_verification.status_code == 409
     assert repeated.status_code == 200
     assert missing.status_code == 404
+    assert missing.json()["code"] == "account_not_found"
     assert dashboard.json()["connected_accounts"] == 0
     assert dashboard.json()["disconnected_accounts"] == 1
     # rule-1, validated-rule, and destination-rule degrade; the paused rule stays paused.
@@ -589,9 +625,11 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
 
     assert connected_delete.status_code == 409
     assert "disconnect" in connected_delete.json()["detail"]
+    assert connected_delete.json()["code"] == "account_must_be_disconnected"
     assert disconnected.status_code == 200
     assert deleted.status_code == 204
     assert repeated.status_code == 404
+    assert repeated.json()["code"] == "account_not_found"
     with sqlite3.connect(database) as connection:
         assert (
             connection.execute(
@@ -891,10 +929,10 @@ def test_discovered_calendars_report_googles_original_access_role(
 
 
 @pytest.mark.parametrize(
-    ("failure", "expected_status"),
+    ("failure", "expected_status", "expected_code"),
     [
-        (ConnectedAccountNotFound("missing account"), 404),
-        (AccountAccessCheckFailed("provider unavailable"), 424),
+        (ConnectedAccountNotFound("missing account"), 404, "account_not_found"),
+        (AccountAccessCheckFailed("provider unavailable"), 424, "account_access_check_failed"),
     ],
 )
 def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
@@ -902,6 +940,7 @@ def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
     monkeypatch: pytest.MonkeyPatch,
     failure: Exception,
     expected_status: int,
+    expected_code: str,
 ) -> None:
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
@@ -917,6 +956,7 @@ def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
 
     assert response.status_code == expected_status
     assert response.json()["detail"] == str(failure)
+    assert response.json()["code"] == expected_code
 
 
 def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
@@ -996,6 +1036,7 @@ def test_google_oauth_callback_requires_an_authorization_result(tmp_path: Path) 
 
     assert response.status_code == 400
     assert "authorization result" in response.json()["detail"]
+    assert response.json()["code"] == "oauth_result_missing"
 
 
 def test_google_oauth_missing_calendar_permission_returns_to_settings(
@@ -1202,6 +1243,7 @@ def test_rule_details_include_policy_state_mapping_count_and_outcomes(tmp_path: 
     assert details.json()["last_sync"] is None
     assert details.json()["last_reconciliation"] is None
     assert missing.status_code == 404
+    assert missing.json()["code"] == "rule_not_found"
 
 
 RESPONSES = {"tentative_events": "mark", "unanswered_invitations": "as_tentative"}
@@ -1242,11 +1284,13 @@ def test_policy_edit_pauses_rule_and_blocks_enable_until_previewed(tmp_path: Pat
     assert edited.json()["unanswered_invitations"] == "wait"
     assert edited.json()["reprojection_required"] is True
     assert enable.status_code == 409
+    assert enable.json()["code"] == "invalid_state_transition"
     assert unknown.status_code == 422
     assert unknown_response.status_code == 422
     # Omitting a choice must not quietly reset it to the default.
     assert omitted_responses.status_code == 422
     assert missing.status_code == 404
+    assert missing.json()["code"] == "rule_not_found"
 
 
 def test_policy_edit_is_rejected_while_removal_is_incomplete(tmp_path: Path) -> None:
@@ -1274,10 +1318,13 @@ def test_rule_removal_requires_an_explicit_choice_and_detach_removes_the_rule(
     assert unspecified.status_code == 422
     assert invalid.status_code == 422
     assert delete_without_google.status_code == 503
+    assert delete_without_google.json()["code"] == "removal_requires_provider"
     assert detached.status_code == 200
     assert detached.json() == {"deleted": 0, "detached": 0, "conflicts": 0}
     assert after.status_code == 404
+    assert after.json()["code"] == "rule_not_found"
     assert missing.status_code == 404
+    assert missing.json()["code"] == "rule_not_found"
 
 
 def test_delete_removal_is_blocked_for_a_disconnected_destination(tmp_path: Path) -> None:
@@ -1310,6 +1357,34 @@ def test_delete_removal_is_blocked_for_a_disconnected_destination(tmp_path: Path
 
     assert blocked.status_code == 409
     assert state == "paused"
+
+
+def test_rule_removal_reports_an_interrupted_removal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    failure = ProviderFailure(ProviderFailureKind.RATE_LIMIT, "429", provider=ProviderKind.GOOGLE)
+
+    def interrupted(
+        self: RemoveSyncRule, rule_id: SyncRuleId, handling: ProjectionHandling
+    ) -> None:
+        raise RemovalInterrupted(2, 3, failure)
+
+    monkeypatch.setattr(RemoveSyncRule, "execute", interrupted)
+
+    with _client_with_rule(tmp_path) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        response = client.delete("/api/v1/rules/rule-1?projections=delete")
+
+    assert response.status_code == 424
+    body = response.json()
+    assert body["code"] == "removal_interrupted"
+    assert body["params"] == {
+        "processed": 2,
+        "remaining": 3,
+        "total": 5,
+        "provider": "google",
+        "kind": "rate_limit",
+    }
 
 
 def test_replacement_creates_a_new_draft_and_rejects_invalid_calendars(tmp_path: Path) -> None:
@@ -2024,7 +2099,9 @@ def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
 
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
-        assert client.get("/api/v1/audit-entries/1/event").status_code == 503
+        unavailable = client.get("/api/v1/audit-entries/1/event")
+        assert unavailable.status_code == 503
+        assert unavailable.json()["code"] == "event_inspection_unavailable"
 
     with TestClient(
         create_app(
@@ -2035,6 +2112,8 @@ def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
         response = client.get("/api/v1/audit-entries/1/event")
         assert response.status_code == 424
         assert "authentication" in response.json()["detail"]
+        assert response.json()["code"] == "provider_failed"
+        assert response.json()["params"] == {"provider": None, "kind": "authentication"}
 
 
 def test_rule_management_entries_are_listed_as_changes(tmp_path: Path) -> None:
@@ -2124,6 +2203,7 @@ def test_single_activity_entry_can_be_opened_directly(tmp_path: Path) -> None:
     assert response.json()["category"] == "changed"
     assert response.json()["destination_event_id"] == "copy-1"
     assert missing.status_code == 404
+    assert missing.json()["code"] == "activity_entry_not_found"
 
 
 def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> None:
@@ -2454,6 +2534,7 @@ def test_activity_event_of_a_removed_rule_reports_gone_without_provider_reads(
             response = client.get("/api/v1/audit-entries/1/event")
             assert response.status_code == 410
             assert "removed" in response.json()["detail"]
+            assert response.json()["code"] == "activity_rule_removed"
     assert provider.requested == []
 
 
@@ -2668,3 +2749,4 @@ def test_calendars_of_a_provider_this_installation_has_not_configured_are_unavai
 
     assert (listed.status_code, verified.status_code) == (503, 503)
     assert listed.json()["detail"] == "Google Calendar is not configured on this installation"
+    assert listed.json()["code"] == "authorization_not_configured"

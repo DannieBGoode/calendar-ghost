@@ -12,7 +12,12 @@ from calendar_sync.application.activity import (
     OperationsOverview,
 )
 from calendar_sync.application.locking import RuleWork, RuleWorkKind
-from calendar_sync.application.ports import RuleRunOutcome, RunKind, SchedulerProgress
+from calendar_sync.application.ports import (
+    IncidentMessage,
+    RuleRunOutcome,
+    RunKind,
+    SchedulerProgress,
+)
 from calendar_sync.application.rules import SyncRuleSummary
 from calendar_sync.application.status import (
     InstallationHealth,
@@ -217,6 +222,27 @@ def test_a_degraded_rule_is_stopped_and_names_its_incident() -> None:
     assert status.problems[0].since == NOW - timedelta(hours=1)
     assert status.rules[0].problem == status.problems[0]
     assert status.summary == "Personal → Work: Calendar provider authorization expired."
+
+
+def test_problems_from_an_incident_carry_its_message() -> None:
+    message = IncidentMessage("provider_failure", {"kind": "authentication", "provider": "google"})
+    stopped = replace(_incident("rule-1", "authentication"), message=message)
+    waiting = replace(_incident("rule-2", "rate_limit"), message=message)
+    status = _assess(
+        [_summary(_rule(state=SyncRuleState.DEGRADED)), _summary(_rule("rule-2"))],
+        incidents=(stopped, waiting),
+    )
+    assert [(problem.kind, problem.message) for problem in status.problems] == [
+        (ProblemKind.STOPPED, message),
+        (ProblemKind.WAITING, message),
+    ]
+
+
+def test_problems_without_an_incident_have_no_message() -> None:
+    status = assess_installation(
+        [_summary(_rule(state=SyncRuleState.REMOVING))], _overview(), (), TICKING, NOW
+    )
+    assert status.problems[0].message is None
 
 
 @pytest.mark.parametrize("side", ["personal-account", "work-account"])

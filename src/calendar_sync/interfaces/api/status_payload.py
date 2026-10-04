@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from calendar_sync import __version__
+from calendar_sync.application.ports import IncidentMessage
 from calendar_sync.application.status import (
     InstallationStatus,
     Problem,
@@ -12,6 +13,7 @@ from calendar_sync.application.status import (
 )
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 from calendar_sync.interfaces.api.schemas import (
+    IncidentMessageResponse,
     ProblemResponse,
     SchedulerResponse,
     StatusCalendarResponse,
@@ -22,12 +24,19 @@ from calendar_sync.interfaces.api.schemas import (
 )
 
 
+def message_response(message: IncidentMessage | None) -> IncidentMessageResponse | None:
+    if message is None:
+        return None
+    return IncidentMessageResponse(code=message.code, params=dict(message.params))
+
+
 def problem_response(problem: Problem) -> ProblemResponse:
     return ProblemResponse(
         kind=problem.kind.value,
         rule_id=problem.rule_id,
         summary=problem.summary,
         since=problem.since.isoformat() if problem.since else None,
+        message=message_response(problem.message),
     )
 
 

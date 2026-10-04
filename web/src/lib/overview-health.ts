@@ -86,9 +86,9 @@ export function ruleProblemsOf(
   })
 }
 
-/** The server's summary, then when the problem began or the rule last synced. */
+/** What the problem says, then when it began or the rule last synced. */
 function problemDetail(i18n: I18n, problem: ServerProblem, now: number): string {
-  // The server writes problem summaries in English until Incident messages exist.
+  // A problem an Incident explains carries its message; the others keep the server's English.
   const summary = sentence(incidentText(i18n, problem))
   if (!problem.since) return summary
   const key = problem.kind === "overdue" ? "overview.health.problemLastSync" : "overview.health.problemFirstSeen"

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
 from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
 from calendar_sync.interfaces.api.dependencies import app_services, set_session_cookie
+from calendar_sync.interfaces.api.problems import problem_from
 from calendar_sync.interfaces.api.routes.session import SessionServices
 from calendar_sync.interfaces.api.schemas import (
     PasswordRequest,
@@ -29,7 +30,7 @@ def create_admin(
     try:
         services.administrator.create_admin(request.password)
     except (AdminAlreadyConfigured, PasswordPolicyViolation) as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
     session = services.administrator.authenticate(request.password)
     assert session is not None
     set_session_cookie(response, session.token, services.secure_cookies)

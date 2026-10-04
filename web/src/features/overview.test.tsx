@@ -67,26 +67,31 @@ const rule: RuleSummary = {
   running: null,
 }
 
-// The server writes problem summaries in English until Incident messages exist, so they are data.
+// A problem an Incident explains carries its message, which the Overview translates; its stored
+// summary differs so a test that finds the message's sentence proves it was translated.
 const providerFailure: ServerProblem = {
   kind: "review",
   rule_id: "rule-1",
-  summary: "Access to Google Calendar was denied",
+  summary: "Stored summary: access denied",
   since: justNow(),
+  message: { code: "provider_failure", params: { kind: "authorization", provider: "google" } },
 }
+// Other problems have no code yet, so their English summaries are data.
 const overdue: ServerProblem = {
   kind: "overdue",
   rule_id: "rule-1",
   summary: "This rule has not synced in over a day",
   since: justNow(),
+  message: null,
 }
 const stalled: ServerProblem = {
   kind: "stalled",
   rule_id: null,
   summary: "The scheduler has not run recently",
   since: justNow(),
+  message: null,
 }
-const SERVER_TEXT = [providerFailure.summary, overdue.summary, stalled.summary]
+const SERVER_TEXT = [overdue.summary, stalled.summary]
 
 const repeatedChange: RecentChange = {
   entry: {
@@ -217,7 +222,7 @@ async function renderOverview(i18n: I18n, scenario: Scenario) {
 }
 
 describe("OverviewView", () => {
-  it("puts an open Incident's summary in the rule's problem sentence", async () => {
+  it("puts what an open Incident says in the rule's problem sentence", async () => {
     const { container } = await renderOverview(testI18n(), {
       dashboard: attentionDashboard,
       rules: [rule],
@@ -225,9 +230,9 @@ describe("OverviewView", () => {
     })
     expect(container.querySelector("#health-title")?.textContent).toBe("A rule needs a look")
     expect(container.querySelector(".health-hero")?.textContent).toContain("Family → Work")
-    expect(container.querySelector(".health-hero-detail")?.textContent).toContain(
-      "Access to Google Calendar was denied",
-    )
+    const detail = container.querySelector(".health-hero-detail")?.textContent
+    expect(detail).toContain("Access to Google Calendar was denied")
+    expect(detail).not.toContain("Stored summary")
     expect(container.querySelector(".activity-happened-suffix")?.textContent).toContain("3 times since")
   })
 
@@ -249,7 +254,7 @@ describe("OverviewView", () => {
         recentChanges: [repeatedChange],
       })
       // The recent change's event time is formatted by Intl, so its month, weekday, and AM/PM are data,
-      // and the server sends problem summaries in English.
+      // and the server sends the summaries of problems without a message in English.
       expect(untranslatedText(container, [...FIXTURE_TEXT, ...dateWords(), ...SERVER_TEXT])).toEqual([])
       act(() => root?.unmount())
       root = null

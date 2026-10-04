@@ -127,32 +127,43 @@ function incident(overrides: Partial<Incident>): Incident {
     resolved_at: null,
     resolution: null,
     account_id: accountA.id,
+    message: null,
     ...overrides,
   }
 }
 
-const STOPPED_SUMMARY = "Rule synchronization stopped after 3 failures"
+// Recorded before Incident messages, so the Web UI shows the stored English summary.
+const LEGACY_SUMMARY = "Rule synchronization stopped after 3 failures"
+// The stored summaries of coded Incidents differ from what their messages say, so a test that
+// finds the message's sentence proves it was translated rather than copied.
 const INCIDENTS: Incident[] = [
-  incident({ id: "open-auth" }),
+  incident({
+    id: "open-auth",
+    summary: "Stored summary: access denied",
+    message: { code: "provider_failure", params: { kind: "authorization", provider: "google" } },
+  }),
   incident({
     id: "open-conflict",
     category: "conflict",
-    summary: "2 events could not be synced and were still blocked at the daily check.",
+    summary: "Stored summary: 2 events blocked",
+    message: { code: "events_still_blocked", params: { count: 2 } },
   }),
   incident({
     id: "open-installation",
     rule_id: null,
     category: "infrastructure",
-    summary: "Local synchronization infrastructure failed",
+    summary: "Stored summary: infrastructure",
+    message: { code: "provider_failure", params: { kind: "infrastructure", provider: null } },
   }),
-  incident({ id: "resolved-stopped", state: "resolved", category: "permanent", summary: STOPPED_SUMMARY }),
+  incident({ id: "resolved-legacy", state: "resolved", category: "permanent", summary: LEGACY_SUMMARY }),
   incident({
     id: "resolved-sync",
     state: "resolved",
     category: "temporary",
     resolution: "sync_succeeded",
     resolved_at: at(0, 7),
-    summary: "Google Calendar is temporarily unavailable",
+    summary: "Stored summary: temporary",
+    message: { code: "provider_failure", params: { kind: "temporary", provider: "google" } },
   }),
 ]
 
@@ -206,8 +217,8 @@ const FIXTURE_TEXT = [
   "Dentist",
   "Lunch",
   "Standup",
-  // The server sends Incident summaries in English.
-  ...INCIDENTS.map((item) => item.summary),
+  // An Incident without a message shows its English summary as sent.
+  LEGACY_SUMMARY,
   "DC",
   "PC",
   ...dateWords(),
@@ -298,14 +309,17 @@ async function click(element: Element | null) {
 }
 
 describe("ActivityView", () => {
-  it("shows each Incident's summary and what each entry did", async () => {
+  it("shows what each Incident says and what each entry did", async () => {
     await renderActivity(testI18n())
     await click(container.querySelector(".resolved-incidents-toggle"))
     const text = container.textContent
     expect(container.querySelector("h1")?.textContent).toBe("What your rules did")
     expect(text).toContain("Access to Google Calendar was denied")
     expect(text).toContain("2 events could not be synced and were still blocked at the daily check.")
-    expect(text).toContain(STOPPED_SUMMARY)
+    expect(text).toContain("Local synchronization infrastructure failed")
+    expect(text).toContain("Google Calendar is temporarily unavailable")
+    expect(text).toContain(LEGACY_SUMMARY)
+    expect(text).not.toContain("Stored summary")
     expect(text).toContain("Hide resolved incidents")
     expect(text).toContain("Resolved by a successful sync.")
     expect(text).toContain("Title and description changed in Family, so updated in Work")

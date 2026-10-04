@@ -19,6 +19,7 @@ The script lives outside ``src/``, so it is not part of the Python package or th
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sqlite3
 from collections.abc import Iterator
@@ -600,7 +601,7 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
             )
         # Provider Incidents, worded as the service words them.
         provider_incidents = [
-            (rule.id, "authentication", "Google authorization expired", 60)
+            (rule.id, "authentication", "Authorization for Google Calendar expired", 60)
             for rule in PREVIEW_RULES
             if scenario in _EXPIRED and _uses_personal(rule)
         ]
@@ -611,8 +612,9 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
         connection.executemany(
             """
             INSERT INTO incidents (
-                id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+                id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
+                message_code, message_params
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -623,6 +625,8 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                     summary,
                     (now - timedelta(minutes=minutes_ago)).isoformat(),
                     (now - timedelta(minutes=2)).isoformat(),
+                    "provider_failure",
+                    json.dumps({"kind": category, "provider": "google"}),
                 )
                 for rule_id, category, summary, minutes_ago in provider_incidents
             ],
@@ -631,8 +635,9 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
             connection.execute(
                 """
                 INSERT INTO incidents (
-                    id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at
-                ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+                    id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
+                    message_code, message_params
+                ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
                 """,
                 (
                     "preview-incident",
@@ -642,14 +647,16 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                     "1 event could not be synced and was still blocked at the daily check.",
                     (now - timedelta(hours=1)).isoformat(),
                     (now - timedelta(hours=1)).isoformat(),
+                    "events_still_blocked",
+                    json.dumps({"count": 1}),
                 ),
             )
         connection.executemany(
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary,
-                opened_at, updated_at, resolved_at, resolution
-            ) VALUES (?, ?, ?, ?, 'resolved', ?, ?, ?, ?, ?)
+                opened_at, updated_at, resolved_at, resolution, message_code, message_params
+            ) VALUES (?, ?, ?, ?, 'resolved', ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -662,21 +669,28 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                     (now - timedelta(days=days)).isoformat(),
                     (now - timedelta(days=days)).isoformat(),
                     resolution,
+                    message_code,
+                    message_params,
                 )
-                for rule_id, category, summary, days, resolution in (
+                for rule_id, category, summary, days, resolution, message_code, message_params in (
                     (
                         "preview-personal-work",
                         "temporary",
                         "Google Calendar is temporarily unavailable",
                         1,
                         "sync_succeeded",
+                        "provider_failure",
+                        json.dumps({"kind": "temporary", "provider": "google"}),
                     ),
                     (
+                        # Kept without a message so the legacy English-summary path stays visible.
                         "preview-removed-rule",
                         "permanent",
                         "Google Calendar rejected synchronization",
                         2,
                         "rule_removed",
+                        None,
+                        None,
                     ),
                 )
             ],

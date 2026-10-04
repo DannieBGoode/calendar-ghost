@@ -184,7 +184,7 @@ function mockFetch(rule: RuleDetail | null) {
     const calendarMatch = /^\/api\/v1\/accounts\/(.+)\/calendars$/.exec(path)
     if (calendarMatch) return jsonResponse(calendars[decodeURIComponent(calendarMatch[1] ?? "")] ?? [])
     if (path.startsWith("/api/v1/rules/")) {
-      return rule ? jsonResponse(rule) : jsonResponse({ detail: "Rule not found" }, 404)
+      return rule ? jsonResponse(rule) : jsonResponse({ detail: "sync rule does not exist", code: "rule_not_found", params: {} }, 404)
     }
     return jsonResponse({})
   }

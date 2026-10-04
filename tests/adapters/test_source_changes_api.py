@@ -135,6 +135,7 @@ def test_an_entry_without_a_source_change_has_none(tmp_path: Path) -> None:
         response = client.get(f"/api/v1/audit-entries/{entry_id}/changes")
 
     assert response.status_code == 404
+    assert response.json()["code"] == "source_change_not_found"
 
 
 def test_source_change_values_require_an_administrator(tmp_path: Path) -> None:

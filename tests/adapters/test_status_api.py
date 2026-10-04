@@ -23,6 +23,8 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.interfaces.access import StatusAccess
+from calendar_sync.interfaces.api import dependencies
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import StatusReaderServices, require_status_reader
 from tests.helpers import endpoint, rule
@@ -64,7 +66,9 @@ def test_tokens_are_managed_only_with_an_administrator_session(tmp_path: Path) -
 
         assert listed[0]["name"] == "Uptime Kuma"
         assert "token" not in listed[0]
-        assert client.post("/api/v1/integration-tokens", json={"name": "a\nb"}).status_code == 422
+        invalid = client.post("/api/v1/integration-tokens", json={"name": "a\nb"})
+        assert invalid.status_code == 422
+        assert invalid.json()["code"] == "invalid_integration_token_name"
 
         client.cookies.clear()
         bearer = {"Authorization": f"Bearer {token}"}
@@ -158,7 +162,28 @@ def test_status_refuses_missing_and_invalid_credentials_alike(
 
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
-    assert response.json() == {"detail": "valid credentials required"}
+    assert response.json() == {
+        "detail": "valid credentials required",
+        "code": "credentials_required",
+        "params": {},
+    }
+
+
+def test_a_token_without_the_status_scope_is_forbidden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Every token issued today has the status scope, so the refusal is forced at the decision.
+    monkeypatch.setattr(dependencies, "status_access", lambda *_: StatusAccess.FORBIDDEN)
+    container, _ = _installation(tmp_path)
+    with TestClient(create_app(container)) as client:
+        response = client.get("/api/v1/status", headers={"Authorization": "Bearer cgs_token"})
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "token lacks the required scope",
+        "code": "insufficient_scope",
+        "params": {},
+    }
 
 
 def test_an_invalid_bearer_header_is_refused_beside_a_valid_session(tmp_path: Path) -> None:
@@ -176,7 +201,9 @@ def test_a_revoked_token_and_a_token_in_the_query_string_are_refused(tmp_path: P
         token = _issue(client)
         token_id = client.get("/api/v1/integration-tokens").json()[0]["id"]
         assert client.delete(f"/api/v1/integration-tokens/{token_id}").status_code == 204
-        assert client.delete(f"/api/v1/integration-tokens/{token_id}").status_code == 404
+        missing = client.delete(f"/api/v1/integration-tokens/{token_id}")
+        assert missing.status_code == 404
+        assert missing.json()["code"] == "integration_token_not_found"
         live = _issue(client, "Homepage")
         client.cookies.clear()
 
@@ -332,3 +359,48 @@ def test_the_scheduler_block_says_whether_a_scheduler_is_configured(tmp_path: Pa
         "last_pass_completed_at": None,
         "current_pass_started_at": None,
     }
+
+
+def test_a_problem_from_an_incident_carries_its_message(tmp_path: Path) -> None:
+    container, adapters = _installation(tmp_path)
+    with sqlite3.connect(tmp_path / "test.db") as connection:
+        connection.executemany(
+            """
+            INSERT INTO connected_accounts (
+                id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at
+            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01')
+            """,
+            [
+                ("personal-account", "Personal", "personal@example.test"),
+                ("work-account", "Work", "work@example.test"),
+            ],
+        )
+    with adapters.unit_of_work() as uow:
+        uow.rules.add(rule(state=SyncRuleState.DEGRADED))
+        uow.commit()
+    with sqlite3.connect(tmp_path / "test.db") as connection:
+        connection.execute(
+            """
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
+                message_code, message_params
+            ) VALUES ('incident-1', 'provider:rule-1', 'rule-1', 'authentication', 'open',
+                'Authorization for Google Calendar expired', '2026-10-03T08:00:00+00:00',
+                '2026-10-03T08:00:00+00:00', 'provider_failure',
+                '{"kind": "authentication", "provider": "google"}')
+            """
+        )
+    with TestClient(create_app(container)) as client:
+        _signed_in(client)
+        status: dict[str, Any] = client.get("/api/v1/status").json()
+        dashboard: dict[str, Any] = client.get("/api/v1/dashboard").json()
+
+    message = {
+        "code": "provider_failure",
+        "params": {"kind": "authentication", "provider": "google"},
+    }
+    assert status["problems"][0]["kind"] == "stopped"
+    assert status["problems"][0]["message"] == message
+    assert status["rules"][0]["problem"]["message"] == message
+    assert dashboard["problems"][0]["message"] == message

@@ -150,35 +150,44 @@ class McpGate:
             None,
         )
         if access is StatusAccess.UNAUTHENTICATED:
-            await _json(
+            await _problem(
                 send,
                 401,
-                {"detail": "valid credentials required"},
+                "credentials_required",
+                "valid credentials required",
                 [(b"www-authenticate", b"Bearer")],
             )
             return
         if access is StatusAccess.FORBIDDEN:
-            await _json(send, 403, {"detail": "token lacks the required scope"})
+            await _problem(send, 403, "insufficient_scope", "token lacks the required scope")
             return
         # Stateless mode has no stream to resume, and a GET would hold one open.
         if scope["method"] != "POST":
-            await _json(send, 405, {"detail": "method not allowed"}, [(b"allow", b"POST")])
+            await _problem(
+                send, 405, "method_not_allowed", "method not allowed", [(b"allow", b"POST")]
+            )
             return
         inner = self._endpoint.inner
         if inner is None:
-            await _json(send, 503, {"detail": "the MCP server is starting or stopping"})
+            await _problem(send, 503, "mcp_not_running", "the MCP server is starting or stopping")
             return
         await inner(scope, receive, send)
 
 
 class McpNotFound:
     async def __call__(self, _scope: Scope, _receive: Receive, send: Send) -> None:
-        await _json(send, 404, {"detail": "not found"})
+        await _problem(send, 404, "not_found", "not found")
 
 
-async def _json(
-    send: Send, status: int, body: dict[str, str], headers: list[tuple[bytes, bytes]] | None = None
+async def _problem(
+    send: Send,
+    status: int,
+    code: str,
+    detail: str,
+    headers: list[tuple[bytes, bytes]] | None = None,
 ) -> None:
+    """An HTTP error body shaped like every Web API error (ADR 0026), before MCP is involved."""
+    body = {"detail": detail, "code": code, "params": {}}
     await send(
         {
             "type": "http.response.start",

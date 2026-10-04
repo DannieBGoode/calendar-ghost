@@ -41,6 +41,7 @@ function incident(overrides: Partial<Incident> = {}): Incident {
     resolved_at: null,
     resolution: null,
     account_id: "failed-account",
+    message: null,
     ...overrides,
   }
 }

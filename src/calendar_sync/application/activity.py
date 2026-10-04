@@ -15,7 +15,7 @@ from calendar_sync.application.errors import (
     ActivityRuleRemoved,
     EventInspectionUnavailable,
 )
-from calendar_sync.application.ports import CalendarReader, UnitOfWorkFactory
+from calendar_sync.application.ports import CalendarReader, IncidentMessage, UnitOfWorkFactory
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventId,
@@ -209,6 +209,8 @@ class IncidentSummary:
     """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
     account_id: str | None = None
     """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
+    message: IncidentMessage | None = None
+    """The summary as a code and parameters, when it was recorded (ADR 0026)."""
 
 
 class OperationsQueries(Protocol):

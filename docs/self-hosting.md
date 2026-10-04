@@ -206,6 +206,12 @@ A healthy installation answers like this (shortened):
 - `summary` is one sentence for a dashboard tile.
 - `problems` lists every current problem, most urgent first, each with a `kind` (`stalled`,
   `stopped`, `review`, `overdue`, `blocked`, or `waiting`), the rule it concerns, and a summary.
+  A problem that an Incident explains also has a `message`: the same summary as a stable `code`
+  and `params`, such as `{"code": "provider_failure", "params": {"kind": "rate_limit",
+  "provider": "google"}}`. Every other problem has `"message": null`. Match on `code`, not on the
+  English summary, which can change between releases.
+- `incidents` lists the open Incidents with their English `summary`; its entries carry no
+  `message`.
 - `rules` names each rule by its calendars. A calendar with no name, or whose name is an email
   address or its calendar ID, appears as "Unnamed calendar", so status never reveals one.
 - The answer never contains event content, calendar IDs, account emails, or token data.

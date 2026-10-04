@@ -158,6 +158,14 @@ describe("countFailedConfirmation", () => {
     })
   })
 
+  it("gives the coded reason in the active language", () => {
+    const detail = "Choose 30, 90, 180, or 365 days"
+    const failure = new ApiError(detail, 422, detail, { code: "invalid_activity_age" })
+    expect(countFailedConfirmation(i18n, failure).body).toBe(
+      "The entries to remove could not be counted: Choose one of the offered ages for clearing Activity.",
+    )
+  })
+
   it("uses a generic reason when the server sent no detail", () => {
     const failure = new ApiError("The request could not be completed.", 422, null)
     expect(countFailedConfirmation(i18n, failure).body).toBe(

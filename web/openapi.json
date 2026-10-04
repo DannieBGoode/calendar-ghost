@@ -746,6 +746,38 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IncidentMessageResponse": {
+        "description": "What an Incident says as a stable code and parameters the Web UI translates (ADR 0026).",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code",
+          "params"
+        ],
+        "title": "IncidentMessageResponse",
+        "type": "object"
+      },
       "IncidentResponse": {
         "properties": {
           "account_id": {
@@ -766,6 +798,16 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentMessageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "opened_at": {
             "title": "Opened At",
@@ -836,7 +878,8 @@
           "updated_at",
           "resolved_at",
           "resolution",
-          "account_id"
+          "account_id",
+          "message"
         ],
         "title": "IncidentResponse",
         "type": "object"
@@ -1147,6 +1190,16 @@
             "title": "Kind",
             "type": "string"
           },
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentMessageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "rule_id": {
             "anyOf": [
               {
@@ -1178,7 +1231,8 @@
           "kind",
           "rule_id",
           "summary",
-          "since"
+          "since",
+          "message"
         ],
         "title": "ProblemResponse",
         "type": "object"

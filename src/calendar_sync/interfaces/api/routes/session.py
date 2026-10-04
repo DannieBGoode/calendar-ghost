@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Protocol
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Response, status
 
 from calendar_sync.application.ports import AdministratorAccess
 from calendar_sync.interfaces.api.dependencies import (
@@ -10,6 +10,7 @@ from calendar_sync.interfaces.api.dependencies import (
     app_services,
     set_session_cookie,
 )
+from calendar_sync.interfaces.api.problems import problem
 from calendar_sync.interfaces.api.schemas import PasswordRequest, SessionResponse
 
 
@@ -28,7 +29,7 @@ router = APIRouter()
 def log_in(request: PasswordRequest, response: Response, services: Services) -> SessionResponse:
     session = services.administrator.authenticate(request.password)
     if session is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "incorrect password")
+        raise problem(status.HTTP_401_UNAUTHORIZED, "incorrect_password", "incorrect password")
     set_session_cookie(response, session.token, services.secure_cookies)
     return SessionResponse(authenticated=True)
 
