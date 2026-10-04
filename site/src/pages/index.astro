@@ -1,17 +1,33 @@
 ---
 import Layout from "../layouts/Layout.astro"
 import { messagesFor } from "../i18n"
-import Hero from "../sections/Hero.astro"
-import Week from "../sections/Week.astro"
+import AppShots from "../sections/AppShots.astro"
 import CrossingSection from "../sections/CrossingSection.astro"
+import Faq from "../sections/Faq.astro"
+import Footer from "../sections/Footer.astro"
+import Hero from "../sections/Hero.astro"
+import HowItWorks from "../sections/HowItWorks.astro"
+import Nav from "../sections/Nav.astro"
+import SelfHost from "../sections/SelfHost.astro"
+import Trust from "../sections/Trust.astro"
+import Week from "../sections/Week.astro"
+import Why from "../sections/Why.astro"
 
 const m = messagesFor(Astro.currentLocale)
 ---
 
 <Layout title={m.meta.title} description={m.meta.description}>
+  <Nav m={m} />
   <main>
     <Hero m={m} />
+    <HowItWorks m={m} />
     <Week m={m} />
     <CrossingSection m={m} />
+    <AppShots m={m} />
+    <Trust m={m} />
+    <SelfHost m={m} />
+    <Why m={m} />
+    <Faq m={m} />
   </main>
+  <Footer m={m} />
 </Layout>

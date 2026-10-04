@@ -1,0 +1,85 @@
+---
+import { SELF_HOST_COMMANDS } from "../content/self-host"
+import type { Messages } from "../i18n"
+import { GUIDE_URL } from "../links"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section id="self-host" class="section" aria-labelledby="self-host-title">
+  <div class="container self-host">
+    <div>
+      <h2 id="self-host-title">{m.selfHost.title}</h2>
+      <p class="lead">{m.selfHost.body}</p>
+      <h3>{m.selfHost.needsTitle}</h3>
+      <ul class="needs">{m.selfHost.needs.map((need) => <li>{need}</li>)}</ul>
+    </div>
+    <div>
+      <h3>{m.selfHost.stepsTitle}</h3>
+      <ol class="commands">
+        {
+          SELF_HOST_COMMANDS.map((command, index) => (
+            <li>
+              <p>{m.selfHost.steps[index]}</p>
+              <div class="command">
+                <code id={`self-host-command-${index}`}>{command}</code>
+                <button
+                  type="button"
+                  class="btn btn-small"
+                  hidden
+                  data-copy={`self-host-command-${index}`}
+                  data-label={m.selfHost.copy}
+                  data-copied={m.selfHost.copied}
+                  data-selected={m.selfHost.selected}
+                >
+                  {m.selfHost.copy}
+                </button>
+              </div>
+            </li>
+          ))
+        }
+      </ol>
+      <p class="note">{m.selfHost.oauthNote}</p>
+      <a class="btn btn-primary" href={GUIDE_URL}>{m.selfHost.guide}</a>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Copy buttons appear only with JavaScript. Without the Clipboard API (plain HTTP on a LAN,
+  // older browsers) the command is selected so the visitor can copy it by hand.
+  for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+    button.hidden = false
+    button.addEventListener("click", async () => {
+      const code = document.getElementById(button.dataset.copy ?? "")
+      if (!code) return
+      try {
+        await navigator.clipboard.writeText(code.textContent ?? "")
+        button.textContent = button.dataset.copied ?? ""
+      } catch {
+        const range = document.createRange()
+        range.selectNodeContents(code)
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        button.textContent = button.dataset.selected ?? ""
+      }
+      window.setTimeout(() => (button.textContent = button.dataset.label ?? ""), 2500)
+    })
+  }
+</script>
+
+<style>
+  .self-host { display: grid; gap: 2.5rem; }
+  @media (min-width: 960px) { .self-host { grid-template-columns: 1fr 1.2fr; } }
+  .needs { padding-left: 1.1rem; color: var(--muted-foreground); }
+  .commands { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: 1rem; }
+  .commands p { margin: 0 0 0.35rem; font-weight: 600; font-size: 0.9375rem; }
+  .command { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.6rem 0.6rem 0.9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .command code { flex: 1; overflow-x: auto; white-space: nowrap; font-size: 0.875rem; }
+  .note { color: var(--muted-foreground); }
+</style>

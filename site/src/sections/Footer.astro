@@ -1,0 +1,34 @@
+---
+import { GhostMark } from "../islands/GhostMark"
+import type { Messages } from "../i18n"
+import { LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../links"
+import LanguagePicker from "./LanguagePicker.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<footer class="footer">
+  <div class="container footer-cta">
+    <GhostMark className="footer-mark" face="sleepy" />
+    <h2>{m.footer.cta}</h2>
+    <a class="btn btn-primary" href="#self-host">{m.hero.primary}</a>
+  </div>
+  <div class="container footer-meta">
+    <p><a href={LICENSE_URL}>{m.footer.license}</a></p>
+    <p><a href={TRADEMARKS_URL}>{m.footer.trademarks}</a> · <a href={REPO_URL}>{m.footer.github}</a></p>
+    <LanguagePicker m={m} />
+    <p>{m.footer.noTrackers}</p>
+  </div>
+</footer>
+
+<style>
+  .footer { border-top: 1px solid var(--border); padding-block: 4rem 2rem; }
+  .footer-cta { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; margin-bottom: 3rem; }
+  .footer-cta :global(.footer-mark) { width: 56px; height: 56px; }
+  .footer-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 2rem; font-size: 0.875rem; color: var(--muted-foreground); }
+  .footer-meta p { margin: 0; }
+</style>

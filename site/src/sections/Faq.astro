@@ -1,0 +1,30 @@
+---
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="section" aria-labelledby="faq-title">
+  <div class="container faq">
+    <h2 id="faq-title">{m.faq.title}</h2>
+    {
+      m.faq.items.map((item) => (
+        <details>
+          <summary>{item.q}</summary>
+          <p>{item.a}</p>
+        </details>
+      ))
+    }
+  </div>
+</section>
+
+<style>
+  .faq { max-width: 48rem; }
+  details { border-bottom: 1px solid var(--border); padding: 1rem 0; }
+  summary { cursor: pointer; font-weight: 650; }
+  details p { margin: 0.6rem 0 0; color: var(--muted-foreground); }
+</style>

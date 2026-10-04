@@ -1,0 +1,31 @@
+---
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section id="features" class="section" aria-labelledby="trust-title">
+  <div class="container">
+    <h2 id="trust-title">{m.trust.title}</h2>
+    <ul class="cards">
+      {
+        m.trust.cards.map((card) => (
+          <li>
+            <h3>{card.title}</h3>
+            <p>{card.body}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .cards { list-style: none; margin: 2rem 0 0; padding: 0; display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
+  .cards li { padding: 1.25rem; border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface); }
+  .cards p { margin: 0; color: var(--muted-foreground); font-size: 0.9375rem; }
+</style>

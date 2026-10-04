@@ -1,0 +1,58 @@
+---
+import { GhostMark } from "../islands/GhostMark"
+import type { Messages } from "../i18n"
+import { REPO_URL } from "../links"
+import LanguagePicker from "./LanguagePicker.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const links = [
+  { href: "#how-it-works", label: m.nav.howItWorks },
+  { href: "#features", label: m.nav.features },
+  { href: "#self-host", label: m.nav.selfHost },
+]
+---
+
+<header class="nav">
+  <div class="container nav-inner">
+    <a class="nav-brand" href="/" aria-label={m.nav.home}>
+      <GhostMark className="nav-mark" />
+      <span>Calendar Ghost</span>
+    </a>
+    <nav class="nav-links" aria-label={m.nav.label}>
+      <ul class="nav-wide">
+        {links.map((link) => <li><a href={link.href}>{link.label}</a></li>)}
+      </ul>
+      <details class="nav-narrow">
+        <summary>{m.nav.menu}</summary>
+        <ul>
+          {links.map((link) => <li><a href={link.href}>{link.label}</a></li>)}
+        </ul>
+      </details>
+      <LanguagePicker m={m} />
+      <a class="btn btn-small" href={REPO_URL}><span aria-hidden="true">★</span> {m.nav.star}</a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in oklch, var(--background), transparent 12%); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; min-height: 4rem; gap: 1rem; }
+  .nav-brand { display: flex; align-items: center; gap: 0.5rem; color: var(--foreground); text-decoration: none; font-weight: 650; }
+  .nav-brand :global(.nav-mark) { width: 28px; height: 28px; }
+  .nav-links { display: flex; align-items: center; gap: 1rem; }
+  .nav-links ul { list-style: none; margin: 0; padding: 0; }
+  .nav-wide { display: flex; gap: 1.25rem; }
+  .nav-links a:not(.btn) { color: var(--muted-foreground); text-decoration: none; font-weight: 600; font-size: 0.9375rem; }
+  .nav-links a:not(.btn):hover { color: var(--foreground); }
+  .nav-narrow { display: none; position: relative; }
+  .nav-narrow summary { cursor: pointer; font-weight: 600; list-style: none; }
+  .nav-narrow ul { position: absolute; right: 0; top: 2rem; padding: 0.75rem 1rem; display: grid; gap: 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); min-width: 12rem; }
+  @media (max-width: 719px) {
+    .nav-wide { display: none; }
+    .nav-narrow { display: block; }
+  }
+</style>
