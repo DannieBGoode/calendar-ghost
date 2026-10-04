@@ -3,7 +3,7 @@
 *Your busy time, everywhere it needs to be.* Self-hosted, single-installation, one-way sync between Google calendars.
 
 A self-hosted, source-authoritative Google Calendar synchronizer. Define a directional rule from
-one calendar to another—including calendars owned by different Google identities—and keep a
+one calendar to another, including calendars owned by different Google identities, and keep a
 privacy-controlled projection synchronized without copying invitations or depending on a hosted
 coordinator.
 
