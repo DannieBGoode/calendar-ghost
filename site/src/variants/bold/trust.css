@@ -47,9 +47,10 @@
   background-position: 0 2.3rem;
 }
 .bold .b-cal-head {
-  display: block; padding: 0.5rem 0.75rem; font-weight: 700; font-size: 0.75rem;
+  display: flex; align-items: center; gap: 0.4rem; height: 2.3rem; padding: 0 0.75rem; font-weight: 700; font-size: 0.75rem;
   border-bottom: 1px solid var(--border); background: var(--background);
 }
+.bold .b-cal-head .avatar { width: 1.25rem; height: 1.25rem; }
 
 /* 1. Fixes itself: the copy is deleted; the ghost puts it back. */
 .bold .b-proof-fix .b-cal { left: 1rem; width: 52%; bottom: 3.6rem; }

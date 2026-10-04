@@ -1,4 +1,5 @@
 ---
+import { avatarUrls } from "../avatars"
 import { Crossing } from "../islands/Crossing"
 import type { Messages } from "../i18n"
 
@@ -18,7 +19,11 @@ const { m } = Astro.props
         {m.crossing.alwaysStays.map((item) => <li>{item}</li>)}
       </ul>
     </div>
-    <Crossing client:visible m={{ crossing: m.crossing, demo: m.demo, ghost: m.ghost, motion: m.motion }} />
+    <Crossing
+      client:visible
+      m={{ crossing: m.crossing, demo: m.demo, ghost: m.ghost, motion: m.motion }}
+      avatars={await avatarUrls()}
+    />
   </div>
 </section>
 

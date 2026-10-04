@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import type { AvatarUrls } from "../avatars"
 import { HAUNTED_STILL_MS, hauntedFrame } from "../demo/haunted"
 import { eventBox } from "../demo/layout"
 import { SAM_WEEK } from "../demo/week"
@@ -20,12 +21,15 @@ export function HauntedWeek({
   motion,
   summary,
   ghostTone = "moss",
+  avatars,
 }: {
   m: Messages["demo"]
   motion: Messages["motion"]
   summary: string
   /** The roaming ghost's tone (default moss, the healthy green). */
   ghostTone?: GhostTone
+  /** Sam's portraits; the work one sits beside the calendar's name (see avatars/index.ts). */
+  avatars?: AvatarUrls
 }) {
   const root = useRef<HTMLDivElement>(null)
   const ghost = useRef<HTMLDivElement>(null)
@@ -88,7 +92,10 @@ export function HauntedWeek({
             <Ghost face={face} tone={ghostTone} look={eyes} alive="loop" size={84} />
           </div>
         </div>
-        <span className="haunt-label">{m.workCalendar}</span>
+        <span className="haunt-label">
+          {avatars ? <img className="avatar" src={avatars.work} alt="" width={64} height={64} /> : null}
+          {m.workCalendar}
+        </span>
       </div>
       <figcaption className="sr-only">{summary}</figcaption>
       <div className="demo-foot">

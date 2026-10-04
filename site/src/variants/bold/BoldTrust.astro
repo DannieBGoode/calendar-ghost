@@ -1,6 +1,7 @@
 ---
 // Built to be trusted: four claims proved by the ghost in small looping scenes (one pause control
 // for all of them), then the other claims as a compact checklist.
+import Avatar from "../../components/Avatar.astro"
 import Icon from "../../components/Icon.astro"
 import "./trust.css"
 import type { Messages } from "../../i18n"
@@ -32,7 +33,7 @@ const previews = [
         <li class="b-proof b-proof-fix">
           <div class="b-scene" aria-hidden="true">
             <div class="b-cal">
-              <span class="b-cal-head">{m.demo.calendars.work}</span>
+              <span class="b-cal-head"><Avatar calendar="work" />{m.demo.calendars.work}</span>
               <span class="cal-event is-busy b-fix-card">{m.demo.busy}</span>
             </div>
             <span class="b-fix-trash"><Icon name="trash" class="b-scene-icon" /></span>
@@ -89,11 +90,11 @@ const previews = [
         <li class="b-proof b-proof-loop">
           <div class="b-scene" aria-hidden="true">
             <div class="b-cal b-loop-from">
-              <span class="b-cal-head">{m.demo.calendars.personal}</span>
+              <span class="b-cal-head"><Avatar calendar="personal" />{m.demo.calendars.personal}</span>
               <span class="cal-event is-personal b-loop-original">{m.demo.events.dentist.title}</span>
             </div>
             <div class="b-cal b-loop-to">
-              <span class="b-cal-head">{m.demo.calendars.work}</span>
+              <span class="b-cal-head"><Avatar calendar="work" />{m.demo.calendars.work}</span>
               <span class="cal-event is-busy b-loop-landed">{m.demo.busy}</span>
             </div>
             <svg class="b-loop-back" viewBox="0 0 200 40" preserveAspectRatio="none" focusable="false">

@@ -4,6 +4,7 @@
 // A page can pass its own section class for spacing; the strip itself needs only the shared
 // tokens.
 import "@fontsource-variable/fraunces/full-italic.css"
+import Avatar from "../components/Avatar.astro"
 import Icon from "../components/Icon.astro"
 import type { Messages } from "../i18n"
 import { Ghost, SpeechBubble } from "../islands/Ghost"
@@ -26,7 +27,6 @@ const previews = [
   { day: m.demo.days[1], time: "12:00 PM" },
   { day: m.demo.days[3], time: "1:00 PM" },
 ]
-const initial = (name: string) => name.charAt(0)
 ---
 
 <section id="how-it-works" class:list={[sectionClass, "how"]} aria-labelledby="how-title">
@@ -42,7 +42,7 @@ const initial = (name: string) => name.charAt(0)
             {
               accounts.map(({ calendar, address }) => (
                 <span class="how-account">
-                  <span class="mock-avatar" data-calendar={calendar}>{initial(m.demo.calendars[calendar])}</span>
+                  <Avatar calendar={calendar} />
                   <span class="how-account-address">{address}</span>
                   <Icon name="circleCheck" class="how-account-ok" />
                 </span>
@@ -56,10 +56,10 @@ const initial = (name: string) => name.charAt(0)
         <li>
           <div class="how-frag how-frag-rule" aria-hidden="true">
             <span class="how-route">
-              <span class="mock-avatar" data-calendar="personal">{initial(m.demo.calendars.personal)}</span>
+              <Avatar calendar="personal" />
               <b>{m.demo.calendars.personal}</b>
               <Icon name="arrowRight" class="how-route-arrow" />
-              <span class="mock-avatar" data-calendar="work">{initial(m.demo.calendars.work)}</span>
+              <Avatar calendar="work" />
               <b>{m.demo.calendars.work}</b>
             </span>
             <span class="how-segment">
@@ -118,7 +118,7 @@ const initial = (name: string) => name.charAt(0)
     border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
     font-size: 0.8125rem; box-shadow: 0 18px 40px -28px color-mix(in oklch, var(--primary), transparent 40%);
   }
-  .how-frag :global(.mock-avatar) { width: 1.6rem; height: 1.6rem; font-size: 0.6875rem; }
+  .how-frag :global(.avatar) { width: 1.75rem; height: 1.75rem; }
   .how-account { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
   .how-account-address { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .how-frag :global(.how-account-ok) { width: 1.05rem; height: 1.05rem; flex: none; color: var(--success-foreground); }

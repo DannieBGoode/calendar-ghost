@@ -173,3 +173,17 @@ test("the app mockups follow the dark color scheme", async ({ browser }) => {
   expect(await background("dark")).toBeLessThan(80)
   expect(await background("light")).toBeGreaterThan(200)
 })
+
+test("calendars show Sam's portraits, never letters", async ({ page }) => {
+  await page.goto("/")
+  // The demos hydrate when they scroll into view; their portraits come with them.
+  for (const demo of [".haunt", ".crossing", ".mock-rules"]) await page.locator(demo).scrollIntoViewIfNeeded()
+  const avatars = page.locator("img.avatar")
+  await expect.poll(() => avatars.count()).toBeGreaterThanOrEqual(9)
+  for (const avatar of await avatars.all()) {
+    await avatar.scrollIntoViewIfNeeded()
+    await expect(avatar).toHaveAttribute("alt", "")
+    await expect.poll(() => avatar.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true)
+  }
+  await expect(page.locator(".mock-avatar")).toHaveCount(0)
+})

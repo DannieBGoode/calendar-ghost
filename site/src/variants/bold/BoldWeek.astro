@@ -1,5 +1,6 @@
 ---
 // The page's one Twilight moment: the Haunted Week at night, where the ghost is the lantern.
+import { avatarUrls } from "../../avatars"
 import { Ghost, SpeechBubble } from "../../islands/Ghost"
 import { HauntedWeek } from "../../islands/HauntedWeek"
 import type { Messages } from "../../i18n"
@@ -23,7 +24,14 @@ const { m } = Astro.props
         <SpeechBubble side="left" className="b-night-bubble">{m.variants.bold.week.ghost}</SpeechBubble>
       </div>
     </div>
-    <HauntedWeek client:visible m={m.demo} motion={m.motion} summary={m.week.summary} ghostTone="mist" />
+    <HauntedWeek
+      client:visible
+      m={m.demo}
+      motion={m.motion}
+      summary={m.week.summary}
+      ghostTone="mist"
+      avatars={await avatarUrls()}
+    />
   </div>
 </section>
 

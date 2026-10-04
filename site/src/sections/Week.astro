@@ -1,4 +1,5 @@
 ---
+import { avatarUrls } from "../avatars"
 import { HauntedWeek } from "../islands/HauntedWeek"
 import type { Messages } from "../i18n"
 
@@ -13,6 +14,6 @@ const { m } = Astro.props
   <div class="container">
     <h2 id="week-title">{m.week.title}</h2>
     <p class="lead">{m.week.body}</p>
-    <HauntedWeek client:visible m={m.demo} motion={m.motion} summary={m.week.summary} />
+    <HauntedWeek client:visible m={m.demo} motion={m.motion} summary={m.week.summary} avatars={await avatarUrls()} />
   </div>
 </section>

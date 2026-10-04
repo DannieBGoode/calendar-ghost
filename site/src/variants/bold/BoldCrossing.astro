@@ -1,5 +1,6 @@
 ---
 // Right after the night band, a close beat: one event, and the choice of what crosses with it.
+import { avatarUrls } from "../../avatars"
 import Icon from "../../components/Icon.astro"
 import { Crossing } from "../../islands/Crossing"
 import type { Messages } from "../../i18n"
@@ -15,7 +16,11 @@ const { m } = Astro.props
   <div class="b-wrap">
     <h2 id="crossing-title">{m.crossing.title}</h2>
     <div class="b-crossing-grid">
-      <Crossing client:visible m={{ crossing: m.crossing, demo: m.demo, ghost: m.ghost, motion: m.motion }} />
+      <Crossing
+        client:visible
+        m={{ crossing: m.crossing, demo: m.demo, ghost: m.ghost, motion: m.motion }}
+        avatars={await avatarUrls()}
+      />
       <div class="b-stays">
         <h3>{m.crossing.alwaysStaysTitle}</h3>
         <ul>

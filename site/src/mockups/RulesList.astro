@@ -1,6 +1,7 @@
 ---
 // The Rules list (web/src/features/rules.tsx): three rules for Sam's calendars, without the app's
 // header, menus, or actions.
+import Avatar from "../components/Avatar.astro"
 import Icon from "../components/Icon.astro"
 import type { Messages } from "../i18n"
 
@@ -28,9 +29,7 @@ const copy = m.app.rules
               <>
                 {side === 1 && <Icon name="arrowRight" class="mock-icon mock-arrow" />}
                 <span class="mock-endpoint">
-                  <span class="mock-avatar" data-calendar={calendar}>
-                    {m.demo.calendars[calendar].slice(0, 1)}
-                  </span>
+                  <Avatar calendar={calendar} />
                   <span class="mock-endpoint-text">
                     <b>{m.demo.calendars[calendar]}</b>
                     <small>{copy.accounts[calendar]}</small>

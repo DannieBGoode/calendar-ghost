@@ -48,9 +48,7 @@
 .mock-health-bubble strong { color: var(--success-foreground); }
 @container (min-width: 40rem) {
   .mock-health-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); min-height: 15rem; }
-  /* The mockup is the size container, so its layout lives one level in. */
-.mock-health-layout { display: grid; align-items: center; }
-.mock-health-copy { padding-bottom: clamp(1.5rem, 4cqi, 2.5rem); }
+  .mock-health-copy { padding-bottom: clamp(1.5rem, 4cqi, 2.5rem); }
   .mock-health-visual { padding: 1.5rem 1.5rem 1.5rem 0; }
 }
 
@@ -66,13 +64,6 @@
 .mock-endpoint-text { display: grid; line-height: 1.3; min-width: 0; }
 .mock-endpoint b { font-size: 0.9375rem; font-weight: 650; }
 .mock-endpoint small { font-size: 0.8125rem; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mock-avatar {
-  display: inline-grid; place-items: center; flex: none; width: 2rem; height: 2rem; border-radius: 50%;
-  font-size: 0.8125rem; font-weight: 700; color: var(--foreground); border: 1px solid var(--event-edge, var(--border));
-}
-.mock-avatar[data-calendar="family"] { --event-edge: var(--event-family-edge); background: var(--event-family); }
-.mock-avatar[data-calendar="personal"] { --event-edge: var(--event-personal-edge); background: var(--event-personal); }
-.mock-avatar[data-calendar="work"] { --event-edge: color-mix(in oklch, var(--primary), transparent 50%); background: var(--primary-soft); }
 .mock-rule-meta { grid-column: 1 / -1; font-size: 0.8125rem; color: var(--muted-foreground); }
 .mock-badge {
   grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; gap: 0.35rem;

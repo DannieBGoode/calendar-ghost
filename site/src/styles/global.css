@@ -45,3 +45,5 @@ a { color: var(--primary); }
 .btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
 .btn-primary:hover { background: color-mix(in oklch, var(--primary), var(--foreground) 12%); }
 .btn-small { padding: 0.4rem 0.8rem; font-size: 0.875rem; }
+/* Sam's portrait for a calendar (components/Avatar.astro), round like the app's account photos. */
+.avatar { display: inline-block; flex: none; width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; }

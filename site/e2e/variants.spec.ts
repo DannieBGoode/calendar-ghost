@@ -143,6 +143,19 @@ for (const variant of VARIANTS) {
       await context.close()
     })
 
+    test("calendars show Sam's portraits, never letters", async ({ page }) => {
+      await page.goto(variant.path)
+      await visitEverything(page)
+      const avatars = page.locator("img.avatar")
+      expect(await avatars.count()).toBeGreaterThan(0)
+      for (const avatar of await avatars.all()) {
+        await avatar.scrollIntoViewIfNeeded()
+        await expect(avatar).toHaveAttribute("alt", "")
+        await expect.poll(() => avatar.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true)
+      }
+      await expect(page.locator(".mock-avatar")).toHaveCount(0)
+    })
+
     test("its section links stay on the page", async ({ page }) => {
       await page.goto(variant.path)
       const hrefs = await page.locator("nav .nav-wide a").evaluateAll((links) => links.map((link) => link.getAttribute("href")))

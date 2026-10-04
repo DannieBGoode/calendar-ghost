@@ -1,4 +1,5 @@
 import { useRef, useState } from "react"
+import type { AvatarUrls } from "../avatars"
 import { crossingFields, type CrossingMode } from "../demo/crossing"
 import type { Messages } from "../i18n"
 import { Ghost, SpeechBubble } from "./Ghost"
@@ -13,7 +14,14 @@ function fieldClass(stays: boolean): string {
 }
 
 /** One event carried by the ghost from Personal to Work; the switch picks what crosses over. */
-export function Crossing({ m }: { m: Pick<Messages, "crossing" | "demo" | "ghost" | "motion"> }) {
+export function Crossing({
+  m,
+  avatars,
+}: {
+  m: Pick<Messages, "crossing" | "demo" | "ghost" | "motion">
+  /** Sam's portraits, shown beside each calendar's name (see avatars/index.ts). */
+  avatars?: AvatarUrls
+}) {
   const stage = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<CrossingMode>("busy")
   const [paused, setPaused] = useState(false)
@@ -47,7 +55,10 @@ export function Crossing({ m }: { m: Pick<Messages, "crossing" | "demo" | "ghost
       <div ref={stage} className="crossing-stage" aria-hidden="true">
         {(["personal", "work"] as const).map((calendar) => (
           <div key={calendar} className={`crossing-cal crossing-${calendar}`}>
-            <header>{m.demo.calendars[calendar]}</header>
+            <header>
+              {avatars ? <img className="avatar" src={avatars[calendar]} alt="" width={64} height={64} /> : null}
+              {m.demo.calendars[calendar]}
+            </header>
             {HOURS.map((hour) => (
               <div key={hour} className="crossing-row">
                 {hour}
