@@ -1,4 +1,6 @@
-FROM node:22-alpine AS web-builder
+# The Web UI bundle is plain JavaScript and CSS, the same for every target platform, so it is built
+# once on the build machine's own platform. Emulating npm for arm64 is slow and can stall.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web-builder
 
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
