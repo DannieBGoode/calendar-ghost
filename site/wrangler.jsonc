@@ -1,0 +1,8 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "calendar-ghost-site",
+  "compatibility_date": "2026-10-01",
+  // Static files only: no Worker script runs at launch.
+  "assets": { "directory": "./dist", "not_found_handling": "404-page" },
+  "routes": [{ "pattern": "calendarghost.com", "custom_domain": true }]
+}

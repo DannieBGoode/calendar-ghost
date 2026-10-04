@@ -1,0 +1,23 @@
+---
+import { GhostMark } from "../islands/GhostMark"
+import Layout from "../layouts/Layout.astro"
+import { messagesFor } from "../i18n"
+import Nav from "../sections/Nav.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<Layout title={m.meta.notFoundTitle} description={m.meta.description} noindex>
+  <Nav m={m} />
+  <main class="container section not-found">
+    <GhostMark className="not-found-mark" face="sleepy" />
+    <h1>{m.notFound.title}</h1>
+    <p class="lead">{m.notFound.body}</p>
+    <a class="btn btn-primary" href="/">{m.notFound.home}</a>
+  </main>
+</Layout>
+
+<style>
+  .not-found { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .not-found :global(.not-found-mark) { width: 96px; height: 96px; margin-bottom: 1rem; }
+</style>
