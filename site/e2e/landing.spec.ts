@@ -179,7 +179,7 @@ test("calendars show Sam's portraits, never letters", async ({ page }) => {
   // The demos hydrate when they scroll into view; their portraits come with them.
   for (const demo of [".haunt", ".crossing", ".mock-rules"]) await page.locator(demo).scrollIntoViewIfNeeded()
   const avatars = page.locator("img.avatar")
-  await expect.poll(() => avatars.count()).toBeGreaterThanOrEqual(9)
+  await expect.poll(() => avatars.count()).toBeGreaterThanOrEqual(14)
   for (const avatar of await avatars.all()) {
     await avatar.scrollIntoViewIfNeeded()
     await expect(avatar).toHaveAttribute("alt", "")
