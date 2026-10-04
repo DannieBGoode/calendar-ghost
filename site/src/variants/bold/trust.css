@@ -1,0 +1,229 @@
+/* Built to be trusted, on /bold: four proof scenes and a checklist. Global (the scenes render
+   inside the LoopStage island), so every rule is scoped to `.bold .b-trust`.
+
+   Each scene's resting style is its final frame: what shows without JavaScript and under reduced
+   motion. The loops run only once LoopStage has hydrated (it adds the pause control then). */
+
+.bold .b-trust h2 { max-width: 12ch; }
+.bold .b-proofs { margin-top: var(--space-lg); }
+.bold .b-proof-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xl) clamp(2rem, 4vw, 3.5rem); }
+.bold .b-proof { min-width: 0; }
+.bold .b-proof h3 { margin-top: 1.25rem; }
+.bold .b-proof p { margin: 0; color: var(--muted-foreground); }
+@media (min-width: 1000px) {
+  .bold .b-proof-list { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .bold .b-proof-fix { grid-column: span 7; }
+  /* Staggered, not a grid of equal boxes: wide and narrow alternate, the narrow ones sit lower. */
+  .bold .b-proof-list { align-items: start; }
+  .bold .b-proof-preview { grid-column: span 5; margin-top: var(--space-lg); }
+  .bold .b-proof-mail { grid-column: span 5; margin-top: var(--space-lg); }
+  .bold .b-proof-loop { grid-column: span 7; }
+}
+
+/* A scene: a small stage with the ghost on it. */
+.bold .b-scene {
+  --scene-bg: var(--surface);
+  position: relative; height: 15rem; overflow: hidden;
+  border: 1px solid var(--border); border-radius: calc(var(--panel-radius) + 0.375rem);
+  background: var(--scene-bg); font-size: 0.8125rem;
+}
+.bold .b-proof-fix .b-scene { --scene-bg: var(--success-surface); border-color: var(--success-border); }
+.bold .b-proof-preview .b-scene { --scene-bg: color-mix(in oklch, var(--primary-soft) 60%, var(--background)); }
+.bold .b-scene .ghost { --ghost-cutout: var(--scene-bg); }
+.bold .b-scene-icon { width: 1.35rem; height: 1.35rem; }
+.bold .b-scene .cal-event { position: absolute; font-size: 0.8125rem; padding: 6px 9px; }
+.bold .b-actor { position: absolute; line-height: 0; }
+.bold .b-scene-bubble { white-space: nowrap; font-size: 0.875rem; }
+.bold .b-scene-log {
+  position: absolute; left: 1rem; bottom: 0.9rem; padding: 0.3rem 0.65rem; border-radius: 999px;
+  background: var(--background); border: 1px solid var(--border); font-weight: 650; font-size: 0.8125rem;
+}
+
+/* A slice of a calendar: a name and a few hour lines. */
+.bold .b-cal {
+  position: absolute; top: 1rem; bottom: 1rem; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 0.75rem; background: var(--background);
+  background-image: repeating-linear-gradient(to bottom, transparent 0 2.2rem, var(--border) 2.2rem calc(2.2rem + 1px));
+  background-position: 0 2.3rem;
+}
+.bold .b-cal-head {
+  display: block; padding: 0.5rem 0.75rem; font-weight: 700; font-size: 0.75rem;
+  border-bottom: 1px solid var(--border); background: var(--background);
+}
+
+/* 1. Fixes itself: the copy is deleted; the ghost puts it back. */
+.bold .b-proof-fix .b-cal { left: 1rem; width: 52%; bottom: 3.6rem; }
+.bold .b-fix-card { left: 0.75rem; right: 0.75rem; top: 3.4rem; height: 3.4rem; }
+.bold .b-fix-trash {
+  position: absolute; left: calc(1rem + 26% - 0.7rem); top: 7.4rem; color: var(--muted-foreground); opacity: 0;
+}
+.bold .b-fix-ghost { right: 12%; top: 5.2rem; }
+.bold .b-fix-log { color: var(--success-foreground); border-color: var(--success-border); }
+
+/* 2. Preview first: the preview fills in, the ghost reads it, then syncing starts. */
+.bold .b-pv {
+  position: absolute; left: 1rem; top: 1rem; bottom: 1rem; width: min(62%, 17rem); display: grid; align-content: start; gap: 0.45rem;
+  padding: 0.8rem 0.9rem; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--background);
+}
+.bold .b-pv-head { display: flex; align-items: center; gap: 0.4rem; font-weight: 700; margin-bottom: 0.15rem; }
+.bold .b-pv-head .b-scene-icon { width: 1rem; height: 1rem; color: var(--primary); }
+.bold .b-pv-row { display: flex; align-items: center; gap: 0.5rem; }
+.bold .b-pv-busy {
+  padding: 0.05rem 0.45rem; border: 1px dashed var(--primary); border-radius: 4px; background: var(--event-busy); font-weight: 600;
+}
+.bold .b-pv-when { flex: 1; color: var(--muted-foreground); white-space: nowrap; }
+.bold .b-pv-check { width: 1rem; height: 1rem; color: var(--success-foreground); }
+.bold .b-pv-start {
+  justify-self: start; margin-top: 0.35rem; padding: 0.4rem 0.8rem; border-radius: 0.5rem;
+  background: var(--primary); color: var(--primary-foreground); font-weight: 650;
+}
+.bold .b-pv-ghost { right: 8%; top: 6.5rem; }
+
+/* 3. Never emails your guests: an invitation heads for the guests; the ghost stops it. */
+.bold .b-mail-event { left: 1rem; top: 5.2rem; width: 5.5rem; height: 3rem; }
+.bold .b-mail-letter {
+  position: absolute; left: 7.4rem; top: 5.9rem; display: grid; place-items: center; width: 2.2rem; height: 2.2rem;
+  border-radius: 0.6rem; background: var(--background); border: 1px solid var(--border);
+}
+.bold .b-mail-out { color: var(--primary); opacity: 0; }
+.bold .b-mail-stopped { left: auto; right: calc(13% + 5.5rem); color: oklch(0.55 0.17 25); }
+.bold .b-mail-ghost { right: 13%; top: 4.6rem; }
+.bold .b-mail-guests { position: absolute; right: 0.9rem; top: 5.1rem; display: grid; gap: 0.4rem; }
+.bold .b-mail-guests span {
+  display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: 50%;
+  background: var(--muted); color: var(--muted-foreground);
+}
+.bold .b-mail-guests .b-scene-icon { width: 1rem; height: 1rem; }
+@media (prefers-color-scheme: dark) { .bold .b-mail-stopped { color: oklch(0.75 0.14 25); } }
+
+/* 4. No loops: the ghost carries the event across, then will not carry its own copy back. */
+.bold .b-loop-from { left: 1rem; width: 34%; }
+.bold .b-loop-to { right: 1rem; width: 34%; }
+.bold .b-loop-original, .bold .b-loop-landed { left: 0.6rem; right: 0.6rem; top: 3.4rem; height: 3.2rem; }
+.bold .b-loop-back {
+  position: absolute; left: 30%; right: 30%; top: 2.2rem; width: 40%; height: 2.6rem;
+  fill: none; stroke: var(--muted-foreground); stroke-width: 2; stroke-dasharray: 5 5; stroke-linecap: round; stroke-linejoin: round;
+}
+.bold .b-loop-back path { vector-effect: non-scaling-stroke; }
+.bold .b-loop-stop {
+  position: absolute; left: calc(50% - 1.2rem); top: 1.35rem; display: grid; place-items: center; width: 2.4rem; height: 2.4rem;
+  border-radius: 50%; background: var(--background); border: 1px solid var(--border); color: oklch(0.55 0.17 25);
+}
+@media (prefers-color-scheme: dark) { .bold .b-loop-stop { color: oklch(0.75 0.14 25); } }
+.bold .b-loop-track { position: absolute; inset: 0; pointer-events: none; }
+.bold .b-loop-carried { right: calc(1rem + 0.6rem); width: calc(34% - 1.2rem); top: calc(1rem + 3.4rem); height: 3.2rem; opacity: 0; }
+.bold .b-loop-ghost { right: calc(1rem + 17% - 2.5rem); top: 7.6rem; }
+
+/* The loops. Each lasts 7 seconds; the ghost's face changes are part of the scene. */
+.bold .b-scene .ghost[data-sequence] .ghost-face-first { animation: none; opacity: 0; }
+.bold .b-scene .ghost[data-sequence] .ghost-face-then { animation: none; opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  .bold .b-proofs[data-hydrated="true"] .b-scene * { animation-duration: 7s; animation-iteration-count: infinite; animation-fill-mode: both; }
+
+  .bold .b-proofs[data-hydrated="true"] .b-fix-card { animation-name: fix-card; animation-timing-function: var(--ease-out-quart); }
+  .bold .b-proofs[data-hydrated="true"] .b-fix-trash { animation-name: fix-trash; }
+  .bold .b-proofs[data-hydrated="true"] .b-fix-ghost { animation-name: fix-ghost; animation-timing-function: var(--ease-out); }
+  .bold .b-proofs[data-hydrated="true"] .b-fix-log { animation-name: late-show; }
+  .bold .b-proofs[data-hydrated="true"] .b-proof-fix .ghost-face-first { animation-name: face-first-56; }
+  .bold .b-proofs[data-hydrated="true"] .b-proof-fix .ghost-face-then { animation-name: face-then-56; }
+
+  .bold .b-proofs[data-hydrated="true"] .b-pv-row:nth-of-type(2) { animation-name: pv-row-1; }
+  .bold .b-proofs[data-hydrated="true"] .b-pv-row:nth-of-type(3) { animation-name: pv-row-2; }
+  .bold .b-proofs[data-hydrated="true"] .b-pv-row:nth-of-type(4) { animation-name: pv-row-3; }
+  .bold .b-proofs[data-hydrated="true"] .b-pv-check { animation-name: pv-check; }
+  .bold .b-proofs[data-hydrated="true"] .b-pv-start { animation-name: pv-start; }
+  .bold .b-proofs[data-hydrated="true"] .b-proof-preview .ghost-face-first { animation-name: face-first-62; }
+  .bold .b-proofs[data-hydrated="true"] .b-proof-preview .ghost-face-then { animation-name: face-then-62; }
+
+  .bold .b-proofs[data-hydrated="true"] .b-mail-out { animation-name: mail-out; animation-timing-function: linear; }
+  .bold .b-proofs[data-hydrated="true"] .b-mail-stopped { animation-name: mail-stopped; }
+  .bold .b-proofs[data-hydrated="true"] .b-mail-ghost { animation-name: mail-ghost; }
+  .bold .b-proofs[data-hydrated="true"] .b-proof-mail .ghost-face-first { animation-name: face-first-44; }
+  .bold .b-proofs[data-hydrated="true"] .b-proof-mail .ghost-face-then { animation-name: face-then-44; }
+
+  .bold .b-proofs[data-hydrated="true"] .b-loop-track { animation-name: loop-track; animation-timing-function: cubic-bezier(0.45, 0, 0.25, 1); }
+  .bold .b-proofs[data-hydrated="true"] .b-loop-carried { animation-name: loop-carried; }
+  .bold .b-proofs[data-hydrated="true"] .b-loop-landed { animation-name: loop-landed; }
+  .bold .b-proofs[data-hydrated="true"] .b-loop-back, .bold .b-proofs[data-hydrated="true"] .b-loop-stop { animation-name: loop-back; }
+  .bold .b-proofs[data-hydrated="true"] .b-proof-loop .ghost-face-first { animation-name: face-first-50; }
+  .bold .b-proofs[data-hydrated="true"] .b-proof-loop .ghost-face-then { animation-name: face-then-50; }
+
+  .bold .b-proofs[data-hydrated="true"] .b-scene-bubble { animation-name: bubble-late; }
+  /* The rest of each ghost's body language stays its own. */
+  .bold .b-proofs[data-hydrated="true"] .b-scene .ghost * { animation-duration: revert; animation-iteration-count: revert; }
+  .bold .b-proofs[data-hydrated="true"] .b-scene .ghost .ghost-face { animation-duration: 7s; animation-iteration-count: infinite; }
+}
+
+@keyframes fix-card {
+  0%, 12% { opacity: 1; transform: none; }
+  20%, 50% { opacity: 0; transform: translateY(14px) rotate(-7deg) scale(0.9); }
+  56% { opacity: 1; transform: scale(1.05); }
+  62%, 100% { opacity: 1; transform: none; }
+}
+@keyframes fix-trash { 0%, 12% { opacity: 0; } 17%, 26% { opacity: 1; } 32%, 100% { opacity: 0; } }
+@keyframes fix-ghost {
+  0%, 26% { opacity: 0; transform: translateX(2.5rem); }
+  38%, 92% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+@keyframes late-show { 0%, 60% { opacity: 0; } 66%, 92% { opacity: 1; } 98%, 100% { opacity: 0; } }
+@keyframes bubble-late { 0%, 62% { opacity: 0; } 68%, 92% { opacity: 1; } 97%, 100% { opacity: 0; } }
+
+@keyframes pv-row-1 { 0%, 8% { opacity: 0; transform: translateY(6px); } 14%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes pv-row-2 { 0%, 18% { opacity: 0; transform: translateY(6px); } 24%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes pv-row-3 { 0%, 28% { opacity: 0; transform: translateY(6px); } 34%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes pv-check { 0%, 40% { opacity: 0; transform: scale(0.4); } 46%, 100% { opacity: 1; transform: none; } }
+@keyframes pv-start {
+  0%, 52% { opacity: 0.35; transform: none; }
+  56% { opacity: 1; transform: none; }
+  60% { opacity: 1; transform: scale(0.93); }
+  64%, 94% { opacity: 1; transform: none; }
+  100% { opacity: 0.35; }
+}
+
+@keyframes mail-out {
+  0%, 8% { opacity: 0; transform: translateX(0); }
+  14% { opacity: 1; transform: translateX(0); }
+  40% { opacity: 1; transform: translateX(3.4rem); }
+  46%, 100% { opacity: 0; transform: translateX(3.6rem) scale(0.6); }
+}
+@keyframes mail-stopped { 0%, 40% { opacity: 0; transform: scale(0.7); } 46%, 92% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
+@keyframes mail-ghost {
+  0%, 36% { transform: none; }
+  42% { transform: translateX(-0.6rem) rotate(-6deg); }
+  52%, 100% { transform: none; }
+}
+
+@keyframes loop-track {
+  0%, 6% { transform: translateX(-56%); opacity: 0; }
+  12% { transform: translateX(-56%); opacity: 1; }
+  42%, 100% { transform: none; opacity: 1; }
+}
+@keyframes loop-carried { 0%, 6% { opacity: 0; } 12%, 42% { opacity: 1; } 46%, 100% { opacity: 0; } }
+@keyframes loop-landed { 0%, 42% { opacity: 0; } 46%, 96% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes loop-back { 0%, 52% { opacity: 0; transform: none; } 58% { opacity: 1; transform: scale(1.08); } 62%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+
+@keyframes face-first-44 { 0%, 43% { opacity: 1; } 46%, 100% { opacity: 0; } }
+@keyframes face-then-44 { 0%, 43% { opacity: 0; } 46%, 100% { opacity: 1; } }
+@keyframes face-first-50 { 0%, 49% { opacity: 1; } 52%, 100% { opacity: 0; } }
+@keyframes face-then-50 { 0%, 49% { opacity: 0; } 52%, 100% { opacity: 1; } }
+@keyframes face-first-56 { 0%, 55% { opacity: 1; } 58%, 100% { opacity: 0; } }
+@keyframes face-then-56 { 0%, 55% { opacity: 0; } 58%, 100% { opacity: 1; } }
+@keyframes face-first-62 { 0%, 61% { opacity: 1; } 64%, 100% { opacity: 0; } }
+@keyframes face-then-62 { 0%, 61% { opacity: 0; } 64%, 100% { opacity: 1; } }
+
+/* The other claims: a compact checklist in two columns. */
+.bold .b-more { margin-top: var(--space-2xl); display: grid; gap: var(--space-md); }
+.bold .b-more-title { font: italic 600 var(--step-2)/1.1 var(--font-display); font-variation-settings: "SOFT" 100, "WONK" 1; }
+.bold .b-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.25rem 3rem; }
+.bold .b-checklist li { display: flex; gap: 0.85rem; align-items: flex-start; padding-top: 1.1rem; border-top: 1px solid var(--border); }
+.bold .b-checklist p { margin: 0; color: var(--muted-foreground); }
+.bold .b-checklist strong { color: var(--foreground); }
+.bold .b-check-icon {
+  flex: none; width: 2.25rem; height: 2.25rem; padding: 0.5rem; border-radius: 50%;
+  background: var(--primary-soft); color: var(--primary);
+}
+@media (min-width: 900px) {
+  .bold .b-more { grid-template-columns: minmax(0, 1fr) minmax(0, 3fr); align-items: start; }
+  .bold .b-checklist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -1,0 +1,96 @@
+---
+import { WideReveal } from "../../islands/WideReveal"
+import type { Messages } from "../../i18n"
+import { REPO_URL } from "../../links"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const [firstLine, secondLine] = m.variants.bold.hero.titleLines
+---
+
+<section class="b-hero" aria-labelledby="hero-title">
+  <div class="b-hero-grid">
+    <div class="b-hero-copy">
+      <p class="chip">{m.hero.chip}</p>
+      <h1 id="hero-title"><span>{firstLine}</span> <em>{secondLine}</em></h1>
+      <p class="b-lead">{m.hero.sub}</p>
+      <div class="ctas">
+        <a class="btn btn-primary b-btn-big" href="#self-host">{m.hero.primary}</a>
+        <a class="btn b-btn-big" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
+        </a>
+      </div>
+      <p class="b-hero-hint" aria-hidden="true">
+        <span>{m.variants.bold.hero.hint}</span>
+        <svg viewBox="0 0 120 48" focusable="false">
+          <path d="M4 10C30 4 62 6 84 22C92 28 98 34 104 42" />
+          <path d="M92 40L105 43L106 30" />
+        </svg>
+      </p>
+    </div>
+    <div class="b-hero-demo">
+      <WideReveal
+        client:load
+        m={m.demo}
+        motion={m.motion}
+        weekHeight={520}
+        handleSize={184}
+        heldSays={m.variants.bold.hero.held}
+      />
+    </div>
+  </div>
+</section>
+
+<style>
+  .b-hero { overflow-x: clip; padding-block: clamp(1.5rem, 3vw, 2.5rem) 0; }
+  .b-hero-grid {
+    display: grid; gap: 2rem;
+    grid-template-columns: minmax(1.25rem, 1fr) minmax(0, 72rem) minmax(1.25rem, 1fr);
+  }
+  .b-hero-copy, .b-hero-demo { grid-column: 2; min-width: 0; }
+  .b-hero-copy h1 { margin: 0.25rem 0 1.5rem; line-height: 0.9; }
+  .b-hero-copy .b-lead { font-size: clamp(1.125rem, 1.05rem + 0.25vw, 1.25rem); max-width: 40ch; }
+  /* The margin note below replaces the demo's own small hint. */
+  .b-hero-demo :global(.reveal-hint) { visibility: hidden; }
+  .b-hero-copy h1 span, .b-hero-copy h1 em { display: block; }
+  .b-hero-copy h1 em { font-style: italic; color: var(--primary); font-variation-settings: "SOFT" 100, "WONK" 1; }
+  .b-hero-copy .ctas { margin-top: 1.5rem; }
+  .b-btn-big { min-height: 3.25rem; padding-inline: 1.4rem; font-size: 1rem; }
+
+  /* The hint: a note in the margin with an arrow that points at the ghost. */
+  .b-hero-hint {
+    display: flex; align-items: flex-start; gap: 0.5rem; margin: 1.5rem 0 0;
+    font: italic 500 var(--step-1)/1.2 var(--font-display); color: var(--foreground);
+  }
+  .b-hero-hint span { max-width: 15ch; }
+  .b-hero-hint svg {
+    flex: none; width: 6.5rem; height: 2.6rem; margin-top: 0.6rem;
+    fill: none; stroke: var(--primary); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* On a phone the week runs edge to edge. */
+  @media (max-width: 1099px) {
+    .b-hero-hint { margin-top: 1.5rem; }
+    .b-hero-hint svg { transform: rotate(60deg); margin-top: 0.2rem; width: 4.5rem; }
+    .b-hero-demo { grid-column: 1 / -1; }
+    .b-hero-demo :global(.reveal-frame) { border-radius: 0; border-inline: 0; }
+    .b-hero-demo :global(.demo-foot) { padding-inline: 1.25rem; }
+  }
+
+  /* Wide screens: copy on the left; the week takes the rest and runs off the right edge. */
+  @media (min-width: 1100px) {
+    .b-hero-grid {
+      column-gap: 0;
+      grid-template-columns: minmax(1.25rem, 1fr) minmax(0, 30rem) clamp(2rem, 3.5vw, 3.5rem) minmax(0, 38.5rem) minmax(1.25rem, 1fr);
+      align-items: start;
+    }
+    .b-hero-copy { grid-column: 2; padding-top: 1rem; }
+    .b-hero-demo { grid-column: 4 / -1; }
+    .b-hero-demo :global(.reveal) { margin: 0; }
+    .b-hero-demo :global(.reveal-frame) { border-right: 0; border-radius: var(--panel-radius) 0 0 var(--panel-radius); }
+    .b-hero-demo :global(.demo-foot) { max-width: 38.5rem; }
+  }
+</style>

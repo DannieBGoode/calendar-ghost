@@ -1,0 +1,202 @@
+---
+// How it works as one strip: three steps, each with a small piece of the app, joined by the path
+// the ghost flies along (once, when the strip comes into view) to the last step, where it stays.
+// A page can pass its own section class for spacing; the strip itself needs only the shared
+// tokens.
+import "@fontsource-variable/fraunces/full-italic.css"
+import Icon from "../components/Icon.astro"
+import type { Messages } from "../i18n"
+import { Ghost, SpeechBubble } from "../islands/Ghost"
+
+interface Props {
+  m: Messages
+  class?: string
+}
+
+const { m, class: sectionClass = "section" } = Astro.props
+const copy = m.howStrip
+const accounts = [
+  { calendar: "personal", address: m.app.rules.accounts.personal },
+  { calendar: "family", address: m.app.rules.accounts.family },
+  { calendar: "work", address: m.app.rules.accounts.work },
+] as const
+// The plans the Personal to Work rule would write, from Sam's demo week.
+const previews = [
+  { day: m.demo.days[0], time: "3:00 PM" },
+  { day: m.demo.days[1], time: "12:00 PM" },
+  { day: m.demo.days[3], time: "1:00 PM" },
+]
+const initial = (name: string) => name.charAt(0)
+---
+
+<section id="how-it-works" class:list={[sectionClass, "how"]} aria-labelledby="how-title">
+  <div class="container">
+    <h2 id="how-title">{m.how.title}</h2>
+    <div class="how-strip" data-wake>
+      <svg class="how-path" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+        <path d="M60 60C200 -10 300 110 460 50S760 -10 940 46" />
+      </svg>
+      <ol class="how-steps">
+        <li>
+          <div class="how-frag how-frag-accounts" aria-hidden="true">
+            {
+              accounts.map(({ calendar, address }) => (
+                <span class="how-account">
+                  <span class="mock-avatar" data-calendar={calendar}>{initial(m.demo.calendars[calendar])}</span>
+                  <span class="how-account-address">{address}</span>
+                  <Icon name="circleCheck" class="how-account-ok" />
+                </span>
+              ))
+            }
+          </div>
+          <p class="how-step-n" aria-hidden="true">1</p>
+          <h3>{m.how.steps[0].title}</h3>
+          <p>{m.how.steps[0].body}</p>
+        </li>
+        <li>
+          <div class="how-frag how-frag-rule" aria-hidden="true">
+            <span class="how-route">
+              <span class="mock-avatar" data-calendar="personal">{initial(m.demo.calendars.personal)}</span>
+              <b>{m.demo.calendars.personal}</b>
+              <Icon name="arrowRight" class="how-route-arrow" />
+              <span class="mock-avatar" data-calendar="work">{initial(m.demo.calendars.work)}</span>
+              <b>{m.demo.calendars.work}</b>
+            </span>
+            <span class="how-segment">
+              <span class="is-on">{m.crossing.busyOnly}</span>
+              <span>{m.crossing.withDetails}</span>
+            </span>
+          </div>
+          <p class="how-step-n" aria-hidden="true">2</p>
+          <h3>{m.how.steps[1].title}</h3>
+          <p>{m.how.steps[1].body}</p>
+        </li>
+        <li>
+          <div class="how-frag how-frag-preview" aria-hidden="true">
+            <span class="how-preview-head"><Icon name="eye" class="how-preview-icon" />{copy.previewRule}</span>
+            {
+              previews.map(({ day, time }) => (
+                <span class="how-preview-row">
+                  <span class="how-preview-busy">{m.demo.busy}</span>
+                  <span>{day} {time}</span>
+                </span>
+              ))
+            }
+            <span class="how-preview-start">{copy.startSyncing}</span>
+          </div>
+          <p class="how-step-n" aria-hidden="true">3</p>
+          <h3>{m.how.steps[2].title}</h3>
+          <p>{m.how.steps[2].body}</p>
+        </li>
+      </ol>
+      <!-- The ghost's resting place is the last step; the track carries it there from the first. -->
+      <div class="how-track" aria-hidden="true">
+        <div class="how-ghost">
+          <span class="how-bob"><Ghost face="happy" tone="moss" float size={104} /></span>
+          <SpeechBubble side="top" className="how-bubble">{copy.ghost}</SpeechBubble>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .how h2 { max-width: 12ch; }
+  .how-strip { position: relative; margin-top: var(--space-lg, 2.5rem); }
+  .how-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xl, 3.5rem); position: relative; z-index: 1; }
+  .how-steps li { min-width: 0; }
+  .how-steps h3 { margin-top: 0.25rem; }
+  .how-steps p:not(.how-step-n) { color: var(--muted-foreground); margin: 0; }
+  .how-step-n {
+    margin: 1.5rem 0 0; font: italic 600 var(--step-2, 2rem)/1 var(--font-display); color: var(--primary);
+    font-variation-settings: "SOFT" 100, "WONK" 1;
+  }
+
+  /* The pieces of the app: small, crisp, made of the app's own parts. */
+  .how-frag {
+    display: grid; gap: 0.45rem; align-content: center; height: 10rem; padding: 0.9rem 1rem;
+    border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
+    font-size: 0.8125rem; box-shadow: 0 18px 40px -28px color-mix(in oklch, var(--primary), transparent 40%);
+  }
+  .how-frag :global(.mock-avatar) { width: 1.6rem; height: 1.6rem; font-size: 0.6875rem; }
+  .how-account { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+  .how-account-address { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .how-frag :global(.how-account-ok) { width: 1.05rem; height: 1.05rem; flex: none; color: var(--success-foreground); }
+  .how-route { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.9375rem; }
+  .how-frag :global(.how-route-arrow) { width: 1rem; height: 1rem; color: var(--muted-foreground); }
+  .how-segment {
+    justify-self: start; display: inline-flex; padding: 3px; margin-top: 0.4rem;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--background);
+  }
+  .how-segment span { padding: 0.3rem 0.75rem; border-radius: 999px; font-weight: 600; color: var(--muted-foreground); }
+  .how-segment .is-on { background: var(--primary-soft); color: var(--foreground); }
+  .how-preview-head { display: flex; align-items: center; gap: 0.4rem; font-weight: 700; }
+  .how-frag :global(.how-preview-icon) { width: 1rem; height: 1rem; color: var(--primary); }
+  .how-preview-row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted-foreground); }
+  .how-preview-busy {
+    padding: 0 0.45rem; border: 1px dashed var(--primary); border-radius: 4px; background: var(--event-busy);
+    color: var(--foreground); font-weight: 600;
+  }
+  .how-preview-start {
+    justify-self: start; margin-top: 0.2rem; padding: 0.3rem 0.7rem; border-radius: 0.5rem;
+    background: var(--primary); color: var(--primary-foreground); font-weight: 650;
+  }
+
+  /* The ghost, at rest on the last step's piece. */
+  .how-track { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+  .how-ghost { position: absolute; right: -0.5rem; top: -4.5rem; }
+  .how-ghost :global(.how-bubble) { left: auto; right: 70%; transform: none; white-space: nowrap; }
+  .how-ghost :global(.how-bubble)::before { left: auto; right: 1.6rem; }
+  .how-bob { display: block; }
+
+  /* The path: on a phone a dashed line down the steps; on wide screens the ghost's flight path. */
+  .how-path { display: none; }
+
+  /* On a phone the ghost waits below the last step, saying its line from the left. */
+  @media (max-width: 899px) {
+    .how-track { position: static; display: flex; justify-content: flex-end; margin-top: 1rem; }
+    .how-ghost { position: relative; inset: auto; display: flex; align-items: center; gap: 0.6rem; flex-direction: row-reverse; }
+    .how-ghost :global(.how-bubble) { position: relative; inset: auto; right: auto; }
+    .how-ghost :global(.how-bubble)::before { top: calc(50% - 0.325rem); bottom: auto; left: auto; right: -0.36rem; transform: rotate(-135deg); }
+  }
+
+  @media (min-width: 900px) {
+    .how-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(2rem, 5vw, 4.5rem); }
+    .how-path {
+      display: block; position: absolute; left: 0; right: 0; top: 2.5rem; width: 100%; height: 5rem; z-index: 0;
+      fill: none; stroke: var(--primary); stroke-width: 2; stroke-dasharray: 2 9; stroke-linecap: round; opacity: 0.55;
+    }
+    .how-path path { vector-effect: non-scaling-stroke; }
+    /* Off to the side of the first steps' pieces, so it joins them without crossing their text. */
+    .how-frag { position: relative; }
+  }
+
+  /* The flight: once, when the strip first comes into view. The track moves across (a share of
+     the strip's width), the ghost bobs along the wave. */
+  @media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
+    .how-strip[data-awake] .how-track { animation: how-fly 3.2s cubic-bezier(0.45, 0, 0.25, 1) both; }
+    .how-strip[data-awake] .how-bob { animation: how-bob 3.2s ease-in-out both; }
+    .how-strip[data-awake] :global(.how-bubble) { animation: how-bubble 3.6s var(--ease-out) both; }
+    .how-strip[data-awake] :global(.ghost-pose) { animation: how-lean 3.2s ease-in-out both; }
+  }
+  @keyframes how-fly {
+    0% { transform: translateX(-66%); opacity: 0; }
+    8% { opacity: 1; }
+    100% { transform: translateX(0); }
+  }
+  @keyframes how-bob {
+    0% { transform: translateY(4.5rem); }
+    25% { transform: translateY(1rem); }
+    50% { transform: translateY(5rem); }
+    75% { transform: translateY(0.5rem); }
+    100% { transform: translateY(0); }
+  }
+  @keyframes how-lean {
+    0%, 85% { transform: rotate(10deg); }
+    100% { transform: rotate(0); }
+  }
+  @keyframes how-bubble {
+    0%, 88% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+</style>

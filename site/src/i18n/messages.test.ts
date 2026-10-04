@@ -27,6 +27,10 @@ describe("English copy", () => {
     expect(en.hero.chip).toBe("Open source (AGPL) · Self-hosted · Google Calendar")
   })
 
+  it("splits the headline into lines without changing it", () => {
+    expect(en.variants.bold.hero.titleLines.join(" ")).toBe(en.hero.title)
+  })
+
   it("never calls the app pre-alpha", () => {
     expect(strings(en).filter(([, text]) => /pre-?alpha/i.test(text))).toEqual([])
   })

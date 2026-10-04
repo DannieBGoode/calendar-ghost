@@ -1,0 +1,39 @@
+---
+// Variant B of the landing page: the home page's sections in the same order, executed boldly.
+// Kept for side-by-side comparison, so it is not indexed and stays out of the sitemap.
+import "@fontsource-variable/fraunces/full-italic.css"
+import "../variants/bold/bold.css"
+import Layout from "../layouts/Layout.astro"
+import { messagesFor } from "../i18n"
+import HowItWorksStrip from "../sections/HowItWorksStrip.astro"
+import Nav from "../sections/Nav.astro"
+import BoldApp from "../variants/bold/BoldApp.astro"
+import BoldCrossing from "../variants/bold/BoldCrossing.astro"
+import BoldFaq from "../variants/bold/BoldFaq.astro"
+import BoldFooter from "../variants/bold/BoldFooter.astro"
+import BoldHero from "../variants/bold/BoldHero.astro"
+import BoldSelfHost from "../variants/bold/BoldSelfHost.astro"
+import BoldTrust from "../variants/bold/BoldTrust.astro"
+import BoldWeek from "../variants/bold/BoldWeek.astro"
+import BoldWhy from "../variants/bold/BoldWhy.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<Layout title={m.meta.title} description={m.meta.description} noindex>
+  <div class="bold">
+    <Nav m={m} base="/bold" />
+    <main>
+      <BoldHero m={m} />
+      <HowItWorksStrip m={m} class="b-section" />
+      <BoldWeek m={m} />
+      <BoldCrossing m={m} />
+      <BoldApp m={m} />
+      <BoldTrust m={m} />
+      <BoldSelfHost m={m} />
+      <BoldWhy m={m} />
+      <BoldFaq m={m} />
+    </main>
+    <BoldFooter m={m} />
+  </div>
+</Layout>

@@ -1,0 +1,90 @@
+---
+// Self-host: the ghost at home on a small server, the commands, and this page's own proof that it
+// tracks no one.
+import Icon from "../../components/Icon.astro"
+import SelfHostCommands from "../../components/SelfHostCommands.astro"
+import type { Messages } from "../../i18n"
+import { Ghost, SpeechBubble } from "../../islands/Ghost"
+import { GUIDE_URL } from "../../links"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const copy = m.variants.bold.selfHost
+---
+
+<section id="self-host" class="b-section b-self" aria-labelledby="self-host-title">
+  <div class="b-wrap b-self-grid">
+    <div class="b-self-intro">
+      <h2 id="self-host-title">{m.selfHost.title}</h2>
+      <p class="b-lead">{m.selfHost.body}</p>
+      <div class="b-home" aria-hidden="true">
+        <div class="b-says b-says-up">
+          <span class="b-home-ghost"><Ghost face="happy" tone="moss" alive="brief" float size={128} /></span>
+          <SpeechBubble side="top">{copy.ghost}</SpeechBubble>
+        </div>
+        <span class="b-server"><i></i><i></i><b></b></span>
+      </div>
+      <h3>{m.selfHost.needsTitle}</h3>
+      <ul class="b-needs">
+        {
+          m.selfHost.needs.map((need) => (
+            <li>
+              <Icon name="check" class="b-needs-icon" />
+              {need}
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    <div class="b-self-steps">
+      <h3>{m.selfHost.stepsTitle}</h3>
+      <SelfHostCommands m={m} />
+      <p class="b-note">{m.selfHost.oauthNote}</p>
+      <a class="btn btn-primary b-btn-big" href={GUIDE_URL}>{m.selfHost.guide}</a>
+      <aside class="b-proof-note">
+        <Icon name="shieldCheck" class="b-proof-note-icon" />
+        <p><strong>{m.footer.noTrackers}</strong> {copy.noTrackersBody}</p>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<style>
+  .b-self-grid { display: grid; gap: var(--space-xl); }
+  .b-self-grid > div { min-width: 0; }
+  @media (min-width: 960px) { .b-self-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: clamp(3rem, 6vw, 6rem); } }
+
+  /* The ghost on its home server: a small box with two lights. */
+  .b-home { display: grid; justify-items: start; margin: var(--space-lg) 0; }
+  .b-home .b-says { margin-left: 1.5rem; }
+  .b-home-ghost { position: relative; z-index: 1; margin-bottom: -0.9rem; margin-left: 1.25rem; }
+  .b-server {
+    position: relative; display: block; width: 13rem; height: 3.25rem; border-radius: 0.75rem;
+    background: var(--foreground); box-shadow: 0 14px 30px -18px var(--foreground);
+  }
+  .b-server i { position: absolute; top: calc(50% - 0.25rem); width: 0.5rem; height: 0.5rem; border-radius: 50%; background: oklch(0.78 0.15 155); }
+  .b-server i:first-child { left: 1rem; }
+  .b-server i + i { left: 2rem; background: oklch(0.8 0.12 85); }
+  .b-server b {
+    position: absolute; right: 1rem; top: calc(50% - 0.6rem); width: 5.5rem; height: 1.2rem; border-radius: 0.3rem;
+    background: repeating-linear-gradient(to right, color-mix(in oklch, var(--background), transparent 70%) 0 2px, transparent 2px 6px);
+  }
+
+  .b-needs { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.5rem; color: var(--muted-foreground); }
+  .b-needs li { display: flex; gap: 0.6rem; align-items: flex-start; }
+  .b-needs :global(.b-needs-icon) { flex: none; width: 1.15rem; height: 1.15rem; margin-top: 0.25rem; color: var(--success-foreground); }
+  .b-self-steps { padding-top: 0.5rem; }
+  .b-note { color: var(--muted-foreground); }
+
+  /* Proof, not a promise: this very page loads nothing from anywhere else. */
+  .b-proof-note {
+    display: flex; gap: 1rem; align-items: flex-start; margin-top: var(--space-lg); padding: 1.25rem 1.4rem;
+    border-radius: var(--panel-radius); background: var(--success-surface); border: 1px solid var(--success-border);
+  }
+  .b-proof-note p { margin: 0; color: var(--muted-foreground); }
+  .b-proof-note strong { display: block; font: 600 var(--step-1)/1.25 var(--font-display); color: var(--success-foreground); margin-bottom: 0.2rem; }
+  .b-proof-note :global(.b-proof-note-icon) { flex: none; width: 2rem; height: 2rem; color: var(--success-foreground); }
+</style>

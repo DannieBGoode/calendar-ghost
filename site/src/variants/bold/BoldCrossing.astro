@@ -1,0 +1,55 @@
+---
+// Right after the night band, a close beat: one event, and the choice of what crosses with it.
+import Icon from "../../components/Icon.astro"
+import { Crossing } from "../../islands/Crossing"
+import type { Messages } from "../../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="b-section b-close b-crossing" aria-labelledby="crossing-title">
+  <div class="b-wrap">
+    <h2 id="crossing-title">{m.crossing.title}</h2>
+    <div class="b-crossing-grid">
+      <Crossing client:visible m={{ crossing: m.crossing, demo: m.demo, ghost: m.ghost, motion: m.motion }} />
+      <div class="b-stays">
+        <h3>{m.crossing.alwaysStaysTitle}</h3>
+        <ul>
+          {
+            m.crossing.alwaysStays.map((item) => (
+              <li>
+                <Icon name="house" class="b-stays-icon" />
+                {item}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .b-crossing h2 { max-width: 14ch; }
+  .b-crossing-grid { display: grid; gap: var(--space-lg); margin-top: var(--space-lg); }
+  .b-crossing-grid > :global(*) { min-width: 0; }
+  .b-crossing :global(.crossing-stage) { height: 320px; }
+  .b-crossing :global(.crossing-switch button) { font-size: 0.9375rem; padding-inline: 1.15rem; }
+  .b-crossing :global(.crossing-explain) { font-size: var(--step-1); color: var(--foreground); font-family: var(--font-display); font-style: italic; }
+  .b-stays h3 { color: var(--muted-foreground); font-size: var(--step-0); text-transform: uppercase; letter-spacing: 0.08em; }
+  .b-stays ul { list-style: none; margin: 0.75rem 0 0; padding: 0; }
+  .b-stays li {
+    display: flex; align-items: center; gap: 0.75rem; padding-block: 0.55rem;
+    font: 560 clamp(1.5rem, 1.3rem + 0.7vw, 1.875rem)/1.15 var(--font-display); letter-spacing: -0.015em;
+    border-bottom: 1px solid var(--border);
+  }
+  .b-stays :global(.b-stays-icon) { width: 1.25rem; height: 1.25rem; flex: none; color: var(--primary); }
+  @media (min-width: 1000px) {
+    .b-crossing-grid { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: clamp(3rem, 6vw, 5.5rem); align-items: start; }
+    .b-stays { padding-top: 4.5rem; }
+  }
+</style>

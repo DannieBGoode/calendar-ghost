@@ -1,0 +1,58 @@
+---
+// The ending, in the ghost's own voice. Forked from sections/Footer.astro because the call to
+// action is the ghost speaking (a big bubble), and "no trackers" moved up to Self-host.
+import type { Messages } from "../../i18n"
+import { Ghost } from "../../islands/Ghost"
+import { LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../../links"
+import LanguagePicker from "../../sections/LanguagePicker.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<footer class="b-footer">
+  <div class="b-wrap b-footer-cta">
+    <span class="b-footer-ghost" aria-hidden="true">
+      <Ghost face="happy" tone="lantern" alive="brief" float size={210} />
+    </span>
+    <div class="b-footer-speech">
+      <h2>{m.variants.bold.footer.cta}</h2>
+      <a class="btn btn-primary b-btn-big" href="#self-host">{m.hero.primary}</a>
+    </div>
+  </div>
+  <div class="b-wrap b-footer-meta">
+    <p><a href={LICENSE_URL}>{m.footer.license}</a></p>
+    <p><a href={TRADEMARKS_URL}>{m.footer.trademarks}</a> · <a href={REPO_URL}>{m.footer.github}</a></p>
+    <LanguagePicker m={m} />
+  </div>
+</footer>
+
+<style>
+  .b-footer { padding-block: var(--space-xl) 2rem; }
+  .b-footer-cta {
+    display: grid; justify-items: start; gap: 1rem; margin-bottom: var(--space-xl);
+  }
+  /* The call to action is a big speech bubble, its tail pointing at the ghost. */
+  .b-footer-speech {
+    position: relative; display: grid; justify-items: start; justify-self: start; gap: 1.5rem;
+    padding: clamp(1.75rem, 4vw, 3rem); border-radius: 2rem;
+    background: var(--primary-soft); color: var(--foreground);
+  }
+  .b-footer-speech::before {
+    content: ""; position: absolute; left: 3rem; top: -0.9rem; width: 2rem; height: 2rem;
+    background: var(--primary-soft); transform: rotate(45deg); border-radius: 0.3rem;
+  }
+  .b-footer-speech h2 { margin: 0; max-width: 16ch; font-size: var(--step-3); }
+  @media (min-width: 800px) {
+    .b-footer-cta { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2rem; }
+    .b-footer-speech::before { left: -0.9rem; top: calc(50% - 1rem); }
+  }
+  .b-footer-meta {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 2rem;
+    padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: var(--step--1); color: var(--muted-foreground);
+  }
+  .b-footer-meta p { margin: 0; }
+</style>

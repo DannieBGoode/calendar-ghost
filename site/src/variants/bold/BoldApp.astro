@@ -1,0 +1,79 @@
+---
+// The app's screens, with the ghost peeking over the top of its own Overview.
+import type { Messages } from "../../i18n"
+import { Ghost, SpeechBubble } from "../../islands/Ghost"
+import ActivityHistory from "../../mockups/ActivityHistory.astro"
+import OverviewHealth from "../../mockups/OverviewHealth.astro"
+import RulesList from "../../mockups/RulesList.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="b-section b-app" aria-labelledby="app-title">
+  <div class="b-wrap">
+    <div class="b-app-head">
+      <h2 id="app-title">{m.app.title}</h2>
+      <p class="b-lead">{m.app.body}</p>
+    </div>
+    <figure class="b-app-overview">
+      <div class="b-peek" aria-hidden="true">
+        <SpeechBubble side="left" className="b-peek-bubble">{m.variants.bold.app.ghost}</SpeechBubble>
+        <Ghost face="surprised" then="happy" tone="lantern" alive="brief" size={112} className="b-peek-ghost" />
+      </div>
+      <OverviewHealth m={m} />
+      <figcaption>{m.app.overview.caption}</figcaption>
+    </figure>
+    <div class="b-app-pair">
+      <figure class="b-app-rules">
+        <RulesList m={m} />
+        <figcaption>{m.app.rules.caption}</figcaption>
+      </figure>
+      <figure class="b-app-activity">
+        <ActivityHistory m={m} />
+        <figcaption>{m.app.activity.caption}</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<style>
+  .b-app-head { display: grid; gap: 0.5rem var(--space-lg); align-items: end; margin-bottom: var(--space-xl); }
+  .b-app-head h2 { margin: 0; }
+  .b-app-head .b-lead { margin: 0; }
+  @media (min-width: 900px) {
+    .b-app-head { grid-template-columns: auto minmax(0, 1fr); }
+    .b-app-head .b-lead { justify-self: end; text-align: right; max-width: 30ch; }
+  }
+  figure { margin: 0; min-width: 0; }
+  figcaption { margin-top: 0.7rem; color: var(--muted-foreground); font-size: var(--step--1); }
+
+  /* The ghost peeks over the Overview's top edge, from behind it. */
+  .b-app-overview { position: relative; }
+  .b-peek { position: absolute; right: 12%; top: 0; z-index: 0; display: flex; align-items: center; gap: 0.5rem; transform: translateY(-62%); }
+  .b-app-overview > :global(.mock) { position: relative; z-index: 1; }
+  .b-peek :global(.b-peek-bubble) { position: relative; inset: auto; transform: translateY(-1.25rem); }
+  .b-peek :global(.b-peek-bubble)::before { top: calc(50% - 0.325rem); }
+  .b-app-overview > :global(.mock) { box-shadow: 0 40px 80px -48px color-mix(in oklch, var(--success-foreground), transparent 30%); }
+
+  .b-app-pair { display: grid; gap: var(--space-lg); margin-top: var(--space-lg); align-items: start; }
+  @media (min-width: 1024px) {
+    /* Not a row of equal boxes: the rules sit lower and narrower, the activity wider and higher. */
+    .b-app-pair { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 2rem; }
+    .b-app-rules { margin-top: var(--space-xl); }
+    .b-app-activity { margin-top: calc(var(--space-lg) * -0.5); }
+  }
+  @media (max-width: 599px) {
+    .b-peek { right: 4%; }
+    .b-peek :global(.b-peek-ghost) { --ghost-size: 84px; }
+  }
+
+  /* Wakes surprised (caught peeking), then is happy to be seen. */
+  @media (prefers-reduced-motion: no-preference) {
+    .b-peek :global(.ghost[data-awake]) { animation: peek-up 900ms var(--ease-out-quart) both; }
+  }
+  @keyframes peek-up { from { transform: translateY(45%); } to { transform: none; } }
+</style>

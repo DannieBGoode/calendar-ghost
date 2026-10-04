@@ -100,6 +100,12 @@ export const en = {
       },
     ] as [Step, Step, Step],
   },
+  /** The "How it works" strip's small pieces of the app, and the ghost waiting at the last step. */
+  howStrip: {
+    ghost: "I'll take it from here.",
+    previewRule: "Preview rule",
+    startSyncing: "Start syncing",
+  },
   week: {
     title: "One week, every calendar.",
     body: "Make one rule per calendar: Personal to Work, Family to Work. Calendar Ghost keeps them all in step.",
@@ -261,6 +267,37 @@ export const en = {
     title: "Nothing here but a ghost.",
     body: "This page does not exist. The ghost looked everywhere, then took a nap.",
     home: "Back to the home page",
+  },
+  /** Words only the alternative page designs use; everything else they share with the home page. */
+  variants: {
+    bold: {
+      hero: {
+        /** `hero.title`, one sentence per line. */
+        titleLines: ["Sync your calendars.", "Keep your privacy."] as [string, string],
+        hint: "Drag the ghost to see what work sees.",
+        held: "Wheee!",
+      },
+      week: { ghost: "Boo! I mean: Busy." },
+      app: { ghost: "That's me, at work." },
+      trust: {
+        fixLog: "Missing from Work → put back",
+        emailsSent: "Emails sent: 0",
+        says: {
+          fixes: "Not on my watch.",
+          preview: "Look, then leap.",
+          emails: "Shh. Nobody gets an email.",
+          loops: "Been there.",
+        },
+        moreTitle: "And also",
+      },
+      selfHost: {
+        ghost: "Home sweet home server.",
+        noTrackersBody: "No analytics, no cookies, nothing loaded from another site. Your browser's network tab can check.",
+      },
+      why: { ghost: "True story." },
+      faq: { ghost: "Ask away. I'm transparent." },
+      footer: { cta: "Give me a server. I'll handle the busywork." },
+    },
   },
 }
 
