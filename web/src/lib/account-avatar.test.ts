@@ -3,8 +3,21 @@ import { describe, expect, it } from "vitest"
 import avatarSource from "../components/account-avatar.tsx?raw"
 import ruleEndpointSource from "../components/rule-endpoint.tsx?raw"
 import rulesSource from "../features/rules.tsx?raw"
-import settingsSource from "../features/settings.tsx?raw"
+import settingsAccountRowSource from "../features/settings-account-row.tsx?raw"
+import settingsAccountsSource from "../features/settings-accounts.tsx?raw"
+import settingsGoogleReturnSource from "../features/settings-google-return.tsx?raw"
+import settingsStorageSource from "../features/settings-storage.tsx?raw"
+import settingsPageSource from "../features/settings.tsx?raw"
 import { accountInitials } from "./account-avatar"
+
+// The Settings page and the sections it is split into.
+const settingsSource = [
+  settingsPageSource,
+  settingsAccountsSource,
+  settingsAccountRowSource,
+  settingsStorageSource,
+  settingsGoogleReturnSource,
+].join("\n")
 
 describe("accountInitials", () => {
   it("uses the first and last words of a full display name", () => {
