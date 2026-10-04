@@ -144,7 +144,7 @@ def test_compacting_releases_the_first_lock_when_a_second_times_out() -> None:
     assert database.compactions == 0
 
 
-# Regression: PR #34 review — a rule created after the last check could start during VACUUM
+# Regression: PR #34 review: a rule created after the last check could start during VACUUM
 def test_a_rule_first_run_while_compacting_waits_for_it_to_finish() -> None:
     database = FakeDatabase()
     storage = _storage(database, wait=1.0)
@@ -197,7 +197,7 @@ def test_purging_logs_purges_the_files() -> None:
     assert b"".join(storage.log_chunks()) == b"line\n"
 
 
-# Regression: ISSUE-001 — clearing Activity left no trace in the logs
+# Regression: ISSUE-001: clearing Activity left no trace in the logs
 # Found by /qa on 2026-10-01
 # Report: .context/qa-reports/run-20261001T190652Z/qa-report-127.0.0.1-2026-10-01.md
 def test_clearing_activity_is_logged_with_its_age_and_count(

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
 import {
   policyChanged,
   policyChangeConsequences,
@@ -10,6 +11,8 @@ import {
   ruleStateLabel,
   runOutcomeSummary,
 } from "./rule-change"
+
+const i18n = testI18n()
 
 const responses = { tentative_events: "mark", unanswered_invitations: "as_tentative" } as const
 const busy = { privacy_policy: "busy_only", sync_all_day_events: true, ...responses } as const
@@ -25,7 +28,7 @@ describe("policy change consequences", () => {
   })
 
   it("warns before exposing event details", () => {
-    const lines = policyChangeConsequences({
+    const lines = policyChangeConsequences(testI18n(), {
       state: "enabled",
       current: busy,
       next: details,
@@ -40,7 +43,7 @@ describe("policy change consequences", () => {
   })
 
   it("explains redaction and all-day exclusion", () => {
-    const lines = policyChangeConsequences({
+    const lines = policyChangeConsequences(testI18n(), {
       state: "draft",
       current: details,
       next: { ...busy, sync_all_day_events: false },
@@ -55,7 +58,7 @@ describe("policy change consequences", () => {
   })
 
   it("describes paused and degraded rules and newly included all-day events", () => {
-    const paused = policyChangeConsequences({
+    const paused = policyChangeConsequences(testI18n(), {
       state: "paused",
       current: { ...busy, sync_all_day_events: false },
       next: busy,
@@ -64,7 +67,7 @@ describe("policy change consequences", () => {
     })
     expect(paused[0]).toBe("The rule stays paused. Preview it before enabling it again.")
     expect(paused).toContain("All-day source events will be added to Work on the next run.")
-    const [degraded] = policyChangeConsequences({
+    const [degraded] = policyChangeConsequences(testI18n(), {
       state: "degraded",
       current: busy,
       next: { ...busy, sync_all_day_events: false },
@@ -77,7 +80,7 @@ describe("policy change consequences", () => {
   })
 
   it("mentions future projections when nothing is mapped yet", () => {
-    const lines = policyChangeConsequences({
+    const lines = policyChangeConsequences(testI18n(), {
       state: "draft",
       current: busy,
       next: details,
@@ -92,13 +95,13 @@ describe("policy change consequences", () => {
 
 describe("rule removal copy", () => {
   it("names the destructive effect", () => {
-    expect(removalConfirmLabel("delete", 37)).toBe("Remove rule and delete 37 projections")
-    expect(removalConfirmLabel("detach", 1)).toBe("Remove rule and keep 1 event")
-    expect(removalConfirmLabel("delete", 0)).toBe("Remove rule")
-    expect(removalConsequence("delete", 2, "Family")).toBe(
+    expect(removalConfirmLabel(i18n, "delete", 37)).toBe("Remove rule and delete 37 projections")
+    expect(removalConfirmLabel(i18n, "detach", 1)).toBe("Remove rule and keep 1 event")
+    expect(removalConfirmLabel(i18n, "delete", 0)).toBe("Remove rule")
+    expect(removalConsequence(i18n, "delete", 2, "Family")).toBe(
       "2 projections this rule wrote will be deleted from Family. Source events are not changed. Any event whose ownership cannot be verified is left in place. This cannot be undone.",
     )
-    expect(removalConsequence("detach", 2, "Family")).toBe(
+    expect(removalConsequence(i18n, "detach", 2, "Family")).toBe(
       "2 projections stay in Family as ordinary events that are no longer updated or deleted. This cannot be undone.",
     )
   })
@@ -106,21 +109,21 @@ describe("rule removal copy", () => {
 
 describe("rule replacement copy", () => {
   it("names what happens to existing projections", () => {
-    expect(replacementConfirmLabel("delete", 37)).toBe("Replace rule and delete 37 projections")
-    expect(replacementConfirmLabel("detach", 1)).toBe("Replace rule and keep 1 event")
-    expect(replacementConfirmLabel("delete", 0)).toBe("Replace rule")
+    expect(replacementConfirmLabel(i18n, "delete", 37)).toBe("Replace rule and delete 37 projections")
+    expect(replacementConfirmLabel(i18n, "detach", 1)).toBe("Replace rule and keep 1 event")
+    expect(replacementConfirmLabel(i18n, "delete", 0)).toBe("Replace rule")
   })
 })
 
 describe("state and outcome labels", () => {
   it("labels removal in progress", () => {
-    expect(ruleStateLabel("disabled")).toBe("Removal incomplete")
-    expect(ruleStateLabel("dry_run_validated")).toBe("Preview passed")
-    expect(ruleStateLabel("some_new_state")).toBe("some new state")
+    expect(ruleStateLabel(i18n, "disabled")).toBe("Removal incomplete")
+    expect(ruleStateLabel(i18n, "dry_run_validated")).toBe("Preview passed")
+    expect(ruleStateLabel(i18n, "some_new_state")).toBe("some new state")
   })
 
   it("summarizes outcomes without provider detail", () => {
-    expect(runOutcomeSummary(null, "sync")).toBe("Not run yet")
+    expect(runOutcomeSummary(i18n, null, "sync")).toBe("Not run yet")
     const base = {
       completed_at: "2026-09-28T10:00:00+00:00",
       succeeded: true,
@@ -134,55 +137,55 @@ describe("state and outcome labels", () => {
       failure_kind: null,
       last_succeeded_at: null,
     }
-    expect(runOutcomeSummary(base, "sync")).toBe("Succeeded: 2 created, 1 updated, 0 deleted")
-    expect(runOutcomeSummary({ ...base, conflicts: 1 }, "sync")).toBe(
+    expect(runOutcomeSummary(i18n, base, "sync")).toBe("Succeeded: 2 created, 1 updated, 0 deleted")
+    expect(runOutcomeSummary(i18n, { ...base, conflicts: 1 }, "sync")).toBe(
       "Succeeded: 2 created, 1 updated, 0 deleted, 1 conflict",
     )
-    expect(runOutcomeSummary(base, "reconciliation")).toBe("All 42 projections matched their sources")
-    expect(runOutcomeSummary({ ...base, drift: 3 }, "reconciliation")).toBe(
+    expect(runOutcomeSummary(i18n, base, "reconciliation")).toBe("All 42 projections matched their sources")
+    expect(runOutcomeSummary(i18n, { ...base, drift: 3 }, "reconciliation")).toBe(
       "Checked 42 projections: 3 differences found; none were changed",
     )
-    expect(runOutcomeSummary({ ...base, drift: 1 }, "reconciliation")).toBe(
+    expect(runOutcomeSummary(i18n, { ...base, drift: 1 }, "reconciliation")).toBe(
       "Checked 42 projections: 1 difference found; it was not changed",
     )
     // A conflict is not drift: nothing was compared wrongly, one event was blocked.
-    expect(runOutcomeSummary({ ...base, conflicts: 1 }, "reconciliation")).toBe(
+    expect(runOutcomeSummary(i18n, { ...base, conflicts: 1 }, "reconciliation")).toBe(
       "Checked 42 projections: 1 conflict blocked",
     )
-    expect(runOutcomeSummary({ ...base, drift: 2, conflicts: 1 }, "reconciliation")).toBe(
+    expect(runOutcomeSummary(i18n, { ...base, drift: 2, conflicts: 1 }, "reconciliation")).toBe(
       "Checked 42 projections: 2 differences found; none were changed. 1 conflict blocked",
     )
     expect(
-      runOutcomeSummary({ ...base, succeeded: false, failure_kind: "authentication" }, "sync"),
+      runOutcomeSummary(i18n, { ...base, succeeded: false, failure_kind: "authentication" }, "sync"),
     ).toBe("Failed: Google authorization expired")
     expect(
-      runOutcomeSummary({ ...base, succeeded: false, failure_kind: "infrastructure" }, "sync"),
+      runOutcomeSummary(i18n, { ...base, succeeded: false, failure_kind: "infrastructure" }, "sync"),
     ).toBe("Failed: Local synchronization failed")
   })
 })
 
 describe("rule removal outcome", () => {
   it("reports deleted and detached events", () => {
-    expect(removalOutcome({ deleted: 3, detached: 0, conflicts: 0 }, "Family")).toEqual({
+    expect(removalOutcome(i18n, { deleted: 3, detached: 0, conflicts: 0 }, "Family")).toEqual({
       attention: false,
       message: "The rule was removed. 3 projections were deleted from Family.",
     })
-    expect(removalOutcome({ deleted: 0, detached: 1, conflicts: 0 }, "Family")).toEqual({
+    expect(removalOutcome(i18n, { deleted: 0, detached: 1, conflicts: 0 }, "Family")).toEqual({
       attention: false,
       message: "The rule was removed. 1 event stays in Family as a Detached Event.",
     })
-    expect(removalOutcome({ deleted: 0, detached: 0, conflicts: 0 }, "Family").message).toBe(
+    expect(removalOutcome(i18n, { deleted: 0, detached: 0, conflicts: 0 }, "Family").message).toBe(
       "The rule was removed.",
     )
   })
 
   it("calls attention to events left because ownership could not be verified", () => {
-    expect(removalOutcome({ deleted: 2, detached: 0, conflicts: 1 }, "Family")).toEqual({
+    expect(removalOutcome(i18n, { deleted: 2, detached: 0, conflicts: 1 }, "Family")).toEqual({
       attention: true,
       message:
         "The rule was removed. 2 projections were deleted from Family. 1 event was left in Family because its ownership could not be verified. Review it in Activity under Blocked.",
     })
-    expect(removalOutcome({ deleted: 0, detached: 0, conflicts: 2 }, "Family").message).toContain(
+    expect(removalOutcome(i18n, { deleted: 0, detached: 0, conflicts: 2 }, "Family").message).toContain(
       "2 events were left in Family because their ownership could not be verified. Review them",
     )
   })

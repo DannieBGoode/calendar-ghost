@@ -1,0 +1,317 @@
+{
+  "page": {
+    "loading": "Loading settings",
+    "loadFailure": "Settings could not load",
+    "title": "Settings",
+    "intro": "Accounts, storage, and integrations for this installation. Appearance applies to this browser only."
+  },
+  "googleReturn": {
+    "step": {
+      "title": "Finish connecting your Google account",
+      "body": "Google sends your browser to <code>{origin}</code> after you approve access. If that page did not load, copy its whole address from the address bar and paste it here. It works once, for 10 minutes.",
+      "dismiss": "Dismiss"
+    },
+    "note": {
+      "summary": "Google returns to <code>{origin}</code>, not this address",
+      "body": "If its page does not load after you approve access, copy the whole address from the address bar and paste it here within 10 minutes to finish connecting.",
+      "fix": "To stop this, set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address of this installation, for example with Tailscale Serve, and register it on your Google OAuth client. Opening Calendar Ghost at <code>{origin}</code>, for example through an SSH tunnel, also works."
+    },
+    "form": {
+      "label": "Address Google returned to",
+      "placeholder": "{redirectUri}?state=…",
+      "submit": "Finish connecting",
+      "invalid": "That is not the address Google returned to. Copy the whole address, starting with <code>{start}</code>"
+    }
+  },
+  "oauthOutcome": {
+    "connected": {
+      "title": "Google account connected",
+      "body": "Calendar permissions were confirmed and the account is ready for Directional Sync Rules."
+    },
+    "calendarPermissionRequired": {
+      "title": "Calendar access wasn’t granted",
+      "body": "No account was connected. Calendar-list and event permissions are required to discover calendars and run Directional Sync Rules."
+    },
+    "authorizationFailed": {
+      "title": "Google authorization could not be completed",
+      "body": "The account was not connected. Try again, then use Check access to confirm permissions."
+    },
+    "tryAgain": "Try again"
+  },
+  "connectionGuide": {
+    "summary": "How connecting works",
+    "connect": {
+      "title": "Connect a Google account",
+      "body": "Authorize calendar discovery and event access for one account."
+    },
+    "choose": {
+      "title": "Choose calendars",
+      "body": "Create a Directional Sync Rule with one source and one destination."
+    },
+    "preview": {
+      "title": "Preview before syncing",
+      "body": "Review what will be written before anything reaches the destination."
+    },
+    "ready": "Use the Connect Google account button above to begin.",
+    "notConfigured": "Add the master key and Google OAuth credentials in <code>.env</code>, then restart before connecting."
+  },
+  "accounts": {
+    "title": "Connected accounts",
+    "intro": "The Google accounts whose calendars your rules can read and write.",
+    "connect": "Connect Google account",
+    "notConfigured": "Not configured",
+    "notConfiguredNote": "Add the master key and Google OAuth credentials in <code>.env</code>, then restart before connecting an account.",
+    "loading": "Loading connected accounts",
+    "loadError": "Connected accounts could not be loaded. Reload the page and try again.",
+    "empty": {
+      "title": "No Google accounts connected",
+      "body": "Connect an account to choose its calendars for your rules."
+    },
+    "toggle": {
+      "hide": "Hide",
+      "show": "Show",
+      "hideAccounts": "Hide accounts",
+      "showAccounts": "Show accounts"
+    },
+    "usage": {
+      "none": "Not used by any rule",
+      "used": {
+        "one": "Used by {count} rule",
+        "other": "Used by {count} rules"
+      },
+      "stopped": {
+        "one": "{count} rule stopped until it is reauthorized",
+        "other": "{count} rules stopped until it is reauthorized"
+      }
+    },
+    "state": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
+    "actions": {
+      "checkAccess": "Check access",
+      "checkingAccess": "Checking access…",
+      "disconnect": "Disconnect account",
+      "reauthorize": "Reauthorize account",
+      "reauthorizeUnavailable": "Add the master key and Google OAuth credentials in .env, then restart.",
+      "delete": "Delete account",
+      "keep": "Keep account"
+    },
+    "access": {
+      "title": "Calendar API access confirmed",
+      "body": {
+        "one": "Calendar-list and event permissions are available. {count} calendar is visible and {writable} can be used as a destination.",
+        "other": "Calendar-list and event permissions are available. {count} calendars are visible and {writable} can be used as a destination."
+      },
+      "bodySourceOnly": {
+        "one": "Calendar-list and event permissions are available. {count} calendar is visible and {writable} can be used as a destination. This account can still be used as a source.",
+        "other": "Calendar-list and event permissions are available. {count} calendars are visible and {writable} can be used as a destination. This account can still be used as a source."
+      }
+    },
+    "disconnect": {
+      "title": "Disconnect {name}?",
+      "bodyWithRules": {
+        "one": "Stored Google credentials will be removed. {count} affected rule will require reauthorization before they can run.",
+        "other": "Stored Google credentials will be removed. {count} affected rules will require reauthorization before they can run."
+      },
+      "bodyWithoutRules": "Stored Google credentials will be removed. No Directional Sync Rules currently use this account.",
+      "pending": "Disconnecting…"
+    },
+    "delete": {
+      "title": "Delete {name} permanently?",
+      "bodyWithRules": {
+        "one": "This cannot be undone. The account record and {count} affected Directional Sync Rule, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed.",
+        "other": "This cannot be undone. The account record and {count} affected Directional Sync Rules, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed."
+      },
+      "bodyWithoutRules": "This cannot be undone. The account record will be removed. No Directional Sync Rules currently use this account.",
+      "confirm": "Delete permanently",
+      "pending": "Deleting…"
+    },
+    "status": {
+      "disconnected": "{name} was disconnected.",
+      "deleted": "{name} was permanently deleted.",
+      "deletedWithRules": {
+        "one": "{name} and {count} affected Directional Sync Rule were permanently deleted.",
+        "other": "{name} and {count} affected Directional Sync Rules were permanently deleted."
+      },
+      "unknownName": "The account"
+    }
+  },
+  "storage": {
+    "title": "Storage",
+    "intro": "Activity history and log files kept on this installation.",
+    "loadError": "Storage usage could not load.",
+    "database": "Database",
+    "summary": {
+      "empty": "{size} · No Activity yet",
+      "emptyReclaimable": "{size} · No Activity yet · {reclaimable} can be reclaimed",
+      "entries": {
+        "one": "{size} · {count} Activity entry since {day}",
+        "other": "{size} · {count} Activity entries since {day}"
+      },
+      "entriesReclaimable": {
+        "one": "{size} · {count} Activity entry since {day} · {reclaimable} can be reclaimed",
+        "other": "{size} · {count} Activity entries since {day} · {reclaimable} can be reclaimed"
+      }
+    },
+    "age": {
+      "label": "Clear Activity older than",
+      "option": {
+        "one": "Older than {count} day",
+        "other": "Older than {count} days"
+      }
+    },
+    "clear": {
+      "action": "Clear Activity",
+      "title": {
+        "one": "Clear Activity older than {count} day?",
+        "other": "Clear Activity older than {count} days?"
+      },
+      "counting": "Counting the entries that would be removed…",
+      "keep": "Keep Activity",
+      "pending": "Clearing…",
+      "body": {
+        "one": "{count} Activity entry older than {days} days will be removed. Each event's latest entry is kept. This cannot be undone.",
+        "other": "{count} Activity entries older than {days} days will be removed. Each event's latest entry is kept. This cannot be undone."
+      },
+      "nothingOld": {
+        "one": "Nothing is older than {count} day.",
+        "other": "Nothing is older than {count} days."
+      },
+      "nothingOldReclaimable": {
+        "one": "Nothing is older than {count} day. {size} left by earlier clearing can still be reclaimed.",
+        "other": "Nothing is older than {count} days. {size} left by earlier clearing can still be reclaimed."
+      },
+      "reclaim": "Reclaim space",
+      "reclaiming": "Reclaiming…",
+      "countFailed": "The entries to remove could not be counted: {reason}",
+      "countAgain": "Count again",
+      "countingAgain": "Counting…",
+      "reclaimed": "The space left by earlier clearing was reclaimed.",
+      "nothingCleared": "Nothing was old enough to clear.",
+      "cleared": {
+        "one": "{count} Activity entry was cleared.",
+        "other": "{count} Activity entries were cleared."
+      }
+    },
+    "logs": {
+      "title": "Logs",
+      "off": "File logging is off. Recent lines are still in the container logs, which rotate.",
+      "empty": "No log lines yet",
+      "range": "{size} · {first} – {last}",
+      "help": {
+        "summary": "How to turn it on",
+        "body": "Log files are kept unless <code>CALENDAR_SYNC_LOG_DIR</code> is set to an empty value. Set it to a writable directory, such as <code>/data/logs</code> on the data volume, or remove it from <code>.env</code>, then restart the service.",
+        "unusable": "If it already names a directory, that directory could not be used: <code>docker compose logs app</code> shows the warning that says why."
+      },
+      "download": "Download",
+      "purge": "Purge logs",
+      "purgeTitle": "Purge the logs?",
+      "purgeBody": "Every log line kept on this installation is deleted. Download them first if you may need them. This cannot be undone.",
+      "keep": "Keep logs",
+      "purging": "Purging…",
+      "purged": "The logs were purged."
+    }
+  },
+  "integrations": {
+    "title": "Integrations",
+    "intro": "Optional. Tokens let monitors, dashboards, and AI assistants read whether synchronization is healthy. They cannot change anything.",
+    "loadError": "Integration tokens could not load.",
+    "tryAgain": "Try again",
+    "summaryDetail": "For monitors, dashboards, and AI assistants",
+    "summary": {
+      "none": "No tokens yet",
+      "neverUsed": { "one": "{count} token · never used", "other": "{count} tokens · never used" },
+      "lastUsed": {
+        "one": "{count} token · last used {relative}",
+        "other": "{count} tokens · last used {relative}"
+      }
+    },
+    "toggle": {
+      "hide": "Hide",
+      "show": "Show",
+      "hideIntegrations": "Hide integrations",
+      "showIntegrations": "Show integrations"
+    },
+    "usage": {
+      "revoked": "Revoked {relative}",
+      "used": "Last used {used} · issued {issued}",
+      "neverUsed": "Never used · issued {issued}"
+    },
+    "issue": {
+      "label": "Issue a token",
+      "hint": "Name the tool that will use it.",
+      "placeholder": "For example, Uptime Kuma",
+      "submit": "Issue token",
+      "pending": "Issuing…"
+    },
+    "reveal": {
+      "title": "Copy the token for {name} now",
+      "body": "It is shown only once. Store it in your password manager or the tool that uses it.",
+      "tokenLabel": "Token for {name}",
+      "copy": "Copy token",
+      "copied": "Copied",
+      "copyUnavailable": "Select the token and copy it.",
+      "done": "Done"
+    },
+    "revoke": {
+      "action": "Revoke",
+      "title": "Revoke {name}?",
+      "body": "Anything that uses this token loses access right away. This cannot be undone.",
+      "keep": "Keep token",
+      "confirm": "Revoke token",
+      "pending": "Revoking…"
+    },
+    "revokedCount": { "one": "{count} revoked token", "other": "{count} revoked tokens" },
+    "revokedItem": "{name} · {usage}",
+    "status": {
+      "issued": "Token for {name} issued. Copy it now; it is shown only once.",
+      "revoked": "{name} was revoked. Anything that used it has lost access."
+    },
+    "transport": {
+      "summary": "This address uses plain HTTP",
+      "body": "A token sent to this address crosses the internet unencrypted. Serve Calendar Ghost over HTTPS, for example with Tailscale Serve or a reverse proxy, before you use tokens from outside your home network."
+    },
+    "examples": {
+      "summary": "Examples for monitors and AI assistants",
+      "intro": "Replace the token placeholder in each example with the token you copied.",
+      "uptimeKuma": {
+        "title": "Uptime Kuma",
+        "description": "Add an HTTP(s) - Json Query monitor. Alert when the result is not false."
+      },
+      "homepage": {
+        "title": "Homepage",
+        "description": "Add a customapi widget to the Calendar Ghost service."
+      },
+      "claudeCode": {
+        "title": "Claude Code",
+        "description": "Keep the token in an environment variable, then add the server."
+      },
+      "codex": {
+        "title": "Codex",
+        "description": "Add this to ~/.codex/config.toml and set CALENDAR_GHOST_TOKEN."
+      },
+      "desktop": {
+        "title": "Claude Desktop and other apps",
+        "description": "Apps that start MCP servers on your computer connect through the mcp-remote bridge, which needs Node.js. In Claude Desktop, add this to the configuration file opened from Settings, Developer, Edit Config, then restart it."
+      }
+    }
+  },
+  "appearance": {
+    "title": "Appearance",
+    "intro": "Saved in this browser only.",
+    "theme": {
+      "title": "Theme",
+      "body": "Follow this device, or keep the interface light or dark.",
+      "system": "Device setting",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "darkPalette": {
+      "title": "Dark palette",
+      "body": "The colors used whenever the interface is dark.",
+      "twilight": "Twilight (indigo)",
+      "midnight": "Midnight (blue)"
+    }
+  }
+}

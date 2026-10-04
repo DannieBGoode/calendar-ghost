@@ -1,20 +1,21 @@
+import type { MessageKey } from "@/i18n/types"
+
 import { ApiError } from "./api"
 
 export type ActivityFailure = "session-expired" | "application-updated" | "service-error" | "unreachable"
 
-export const activityFailureMessages: Record<ActivityFailure, string> = {
-  "session-expired": "Your administrator session has expired. Sign in again to view operational activity.",
-  "application-updated": "Calendar Ghost was updated. Reload the page to continue.",
-  "service-error": "The local service returned an error; try the request again.",
-  unreachable:
-    "The request did not reach the local service. It may have been restarting, or a browser extension such as a content blocker may be blocking it; try the request again.",
+export const activityFailureMessages: Record<ActivityFailure, MessageKey> = {
+  "session-expired": "activity.failure.message.sessionExpired",
+  "application-updated": "activity.failure.message.applicationUpdated",
+  "service-error": "activity.failure.message.serviceError",
+  unreachable: "activity.failure.message.unreachable",
 }
 
-export const activityFailureActions: Record<ActivityFailure, string> = {
-  "session-expired": "Sign in again",
-  "application-updated": "Reload page",
-  "service-error": "Try again",
-  unreachable: "Try again",
+export const activityFailureActions: Record<ActivityFailure, MessageKey> = {
+  "session-expired": "activity.failure.action.signIn",
+  "application-updated": "activity.failure.action.reload",
+  "service-error": "activity.failure.action.retry",
+  unreachable: "activity.failure.action.retry",
 }
 
 // A 404 from a known API path means this page predates the running service, so only a reload

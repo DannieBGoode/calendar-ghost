@@ -1,0 +1,35 @@
+{
+  "loading": "Loading",
+  "loadFailure": {
+    "body": "Check that the local service is running, then try again.",
+    "retry": "Try again"
+  },
+  "themeToggle": {
+    "label": "Dark mode",
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode"
+  },
+  "time": {
+    "justNow": "just now",
+    "unknown": "at an unknown time",
+    "onDay": "on {day}"
+  },
+  "bytes": {
+    "b": "{value} B",
+    "kb": "{value} KB",
+    "mb": "{value} MB",
+    "gb": "{value} GB",
+    "tb": "{value} TB"
+  },
+  "range": {
+    "sameDay": "{day}, {start} – {end}",
+    "span": "{start} – {end}",
+    "allDay": "{day}, all day",
+    "allDaySpan": "{first} – {last}, all day"
+  },
+  "apiError": {
+    "generic": "The request could not be completed.",
+    "network": "The browser could not reach Calendar Ghost.",
+    "unreadableResponse": "The service returned an unreadable response."
+  }
+}

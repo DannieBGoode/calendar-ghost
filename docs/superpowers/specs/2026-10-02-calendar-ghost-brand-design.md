@@ -8,7 +8,7 @@ inconsistent heading levels. This change gives the product a name and a calm, di
 without changing how it behaves or how an existing installation upgrades.
 
 **Decided with the administrator:** the product is renamed **Calendar Ghost**. The ghost is the
-brand metaphor for Busy-Only Projection — a silhouette of the source event with its details left
+brand metaphor for Busy-Only Projection: a silhouette of the source event with its details left
 behind. The personality is the *calm ghost*: the ghost appears in the mark, the sign-in screen, the
 loading state, and empty states, never in routine controls or incident copy.
 

@@ -1,3 +1,5 @@
+import type { I18n } from "@/i18n/translator"
+
 type SummarizedAccount = { state: string; rule_count: number }
 
 export type AccountSummary = {
@@ -8,25 +10,28 @@ export type AccountSummary = {
   stopsRules: boolean
 }
 
-export function accountSummary(accounts: readonly SummarizedAccount[]): AccountSummary {
+export function accountSummary(i18n: I18n, accounts: readonly SummarizedAccount[]): AccountSummary {
   const disconnectedAccounts = accounts.filter((account) => account.state !== "connected")
   const disconnected = disconnectedAccounts.length
   const stopsRules = disconnectedAccounts.some((account) => account.rule_count > 0)
   const connected = accounts.length - disconnected
-  const reauthorize = `${disconnected} ${disconnected === 1 ? "needs" : "need"} reauthorization`
   if (disconnected === 0) {
-    return { text: `${connected} account${connected === 1 ? "" : "s"} connected`, needsAttention: false, stopsRules }
+    return {
+      text: i18n.t("overview.accountSummary.connectedOnly", { count: connected }),
+      needsAttention: false,
+      stopsRules,
+    }
   }
   if (connected === 0) {
-    const text = `${disconnected} account${disconnected === 1 ? "" : "s"} disconnected`
     return {
-      text: `${text}, ${disconnected === 1 ? "it needs" : "they need"} reauthorization`,
+      text: i18n.t("overview.accountSummary.disconnectedOnly", { count: disconnected }),
       needsAttention: true,
       stopsRules,
     }
   }
+  const reauthorize = i18n.t("overview.accountSummary.reauthorizeCount", { count: disconnected })
   return {
-    text: `${connected} account${connected === 1 ? "" : "s"} connected, ${reauthorize}`,
+    text: i18n.t("overview.accountSummary.mixed", { count: connected, reauthorize }),
     needsAttention: true,
     stopsRules,
   }

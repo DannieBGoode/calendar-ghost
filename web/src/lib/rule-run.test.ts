@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
+
 import type { ReconcileResult, RunOutcome, SyncResult } from "./api"
 import {
   lastRunLabel,
@@ -8,6 +10,8 @@ import {
   reconcileResultMessage,
   syncResultMessage,
 } from "./rule-run"
+
+const i18n = testI18n()
 
 const now = Date.parse("2026-09-28T12:00:00Z")
 const outcome: RunOutcome = {
@@ -34,33 +38,34 @@ const reconciled: ReconcileResult = {
 
 describe("lastRunLabel", () => {
   it("describes success, failure, and never-run rules", () => {
-    expect(lastRunLabel(outcome, now)).toBe("Last synced 10 minutes ago")
-    expect(lastRunLabel({ ...outcome, succeeded: false, failure_kind: "rate_limit" }, now)).toBe(
+    expect(lastRunLabel(i18n, outcome, now)).toBe("Last synced 10 minutes ago")
+    expect(lastRunLabel(i18n, { ...outcome, succeeded: false, failure_kind: "rate_limit" }, now)).toBe(
       "Last sync failed 10 minutes ago: Google Calendar was limiting requests",
     )
-    expect(lastRunLabel(null, now)).toBe("Not synced yet")
+    expect(lastRunLabel(i18n, null, now)).toBe("Not synced yet")
   })
 })
 
 describe("run results", () => {
   it("summarizes a sync by what changed", () => {
-    expect(syncResultMessage(result)).toBe("Up to date. Nothing changed since the last run.")
-    expect(syncResultMessage({ ...result, created: 2, deleted: 1 })).toBe("Synced: 2 created, 1 deleted.")
-    expect(syncResultMessage({ ...result, conflicts: 1 })).toContain("1 conflict blocked")
+    expect(syncResultMessage(i18n, result)).toBe("Up to date. Nothing changed since the last run.")
+    expect(syncResultMessage(i18n, { ...result, created: 2, deleted: 1 })).toBe("Synced: 2 created, 1 deleted.")
+    expect(syncResultMessage(i18n, { ...result, conflicts: 1 })).toContain("1 conflict blocked")
   })
 
   it("summarizes a reconciliation by what its sync changed and what its check found", () => {
     const checked = { ...reconciled, checked_mappings: 12 }
-    expect(reconcileResultMessage({ ...checked, consistent: true }, "Family")).toBe(
+    expect(reconcileResultMessage(i18n, { ...checked, consistent: true }, "Family")).toBe(
       "Checked 12 events this rule wrote to Family: every one matches its source event.",
     )
-    expect(reconcileResultMessage({ ...checked, consistent: true, updated: 2 }, "Family")).toBe(
+    expect(reconcileResultMessage(i18n, { ...checked, consistent: true, updated: 2 }, "Family")).toBe(
       "Synced: 2 updated. Checked 12 events this rule wrote to Family: every one matches its source event.",
     )
   })
 
   it("counts what still differs after the sync by kind, and never blames a change during the check", () => {
     const message = reconcileResultMessage(
+      i18n,
       {
         ...reconciled,
         consistent: false,
@@ -85,6 +90,7 @@ describe("run results", () => {
 
   it("names one remaining difference in the singular", () => {
     const message = reconcileResultMessage(
+      i18n,
       { ...reconciled, consistent: false, checked_mappings: 1, drift: [{ kind: "missing", detail: "" }] },
       "Family",
     )
@@ -102,13 +108,14 @@ describe("run results", () => {
       { kind: "unexpected", detail: "" },
       { kind: "unexpected", detail: "" },
     ]
-    expect(reconcileResultMessage({ ...reconciled, consistent: false, checked_mappings: 9, drift }, "Family")).toContain(
+    expect(reconcileResultMessage(i18n, { ...reconciled, consistent: false, checked_mappings: 9, drift }, "Family")).toContain(
       "2 different from their source events, 2 still in Family though their source events were cancelled or excluded.",
     )
   })
 
   it("never calls what the check only reported repaired", () => {
     const message = reconcileResultMessage(
+      i18n,
       {
         ...reconciled,
         consistent: false,
@@ -123,6 +130,7 @@ describe("run results", () => {
   it("counts the sync's blocks and the check's own conflicts together", () => {
     expect(
       reconcileResultMessage(
+        i18n,
         {
           ...reconciled,
           conflicts: 1,
@@ -138,8 +146,9 @@ describe("run results", () => {
 
   it("never says every projection matches when an event was blocked", () => {
     const checked = { ...reconciled, checked_mappings: 4 }
-    const bySync = reconcileResultMessage({ ...checked, conflicts: 1, consistent: true }, "Family")
+    const bySync = reconcileResultMessage(i18n, { ...checked, conflicts: 1, consistent: true }, "Family")
     const byCheck = reconcileResultMessage(
+      i18n,
       {
         ...checked,
         consistent: false,
@@ -157,24 +166,24 @@ describe("run results", () => {
 describe("previewReadyLabel", () => {
   it("states what the preview found in one line", () => {
     expect(
-      previewReadyLabel({ eligible_events: 73, excluded_events: 47, completed_at: "2026-09-28T11:58:00Z" }, "Work", now),
+      previewReadyLabel(i18n, { eligible_events: 73, excluded_events: 47, completed_at: "2026-09-28T11:58:00Z" }, "Work", now),
     ).toBe("Previewed 2 minutes ago: 73 events will appear in Work, 47 excluded.")
     expect(
-      previewReadyLabel({ eligible_events: 1, excluded_events: 0, completed_at: "2026-09-28T11:58:00Z" }, "Work", now),
+      previewReadyLabel(i18n, { eligible_events: 1, excluded_events: 0, completed_at: "2026-09-28T11:58:00Z" }, "Work", now),
     ).toBe("Previewed 2 minutes ago: 1 event will appear in Work.")
   })
 
   it("still names the destination when the preview counts are not known", () => {
-    expect(previewReadyLabel(null, "Work", now)).toBe("Start syncing to show events in Work.")
+    expect(previewReadyLabel(i18n, null, "Work", now)).toBe("Start syncing to show events in Work.")
   })
 })
 
 describe("recoveryExplanation", () => {
   it("names the cause and reassures that nothing was lost", () => {
-    expect(recoveryExplanation({ ...outcome, succeeded: false, failure_kind: "rate_limit" }, now)).toBe(
+    expect(recoveryExplanation(i18n, { ...outcome, succeeded: false, failure_kind: "rate_limit" }, now)).toBe(
       "Google Calendar was limiting requests 10 minutes ago, so Calendar Ghost stopped this rule to be safe. Nothing was lost. Preview it to check both calendars, then start syncing again.",
     )
-    expect(recoveryExplanation(null, now)).toMatch(/^Calendar Ghost stopped this rule to be safe\. Nothing was lost/)
+    expect(recoveryExplanation(i18n, null, now)).toMatch(/^Calendar Ghost stopped this rule to be safe\. Nothing was lost/)
   })
 })
 

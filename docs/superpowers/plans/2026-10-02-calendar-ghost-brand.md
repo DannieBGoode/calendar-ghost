@@ -24,11 +24,11 @@
 
 ## Review Focus
 
-1. **Low-contrast token pairs in either appearance** — every text/surface pair must stay AA after the palette swap. Pinned by `brand-contrast.test.ts` in Task 1.
-2. **Offline Raspberry Pi** — fonts must render with no internet; a stray CDN `@import` or `<link>` would silently fall back. Pinned by the "no remote font" test in Task 1.
-3. **Upgrade keeps the saved appearance** — renaming the theme storage key would reset every user to Device setting. Pinned by the storage-key test in Task 2.
-4. **Old name left in copy** — a missed "Calendar Sync" string in an explanation or incident. Pinned by the old-name guard in Task 4 (web) and the API/notification tests in Task 5.
-5. **Reduced motion** — the loading ghost must not animate when the device asks for reduced motion. Pinned by the stylesheet test in Task 2.
+1. **Low-contrast token pairs in either appearance**: every text/surface pair must stay AA after the palette swap. Pinned by `brand-contrast.test.ts` in Task 1.
+2. **Offline Raspberry Pi**: fonts must render with no internet; a stray CDN `@import` or `<link>` would silently fall back. Pinned by the "no remote font" test in Task 1.
+3. **Upgrade keeps the saved appearance**: renaming the theme storage key would reset every user to Device setting. Pinned by the storage-key test in Task 2.
+4. **Old name left in copy**: a missed "Calendar Sync" string in an explanation or incident. Pinned by the old-name guard in Task 4 (web) and the API/notification tests in Task 5.
+5. **Reduced motion**: the loading ghost must not animate when the device asks for reduced motion. Pinned by the stylesheet test in Task 2.
 
 ---
 
@@ -153,7 +153,7 @@ describe("Twilight identity", () => {
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `npm --prefix web run test -- brand-contrast`
-Expected: FAIL — `Missing --twilight-ink` / `Missing --brand-eyes`, Lantern Indigo assertion, and font assertions.
+Expected: FAIL: `Missing --twilight-ink` / `Missing --brand-eyes`, Lantern Indigo assertion, and font assertions.
 
 - [ ] **Step 3: Install the fonts**
 
@@ -337,7 +337,7 @@ describe("GhostMark", () => {
 - [ ] **Step 2: Run them to verify they fail**
 
 Run: `npm --prefix web run test -- brand ghost-mark`
-Expected: FAIL — cannot resolve `./brand` and `./ghost-mark`.
+Expected: FAIL: cannot resolve `./brand` and `./ghost-mark`.
 
 - [ ] **Step 3: Inject the version at build time**
 
@@ -612,7 +612,7 @@ Change `.auth-copy` and `.privacy-list` `color: var(--muted-foreground)` → `co
 
 - [ ] **Step 5: Empty states**
 
-`web/src/features/rules.tsx` — import `GhostMark` and make the empty note:
+`web/src/features/rules.tsx`: import `GhostMark` and make the empty note:
 
 ```tsx
           <section className="empty-note" aria-labelledby="no-rules-title">
@@ -628,9 +628,9 @@ Change `.auth-copy` and `.privacy-list` `color: var(--muted-foreground)` → `co
           </section>
 ```
 
-`web/src/features/activity.tsx` — import `GhostMark`; in the non-error empty panel replace `<div className="empty-icon"><Activity aria-hidden="true" /></div>` with `<GhostMark className="empty-ghost" />`. Remove `Activity` from the lucide import only if nothing else in the file uses it (`grep -n "<Activity" web/src/features/activity.tsx`).
+`web/src/features/activity.tsx`: import `GhostMark`; in the non-error empty panel replace `<div className="empty-icon"><Activity aria-hidden="true" /></div>` with `<GhostMark className="empty-ghost" />`. Remove `Activity` from the lucide import only if nothing else in the file uses it (`grep -n "<Activity" web/src/features/activity.tsx`).
 
-CSS — `.empty-note` gains `display: flex; align-items: center; gap: 1rem;` and add:
+CSS: `.empty-note` gains `display: flex; align-items: center; gap: 1rem;` and add:
 
 ```css
 .empty-ghost {
@@ -713,7 +713,7 @@ Expected: FAIL listing about a dozen files (those above).
 
 - [ ] **Step 3: Rename**
 
-Run: `grep -rln "Calendar Sync" web/src | xargs perl -pi -e 's/Calendar Sync\b/Calendar Ghost/g'` (perl, because BSD `sed` has no `\b`). Then `git diff web/src` and confirm every change is a user-facing sentence, a test expectation, or a comment — no identifiers, keys, or URLs changed.
+Run: `grep -rln "Calendar Sync" web/src | xargs perl -pi -e 's/Calendar Sync\b/Calendar Ghost/g'` (perl, because BSD `sed` has no `\b`). Then `git diff web/src` and confirm every change is a user-facing sentence, a test expectation, or a comment, with no identifiers, keys, or URLs changed.
 
 - [ ] **Step 4: Run the suite**
 
@@ -839,7 +839,7 @@ Add to its settled product decisions section:
 
 - Frontmatter: `name: Calendar Ghost`; `description: A calm ghost that keeps your busy time where it needs to be`. Replace `status-cobalt`/`night-status-cobalt` with `lantern-indigo: "oklch(0.47 0.15 278)"` / `night-lantern-indigo: "oklch(0.74 0.12 278)"`, and update `daylight`→`mist`, `quiet-surface`, `muted-surface`, `calm-ink`, `muted-ink`, `quiet-border`, `night*` neutrals to the Task 1 values; add `brand-glow`, `twilight-canvas`, `twilight-ink`, `twilight-muted`. Typography: `headline.fontFamily: "Fraunces Variable, ui-serif, Georgia, serif"`, `fontWeight: 560`, `letterSpacing: "-0.015em"`; `title`/`body`/`label` use `"Figtree Variable, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"`, `title.fontWeight: 650`. Components: `button-primary.backgroundColor: "{colors.lantern-indigo}"`.
 - Body: title `# Design System: Calendar Ghost`. North Star becomes **"The Calm Ghost"**: *"A friendly presence at twilight: pale, quiet, and always where you expect it. The ghost lives in the mark, the sign-in panel, loading, and empty states; everywhere else the interface is a calm household utility."* Rename "Status Cobalt" → "Lantern Indigo" throughout (Quiet Indicator Rule now names Lantern Indigo). Typography section: display Fraunces (page titles and auth headline only, SOFT 100), body Figtree, bundled for offline use, hierarchy as in the spec §4.
-- Add a `## Brand` section before `## Colors`: name and tagline; the mark (calendar page, two tabs, three-scallop hem, two eyes; `GhostMark`; `--brand-glow`/`--brand-line`/`--brand-eyes`); **The Ghost Is Brand, Not Vocabulary Rule** — the ghost appears in the mark, auth panel, loading, and empty states; labels and explanations use the glossary.
+- Add a `## Brand` section before `## Colors`: name and tagline; the mark (calendar page, two tabs, three-scallop hem, two eyes; `GhostMark`; `--brand-glow`/`--brand-line`/`--brand-eyes`); **The Ghost Is Brand, Not Vocabulary Rule**: the ghost appears in the mark, auth panel, loading, and empty states; labels and explanations use the glossary.
 - Update "Elevation"/"Do's and Don'ts" only where they name cobalt or Inter.
 
 - [ ] **Step 4: Update `.impeccable/design.json`**

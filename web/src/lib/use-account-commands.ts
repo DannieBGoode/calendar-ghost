@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
+import { useI18n } from "@/i18n/provider"
 import { type ConnectedAccount, api } from "@/lib/api"
 import { withoutKey } from "@/lib/utils"
 
@@ -8,6 +9,7 @@ export type AccessCheck = Awaited<ReturnType<typeof api.verifyAccountAccess>>
 
 /** The account confirmations, access checks, and the commands that disconnect or delete one. */
 export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const [confirmingAccountId, setConfirmingAccountId] = useState<string | null>(null)
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null)
@@ -26,7 +28,7 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
     mutationFn: api.disconnectAccount,
     onSuccess: async (account) => {
       setConfirmingAccountId(null)
-      setStatusMessage(`${account.display_name} was disconnected.`)
+      setStatusMessage(t("settings.accounts.status.disconnected", { name: account.display_name }))
       setAccessChecks((current) => withoutKey(current, account.id))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
@@ -41,7 +43,7 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
       await api.deleteAccount(accountId)
       return {
         accountId,
-        displayName: account?.display_name ?? "The account",
+        displayName: account?.display_name ?? t("settings.accounts.status.unknownName"),
         ruleCount: account?.rule_count ?? 0,
       }
     },
@@ -49,8 +51,8 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
       setDeletingAccountId(null)
       setStatusMessage(
         ruleCount > 0
-          ? `${displayName} and ${ruleCount} affected Directional Sync Rule${ruleCount === 1 ? "" : "s"} were permanently deleted.`
-          : `${displayName} was permanently deleted.`,
+          ? t("settings.accounts.status.deletedWithRules", { name: displayName, count: ruleCount })
+          : t("settings.accounts.status.deleted", { name: displayName }),
       )
       setAccessChecks((current) => withoutKey(current, accountId))
       await Promise.all([

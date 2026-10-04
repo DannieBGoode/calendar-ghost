@@ -18,6 +18,8 @@ import { CalendarReplacement } from "@/features/calendar-replacement"
 import { RuleFacts, RuleRuns } from "@/features/rule-details-facts"
 import { PolicyEditor } from "@/features/rule-policy-editor"
 import { RuleRemoval } from "@/features/rule-removal"
+import { useI18n } from "@/i18n/provider"
+import { rich } from "@/i18n/rich"
 import {
   ApiError,
   api,
@@ -26,7 +28,6 @@ import {
   type RuleDetail,
 } from "@/lib/api"
 import { appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
-import { plural } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 import { REMOVAL_REFRESH_MS, reportedRemoval, useActiveRemoval, type ActiveRemoval } from "@/lib/rule-removal"
 import { recoveryExplanation } from "@/lib/rule-run"
@@ -50,6 +51,7 @@ export function RuleDetailsView({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
+  const { t } = useI18n()
   const now = useNow()
   const commands = useRuleCommands()
   const sessionRemoval = useActiveRemoval(ruleId)
@@ -69,7 +71,7 @@ export function RuleDetailsView({
     if (loadedRuleId && namesReady) heading.current?.focus()
   }, [loadedRuleId, namesReady])
 
-  if (rule.isPending || accounts.isPending) return <PageSkeleton label="Loading rule" />
+  if (rule.isPending || accounts.isPending) return <PageSkeleton label={t("ruleDetails.page.loading")} />
   // The last refresh of a finishing removal can find the rule gone before the removal returns.
   if (!rule.data || (rule.error && !sessionRemoval) || accounts.error) {
     return (
@@ -128,6 +130,7 @@ function useRuleCalendars(detail: RuleDetail | undefined, accounts: ConnectedAcc
 }
 
 function BackToRules({ onViewChange }: { onViewChange: ViewChange }) {
+  const { t } = useI18n()
   return (
     <a
       className="back-link"
@@ -138,7 +141,7 @@ function BackToRules({ onViewChange }: { onViewChange: ViewChange }) {
         onViewChange("rules")
       }}
     >
-      <ArrowLeft aria-hidden="true" /> All rules
+      <ArrowLeft aria-hidden="true" /> {t("ruleDetails.page.back")}
     </a>
   )
 }
@@ -152,23 +155,30 @@ function RuleLoadFailure({
   onRetry: () => void
   onViewChange: ViewChange
 }) {
+  const { t } = useI18n()
   const missing = rule.error instanceof ApiError && rule.error.status === 404
   // Stale data still describes the removal this page was showing when the rule disappeared.
   const removed = missing && rule.data?.running?.kind === "removal"
   return (
     <section className="page-section" role="alert">
       <BackToRules onViewChange={onViewChange} />
-      <h1>{removed ? "Rule removed" : missing ? "This rule no longer exists" : "Rule details could not load"}</h1>
+      <h1>
+        {removed
+          ? t("ruleDetails.page.removedTitle")
+          : missing
+            ? t("ruleDetails.page.missingTitle")
+            : t("ruleDetails.page.loadFailedTitle")}
+      </h1>
       <p className="page-intro">
         {removed
-          ? "Its removal finished. Activity lists what happened to each of its events."
+          ? t("ruleDetails.page.removedBody")
           : missing
-            ? "It may have been removed or replaced. Return to the rules list to continue."
-            : "Check that the local service is running, then try again."}
+            ? t("ruleDetails.page.missingBody")
+            : t("ruleDetails.page.loadFailedBody")}
       </p>
       {!missing && (
         <Button variant="outline" onClick={onRetry}>
-          <RefreshCw aria-hidden="true" /> Try again
+          <RefreshCw aria-hidden="true" /> {t("ruleDetails.page.tryAgain")}
         </Button>
       )}
     </section>
@@ -200,6 +210,7 @@ function RuleDetailsPage({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
+  const i18n = useI18n()
   // A failed refresh keeps stale data, which must not keep a finished removal on screen.
   const reported = refreshFailed ? undefined : reportedRemoval(detail.running, detail.mapping_count)
   const removal = reported ?? sessionRemoval
@@ -211,11 +222,13 @@ function RuleDetailsPage({
     (account) => account?.state === "disconnected",
   )
   const sourceName = ruleEndpointLabel(
+    i18n,
     detail.source,
     sourceAccount,
     calendarsByAccount.get(detail.source.connected_account_id),
   ).calendar
   const destinationName = ruleEndpointLabel(
+    i18n,
     detail.destination,
     destinationAccount,
     calendarsByAccount.get(detail.destination.connected_account_id),
@@ -320,12 +333,18 @@ function RuleHeading({
   sourceName: string
   destinationName: string
 }) {
+  const { t } = useI18n()
   return (
     <div className="rule-heading">
       <h1 ref={ref} tabIndex={-1}>
-        {sourceName} <ArrowRight aria-hidden="true" className="rule-heading-arrow" />
-        <span className="sr-only"> to </span>
-        {destinationName}
+        {/* The arrow reads as one sentence to assistive technology, not as glued fragments. */}
+        <span aria-hidden="true">
+          {sourceName} <ArrowRight className="rule-heading-arrow" />
+          {destinationName}
+        </span>
+        <span className="sr-only">
+          {t("ruleDetails.page.heading", { source: sourceName, destination: destinationName })}
+        </span>
       </h1>
       <div className="rule-direction rule-details-direction">
         <RuleEndpoint
@@ -365,13 +384,14 @@ function RuleNotes({
   destinationName: string
   now: number
 }) {
+  const i18n = useI18n()
   const stopped = displayState === "degraded" && !disconnected
   return (
     <>
       {stopped && (
         <div className="rule-recovery-note">
           <ShieldAlert aria-hidden="true" />
-          <p>{recoveryExplanation(detail.last_sync, now)}</p>
+          <p>{recoveryExplanation(i18n, detail.last_sync, now)}</p>
         </div>
       )}
       {displayState === "dry_run_validated" && (
@@ -388,8 +408,9 @@ function RuleNotes({
         <div className="rule-recovery-note">
           <ShieldAlert aria-hidden="true" />
           <p>
-            <strong>Preview required.</strong> The policy changed. Preview this rule, then start syncing;{" "}
-            {plural(detail.mapping_count, "existing projection")} will be rewritten on the next run.
+            {rich(i18n.t("ruleDetails.page.reprojectionRequired", { count: detail.mapping_count }), {
+              strong: (text) => <strong>{text}</strong>,
+            })}
           </p>
         </div>
       )}

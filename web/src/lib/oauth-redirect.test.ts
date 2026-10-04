@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
+
 import {
   AUTHORIZATION_RETURN_MS,
+  OAUTH_OUTCOME_MESSAGES,
   authorizationAwaitingReturn,
   clearAuthorizationStart,
   oauthRedirectMismatch,
+  oauthOutcome,
   oauthReturnAtCurrentOrigin,
   recordAuthorizationStart,
 } from "./oauth-redirect"
@@ -37,6 +41,26 @@ describe("oauthRedirectMismatch", () => {
   it("stays silent when the redirect URI is missing or unparseable", () => {
     expect(oauthRedirectMismatch(null, "http://192.168.1.50:18000")).toBeNull()
     expect(oauthRedirectMismatch("not a url", "http://192.168.1.50:18000")).toBeNull()
+  })
+})
+
+describe("oauthOutcome", () => {
+  it("reads the outcome the OAuth callback adds to the Settings address", () => {
+    expect(oauthOutcome("?google=connected")).toBe("connected")
+    expect(oauthOutcome("?google=calendar_permission_required")).toBe("calendar_permission_required")
+    expect(oauthOutcome("?tab=x&google=authorization_failed")).toBe("authorization_failed")
+  })
+
+  it("ignores a missing or unknown outcome", () => {
+    expect(oauthOutcome("")).toBeNull()
+    expect(oauthOutcome("?google=surprise")).toBeNull()
+  })
+
+  it("names each outcome in the catalog", () => {
+    const { t } = testI18n()
+    expect(t(OAUTH_OUTCOME_MESSAGES.connected.title)).toBe("Google account connected")
+    expect(t(OAUTH_OUTCOME_MESSAGES.calendar_permission_required.title)).toBe("Calendar access wasn’t granted")
+    expect(t(OAUTH_OUTCOME_MESSAGES.authorization_failed.title)).toBe("Google authorization could not be completed")
   })
 })
 

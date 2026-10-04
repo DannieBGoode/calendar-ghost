@@ -3,6 +3,7 @@ import { CheckCircle2, CircleAlert, CircleDot, CirclePause, LoaderCircle, Shield
 import { OverflowMenu, type OverflowMenuItem } from "@/components/overflow-menu"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useI18n } from "@/i18n/provider"
 import type { PreviewSummary } from "@/lib/api"
 import { appPathForView, isPlainLeftClick, type AppView } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
@@ -26,32 +27,33 @@ export function RuleStatusBadge({
   stopped: boolean
   working?: RuleWorkKind | undefined
 }) {
+  const i18n = useI18n()
   if (state === "removing" || working) {
     return (
       <Badge variant="neutral">
         <LoaderCircle aria-hidden="true" className="work-spinner" />{" "}
-        {working ? workLabel(working) : ruleStateLabel(state)}
+        {working ? workLabel(i18n, working) : ruleStateLabel(i18n, state)}
       </Badge>
     )
   }
   if (stopped || state === "disabled") {
     return (
       <Badge variant="stopped">
-        <ShieldAlert aria-hidden="true" /> {state === "disabled" ? ruleStateLabel(state) : "Stopped"}
+        <ShieldAlert aria-hidden="true" /> {state === "disabled" ? ruleStateLabel(i18n, state) : i18n.t("ruleDetails.state.degraded")}
       </Badge>
     )
   }
   if (state === "enabled") {
     return (
       <Badge variant="healthy">
-        <CheckCircle2 aria-hidden="true" /> Enabled
+        <CheckCircle2 aria-hidden="true" /> {i18n.t("ruleDetails.state.enabled")}
       </Badge>
     )
   }
   return (
     <Badge variant="neutral">
       {state === "paused" ? <CirclePause aria-hidden="true" /> : <CircleDot aria-hidden="true" />}{" "}
-      {ruleStateLabel(state)}
+      {ruleStateLabel(i18n, state)}
     </Badge>
   )
 }
@@ -75,6 +77,7 @@ export function RuleNextAction({
   onRun: (command: RuleCommand) => void
   onViewChange: (view: AppView) => void
 }) {
+  const { t } = useI18n()
   if (state === "disabled" || state === "removing") return null
   if (disconnected) {
     return (
@@ -88,7 +91,7 @@ export function RuleNextAction({
             onViewChange("settings")
           }}
         >
-          Reauthorize in Settings
+          {t("ruleDetails.commands.reauthorize")}
         </a>
       </Button>
     )
@@ -102,10 +105,10 @@ export function RuleNextAction({
       >
         {pending === "enable" ? (
           <>
-            <LoaderCircle aria-hidden="true" className="work-spinner" /> {PENDING_LABELS.enable}
+            <LoaderCircle aria-hidden="true" className="work-spinner" /> {t(PENDING_LABELS.enable)}
           </>
         ) : (
-          "Start syncing"
+          t("ruleDetails.commands.startSyncing")
         )}
       </Button>
     )
@@ -119,7 +122,7 @@ export function RuleNextAction({
       onClick={() => pending === undefined && onRun("preview")}
     >
       {/* The badge and work note say it is previewing; the label stays so it does not echo them. */}
-      {state === "degraded" ? "Preview to restart" : "Preview rule"}
+      {state === "degraded" ? t("ruleDetails.commands.previewToRestart") : t("ruleDetails.commands.preview")}
     </Button>
   )
 }
@@ -142,21 +145,22 @@ export function RuleCommandMenu({
   reserveSpace?: boolean
   onRun: (command: RuleCommand) => void
 }) {
+  const { t } = useI18n()
   const busy = pending !== undefined
   const items: OverflowMenuItem[] = []
   if (state === "enabled" && !disconnected) {
     items.push(
       {
         id: "sync",
-        label: "Sync now",
-        description: `Apply changes made in ${source} since the last run. Runs by itself every five minutes.`,
+        label: t("ruleDetails.commands.syncNow"),
+        description: t("ruleDetails.commands.syncNowDescription", { source }),
         disabled: busy,
         onSelect: () => onRun("sync"),
       },
       {
         id: "reconcile",
-        label: "Reconcile now",
-        description: `Sync in full, putting back events edited or deleted in ${destination}, then check the events this rule wrote there from its starting point onward and report any that still differ.`,
+        label: t("ruleDetails.commands.reconcileNow"),
+        description: t("ruleDetails.commands.reconcileNowDescription", { destination }),
         disabled: busy,
         onSelect: () => onRun("reconcile"),
       },
@@ -165,14 +169,14 @@ export function RuleCommandMenu({
   if (state === "enabled" || state === "degraded") {
     items.push({
       id: "pause",
-      label: "Pause rule",
-      description: `Stop writing to ${destination}. Existing events stay; resuming needs a new preview.`,
+      label: t("ruleDetails.commands.pause"),
+      description: t("ruleDetails.commands.pauseDescription", { destination }),
       disabled: busy,
       onSelect: () => onRun("pause"),
     })
   }
   if (!items.length) return reserveSpace ? <span className="overflow-menu-spacer" aria-hidden="true" /> : null
-  return <OverflowMenu label={`More actions for ${source} to ${destination}`} items={items} />
+  return <OverflowMenu label={t("ruleDetails.commands.moreActions", { source, destination })} items={items} />
 }
 
 /** What the latest preview found, which the Start syncing button refers to. */
@@ -185,10 +189,11 @@ export function PreviewReadyNote({
   preview: PreviewSummary | null | undefined
   destination: string
 }) {
+  const i18n = useI18n()
   const now = useNow()
   return (
     <p id={id} className="rule-note">
-      {previewReadyLabel(preview, destination, now)}
+      {previewReadyLabel(i18n, preview, destination, now)}
     </p>
   )
 }
@@ -206,20 +211,22 @@ export function RuleWorkNote({
   source: string
   destination: string
 }) {
+  const i18n = useI18n()
   const now = useNow(1_000)
+  const description = workDescription(i18n, work, source, destination)
   return (
     <div className="rule-work">
       <LoaderCircle aria-hidden="true" className="work-spinner" />
       <p>
-        <span>{workDescription(work, source, destination)}</span>
-        <span className="rule-work-meta">{workMeta(work, now)}</span>
+        <span>{description}</span>
+        <span className="rule-work-meta">{workMeta(i18n, work, now)}</span>
       </p>
       {work.progress && (
         <progress
           className="removal-bar"
           value={work.progress.done}
           max={work.progress.total}
-          aria-label={workDescription(work, source, destination)}
+          aria-label={description}
         />
       )}
     </div>

@@ -1,16 +1,23 @@
+import { CLOCK } from "@/i18n/format"
+import type { I18n } from "@/i18n/translator"
+
 /** How Activity writes times: run times, day headers, and recorded event times. */
 
 /** The Time column: the clock time alone, since day headers name the day. */
-export function formatClockTime(value: string): string {
-  return new Date(value).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+export function formatClockTime(i18n: I18n, value: string): string {
+  return i18n.format.time(value)
 }
 
-export function formatDay(value: string, now: Date = new Date()): string {
+function daysBefore(now: Date, date: Date): number {
+  return Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000)
+}
+
+export function formatDay(i18n: I18n, value: string, now: Date = new Date()): string {
   const date = new Date(value)
-  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000)
-  if (days === 0) return "Today"
-  if (days === 1) return "Yesterday"
-  return date.toLocaleDateString(undefined, {
+  const days = daysBefore(now, date)
+  if (days === 0) return i18n.t("activity.day.today")
+  if (days === 1) return i18n.t("activity.day.yesterday")
+  return i18n.format.date(date, {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -18,22 +25,23 @@ export function formatDay(value: string, now: Date = new Date()): string {
   })
 }
 
-export function formatRunTime(value: string, now: Date = new Date()): string {
+export function formatRunTime(i18n: I18n, value: string, now: Date = new Date()): string {
   const date = new Date(value)
-  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000)
-  if (days === 0) return `Today at ${time}`
-  if (days === 1) return `Yesterday at ${time}`
-  const day = date.toLocaleDateString(undefined, {
+  const time = i18n.format.time(date)
+  const days = daysBefore(now, date)
+  if (days === 0) return i18n.t("activity.runTime.today", { time })
+  if (days === 1) return i18n.t("activity.runTime.yesterday", { time })
+  const day = i18n.format.date(date, {
     weekday: "short",
     day: "numeric",
     month: "short",
     ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
   })
-  return `${day} at ${time}`
+  return i18n.t("activity.runTime.day", { day, time })
 }
 
 export function formatEventTime(
+  i18n: I18n,
   event: { all_day: boolean; starts: string | null; ends: string | null },
   now: Date = new Date(),
 ): string {
@@ -46,21 +54,24 @@ export function formatEventTime(
     month: "short",
     ...(sameYear ? {} : { year: "numeric" }),
   }
+  const { t, format } = i18n
   if (event.all_day) {
     const start = new Date(`${event.starts}T00:00:00`)
     const lastDay = new Date(`${event.ends}T00:00:00`)
     lastDay.setDate(lastDay.getDate() - 1)
-    const first = start.toLocaleDateString(undefined, dayFormat)
-    if (lastDay.getTime() <= start.getTime()) return `${first}, all day`
-    return `${first} – ${lastDay.toLocaleDateString(undefined, dayFormat)}, all day`
+    const first = format.date(start, dayFormat)
+    if (lastDay.getTime() <= start.getTime()) return t("common.range.allDay", { day: first })
+    return t("common.range.allDaySpan", { first, last: format.date(lastDay, dayFormat) })
   }
   const start = new Date(event.starts)
   const end = new Date(event.ends)
-  const timeFormat: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" }
-  const sameDay = start.toDateString() === end.toDateString()
-  return sameDay
-    ? `${start.toLocaleDateString(undefined, dayFormat)}, ${start.toLocaleTimeString(undefined, timeFormat)} – ${end.toLocaleTimeString(undefined, timeFormat)}`
-    : `${start.toLocaleString(undefined, { ...dayFormat, ...timeFormat })} – ${end.toLocaleString(undefined, { ...dayFormat, ...timeFormat })}`
+  if (start.toDateString() === end.toDateString()) {
+    return t("common.range.sameDay", { day: format.date(start, dayFormat), start: format.time(start), end: format.time(end) })
+  }
+  return t("common.range.span", {
+    start: format.dateTime(start, { ...dayFormat, ...CLOCK }),
+    end: format.dateTime(end, { ...dayFormat, ...CLOCK }),
+  })
 }
 
 function startOfDay(date: Date): number {

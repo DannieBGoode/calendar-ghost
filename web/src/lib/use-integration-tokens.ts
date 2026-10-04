@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useRef, useState } from "react"
 
+import { useI18n } from "@/i18n/provider"
 import { api, type IntegrationToken, type IssuedIntegrationToken } from "@/lib/api"
 
 // How long the Copy button says "Copied" before it offers to copy again.
@@ -10,6 +11,7 @@ export type CopyState = "idle" | "copied" | "unavailable"
 
 /** The Integration Tokens list, the token issued this visit, and the commands that issue or revoke one. */
 export function useIntegrationTokens() {
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const tokens = useQuery({ queryKey: ["integration-tokens"], queryFn: api.integrationTokens })
   const [name, setName] = useState("")
@@ -30,7 +32,7 @@ export function useIntegrationTokens() {
       setName("")
       setCopyState("idle")
       // Announce the issue, never the token: a screen reader would read the secret aloud.
-      setMessage(`Token for ${token.name} issued. Copy it now; it is shown only once.`)
+      setMessage(t("settings.integrations.status.issued", { name: token.name }))
       await queryClient.invalidateQueries({ queryKey: ["integration-tokens"] })
     },
   })
@@ -41,7 +43,7 @@ export function useIntegrationTokens() {
       // The plaintext token lives only in this component's state, shown once; if the admin
       // revokes it right away, stop showing a secret that no longer works.
       setIssued((current) => (current?.id === token.id ? null : current))
-      setMessage(`${token.name} was revoked. Anything that used it has lost access.`)
+      setMessage(t("settings.integrations.status.revoked", { name: token.name }))
       await queryClient.invalidateQueries({ queryKey: ["integration-tokens"] })
       // The revoked row loses its button, so focus returns to the group it belongs to.
       summaryButton.current?.focus()

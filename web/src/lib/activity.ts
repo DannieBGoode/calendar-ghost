@@ -1,17 +1,14 @@
-import { fieldLabel } from "@/lib/activity-fields"
+import { CLOCK } from "@/i18n/format"
+import type { I18n } from "@/i18n/translator"
+import type { MessageKey } from "@/i18n/types"
+import { fieldInSentence, fieldLabel } from "@/lib/activity-fields"
 import type { ActivityShow } from "@/lib/activity-location"
-import { capitalized, named, UNNAMED, type RuleNames } from "@/lib/activity-names"
-import { ACTION_FALLBACK, REASONS, RULE_ACTIONS, type ReasonCopy } from "@/lib/activity-reasons"
+import { capitalized, named, unnamed, type RuleNames } from "@/lib/activity-names"
+import { ACTION_FALLBACK, REASONS, RULE_ACTIONS, type CopyKeys, type ReasonCopy } from "@/lib/activity-reasons"
 import { ApiError, type ActivityCategory, type AuditEntry, type RecordedEvent } from "@/lib/api"
 
 export type { RuleNames } from "@/lib/activity-names"
-export {
-  CHANGE_VALUES_UNAVAILABLE,
-  changeListing,
-  fieldChangeLines,
-  fieldLabel,
-  type FieldChangeLines,
-} from "@/lib/activity-fields"
+export { changeListing, fieldChangeLines, fieldLabel, type FieldChangeLines } from "@/lib/activity-fields"
 export { eventCell, type EventCell, type EventScope } from "@/lib/activity-events"
 export {
   activityDayGroups,
@@ -25,55 +22,58 @@ export { formatClockTime, formatDay, formatEventTime, formatRunTime } from "@/li
 
 // Decisions a source change can explain: an update, or a check that found nothing to write.
 const SOURCE_CHANGE_REASONS = new Set(["source_changed", "occurrence_changed", "projection_current", "occurrence_current"])
-const UNCHANGED_BY_SOURCE_CHANGE =
-  "The event changed in {source}, and {destination} already matched it, so nothing was written for this entry."
 
 function changedFields(entry: Partial<Pick<AuditEntry, "reason" | "changed_fields">>): string[] {
   if (!entry.reason || !SOURCE_CHANGE_REASONS.has(entry.reason)) return []
   return entry.changed_fields ?? []
 }
 
-const FIELD_LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" })
-
 /** "Title and description changed in Personal": the fields in a sentence, then the calendar. */
-function changedTrigger(fields: string[], names: RuleNames | null): string {
-  const labels = fields.map((field, index) => (index === 0 ? fieldLabel(field) : fieldLabel(field).toLowerCase()))
-  const list = FIELD_LIST.format(labels)
-  return named(`${list} changed in {source}`, names)
+function changedTrigger(i18n: I18n, fields: string[], names: RuleNames | null): string {
+  const labels = fields.map((field, index) => (index === 0 ? fieldLabel(i18n, field) : fieldInSentence(i18n, field)))
+  const { source } = names ?? unnamed(i18n)
+  return i18n.t("activity.happened.fieldsChanged", { fields: i18n.format.list(labels), source })
 }
 
 type DescribedEntry = Pick<AuditEntry, "reason" | "action" | "detail"> & Partial<Pick<AuditEntry, "changed_fields">>
 
+/** The copy this version knows for an entry: its reason, or for rule management, its action. */
+function knownCopy(entry: DescribedEntry): CopyKeys | undefined {
+  return entry.reason ? REASONS[entry.reason] : RULE_ACTIONS[entry.action]
+}
+
 /** A check that found nothing to write after a source change says the change was already there. */
-function unchangedAfterSourceChange(entry: DescribedEntry): ReasonCopy | undefined {
+function unchangedAfterSourceChange(entry: DescribedEntry): CopyKeys | undefined {
   const current = entry.reason === "projection_current" || entry.reason === "occurrence_current" ? REASONS[entry.reason] : undefined
   if (!current || !changedFields(entry).length) return undefined
-  return { effect: current.effect, explanation: UNCHANGED_BY_SOURCE_CHANGE }
+  return { effect: current.effect, explanation: "activity.reason.unchangedBySourceChange" }
 }
 
-/** The copy for the entry's reason, or for its rule action, or worded from the action itself. */
-function entryCopy(entry: DescribedEntry): ReasonCopy {
-  const known = entry.reason ? REASONS[entry.reason] : RULE_ACTIONS[entry.action]
-  return (
-    known ?? {
-      effect: ACTION_FALLBACK[entry.action] ?? entry.action.replaceAll("_", " "),
-      explanation: entry.detail,
-    }
-  )
-}
-
-function namedCopy(copy: ReasonCopy, names: RuleNames | null): ReasonCopy {
+/**
+ * Copy for an entry this version cannot describe. It never explains itself with the server's
+ * recorded detail; the detail stays a diagnostic.
+ */
+function unknownCopy(i18n: I18n, entry: DescribedEntry, names: RuleNames | null): ReasonCopy {
+  const fallback = ACTION_FALLBACK[entry.action]
   return {
-    effect: named(copy.effect, names),
-    explanation: named(copy.explanation, names),
-    ...(copy.trigger ? { trigger: named(copy.trigger, names) } : {}),
-    ...(copy.next ? { next: named(copy.next, names) } : {}),
+    effect: fallback ? named(i18n, fallback, names) : i18n.t("activity.reason.unknown.effect"),
+    explanation: entry.detail ? i18n.t("activity.reason.unknown.explanation") : "",
+  }
+}
+
+function namedCopy(i18n: I18n, copy: CopyKeys, names: RuleNames | null): ReasonCopy {
+  return {
+    effect: named(i18n, copy.effect, names),
+    explanation: named(i18n, copy.explanation, names),
+    ...(copy.trigger ? { trigger: named(i18n, copy.trigger, names) } : {}),
+    ...(copy.next ? { next: named(i18n, copy.next, names) } : {}),
   }
 }
 
 /** The entry's copy with the rule's calendars named. */
-export function describeEntry(entry: DescribedEntry, names: RuleNames | null = null): ReasonCopy {
-  return namedCopy(unchangedAfterSourceChange(entry) ?? entryCopy(entry), names)
+export function describeEntry(i18n: I18n, entry: DescribedEntry, names: RuleNames | null = null): ReasonCopy {
+  const copy = unchangedAfterSourceChange(entry) ?? knownCopy(entry)
+  return copy ? namedCopy(i18n, copy, names) : unknownCopy(i18n, entry, names)
 }
 
 /** Events can be looked up only while the rule that names their calendars still exists. */
@@ -82,19 +82,16 @@ export function entryInspection(
   ruleExists: boolean,
 ): "event" | "details" | null {
   if (entry.source_event_id && ruleExists) return "event"
-  return describeEntry(entry).explanation ? "details" : null
+  return knownCopy(entry) || entry.detail ? "details" : null
 }
 
-export const REMOVED_RULE_LOOKUP =
-  "This rule was removed, so its events can no longer be looked up."
+export const REMOVED_RULE_LOOKUP: MessageKey = "activity.lookup.removedRule"
 
 /** The service answers 410 when the entry's rule was removed, whatever the page believed. */
-export function eventLookupFailure(error: unknown): string {
-  if (error instanceof ApiError && error.status === 410) return REMOVED_RULE_LOOKUP
-  if (error instanceof ApiError && error.status === 503) {
-    return "Google is not configured, so the event cannot be looked up."
-  }
-  return "Google could not return this event right now. The account may need reauthorization in Settings."
+export function eventLookupFailure(i18n: I18n, error: unknown): string {
+  if (error instanceof ApiError && error.status === 410) return i18n.t(REMOVED_RULE_LOOKUP)
+  if (error instanceof ApiError && error.status === 503) return i18n.t("activity.lookup.notConfigured")
+  return i18n.t("activity.lookup.failed")
 }
 
 export type HappenedIcon =
@@ -157,26 +154,27 @@ function movedEvent(entry: HappenedEntry): RecordedEvent | null {
   return entry.event
 }
 
-function happenedTrigger(entry: HappenedEntry, copy: ReasonCopy, names: RuleNames | null): string | null {
+function happenedTrigger(i18n: I18n, entry: HappenedEntry, copy: ReasonCopy, names: RuleNames | null): string | null {
   const event = movedEvent(entry)
   const fields = changedFields(entry)
   // A move alone says where from; any other change names its fields.
   const onlyMoved = fields.length === 0 || (fields.length === 1 && fields[0] === "time")
-  if (event && onlyMoved) return movedTrigger(event, names)
-  if (fields.length) return changedTrigger(fields, names)
+  if (event && onlyMoved) return movedTrigger(i18n, event, names)
+  if (fields.length) return changedTrigger(i18n, fields, names)
   return copy.trigger ?? null
 }
 
 /** The What happened column: what was observed, then what Calendar Ghost did, with an icon for the outcome. */
-export function whatHappened(entry: HappenedEntry, names: RuleNames | null): Happened {
-  const copy = describeEntry(entry, names)
-  const trigger = happenedTrigger(entry, copy, names)
-  const effect = entry.repeated ? `${copy.effect} again` : copy.effect
+export function whatHappened(i18n: I18n, entry: HappenedEntry, names: RuleNames | null): Happened {
+  const copy = describeEntry(i18n, entry, names)
+  const trigger = happenedTrigger(i18n, entry, copy, names)
+  const effect = entry.repeated ? i18n.t("activity.happened.again", { effect: copy.effect }) : copy.effect
+  const shownTrigger = trigger ? capitalized(i18n, trigger) : null
   const { icon, tone } = outcomeOf(entry)
   return {
-    text: trigger ? `${capitalized(trigger)} → ${effect}` : capitalized(effect),
-    trigger: trigger ? capitalized(trigger) : null,
-    effect: trigger ? effect : capitalized(effect),
+    text: shownTrigger ? i18n.t("activity.happened.line", { trigger: shownTrigger, effect }) : capitalized(i18n, effect),
+    trigger: shownTrigger,
+    effect: shownTrigger ? effect : capitalized(i18n, effect),
     icon,
     mark: changeMark(icon, entry.action),
     tone,
@@ -198,29 +196,27 @@ export function changeMark(icon: HappenedIcon, action: string): ChangeMark {
 }
 
 /** "Moved from 10:00 AM in Work": the earlier start, with its date only when the day changed. */
-function movedTrigger(event: RecordedEvent, names: RuleNames | null): string {
+function movedTrigger(i18n: I18n, event: RecordedEvent, names: RuleNames | null): string {
   const before = event.moved_from
-  if (!before?.starts) return named("Changed in {source}", names)
-  const { source } = names ?? UNNAMED
+  if (!before?.starts) return named(i18n, "activity.reason.sourceChanged.trigger", names)
+  const { source } = names ?? unnamed(i18n)
+  const day: Intl.DateTimeFormatOptions = { weekday: "short", day: "numeric", month: "short" }
   if (before.all_day) {
-    const day = new Date(`${before.starts}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
-    return `Moved from ${day} in ${source}`
+    return i18n.t("activity.happened.movedFrom", { when: i18n.format.date(`${before.starts}T00:00:00`, day), source })
   }
   const start = new Date(before.starts)
   const sameDay = event.starts !== null && !event.all_day && new Date(event.starts).toDateString() === start.toDateString()
-  const when = sameDay
-    ? start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
-    : start.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
-  return `Moved from ${when} in ${source}`
+  const when = sameDay ? i18n.format.time(start) : i18n.format.dateTime(start, { ...day, ...CLOCK })
+  return i18n.t("activity.happened.movedFrom", { when, source })
 }
 
-export const SHOW_FILTERS: { value: ActivityShow; label: string }[] = [
-  { value: "", label: "Changes, skips, and blocks" },
-  { value: "all", label: "All decisions" },
-  { value: "changed", label: "Changes" },
-  { value: "skipped", label: "Skipped" },
-  { value: "blocked", label: "Blocked" },
-  { value: "unchanged", label: "No change needed" },
+export const SHOW_FILTERS: { value: ActivityShow; label: MessageKey }[] = [
+  { value: "", label: "activity.filters.option.default" },
+  { value: "all", label: "activity.filters.option.all" },
+  { value: "changed", label: "activity.filters.option.changed" },
+  { value: "skipped", label: "activity.filters.option.skipped" },
+  { value: "blocked", label: "activity.filters.option.blocked" },
+  { value: "unchanged", label: "activity.filters.option.unchanged" },
 ]
 
 /** Every run re-checks events that already match, so those checks are hidden by default. */

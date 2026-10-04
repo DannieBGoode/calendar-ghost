@@ -1,0 +1,119 @@
+{
+  "list": {
+    "loading": "Loading rules",
+    "loadFailure": "Rules could not load",
+    "heading": "Sync rules",
+    "intro": "Each rule shows the events of one calendar in another, as busy time or with their details. The source calendar is never changed.",
+    "closeBuilder": "Close rule builder",
+    "createButton": "Create sync rule",
+    "connectAccountHint": "<link>Connect a Google account</link> first.",
+    "reviewInActivity": "Review in Activity",
+    "dismiss": "Dismiss",
+    "draftSavedNotice": "Draft saved. Preview it to see exactly what will be written before anything changes.",
+    "empty": {
+      "title": "No rules yet",
+      "connectFirst": "Connect a Google account in Settings, then create your first rule here.",
+      "createFirst": "Create a rule, preview its effects, then start syncing."
+    },
+    "ariaLabel": "Sync rules",
+    "ruleName": "{source} to {destination}",
+    "policySummary": {
+      "busyOnlyAllDay": "Busy only, including all-day events",
+      "busyOnlyTimedOnly": "Busy only, timed events only",
+      "copyDetailsAllDay": "Copy details, including all-day events",
+      "copyDetailsTimedOnly": "Copy details, timed events only"
+    },
+    "detailsLabel": "Details for {source} to {destination}",
+    "detailsLink": "Details",
+    "reprojectionRequired": "Preview required: the policy changed, so existing projections are rewritten on the first run after you start syncing again.",
+    "stoppedDisconnected": "Synchronization stopped: {accounts} must be reauthorized before this rule can run.",
+    "stoppedGeneric": "Synchronization stopped to protect your calendars. Nothing was lost; preview the rule to restart it."
+  },
+  "endpoint": {
+    "role": {
+      "source": "Source: ",
+      "destination": "Destination: "
+    },
+    "secondaryCalendar": "Secondary calendar",
+    "unknownAccount": "Unknown account",
+    "primaryCalendar": "Primary calendar"
+  },
+  "accountSelect": {
+    "empty": "No Google accounts"
+  },
+  "picker": {
+    "clear": "Clear",
+    "removedRules": "Removed rules"
+  },
+  "invitations": {
+    "tentative": {
+      "label": "Events you answered Maybe",
+      "mark": "Sync, marked as tentative (recommended)",
+      "sync": "Sync like accepted events",
+      "skip": "Don't sync"
+    },
+    "unanswered": {
+      "label": "Invitations you haven't answered",
+      "asTentative": "Sync as Maybe (recommended)",
+      "wait": "Don't sync until I answer"
+    },
+    "tentativeTitle": {
+      "busyOnly": "“{title}”",
+      "copyDetails": "“{prefix}” and the event title, like “{example}”",
+      "exampleTitle": "Standup"
+    },
+    "tentativeHint": {
+      "marked": "Shown as {title}.",
+      "sync": "Shown the same as events you accepted.",
+      "skip": "Events you answered Maybe stay out of the destination."
+    },
+    "unansweredHint": {
+      "base": "Declined events are never synced.",
+      "treatedAsMaybe": "Treated as Maybe, so they stay out of the destination too. Declined events are never synced."
+    },
+    "tentativeFact": {
+      "marked": "Synced as {title}",
+      "sync": "Synced like accepted events",
+      "skip": "Not synced"
+    },
+    "unansweredFact": {
+      "wait": "Not synced until answered",
+      "skipLikeMaybe": "Not synced, like events you answered Maybe",
+      "asMaybe": "Synced as Maybe"
+    },
+    "consequence": {
+      "maybeDeleted": "Events you answered Maybe will be deleted from {destination} on the next run.",
+      "maybeAdded": "Events you answered Maybe will be added to {destination} on the next run.",
+      "maybeMarked": "Events you answered Maybe will be marked as tentative in {destination} on the next run.",
+      "maybeUnmarked": "Events you answered Maybe will lose their tentative mark in {destination} on the next run.",
+      "unansweredDeleted": "Invitations you haven't answered will be deleted from {destination} on the next run.",
+      "unansweredAdded": "Invitations you haven't answered will be added to {destination} as Maybe events on the next run."
+    }
+  },
+  "builder": {
+    "heading": "Choose the calendars",
+    "intro": "Saving creates a draft. Nothing is written until you preview the rule and start syncing.",
+    "sourceLegend": "Source calendar",
+    "destinationLegend": "Destination calendar",
+    "googleAccount": "Google account",
+    "calendarLabel": "Calendar",
+    "destinationCalendarLabel": "Calendar you can edit",
+    "sameEndpointError": "Choose a destination different from the source calendar.",
+    "policyLegend": "What the destination shows",
+    "privacyLabel": "Event information",
+    "privacyOption": {
+      "busyOnly": "Busy only (recommended)",
+      "copyDetails": "Copy title, description, and location"
+    },
+    "allDay": {
+      "label": "Sync all-day events",
+      "hint": "Turn this off to synchronize timed events only."
+    },
+    "calendarsLoadError": "Calendars could not load: {reason}",
+    "loadingCalendars": "Loading calendars…",
+    "noCalendars": "This account has no calendars to choose.",
+    "noWritableCalendars": "This account has no writable calendars to choose.",
+    "saving": "Saving draft…",
+    "submit": "Save rule draft"
+  }
+}

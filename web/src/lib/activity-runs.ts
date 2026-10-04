@@ -1,3 +1,4 @@
+import type { I18n } from "@/i18n/translator"
 import { formatDay } from "@/lib/activity-time"
 import type { AuditEntry } from "@/lib/api"
 
@@ -31,10 +32,10 @@ export function groupRuns(entries: AuditEntry[]): ActivityRun[] {
 export type ActivityGroup = { key: string; day: string | null; run: ActivityRun }
 
 /** Lays out the runs newest first and names the day above its first run. */
-export function activityRows(runs: ActivityRun[], { now = new Date() }: { now?: Date } = {}): ActivityGroup[] {
+export function activityRows(i18n: I18n, runs: ActivityRun[], { now = new Date() }: { now?: Date } = {}): ActivityGroup[] {
   let previousDay: string | null = null
   return runs.map((run) => {
-    const label = formatDay(run.occurredAt, now)
+    const label = formatDay(i18n, run.occurredAt, now)
     const day = label === previousDay ? null : label
     previousDay = label
     return { key: run.key, day, run }

@@ -5,6 +5,8 @@ import { InvitationResponseFields } from "@/components/invitation-response-field
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
 import { api, type RuleDetail, type RulePolicyPayload } from "@/lib/api"
 import { policyChanged, policyChangeConsequences } from "@/lib/rule-change"
 import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
@@ -20,6 +22,8 @@ export function PolicyEditor({
   destinationName: string
   onSaved: (feedback: RuleFeedback) => void
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const invalidate = useRuleInvalidation(detail.id)
   const toggle = useRef<HTMLButtonElement>(null)
   const firstField = useRef<HTMLSelectElement>(null)
@@ -39,7 +43,7 @@ export function PolicyEditor({
     onSuccess: async () => {
       await invalidate()
       setOpen(false)
-      onSaved({ tone: "success", text: "Policy saved. Preview the rule to start syncing with the new policy." })
+      onSaved({ tone: "success", text: t("ruleDetails.policy.saved") })
     },
   })
 
@@ -58,8 +62,8 @@ export function PolicyEditor({
     <section className="rule-section page-card" aria-labelledby="policy-title">
       <div className="section-heading">
         <div>
-          <h2 id="policy-title">What {destinationName} shows</h2>
-          <p>A change stops the rule from writing until you preview it again.</p>
+          <h2 id="policy-title">{t("ruleDetails.policy.title", { destination: destinationName })}</h2>
+          <p>{t("ruleDetails.policy.intro")}</p>
         </div>
         {!open && (
           <Button
@@ -73,14 +77,14 @@ export function PolicyEditor({
             aria-expanded={open}
             aria-controls="policy-form"
           >
-            Change policy
+            {t("ruleDetails.policy.change")}
           </Button>
         )}
       </div>
       {open && (
         <form id="policy-form" className="rule-edit-form" onSubmit={submit}>
           <div className="field-stack">
-            <Label htmlFor="edit-privacy-policy">Event information</Label>
+            <Label htmlFor="edit-privacy-policy">{t("ruleDetails.policy.eventInformation")}</Label>
             <NativeSelect
               ref={firstField}
               id="edit-privacy-policy"
@@ -89,8 +93,8 @@ export function PolicyEditor({
                 setNext({ ...next, privacy_policy: event.target.value as RulePolicyPayload["privacy_policy"] })
               }
             >
-              <option value="busy_only">Busy only (recommended)</option>
-              <option value="copy_details">Copy title, description, and location</option>
+              <option value="busy_only">{t("ruleDetails.policy.busyOnly")}</option>
+              <option value="copy_details">{t("ruleDetails.policy.copyDetails")}</option>
             </NativeSelect>
           </div>
           <label className="checkbox-row">
@@ -100,8 +104,8 @@ export function PolicyEditor({
               onChange={(event) => setNext({ ...next, sync_all_day_events: event.target.checked })}
             />
             <span>
-              <strong>Sync all-day events</strong>
-              <small>Turn this off to synchronize timed events only.</small>
+              <strong>{t("ruleDetails.policy.allDay")}</strong>
+              <small>{t("ruleDetails.policy.allDayHint")}</small>
             </span>
           </label>
           <InvitationResponseFields
@@ -118,13 +122,17 @@ export function PolicyEditor({
               destinationName={destinationName}
             />
           )}
-          {update.error && <div className="inline-error" role="alert">{update.error.message}</div>}
+          {update.error && <div className="inline-error" role="alert">{apiErrorMessage(i18n, update.error)}</div>}
           <div className="form-actions">
             <Button type="submit" disabled={!changed || update.isPending}>
-              {update.isPending ? "Saving…" : widens ? `Show event details in ${destinationName}` : "Save policy change"}
+              {update.isPending
+                ? t("ruleDetails.policy.saving")
+                : widens
+                  ? t("ruleDetails.policy.saveWidens", { destination: destinationName })
+                  : t("ruleDetails.policy.save")}
             </Button>
             <Button type="button" variant="outline" onClick={cancel} disabled={update.isPending}>
-              Cancel
+              {t("ruleDetails.policy.cancel")}
             </Button>
           </div>
         </form>
@@ -146,11 +154,17 @@ function PolicyConsequences({
   widens: boolean
   destinationName: string
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   return (
     <div className="consequence-panel" data-tone={widens ? "attention" : undefined} role="status" aria-live="polite">
-      <h3>{widens ? `Everyone who can see ${destinationName} will see event details` : "What happens when you save"}</h3>
+      <h3>
+        {widens
+          ? t("ruleDetails.policy.widensTitle", { destination: destinationName })
+          : t("ruleDetails.policy.consequencesTitle")}
+      </h3>
       <ul>
-        {policyChangeConsequences({
+        {policyChangeConsequences(i18n, {
           state: detail.state,
           current,
           next,

@@ -1,5 +1,6 @@
 import { useState } from "react"
 
+import { useI18n } from "@/i18n/provider"
 import { accountInitials } from "@/lib/account-avatar"
 import { cn } from "@/lib/utils"
 
@@ -14,6 +15,7 @@ export function AccountAvatar({
   avatarUrl: string | null | undefined
   compact?: boolean
 }) {
+  const { locale } = useI18n()
   const [failedUrl, setFailedUrl] = useState<string | null>(null)
   const photo = avatarUrl && avatarUrl !== failedUrl ? avatarUrl : null
   return (
@@ -27,7 +29,7 @@ export function AccountAvatar({
           onError={() => setFailedUrl(photo)}
         />
       ) : (
-        accountInitials(displayName, email)
+        accountInitials(displayName, email, locale)
       )}
     </span>
   )

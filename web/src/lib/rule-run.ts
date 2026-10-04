@@ -1,58 +1,50 @@
+import type { I18n } from "@/i18n/translator"
+import type { MessageKey } from "@/i18n/types"
 import type { ReconcileResult, RulePreview, RunOutcome, SyncResult } from "@/lib/api"
-import { failureLabel, plural } from "@/lib/rule-change"
-import { relativeTime } from "@/lib/relative-time"
+import { failureLabel, isFailureKind, type ProviderFailureKind } from "@/lib/rule-change"
 
 /** The one-line run status a rule row shows next to its policy. */
-export function lastRunLabel(outcome: RunOutcome | null, now: number = Date.now()): string {
-  if (outcome === null) return "Not synced yet"
-  const when = relativeTime(outcome.completed_at, now)
+export function lastRunLabel(i18n: I18n, outcome: RunOutcome | null, now: number = Date.now()): string {
+  if (outcome === null) return i18n.t("ruleDetails.run.notSynced")
+  const when = i18n.format.relative(outcome.completed_at, now)
   return outcome.succeeded
-    ? `Last synced ${when}`
-    : `Last sync failed ${when}: ${failureLabel(outcome.failure_kind)}`
+    ? i18n.t("ruleDetails.run.lastSynced", { when })
+    : i18n.t("ruleDetails.run.lastSyncFailed", { when, reason: failureLabel(i18n, outcome.failure_kind) })
 }
 
-function syncedChanges(result: SyncResult): string | null {
+function syncedChanges(i18n: I18n, result: SyncResult): string | null {
   const changes = [
-    result.created ? `${result.created} created` : null,
-    result.updated ? `${result.updated} updated` : null,
-    result.deleted ? `${result.deleted} deleted` : null,
-  ].filter(Boolean)
-  return changes.length ? `Synced: ${changes.join(", ")}.` : null
+    result.created ? i18n.t("ruleDetails.run.created", { count: result.created }) : null,
+    result.updated ? i18n.t("ruleDetails.run.updated", { count: result.updated }) : null,
+    result.deleted ? i18n.t("ruleDetails.run.deleted", { count: result.deleted }) : null,
+  ].filter((change): change is string => change !== null)
+  return changes.length ? i18n.t("ruleDetails.run.synced", { changes: i18n.format.unitList(changes) }) : null
 }
 
-function withBlocked(base: string, blocked: number): string {
-  return blocked ? `${base} ${plural(blocked, "conflict")} blocked; see Activity.` : base
+function withBlocked(i18n: I18n, result: string, blocked: number): string {
+  return blocked ? i18n.t("ruleDetails.run.withBlocked", { result, count: blocked }) : result
 }
 
-export function syncResultMessage(result: SyncResult): string {
-  return withBlocked(
-    syncedChanges(result) ?? "Up to date. Nothing changed since the last run.",
-    result.conflicts,
-  )
+export function syncResultMessage(i18n: I18n, result: SyncResult): string {
+  return withBlocked(i18n, syncedChanges(i18n, result) ?? i18n.t("ruleDetails.run.upToDate"), result.conflicts)
 }
 
 type Drift = ReconcileResult["drift"]
 
+const DRIFT_KINDS: Record<string, MessageKey> = {
+  missing: "ruleDetails.run.drift.missing",
+  incorrect_projection: "ruleDetails.run.drift.incorrectProjection",
+  unexpected: "ruleDetails.run.drift.unexpected",
+}
+
 /** Each kind of difference the check found, in plain words, in the order it found them. */
-function driftParts(drift: Drift, destination: string): string[] {
+function driftParts(i18n: I18n, drift: Drift, destination: string): string[] {
   const counts = new Map<string, number>()
   for (const item of drift) counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1)
-  const describe = (kind: string, count: number): string => {
-    const one = count === 1
-    switch (kind) {
-      case "missing":
-        return `${count} missing from ${destination}`
-      case "incorrect_projection":
-        return one ? "1 different from its source event" : `${count} different from their source events`
-      case "unexpected":
-        return one
-          ? `1 still in ${destination} though its source event was cancelled or excluded`
-          : `${count} still in ${destination} though their source events were cancelled or excluded`
-      default:
-        return `${count} other`
-    }
-  }
-  return [...counts].map(([kind, count]) => describe(kind, count))
+  return [...counts].map(([kind, count]) => {
+    const key = DRIFT_KINDS[kind]
+    return key ? i18n.t(key, { count, destination }) : i18n.t("ruleDetails.run.drift.unknown", { count })
+  })
 }
 
 /**
@@ -60,58 +52,67 @@ function driftParts(drift: Drift, destination: string): string[] {
  * changing anything. Whatever the check still finds survived a full sync, so it is a difference
  * the sync cannot settle, or a check that is wrong, rather than a change made during the check.
  */
-export function reconcileResultMessage(result: ReconcileResult, destination: string): string {
-  const checked = `Checked ${plural(result.checked_mappings, "event")} this rule wrote to ${destination}`
+export function reconcileResultMessage(i18n: I18n, result: ReconcileResult, destination: string): string {
+  const checked = result.checked_mappings
   const drift = result.drift
   const blocked = result.conflicts + result.reconciliation_conflicts.length
   // A blocked projection could not be verified, so only a check without blocks says all match.
   const check = drift.length
     ? [
         // Mappings are counted per series while differences include single occurrences.
-        `${checked} (a recurring series counts once).`,
-        `${drift.length === 1 ? "1 difference remains" : `${drift.length} differences remain`} after the sync: ${driftParts(drift, destination).join(", ")}.`,
-        `If Reconcile now finds ${drift.length === 1 ? "it" : "them"} again, Calendar Ghost can't settle ${drift.length === 1 ? "it" : "them"} on its own.`,
+        i18n.t("ruleDetails.run.checkedSeries", { count: checked, destination }),
+        i18n.t("ruleDetails.run.differencesRemain", {
+          count: drift.length,
+          differences: i18n.format.unitList(driftParts(i18n, drift, destination)),
+        }),
+        i18n.t("ruleDetails.run.settleAgain", { count: drift.length }),
       ].join(" ")
     : blocked
-      ? `${checked}.`
-      : `${checked}: every one matches its source event.`
-  const synced = syncedChanges(result)
-  return withBlocked(synced ? `${synced} ${check}` : check, blocked)
+      ? i18n.t("ruleDetails.run.checked", { count: checked, destination })
+      : i18n.t("ruleDetails.run.checkedAllMatch", { count: checked, destination })
+  const synced = syncedChanges(i18n, result)
+  return withBlocked(i18n, synced ? `${synced} ${check}` : check, blocked)
 }
 
 /** What the latest preview found, beside the Start syncing button. The policy line names the privacy. */
 export function previewReadyLabel(
+  i18n: I18n,
   preview: Pick<RulePreview, "eligible_events" | "excluded_events"> & { completed_at: string } | null | undefined,
   destination: string,
   now: number = Date.now(),
 ): string {
-  if (!preview) return `Start syncing to show events in ${destination}.`
-  const excluded = preview.excluded_events > 0 ? `, ${preview.excluded_events} excluded` : ""
-  return `Previewed ${relativeTime(preview.completed_at, now)}: ${plural(preview.eligible_events, "event")} will appear in ${destination}${excluded}.`
+  if (!preview) return i18n.t("ruleDetails.run.previewNone", { destination })
+  const when = i18n.format.relative(preview.completed_at, now)
+  const count = preview.eligible_events
+  return preview.excluded_events > 0
+    ? i18n.t("ruleDetails.run.previewedExcluded", { when, count, destination, excluded: preview.excluded_events })
+    : i18n.t("ruleDetails.run.previewed", { when, count, destination })
 }
 
-export function enabledMessage(destination: string): string {
-  return `Enabled. The first sync to ${destination} runs within five minutes, or choose Sync now.`
+export function enabledMessage(i18n: I18n, destination: string): string {
+  return i18n.t("ruleDetails.run.enabled", { destination })
 }
 
-export function pausedMessage(destination: string): string {
-  return `Paused. Existing events stay in ${destination}. Preview the rule again to resume.`
+export function pausedMessage(i18n: I18n, destination: string): string {
+  return i18n.t("ruleDetails.run.paused", { destination })
 }
 
-const RECOVERY_CAUSES: Record<string, string> = {
-  rate_limit: "Google Calendar was limiting requests",
-  temporary: "Google Calendar was temporarily unavailable",
-  permanent: "Google Calendar rejected a request",
-  authentication: "Google authorization expired",
-  authorization: "Google calendar access was denied",
+const RECOVERY_CAUSES: Record<ProviderFailureKind, MessageKey> = {
+  rate_limit: "ruleDetails.run.recovery.rateLimit",
+  temporary: "ruleDetails.run.recovery.temporary",
+  permanent: "ruleDetails.run.recovery.permanent",
+  authentication: "ruleDetails.run.recovery.authentication",
+  authorization: "ruleDetails.run.recovery.authorization",
+  infrastructure: "ruleDetails.run.recovery.unknown",
 }
 
 /** Why a stopped rule stopped and what restarting involves, in calendar language. */
-export function recoveryExplanation(outcome: RunOutcome | null, now: number = Date.now()): string {
+export function recoveryExplanation(i18n: I18n, outcome: RunOutcome | null, now: number = Date.now()): string {
   const cause =
     outcome && !outcome.succeeded
-      ? `${RECOVERY_CAUSES[outcome.failure_kind ?? ""] ?? "A sync could not finish"} ${relativeTime(outcome.completed_at, now)}, so Calendar Ghost stopped this rule to be safe.`
-      : "Calendar Ghost stopped this rule to be safe."
-  return `${cause} Nothing was lost. Preview it to check both calendars, then start syncing again.`
+      ? i18n.t(isFailureKind(outcome.failure_kind) ? RECOVERY_CAUSES[outcome.failure_kind] : "ruleDetails.run.recovery.unknown", {
+          when: i18n.format.relative(outcome.completed_at, now),
+        })
+      : i18n.t("ruleDetails.run.recovery.noFailure")
+  return `${cause} ${i18n.t("ruleDetails.run.recovery.next")}`
 }
-

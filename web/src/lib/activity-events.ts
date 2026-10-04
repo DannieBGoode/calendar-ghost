@@ -1,4 +1,5 @@
-import { UNNAMED, type RuleNames } from "@/lib/activity-names"
+import type { I18n } from "@/i18n/translator"
+import { unnamed, type RuleNames } from "@/lib/activity-names"
 import { formatEventTime } from "@/lib/activity-time"
 import type { AuditEntry } from "@/lib/api"
 
@@ -44,32 +45,42 @@ function eventScope(reason: string | null | undefined, recurring: boolean): Even
 
 /** What the Event column shows: the source event as the entry's run recorded it. */
 export function eventCell(
+  i18n: I18n,
   entry: Pick<AuditEntry, "source_event_id" | "event"> & Partial<Pick<AuditEntry, "reason">>,
   names: RuleNames | null,
 ): EventCell {
   if (!entry.source_event_id) {
     return {
       state: "unavailable",
-      label: names ? `${names.source} → ${names.destination} rule` : "Removed rule",
-      note: "Applies to the whole rule",
+      label: names ? i18n.t("activity.cell.ruleLabel", { source: names.source, destination: names.destination }) : i18n.t("activity.removedRule"),
+      note: i18n.t("activity.cell.wholeRule"),
     }
   }
   const event = entry.event
   if (!event) {
-    return { state: "unavailable", label: "Event name not recorded", note: "Recorded before event names were kept" }
+    return { state: "unavailable", label: i18n.t("activity.cell.nameNotRecorded"), note: i18n.t("activity.cell.recordedBefore") }
   }
-  const when = formatEventTime(event)
+  const when = formatEventTime(i18n, event)
   const scope = eventScope(entry.reason, event.recurring)
   if (event.cancelled) {
-    return { state: "event", title: event.title || "Cancelled event", when, recurring: event.recurring, scope, note: `Cancelled in ${(names ?? UNNAMED).source}` }
+    return {
+      state: "event",
+      title: event.title || i18n.t("activity.cell.cancelledEvent"),
+      when,
+      recurring: event.recurring,
+      scope,
+      note: i18n.t("activity.cell.cancelledIn", { source: (names ?? unnamed(i18n)).source }),
+    }
   }
   return {
     state: "event",
-    title: event.title || "(No title)",
+    title: event.title || i18n.t("activity.cell.noTitle"),
     when,
     recurring: event.recurring,
     scope,
     // An empty former title is a real one: the event was untitled before.
-    ...(event.renamed_from !== null ? { note: `Renamed from “${event.renamed_from || "(No title)"}”` } : {}),
+    ...(event.renamed_from !== null
+      ? { note: i18n.t("activity.cell.renamedFrom", { title: event.renamed_from || i18n.t("activity.cell.noTitle") }) }
+      : {}),
   }
 }

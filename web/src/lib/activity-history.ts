@@ -1,51 +1,42 @@
+import type { I18n } from "@/i18n/translator"
 import type { ActivityShow } from "@/lib/activity-location"
 import type { AuditEntry } from "@/lib/api"
-import { plural } from "@/lib/rule-change"
 
 export type HistoryFilters = { ruleId: string; show: ActivityShow; query: string }
 
 /** What the history says when no entry matches, depending on which filters are set. */
-export function emptyHistoryCopy({ ruleId, show, query }: HistoryFilters): { title: string; body: string } {
+export function emptyHistoryCopy({ t }: I18n, { ruleId, show, query }: HistoryFilters): { title: string; body: string } {
   // The default view hides no-change checks, so an empty page there is usually good news.
   if (!ruleId && show === "" && !query) {
-    return {
-      title: "Nothing has changed yet",
-      body: "No rule has added, updated, removed, skipped, or blocked an event. Checks that found everything already up to date are hidden.",
-    }
+    return { title: t("activity.empty.quiet.title"), body: t("activity.empty.quiet.body") }
   }
   if (query) {
-    return {
-      title: `No events named “${query}”`,
-      body: "Search matches event titles as each run recorded them. Check the spelling, show all decisions, or clear the search.",
-    }
+    return { title: t("activity.empty.search.title", { query }), body: t("activity.empty.search.body") }
   }
   if (ruleId || show !== "all") {
-    return {
-      title: "No matching activity",
-      body: "No recorded decisions match these filters. Show all decisions, or choose a different rule.",
-    }
+    return { title: t("activity.empty.filtered.title"), body: t("activity.empty.filtered.body") }
   }
-  return {
-    title: "No activity yet",
-    body: "Synchronization decisions will appear here after an enabled rule completes its first run.",
-  }
+  return { title: t("activity.empty.none.title"), body: t("activity.empty.none.body") }
 }
 
 /** What screen readers hear while the history updates or after a search. */
-export function historyStatus({
-  updating,
-  query,
-  more,
-  count,
-}: {
-  updating: boolean
-  query: string
-  more: boolean
-  count: number
-}): string {
-  if (updating) return "Updating activity…"
+export function historyStatus(
+  { t }: I18n,
+  {
+    updating,
+    query,
+    more,
+    count,
+  }: {
+    updating: boolean
+    query: string
+    more: boolean
+    count: number
+  },
+): string {
+  if (updating) return t("activity.history.updating")
   if (!query) return ""
-  return `${more ? "More than " : ""}${plural(count, "entry", "entries")} found for “${query}”.`
+  return t(more ? "activity.history.foundMore" : "activity.history.found", { count, query })
 }
 
 /** The entries next to the selected one; an entry that is not listed has neither. */

@@ -59,7 +59,7 @@ def _held_elsewhere(lock: Lock) -> bool:
     return not acquired
 
 
-# Regression: PR #34 review — a rule created right before VACUUM could run alongside it
+# Regression: PR #34 review: a rule created right before VACUUM could run alongside it
 def test_holding_every_rule_also_holds_a_rule_first_locked_meanwhile() -> None:
     locks = RuleLocks()
     existing = locks.for_rule(RULE)

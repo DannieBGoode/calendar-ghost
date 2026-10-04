@@ -307,6 +307,10 @@ diagnostics keep the glossary terms above.
 - The product is named **Calendar Ghost**. "Ghost" is brand language for the mark and tagline;
   the interface and documentation keep this glossary's terms, so a Managed Projection is never
   called a "ghost" in labels, explanations, or incidents.
+- The Web UI's language follows the administrator's saved choice, then the browser's languages,
+  then English. Diagnostics (provider error text, Audit Entry detail, Drift detail, and conflict
+  detail) stay as recorded and are shown only under a translated diagnostic label, never
+  translated or used as a primary sentence.
 
 ## Data Minimization
 

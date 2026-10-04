@@ -1,5 +1,6 @@
+import type { I18n } from "@/i18n/translator"
+import type { MessageKey } from "@/i18n/types"
 import type { RunningWork } from "@/lib/api"
-import { plural } from "@/lib/rule-change"
 import { elapsedLabel } from "@/lib/rule-removal"
 import type { RuleCommand } from "@/lib/use-rule-commands"
 
@@ -95,32 +96,32 @@ export function busyCommand(pending: RuleCommand | undefined, work: RuleWork | n
   return work && work.kind !== "removal" ? WORK_COMMAND[work.kind] : undefined
 }
 
-const WORK_LABELS: Record<RuleWorkKind, string> = {
-  preview: "Previewing",
-  sync: "Syncing",
-  reconciliation: "Reconciling",
-  removal: "Removing",
+const WORK_LABELS: Record<RuleWorkKind, MessageKey> = {
+  preview: "ruleDetails.work.label.preview",
+  sync: "ruleDetails.work.label.sync",
+  reconciliation: "ruleDetails.work.label.reconciliation",
+  removal: "ruleDetails.work.label.removal",
 }
 
-export function workLabel(kind: RuleWorkKind): string {
-  return WORK_LABELS[kind]
+export function workLabel(i18n: I18n, kind: RuleWorkKind): string {
+  return i18n.t(WORK_LABELS[kind])
 }
 
 /** One sentence saying what the rule is doing, in calendar language. */
-export function workDescription(work: RuleWork, source: string, destination: string): string {
+export function workDescription(i18n: I18n, work: RuleWork, source: string, destination: string): string {
   switch (work.kind) {
     case "preview":
-      return `Reading ${source} to show what ${destination} would get. Nothing is written yet.`
+      return i18n.t("ruleDetails.work.preview", { source, destination })
     case "sync":
-      return `Applying changes from ${source} to ${destination}.`
+      return i18n.t("ruleDetails.work.sync", { source, destination })
     case "reconciliation":
       return work.syncing
-        ? `Syncing every event from ${source} to ${destination}, then checking each one this rule wrote.`
-        : `Checking every event this rule wrote to ${destination} against ${source}.`
+        ? i18n.t("ruleDetails.work.reconciliationSyncing", { source, destination })
+        : i18n.t("ruleDetails.work.reconciliation", { source, destination })
     case "removal":
       return work.progress
-        ? `Removing this rule: handled ${work.progress.done} of ${plural(work.progress.total, "projection")} in ${destination}.`
-        : `Removing this rule from ${destination}.`
+        ? i18n.t("ruleDetails.work.removalProgress", { done: work.progress.done, count: work.progress.total, destination })
+        : i18n.t("ruleDetails.work.removal", { destination })
   }
 }
 
@@ -128,12 +129,18 @@ export function workDescription(work: RuleWork, source: string, destination: str
  * The line under the description: how far the work got, how long it has run, and that leaving is
  * safe. A removal's count is already in its description.
  */
-export function workMeta(work: RuleWork, now: number): string {
+export function workMeta(i18n: I18n, work: RuleWork, now: number): string {
   const parts: string[] = []
-  if (work.kind !== "removal" && work.progress) parts.push(`${work.progress.done} of ${work.progress.total} checked`)
-  else if (work.kind !== "removal" && work.handled) parts.push(`${work.handled} handled`)
-  if (work.startedAt !== null) parts.push(`Running for ${elapsedLabel(now - work.startedAt)}`)
-  parts.push("It keeps running if you leave this page.")
+  if (work.kind !== "removal" && work.progress) {
+    parts.push(i18n.t("ruleDetails.work.checked", { done: work.progress.done, total: work.progress.total }))
+  } else if (work.kind !== "removal" && work.handled) {
+    parts.push(i18n.t("ruleDetails.work.handled", { count: work.handled }))
+  }
+  if (work.startedAt !== null) {
+    parts.push(i18n.t("ruleDetails.work.runningFor", { elapsed: elapsedLabel(i18n, now - work.startedAt) }))
+  }
+  parts.push(i18n.t("ruleDetails.work.keepsRunning"))
+  // A visual separator between independent facts, not a word.
   return parts.join(" · ")
 }
 

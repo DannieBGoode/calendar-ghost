@@ -1,0 +1,28 @@
+{
+  "documentTitle": "{page} – Calendar Ghost",
+  "loading": "Loading Calendar Ghost",
+  "wordmarkLabel": "Calendar Ghost overview",
+  "signOut": "Sign out",
+  "ruleTitle": "Rule",
+  "nav": {
+    "overview": "Overview",
+    "rules": "Rules",
+    "activity": "Activity",
+    "settings": "Settings",
+    "primaryLabel": "Primary navigation",
+    "open": "Open navigation",
+    "close": "Close navigation"
+  },
+  "unavailable": {
+    "title": "Calendar Ghost is unavailable",
+    "body": "The browser could not reach the local service.",
+    "reload": "Reload page"
+  },
+  "footer": {
+    "version": "v{version}",
+    "runsHere": "Runs on this device",
+    "apiDocs": "API documentation",
+    "legal": "© 2026 Calendar Ghost contributors · No warranty · <license>AGPLv3+ license</license>",
+    "source": "Source"
+  }
+}
