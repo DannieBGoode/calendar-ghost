@@ -40,9 +40,8 @@ a { color: var(--primary); }
   display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.75rem; padding: 0.6rem 1.1rem;
   border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface);
   color: var(--foreground); font: 600 0.9375rem/1 var(--font-sans); text-decoration: none; cursor: pointer;
-  transition: background 180ms var(--ease-out);
 }
 .btn:hover { background: var(--muted); }
 .btn-primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
 .btn-primary:hover { background: color-mix(in oklch, var(--primary), var(--foreground) 12%); }
-.btn-small { min-height: 2.25rem; padding: 0.4rem 0.8rem; font-size: 0.875rem; }
+.btn-small { padding: 0.4rem 0.8rem; font-size: 0.875rem; }

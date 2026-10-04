@@ -24,7 +24,16 @@ const { m } = Astro.props
 
 <style>
   .faq { max-width: 48rem; }
-  details { border-bottom: 1px solid var(--border); padding: 1rem 0; }
-  summary { cursor: pointer; font-weight: 650; }
-  details p { margin: 0.6rem 0 0; color: var(--muted-foreground); }
+  details { border-bottom: 1px solid var(--border); padding: 0.5rem 0; }
+  summary { display: flex; align-items: center; gap: 0.6rem; min-height: 2.75rem; cursor: pointer; font-weight: 650; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  /* A chevron that turns when the answer opens. */
+  summary::before {
+    content: ""; flex: none; width: 0.45rem; height: 0.45rem; margin: 0 0.2rem 0 0.15rem;
+    border: solid var(--muted-foreground); border-width: 0 2px 2px 0; transform: rotate(-45deg);
+    transition: transform 200ms var(--ease-out);
+  }
+  details[open] summary::before { transform: rotate(45deg); }
+  details p { margin: 0.25rem 0 0.75rem 1.4rem; color: var(--muted-foreground); }
+  @media (prefers-reduced-motion: reduce) { summary::before { transition: none; } }
 </style>

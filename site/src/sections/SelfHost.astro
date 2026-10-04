@@ -85,11 +85,15 @@ const { m } = Astro.props
 
 <style>
   .self-host { display: grid; gap: 2.5rem; }
+  /* Grid and flex children default to their content's width; a long command must not widen the
+     page, so every box on the way down may shrink, and the command scrolls inside its own box. */
+  .self-host > div, .commands li { min-width: 0; }
   @media (min-width: 960px) { .self-host { grid-template-columns: 1fr 1.2fr; } }
   .needs { padding-left: 1.1rem; color: var(--muted-foreground); }
   .commands { list-style: none; margin: 1rem 0; padding: 0; display: grid; gap: 1rem; }
   .commands p { margin: 0 0 0.35rem; font-weight: 600; font-size: 0.9375rem; }
   .command { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.6rem 0.6rem 0.9rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-  .command code { flex: 1; overflow-x: auto; white-space: nowrap; font-size: 0.875rem; }
+  .command code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.875rem; padding-block: 0.35rem; }
+  .command .btn { flex: none; }
   .note { color: var(--muted-foreground); }
 </style>
