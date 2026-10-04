@@ -1,0 +1,29 @@
+---
+import { Crossing } from "../islands/Crossing"
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="section" aria-labelledby="crossing-title">
+  <div class="container crossing-section">
+    <div>
+      <h2 id="crossing-title">{m.crossing.title}</h2>
+      <h3>{m.crossing.alwaysStaysTitle}</h3>
+      <ul class="stays">
+        {m.crossing.alwaysStays.map((item) => <li>{item}</li>)}
+      </ul>
+    </div>
+    <Crossing client:visible m={{ crossing: m.crossing, demo: m.demo }} />
+  </div>
+</section>
+
+<style>
+  .crossing-section { display: grid; gap: 2.5rem; }
+  @media (min-width: 960px) { .crossing-section { grid-template-columns: 1fr 1.6fr; align-items: start; } }
+  .stays { margin: 0; padding-left: 1.1rem; color: var(--muted-foreground); }
+</style>

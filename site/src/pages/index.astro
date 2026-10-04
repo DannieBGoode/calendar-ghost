@@ -3,6 +3,7 @@ import Layout from "../layouts/Layout.astro"
 import { messagesFor } from "../i18n"
 import Hero from "../sections/Hero.astro"
 import Week from "../sections/Week.astro"
+import CrossingSection from "../sections/CrossingSection.astro"
 
 const m = messagesFor(Astro.currentLocale)
 ---
@@ -11,5 +12,6 @@ const m = messagesFor(Astro.currentLocale)
   <main>
     <Hero m={m} />
     <Week m={m} />
+    <CrossingSection m={m} />
   </main>
 </Layout>

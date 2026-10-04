@@ -87,3 +87,96 @@
 @media (prefers-reduced-motion: reduce) {
   .haunt-ghost { transition: none; }
 }
+
+/* The Crossing: a 7-second loop. Details that do not cross over fade out with the event's other
+   information as it travels; nothing falls. */
+.crossing { display: grid; gap: 1.5rem; }
+.crossing-switch {
+  display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
+}
+.crossing-switch button {
+  all: unset; cursor: pointer; padding: 0.4rem 0.9rem; border-radius: 999px;
+  font-size: 0.875rem; font-weight: 600; color: var(--muted-foreground);
+}
+.crossing-switch button[aria-pressed="true"] { background: var(--muted); color: var(--foreground); }
+.crossing-switch button:focus-visible { outline: 2px solid var(--ring); }
+.crossing-explain { margin: 0.6rem 0 0; color: var(--muted-foreground); }
+.crossing-stage { position: relative; height: 300px; }
+.crossing-cal {
+  position: absolute; top: 0; width: 42%; height: 100%; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+}
+.crossing-personal { left: 0; }
+.crossing-work { right: 0; }
+.crossing-cal header {
+  font-size: 0.75rem; font-weight: 600; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border);
+}
+.crossing-row {
+  height: 60px; padding: 3px 8px; font-size: 0.625rem; color: var(--muted-foreground);
+  border-bottom: 1px dashed var(--border);
+}
+.crossing-original, .crossing-existing { left: 44px; right: 8px; height: 54px; }
+.crossing-original { top: 98px; }
+.crossing-existing { top: 38px; }
+.crossing-traveler {
+  position: absolute; left: 0; top: 0; width: 42%; height: 100%; pointer-events: none;
+  animation: crossing-move 7s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.crossing-card {
+  left: 44px; right: 8px; top: 98px; height: 54px;
+  background: var(--event-personal); border-left-color: var(--event-personal-edge);
+  animation: crossing-tint 7s infinite;
+}
+.crossing-busy { position: absolute; left: 7px; top: 4px; opacity: 0; animation: crossing-busy 7s infinite; }
+.crossing-chips > small {
+  display: inline-block; margin: 3px 3px 0 0; padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in oklch, var(--background), transparent 30%); font-size: 0.625rem; font-weight: 500;
+}
+.crossing-fades { animation: crossing-fade 7s infinite; }
+.crossing-carrier { position: absolute; left: 62%; top: 52px; width: 46px; height: 46px; animation: crossing-carry 7s infinite; }
+.crossing-carrier svg { width: 100%; height: 100%; }
+.crossing[data-playing="false"] .crossing-traveler,
+.crossing[data-playing="false"] .crossing-traveler * { animation-play-state: paused; }
+@keyframes crossing-move {
+  0%, 6% { transform: translate(0, 0); opacity: 0; }
+  12% { transform: translate(0, 0); opacity: 1; }
+  22% { transform: translate(0, -34px); }
+  62% { transform: translate(138.1%, -34px); }
+  72%, 92% { transform: translate(138.1%, 0); opacity: 1; }
+  100% { transform: translate(138.1%, 0); opacity: 0; }
+}
+@keyframes crossing-carry {
+  0%, 8% { opacity: 0; transform: translateY(-10px); }
+  14%, 72% { opacity: 1; transform: translateY(0); }
+  84%, 100% { opacity: 0; transform: translate(20px, -40px); }
+}
+@keyframes crossing-tint {
+  0%, 52% { background: var(--event-personal); border-left-color: var(--event-personal-edge); }
+  64%, 100% { background: var(--event-busy); border-left-color: var(--primary); }
+}
+@keyframes crossing-fade { 0%, 40% { opacity: 1; } 58%, 100% { opacity: 0; } }
+@keyframes crossing-busy { 0%, 56% { opacity: 0; } 64%, 100% { opacity: 1; } }
+@media (max-width: 639px) {
+  .crossing-cal { width: 47%; }
+  .crossing-traveler { width: 47%; }
+  @keyframes crossing-move {
+    0%, 6% { transform: translate(0, 0); opacity: 0; }
+    12% { transform: translate(0, 0); opacity: 1; }
+    22% { transform: translate(0, -34px); }
+    62% { transform: translate(112.8%, -34px); }
+    72%, 92% { transform: translate(112.8%, 0); opacity: 1; }
+    100% { transform: translate(112.8%, 0); opacity: 0; }
+  }
+}
+/* Reduced motion: show where the event lands, with what crossed over. */
+@media (prefers-reduced-motion: reduce) {
+  .crossing-traveler, .crossing-traveler * { animation: none !important; }
+  .crossing-traveler { transform: translate(138.1%, 0); }
+  .crossing-card { background: var(--event-busy); border-left-color: var(--primary); }
+  .crossing-fades { opacity: 0; }
+  .crossing-busy { opacity: 1; }
+  .crossing-carrier { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) and (max-width: 639px) {
+  .crossing-traveler { transform: translate(112.8%, 0); }
+}
