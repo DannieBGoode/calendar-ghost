@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -86,6 +87,29 @@ def test_use_is_recorded_at_most_every_five_minutes(tmp_path: Path) -> None:
     second = tokens.authenticate(issued.token)
     assert second is not None
     assert second.last_used_at == ISSUED + timedelta(minutes=6)
+
+
+def test_a_busy_database_does_not_refuse_a_valid_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tokens, clock, database = _tokens(tmp_path)
+    issued = tokens.issue("Uptime Kuma")
+    clock.moment = ISSUED + timedelta(minutes=10)
+    # Another connection holds the write lock, and this one gives up at once instead of waiting.
+    holder = sqlite3.connect(database, isolation_level=None)
+    holder.execute("BEGIN IMMEDIATE")
+    monkeypatch.setattr(sqlite3, "connect", partial(sqlite3.connect, timeout=0))
+    try:
+        busy = tokens.authenticate(issued.token)
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+
+    # Recording the use is best effort; the token is valid, so the request is allowed.
+    assert busy == issued.summary
+    used = tokens.authenticate(issued.token)
+    assert used is not None
+    assert used.last_used_at == ISSUED + timedelta(minutes=10)
 
 
 def test_tokens_are_listed_newest_first_with_revoked_ones_last(tmp_path: Path) -> None:

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 import secrets
 import sqlite3
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -16,6 +18,8 @@ from calendar_sync.application.ports import (
     IssuedIntegrationToken,
 )
 from calendar_sync.infrastructure.security import token_hash
+
+logger = logging.getLogger(__name__)
 
 USAGE_GRANULARITY = timedelta(minutes=5)
 """A monitor polling every 20 seconds must not write to SQLite on every request."""
@@ -90,13 +94,7 @@ class SqliteIntegrationTokens:
                 return None
             summary = _summary(row)
             if summary.last_used_at is None or now - summary.last_used_at >= USAGE_GRANULARITY:
-                connection.execute(
-                    "UPDATE integration_tokens SET last_used_at = ? WHERE id = ?",
-                    (now.isoformat(), summary.id),
-                )
-                summary = IntegrationTokenSummary(
-                    summary.id, summary.name, summary.scope, summary.created_at, now, None
-                )
+                summary = _record_use(connection, summary, now)
         return summary
 
     @contextmanager
@@ -112,6 +110,26 @@ class SqliteIntegrationTokens:
             connection.commit()
         finally:
             connection.close()
+
+
+def _record_use(
+    connection: sqlite3.Connection, summary: IntegrationTokenSummary, now: datetime
+) -> IntegrationTokenSummary:
+    """The summary with this use recorded, or unchanged when the database is busy.
+
+    Recording use is best effort: a valid token must not fail its request because another
+    operation, such as a scheduled pass, holds the write lock.
+    """
+    try:
+        connection.execute(
+            "UPDATE integration_tokens SET last_used_at = ? WHERE id = ?",
+            (now.isoformat(), summary.id),
+        )
+    except sqlite3.OperationalError:
+        logger.warning("Could not record the use of integration token %s", summary.id)
+        connection.rollback()
+        return summary
+    return replace(summary, last_used_at=now)
 
 
 def _summary(row: sqlite3.Row) -> IntegrationTokenSummary:
