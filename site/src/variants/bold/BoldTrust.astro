@@ -1,14 +1,11 @@
 ---
-// Built to be trusted: four claims proved by the ghost in small looping scenes (one pause control
-// for all of them), then the other claims as a compact checklist.
-import Avatar from "../../components/Avatar.astro"
+// Built to be trusted: every claim as text, an icon, and a link to the doc that proves it, in a
+// two-column checklist.
 import DocLink from "../../components/DocLink.astro"
 import Icon from "../../components/Icon.astro"
 import "./trust.css"
 import type { Messages } from "../../i18n"
 import type { IconName } from "../../icons"
-import { Ghost, SpeechBubble } from "../../islands/Ghost"
-import { LoopStage } from "../../islands/LoopStage"
 import { TRUST_DOCS } from "../../links"
 
 interface Props {
@@ -16,123 +13,33 @@ interface Props {
 }
 
 const { m } = Astro.props
-const copy = m.variants.bold.trust
-const [fixes, preview, emails, loops, ...rest] = m.trust.cards
-const [fixesDoc, previewDoc, emailsDoc, loopsDoc, ...restDocs] = TRUST_DOCS
-// One icon per remaining claim, in the order of `trust.cards` after the first four.
-const REST_ICONS: readonly IconName[] = ["repeat", "listChecks", "shieldCheck", "activity"]
-const previews = [
-  { day: m.demo.days[0], time: "3:00 PM" },
-  { day: m.demo.days[1], time: "12:00 PM" },
-  { day: m.demo.days[3], time: "1:00 PM" },
+// One icon per claim, in the order of `trust.cards`.
+const ICONS: readonly IconName[] = [
+  "rotateCcw",
+  "eye",
+  "mailX",
+  "refreshCwOff",
+  "repeat",
+  "listChecks",
+  "shieldCheck",
+  "activity",
 ]
 ---
 
 <section id="features" class="b-section b-trust" aria-labelledby="trust-title">
   <div class="b-wrap">
     <h2 id="trust-title">{m.trust.title}</h2>
-    <LoopStage client:visible motion={m.motion} className="b-proofs">
-      <ul class="b-proof-list">
-        <li class="b-proof b-proof-fix">
-          <div class="b-scene" aria-hidden="true">
-            <div class="b-cal">
-              <span class="b-cal-head"><Avatar calendar="work" />{m.demo.calendars.work}</span>
-              <span class="cal-event is-busy b-fix-card">{m.demo.busy}</span>
-            </div>
-            <span class="b-fix-trash"><Icon name="trash" class="b-scene-icon" /></span>
-            <span class="b-actor b-fix-ghost">
-              <Ghost face="concerned" then="happy" size={112} />
-              <SpeechBubble side="top" className="b-scene-bubble">{copy.says.fixes}</SpeechBubble>
-            </span>
-            <span class="b-scene-log b-fix-log">{copy.fixLog}</span>
-          </div>
-          <h3><DocLink m={m} href={fixesDoc}>{fixes.title}</DocLink></h3>
-          <p>{fixes.body}</p>
-        </li>
-        <li class="b-proof b-proof-preview">
-          <div class="b-scene" aria-hidden="true">
-            <div class="b-pv">
-              <span class="b-pv-head"><Icon name="eye" class="b-scene-icon" />{m.howStrip.previewRule}</span>
-              {
-                previews.map(({ day, time }) => (
-                  <span class="b-pv-row">
-                    <span class="b-pv-busy">{m.demo.busy}</span>
-                    <span class="b-pv-when">{day} {time}</span>
-                    <Icon name="check" class="b-pv-check" />
-                  </span>
-                ))
-              }
-              <span class="b-pv-start">{m.howStrip.startSyncing}</span>
-            </div>
-            <span class="b-actor b-pv-ghost">
-              <Ghost face="neutral" then="happy" look={{ x: -1.3, y: 0.5 }} size={104} />
-              <SpeechBubble side="top" className="b-scene-bubble">{copy.says.preview}</SpeechBubble>
-            </span>
-          </div>
-          <h3><DocLink m={m} href={previewDoc}>{preview.title}</DocLink></h3>
-          <p>{preview.body}</p>
-        </li>
-        <li class="b-proof b-proof-mail">
-          <div class="b-scene" aria-hidden="true">
-            <span class="cal-event is-busy b-mail-event">{m.demo.busy}</span>
-            <span class="b-mail-letter b-mail-out"><Icon name="mail" class="b-scene-icon" /></span>
-            <span class="b-mail-letter b-mail-stopped"><Icon name="mailX" class="b-scene-icon" /></span>
-            <span class="b-actor b-mail-ghost">
-              <Ghost face="surprised" then="wink" size={104} />
-              <SpeechBubble side="top" className="b-scene-bubble">{copy.says.emails}</SpeechBubble>
-            </span>
-            <span class="b-mail-guests">
-              <span><Icon name="user" class="b-scene-icon" /></span>
-              <span><Icon name="user" class="b-scene-icon" /></span>
-            </span>
-            <span class="b-scene-log b-mail-count">{copy.emailsSent}</span>
-          </div>
-          <h3><DocLink m={m} href={emailsDoc}>{emails.title}</DocLink></h3>
-          <p>{emails.body}</p>
-        </li>
-        <li class="b-proof b-proof-loop">
-          <div class="b-scene" aria-hidden="true">
-            <div class="b-cal b-loop-from">
-              <span class="b-cal-head"><Avatar calendar="personal" />{m.demo.calendars.personal}</span>
-              <span class="cal-event is-personal b-loop-original">{m.demo.events.dentist.title}</span>
-            </div>
-            <div class="b-cal b-loop-to">
-              <span class="b-cal-head"><Avatar calendar="work" />{m.demo.calendars.work}</span>
-              <span class="cal-event is-busy b-loop-landed">{m.demo.busy}</span>
-            </div>
-            <svg class="b-loop-back" viewBox="0 0 200 40" preserveAspectRatio="none" focusable="false">
-              <path d="M180 34C140 2 60 2 20 34" />
-              <path d="M30 22L20 34L35 37" />
-            </svg>
-            <span class="b-loop-stop"><Icon name="refreshCwOff" class="b-scene-icon" /></span>
-            <div class="b-loop-track">
-              <span class="cal-event is-busy b-loop-carried">{m.demo.busy}</span>
-              <span class="b-actor b-loop-ghost">
-                <Ghost face="proud" then="happy" size={100} />
-                <SpeechBubble side="left" className="b-scene-bubble">{copy.says.loops}</SpeechBubble>
-              </span>
-            </div>
-          </div>
-          <h3><DocLink m={m} href={loopsDoc}>{loops.title}</DocLink></h3>
-          <p>{loops.body}</p>
-        </li>
-      </ul>
-    </LoopStage>
-
-    <div class="b-more">
-      <h3 class="b-more-title">{copy.moreTitle}</h3>
-      <ul class="b-checklist">
-        {
-          rest.map((card, index) => (
-            <li>
-              <Icon name={REST_ICONS[index] ?? "shieldCheck"} class="b-check-icon" />
-              <p>
-                <strong><DocLink m={m} href={restDocs[index] ?? fixesDoc}>{card.title}</DocLink></strong> {card.body}
-              </p>
-            </li>
-          ))
-        }
-      </ul>
-    </div>
+    <ul class="b-checklist">
+      {
+        m.trust.cards.map((card, index) => (
+          <li>
+            <Icon name={ICONS[index] ?? "shieldCheck"} class="b-check-icon" />
+            <p>
+              <strong><DocLink m={m} href={TRUST_DOCS[index] ?? TRUST_DOCS[0]}>{card.title}</DocLink></strong> {card.body}
+            </p>
+          </li>
+        ))
+      }
+    </ul>
   </div>
 </section>
