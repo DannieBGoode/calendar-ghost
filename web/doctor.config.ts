@@ -9,8 +9,8 @@ export default {
   noScore: true,
   supplyChain: { enabled: false },
   rules: {
-    // ESLint owns size and complexity for every file (complexity, max-lines-per-function), with
-    // one marked exception per existing violation, so these would only report the same debt twice.
+    // ESLint owns size and complexity for every file (complexity, max-lines-per-function), so
+    // these would only report the same problem twice.
     "react-doctor/no-high-complexity-react-function": "off",
     "react-doctor/no-giant-component": "off",
   },

@@ -47,9 +47,8 @@ export default tseslint.config(
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNumber: true }],
       // `||` deliberately treats an empty name or a false flag as missing.
       "@typescript-eslint/prefer-nullish-coalescing": ["error", { ignorePrimitives: { string: true, boolean: true } }],
-      // Size and complexity bounds, as Ruff's C90 and PLR rules set for the backend. Each existing
-      // violation carries an eslint-disable comment marked as debt, like the backend's `# noqa`
-      // markers: debt to shrink, not a pattern to copy. Unused markers fail lint.
+      // Size and complexity bounds, as Ruff's C90 and PLR rules set for the backend. No code is
+      // exempt: split a function or file that reaches a bound instead of disabling the rule.
       complexity: ["error", 10],
       "max-depth": ["error", 4],
       "max-params": ["error", 4],

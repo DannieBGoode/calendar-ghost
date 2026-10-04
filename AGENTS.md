@@ -90,9 +90,9 @@ web/ and interfaces/  ->  application/  ->  domain/
 - Ruff bounds function complexity and argument count. Existing `# noqa: C901`, `PLR0912`,
   `PLR0913`, and `PLR0915` markers are debt to shrink, not a pattern to copy: split new code
   instead of suppressing the rule.
-- ESLint applies the same kind of bounds to `web/src`. Each violation that predates them carries an
-  `eslint-disable` comment marked `debt`, the frontend's `# noqa`: split the code instead of adding
-  one. A marker that no longer suppresses anything fails lint, so remove it after a split.
+- ESLint applies the same kind of bounds to `web/src`, and no frontend code is exempt. Split a
+  component, hook, or module that reaches a bound into cohesive files (for example
+  `features/rule-details.tsx` and its section files); never add an `eslint-disable` for these rules.
 - In `web/src`, features compose components, components render `lib`, and `lib` imports neither;
   `components/ui` imports only other UI primitives. ESLint's `no-restricted-imports` enforces this
   for alias and relative imports.

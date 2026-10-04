@@ -111,6 +111,6 @@ rules out.
 - In `web/src`, features compose components, components render `lib`, and `lib` imports neither;
   `components/ui` imports only other UI primitives. ESLint's `no-restricted-imports` enforces this
   for alias (`@/features/x`) and relative (`../features/x`) imports.
-- ESLint bounds complexity, nesting, parameters, and length, as Ruff does for the backend. Each
-  violation that predates the bounds carries an `eslint-disable` comment marked `debt`, like a
-  backend `# noqa`. A new violation fails lint, and so does a marker left behind after a split.
+- ESLint bounds complexity, nesting, parameters, and length, as Ruff does for the backend, and no
+  frontend code is exempt. Split a component, hook, or module that reaches a bound; do not disable
+  the rule.
