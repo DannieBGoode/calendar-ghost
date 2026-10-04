@@ -70,9 +70,10 @@
 /* The Haunted Week. */
 .haunt { margin: 2rem 0 0; }
 .haunt-frame {
-  position: relative; height: 360px; overflow: hidden;
+  position: relative; height: 396px; overflow: hidden;
   border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
 }
+.haunt-frame .week { height: 360px; }
 .haunt .cal-event.is-arriving { opacity: 0; transform: translateX(-14px); }
 .haunt .cal-event.is-fading { opacity: 0; }
 .haunt-ghost {
@@ -83,3 +84,6 @@
 .haunt-ghost svg { width: 100%; height: 100%; }
 .haunt-label { position: absolute; right: 0.7rem; bottom: 0.5rem; font-size: 0.75rem; color: var(--muted-foreground); }
 @media (max-width: 639px) { .haunt-frame .week { width: calc(100% * 5 / 3); } }
+@media (prefers-reduced-motion: reduce) {
+  .haunt-ghost { transition: none; }
+}
