@@ -1,94 +1,38 @@
-/* eslint-disable max-lines -- debt: split this file before adding to it */
-import { keepPreviousData, skipToken, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
 import {
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
-  ExternalLink,
-  RefreshCw,
-  Repeat,
-  Search,
-  ShieldAlert,
-  X,
-} from "lucide-react"
-import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type RefObject } from "react"
+  keepPreviousData,
+  skipToken,
+  useInfiniteQuery,
+  useQueries,
+  useQuery,
+  type InfiniteData,
+  type UseInfiniteQueryResult,
+} from "@tanstack/react-query"
+import { RefreshCw, ShieldAlert } from "lucide-react"
+import { useRef, useState, type RefObject } from "react"
 
-import { EventWhen, HappenedLine } from "@/components/activity-event"
 import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
-import { RuleEndpoint } from "@/components/rule-endpoint"
-import { RulePicker, type RulePickerOption } from "@/components/rule-picker"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
-import {
-  activityDayGroups,
-  activityRows,
-  describeEntry,
-  entryInspection,
-  eventCell,
-  CHANGE_VALUES_UNAVAILABLE,
-  changeListing,
-  eventLookupFailure,
-  formatClockTime,
-  formatDay,
-  formatEventTime,
-  formatRunTime,
-  groupRuns,
-  REMOVED_RULE_LOOKUP,
-  SHOW_FILTERS,
-  showCategories,
-  whatHappened,
-  type EventCell,
-  type RuleNames,
-} from "@/lib/activity"
+import { ActivityDetail } from "@/features/activity-entry-details"
+import { ActivityFilters } from "@/features/activity-filters"
+import { OpenIncidents, ResolvedIncidents } from "@/features/activity-incidents"
+import { ActivityTable } from "@/features/activity-table"
+import { activityDayGroups, activityRows, groupRuns, showCategories } from "@/lib/activity"
 import {
   activityFailure,
   activityFailureActions,
   activityFailureMessages,
   activityFailureRequiresReload,
 } from "@/lib/activity-failure"
-import {
-  activitySearch,
-  activityStateFromSearch,
-  type ActivityLocationState,
-  type ActivityShow,
-} from "@/lib/activity-location"
-import {
-  ACTIVITY_PAGE_SIZE,
-  api,
-  type AuditEntry,
-  type ConnectedAccount,
-  type DiscoveredCalendar,
-  type EventSnapshot,
-  type Incident,
-  type RuleSummary,
-} from "@/lib/api"
-import {
-  accessRenewedSince,
-  incidentClosedAt, incidentGuidance, incidentResolution, splitIncidents, type IncidentAction, type IncidentRuleState } from "@/lib/incidents"
-import { isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
-import { plural } from "@/lib/rule-change"
-import { ruleEndpointLabel } from "@/lib/rule-endpoint"
+import { emptyHistoryCopy, entrySteps, historyStatus, type HistoryFilters } from "@/lib/activity-history"
+import { activitySearch, activityStateFromSearch, type ActivityLocationState } from "@/lib/activity-location"
+import type { RuleContext } from "@/lib/activity-rule-context"
+import { ACTIVITY_PAGE_SIZE, api, type AuditEntry, type Incident } from "@/lib/api"
+import { splitIncidents, type IncidentAction } from "@/lib/incidents"
+import type { OpenRule, ViewChange } from "@/lib/navigation"
 
-type RuleContext = {
-  rulesById: Map<string, RuleSummary>
-  accountsById: Map<string, ConnectedAccount>
-  calendarsByAccount: Map<string, DiscoveredCalendar[] | undefined>
-  rulesLoaded: boolean
-}
-
-// Until rules load, assume a rule exists rather than hide its events.
-const LOADING_NAMES: RuleNames = { source: "the source calendar", destination: "the destination" }
-
-function ruleNames(ruleId: string, context: RuleContext): RuleNames | null {
-  if (!context.rulesLoaded) return LOADING_NAMES
-  const rule = context.rulesById.get(ruleId)
-  if (!rule) return null
-  return { source: endpointName(rule.source, context), destination: endpointName(rule.destination, context) }
-}
+type UpdateLocation = (next: Partial<ActivityLocationState>, history: "push" | "replace") => void
+type ActivityFeed = UseInfiniteQueryResult<InfiniteData<AuditEntry[]>>
 
 /**
  * Filters and the open entry live in the address so Back, reload, and shared links keep them. The
@@ -108,8 +52,45 @@ function useActivityLocation() {
   return [state, update] as const
 }
 
+/** The rules, accounts, and calendar names each entry needs to name its rule. */
+function useRuleContext(): RuleContext {
+  const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
+  // Shares the Rules view cache so calendars show their names rather than Google identifiers.
+  const connectedAccountIds = (accounts.data ?? [])
+    .filter((account) => account.state === "connected")
+    .map((account) => account.id)
+  const calendarQueries = useQueries({
+    queries: connectedAccountIds.map((accountId) => ({
+      queryKey: ["calendars", accountId],
+      queryFn: () => api.calendars(accountId),
+      staleTime: 5 * 60 * 1000,
+    })),
+  })
+  return {
+    rulesById: new Map((rules.data ?? []).map((rule) => [rule.id, rule])),
+    accountsById: new Map((accounts.data ?? []).map((account) => [account.id, account])),
+    calendarsByAccount: new Map(
+      connectedAccountIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
+    ),
+    rulesLoaded: rules.data !== undefined,
+  }
+}
 
-// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
+/** The open entry, from the loaded pages or, when they do not hold it, on its own. */
+function useSelectedEntry(entryId: number | null, entries: AuditEntry[], feedPending: boolean) {
+  const listedEntry = entries.find((item) => item.id === entryId)
+  // A shared link or an older page can name an entry that is not loaded.
+  const directEntry = useQuery({
+    queryKey: ["activity-entry", entryId],
+    queryFn: entryId === null ? skipToken : () => api.activityEntry(entryId),
+    enabled: listedEntry === undefined && !feedPending,
+    retry: false,
+  })
+  const entry = listedEntry ?? (directEntry.data?.id === entryId ? directEntry.data : undefined)
+  return { entry, loading: entry === undefined && (directEntry.isPending || directEntry.isFetching) }
+}
+
 export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
@@ -129,75 +110,107 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
     placeholderData: keepPreviousData,
   })
   const incidents = useQuery({ queryKey: ["incidents"], queryFn: api.incidents })
-  const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
-  // Shares the Rules view cache so calendars show their names rather than Google identifiers.
-  const connectedAccountIds = (accounts.data ?? [])
-    .filter((account) => account.state === "connected")
-    .map((account) => account.id)
-  const calendarQueries = useQueries({
-    queries: connectedAccountIds.map((accountId) => ({
-      queryKey: ["calendars", accountId],
-      queryFn: () => api.calendars(accountId),
-      staleTime: 5 * 60 * 1000,
-    })),
-  })
+  const context = useRuleContext()
   const entries = activity.data?.pages.flat() ?? []
-  const runs = groupRuns(entries)
-  const listedEntry = entries.find((item) => item.id === entryId)
-  // A shared link or an older page can name an entry that is not loaded.
-  const directEntry = useQuery({
-    queryKey: ["activity-entry", entryId],
-    queryFn: entryId === null ? skipToken : () => api.activityEntry(entryId),
-    enabled: listedEntry === undefined && !activity.isPending,
-    retry: false,
-  })
-  const selected = listedEntry ?? (directEntry.data?.id === entryId ? directEntry.data : undefined)
+  const selection = useSelectedEntry(entryId, entries, activity.isPending)
 
   if (activity.isPending || incidents.isPending) return <PageSkeleton label="Loading activity" />
 
   if (activity.error || incidents.error) {
-    const failure = activityFailure([activity.error, incidents.error])
-    const reloadRequired = activityFailureRequiresReload(failure)
-    const refreshing = activity.isFetching || incidents.isFetching
-    const recover = () => {
-      if (reloadRequired) {
-        window.location.reload()
-        return
-      }
-      void Promise.all([activity.refetch(), incidents.refetch()])
-    }
-
     return (
-      <div className="page-section">
-        <ActivityHeading />
-        <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
-          <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
-          <h2 id="activity-error-title">Activity is temporarily unavailable</h2>
-          <p>{activityFailureMessages[failure]}</p>
-          <Button variant="outline" onClick={recover} disabled={refreshing && !reloadRequired}>
-            <RefreshCw aria-hidden="true" />
-            {refreshing && !reloadRequired ? "Trying again…" : activityFailureActions[failure]}
-          </Button>
-        </section>
-      </div>
+      <ActivityUnavailable
+        errors={[activity.error, incidents.error]}
+        refreshing={activity.isFetching || incidents.isFetching}
+        onRetry={() => void Promise.all([activity.refetch(), incidents.refetch()])}
+      />
     )
   }
 
-  const context: RuleContext = {
-    rulesById: new Map((rules.data ?? []).map((rule) => [rule.id, rule])),
-    accountsById: new Map((accounts.data ?? []).map((account) => [account.id, account])),
-    calendarsByAccount: new Map(
-      connectedAccountIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
-    ),
-    rulesLoaded: rules.data !== undefined,
+  return (
+    <ActivityPage
+      state={state}
+      query={query}
+      update={update}
+      feed={activity}
+      entries={entries}
+      incidents={incidents.data}
+      context={context}
+      selection={selection}
+      focusDetailRef={focusDetail}
+      onViewChange={onViewChange}
+      onOpenRule={onOpenRule}
+    />
+  )
+}
+
+function ActivityUnavailable({
+  errors,
+  refreshing,
+  onRetry,
+}: {
+  errors: unknown[]
+  refreshing: boolean
+  onRetry: () => void
+}) {
+  const failure = activityFailure(errors)
+  const reloadRequired = activityFailureRequiresReload(failure)
+  const recover = () => {
+    if (reloadRequired) {
+      window.location.reload()
+      return
+    }
+    onRetry()
   }
-  const { open: openIncidents, resolved: resolvedIncidents } = splitIncidents(incidents.data)
+
+  return (
+    <div className="page-section">
+      <ActivityHeading />
+      <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
+        <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
+        <h2 id="activity-error-title">Activity is temporarily unavailable</h2>
+        <p>{activityFailureMessages[failure]}</p>
+        <Button variant="outline" onClick={recover} disabled={refreshing && !reloadRequired}>
+          <RefreshCw aria-hidden="true" />
+          {refreshing && !reloadRequired ? "Trying again…" : activityFailureActions[failure]}
+        </Button>
+      </section>
+    </div>
+  )
+}
+
+function ActivityPage({
+  state,
+  query,
+  update,
+  feed,
+  entries,
+  incidents,
+  context,
+  selection,
+  focusDetailRef,
+  onViewChange,
+  onOpenRule,
+}: {
+  state: ActivityLocationState
+  query: string
+  update: UpdateLocation
+  feed: ActivityFeed
+  entries: AuditEntry[]
+  incidents: Incident[]
+  context: RuleContext
+  selection: { entry: AuditEntry | undefined; loading: boolean }
+  focusDetailRef: RefObject<boolean>
+  onViewChange: ViewChange
+  onOpenRule: OpenRule
+}) {
+  const { ruleId, show, entryId } = state
+  const { open: openIncidents, resolved: resolvedIncidents } = splitIncidents(incidents)
+  const runs = groupRuns(entries)
   const groups = activityRows(runs)
   const days = activityDayGroups(groups)
   const visibleEntries = runs.flatMap((run) => run.entries)
-  const selectedIndex = selected ? visibleEntries.findIndex((item) => item.id === selected.id) : -1
-  const updating = activity.isPlaceholderData
+  const { newer, older } = entrySteps(visibleEntries, selection.entry)
+  const updating = feed.isPlaceholderData
   const detailOpen = entryId !== null
 
   function select(entry: AuditEntry | undefined, history: "push" | "replace") {
@@ -205,7 +218,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   }
 
   function openEntry(entry: AuditEntry) {
-    focusDetail.current = true
+    focusDetailRef.current = true
     select(entry, entryId === null ? "push" : "replace")
   }
 
@@ -229,23 +242,13 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
     }
   }
 
-  function moveSelection(event: KeyboardEvent<HTMLTableElement>) {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return
-    const target = event.target as HTMLElement
-    if (!target.dataset.rowLink) return
-    const links = [...event.currentTarget.querySelectorAll<HTMLElement>("[data-row-link]")]
-    const next = links[links.indexOf(target) + (event.key === "ArrowDown" ? 1 : -1)]
-    if (!next) return
-    event.preventDefault()
-    next.focus()
+  function stepTo(rowLink: string | undefined) {
     // With details open, the arrow keys step through entries without leaving the table.
-    if (detailOpen) select(visibleEntries.find((item) => String(item.id) === next.dataset.rowLink), "replace")
+    if (detailOpen) select(visibleEntries.find((item) => String(item.id) === rowLink), "replace")
   }
 
   // A selected rule is named above the table, and the detail pane names the rule of its entry.
   const showRuleColumn = !ruleId && !detailOpen
-  const columns = showRuleColumn ? 4 : 3
-  const pickerOptions = rulePickerOptions(ruleId, entries, context)
 
   return (
     <div className="page-section">
@@ -260,34 +263,16 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
             <p>Newest first. Select an entry to see what happened and why.</p>
           </div>
         </div>
-        <div className="activity-filters">
-            <ActivitySearch query={query} onSearch={(next) => changeFilters({ query: next })} />
-            <div className="field-stack">
-              <Label id="activity-rule-label" onClick={() => document.getElementById("activity-rule")?.focus()}>Rule</Label>
-              <RulePicker
-                id="activity-rule"
-                labelId="activity-rule-label"
-                value={ruleId}
-                options={pickerOptions.options}
-                showAccounts={pickerOptions.showAccounts}
-                clearValue=""
-                clearLabel="Show all rules"
-                onChange={(value) => changeFilters({ ruleId: value })}
-              />
-            </div>
-            <div className="field-stack">
-              <Label htmlFor="activity-category">Show</Label>
-              <NativeSelect id="activity-category" value={show} onChange={(event) => changeFilters({ show: event.target.value as ActivityShow })}>
-                {SHOW_FILTERS.map((filter) => <option key={filter.value} value={filter.value}>{filter.label}</option>)}
-              </NativeSelect>
-            </div>
-        </div>
+        <ActivityFilters
+          query={query}
+          ruleId={ruleId}
+          show={show}
+          entries={entries}
+          context={context}
+          onChange={changeFilters}
+        />
         <p className="sr-only" role="status">
-          {updating
-            ? "Updating activity…"
-            : query
-              ? `${activity.hasNextPage ? "More than " : ""}${plural(visibleEntries.length, "entry", "entries")} found for “${query}”.`
-              : ""}
+          {historyStatus({ updating, query, more: feed.hasNextPage, count: visibleEntries.length })}
         </p>
 
         {/* A linked entry the filters hide still opens beside an empty table. */}
@@ -295,52 +280,25 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
           <div className="activity-table-wrap" aria-busy={updating} data-updating={updating}>
             {groups.length === 0 ? (
               <EmptyActivity
-                ruleId={ruleId}
-                show={show}
-                query={query}
+                filters={{ ruleId, show, query }}
                 onShowAll={() => changeFilters({ show: "all" })}
                 onAllRules={() => changeFilters({ ruleId: "" })}
                 onClearSearch={() => changeFilters({ query: "" })}
               />
             ) : (
               <>
-                {/* Explicit roles keep table semantics where narrow screens restyle the rows. */}
-                <table className="activity-table" role="table" onKeyDown={moveSelection}>
-                  <caption className="sr-only">Synchronization history, newest first</caption>
-                  <thead role="rowgroup">
-                    <tr role="row">
-                      <th scope="col" role="columnheader" className="activity-col-time">Time</th>
-                      <th scope="col" role="columnheader" className="activity-col-event">Event</th>
-                      <th scope="col" role="columnheader" className="activity-col-happened">What happened</th>
-                      {showRuleColumn && <th scope="col" role="columnheader" className="activity-col-rule">Rule</th>}
-                    </tr>
-                  </thead>
-                  {days.map((day) => (
-                    <tbody key={day.key} role="rowgroup" className="activity-day">
-                      <tr role="row">
-                        <th scope="rowgroup" role="rowheader" colSpan={columns}>{day.day}</th>
-                      </tr>
-                      {day.runs.flatMap((run, runIndex) =>
-                        run.entries.map((entry, entryIndex) => (
-                          <EntryRow
-                            key={entry.id}
-                            entry={entry}
-                            context={context}
-                            state={state}
-                            selected={entryId === entry.id}
-                            showRuleColumn={showRuleColumn}
-                            runStart={runIndex > 0 && entryIndex === 0}
-                            onOpen={openEntry}
-                            onFilterRule={(value) => changeFilters({ ruleId: value })}
-                          />
-                        )),
-                      )}
-                    </tbody>
-                  ))}
-                </table>
-                {activity.hasNextPage && (
-                  <Button variant="outline" className="activity-more" onClick={() => void activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
-                    {activity.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
+                <ActivityTable
+                  days={days}
+                  context={context}
+                  state={state}
+                  showRuleColumn={showRuleColumn}
+                  onOpen={openEntry}
+                  onFilterRule={(value) => changeFilters({ ruleId: value })}
+                  onStep={stepTo}
+                />
+                {feed.hasNextPage && (
+                  <Button variant="outline" className="activity-more" onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>
+                    {feed.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
                   </Button>
                 )}
               </>
@@ -348,18 +306,14 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
           </div>
           {detailOpen && (
             <ActivityDetail
-              entry={selected}
-              loading={selected === undefined && (directEntry.isPending || directEntry.isFetching)}
+              entry={selection.entry}
+              loading={selection.loading}
               context={context}
-              focusRef={focusDetail}
+              focusRef={focusDetailRef}
               onClose={closeDetail}
               onOpenRule={onOpenRule}
-              onNewer={selectedIndex > 0 ? () => select(visibleEntries[selectedIndex - 1], "replace") : undefined}
-              onOlder={
-                selectedIndex >= 0 && selectedIndex < visibleEntries.length - 1
-                  ? () => select(visibleEntries[selectedIndex + 1], "replace")
-                  : undefined
-              }
+              onNewer={newer && (() => select(newer, "replace"))}
+              onOlder={older && (() => select(older, "replace"))}
             />
           )}
         </div>
@@ -380,79 +334,25 @@ function ActivityHeading() {
   )
 }
 
-function rulePickerOptions(
-  ruleId: string,
-  entries: AuditEntry[],
-  context: RuleContext,
-): { options: RulePickerOption[]; showAccounts: boolean } {
-  const rules = [...context.rulesById.values()]
-  const endpoint = (value: RuleSummary["source"]) => ({
-    calendar: endpointName(value, context),
-    accountId: value.connected_account_id,
-    account: context.accountsById.get(value.connected_account_id),
-  })
-  // History can name rules that were removed; they stay filterable.
-  const removed = context.rulesLoaded
-    ? [...new Set([...entries.map((item) => item.rule_id), ...(ruleId ? [ruleId] : [])])].filter(
-        (id) => !context.rulesById.has(id),
-      )
-    : []
-  const options: RulePickerOption[] = [
-    { value: "", name: "All rules" },
-    ...rules.map((rule) => {
-      const source = endpoint(rule.source)
-      const destination = endpoint(rule.destination)
-      return { value: rule.id, name: `${source.calendar} to ${destination.calendar}`, source, destination }
-    }),
-    ...removed.map((id, index) => ({
-      value: id,
-      name: removed.length > 1 ? `Removed rule ${index + 1}` : "Removed rule",
-      removed: true,
-    })),
-  ]
-  // Calendar names alone cannot tell apart two calendars that share a name.
-  const calendars = new Map<string, Set<string>>()
-  for (const rule of rules) {
-    for (const side of [rule.source, rule.destination]) {
-      const name = endpointName(side, context)
-      calendars.set(name, (calendars.get(name) ?? new Set()).add(`${side.connected_account_id}/${side.calendar_id}`))
-    }
-  }
-  return { options, showAccounts: [...calendars.values()].some((ids) => ids.size > 1) }
-}
-
-// eslint-disable-next-line complexity -- debt: split this before adding to it
 function EmptyActivity({
-  ruleId,
-  show,
-  query,
+  filters,
   onShowAll,
   onAllRules,
   onClearSearch,
 }: {
-  ruleId: string
-  show: ActivityShow
-  query: string
+  filters: HistoryFilters
   onShowAll: () => void
   onAllRules: () => void
   onClearSearch: () => void
 }) {
-  // The default view hides no-change checks, so an empty page there is usually good news.
-  const quiet = !ruleId && show === "" && !query
+  const { ruleId, show, query } = filters
+  const copy = emptyHistoryCopy(filters)
   const filtered = Boolean(ruleId) || show !== "all" || Boolean(query)
   return (
     <div className="empty-panel">
       <GhostMark className="empty-ghost" />
-      <h2>{quiet ? "Nothing has changed yet" : query ? `No events named “${query}”` : filtered ? "No matching activity" : "No activity yet"}</h2>
-      <p>
-        {quiet
-          ? "No rule has added, updated, removed, skipped, or blocked an event. Checks that found everything already up to date are hidden."
-          : query
-            ? "Search matches event titles as each run recorded them. Check the spelling, show all decisions, or clear the search."
-            : filtered
-              ? "No recorded decisions match these filters. Show all decisions, or choose a different rule."
-              : "Synchronization decisions will appear here after an enabled rule completes its first run."}
-      </p>
+      <h2>{copy.title}</h2>
+      <p>{copy.body}</p>
       {filtered && (
         <div className="empty-actions">
           {query && <Button variant="outline" onClick={onClearSearch}>Clear search</Button>}
@@ -460,553 +360,6 @@ function EmptyActivity({
           {ruleId && <Button variant="outline" onClick={onAllRules}>Show all rules</Button>}
         </div>
       )}
-    </div>
-  )
-}
-
-const SEARCH_DELAY_MS = 300
-
-/**
- * Searches recorded event titles as the administrator types, pausing briefly so each keystroke
- * does not replace the table. Enter searches at once; Escape clears.
- */
-function ActivitySearch({ query, onSearch }: { query: string; onSearch: (query: string) => void }) {
-  const [text, setText] = useState(query)
-  const [shownQuery, setShownQuery] = useState(query)
-  const input = useRef<HTMLInputElement>(null)
-  const search = useRef(onSearch)
-  useEffect(() => {
-    search.current = onSearch
-  })
-  // A search cleared elsewhere, such as from the empty state, empties the field too.
-  if (query !== shownQuery) {
-    setShownQuery(query)
-    if (text.trim() !== query) setText(query)
-  }
-
-  useEffect(() => {
-    if (text.trim() === query) return
-    const timer = window.setTimeout(() => search.current(text.trim()), SEARCH_DELAY_MS)
-    return () => window.clearTimeout(timer)
-  }, [text, query])
-
-  function clear() {
-    setText("")
-    onSearch("")
-    input.current?.focus()
-  }
-
-  return (
-    <div className="field-stack">
-      <Label htmlFor="activity-search">Event</Label>
-      <div className="activity-search">
-        <Search aria-hidden="true" className="activity-search-icon" />
-        <Input
-          ref={input}
-          id="activity-search"
-          type="search"
-          value={text}
-          placeholder="Search event titles"
-          autoComplete="off"
-          spellCheck={false}
-          maxLength={200}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault()
-              if (text.trim() !== query) onSearch(text.trim())
-            } else if (event.key === "Escape" && text) {
-              event.preventDefault()
-              clear()
-            }
-          }}
-        />
-        {text && (
-          <button type="button" className="activity-search-clear" aria-label="Clear search" title="Clear search" onClick={clear}>
-            <X aria-hidden="true" />
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function EntryRow({
-  entry,
-  context,
-  state,
-  selected,
-  showRuleColumn,
-  runStart,
-  onOpen,
-  onFilterRule,
-}: {
-  entry: AuditEntry
-  context: RuleContext
-  state: ActivityLocationState
-  selected: boolean
-  showRuleColumn: boolean
-  runStart: boolean
-  onOpen: (entry: AuditEntry) => void
-  onFilterRule: (ruleId: string) => void
-}) {
-  const names = ruleNames(entry.rule_id, context)
-  const cell = eventCell(entry, names)
-  const href = `${window.location.pathname}${activitySearch({ ...state, entryId: entry.id })}`
-  const follow = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (!isPlainLeftClick(event)) return
-    event.preventDefault()
-    onOpen(entry)
-  }
-  return (
-    <tr
-      role="row"
-      className={runStart ? "activity-row activity-run-start" : "activity-row"}
-      data-selected={selected}
-      // The event link is the row's keyboard target; the rest of the row is a larger mouse target.
-      onClick={(event) => {
-        if (!(event.target as HTMLElement).closest("a, button")) onOpen(entry)
-      }}
-    >
-      <td role="cell" className="activity-col-time">
-        <time dateTime={entry.occurred_at}>{formatClockTime(entry.occurred_at)}</time>
-        <span className="sr-only">, {formatDay(entry.occurred_at)}</span>
-      </td>
-      <td role="cell" className="activity-col-event">
-        <a
-          href={href}
-          className="activity-row-link"
-          data-row-link={entry.id}
-          aria-current={selected ? "true" : undefined}
-          onClick={follow}
-        >
-          <EventCellContent cell={cell} />
-        </a>
-      </td>
-      <td role="cell" className="activity-col-happened">
-        <HappenedLabel entry={entry} names={names} />
-      </td>
-      {showRuleColumn && (
-        <td role="cell" className="activity-col-rule">
-          <button
-            type="button"
-            className="activity-rule-name"
-            onClick={() => onFilterRule(entry.rule_id)}
-            aria-label={names ? `Show only ${names.source} to ${names.destination}` : "Show only this removed rule"}
-          >
-            {names ? (
-              <>
-                <span>{names.source}</span>
-                <ArrowRight aria-hidden="true" />
-                <span>{names.destination}</span>
-              </>
-            ) : (
-              <span>Removed rule</span>
-            )}
-          </button>
-        </td>
-      )}
-    </tr>
-  )
-}
-
-function EventCellContent({ cell }: { cell: EventCell }) {
-  if (cell.state === "unavailable") {
-    return (
-      <span className="activity-event-cell activity-event-cell-muted">
-        <span className="activity-event-title">{cell.label}</span>
-        {cell.note && <span className="activity-event-when">{cell.note}</span>}
-      </span>
-    )
-  }
-  return (
-    <span className="activity-event-cell">
-      <span className="activity-event-title">{cell.title}</span>
-      <EventWhen cell={cell} />
-    </span>
-  )
-}
-
-function HappenedLabel({ entry, names }: { entry: AuditEntry; names: RuleNames | null }) {
-  return <HappenedLine happened={whatHappened(entry, names)} />
-}
-
-function ActivityDetail({
-  entry,
-  loading,
-  context,
-  focusRef,
-  onClose,
-  onOpenRule,
-  onNewer,
-  onOlder,
-}: {
-  entry: AuditEntry | undefined
-  loading: boolean
-  context: RuleContext
-  focusRef: RefObject<boolean>
-  onClose: () => void
-  onOpenRule: OpenRule
-  onNewer?: (() => void) | undefined
-  onOlder?: (() => void) | undefined
-}) {
-  const close = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") onClose()
-  }
-  const toolbar = (
-    <div className="activity-detail-bar">
-      <Button variant="ghost" size="sm" onClick={onClose}>
-        <X aria-hidden="true" /> Close
-      </Button>
-      <div className="activity-detail-steps">
-        <Button variant="ghost" size="sm" onClick={onNewer} disabled={!onNewer} aria-label="Newer entry">
-          <ChevronUp aria-hidden="true" />
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onOlder} disabled={!onOlder} aria-label="Older entry">
-          <ChevronDown aria-hidden="true" />
-        </Button>
-      </div>
-    </div>
-  )
-
-  if (!entry) {
-    return (
-      <aside className="activity-detail" aria-label="Entry details" onKeyDown={close}>
-        {toolbar}
-        <p className="activity-event-status" role="status">
-          {loading ? "Loading this entry…" : "This entry is no longer in the activity history."}
-        </p>
-      </aside>
-    )
-  }
-  return (
-    <aside className="activity-detail" aria-labelledby="activity-detail-title" onKeyDown={close}>
-      {toolbar}
-      <EntryDetails entry={entry} context={context} focusRef={focusRef} onOpenRule={onOpenRule} />
-    </aside>
-  )
-}
-
-// eslint-disable-next-line complexity -- debt: split this before adding to it
-function EntryDetails({
-  entry,
-  context,
-  focusRef,
-  onOpenRule,
-}: {
-  entry: AuditEntry
-  context: RuleContext
-  focusRef: RefObject<boolean>
-  onOpenRule: OpenRule
-}) {
-  const headingRef = useRef<HTMLHeadingElement>(null)
-  useEffect(() => {
-    if (!focusRef.current) return
-    focusRef.current = false
-    headingRef.current?.focus({ preventScroll: true })
-  }, [entry, focusRef])
-  const names = ruleNames(entry.rule_id, context)
-  const cell = eventCell(entry, names)
-  const copy = describeEntry(entry, names)
-  const exists = names !== null
-  const inspection = entryInspection(entry, exists)
-  return (
-    <>
-      <div className="activity-detail-heading">
-        {/* The event is what people recognise, so it leads; what happened follows. */}
-        <h2 id="activity-detail-title" ref={headingRef} tabIndex={-1}>
-          {cell.state === "event" ? cell.title : cell.label}
-        </h2>
-        {cell.state === "event" && <EventWhen cell={cell} />}
-        <HappenedLabel entry={entry} names={names} />
-        {copy.explanation && <p className="activity-explanation">{copy.explanation}</p>}
-        {copy.next && exists && (
-          <p className="activity-next">
-            <strong>What to do: </strong>
-            {copy.next}
-          </p>
-        )}
-        {entry.category === "blocked" && exists && (
-          <Button variant="outline" size="sm" onClick={() => onOpenRule(entry.rule_id)}>
-            Open rule
-          </Button>
-        )}
-      </div>
-      <dl className="activity-detail-facts">
-        <div>
-          <dt>Recorded</dt>
-          <dd>{formatRunTime(entry.occurred_at)}</dd>
-        </div>
-        <div>
-          <dt>Rule</dt>
-          <dd><RuleDirection ruleId={entry.rule_id} context={context} /></dd>
-        </div>
-      </dl>
-      {entry.changed_fields?.length ? <SourceChangeDetails entry={entry} names={names} /> : null}
-      {inspection === "event" ? (
-        <ActivityEventDetails entry={entry} />
-      ) : (
-        entry.source_event_id && <p className="activity-event-status">{REMOVED_RULE_LOOKUP}</p>
-      )}
-      <details className="activity-diagnostics">
-        <summary>Technical details</summary>
-        <dl>
-          <Diagnostic label="Entry" value={String(entry.id)} />
-          <Diagnostic label="Run" value={entry.run_id} />
-          <Diagnostic label="Decision" value={[entry.action, entry.reason].filter(Boolean).join(" · ")} />
-          <Diagnostic label="Source event ID" value={entry.source_event_id} />
-          <Diagnostic label="Projection event ID" value={entry.destination_event_id} />
-          {entry.detail && entry.detail !== copy.explanation && <Diagnostic label="Recorded detail" value={entry.detail} />}
-        </dl>
-      </details>
-    </>
-  )
-}
-
-function Diagnostic({ label, value }: { label: string; value: string | null }) {
-  if (!value) return null
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd><code>{value}</code></dd>
-    </div>
-  )
-}
-
-function incidentRuleState(incident: Incident, context: RuleContext): IncidentRuleState | null {
-  if (!incident.rule_id) return null
-  // Until rules load, assume the rule exists but claim no renewed access.
-  if (!context.rulesLoaded) return { accessRenewed: false }
-  const rule = context.rulesById.get(incident.rule_id)
-  if (!rule) return null
-  const accounts = [rule.source, rule.destination].map((endpoint) => context.accountsById.get(endpoint.connected_account_id))
-  return { accessRenewed: accessRenewedSince(incident, accounts) }
-}
-
-function IncidentRule({ incident, context }: { incident: Incident; context: RuleContext }) {
-  return incident.rule_id ? <RuleDirection ruleId={incident.rule_id} context={context} /> : <span>Installation</span>
-}
-
-/** Only incidents that still need attention lead the page, each with its next step. */
-function OpenIncidents({
-  incidents,
-  context,
-  onAction,
-}: {
-  incidents: Incident[]
-  context: RuleContext
-  onAction: (action: IncidentAction) => void
-}) {
-  if (incidents.length === 0) return null
-  return (
-    <section className="workflow activity-section page-card" aria-labelledby="incidents-title">
-      <div className="section-heading">
-        <div>
-          <h2 id="incidents-title">Incidents</h2>
-          <p>Each stays open until Calendar Ghost confirms the problem is gone.</p>
-        </div>
-      </div>
-      <ul className="rule-list">
-        {incidents.map((incident) => {
-          const { detail, action } = incidentGuidance(incident, incidentRuleState(incident, context))
-          return (
-            <li className="rule-row incident-row" key={incident.id}>
-              <div className="incident-heading">
-                <strong>{incident.summary}</strong>
-                <Badge variant="attention">Open</Badge>
-              </div>
-              <div className="activity-run-meta">
-                <IncidentRule incident={incident} context={context} />
-                <span>Since {formatRunTime(incident.opened_at)}</span>
-                {incident.updated_at !== incident.opened_at && <span>Last seen {formatRunTime(incident.updated_at)}</span>}
-              </div>
-              {detail && <p className="incident-detail">{detail}</p>}
-              {action && (
-                <div>
-                  <Button variant="outline" size="sm" onClick={() => onAction(action)}>
-                    {action.label}
-                    <ArrowRight aria-hidden="true" />
-                  </Button>
-                </div>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-    </section>
-  )
-}
-
-/** Resolved incidents are kept as evidence, out of the way until asked for. */
-function ResolvedIncidents({ incidents, context }: { incidents: Incident[]; context: RuleContext }) {
-  const [open, setOpen] = useState(false)
-  if (incidents.length === 0) return null
-  return (
-    <section className="resolved-incidents" aria-label="Resolved incidents">
-      <Button
-        variant="ghost"
-        size="sm"
-        className="resolved-incidents-toggle"
-        aria-expanded={open}
-        aria-controls="resolved-incidents-list"
-        onClick={() => setOpen((value) => !value)}
-      >
-        {open ? <ChevronUp aria-hidden="true" /> : <ChevronDown aria-hidden="true" />}
-        {open ? "Hide resolved incidents" : `Show ${plural(incidents.length, "resolved incident")}`}
-      </Button>
-      {open && (
-        <ul id="resolved-incidents-list" className="rule-list">
-          {incidents.map((incident) => {
-            const resolution = incidentResolution(incident)
-            return (
-              <li className="rule-row incident-row" key={incident.id}>
-                <div className="incident-heading">
-                  <strong>{incident.summary}</strong>
-                  <Badge variant="neutral">Resolved</Badge>
-                </div>
-                <div className="activity-run-meta">
-                  <IncidentRule incident={incident} context={context} />
-                  <span>Opened {formatRunTime(incident.opened_at)}</span>
-                  <span>Closed {formatRunTime(incidentClosedAt(incident))}</span>
-                </div>
-                {resolution && <p className="incident-detail">{resolution}</p>}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </section>
-  )
-}
-
-function endpointName(endpoint: RuleSummary["source"], context: RuleContext): string {
-  return ruleEndpointLabel(
-    endpoint,
-    context.accountsById.get(endpoint.connected_account_id),
-    context.calendarsByAccount.get(endpoint.connected_account_id),
-  ).calendar
-}
-
-function RuleDirection({ ruleId, context }: { ruleId: string; context: RuleContext }) {
-  const rule = context.rulesById.get(ruleId)
-  if (!rule) return <span className="activity-removed-rule">Removed rule</span>
-  return (
-    <span className="rule-direction activity-direction">
-      <RuleEndpoint
-        account={context.accountsById.get(rule.source.connected_account_id)}
-        endpoint={rule.source}
-        calendars={context.calendarsByAccount.get(rule.source.connected_account_id)}
-        role="Source"
-      />
-      <ArrowRight aria-label="to" role="img" />
-      <RuleEndpoint
-        account={context.accountsById.get(rule.destination.connected_account_id)}
-        endpoint={rule.destination}
-        calendars={context.calendarsByAccount.get(rule.destination.connected_account_id)}
-        role="Destination"
-      />
-    </span>
-  )
-}
-
-/** What the entry's run saw change in the source event, with the values before and after. */
-function SourceChangeDetails({ entry, names }: { entry: AuditEntry; names: RuleNames | null }) {
-  const change = useQuery({
-    queryKey: ["activity-changes", entry.id],
-    queryFn: () => api.activityChanges(entry.id),
-    staleTime: Infinity,
-    retry: false,
-  })
-  const heading = `What changed in ${names?.source ?? "the source calendar"}`
-  if (change.isPending) return <p className="activity-event-status" role="status">Loading what changed…</p>
-  if (change.error) {
-    return <p className="activity-event-status" role="alert">What changed could not be loaded right now.</p>
-  }
-  return (
-    <section className="activity-changes" aria-label={heading}>
-      <h3>{heading}</h3>
-      <dl>
-        {changeListing(change.data).map((lines) => {
-          return (
-            <div key={lines.field}>
-              <dt>{lines.label}</dt>
-              <dd>
-                {lines.unavailable && <span className="activity-event-status">No longer available</span>}
-                {lines.before !== null && (
-                  <span className="activity-change-value">
-                    <span className="activity-change-label">Before</span> {lines.before}
-                  </span>
-                )}
-                {lines.after !== null && (
-                  <span className="activity-change-value">
-                    <span className="activity-change-label">After</span> {lines.after}
-                  </span>
-                )}
-                {lines.added.length > 0 && (
-                  <span className="activity-change-value">
-                    <span className="activity-change-label">Added</span> {lines.added.join(", ")}
-                  </span>
-                )}
-                {lines.removed.length > 0 && (
-                  <span className="activity-change-value">
-                    <span className="activity-change-label">Removed</span> {lines.removed.join(", ")}
-                  </span>
-                )}
-              </dd>
-            </div>
-          )
-        })}
-      </dl>
-      {!change.data.values_available && <p className="activity-event-status">{CHANGE_VALUES_UNAVAILABLE}</p>}
-    </section>
-  )
-}
-
-function ActivityEventDetails({ entry }: { entry: AuditEntry }) {
-  const event = useQuery({
-    queryKey: ["activity-event", entry.id],
-    queryFn: () => api.activityEvent(entry.id),
-    staleTime: 60_000,
-    retry: false,
-  })
-  if (event.isPending) return <p className="activity-event-status" role="status">Looking up the event in Google…</p>
-  if (event.error) {
-    return (
-      <p className="activity-event-status" role="alert">
-        {eventLookupFailure(event.error)}
-      </p>
-    )
-  }
-  return (
-    <dl className="activity-event">
-      <EventFacts label="Source event" snapshot={event.data.source} />
-      {event.data.destination && <EventFacts label="Managed projection" snapshot={event.data.destination} />}
-    </dl>
-  )
-}
-
-function EventFacts({ label, snapshot }: { label: string; snapshot: EventSnapshot }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>
-        {!snapshot.found ? (
-          <span className="activity-event-missing">No longer exists in Google Calendar.</span>
-        ) : (
-          <>
-            <strong>{snapshot.title || (snapshot.cancelled ? "Cancelled event" : "(No title)")}</strong>
-            <span>
-              {[snapshot.cancelled ? "Cancelled" : "", formatEventTime(snapshot)].filter(Boolean).join(" · ")}
-              {snapshot.recurring && <span className="activity-recurring"><Repeat aria-hidden="true" /> Repeats</span>}
-            </span>
-          </>
-        )}
-        {snapshot.web_link && (
-          <a href={snapshot.web_link} target="_blank" rel="noreferrer" className="activity-link">
-            Open in Google Calendar <ExternalLink aria-hidden="true" />
-          </a>
-        )}
-      </dd>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { movedIndex, openingIndex, typeaheadIndex } from "./rule-picker"
+import { isTypeaheadKey, listCommand, movedIndex, openingIndex, typeaheadIndex } from "./rule-picker"
 
 describe("rule picker keyboard", () => {
   it("opens on the selected option, or at either end with Home and End", () => {
@@ -20,6 +20,24 @@ describe("rule picker keyboard", () => {
     expect(movedIndex("End", 0, 4)).toBe(3)
     expect(movedIndex("PageUp", 3, 30)).toBe(0)
     expect(movedIndex("Tab", 1, 4)).toBeNull()
+  })
+
+  it("closes, chooses, or chooses and moves on from the open list", () => {
+    expect(listCommand("Escape", false)).toBe("close")
+    expect(listCommand("Enter", false)).toBe("choose")
+    expect(listCommand(" ", false)).toBe("choose")
+    expect(listCommand("ArrowUp", true)).toBe("choose")
+    expect(listCommand("Tab", false)).toBe("chooseAndLeave")
+    expect(listCommand("ArrowUp", false)).toBeNull()
+    expect(listCommand("a", false)).toBeNull()
+  })
+
+  it("searches only on printable keys typed without a shortcut modifier", () => {
+    expect(isTypeaheadKey({ key: "p", ctrlKey: false, metaKey: false })).toBe(true)
+    expect(isTypeaheadKey({ key: " ", ctrlKey: false, metaKey: false })).toBe(false)
+    expect(isTypeaheadKey({ key: "ArrowDown", ctrlKey: false, metaKey: false })).toBe(false)
+    expect(isTypeaheadKey({ key: "p", ctrlKey: true, metaKey: false })).toBe(false)
+    expect(isTypeaheadKey({ key: "p", ctrlKey: false, metaKey: true })).toBe(false)
   })
 
   it("finds options by the start of their name and cycles on a repeated letter", () => {

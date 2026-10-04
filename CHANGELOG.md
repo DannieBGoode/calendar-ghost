@@ -45,6 +45,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - The Overview shows the server's health verdict, so it always agrees with the status API.
 - Settings → No Google accounts connected explains the next step in quiet text instead of red: an
   installation without an account yet is not failing.
+- Rule Details, Settings, Activity, Rules, and Overview are split into section files, and the
+  activity copy into focused modules, so every frontend file and function is within the
+  complexity and size bounds. The screens render the same markup.
 - The Overview hero says each thing once: the headline gives the state, the detail explains it, the
   facts show running rules and the last sync, and the ghost reacts in a few words. The ghost is
   filled with its state's color, and its speech bubble sits beside it at eye level on every screen

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import activitySource from "../features/activity.tsx?raw"
+import entryDetailsSource from "../features/activity-entry-details.tsx?raw"
+import tableSource from "../features/activity-table.tsx?raw"
+import viewSource from "../features/activity.tsx?raw"
+import historySource from "./activity-history.ts?raw"
+
+// The Activity view, its table, its entry details, and the copy for an empty history.
+const activitySource = [viewSource, tableSource, entryDetailsSource, historySource].join("\n")
 
 describe("Activity view states", () => {
   it("keeps successful empty activity distinct from a recoverable request failure", () => {

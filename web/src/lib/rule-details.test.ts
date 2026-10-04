@@ -2,7 +2,24 @@ import { describe, expect, it } from "vitest"
 
 import dashboardSource from "../features/dashboard.tsx?raw"
 import rulesSource from "../features/rules.tsx?raw"
-import detailsSource from "../features/rule-details.tsx?raw"
+import calendarReplacementSource from "../features/calendar-replacement.tsx?raw"
+import projectionChoiceSource from "../features/projection-choice.tsx?raw"
+import factsSource from "../features/rule-details-facts.tsx?raw"
+import pageSource from "../features/rule-details.tsx?raw"
+import policyEditorSource from "../features/rule-policy-editor.tsx?raw"
+import removalSource from "../features/rule-removal.tsx?raw"
+import refreshSource from "./use-rule-refresh.ts?raw"
+
+// Rule Details spans the page and the sections and hooks it composes.
+const detailsSource = [
+  pageSource,
+  factsSource,
+  policyEditorSource,
+  calendarReplacementSource,
+  removalSource,
+  projectionChoiceSource,
+  refreshSource,
+].join("\n")
 
 describe("Rule Details presentation", () => {
   it("defaults Rule Removal to deleting mapped projections and names the effect on its button", () => {

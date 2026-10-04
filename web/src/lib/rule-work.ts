@@ -37,7 +37,6 @@ const WORK_COMMAND: Record<Exclude<RuleWorkKind, "removal">, RuleCommand> = {
  * page sent names the work until the service reports it, and while it waits behind other work,
  * whose count is not its own. Reconcile now reports its full pass as its first stage.
  */
-// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function ruleWork({
   pending,
   pendingSince,
@@ -49,22 +48,31 @@ export function ruleWork({
   running: RunningWork | null | undefined
   removing?: boolean
 }): RuleWork | null {
-  if (running?.kind === "removal") {
-    const progress =
-      running.handling === "delete" && running.total !== null && running.total > 0
-        ? { done: running.done, total: running.total }
-        : null
-    return { kind: "removal", startedAt: Date.parse(running.started_at), progress }
-  }
+  if (running?.kind === "removal") return removalWork(running)
   const requested = pending ? COMMAND_WORK[pending] : undefined
-  if (requested) {
-    if (running?.kind === requested) return reportedWork(running)
-    // Reconcile now begins with its full pass.
-    const syncing = requested === "reconciliation" ? { syncing: true as const } : {}
-    return { kind: requested, startedAt: pendingSince ?? null, progress: null, ...syncing }
-  }
+  if (requested) return requestedWork(requested, running, pendingSince)
   if (removing) return { kind: "removal", startedAt: null, progress: null }
   return running ? reportedWork(running) : null
+}
+
+/** A removal counts the projections it deletes; detaching them has nothing to count. */
+function removalWork(running: RunningWork): RuleWork {
+  const progress =
+    running.handling === "delete" && running.total !== null && running.total > 0
+      ? { done: running.done, total: running.total }
+      : null
+  return { kind: "removal", startedAt: Date.parse(running.started_at), progress }
+}
+
+function requestedWork(
+  requested: RuleWorkKind,
+  running: RunningWork | null | undefined,
+  pendingSince: number | undefined,
+): RuleWork {
+  if (running?.kind === requested) return reportedWork(running)
+  // Reconcile now begins with its full pass.
+  const syncing = requested === "reconciliation" ? { syncing: true as const } : {}
+  return { kind: requested, startedAt: pendingSince ?? null, progress: null, ...syncing }
 }
 
 function reportedWork(running: RunningWork): RuleWork {

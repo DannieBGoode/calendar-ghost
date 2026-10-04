@@ -7,8 +7,12 @@ import { renderToStaticMarkup } from "react-dom/server"
 
 import { AccountSelect } from "../components/account-select"
 import accountSelectSource from "../components/account-select.tsx?raw"
-import rulesSource from "../features/rules.tsx?raw"
+import ruleBuilderSource from "../features/rule-builder.tsx?raw"
+import rulesViewSource from "../features/rules.tsx?raw"
 import type { ConnectedAccount } from "./api"
+
+// The rules page and the rule builder it opens.
+const rulesSource = `${rulesViewSource}\n${ruleBuilderSource}`
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

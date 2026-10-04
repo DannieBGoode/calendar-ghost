@@ -2,7 +2,7 @@ import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 
-import { EndpointFields } from "./rule-details"
+import { EndpointFields } from "./calendar-replacement"
 import type { ConnectedAccount, DiscoveredCalendar } from "@/lib/api"
 
 const account: ConnectedAccount = {

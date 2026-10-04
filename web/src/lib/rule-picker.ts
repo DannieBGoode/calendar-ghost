@@ -11,6 +11,25 @@ export function openingIndex(key: string, altKey: boolean, selected: number, cou
   return null
 }
 
+/** A printable character other than Space, typed without a shortcut modifier, searches the options. */
+export function isTypeaheadKey(event: { key: string; ctrlKey: boolean; metaKey: boolean }): boolean {
+  return event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey
+}
+
+/** What a key does to the open list other than moving within it. */
+export type ListCommand = "close" | "choose" | "chooseAndLeave"
+
+/**
+ * Escape closes the open list; Enter, Space, and Alt+ArrowUp choose the active option; Tab chooses
+ * it as focus moves on. Null for every other key.
+ */
+export function listCommand(key: string, altKey: boolean): ListCommand | null {
+  if (key === "Escape") return "close"
+  if (key === "Enter" || key === " " || (altKey && key === "ArrowUp")) return "choose"
+  if (key === "Tab") return "chooseAndLeave"
+  return null
+}
+
 /** The option a navigation key moves to in the open list, or null for other keys. */
 export function movedIndex(key: string, active: number, count: number): number | null {
   const page = 10

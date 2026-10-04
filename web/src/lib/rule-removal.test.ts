@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import detailsSource from "../features/rule-details.tsx?raw"
+import calendarReplacementSource from "../features/calendar-replacement.tsx?raw"
+import projectionChoiceSource from "../features/projection-choice.tsx?raw"
+import factsSource from "../features/rule-details-facts.tsx?raw"
+import pageSource from "../features/rule-details.tsx?raw"
+import policyEditorSource from "../features/rule-policy-editor.tsx?raw"
+import removalSource from "../features/rule-removal.tsx?raw"
+import refreshSource from "./use-rule-refresh.ts?raw"
 import { ApiError } from "@/lib/api"
 import { removalOutcomeUnknown, ruleStateLabel } from "@/lib/rule-change"
 import {
@@ -10,6 +16,17 @@ import {
   removalProgress,
   reportedRemoval,
 } from "@/lib/rule-removal"
+
+// Rule Details spans the page and the sections and hooks it composes.
+const detailsSource = [
+  pageSource,
+  factsSource,
+  policyEditorSource,
+  calendarReplacementSource,
+  removalSource,
+  projectionChoiceSource,
+  refreshSource,
+].join("\n")
 
 describe("rule removal progress", () => {
   it("counts handled projections without claiming conflicted ones were deleted", () => {

@@ -1,9 +1,26 @@
 import { describe, expect, it } from "vitest"
 
-import detailsSource from "../features/rule-details.tsx?raw"
+import calendarReplacementSource from "../features/calendar-replacement.tsx?raw"
+import projectionChoiceSource from "../features/projection-choice.tsx?raw"
+import factsSource from "../features/rule-details-facts.tsx?raw"
+import pageSource from "../features/rule-details.tsx?raw"
+import policyEditorSource from "../features/rule-policy-editor.tsx?raw"
+import removalSource from "../features/rule-removal.tsx?raw"
+import refreshSource from "./use-rule-refresh.ts?raw"
 import commandsSource from "./use-rule-commands.ts?raw"
 import { clearCompletedWork, RULE_CHANGE_QUERIES } from "@/lib/use-rule-commands"
 import { ruleWork } from "@/lib/rule-work"
+
+// Rule Details spans the page and the sections and hooks it composes.
+const detailsSource = [
+  pageSource,
+  factsSource,
+  policyEditorSource,
+  calendarReplacementSource,
+  removalSource,
+  projectionChoiceSource,
+  refreshSource,
+].join("\n")
 
 describe("rule change refresh", () => {
   it("refetches incidents, which runs resolve and recovery previews move to another account", () => {

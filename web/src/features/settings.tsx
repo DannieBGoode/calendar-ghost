@@ -1,231 +1,22 @@
-/* eslint-disable max-lines -- debt: split this file before adding to it */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  CircleUserRound,
-  Copy,
-  Download,
-  Info,
-  KeyRound,
-  Plus,
-  ShieldAlert,
-  ShieldCheck,
-  Trash2,
-  Unplug,
-} from "lucide-react"
-import { Fragment, useEffect, useId, useRef, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { CheckCircle2, ShieldAlert } from "lucide-react"
+import { useEffect, useState } from "react"
 
-import { AccountAvatar } from "@/components/account-avatar"
-import { DestructiveConfirmation } from "@/components/destructive-confirmation"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useTheme } from "@/components/theme-provider"
-import { accountSummary } from "@/lib/account-summary"
-import { ApiError, STORAGE_LOGS_URL, api } from "@/lib/api"
-import type { IntegrationToken, IssuedIntegrationToken } from "@/lib/api"
-import {
-  copyToken,
-  integrationExamples,
-  integrationSummary,
-  needsTransportNote,
-  tokenUsage,
-} from "@/lib/integrations"
-import {
-  authorizationAwaitingReturn,
-  clearAuthorizationStart,
-  oauthRedirectMismatch,
-  oauthReturnAtCurrentOrigin,
-  recordAuthorizationStart,
-} from "@/lib/oauth-redirect"
-import {
-  activitySummary,
-  canClearActivity,
-  clearActivityConfirmation,
-  clearedActivityMessage,
-  countFailedConfirmation,
-  logSummary,
-} from "@/lib/storage"
+import { api } from "@/lib/api"
+import { clearAuthorizationStart, recordAuthorizationStart } from "@/lib/oauth-redirect"
 import type { DarkPalette, ThemePreference } from "@/lib/theme"
-import { useNow } from "@/lib/use-now"
-import { cn, withoutKey } from "@/lib/utils"
+import { useGoogleReturn } from "@/lib/use-google-return"
+import { AccountsSection } from "@/features/settings-accounts"
+import { IntegrationsSection } from "@/features/settings-integrations"
+import { StorageSection } from "@/features/settings-storage"
 
-type GoogleReturn = {
-  mismatch: { redirectOrigin: string; redirectUri: string } | null
-  awaiting: boolean
-  dismiss: () => void
-}
-
-/**
- * Whether Google returns somewhere else, and whether a connection started in this browser may be
- * waiting for that return address. Read the OAuth outcome first: returning ends the attempt.
- */
-function useGoogleReturn(redirectUri: string | null): GoogleReturn {
-  const mismatch = oauthRedirectMismatch(redirectUri, window.location.origin)
-  const [awaiting, setAwaiting] = useState(() => authorizationAwaitingReturn())
-  return {
-    mismatch: mismatch && redirectUri ? { redirectOrigin: mismatch.redirectOrigin, redirectUri } : null,
-    awaiting,
-    dismiss: () => {
-      clearAuthorizationStart()
-      setAwaiting(false)
-    },
-  }
-}
-
-/** The step that finishes a connection Google returned elsewhere; shown only while it can. */
-function GoogleReturnStep({ help }: { help: GoogleReturn }) {
-  const headingId = useId()
-  if (!help.mismatch || !help.awaiting) return null
-  return (
-    <section className="oauth-feedback oauth-feedback-warning oauth-return" aria-labelledby={headingId}>
-      <ShieldAlert aria-hidden="true" />
-      <div>
-        <h3 id={headingId}>Finish connecting your Google account</h3>
-        <p>
-          Google sends your browser to <code>{help.mismatch.redirectOrigin}</code> after you approve
-          access. If that page did not load, copy its whole address from the address bar and paste it
-          here. It works once, for 10 minutes.
-        </p>
-        <OAuthReturnForm redirectUri={help.mismatch.redirectUri} />
-      </div>
-      <Button variant="ghost" onClick={help.dismiss}>
-        Dismiss
-      </Button>
-    </section>
-  )
-}
-
-/** A quiet note that Google returns elsewhere, with the way to finish and the permanent fix. */
-function GoogleReturnNote({ help, className }: { help: GoogleReturn; className?: string }) {
-  if (!help.mismatch || help.awaiting) return null
-  return (
-    <details className={cn("inline-help", className)}>
-      <summary>
-        <Info aria-hidden="true" />
-        <span>
-          Google returns to <code>{help.mismatch.redirectOrigin}</code>, not this address
-        </span>
-        <ChevronDown className="inline-help-chevron" aria-hidden="true" />
-      </summary>
-      <div className="inline-help-body">
-        <p>
-          If its page does not load after you approve access, copy the whole address from the address
-          bar and paste it here within 10 minutes to finish connecting.
-        </p>
-        <OAuthReturnForm redirectUri={help.mismatch.redirectUri} />
-        <p>
-          To stop this, set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address of this
-          installation, for example with Tailscale Serve, and register it on your Google OAuth client.
-          Opening Calendar Ghost at <code>{help.mismatch.redirectOrigin}</code>, for example through an
-          SSH tunnel, also works.
-        </p>
-      </div>
-    </details>
-  )
-}
-
-export function GoogleReturnHelp({ redirectUri }: { redirectUri: string | null }) {
-  const help = useGoogleReturn(redirectUri)
-  return (
-    <>
-      <GoogleReturnStep help={help} />
-      <GoogleReturnNote help={help} />
-    </>
-  )
-}
-
-function OAuthReturnForm({ redirectUri }: { redirectUri: string }) {
-  const fieldId = useId()
-  const [pasted, setPasted] = useState("")
-  const [invalid, setInvalid] = useState(false)
-  return (
-    <form
-      className="oauth-return-form"
-      onSubmit={(event) => {
-        event.preventDefault()
-        const target = oauthReturnAtCurrentOrigin(pasted, redirectUri, window.location.origin)
-        setInvalid(target === null)
-        if (target) window.location.assign(target)
-      }}
-    >
-      <Label htmlFor={fieldId}>Address Google returned to</Label>
-      <div className="oauth-return-row">
-        <Input
-          id={fieldId}
-          value={pasted}
-          onChange={(event) => {
-            setPasted(event.target.value)
-            setInvalid(false)
-          }}
-          placeholder={`${redirectUri}?state=…`}
-          aria-invalid={invalid}
-          aria-describedby={invalid ? `${fieldId}-error` : undefined}
-          autoComplete="off"
-          spellCheck={false}
-          required
-        />
-        <Button type="submit" variant="outline">
-          Finish connecting
-        </Button>
-      </div>
-      {invalid && (
-        <p id={`${fieldId}-error`} className="field-error" role="alert">
-          That is not the address Google returned to. Copy the whole address, starting with{" "}
-          <code>{redirectUri}?</code>
-        </p>
-      )}
-    </form>
-  )
-}
-
-function ruleUsage(count: number, connected: boolean): string {
-  if (count === 0) return "Not used by any rule"
-  const rules = `${count} rule${count === 1 ? "" : "s"}`
-  return connected ? `Used by ${rules}` : `${rules} stopped until it is reauthorized`
-}
-
-function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
-  return (
-    <details className="inline-help connection-guide">
-      <summary>
-        <KeyRound aria-hidden="true" />
-        <span>How connecting works</span>
-        <ChevronDown className="inline-help-chevron" aria-hidden="true" />
-      </summary>
-      <div className="inline-help-body connection-guide-body">
-        <ol className="connection-guide-steps">
-          <li>
-            <strong>Connect a Google account</strong>
-            <span>Authorize calendar discovery and event access for one account.</span>
-          </li>
-          <li>
-            <strong>Choose calendars</strong>
-            <span>Create a Directional Sync Rule with one source and one destination.</span>
-          </li>
-          <li>
-            <strong>Preview before syncing</strong>
-            <span>Review what will be written before anything reaches the destination.</span>
-          </li>
-        </ol>
-        {googleConfigured ? (
-          <p className="connection-guide-note">Use the Connect Google account button above to begin.</p>
-        ) : (
-          <p className="connection-guide-note">
-            Add the master key and Google OAuth credentials in <code>.env</code>, then restart before connecting.
-          </p>
-        )}
-      </div>
-    </details>
-  )
-}
+export { GoogleReturnHelp } from "@/features/settings-google-return"
+export { IntegrationsSection } from "@/features/settings-integrations"
 
 export function SettingsPage() {
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
@@ -234,23 +25,13 @@ export function SettingsPage() {
   return <SettingsView googleConfigured={google.data.configured} redirectUri={google.data.redirect_uri} />
 }
 
-// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
-function SettingsView({
-  googleConfigured,
-  redirectUri,
-}: {
-  googleConfigured: boolean
-  redirectUri: string | null
-}) {
-  const { preference, setPreference, darkPalette, setDarkPalette } = useTheme()
-  const queryClient = useQueryClient()
+/** The outcome Google returned with, read once; returning ends the authorization attempt. */
+function useOAuthOutcome(): string | null {
   const [oauthOutcome] = useState(() => {
     const outcome = new URLSearchParams(window.location.search).get("google")
     if (outcome) clearAuthorizationStart()
     return outcome
   })
-  const returnHelp = useGoogleReturn(redirectUri)
-  const [accountsChoice, setAccountsChoice] = useState<boolean | null>(null)
   useEffect(() => {
     // A reload should not announce the same connection again.
     const url = new URL(window.location.href)
@@ -258,97 +39,18 @@ function SettingsView({
     url.searchParams.delete("google")
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
   }, [])
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
-  const [confirmingAccountId, setConfirmingAccountId] = useState<string | null>(null)
-  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null)
-  const [statusMessage, setStatusMessage] = useState("")
-  const [accessChecks, setAccessChecks] = useState<
-    Record<string, Awaited<ReturnType<typeof api.verifyAccountAccess>>>
-  >({})
-  const verifyAccess = useMutation({
-    mutationFn: async (accountId: string) => ({
-      accountId,
-      access: await api.verifyAccountAccess(accountId),
-    }),
-    onSuccess: ({ accountId, access }) => {
-      setAccessChecks((current) => ({ ...current, [accountId]: access }))
-    },
-  })
-  const disconnect = useMutation({
-    mutationFn: api.disconnectAccount,
-    onSuccess: async (account) => {
-      setConfirmingAccountId(null)
-      setStatusMessage(`${account.display_name} was disconnected.`)
-      setAccessChecks((current) => withoutKey(current, account.id))
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["rules"] }),
-      ])
-    },
-  })
-  const permanentDelete = useMutation({
-    mutationFn: async (accountId: string) => {
-      const account = accounts.data?.find((candidate) => candidate.id === accountId)
-      await api.deleteAccount(accountId)
-      return {
-        accountId,
-        displayName: account?.display_name ?? "The account",
-        ruleCount: account?.rule_count ?? 0,
-      }
-    },
-    onSuccess: async ({ accountId, displayName, ruleCount }) => {
-      setDeletingAccountId(null)
-      setStatusMessage(
-        ruleCount > 0
-          ? `${displayName} and ${ruleCount} affected Directional Sync Rule${ruleCount === 1 ? "" : "s"} were permanently deleted.`
-          : `${displayName} was permanently deleted.`,
-      )
-      setAccessChecks((current) => withoutKey(current, accountId))
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-        queryClient.invalidateQueries({ queryKey: ["rules"] }),
-        queryClient.invalidateQueries({ queryKey: ["activity"] }),
-        queryClient.invalidateQueries({ queryKey: ["incidents"] }),
-      ])
-    },
-  })
+  return oauthOutcome
+}
 
-  const summary = accounts.data ? accountSummary(accounts.data) : null
-  const names = (accounts.data ?? []).map((account) => account.display_name)
-  const sharedNames = new Set(names.filter((name, index) => names.indexOf(name) !== index))
-  // Collapsed while every account is healthy; open when one needs attention or just connected.
-  const accountsOpen =
-    accountsChoice ??
-    Boolean(
-      summary?.needsAttention ||
-        oauthOutcome === "connected" ||
-        confirmingAccountId ||
-        deletingAccountId,
-    )
-
-  function confirmDisconnect(accountId: string) {
-    disconnect.reset()
-    permanentDelete.reset()
-    setStatusMessage("")
-    setDeletingAccountId(null)
-    setConfirmingAccountId(accountId)
-  }
-
-  function confirmPermanentDelete(accountId: string) {
-    disconnect.reset()
-    permanentDelete.reset()
-    setStatusMessage("")
-    setConfirmingAccountId(null)
-    setDeletingAccountId(accountId)
-  }
-
-  function checkAccess(accountId: string) {
-    verifyAccess.reset()
-    setStatusMessage("")
-    verifyAccess.mutate(accountId)
-  }
+function SettingsView({
+  googleConfigured,
+  redirectUri,
+}: {
+  googleConfigured: boolean
+  redirectUri: string | null
+}) {
+  const oauthOutcome = useOAuthOutcome()
+  const returnHelp = useGoogleReturn(redirectUri)
 
   return (
     <div className="page-section settings-page">
@@ -359,7 +61,27 @@ function SettingsView({
         </p>
       </div>
 
-      {oauthOutcome === "connected" && (
+      <OAuthOutcomeFeedback outcome={oauthOutcome} googleConfigured={googleConfigured} />
+
+      <AccountsSection
+        googleConfigured={googleConfigured}
+        justConnected={oauthOutcome === "connected"}
+        returnHelp={returnHelp}
+      />
+
+      <StorageSection />
+
+      <IntegrationsSection />
+
+      <AppearanceSection />
+    </div>
+  )
+}
+
+function OAuthOutcomeFeedback({ outcome, googleConfigured }: { outcome: string | null; googleConfigured: boolean }) {
+  return (
+    <>
+      {outcome === "connected" && (
         <div className="oauth-feedback oauth-feedback-success" role="status">
           <CheckCircle2 aria-hidden="true" />
           <div>
@@ -368,7 +90,7 @@ function SettingsView({
           </div>
         </div>
       )}
-      {oauthOutcome === "calendar_permission_required" && (
+      {outcome === "calendar_permission_required" && (
         <div className="oauth-feedback oauth-feedback-warning" role="status">
           <ShieldAlert aria-hidden="true" />
           <div>
@@ -385,7 +107,7 @@ function SettingsView({
           )}
         </div>
       )}
-      {oauthOutcome === "authorization_failed" && (
+      {outcome === "authorization_failed" && (
         <div className="oauth-feedback oauth-feedback-warning" role="alert">
           <ShieldAlert aria-hidden="true" />
           <div>
@@ -399,842 +121,57 @@ function SettingsView({
           )}
         </div>
       )}
-
-      <section className="settings-section" aria-labelledby="accounts-title">
-        <div className="section-heading">
-          <div>
-            <h2 id="accounts-title">Connected accounts</h2>
-            <p>The Google accounts whose calendars your rules can read and write.</p>
-          </div>
-          {googleConfigured ? (
-            // The next step only while nothing is connected; otherwise a routine addition.
-            <Button variant={accounts.data?.length ? "outline" : "default"} asChild>
-              <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>
-                <Plus aria-hidden="true" /> Connect Google account
-              </a>
-            </Button>
-          ) : (
-            <Badge variant="attention"><ShieldAlert aria-hidden="true" /> Not configured</Badge>
-          )}
-        </div>
-
-        {!googleConfigured && (
-          <p className="settings-note" role="status">
-            Add the master key and Google OAuth credentials in <code>.env</code>, then restart
-            before connecting an account.
-          </p>
-        )}
-        <GoogleReturnStep help={returnHelp} />
-        <ConnectionGuide googleConfigured={googleConfigured} />
-        {accounts.isPending && (
-          <div className="account-list-loading" aria-label="Loading connected accounts">
-            <Skeleton className="h-20 w-full" />
-            <Skeleton className="h-20 w-full" />
-          </div>
-        )}
-        {accounts.error && (
-          <div className="inline-error" role="alert">
-            Connected accounts could not be loaded. Reload the page and try again.
-          </div>
-        )}
-        {accounts.data && (
-          <div className="account-group">
-            {accounts.data.length === 0 ? (
-              <div className="account-empty">
-                <CircleUserRound aria-hidden="true" />
-                <div>
-                  <h3>No Google accounts connected</h3>
-                  <p>Connect an account to choose its calendars for your rules.</p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="account-summary"
-                  aria-expanded={accountsOpen}
-                  aria-controls={accountsOpen ? "account-list" : undefined}
-                  onClick={() => setAccountsChoice(!accountsOpen)}
-                >
-                  <span className="account-stack">
-                    {accounts.data.slice(0, 3).map((account) => (
-                      <AccountAvatar
-                        key={account.id}
-                        displayName={account.display_name}
-                        email={account.email}
-                        avatarUrl={account.avatar_url}
-                        compact
-                      />
-                    ))}
-                  </span>
-                  <span className="account-summary-copy">
-                    <span
-                      className="account-summary-status"
-                      data-attention={summary?.stopsRules ? "stopped" : summary?.needsAttention ? "review" : undefined}
-                    >
-                      {summary?.needsAttention ? (
-                        <ShieldAlert aria-hidden="true" />
-                      ) : (
-                        <CheckCircle2 aria-hidden="true" />
-                      )}
-                      {summary?.text}
-                    </span>
-                    <span className="account-summary-emails">
-                      {accounts.data.map((account) => account.email).join(", ")}
-                    </span>
-                  </span>
-                  <span className="account-summary-toggle">
-                    {accountsOpen ? "Hide" : "Show"}
-                    <span className="sr-only"> accounts</span>
-                    <ChevronDown aria-hidden="true" />
-                  </span>
-                </button>
-                {accountsOpen && (
-                  <ul className="account-list" id="account-list">
-            {/* eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it */}
-            {accounts.data.map((account) => {
-              const connected = account.state === "connected"
-              const confirming = confirmingAccountId === account.id
-              const deleting = deletingAccountId === account.id
-              const access = accessChecks[account.id]
-              const checking = verifyAccess.isPending && verifyAccess.variables === account.id
-              return (
-                <li className="account-item" key={account.id}>
-                  <div className="account-main">
-                    <div className="account-identity">
-                      <AccountAvatar
-                        displayName={account.display_name}
-                        email={account.email}
-                        avatarUrl={account.avatar_url}
-                      />
-                      <div className="account-copy">
-                        {/* One person often connects several Google accounts under the same name, so the
-                            address leads when the name alone would not tell them apart. */}
-                        <h3>{sharedNames.has(account.display_name) ? account.email : account.display_name}</h3>
-                        <p>{sharedNames.has(account.display_name) ? account.display_name : account.email}</p>
-                        <span data-stopped={!connected && account.rule_count > 0 ? "" : undefined}>
-                          {ruleUsage(account.rule_count, connected)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="account-actions">
-                      {/* A disconnected account stops every rule that uses it until it is reauthorized. */}
-                      <Badge variant={connected ? "healthy" : account.rule_count > 0 ? "stopped" : "attention"}>
-                        {connected ? (
-                          <CheckCircle2 aria-hidden="true" />
-                        ) : (
-                          <ShieldAlert aria-hidden="true" />
-                        )}
-                        {connected ? "Connected" : "Disconnected"}
-                      </Badge>
-                      {connected ? (
-                        <>
-                          <Button
-                            className="account-action"
-                            variant="outline"
-                            onClick={() => checkAccess(account.id)}
-                            disabled={disconnect.isPending || permanentDelete.isPending || verifyAccess.isPending}
-                          >
-                            <ShieldCheck aria-hidden="true" />
-                            {checking ? "Checking access…" : "Check access"}
-                          </Button>
-                          <Button
-                            className="account-action"
-                            variant="ghost"
-                            onClick={() => confirmDisconnect(account.id)}
-                            disabled={disconnect.isPending || permanentDelete.isPending || verifyAccess.isPending}
-                            aria-expanded={confirming}
-                            aria-controls={confirming ? `disconnect-${account.id}` : undefined}
-                          >
-                            <Unplug aria-hidden="true" /> Disconnect account
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          {/* The row's fix, so it stays visible even before Google is configured. */}
-                          {googleConfigured ? (
-                            <Button className="account-action" asChild>
-                              <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>
-                                <KeyRound aria-hidden="true" /> Reauthorize account
-                              </a>
-                            </Button>
-                          ) : (
-                            <Button
-                              className="account-action"
-                              disabled
-                              title="Add the master key and Google OAuth credentials in .env, then restart."
-                            >
-                              <KeyRound aria-hidden="true" /> Reauthorize account
-                            </Button>
-                          )}
-                          <Button
-                            className="account-action account-delete-action"
-                            variant="ghost"
-                            onClick={() => confirmPermanentDelete(account.id)}
-                            disabled={disconnect.isPending || permanentDelete.isPending}
-                            aria-expanded={deleting}
-                            aria-controls={deleting ? `delete-${account.id}` : undefined}
-                          >
-                            <Trash2 aria-hidden="true" /> Delete account
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  {access && (
-                    <div className="account-access-result" role="status">
-                      <ShieldCheck aria-hidden="true" />
-                      <div>
-                        <h4>Calendar API access confirmed</h4>
-                        <p>
-                          Calendar-list and event permissions are available. {access.calendars_visible} calendar
-                          {access.calendars_visible === 1 ? " is" : "s are"} visible and {access.writable_calendars} can be used as a destination.
-                          {access.writable_calendars === 0
-                            ? " This account can still be used as a source."
-                            : ""}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {verifyAccess.error && verifyAccess.variables === account.id && (
-                    <div className="inline-error account-access-error" role="alert">
-                      {verifyAccess.error.message}
-                    </div>
-                  )}
-                  {confirming && (
-                    <div
-                      className="disconnect-confirmation"
-                      id={`disconnect-${account.id}`}
-                      role="group"
-                      aria-labelledby={`disconnect-title-${account.id}`}
-                    >
-                      <div>
-                        <h4 id={`disconnect-title-${account.id}`}>
-                          Disconnect {account.display_name}?
-                        </h4>
-                        <p>
-                          Stored Google credentials will be removed. {account.rule_count > 0
-                            ? `${account.rule_count} affected rule${account.rule_count === 1 ? "" : "s"} will require reauthorization before they can run.`
-                            : "No Directional Sync Rules currently use this account."}
-                        </p>
-                      </div>
-                      <div className="confirmation-actions">
-                        <Button
-                          variant="outline"
-                          onClick={() => setConfirmingAccountId(null)}
-                          disabled={disconnect.isPending}
-                        >
-                          Keep account
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          onClick={() => disconnect.mutate(account.id)}
-                          disabled={disconnect.isPending}
-                        >
-                          <Unplug aria-hidden="true" />
-                          {disconnect.isPending ? "Disconnecting…" : "Disconnect account"}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  {deleting && (
-                    <div
-                      className="disconnect-confirmation delete-confirmation"
-                      id={`delete-${account.id}`}
-                      role="group"
-                      aria-labelledby={`delete-title-${account.id}`}
-                    >
-                      <div>
-                        <h4 id={`delete-title-${account.id}`}>
-                          Delete {account.display_name} permanently?
-                        </h4>
-                        <p>
-                          This cannot be undone. The account record
-                          {account.rule_count > 0
-                            ? ` and ${account.rule_count} affected Directional Sync Rule${account.rule_count === 1 ? "" : "s"}, including their mappings, cursors, incidents, and audit activity,`
-                            : ""} will be removed. {account.rule_count > 0
-                            ? "Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed."
-                            : "No Directional Sync Rules currently use this account."}
-                        </p>
-                      </div>
-                      <div className="confirmation-actions">
-                        <Button
-                          variant="outline"
-                          onClick={() => setDeletingAccountId(null)}
-                          disabled={permanentDelete.isPending}
-                        >
-                          Keep account
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          onClick={() => permanentDelete.mutate(account.id)}
-                          disabled={permanentDelete.isPending}
-                        >
-                          <Trash2 aria-hidden="true" />
-                          {permanentDelete.isPending ? "Deleting…" : "Delete permanently"}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-                  </ul>
-                )}
-              </>
-            )}
-            <GoogleReturnNote help={returnHelp} className="account-group-footer" />
-          </div>
-        )}
-        {statusMessage && <p className="account-status-message" role="status">{statusMessage}</p>}
-        {disconnect.error && (
-          <div className="inline-error" role="alert">
-            {disconnect.error.message}
-          </div>
-        )}
-        {permanentDelete.error && (
-          <div className="inline-error" role="alert">
-            {permanentDelete.error.message}
-          </div>
-        )}
-      </section>
-
-      <StorageSection />
-
-      <IntegrationsSection />
-
-      <section className="settings-section" aria-labelledby="appearance-title">
-        <div className="section-heading">
-          <div>
-            <h2 id="appearance-title">Appearance</h2>
-            <p>Saved in this browser only.</p>
-          </div>
-        </div>
-        <div className="settings-list">
-          <div className="setting-row">
-            <div>
-              <h3 id="theme-title">Theme</h3>
-              <p>Follow this device, or keep the interface light or dark.</p>
-            </div>
-            <div className="appearance-control">
-              <NativeSelect
-                id="theme-preference"
-                aria-labelledby="theme-title"
-                value={preference}
-                onChange={(event) => setPreference(event.target.value as ThemePreference)}
-              >
-                <option value="system">Device setting</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </NativeSelect>
-            </div>
-          </div>
-          <div className="setting-row">
-            <div>
-              <h3 id="dark-palette-title">Dark palette</h3>
-              <p>The colors used whenever the interface is dark.</p>
-            </div>
-            <div className="appearance-control">
-              <NativeSelect
-                id="dark-palette"
-                aria-labelledby="dark-palette-title"
-                value={darkPalette}
-                onChange={(event) => setDarkPalette(event.target.value as DarkPalette)}
-              >
-                <option value="twilight">Twilight (indigo)</option>
-                <option value="midnight">Midnight (blue)</option>
-              </NativeSelect>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
+    </>
   )
 }
 
-// How long the Copy button says "Copied" before it offers to copy again.
-const COPIED_FOR_MS = 2000
-
-/**
- * Integration Tokens as one Settings group. It stays collapsed to a summary row, as Connected
- * accounts does, because most administrators never need it.
- */
-// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
-export function IntegrationsSection() {
-  const queryClient = useQueryClient()
-  const now = useNow()
-  const tokens = useQuery({ queryKey: ["integration-tokens"], queryFn: api.integrationTokens })
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState("")
-  const [issued, setIssued] = useState<IssuedIntegrationToken | null>(null)
-  const [revoking, setRevoking] = useState<string | null>(null)
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "unavailable">("idle")
-  const [message, setMessage] = useState("")
-  const summaryButton = useRef<HTMLButtonElement>(null)
-  const nameInput = useRef<HTMLInputElement>(null)
-  const revealHeading = useRef<HTMLHeadingElement>(null)
-  const revokeTriggers = useRef<Record<string, HTMLButtonElement | null>>({})
-  const origin = window.location.origin
-  useEffect(() => {
-    if (copyState !== "copied") return
-    const timer = window.setTimeout(() => setCopyState("idle"), COPIED_FOR_MS)
-    return () => window.clearTimeout(timer)
-  }, [copyState])
-  useEffect(() => {
-    if (issued) revealHeading.current?.focus()
-  }, [issued])
-  const issue = useMutation({
-    mutationFn: () => api.issueIntegrationToken(name),
-    onSuccess: async (token) => {
-      setIssued(token)
-      setName("")
-      setCopyState("idle")
-      // Announce the issue, never the token: a screen reader would read the secret aloud.
-      setMessage(`Token for ${token.name} issued. Copy it now; it is shown only once.`)
-      await queryClient.invalidateQueries({ queryKey: ["integration-tokens"] })
-    },
-  })
-  const revoke = useMutation({
-    mutationFn: (token: IntegrationToken) => api.revokeIntegrationToken(token.id),
-    onSuccess: async (_result, token) => {
-      setRevoking(null)
-      // The plaintext token lives only in this component's state, shown once; if the admin
-      // revokes it right away, stop showing a secret that no longer works.
-      setIssued((current) => (current?.id === token.id ? null : current))
-      setMessage(`${token.name} was revoked. Anything that used it has lost access.`)
-      await queryClient.invalidateQueries({ queryKey: ["integration-tokens"] })
-      // The revoked row loses its button, so focus returns to the group it belongs to.
-      summaryButton.current?.focus()
-    },
-  })
-  const active = (tokens.data ?? []).filter((token) => !token.revoked_at)
-  const revoked = (tokens.data ?? []).filter((token) => token.revoked_at)
-
-  function finishReveal() {
-    setIssued(null)
-    setCopyState("idle")
-    setMessage("")
-    nameInput.current?.focus()
-  }
-
+function AppearanceSection() {
+  const { preference, setPreference, darkPalette, setDarkPalette } = useTheme()
   return (
-    <section className="settings-section" aria-labelledby="integrations-title">
+    <section className="settings-section" aria-labelledby="appearance-title">
       <div className="section-heading">
         <div>
-          <h2 id="integrations-title">Integrations</h2>
-          <p>
-            Optional. Tokens let monitors, dashboards, and AI assistants read whether
-            synchronization is healthy. They cannot change anything.
-          </p>
+          <h2 id="appearance-title">Appearance</h2>
+          <p>Saved in this browser only.</p>
         </div>
       </div>
-      {tokens.isPending && <Skeleton className="h-16 w-full" />}
-      {tokens.error && (
-        <div className="inline-error integration-load-error" role="alert">
-          <span>Integration tokens could not load.</span>
-          <Button type="button" variant="outline" onClick={() => void tokens.refetch()}>
-            Try again
-          </Button>
+      <div className="settings-list">
+        <div className="setting-row">
+          <div>
+            <h3 id="theme-title">Theme</h3>
+            <p>Follow this device, or keep the interface light or dark.</p>
+          </div>
+          <div className="appearance-control">
+            <NativeSelect
+              id="theme-preference"
+              aria-labelledby="theme-title"
+              value={preference}
+              onChange={(event) => setPreference(event.target.value as ThemePreference)}
+            >
+              <option value="system">Device setting</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </NativeSelect>
+          </div>
         </div>
-      )}
-      {tokens.data && (
-        <div className="settings-group">
-          <button
-            ref={summaryButton}
-            type="button"
-            className="group-summary"
-            aria-expanded={open}
-            aria-controls={open ? "integration-body" : undefined}
-            onClick={() => setOpen(!open)}
-          >
-            <KeyRound className="group-summary-icon" aria-hidden="true" />
-            <span className="account-summary-copy">
-              <span className="account-summary-status">{integrationSummary(tokens.data, now)}</span>
-              <span className="account-summary-emails">For monitors, dashboards, and AI assistants</span>
-            </span>
-            <span className="account-summary-toggle">
-              {open ? "Hide" : "Show"}
-              <span className="sr-only"> integrations</span>
-              <ChevronDown aria-hidden="true" />
-            </span>
-          </button>
-          {open && (
-            <div className="group-body" id="integration-body">
-              <form
-                className="setting-row integration-issue"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  issue.mutate()
-                }}
-              >
-                <div className="integration-issue-field">
-                  <Label htmlFor="integration-name">Issue a token</Label>
-                  <p id="integration-name-hint">Name the tool that will use it.</p>
-                  <Input
-                    ref={nameInput}
-                    id="integration-name"
-                    value={name}
-                    maxLength={80}
-                    placeholder="For example, Uptime Kuma"
-                    aria-describedby="integration-name-hint"
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                  {issue.error && (
-                    <p className="field-error" role="alert">
-                      {issue.error.message}
-                    </p>
-                  )}
-                </div>
-                <Button type="submit" disabled={!name.trim() || issue.isPending}>
-                  {issue.isPending ? "Issuing…" : "Issue token"}
-                </Button>
-              </form>
-              {issued && (
-                <div className="setting-row token-reveal">
-                  <div className="token-reveal-copy">
-                    <h3 ref={revealHeading} tabIndex={-1}>
-                      Copy the token for {issued.name} now
-                    </h3>
-                    <p>It is shown only once. Store it in your password manager or the tool that uses it.</p>
-                    <div className="token-field">
-                      <Input
-                        readOnly
-                        value={issued.token}
-                        aria-label={`Token for ${issued.name}`}
-                        onFocus={(event) => event.currentTarget.select()}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          void copyToken(issued.token, navigator.clipboard).then(setCopyState)
-                        }}
-                      >
-                        {copyState === "copied" ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-                        {copyState === "copied" ? "Copied" : "Copy token"}
-                      </Button>
-                    </div>
-                    {copyState === "unavailable" && <p>Select the token and copy it.</p>}
-                  </div>
-                  <Button type="button" variant="ghost" onClick={finishReveal}>
-                    Done
-                  </Button>
-                </div>
-              )}
-              {active.map((token) => (
-                <Fragment key={token.id}>
-                  <div className="setting-row">
-                    <div>
-                      <h3>{token.name}</h3>
-                      <p>{tokenUsage(token, now)}</p>
-                    </div>
-                    <Button
-                      ref={(element) => {
-                        revokeTriggers.current[token.id] = element
-                      }}
-                      type="button"
-                      variant="outline"
-                      aria-expanded={revoking === token.id}
-                      aria-controls={`revoke-${token.id}`}
-                      onClick={() => {
-                        revoke.reset()
-                        setRevoking(token.id)
-                      }}
-                    >
-                      Revoke
-                    </Button>
-                  </div>
-                  {revoking === token.id && (
-                    <>
-                      <DestructiveConfirmation
-                        id={`revoke-${token.id}`}
-                        title={`Revoke ${token.name}?`}
-                        body="Anything that uses this token loses access right away. This cannot be undone."
-                        cancelLabel="Keep token"
-                        confirmLabel="Revoke token"
-                        pendingLabel="Revoking…"
-                        pending={revoke.isPending}
-                        confirmIcon={null}
-                        onConfirm={() => revoke.mutate(token)}
-                        onCancel={() => {
-                          setRevoking(null)
-                          revokeTriggers.current[token.id]?.focus()
-                        }}
-                      />
-                      {revoke.error && (
-                        <p className="field-error" role="alert">
-                          {revoke.error.message}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </Fragment>
-              ))}
-              {revoked.length > 0 && (
-                <details className="inline-help setting-help revoked-tokens">
-                  <summary>
-                    <span>
-                      {revoked.length} revoked {revoked.length === 1 ? "token" : "tokens"}
-                    </span>
-                    <ChevronDown className="inline-help-chevron" aria-hidden="true" />
-                  </summary>
-                  <ul className="inline-help-body">
-                    {revoked.map((token) => (
-                      <li key={token.id}>
-                        {token.name} · {tokenUsage(token, now)}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
-          )}
-          {open && (
-            <div className="group-footer">
-              {needsTransportNote(origin) && (
-                <details className="inline-help">
-                  <summary>
-                    <Info aria-hidden="true" />
-                    <span>This address uses plain HTTP</span>
-                    <ChevronDown className="inline-help-chevron" aria-hidden="true" />
-                  </summary>
-                  <div className="inline-help-body">
-                    <p>
-                      A token sent to this address crosses the internet unencrypted. Serve Calendar Ghost
-                      over HTTPS, for example with Tailscale Serve or a reverse proxy, before you use
-                      tokens from outside your home network.
-                    </p>
-                  </div>
-                </details>
-              )}
-              <details className="inline-help">
-                <summary>
-                  <Info aria-hidden="true" />
-                  <span>Examples for monitors and AI assistants</span>
-                  <ChevronDown className="inline-help-chevron" aria-hidden="true" />
-                </summary>
-                <div className="inline-help-body integration-examples">
-                  <p>Replace the token placeholder in each example with the token you copied.</p>
-                  {integrationExamples(origin).map((example) => (
-                    <div key={example.title}>
-                      <h3>{example.title}</h3>
-                      <p>{example.description}</p>
-                      <pre>
-                        <code>{example.code}</code>
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            </div>
-          )}
-        </div>
-      )}
-      {message && <p role="status">{message}</p>}
-    </section>
-  )
-}
-
-// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
-function StorageSection() {
-  const queryClient = useQueryClient()
-  const storage = useQuery({ queryKey: ["storage"], queryFn: api.storage })
-  const [days, setDays] = useState(90)
-  const [confirming, setConfirming] = useState<"activity" | "logs" | null>(null)
-  const [message, setMessage] = useState("")
-  const clearTrigger = useRef<HTMLButtonElement>(null)
-  const purgeTrigger = useRef<HTMLButtonElement>(null)
-  const clearable = useQuery({
-    queryKey: ["storage", "clearable", days],
-    queryFn: () => api.clearableActivity(days),
-    enabled: confirming === "activity",
-  })
-  const clear = useMutation({
-    mutationFn: () => api.clearActivity(days),
-    onSuccess: async (cleared) => {
-      setConfirming(null)
-      setMessage(
-        clearedActivityMessage(cleared.removed, storage.data?.database.reclaimable_bytes ?? 0),
-      )
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["storage"] }),
-        queryClient.invalidateQueries({ queryKey: ["activity"] }),
-      ])
-    },
-    onError: async (error) => {
-      // A 409 means the clear deleted entries but could not reclaim the space while a rule
-      // was synchronizing. Close the confirmation, keep the server's message in the alert, and
-      // refresh the usage, so the row offers to reclaim the space that is left.
-      if (error instanceof ApiError && error.status === 409) {
-        setConfirming(null)
-        await queryClient.invalidateQueries({ queryKey: ["storage"] })
-      }
-    },
-  })
-  const purge = useMutation({
-    mutationFn: api.purgeLogs,
-    onSuccess: async () => {
-      setConfirming(null)
-      setMessage("The logs were purged.")
-      await queryClient.invalidateQueries({ queryKey: ["storage"] })
-    },
-  })
-  const busy = clear.isPending || purge.isPending
-  const usage = storage.data
-  const confirmation = clearable.data
-    ? clearActivityConfirmation(
-        clearable.data.entries,
-        days,
-        usage?.database.reclaimable_bytes ?? 0,
-      )
-    : clearable.error
-      ? countFailedConfirmation(clearable.error.message)
-      : null
-
-  return (
-    <section className="settings-section" aria-labelledby="storage-title">
-      <div className="section-heading">
-        <div>
-          <h2 id="storage-title">Storage</h2>
-          <p>Activity history and log files kept on this installation.</p>
+        <div className="setting-row">
+          <div>
+            <h3 id="dark-palette-title">Dark palette</h3>
+            <p>The colors used whenever the interface is dark.</p>
+          </div>
+          <div className="appearance-control">
+            <NativeSelect
+              id="dark-palette"
+              aria-labelledby="dark-palette-title"
+              value={darkPalette}
+              onChange={(event) => setDarkPalette(event.target.value as DarkPalette)}
+            >
+              <option value="twilight">Twilight (indigo)</option>
+              <option value="midnight">Midnight (blue)</option>
+            </NativeSelect>
+          </div>
         </div>
       </div>
-      {storage.isPending && <Skeleton className="h-24 w-full" />}
-      {storage.error && (
-        <div className="inline-error" role="alert">
-          Storage usage could not load.
-        </div>
-      )}
-      {usage && (
-        <div className="settings-list">
-          <div className="setting-row">
-            <div>
-              <h3>Database</h3>
-              <p>{activitySummary(usage.database)}</p>
-            </div>
-            <div className="storage-actions">
-              <div className="storage-select">
-                <NativeSelect
-                  id="activity-age"
-                  aria-label="Clear Activity older than"
-                  value={days}
-                  disabled={busy}
-                  onChange={(event) => setDays(Number(event.target.value))}
-                >
-                  {usage.activity_ages.map((age) => (
-                    <option key={age} value={age}>
-                      Older than {age} days
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-              <Button
-                ref={clearTrigger}
-                type="button"
-                variant="outline"
-                disabled={busy || !canClearActivity(usage.database)}
-                aria-expanded={confirming === "activity"}
-                aria-controls="clear-activity-confirmation"
-                onClick={() => {
-                  clear.reset()
-                  setMessage("")
-                  setConfirming("activity")
-                }}
-              >
-                Clear Activity
-              </Button>
-            </div>
-          </div>
-          {confirming === "activity" && (
-            <DestructiveConfirmation
-              id="clear-activity-confirmation"
-              title={`Clear Activity older than ${days} days?`}
-              body={confirmation?.body ?? "Counting the entries that would be removed…"}
-              cancelLabel="Keep Activity"
-              confirmLabel={confirmation?.confirmLabel ?? "Clear Activity"}
-              pendingLabel={confirmation?.pendingLabel ?? "Clearing…"}
-              pending={clear.isPending || clearable.isRefetching}
-              confirmDisabled={!confirmation?.canConfirm}
-              onConfirm={() => (clearable.error ? void clearable.refetch() : clear.mutate())}
-              onCancel={() => {
-                setConfirming(null)
-                clearTrigger.current?.focus()
-              }}
-            />
-          )}
-          <div className="setting-row">
-            <div>
-              <h3>Logs</h3>
-              <p>{logSummary(usage.logs)}</p>
-              {!usage.logs && (
-                <details className="inline-help setting-help">
-                  <summary>
-                    <span>How to turn it on</span>
-                    <ChevronDown className="inline-help-chevron" aria-hidden="true" />
-                  </summary>
-                  <div className="inline-help-body">
-                    <p>
-                      Log files are kept unless <code>CALENDAR_SYNC_LOG_DIR</code> is set to an empty
-                      value. Set it to a writable directory, such as <code>/data/logs</code> on the data
-                      volume, or remove it from <code>.env</code>, then restart the service.
-                    </p>
-                    <p>
-                      If it already names a directory, that directory could not be used:{" "}
-                      <code>docker compose logs app</code> shows the warning that says why.
-                    </p>
-                  </div>
-                </details>
-              )}
-            </div>
-            {usage.logs && (
-              <div className="storage-actions">
-                <Button variant="outline" asChild>
-                  <a href={STORAGE_LOGS_URL} download>
-                    <Download aria-hidden="true" /> Download
-                  </a>
-                </Button>
-                <Button
-                  ref={purgeTrigger}
-                  type="button"
-                  variant="outline"
-                  disabled={busy || usage.logs.files === 0}
-                  aria-expanded={confirming === "logs"}
-                  aria-controls="purge-logs-confirmation"
-                  onClick={() => {
-                    purge.reset()
-                    setMessage("")
-                    setConfirming("logs")
-                  }}
-                >
-                  Purge logs
-                </Button>
-              </div>
-            )}
-          </div>
-          {confirming === "logs" && (
-            <DestructiveConfirmation
-              id="purge-logs-confirmation"
-              title="Purge the logs?"
-              body="Every log line kept on this installation is deleted. Download them first if you may need them. This cannot be undone."
-              cancelLabel="Keep logs"
-              confirmLabel="Purge logs"
-              pendingLabel="Purging…"
-              pending={purge.isPending}
-              onConfirm={() => purge.mutate()}
-              onCancel={() => {
-                setConfirming(null)
-                purgeTrigger.current?.focus()
-              }}
-            />
-          )}
-        </div>
-      )}
-      {message && <p role="status">{message}</p>}
-      {(clear.error ?? purge.error) && (
-        <div className="inline-error" role="alert">
-          {(clear.error ?? purge.error)?.message}
-        </div>
-      )}
     </section>
   )
 }

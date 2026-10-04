@@ -1,8 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Plus, ShieldAlert } from "lucide-react"
-import { useEffect, useRef, useState, type SyntheticEvent } from "react"
+import { useRef, useState, type RefObject } from "react"
 
-import { AccountSelect } from "@/components/account-select"
 import { GhostMark } from "@/components/ghost-mark"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -15,37 +14,29 @@ import {
   RuleStatusBadge,
   RuleWorkNote,
 } from "@/components/rule-commands"
-import { InvitationResponseFields } from "@/components/invitation-response-fields"
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { NativeSelect } from "@/components/ui/native-select"
-import {
-  api,
-  type ConnectedAccount,
-  type Rule,
-  type TentativeEvents,
-  type UnansweredInvitations,
-} from "@/lib/api"
-import { firstOtherCalendar, writableCalendars } from "@/lib/writable-calendars"
+import { RuleBuilder } from "@/features/rule-builder"
+import { api, type ConnectedAccount, type RuleSummary } from "@/lib/api"
 import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
-import { busyCommand, ruleWork, workRefreshInterval } from "@/lib/rule-work"
+import { busyCommand, ruleWork, workRefreshInterval, type RuleWork } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
-import { useRuleCommands } from "@/lib/use-rule-commands"
-import { useRuleEndpoints } from "@/lib/use-rule-endpoints"
+import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
+import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 
-const CALENDAR_STALE_TIME = 5 * 60 * 1000
+export { RuleBuilder }
+
+type RulesNoticeText = { text: string; attention: boolean }
 
 type RulesViewProps = {
-  notice: { text: string; attention: boolean } | null
+  notice: RulesNoticeText | null
   createRule: boolean
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }
 
-// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function RulesView({
   notice,
   createRule,
@@ -86,66 +77,19 @@ export function RulesView({
   return (
     <div className="page-section">
       <LiveAnnouncement text={commands.announcement} />
-      <div className="page-heading-row">
-        <div>
-          <h1>Sync rules</h1>
-          <p className="page-intro">
-            Each rule shows the events of one calendar in another, as busy time or with their
-            details. The source calendar is never changed.
-          </p>
-        </div>
-        <div className="heading-action">
-          <Button
-            ref={createButton}
-            variant={showBuilder ? "outline" : "default"}
-            disabled={connected.length === 0}
-            onClick={() => setBuilderChoice(!showBuilder)}
-            aria-expanded={showBuilder}
-            aria-controls="rule-builder"
-            aria-describedby={connected.length === 0 ? "create-rule-hint" : undefined}
-          >
-            {showBuilder ? "Close rule builder" : <><Plus aria-hidden="true" /> Create sync rule</>}
-          </Button>
-          {connected.length === 0 && (
-            <p id="create-rule-hint" className="action-hint">
-              <a
-                href={appPathForView("settings")}
-                onClick={(event) => {
-                  if (!isPlainLeftClick(event)) return
-                  event.preventDefault()
-                  onViewChange("settings")
-                }}
-              >
-                Connect a Google account
-              </a>{" "}
-              first.
-            </p>
-          )}
-        </div>
-      </div>
-      {notice && !noticeDismissed && (
-        <div className="page-notice" data-tone={notice.attention ? "attention" : undefined}>
-          {notice.attention ? <ShieldAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
-          <p>{notice.text}</p>
-          <div className="page-notice-actions">
-            {notice.attention && (
-              <Button variant="outline" asChild>
-                <a
-                  href={appPathForView("activity")}
-                  onClick={(event) => {
-                    if (!isPlainLeftClick(event)) return
-                    event.preventDefault()
-                    onViewChange("activity")
-                  }}
-                >
-                  Review in Activity
-                </a>
-              </Button>
-            )}
-            <Button variant="ghost" onClick={() => setNoticeDismissed(true)}>Dismiss</Button>
-          </div>
-        </div>
-      )}
+      <RulesHeading
+        createButton={createButton}
+        showBuilder={showBuilder}
+        noAccounts={connected.length === 0}
+        onToggleBuilder={() => setBuilderChoice(!showBuilder)}
+        onViewChange={onViewChange}
+      />
+      <RulesNotice
+        notice={notice}
+        dismissed={noticeDismissed}
+        onDismiss={() => setNoticeDismissed(true)}
+        onViewChange={onViewChange}
+      />
       {showBuilder && (
         <RuleBuilder
           accounts={connected}
@@ -160,338 +104,308 @@ export function RulesView({
         />
       )}
       {rules.data.length === 0 ? (
-        !showBuilder && (
-          <section className="empty-note" aria-labelledby="no-rules-title">
-            <GhostMark className="empty-ghost" />
-            <div>
-              <h2 id="no-rules-title">No rules yet</h2>
-              <p>
-                {connected.length === 0
-                  ? "Connect a Google account in Settings, then create your first rule here."
-                  : "Create a rule, preview its effects, then start syncing."}
-              </p>
-            </div>
-          </section>
-        )
+        <NoRulesNote builderOpen={showBuilder} connected={connected} />
       ) : (
         <ul className="rule-list page-card" aria-label="Sync rules">
-          {/* eslint-disable-next-line complexity -- debt: split this before adding to it */}
-          {rules.data.map((rule) => {
-            const { source, destination, disconnected } = endpoints(rule)
-            const stopped = rule.state === "degraded" || disconnected.length > 0
-            const removing = removingIds.has(rule.id)
-            const work = ruleWork({
-              pending: commands.pending[rule.id],
-              pendingSince: commands.pendingSince[rule.id],
-              running: rule.running,
-              removing,
-            })
-            const pending = busyCommand(commands.pending[rule.id], work)
-            const state = removing ? "removing" : rule.state
-            const headingId = `rule-${rule.id}-name`
-            const previewId = `rule-${rule.id}-preview`
-            const run = (command: Parameters<typeof commands.run>[1]) =>
-              void commands.run(rule.id, command, destination.name, () => rows.current.get(rule.id) ?? null)
-            return (
-              <li
-                className="rule-row"
-                key={rule.id}
-                tabIndex={-1}
-                aria-labelledby={headingId}
-                aria-busy={work ? true : undefined}
-                ref={(element) => {
-                  if (element) rows.current.set(rule.id, element)
-                  else rows.current.delete(rule.id)
-                }}
-              >
-                <div className="rule-main">
-                  <div className="rule-summary">
-                    <h2 className="sr-only" id={headingId}>{source.name} to {destination.name}</h2>
-                    <div className="rule-direction">
-                      <RuleEndpoint
-                        account={source.account}
-                        endpoint={rule.source}
-                        calendars={source.calendars}
-                        role="Source"
-                      />
-                      <ArrowRight aria-hidden="true" />
-                      <RuleEndpoint
-                        account={destination.account}
-                        endpoint={rule.destination}
-                        calendars={destination.calendars}
-                        role="Destination"
-                      />
-                    </div>
-                    <p className="rule-policy">
-                      <span>
-                        {rule.privacy_policy === "busy_only" ? "Busy only" : "Copy details"}
-                        {rule.sync_all_day_events ? ", including all-day events" : ", timed events only"}
-                      </span>
-                      <span className="rule-run" data-failed={rule.last_sync?.succeeded === false || undefined}>
-                        {rule.last_sync?.succeeded === false && <ShieldAlert aria-hidden="true" />}
-                        {lastRunLabel(rule.last_sync, now)}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="rule-actions">
-                    <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} />
-                    <RuleNextAction
-                      state={state}
-                      disconnected={disconnected.length > 0}
-                      pending={pending}
-                      describedBy={state === "dry_run_validated" ? `${headingId} ${previewId}` : headingId}
-                      onRun={run}
-                      onViewChange={onViewChange}
-                    />
-                    <Button variant="ghost" asChild>
-                      <a
-                        href={appPathForRule(rule.id)}
-                        onClick={(event) => {
-                          if (!isPlainLeftClick(event)) return
-                          event.preventDefault()
-                          onOpenRule(rule.id)
-                        }}
-                        aria-label={`Details for ${source.name} to ${destination.name}`}
-                      >
-                        Details <ArrowRight aria-hidden="true" />
-                      </a>
-                    </Button>
-                    <RuleCommandMenu
-                      state={state}
-                      disconnected={disconnected.length > 0}
-                      pending={pending}
-                      source={source.name}
-                      destination={destination.name}
-                      reserveSpace
-                      onRun={run}
-                    />
-                  </div>
-                </div>
-                {rule.reprojection_required && ["draft", "paused", "degraded"].includes(rule.state) && (
-                  <p className="rule-note">
-                    Preview required: the policy changed, so existing projections are rewritten on the
-                    first run after you start syncing again.
-                  </p>
-                )}
-                {stopped && (
-                  <p className="rule-note">
-                    {disconnected.length > 0
-                      ? `Synchronization stopped: ${disconnected.map((account) => account.email).join(" and ")} must be reauthorized before this rule can run.`
-                      : "Synchronization stopped to protect your calendars. Nothing was lost; preview the rule to restart it."}
-                  </p>
-                )}
-                {state === "dry_run_validated" && (
-                  <PreviewReadyNote id={previewId} preview={rule.latest_preview} destination={destination.name} />
-                )}
-                {work ? (
-                  <RuleWorkNote work={work} source={source.name} destination={destination.name} />
-                ) : (
-                  <RuleFeedbackNote feedback={commands.feedback[rule.id]} />
-                )}
-              </li>
-            )
-          })}
+          {rules.data.map((rule) => (
+            <RuleRow
+              key={rule.id}
+              rule={rule}
+              endpoints={endpoints(rule)}
+              removing={removingIds.has(rule.id)}
+              commands={commands}
+              rows={rows}
+              now={now}
+              onViewChange={onViewChange}
+              onOpenRule={onOpenRule}
+            />
+          ))}
         </ul>
       )}
     </div>
   )
 }
 
-/** Exported so rendered tests can exercise calendar-picker wiring without the full rules list. */
-// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
-export function RuleBuilder({
-  accounts,
-  onCreated,
+function RulesHeading({
+  createButton,
+  showBuilder,
+  noAccounts,
+  onToggleBuilder,
+  onViewChange,
 }: {
-  accounts: ConnectedAccount[]
-  onCreated: (rule: Rule) => void
+  createButton: RefObject<HTMLButtonElement | null>
+  showBuilder: boolean
+  noAccounts: boolean
+  onToggleBuilder: () => void
+  onViewChange: ViewChange
 }) {
-  const queryClient = useQueryClient()
-  const heading = useRef<HTMLHeadingElement>(null)
-  const [sourceAccount, setSourceAccount] = useState("")
-  const [destinationAccount, setDestinationAccount] = useState("")
-  const [sourceCalendar, setSourceCalendar] = useState("")
-  const [destinationCalendar, setDestinationCalendar] = useState("")
-  const [privacy, setPrivacy] = useState<"busy_only" | "copy_details">("busy_only")
-  const [allDay, setAllDay] = useState(true)
-  const [responses, setResponses] = useState<{
-    tentative_events: TentativeEvents
-    unanswered_invitations: UnansweredInvitations
-  }>({ tentative_events: "mark", unanswered_invitations: "as_tentative" })
-
-  useEffect(() => {
-    heading.current?.focus()
-  }, [])
-
-  const resolvedSourceAccount = sourceAccount || accounts[0]?.id || ""
-  const resolvedDestinationAccount = destinationAccount || accounts[1]?.id || accounts[0]?.id || ""
-
-  const sourceCalendars = useQuery({
-    queryKey: ["calendars", resolvedSourceAccount],
-    queryFn: () => api.calendars(resolvedSourceAccount),
-    enabled: Boolean(resolvedSourceAccount),
-    staleTime: CALENDAR_STALE_TIME,
-  })
-  const destinationCalendars = useQuery({
-    queryKey: ["calendars", resolvedDestinationAccount],
-    queryFn: () => api.calendars(resolvedDestinationAccount),
-    enabled: Boolean(resolvedDestinationAccount),
-    staleTime: CALENDAR_STALE_TIME,
-  })
-
-  const resolvedSourceCalendar = sourceCalendar || sourceCalendars.data?.[0]?.id || ""
-  const writableDestinations = writableCalendars(destinationCalendars.data)
-  // Default to a destination other than the source so the builder never opens in an error.
-  const resolvedDestinationCalendar =
-    destinationCalendar ||
-    firstOtherCalendar(
-      destinationCalendars.data,
-      resolvedSourceAccount === resolvedDestinationAccount ? resolvedSourceCalendar : null,
-    )
-
-  const create = useMutation({
-    mutationFn: () =>
-      api.createRule({
-        source: { connected_account_id: resolvedSourceAccount, calendar_id: resolvedSourceCalendar },
-        destination: { connected_account_id: resolvedDestinationAccount, calendar_id: resolvedDestinationCalendar },
-        privacy_policy: privacy,
-        sync_all_day_events: allDay,
-        ...responses,
-      }),
-    onSuccess: async (rule) => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["rules"] }),
-        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
-      ])
-      onCreated(rule)
-    },
-  })
-
-  const sameEndpoint =
-    resolvedSourceAccount === resolvedDestinationAccount && resolvedSourceCalendar === resolvedDestinationCalendar
-  const canSubmit = Boolean(
-    resolvedSourceAccount &&
-      resolvedDestinationAccount &&
-      resolvedSourceCalendar &&
-      resolvedDestinationCalendar &&
-      !sameEndpoint,
-  )
-
-  function submit(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (canSubmit) create.mutate()
-  }
-
-  const sourceStatus = calendarStatus(sourceCalendars, sourceCalendars.data?.length ?? 0, "calendars")
-  const destinationStatus = calendarStatus(destinationCalendars, writableDestinations.length, "writable calendars")
-
   return (
-    <section className="rule-builder page-card" id="rule-builder" aria-labelledby="builder-title">
-      <div className="section-heading">
-        <div>
-          <h2 id="builder-title" ref={heading} tabIndex={-1}>Choose the calendars</h2>
-          <p>Saving creates a draft. Nothing is written until you preview the rule and start syncing.</p>
-        </div>
+    <div className="page-heading-row">
+      <div>
+        <h1>Sync rules</h1>
+        <p className="page-intro">
+          Each rule shows the events of one calendar in another, as busy time or with their
+          details. The source calendar is never changed.
+        </p>
       </div>
-      <form className="rule-form" onSubmit={submit}>
-        <fieldset>
-          <legend>Source calendar</legend>
-          <div className="field-stack">
-            <Label id="source-account-label" htmlFor="source-account">Google account</Label>
-            <AccountSelect
-              id="source-account"
-              labelId="source-account-label"
-              accounts={accounts}
-              value={resolvedSourceAccount}
-              onChange={(value) => {
-                setSourceAccount(value)
-                setSourceCalendar("")
+      <div className="heading-action">
+        <Button
+          ref={createButton}
+          variant={showBuilder ? "outline" : "default"}
+          disabled={noAccounts}
+          onClick={onToggleBuilder}
+          aria-expanded={showBuilder}
+          aria-controls="rule-builder"
+          aria-describedby={noAccounts ? "create-rule-hint" : undefined}
+        >
+          {showBuilder ? "Close rule builder" : <><Plus aria-hidden="true" /> Create sync rule</>}
+        </Button>
+        {noAccounts && (
+          <p id="create-rule-hint" className="action-hint">
+            <a
+              href={appPathForView("settings")}
+              onClick={(event) => {
+                if (!isPlainLeftClick(event)) return
+                event.preventDefault()
+                onViewChange("settings")
               }}
-            />
-          </div>
-          <div className="field-stack">
-            <Label htmlFor="source-calendar">Calendar</Label>
-            <NativeSelect
-              id="source-calendar"
-              value={resolvedSourceCalendar}
-              onChange={(event) => setSourceCalendar(event.target.value)}
-              disabled={!sourceCalendars.data?.length}
-              aria-describedby={sourceStatus ? "source-calendar-status" : undefined}
             >
-              {sourceCalendars.data?.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.summary}</option>)}
-            </NativeSelect>
-            {sourceStatus && <p id="source-calendar-status" className="field-hint">{sourceStatus}</p>}
-          </div>
-        </fieldset>
-        <div className="direction-marker" aria-hidden="true"><ArrowRight /></div>
-        <fieldset>
-          <legend>Destination calendar</legend>
-          <div className="field-stack">
-            <Label id="destination-account-label" htmlFor="destination-account">Google account</Label>
-            <AccountSelect
-              id="destination-account"
-              labelId="destination-account-label"
-              accounts={accounts}
-              value={resolvedDestinationAccount}
-              onChange={(value) => {
-                setDestinationAccount(value)
-                setDestinationCalendar("")
+              Connect a Google account
+            </a>{" "}
+            first.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function RulesNotice({
+  notice,
+  dismissed,
+  onDismiss,
+  onViewChange,
+}: {
+  notice: RulesNoticeText | null
+  dismissed: boolean
+  onDismiss: () => void
+  onViewChange: ViewChange
+}) {
+  if (!notice || dismissed) return null
+  return (
+    <div className="page-notice" data-tone={notice.attention ? "attention" : undefined}>
+      {notice.attention ? <ShieldAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+      <p>{notice.text}</p>
+      <div className="page-notice-actions">
+        {notice.attention && (
+          <Button variant="outline" asChild>
+            <a
+              href={appPathForView("activity")}
+              onClick={(event) => {
+                if (!isPlainLeftClick(event)) return
+                event.preventDefault()
+                onViewChange("activity")
               }}
-            />
-          </div>
-          <div className="field-stack">
-            <Label htmlFor="destination-calendar">Calendar you can edit</Label>
-            <NativeSelect
-              id="destination-calendar"
-              value={resolvedDestinationCalendar}
-              onChange={(event) => setDestinationCalendar(event.target.value)}
-              disabled={!writableDestinations.length}
-              aria-invalid={sameEndpoint || undefined}
-              aria-describedby={
-                sameEndpoint ? "destination-calendar-error" : destinationStatus ? "destination-calendar-status" : undefined
-              }
             >
-              {writableDestinations.map((calendar) => <option key={calendar.id} value={calendar.id}>{calendar.summary}</option>)}
-            </NativeSelect>
-            {sameEndpoint ? (
-              <p id="destination-calendar-error" className="field-error" role="alert">
-                Choose a destination different from the source calendar.
-              </p>
-            ) : (
-              destinationStatus && <p id="destination-calendar-status" className="field-hint">{destinationStatus}</p>
-            )}
-          </div>
-        </fieldset>
-        <fieldset className="policy-fields">
-          <legend>What the destination shows</legend>
-          <div className="field-stack">
-            <Label htmlFor="privacy-policy">Event information</Label>
-            <NativeSelect id="privacy-policy" value={privacy} onChange={(event) => setPrivacy(event.target.value as "busy_only" | "copy_details")}>
-              <option value="busy_only">Busy only (recommended)</option>
-              <option value="copy_details">Copy title, description, and location</option>
-            </NativeSelect>
-          </div>
-          <label className="checkbox-row"><input type="checkbox" checked={allDay} onChange={(event) => setAllDay(event.target.checked)} /><span><strong>Sync all-day events</strong><small>Turn this off to synchronize timed events only.</small></span></label>
-          <InvitationResponseFields
-            idPrefix=""
-            policy={{ privacy_policy: privacy, ...responses }}
-            onChange={setResponses}
-          />
-        </fieldset>
-        {create.error && <div className="inline-error" role="alert">{create.error.message}</div>}
-        <div className="form-actions"><Button type="submit" disabled={!canSubmit || create.isPending}>{create.isPending ? "Saving draft…" : "Save rule draft"}</Button></div>
-      </form>
+              Review in Activity
+            </a>
+          </Button>
+        )}
+        <Button variant="ghost" onClick={onDismiss}>Dismiss</Button>
+      </div>
+    </div>
+  )
+}
+
+/** Hidden while the builder is open, which already shows the way forward. */
+function NoRulesNote({ builderOpen, connected }: { builderOpen: boolean; connected: ConnectedAccount[] }) {
+  if (builderOpen) return null
+  return (
+    <section className="empty-note" aria-labelledby="no-rules-title">
+      <GhostMark className="empty-ghost" />
+      <div>
+        <h2 id="no-rules-title">No rules yet</h2>
+        <p>
+          {connected.length === 0
+            ? "Connect a Google account in Settings, then create your first rule here."
+            : "Create a rule, preview its effects, then start syncing."}
+        </p>
+      </div>
     </section>
   )
 }
 
-function calendarStatus(
-  query: { isPending: boolean; isFetching: boolean; error: Error | null },
-  available: number,
-  noun: string,
-): string | null {
-  if (query.error) return `Calendars could not load: ${query.error.message}`
-  if (query.isPending && query.isFetching) return "Loading calendars…"
-  if (!query.isPending && available === 0) return `This account has no ${noun} to choose.`
-  return null
+type RuleRowProps = {
+  rule: RuleSummary
+  endpoints: RuleEndpoints
+  removing: boolean
+  commands: ReturnType<typeof useRuleCommands>
+  rows: RefObject<Map<string, HTMLLIElement>>
+  now: number
+  onViewChange: ViewChange
+  onOpenRule: OpenRule
+}
+
+function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange, onOpenRule }: RuleRowProps) {
+  const { source, destination, disconnected } = endpoints
+  const stopped = rule.state === "degraded" || disconnected.length > 0
+  const work = ruleWork({
+    pending: commands.pending[rule.id],
+    pendingSince: commands.pendingSince[rule.id],
+    running: rule.running,
+    removing,
+  })
+  const pending = busyCommand(commands.pending[rule.id], work)
+  const state = removing ? "removing" : rule.state
+  const headingId = `rule-${rule.id}-name`
+  const previewId = `rule-${rule.id}-preview`
+  const run = (command: Parameters<typeof commands.run>[1]) =>
+    void commands.run(rule.id, command, destination.name, () => rows.current.get(rule.id) ?? null)
+  return (
+    <li
+      className="rule-row"
+      tabIndex={-1}
+      aria-labelledby={headingId}
+      aria-busy={work ? true : undefined}
+      ref={(element) => {
+        if (element) rows.current.set(rule.id, element)
+        else rows.current.delete(rule.id)
+      }}
+    >
+      <div className="rule-main">
+        <RuleSummaryLine rule={rule} endpoints={endpoints} headingId={headingId} now={now} />
+        <div className="rule-actions">
+          <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} />
+          <RuleNextAction
+            state={state}
+            disconnected={disconnected.length > 0}
+            pending={pending}
+            describedBy={state === "dry_run_validated" ? `${headingId} ${previewId}` : headingId}
+            onRun={run}
+            onViewChange={onViewChange}
+          />
+          <Button variant="ghost" asChild>
+            <a
+              href={appPathForRule(rule.id)}
+              onClick={(event) => {
+                if (!isPlainLeftClick(event)) return
+                event.preventDefault()
+                onOpenRule(rule.id)
+              }}
+              aria-label={`Details for ${source.name} to ${destination.name}`}
+            >
+              Details <ArrowRight aria-hidden="true" />
+            </a>
+          </Button>
+          <RuleCommandMenu
+            state={state}
+            disconnected={disconnected.length > 0}
+            pending={pending}
+            source={source.name}
+            destination={destination.name}
+            reserveSpace
+            onRun={run}
+          />
+        </div>
+      </div>
+      <RuleNotes
+        rule={rule}
+        endpoints={endpoints}
+        state={state}
+        stopped={stopped}
+        work={work}
+        feedback={commands.feedback[rule.id]}
+        previewId={previewId}
+      />
+    </li>
+  )
+}
+
+function RuleSummaryLine({
+  rule,
+  endpoints,
+  headingId,
+  now,
+}: {
+  rule: RuleSummary
+  endpoints: RuleEndpoints
+  headingId: string
+  now: number
+}) {
+  const { source, destination } = endpoints
+  return (
+    <div className="rule-summary">
+      <h2 className="sr-only" id={headingId}>{source.name} to {destination.name}</h2>
+      <div className="rule-direction">
+        <RuleEndpoint
+          account={source.account}
+          endpoint={rule.source}
+          calendars={source.calendars}
+          role="Source"
+        />
+        <ArrowRight aria-hidden="true" />
+        <RuleEndpoint
+          account={destination.account}
+          endpoint={rule.destination}
+          calendars={destination.calendars}
+          role="Destination"
+        />
+      </div>
+      <p className="rule-policy">
+        <span>
+          {rule.privacy_policy === "busy_only" ? "Busy only" : "Copy details"}
+          {rule.sync_all_day_events ? ", including all-day events" : ", timed events only"}
+        </span>
+        <span className="rule-run" data-failed={rule.last_sync?.succeeded === false || undefined}>
+          {rule.last_sync?.succeeded === false && <ShieldAlert aria-hidden="true" />}
+          {lastRunLabel(rule.last_sync, now)}
+        </span>
+      </p>
+    </div>
+  )
+}
+
+function RuleNotes({
+  rule,
+  endpoints,
+  state,
+  stopped,
+  work,
+  feedback,
+  previewId,
+}: {
+  rule: RuleSummary
+  endpoints: RuleEndpoints
+  state: string
+  stopped: boolean
+  work: RuleWork | null
+  feedback: RuleFeedback | undefined
+  previewId: string
+}) {
+  const { source, destination, disconnected } = endpoints
+  return (
+    <>
+      {rule.reprojection_required && ["draft", "paused", "degraded"].includes(rule.state) && (
+        <p className="rule-note">
+          Preview required: the policy changed, so existing projections are rewritten on the
+          first run after you start syncing again.
+        </p>
+      )}
+      {stopped && (
+        <p className="rule-note">
+          {disconnected.length > 0
+            ? `Synchronization stopped: ${disconnected.map((account) => account.email).join(" and ")} must be reauthorized before this rule can run.`
+            : "Synchronization stopped to protect your calendars. Nothing was lost; preview the rule to restart it."}
+        </p>
+      )}
+      {state === "dry_run_validated" && (
+        <PreviewReadyNote id={previewId} preview={rule.latest_preview} destination={destination.name} />
+      )}
+      {work ? (
+        <RuleWorkNote work={work} source={source.name} destination={destination.name} />
+      ) : (
+        <RuleFeedbackNote feedback={feedback} />
+      )}
+    </>
+  )
 }
