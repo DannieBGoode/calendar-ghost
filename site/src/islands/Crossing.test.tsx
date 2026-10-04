@@ -10,7 +10,7 @@ describe("Crossing", () => {
     const container = document.createElement("div")
     document.body.append(container)
     const root = createRoot(container)
-    await act(async () => root.render(<Crossing m={{ crossing: en.crossing, demo: en.demo }} />))
+    await act(async () => root.render(<Crossing m={{ crossing: en.crossing, demo: en.demo, ghost: en.ghost, motion: en.motion }} />))
 
     const [busy, details] = Array.from(container.querySelectorAll("button"))
     expect(busy?.getAttribute("aria-pressed")).toBe("true")

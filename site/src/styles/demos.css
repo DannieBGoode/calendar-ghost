@@ -1,4 +1,4 @@
-/* Shared demo pieces: the week frame, event cards, and the ghost's bob. */
+/* Shared demo pieces: the week frame, event cards, and the controls under each demo. */
 .week { position: relative; height: 100%; }
 .week-days {
   position: absolute; inset: 0 0 auto 0; height: 36px; display: grid;
@@ -8,28 +8,45 @@
 .week-days span { padding: 0.55rem 0.65rem; }
 .week-columns { position: absolute; inset: 36px 0 0 0; display: grid; grid-template-columns: repeat(5, 1fr); }
 .week-columns span + span { border-left: 1px dashed var(--border); }
+/* An event is tinted with its calendar's color and outlined, all the way round, in a deeper shade
+   of it. */
 .cal-event {
+  --event-edge: var(--border);
   position: absolute; overflow: hidden; border-radius: 6px; padding: 4px 7px;
   font-size: 0.6875rem; font-weight: 600; line-height: 1.3; color: var(--foreground);
-  border-left: 3px solid transparent;
-  transition: background 450ms var(--ease-out), border-color 450ms var(--ease-out),
-    opacity 450ms var(--ease-out), transform 450ms cubic-bezier(0.3, 1.4, 0.5, 1);
+  border: 1px solid var(--event-edge);
+  transition: opacity 450ms var(--ease-out), transform 450ms var(--ease-out-quart);
 }
 .cal-event > span, .cal-event > small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Full foreground color (not a faded opacity) so detail text reaches the same contrast ratio as
    the title in every event color, in both themes. */
-.cal-event > small { font-weight: 500; font-size: 0.625rem; }
+.cal-event > small { font-weight: 500; font-size: 0.6875rem; }
 .cal-event.is-short > small { display: none; }
-.cal-event.is-work { background: var(--event-work); border-left-color: var(--primary); }
-.cal-event.is-personal { background: var(--event-personal); border-left-color: var(--event-personal-edge); }
-.cal-event.is-family { background: var(--event-family); border-left-color: var(--event-family-edge); }
-.cal-event.is-busy { background: var(--event-busy); border: 1px dashed var(--primary); }
-@keyframes ghost-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-.ghost-bob { animation: ghost-bob 1.5s ease-in-out infinite; }
+.cal-event.is-work { --event-edge: color-mix(in oklch, var(--primary), transparent 55%); background: var(--event-work); }
+.cal-event.is-personal { --event-edge: var(--event-personal-edge); background: var(--event-personal); }
+.cal-event.is-family { --event-edge: var(--event-family-edge); background: var(--event-family); }
+.cal-event.is-busy { --event-edge: var(--primary); background: var(--event-busy); border-style: dashed; }
+/* An event that has just turned into Busy settles in place: its new look appears at once, and
+   a small pop (transform and opacity only) marks the change. */
+.cal-event.is-busy.is-settled { animation: event-settle 450ms var(--ease-out-quart); }
+@keyframes event-settle { from { opacity: 0.55; transform: scale(0.94); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
-  .ghost-bob { animation: none; }
   .cal-event { transition: none; }
+  .cal-event.is-busy.is-settled { animation: none; }
 }
+
+/* Under each demo: its hint, and the pause control for its loop. */
+.demo-foot {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.25rem 1rem;
+  margin-top: 0.5rem; min-height: 2.75rem;
+}
+.motion-toggle {
+  display: inline-flex; align-items: center; gap: 0.45rem; min-height: 2.75rem; padding: 0 0.85rem;
+  border: 0; border-radius: var(--radius); background: transparent; color: var(--muted-foreground);
+  font: 600 0.8125rem/1 var(--font-sans); cursor: pointer;
+}
+.motion-toggle:hover { background: var(--muted); color: var(--foreground); }
+.motion-toggle svg { width: 0.9rem; height: 0.9rem; fill: currentColor; }
 
 /* The Wide Reveal. The top layer shows Sam's view up to --split; below it, what work sees. */
 .reveal { margin: 2.5rem 0 0; }
@@ -50,15 +67,22 @@
 }
 .reveal-tag-you { left: 0.6rem; }
 .reveal-tag-work { right: 0.6rem; }
+/* A rail is as wide as the frame, so translating it by --split puts its left edge on the split. */
+.reveal-rail { position: absolute; inset: 0; z-index: 3; pointer-events: none; transform: translateX(var(--split)); }
+.reveal-rail + .reveal-rail { z-index: 4; }
 .reveal-divider {
-  position: absolute; top: 0; bottom: 0; left: var(--split); width: 2px; margin-left: -1px; z-index: 3;
-  background: var(--brand-line); box-shadow: 0 0 18px color-mix(in oklch, var(--primary), transparent 40%);
+  position: absolute; top: 0; bottom: 0; left: -1px; width: 2px;
+  background: var(--brand-line);
 }
-.reveal-handle {
-  position: absolute; top: 50%; left: var(--split); width: 56px; height: 56px; margin: -28px 0 0 -28px;
-  z-index: 4; pointer-events: none;
+.reveal-handle { position: absolute; top: 50%; left: 0; width: 104px; height: 104px; margin: -56px 0 0 -52px; }
+.reveal-ghost { --ghost-cutout: var(--background); }
+/* Two small chevrons beside the ghost say it moves sideways. */
+.reveal-handle::before, .reveal-handle::after {
+  content: ""; position: absolute; top: 54%; width: 7px; height: 7px;
+  border: solid var(--brand-line); border-width: 0 0 2px 2px; opacity: 0.85;
 }
-.reveal-handle svg { width: 100%; height: 100%; overflow: visible; }
+.reveal-handle::before { left: 8px; transform: rotate(45deg); }
+.reveal-handle::after { right: 8px; transform: rotate(-135deg); }
 /* The real control: a transparent range input over the whole frame, for mouse, touch, and keys. */
 .reveal-range {
   position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%; margin: 0;
@@ -67,7 +91,8 @@
 .reveal-range::-webkit-slider-thumb { -webkit-appearance: none; width: 56px; height: 416px; }
 .reveal-range::-moz-range-thumb { width: 56px; height: 416px; border: 0; }
 .reveal-frame:has(.reveal-range:focus-visible) { outline: 2px solid var(--ring); outline-offset: 3px; }
-.reveal-hint { text-align: center; font-size: 0.8125rem; color: var(--muted-foreground); margin-top: 0.6rem; }
+.reveal .demo-foot { justify-content: space-between; }
+.reveal-hint { margin: 0 0 0 0.25rem; font-size: 0.8125rem; color: var(--muted-foreground); }
 
 /* The Haunted Week. */
 .haunt { margin: 2rem 0 0; }
@@ -78,26 +103,31 @@
 .haunt-frame .week { height: 360px; }
 .haunt .cal-event.is-arriving { opacity: 0; transform: translateX(-14px); }
 .haunt .cal-event.is-fading { opacity: 0; }
+/* The track is the frame's size, so a translate of (x%, y%) is that share of the frame. */
+.haunt-track {
+  position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  transform: translate(var(--haunt-x, 0%), var(--haunt-y, 50%));
+}
 .haunt-ghost {
-  position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; z-index: 3;
-  filter: drop-shadow(0 0 14px color-mix(in oklch, var(--primary), transparent 50%));
+  position: absolute; left: 0; top: 0; width: 84px; height: 84px; margin: -46px 0 0 -42px;
   transition: opacity 300ms var(--ease-out);
 }
-.haunt-ghost svg { width: 100%; height: 100%; }
+.haunt-ghost .ghost { --ghost-cutout: var(--surface); }
 .haunt-label { position: absolute; right: 0.7rem; bottom: 0.5rem; font-size: 0.75rem; color: var(--muted-foreground); }
 @media (max-width: 639px) { .haunt-frame .week { width: calc(100% * 5 / 3); } }
 @media (prefers-reduced-motion: reduce) {
   .haunt-ghost { transition: none; }
 }
 
-/* The Crossing: a 7-second loop. Details that do not cross over fade out with the event's other
-   information as it travels; nothing falls. */
-.crossing { display: grid; gap: 1.5rem; }
+/* The Crossing: a 9-second loop. The ghost lifts the event, carries it across, and sets it down;
+   details that do not cross over fade out on the way. Then it says something about it. */
+.crossing { --cross-x: 138.1%; display: grid; gap: 1.5rem; min-width: 0; }
 .crossing-switch {
   display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
 }
 .crossing-switch button {
-  all: unset; cursor: pointer; padding: 0.4rem 0.9rem; border-radius: 999px;
+  all: unset; box-sizing: border-box; display: inline-flex; align-items: center; min-height: 2.75rem;
+  cursor: pointer; padding: 0 1rem; border-radius: 999px;
   font-size: 0.875rem; font-weight: 600; color: var(--muted-foreground);
 }
 .crossing-switch button[aria-pressed="true"] { background: var(--muted); color: var(--foreground); }
@@ -114,86 +144,91 @@
   font-size: 0.75rem; font-weight: 600; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border);
 }
 .crossing-row {
-  height: 60px; padding: 3px 8px; font-size: 0.625rem; color: var(--muted-foreground);
+  height: 60px; padding: 3px 8px; font-size: 0.6875rem; color: var(--muted-foreground);
   border-bottom: 1px dashed var(--border);
 }
 .crossing-original, .crossing-existing { left: 44px; right: 8px; height: 54px; }
 .crossing-original { top: 98px; }
-.crossing-existing { top: 38px; }
+.crossing-existing { top: 158px; }
 .crossing-traveler {
   position: absolute; left: 0; top: 0; width: 42%; height: 100%; pointer-events: none;
-  animation: crossing-move 7s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  animation: crossing-move 9s cubic-bezier(0.45, 0, 0.25, 1) infinite;
 }
 .crossing-card {
+  --event-edge: var(--event-personal-edge);
   left: 44px; right: 8px; top: 98px; height: 54px;
-  background: var(--event-personal); border-left-color: var(--event-personal-edge);
-  animation: crossing-tint 7s infinite;
+  border: 0; box-shadow: inset 0 0 0 1px var(--event-personal-edge);
+  background: var(--event-personal);
 }
-.crossing-busy { position: absolute; left: 7px; top: 4px; opacity: 0; animation: crossing-busy 7s infinite; }
+/* The Busy look lies over the card and fades in as it crosses, so only opacity animates. Its
+   edge is an inset shadow because the card clips anything outside its padding box. */
+.crossing-card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--primary);
+  background: linear-gradient(var(--event-busy), var(--event-busy)), var(--surface);
+  opacity: 0; animation: crossing-tint 9s infinite;
+}
+.crossing-card > :not(.crossing-busy) { position: relative; }
+.crossing-busy { position: absolute; left: 7px; top: 4px; opacity: 0; animation: crossing-busy 9s infinite; }
 /* Override the shared .cal-event > span ellipsis rule: the chips line wraps instead of
    truncating, so a faded chip never leaves a stray "…" behind. */
 .crossing-card > .crossing-chips { white-space: normal; text-overflow: clip; }
 .crossing-chips > small {
   display: inline-block; margin: 3px 3px 0 0; padding: 1px 5px; border-radius: 4px;
-  background: color-mix(in oklch, var(--background), transparent 30%); font-size: 0.625rem; font-weight: 500;
+  background: color-mix(in oklch, var(--background), transparent 30%); font-size: 0.6875rem; font-weight: 500;
 }
-.crossing-fades { animation: crossing-fade 7s infinite; }
-.crossing-carrier { position: absolute; left: 62%; top: 52px; width: 46px; height: 46px; animation: crossing-carry 7s infinite; }
-.crossing-carrier svg { width: 100%; height: 100%; }
+.crossing-fades { animation: crossing-fade 9s infinite; }
+/* The ghost holds the card by its top edge, hem over the card. */
+.crossing-traveler .crossing-carrier { position: absolute; right: -4px; top: 30px; width: 88px; height: 88px; animation: crossing-carry 9s infinite; }
+.crossing-carrier .ghost { --ghost-cutout: var(--surface); --ghost-size: 100%; }
+.crossing-bubble { top: 4%; font-size: 0.8125rem; animation: crossing-bubble 9s infinite; }
+.crossing-traveler .ghost[data-sequence] .ghost-face-first { animation: crossing-face-first 9s infinite; }
+.crossing-traveler .ghost[data-sequence] .ghost-face-then { animation: crossing-face-then 9s infinite; }
 .crossing[data-playing="false"] .crossing-traveler,
-.crossing[data-playing="false"] .crossing-traveler * { animation-play-state: paused; }
+.crossing[data-playing="false"] .crossing-traveler *,
+.crossing[data-playing="false"] .crossing-traveler *::before { animation-play-state: paused; }
 @keyframes crossing-move {
-  0%, 6% { transform: translate(0, 0); opacity: 0; }
-  12% { transform: translate(0, 0); opacity: 1; }
-  22% { transform: translate(0, -34px); }
-  62% { transform: translate(138.1%, -34px); }
-  72%, 92% { transform: translate(138.1%, 0); opacity: 1; }
-  100% { transform: translate(138.1%, 0); opacity: 0; }
+  0%, 5% { transform: translate(0, 0); opacity: 0; }
+  10% { transform: translate(0, 0); opacity: 1; }
+  18% { transform: translate(0, -34px); }
+  50% { transform: translate(var(--cross-x), -34px); }
+  58%, 92% { transform: translate(var(--cross-x), 0); opacity: 1; }
+  100% { transform: translate(var(--cross-x), 0); opacity: 0; }
 }
 @keyframes crossing-carry {
-  0%, 8% { opacity: 0; transform: translateY(-10px); }
-  14%, 72% { opacity: 1; transform: translateY(0); }
-  84%, 100% { opacity: 0; transform: translate(20px, -40px); }
+  0%, 5% { opacity: 0; transform: translateY(-10px); }
+  11%, 84% { opacity: 1; transform: translate(0, 0); }
+  92%, 100% { opacity: 0; transform: translate(16px, -36px); }
 }
-@keyframes crossing-tint {
-  0%, 52% { background: var(--event-personal); border-left-color: var(--event-personal-edge); }
-  64%, 100% { background: var(--event-busy); border-left-color: var(--primary); }
+@keyframes crossing-face-first { 0%, 57% { opacity: 1; } 60%, 100% { opacity: 0; } }
+@keyframes crossing-face-then { 0%, 57% { opacity: 0; } 60%, 100% { opacity: 1; } }
+@keyframes crossing-bubble {
+  0%, 61% { opacity: 0; transform: translateY(4px); }
+  65%, 84% { opacity: 1; transform: translateY(0); }
+  88%, 100% { opacity: 0; transform: translateY(0); }
 }
-@keyframes crossing-fade { 0%, 40% { opacity: 1; } 58%, 100% { opacity: 0; } }
-@keyframes crossing-busy { 0%, 56% { opacity: 0; } 64%, 100% { opacity: 1; } }
+@keyframes crossing-tint { 0%, 38% { opacity: 0; } 48%, 100% { opacity: 1; } }
+@keyframes crossing-fade { 0%, 26% { opacity: 1; } 42%, 100% { opacity: 0; } }
+@keyframes crossing-busy { 0%, 42% { opacity: 0; } 48%, 100% { opacity: 1; } }
 @media (max-width: 639px) {
-  .crossing-cal { width: 47%; }
-  .crossing-traveler { width: 47%; }
-  @keyframes crossing-move {
-    0%, 6% { transform: translate(0, 0); opacity: 0; }
-    12% { transform: translate(0, 0); opacity: 1; }
-    22% { transform: translate(0, -34px); }
-    62% { transform: translate(112.8%, -34px); }
-    72%, 92% { transform: translate(112.8%, 0); opacity: 1; }
-    100% { transform: translate(112.8%, 0); opacity: 0; }
-  }
+  .crossing { --cross-x: 112.8%; }
+  .crossing-cal, .crossing-traveler { width: 47%; }
+  .crossing-traveler .crossing-carrier { top: 42px; width: 68px; height: 68px; }
 }
-/* Reduced motion: show where the event lands, with what crossed over. */
+/* Landed: where the event ends up, with what crossed over and the ghost pleased about it. This
+   is the state under reduced motion, and before hydration (including without JavaScript), when
+   the loop would otherwise sit paused at its invisible first frame. */
 @media (prefers-reduced-motion: reduce) {
-  .crossing-traveler, .crossing-traveler * { animation: none !important; }
-  .crossing-traveler { transform: translate(138.1%, 0); }
-  .crossing-card { background: var(--event-busy); border-left-color: var(--primary); }
+  .crossing-traveler, .crossing-traveler *, .crossing-traveler *::before { animation: none !important; }
+  .crossing-traveler { transform: translate(var(--cross-x), 0); }
+  .crossing-card::before { opacity: 1; }
   .crossing-fades { opacity: 0; }
   .crossing-busy { opacity: 1; }
-  .crossing-carrier { opacity: 0; }
 }
-@media (prefers-reduced-motion: reduce) and (max-width: 639px) {
-  .crossing-traveler { transform: translate(112.8%, 0); }
-}
-/* Before hydration (including no JavaScript), the loop is paused at its 0% frame, where the
-   traveler is invisible. Show the same landed state as reduced motion until the island hydrates. */
 .crossing[data-hydrated="false"] .crossing-traveler,
-.crossing[data-hydrated="false"] .crossing-traveler * { animation: none !important; }
-.crossing[data-hydrated="false"] .crossing-traveler { transform: translate(138.1%, 0); }
-.crossing[data-hydrated="false"] .crossing-card { background: var(--event-busy); border-left-color: var(--primary); }
+.crossing[data-hydrated="false"] .crossing-traveler *,
+.crossing[data-hydrated="false"] .crossing-traveler *::before { animation: none !important; }
+.crossing[data-hydrated="false"] .crossing-traveler { transform: translate(var(--cross-x), 0); }
+.crossing[data-hydrated="false"] .crossing-card::before { opacity: 1; }
 .crossing[data-hydrated="false"] .crossing-fades { opacity: 0; }
 .crossing[data-hydrated="false"] .crossing-busy { opacity: 1; }
-.crossing[data-hydrated="false"] .crossing-carrier { opacity: 0; }
-@media (max-width: 639px) {
-  .crossing[data-hydrated="false"] .crossing-traveler { transform: translate(112.8%, 0); }
-}

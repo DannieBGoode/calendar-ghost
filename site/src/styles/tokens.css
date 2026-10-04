@@ -24,9 +24,14 @@
   --event-family-edge: oklch(0.62 0.12 75);
   --event-busy: oklch(0.93 0.035 280 / 0.85);
   --reveal-you: oklch(0.965 0.02 200);
+  --success-soft: oklch(0.94 0.04 155);
+  --success-foreground: oklch(0.31 0.09 155);
+  --success-surface: oklch(0.975 0.018 155);
+  --success-border: oklch(0.85 0.035 155);
   --radius: 0.625rem;
   --panel-radius: 0.875rem;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -51,5 +56,9 @@
     --event-family-edge: oklch(0.80 0.12 80);
     --event-busy: oklch(0.42 0.08 278 / 0.55);
     --reveal-you: oklch(0.22 0.03 200);
+    --success-soft: oklch(0.27 0.045 155);
+    --success-foreground: oklch(0.79 0.11 155);
+    --success-surface: oklch(0.22 0.025 155);
+    --success-border: oklch(0.40 0.055 155);
   }
 }

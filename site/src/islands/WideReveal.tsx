@@ -4,8 +4,9 @@ import { SAM_WEEK } from "../demo/week"
 import type { Messages } from "../i18n"
 import { format } from "../i18n/format"
 import { EventCard } from "./EventCard"
-import { GhostMark } from "./GhostMark"
+import { Ghost, type GhostFace } from "./Ghost"
 import { useAnimationFrame, useOnScreen, usePageVisible, usePointerEyes, useReducedMotion } from "./hooks"
+import { MotionToggle } from "./MotionToggle"
 import { REVEAL_REST, clampPercent, shouldAnimate, sweepPercent, sweepTimeFor } from "./motion"
 import { WeekGrid } from "./WeekGrid"
 
@@ -17,18 +18,36 @@ function splitStyle(percent: number): string {
   return `${Math.round(percent * 100) / 100}%`
 }
 
+/** How long the ghost looks startled when a visitor takes hold of it, before it enjoys the ride. */
+const STARTLE_MS = 450
+
+/** The handle's face: watching while it sweeps, startled when grabbed, then happy to be dragged. */
+function useHandleFace(held: boolean): GhostFace {
+  const [startled, setStartled] = useState(false)
+  useEffect(() => {
+    if (!held) return
+    setStartled(true)
+    const timer = window.setTimeout(() => setStartled(false), STARTLE_MS)
+    return () => window.clearTimeout(timer)
+  }, [held])
+  if (!held) return "neutral"
+  return startled ? "surprised" : "happy"
+}
+
 /** The hero: Sam's week as Sam sees it, revealed over what work sees, with the ghost as handle. */
-export function WideReveal({ m }: { m: Messages["demo"] }) {
+export function WideReveal({ m, motion }: { m: Messages["demo"]; motion: Messages["motion"] }) {
   const frame = useRef<HTMLDivElement>(null)
   const handle = useRef<HTMLDivElement>(null)
   const [held, setHeld] = useState<number | null>(null)
   const [auto, setAuto] = useState(REVEAL_REST)
   const [phase, setPhase] = useState(() => sweepTimeFor(REVEAL_REST))
+  const [paused, setPaused] = useState(false)
   const reducedMotion = useReducedMotion()
   const onScreen = useOnScreen(frame)
   const pageVisible = usePageVisible()
   const eyes = usePointerEyes(handle, onScreen)
-  const animating = shouldAnimate({ onScreen, pageVisible, reducedMotion, held: held !== null })
+  const animating = shouldAnimate({ onScreen, pageVisible, reducedMotion, held: held !== null || paused })
+  const face = useHandleFace(held !== null)
   useAnimationFrame((elapsed) => setAuto(sweepPercent(phase + elapsed)), animating)
 
   // When the loop stops (scrolled away, tab hidden, reduced motion), remember the phase at the
@@ -83,12 +102,23 @@ export function WideReveal({ m }: { m: Messages["demo"] }) {
 
   return (
     <figure className="reveal">
-      <div ref={frame} className="reveal-frame" style={{ "--split": splitStyle(splitValue) } as CSSProperties}>
+      <div
+        ref={frame}
+        className="reveal-frame"
+        data-playing={paused ? "false" : "true"}
+        style={{ "--split": splitStyle(splitValue) } as CSSProperties}
+      >
         {workLayer}
         {youLayer}
-        <div className="reveal-divider" aria-hidden="true" />
-        <div ref={handle} className="reveal-handle" aria-hidden="true">
-          <GhostMark className="ghost-bob" eyes={eyes} />
+        {/* Both rails span the frame and slide by --split, so the sweep moves them with
+            transform alone. */}
+        <div className="reveal-rail" aria-hidden="true">
+          <div className="reveal-divider" />
+        </div>
+        <div className="reveal-rail" aria-hidden="true">
+          <div ref={handle} className="reveal-handle" data-face={face}>
+            <Ghost face={face} look={eyes} alive="loop" size={104} className="reveal-ghost" />
+          </div>
         </div>
         <input
           className="reveal-range"
@@ -111,9 +141,12 @@ export function WideReveal({ m }: { m: Messages["demo"] }) {
         />
       </div>
       <figcaption className="sr-only">{m.revealSummary}</figcaption>
-      <p className="reveal-hint" aria-hidden="true">
-        {m.hint}
-      </p>
+      <div className="demo-foot">
+        <p className="reveal-hint" aria-hidden="true">
+          {m.hint}
+        </p>
+        <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={motion} />
+      </div>
     </figure>
   )
 }

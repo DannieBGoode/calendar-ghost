@@ -10,18 +10,20 @@ interface Props {
 const { m } = Astro.props
 ---
 
-<section class="hero section">
+<section class="hero section" aria-labelledby="hero-title">
   <div class="container hero-copy">
     <p class="chip">{m.hero.chip}</p>
-    <h1>{m.hero.title}</h1>
+    <h1 id="hero-title">{m.hero.title}</h1>
     <p class="lead">{m.hero.sub}</p>
     <div class="ctas">
       <a class="btn btn-primary" href="#self-host">{m.hero.primary}</a>
-      <a class="btn" href={REPO_URL}><span aria-hidden="true">★</span> {m.hero.secondary}</a>
+      <a class="btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+        <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
+      </a>
     </div>
   </div>
   <div class="container">
-    <WideReveal client:load m={m.demo} />
+    <WideReveal client:load m={m.demo} motion={m.motion} />
   </div>
 </section>
 

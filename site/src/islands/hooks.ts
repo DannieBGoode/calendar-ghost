@@ -13,6 +13,13 @@ function useMediaQuery(query: string): boolean {
   return matches
 }
 
+/** False on the server and in the first client render, true once the island has hydrated. */
+export function useHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(false)
+  useEffect(() => setHydrated(true), [])
+  return hydrated
+}
+
 export function useReducedMotion(): boolean {
   return useMediaQuery("(prefers-reduced-motion: reduce)")
 }

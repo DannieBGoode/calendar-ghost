@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { crossingFields, type CrossingMode } from "../demo/crossing"
 import type { Messages } from "../i18n"
-import { GhostMark } from "./GhostMark"
-import { useOnScreen, usePageVisible, usePointerEyes } from "./hooks"
+import { Ghost, SpeechBubble } from "./Ghost"
+import { useHydrated, useOnScreen, usePageVisible } from "./hooks"
+import { MotionToggle } from "./MotionToggle"
 
 const HOURS = ["14:00", "15:00", "16:00", "17:00"]
 const MODES: readonly CrossingMode[] = ["busy", "details"]
@@ -12,17 +13,15 @@ function fieldClass(stays: boolean): string {
 }
 
 /** One event carried by the ghost from Personal to Work; the switch picks what crosses over. */
-export function Crossing({ m }: { m: Pick<Messages, "crossing" | "demo"> }) {
+export function Crossing({ m }: { m: Pick<Messages, "crossing" | "demo" | "ghost" | "motion"> }) {
   const stage = useRef<HTMLDivElement>(null)
-  const carrier = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<CrossingMode>("busy")
+  const [paused, setPaused] = useState(false)
   // Without JavaScript (or before hydration), the loop is paused at its 0% frame, where the
   // traveler is invisible. Show the landed state until the island has taken over.
-  const [hydrated, setHydrated] = useState(false)
-  useEffect(() => setHydrated(true), [])
+  const hydrated = useHydrated()
   const onScreen = useOnScreen(stage)
   const pageVisible = usePageVisible()
-  const eyes = usePointerEyes(carrier, onScreen)
   const fields = crossingFields(mode)
   const dentist = m.demo.events.dentist
 
@@ -30,7 +29,7 @@ export function Crossing({ m }: { m: Pick<Messages, "crossing" | "demo"> }) {
     <div
       className="crossing"
       data-mode={mode}
-      data-playing={onScreen && pageVisible ? "true" : "false"}
+      data-playing={onScreen && pageVisible && !paused ? "true" : "false"}
       data-hydrated={hydrated ? "true" : "false"}
     >
       <div className="crossing-controls">
@@ -75,10 +74,18 @@ export function Crossing({ m }: { m: Pick<Messages, "crossing" | "demo"> }) {
               <small className={fieldClass(fields.link)}>{m.crossing.link}</small>
             </span>
           </div>
-          <div ref={carrier} className="crossing-carrier">
-            <GhostMark className="ghost-bob" eyes={eyes} />
+          {/* Proud while it carries the event; on landing, happy with Busy only and a wink with
+              details. */}
+          <div className="crossing-carrier ghost-stage">
+            <Ghost face="proud" then={mode === "busy" ? "happy" : "wink"} alive="loop" />
+            <SpeechBubble side="left" className="crossing-bubble">
+              {mode === "busy" ? m.ghost.crossingBusy : m.ghost.crossingDetails}
+            </SpeechBubble>
           </div>
         </div>
+      </div>
+      <div className="demo-foot">
+        <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={m.motion} />
       </div>
       <p className="sr-only">{m.crossing.summary}</p>
     </div>
