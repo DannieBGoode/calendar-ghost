@@ -3,7 +3,7 @@
 *Your busy time, everywhere it needs to be.* Self-hosted, single-installation, one-way sync between Google calendars.
 
 A self-hosted, source-authoritative Google Calendar synchronizer. Define a directional rule from
-one calendar to another—including calendars owned by different Google identities—and keep a
+one calendar to another, including calendars owned by different Google identities, and keep a
 privacy-controlled projection synchronized without copying invitations or depending on a hosted
 coordinator.
 
@@ -100,6 +100,7 @@ machine and creates only the destination representation selected by each rule.
 | Loop prevention | Private managed-origin metadata prevents projections from becoming sources |
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Authenticated Activity view, deduplication, optional SMTP, and optional webhook delivery |
+| Monitoring | Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, authorized with Integration Tokens issued in Settings |
 | Access | One local administrator password and encrypted Google OAuth credentials |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
@@ -252,6 +253,34 @@ Stop the installation without deleting its named data volume:
 docker compose down
 ```
 
+### 4. Connect monitors and AI agents (optional)
+
+Uptime Kuma, homelab dashboards such as Homepage, and AI agents such as Claude Code or Codex can
+read whether synchronization is healthy. Open **Settings → Integrations**, choose **Show**, name a
+token for the tool that will use it, and choose **Issue token**. Copy the token: it is shown once.
+A token only reads status; it can never change a rule or a calendar, and you can revoke it at any
+time.
+
+Read the status with any HTTP client:
+
+```sh
+curl -H "Authorization: Bearer $CALENDAR_GHOST_TOKEN" http://localhost:8000/api/v1/status
+```
+
+The answer names one overall `status` (`healthy`, `waiting`, `review`, `stopped`, `stalled`,
+`paused`, or `setup`), a `needs_attention` flag for alerting, each current problem, and every rule.
+AI agents use the MCP server at `/mcp` instead, for example:
+
+```sh
+claude mcp add --transport http calendar-ghost http://localhost:8000/mcp \
+  --header "Authorization: Bearer ${CALENDAR_GHOST_TOKEN}"
+```
+
+Then ask the agent "Is my calendar sync healthy?". Codex and apps such as Claude Desktop connect too;
+Settings shows ready-made examples for each tool, filled in with this installation's address. The
+[self-hosting guide](docs/self-hosting.md#6-connect-monitors-and-agents) explains every field, each
+status, and setup for Uptime Kuma, Homepage, Claude Code, Codex, and Claude Desktop.
+
 ## How synchronization works
 
 The first run reads source events ending no earlier than 30 days before the run, with no future
@@ -299,6 +328,10 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
 - Google writes use `sendUpdates=none`, and projections contain no attendees or invitation data.
 - The Web UI and operational API require the local administrator session. `/health` remains public
   and intentionally minimal.
+- Integration Tokens read Installation Status only, through `GET /api/v1/status` and `/mcp`; every
+  other route refuses them. Only a SHA-256 hash of each token is stored, the token is shown once,
+  and it can be revoked at any time. Status names rules by their calendars and never contains event
+  content, calendar IDs, or account emails ([ADR 0024](docs/adr/0024-integration-tokens-installation-status-and-mcp.md)).
 - There is no mandatory analytics, license server, remote logging, or developer-operated backend.
 
 For deployment hardening, backup expectations, and HTTPS guidance, read
@@ -410,7 +443,7 @@ src/calendar_sync/
   domain/          Provider-independent entities, value objects, policies, and decisions
   application/     Use cases and boundary protocols
   infrastructure/  Google, SQLite, security, scheduling, and notification adapters
-  interfaces/      FastAPI routes and the compiled Web UI
+  interfaces/      FastAPI routes, the MCP server, and the compiled Web UI
   bootstrap/       Explicit dependency composition
 web/               React, TypeScript, Vite, Tailwind CSS, and shadcn-style component source
 tests/             Domain, application, adapter, and public-boundary tests

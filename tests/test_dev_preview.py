@@ -103,12 +103,31 @@ def test_preview_shows_source_changes_with_their_values(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("scenario", "expected"),
     [
-        (Scenario.REVIEW, {"health": "attention", "open_incidents": 1, "blocked_events": 2}),
-        (Scenario.HEALTHY, {"health": "healthy", "open_incidents": 0, "blocked_events": 0}),
+        (
+            Scenario.REVIEW,
+            {
+                "status": "review",
+                "needs_attention": True,
+                "open_incidents": 1,
+                "blocked_events": 2,
+            },
+        ),
+        (
+            Scenario.HEALTHY,
+            {
+                "status": "healthy",
+                "needs_attention": False,
+                "open_incidents": 0,
+                "blocked_events": 0,
+            },
+        ),
         (Scenario.STOPPED, {"open_incidents": 2, "stopped_rules": 2, "blocked_events": 0}),
         (Scenario.WAITING, {"open_incidents": 1, "stopped_rules": 0, "enabled_rules": 3}),
         (Scenario.SEVERAL, {"open_incidents": 3, "stopped_rules": 2, "blocked_events": 2}),
-        (Scenario.PAUSED, {"health": "healthy", "enabled_rules": 0, "sync_rules": 3}),
+        (
+            Scenario.PAUSED,
+            {"status": "paused", "needs_attention": False, "enabled_rules": 0, "sync_rules": 3},
+        ),
         (Scenario.SETUP, {"connected_accounts": 0, "sync_rules": 0}),
     ],
 )

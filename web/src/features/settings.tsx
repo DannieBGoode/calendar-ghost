@@ -12,9 +12,11 @@ import { clearAuthorizationStart, recordAuthorizationStart } from "@/lib/oauth-r
 import type { DarkPalette, ThemePreference } from "@/lib/theme"
 import { useGoogleReturn } from "@/lib/use-google-return"
 import { AccountsSection } from "@/features/settings-accounts"
+import { IntegrationsSection } from "@/features/settings-integrations"
 import { StorageSection } from "@/features/settings-storage"
 
 export { GoogleReturnHelp } from "@/features/settings-google-return"
+export { IntegrationsSection } from "@/features/settings-integrations"
 
 export function SettingsPage() {
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
@@ -55,7 +57,7 @@ function SettingsView({
       <div>
         <h1>Settings</h1>
         <p className="page-intro">
-          Accounts and storage for this installation. Appearance applies to this browser only.
+          Accounts, storage, and integrations for this installation. Appearance applies to this browser only.
         </p>
       </div>
 
@@ -68,6 +70,8 @@ function SettingsView({
       />
 
       <StorageSection />
+
+      <IntegrationsSection />
 
       <AppearanceSection />
     </div>

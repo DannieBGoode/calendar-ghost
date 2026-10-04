@@ -148,7 +148,176 @@ Do not expose the service directly to the public internet. See [Google OAuth red
 LAN host](deployment.md#google-oauth-redirect-uri-on-a-lan-host) for the tunnel and reverse-proxy
 options.
 
-## 6. Back up, upgrade, and recover
+## 6. Connect monitors and agents
+
+Installation Status is the authenticated counterpart to `/health`: it reports which rules are
+running, which are stopped and why, whether the scheduler itself is still running passes, and one
+overall verdict, through `GET /api/v1/status` and an MCP server at `/mcp`. Both require an
+Integration Token, a credential you issue in **Settings → Integrations** for one monitor, dashboard,
+or agent at a time.
+
+A token only reads status, and plain HTTP on this machine or your home network is normal for a
+homelab: anyone on that network could read a token sent to it, and nothing more. Before you use a
+token from outside your home network, put the installation behind HTTPS (see
+[5. Use a LAN host or HTTPS](#5-use-a-lan-host-or-https)), for example with Tailscale Serve or a
+reverse proxy. Settings notes this in the Integrations group only when it is open at an address
+that would carry a token across the internet unencrypted. A reverse proxy configured to log request headers will
+record the token in its own logs the same as it would record a session cookie, so review a proxy's
+logging configuration before relying on it.
+
+To issue a token:
+
+1. Open **Settings → Integrations** and choose **Show**. The group stays collapsed to one line, such
+   as "2 tokens · last used 3 minutes ago", until you open it.
+2. Under **Issue a token**, name the tool that will use it, for example "Uptime Kuma", and choose
+   **Issue token**.
+3. Copy the token, then choose **Done**. It is shown only once. If you lose it, issue a new one and
+   revoke the old one.
+
+Each token row says when it was issued and last used, so you can tell which ones are still in use.
+**Revoke** cuts a token off immediately; revoked tokens move under one disclosure at the end of the
+group. **Examples for monitors and AI assistants**, at the foot of the group, repeats the setups
+below, filled in with the address you opened Settings at.
+
+Check a token from any machine that will use it:
+
+```sh
+curl -H "Authorization: Bearer $CALENDAR_GHOST_TOKEN" https://ghost.example.lan/api/v1/status
+```
+
+A healthy installation answers like this (shortened):
+
+```json
+{
+  "status": "healthy",
+  "needs_attention": false,
+  "summary": "2 rules running.",
+  "last_synced_at": "2026-10-04T09:58:00+00:00",
+  "scheduler": { "configured": true, "last_pass_completed_at": "2026-10-04T09:58:00+00:00", "current_pass_started_at": null },
+  "counts": { "rules": 2, "running": 2, "stopped": 0, "paused": 0, "overdue": 0, "open_incidents": 0, "blocked_events": 0, "disconnected_accounts": 0 },
+  "problems": [],
+  "rules": [{ "id": "…", "name": "Work → Family", "state": "enabled", "last_succeeded_at": "…", "problem": null }],
+  "incidents": []
+}
+```
+
+- `status` is the one verdict, explained in the table below. Alert on `needs_attention`: it is
+  `true` only for `stalled`, `stopped`, and `review`.
+- `summary` is one sentence for a dashboard tile.
+- `problems` lists every current problem, most urgent first, each with a `kind` (`stalled`,
+  `stopped`, `review`, `overdue`, `blocked`, or `waiting`), the rule it concerns, and a summary.
+- `rules` names each rule by its calendars. A calendar with no name, or whose name is an email
+  address or its calendar ID, appears as "Unnamed calendar", so status never reveals one.
+- The answer never contains event content, calendar IDs, account emails, or token data.
+
+Use only the `Authorization` header. A token in the address, such as `?token=`, is refused, so it
+never lands in browser history or access logs.
+
+**Uptime Kuma.** Add an **HTTP(s) - Json Query** monitor:
+
+```text
+URL: https://ghost.example.lan/api/v1/status
+Headers: {"Authorization": "Bearer <token>"}
+Json Query: $.needs_attention
+Expected Value: false
+```
+
+**Homepage.** Add a `customapi` widget to the Calendar Ghost service:
+
+```yaml
+widget:
+  type: customapi
+  url: https://ghost.example.lan/api/v1/status
+  headers:
+    Authorization: Bearer {{HOMEPAGE_VAR_CALENDAR_GHOST_TOKEN}}
+  mappings:
+    - field: status
+      label: Status
+    - field: summary
+      label: Summary
+```
+
+**Claude Code.** Keep the token in an environment variable rather than typing it into a command
+line:
+
+```sh
+export CALENDAR_GHOST_TOKEN=cgs_…   # from a password manager or shell profile
+claude mcp add --transport http calendar-ghost https://ghost.example.lan/mcp \
+  --header "Authorization: Bearer ${CALENDAR_GHOST_TOKEN}"
+```
+
+**Codex.** Add to `~/.codex/config.toml` and set `CALENDAR_GHOST_TOKEN` in the environment Codex
+runs in:
+
+```toml
+[mcp_servers.calendar-ghost]
+url = "https://ghost.example.lan/mcp"
+bearer_token_env_var = "CALENDAR_GHOST_TOKEN"
+```
+
+The same entry can be added with one command:
+
+```sh
+codex mcp add calendar-ghost --url https://ghost.example.lan/mcp \
+  --bearer-token-env-var CALENDAR_GHOST_TOKEN
+```
+
+**Claude Desktop and other apps.** Apps that only start MCP servers on your own computer connect
+through the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which needs Node.js on
+that computer. In Claude Desktop, open **Settings → Developer → Edit Config**, add this to
+`claude_desktop_config.json`, and restart Claude Desktop:
+
+```json
+{
+  "mcpServers": {
+    "calendar-ghost": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://ghost.example.lan/mcp", "--header", "Authorization:${AUTH_HEADER}"],
+      "env": { "AUTH_HEADER": "Bearer <token>" }
+    }
+  }
+}
+```
+
+Keep `Authorization:${AUTH_HEADER}` exactly as written, with no spaces around the colon;
+`mcp-remote` fills in the token from `env`. If the address starts with `http://` and is not
+`localhost`, add `"--allow-http"` after the address. Settings shows this example already filled in
+for the address you opened it at. An app whose connector settings accept only an address, or only
+an OAuth sign-in, cannot send a token directly; connect it through this bridge if it can run local
+MCP servers.
+
+Both `/api/v1/status` and `/mcp` answer the same verdict. Each status means:
+
+| Status | What it means | What to do |
+| --- | --- | --- |
+| `stalled` | Rules are enabled, but the scheduler is not running passes | Restart the service |
+| `stopped` | A rule is suspended, usually because a Google account lost access | Reauthorize the account in Settings |
+| `review` | An incident, blocked events, or a rule not synced in over a day needs a look | Open Activity or the named rule |
+| `waiting` | Google is limiting or failing requests | Nothing yet; it retries by itself |
+| `paused` | Rules exist and have synced before, but none is enabled | Nothing, unless you meant to resume one |
+| `setup` | No account or rule yet, or none has synced | Finish connecting an account and creating a rule |
+| `healthy` | Every enabled rule is running and up to date | Nothing |
+
+**Other MCP clients.** Any client that speaks MCP over streamable HTTP and can send an
+`Authorization: Bearer` header works: point it at `https://<your address>/mcp`. The server is
+stateless and answers `POST` only. Calendar Ghost has no OAuth sign-in for MCP; a client that looks
+for one gets `404` and should then use the token you configured. Claude Code, Codex, and Claude
+Code through `mcp-remote` were each checked against a running installation with this release.
+
+The MCP server offers two read-only tools, and explains each status to the agent itself:
+
+- `get_status` returns the same answer as `/api/v1/status`.
+- `get_rule` takes a rule id or its "Source → Destination" name and adds the rule's last
+  synchronization and reconciliation outcome: when it ran, whether it succeeded, and how many events
+  it created, updated, deleted, or found in conflict.
+
+Ask the agent in plain words, for example "Is my calendar sync healthy?", "Why did Work → Family
+stop?", or "When did each rule last sync?". Calendar Ghost never changes a rule or a calendar through
+an Integration Token.
+
+If a monitor or agent cannot connect, see [Troubleshooting](troubleshooting.md#a-monitor-or-agent-cannot-read-status).
+
+## 7. Back up, upgrade, and recover
 
 Before an upgrade or host migration:
 
@@ -172,7 +341,7 @@ Do not run `docker compose down -v` as an upgrade step: removing the named volum
 database, mappings, and connected-account state. The full backup and restore procedure is in
 [Data ownership and privacy](data-ownership.md#backups-and-recovery).
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 Inspect service status and logs without exposing secrets:
 

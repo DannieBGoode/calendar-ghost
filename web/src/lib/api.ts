@@ -110,8 +110,14 @@ export function call<P extends keyof paths, M extends MethodOf<P>>(
 /** Response and request bodies, generated from the backend's OpenAPI schema (web/openapi.json). */
 type Schemas = components["schemas"]
 
-/** `blocked_events` counts events of existing rules whose latest decision was a block. */
+/**
+ * `status` is the server's verdict; the Overview never derives its own (ADR 0024). `problems`
+ * lists every current problem, most urgent first, and `blocked_events` counts events of existing
+ * rules whose latest decision was a block.
+ */
 export type Dashboard = Schemas["DashboardResponse"]
+export type InstallationHealth = Dashboard["status"]
+export type ServerProblem = Schemas["ProblemResponse"]
 /** A rule's calendar with the name Google last gave it; null until Google lists it. */
 export type RuleCalendar = Schemas["NamedCalendarEndpointResponse"]
 export type Rule = Schemas["RuleResponse"]
@@ -156,6 +162,9 @@ export type Incident = Schemas["IncidentResponse"]
 export type DatabaseUsage = Schemas["DatabaseUsageResponse"]
 export type LogUsage = Schemas["LogUsageResponse"]
 export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
+
+export type IntegrationToken = Schemas["IntegrationTokenResponse"]
+export type IssuedIntegrationToken = Schemas["IssuedIntegrationTokenResponse"]
 
 export const ACTIVITY_PAGE_SIZE = 100
 
@@ -220,4 +229,8 @@ export const api = {
   clearActivity: (days: number) =>
     call("/api/v1/storage/activity/clear", "post", { body: { older_than_days: days } }),
   purgeLogs: () => call(STORAGE_LOGS_URL, "delete"),
+  integrationTokens: () => call("/api/v1/integration-tokens", "get"),
+  issueIntegrationToken: (name: string) => call("/api/v1/integration-tokens", "post", { body: { name } }),
+  revokeIntegrationToken: (id: string) =>
+    call("/api/v1/integration-tokens/{token_id}", "delete", { params: { token_id: id } }),
 }

@@ -22,10 +22,19 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Added
+
+- Monitors, homelab dashboards, and AI agents can read Installation Status with an Integration
+  Token: `GET /api/v1/status` for tools like Uptime Kuma and Homepage, and an MCP server at `/mcp`
+  for Claude Code, Codex, and other agents. Settings → Integrations, collapsed until opened, issues
+  and revokes tokens and shows setup examples for each tool.
+- Installation Status notices a scheduler that stopped running passes and a rule that has not
+  synced in over a day.
+
 ### Changed
 
 - The Web UI's API types are generated from the backend's OpenAPI schema
-  ([ADR 0024](docs/adr/0024-generate-web-api-types-from-openapi.md)), so a changed response fails
+  ([ADR 0025](docs/adr/0025-generate-web-api-types-from-openapi.md)), so a changed response fails
   the frontend type check instead of breaking a page. The sync, reconcile, and preview routes now
   declare their response bodies, which are unchanged, and each Web UI call is typed by the route it
   names. An unknown `privacy_policy` in a rule request is still rejected with 422, now with
@@ -33,6 +42,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - The frontend quality gate adds stricter TypeScript (`noUncheckedIndexedAccess`,
   `exactOptionalPropertyTypes`), type-aware ESLint with complexity and size bounds and folder
   layering, React Doctor, and `npm audit --audit-level=high`. CI runs all of them.
+- The Overview shows the server's health verdict, so it always agrees with the status API.
+- Settings → No Google accounts connected explains the next step in quiet text instead of red: an
+  installation without an account yet is not failing.
 - Rule Details, Settings, Activity, Rules, and Overview are split into section files, and the
   activity copy into focused modules, so every frontend file and function is within the
   complexity and size bounds. The screens render the same markup.

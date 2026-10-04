@@ -373,14 +373,6 @@
             "title": "Enabled Rules",
             "type": "integer"
           },
-          "health": {
-            "enum": [
-              "healthy",
-              "attention"
-            ],
-            "title": "Health",
-            "type": "string"
-          },
           "last_synced_at": {
             "anyOf": [
               {
@@ -392,9 +384,33 @@
             ],
             "title": "Last Synced At"
           },
+          "needs_attention": {
+            "title": "Needs Attention",
+            "type": "boolean"
+          },
           "open_incidents": {
             "title": "Open Incidents",
             "type": "integer"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemResponse"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "waiting",
+              "paused",
+              "setup",
+              "healthy"
+            ],
+            "title": "Status",
+            "type": "string"
           },
           "stopped_rules": {
             "title": "Stopped Rules",
@@ -406,7 +422,9 @@
           }
         },
         "required": [
-          "health",
+          "status",
+          "needs_attention",
+          "problems",
           "connected_accounts",
           "disconnected_accounts",
           "sync_rules",
@@ -823,6 +841,131 @@
         "title": "IncidentResponse",
         "type": "object"
       },
+      "IntegrationTokenResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scope": {
+            "const": "status:read",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "created_at",
+          "last_used_at",
+          "revoked_at"
+        ],
+        "title": "IntegrationTokenResponse",
+        "type": "object"
+      },
+      "IssueIntegrationTokenRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "IssueIntegrationTokenRequest",
+        "type": "object"
+      },
+      "IssuedIntegrationTokenResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scope": {
+            "const": "status:read",
+            "title": "Scope",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "created_at",
+          "last_used_at",
+          "revoked_at",
+          "token"
+        ],
+        "title": "IssuedIntegrationTokenResponse",
+        "type": "object"
+      },
       "LogUsageResponse": {
         "properties": {
           "bytes": {
@@ -988,6 +1131,56 @@
           "occurrence_changes"
         ],
         "title": "PreviewSummaryResponse",
+        "type": "object"
+      },
+      "ProblemResponse": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "overdue",
+              "blocked",
+              "waiting"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "rule_id",
+          "summary",
+          "since"
+        ],
+        "title": "ProblemResponse",
         "type": "object"
       },
       "RecentChangeResponse": {
@@ -1759,6 +1952,43 @@
         "title": "RunOutcomeResponse",
         "type": "object"
       },
+      "SchedulerResponse": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "current_pass_started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Pass Started At"
+          },
+          "last_pass_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pass Completed At"
+          }
+        },
+        "required": [
+          "configured",
+          "last_pass_completed_at",
+          "current_pass_started_at"
+        ],
+        "title": "SchedulerResponse",
+        "type": "object"
+      },
       "SessionResponse": {
         "properties": {
           "authenticated": {
@@ -1813,6 +2043,271 @@
           "changes"
         ],
         "title": "SourceChangeResponse",
+        "type": "object"
+      },
+      "StatusCalendarResponse": {
+        "properties": {
+          "calendar": {
+            "title": "Calendar",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "required": [
+          "calendar",
+          "provider"
+        ],
+        "title": "StatusCalendarResponse",
+        "type": "object"
+      },
+      "StatusCountsResponse": {
+        "properties": {
+          "blocked_events": {
+            "title": "Blocked Events",
+            "type": "integer"
+          },
+          "disconnected_accounts": {
+            "title": "Disconnected Accounts",
+            "type": "integer"
+          },
+          "open_incidents": {
+            "title": "Open Incidents",
+            "type": "integer"
+          },
+          "overdue": {
+            "title": "Overdue",
+            "type": "integer"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "integer"
+          },
+          "rules": {
+            "title": "Rules",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rules",
+          "running",
+          "stopped",
+          "paused",
+          "overdue",
+          "open_incidents",
+          "blocked_events",
+          "disconnected_accounts"
+        ],
+        "title": "StatusCountsResponse",
+        "type": "object"
+      },
+      "StatusIncidentResponse": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "opened_at": {
+            "title": "Opened At",
+            "type": "string"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "category",
+          "summary",
+          "opened_at"
+        ],
+        "title": "StatusIncidentResponse",
+        "type": "object"
+      },
+      "StatusResponse": {
+        "properties": {
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/StatusCountsResponse"
+          },
+          "incidents": {
+            "items": {
+              "$ref": "#/components/schemas/StatusIncidentResponse"
+            },
+            "title": "Incidents",
+            "type": "array"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "needs_attention": {
+            "title": "Needs Attention",
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemResponse"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/StatusRuleResponse"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "scheduler": {
+            "$ref": "#/components/schemas/SchedulerResponse"
+          },
+          "status": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "waiting",
+              "paused",
+              "setup",
+              "healthy"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "needs_attention",
+          "summary",
+          "version",
+          "checked_at",
+          "last_synced_at",
+          "scheduler",
+          "counts",
+          "problems",
+          "rules",
+          "incidents"
+        ],
+        "title": "StatusResponse",
+        "type": "object"
+      },
+      "StatusRuleResponse": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/StatusCalendarResponse"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_succeeded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Succeeded At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProblemResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projection": {
+            "title": "Projection",
+            "type": "string"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Running"
+          },
+          "source": {
+            "$ref": "#/components/schemas/StatusCalendarResponse"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "source",
+          "destination",
+          "projection",
+          "last_succeeded_at",
+          "running",
+          "problem"
+        ],
+        "title": "StatusRuleResponse",
         "type": "object"
       },
       "StorageResponse": {
@@ -2682,6 +3177,158 @@
           }
         },
         "summary": "List Incidents"
+      }
+    },
+    "/api/v1/integration-tokens": {
+      "get": {
+        "operationId": "list_integration_tokens_api_v1_integration_tokens_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IntegrationTokenResponse"
+                  },
+                  "title": "Response List Integration Tokens Api V1 Integration Tokens Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Integration Tokens"
+      },
+      "post": {
+        "operationId": "issue_integration_token_api_v1_integration_tokens_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueIntegrationTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedIntegrationTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Integration Token"
+      }
+    },
+    "/api/v1/integration-tokens/{token_id}": {
+      "delete": {
+        "operationId": "revoke_integration_token_api_v1_integration_tokens__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "title": "Token Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Integration Token"
       }
     },
     "/api/v1/oauth/google/start": {
@@ -3591,6 +4238,68 @@
           }
         },
         "summary": "Create Admin"
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "installation_status_api_v1_status_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Installation Status"
       }
     },
     "/api/v1/storage": {

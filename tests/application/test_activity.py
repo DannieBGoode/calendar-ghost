@@ -1,12 +1,9 @@
-from dataclasses import replace
-
 import pytest
 
 from calendar_sync.application.activity import (
     ActivityCategory,
+    Dashboard,
     EntryEvents,
-    GetDashboard,
-    IncidentSummary,
     InspectActivityEvent,
     OpenBlock,
     OperationsOverview,
@@ -17,7 +14,7 @@ from calendar_sync.application.errors import (
     ActivityRuleRemoved,
     EventInspectionUnavailable,
 )
-from calendar_sync.domain.model import EventId, EventRef, SyncReason, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import EventId, EventRef, SyncReason, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars
 from tests.helpers import event, rule
@@ -55,56 +52,27 @@ def test_recurring_exclusions_recorded_as_conflicts_are_skips() -> None:
     assert activity_category("ignore", SyncReason.RECURRING_UNSUPPORTED.value) == "skipped"
 
 
-class Overview:
-    def __init__(self, overview: OperationsOverview) -> None:
-        self._overview = overview
-
-    def overview(self) -> OperationsOverview:
-        return self._overview
-
-    def incidents(self) -> tuple[IncidentSummary, ...]:
-        return ()
+def _overview(*blocks: OpenBlock, incidents: int = 0) -> OperationsOverview:
+    return OperationsOverview(1, 0, incidents, "2026-09-01T00:00:00+00:00", blocks)
 
 
-def _overview(*blocks: OpenBlock, incidents: int = 0) -> Overview:
-    return Overview(OperationsOverview(1, 0, incidents, "2026-09-01T00:00:00+00:00", blocks))
+def test_dashboard_counts_rules_by_state() -> None:
+    dashboard = Dashboard.of(
+        [SyncRuleState.ENABLED, SyncRuleState.PAUSED, SyncRuleState.DEGRADED], _overview()
+    )
 
-
-def _rules(*states: SyncRuleState) -> InMemoryUnitOfWorkFactory:
-    unit_of_work = InMemoryUnitOfWorkFactory()
-    for index, state in enumerate(states):
-        unit_of_work.state.rules[SyncRuleId(f"rule-{index}")] = replace(
-            rule(state=state), id=SyncRuleId(f"rule-{index}")
-        )
-    return unit_of_work
-
-
-def test_dashboard_is_healthy_without_incidents_or_stopped_rules() -> None:
-    dashboard = GetDashboard(
-        _rules(SyncRuleState.ENABLED, SyncRuleState.PAUSED), _overview()
-    ).execute()
-
-    assert dashboard.healthy
-    assert (dashboard.sync_rules, dashboard.enabled_rules, dashboard.stopped_rules) == (2, 1, 0)
+    assert (dashboard.sync_rules, dashboard.enabled_rules, dashboard.stopped_rules) == (3, 1, 1)
     assert dashboard.blocked_rule_id is None
 
 
-@pytest.mark.parametrize(
-    ("states", "incidents"),
-    [((SyncRuleState.DEGRADED,), 0), ((SyncRuleState.REMOVING,), 0), ((), 1)],
-)
-def test_dashboard_needs_attention_for_stopped_rules_or_open_incidents(
-    states: tuple[SyncRuleState, ...], incidents: int
-) -> None:
-    dashboard = GetDashboard(_rules(*states), _overview(incidents=incidents)).execute()
-
-    assert not dashboard.healthy
-    assert dashboard.stopped_rules == len(states)
+@pytest.mark.parametrize("state", [SyncRuleState.DEGRADED, SyncRuleState.REMOVING])
+def test_dashboard_counts_degraded_and_removing_rules_as_stopped(state: SyncRuleState) -> None:
+    assert Dashboard.of([state], _overview(incidents=1)).stopped_rules == 1
 
 
 def test_dashboard_names_the_blocked_rule_only_when_every_block_is_its_own() -> None:
-    one_rule = GetDashboard(_rules(), _overview(OpenBlock(9, "a"), OpenBlock(4, "a"))).execute()
-    two_rules = GetDashboard(_rules(), _overview(OpenBlock(9, "a"), OpenBlock(4, "b"))).execute()
+    one_rule = Dashboard.of([], _overview(OpenBlock(9, "a"), OpenBlock(4, "a")))
+    two_rules = Dashboard.of([], _overview(OpenBlock(9, "a"), OpenBlock(4, "b")))
 
     assert (one_rule.blocked_events, one_rule.blocked_entry_id, one_rule.blocked_rule_id) == (
         2,

@@ -208,6 +208,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integration-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Integration Tokens */
+        get: operations["list_integration_tokens_api_v1_integration_tokens_get"];
+        put?: never;
+        /** Issue Integration Token */
+        post: operations["issue_integration_token_api_v1_integration_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integration-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Integration Token */
+        delete: operations["revoke_integration_token_api_v1_integration_tokens__token_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth/google/start": {
         parameters: {
             query?: never;
@@ -434,6 +469,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Installation Status */
+        get: operations["installation_status_api_v1_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/storage": {
         parameters: {
             query?: never;
@@ -654,15 +706,19 @@ export interface components {
             disconnected_accounts: number;
             /** Enabled Rules */
             enabled_rules: number;
-            /**
-             * Health
-             * @enum {string}
-             */
-            health: "healthy" | "attention";
             /** Last Synced At */
             last_synced_at: string | null;
+            /** Needs Attention */
+            needs_attention: boolean;
             /** Open Incidents */
             open_incidents: number;
+            /** Problems */
+            problems: components["schemas"]["ProblemResponse"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy";
             /** Stopped Rules */
             stopped_rules: number;
             /** Sync Rules */
@@ -802,6 +858,49 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /** IntegrationTokenResponse */
+        IntegrationTokenResponse: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Name */
+            name: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "status:read";
+        };
+        /** IssueIntegrationTokenRequest */
+        IssueIntegrationTokenRequest: {
+            /** Name */
+            name: string;
+        };
+        /** IssuedIntegrationTokenResponse */
+        IssuedIntegrationTokenResponse: {
+            /** Created At */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Name */
+            name: string;
+            /** Revoked At */
+            revoked_at: string | null;
+            /**
+             * Scope
+             * @constant
+             */
+            scope: "status:read";
+            /** Token */
+            token: string;
+        };
         /** LogUsageResponse */
         LogUsageResponse: {
             /** Bytes */
@@ -858,6 +957,20 @@ export interface components {
             occurrence_changes: number;
             /** Recurring Series */
             recurring_series: number;
+        };
+        /** ProblemResponse */
+        ProblemResponse: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "stalled" | "stopped" | "review" | "overdue" | "blocked" | "waiting";
+            /** Rule Id */
+            rule_id: string | null;
+            /** Since */
+            since: string | null;
+            /** Summary */
+            summary: string;
         };
         /**
          * RecentChangeResponse
@@ -1124,6 +1237,15 @@ export interface components {
             /** Updated */
             updated: number;
         };
+        /** SchedulerResponse */
+        SchedulerResponse: {
+            /** Configured */
+            configured: boolean;
+            /** Current Pass Started At */
+            current_pass_started_at: string | null;
+            /** Last Pass Completed At */
+            last_pass_completed_at: string | null;
+        };
         /** SessionResponse */
         SessionResponse: {
             /** Authenticated */
@@ -1145,6 +1267,87 @@ export interface components {
             fields: string[];
             /** Values Available */
             values_available: boolean;
+        };
+        /** StatusCalendarResponse */
+        StatusCalendarResponse: {
+            /** Calendar */
+            calendar: string;
+            /** Provider */
+            provider: string | null;
+        };
+        /** StatusCountsResponse */
+        StatusCountsResponse: {
+            /** Blocked Events */
+            blocked_events: number;
+            /** Disconnected Accounts */
+            disconnected_accounts: number;
+            /** Open Incidents */
+            open_incidents: number;
+            /** Overdue */
+            overdue: number;
+            /** Paused */
+            paused: number;
+            /** Rules */
+            rules: number;
+            /** Running */
+            running: number;
+            /** Stopped */
+            stopped: number;
+        };
+        /** StatusIncidentResponse */
+        StatusIncidentResponse: {
+            /** Category */
+            category: string;
+            /** Opened At */
+            opened_at: string;
+            /** Rule Id */
+            rule_id: string | null;
+            /** Summary */
+            summary: string;
+        };
+        /** StatusResponse */
+        StatusResponse: {
+            /** Checked At */
+            checked_at: string;
+            counts: components["schemas"]["StatusCountsResponse"];
+            /** Incidents */
+            incidents: components["schemas"]["StatusIncidentResponse"][];
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** Needs Attention */
+            needs_attention: boolean;
+            /** Problems */
+            problems: components["schemas"]["ProblemResponse"][];
+            /** Rules */
+            rules: components["schemas"]["StatusRuleResponse"][];
+            scheduler: components["schemas"]["SchedulerResponse"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy";
+            /** Summary */
+            summary: string;
+            /** Version */
+            version: string;
+        };
+        /** StatusRuleResponse */
+        StatusRuleResponse: {
+            destination: components["schemas"]["StatusCalendarResponse"];
+            /** Id */
+            id: string;
+            /** Last Succeeded At */
+            last_succeeded_at: string | null;
+            /** Name */
+            name: string;
+            problem: components["schemas"]["ProblemResponse"] | null;
+            /** Projection */
+            projection: string;
+            /** Running */
+            running: string | null;
+            source: components["schemas"]["StatusCalendarResponse"];
+            /** State */
+            state: string;
         };
         /** StorageResponse */
         StorageResponse: {
@@ -1588,6 +1791,103 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["IncidentResponse"][];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_integration_tokens_api_v1_integration_tokens_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationTokenResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_integration_token_api_v1_integration_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueIntegrationTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedIntegrationTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_integration_token_api_v1_integration_tokens__token_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2170,6 +2470,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    installation_status_api_v1_status_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusResponse"];
                 };
             };
             /** @description Validation Error */

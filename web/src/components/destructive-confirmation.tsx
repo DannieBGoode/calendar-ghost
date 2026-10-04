@@ -1,5 +1,5 @@
 import { Trash2 } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 
@@ -12,6 +12,7 @@ export function DestructiveConfirmation({
   pendingLabel,
   pending,
   confirmDisabled,
+  confirmIcon = <Trash2 aria-hidden="true" />,
   onConfirm,
   onCancel,
 }: {
@@ -23,6 +24,8 @@ export function DestructiveConfirmation({
   pendingLabel: string
   pending: boolean
   confirmDisabled?: boolean
+  /** The icon on the destructive button; a trash can by default, none when nothing is deleted. */
+  confirmIcon?: ReactNode
   onConfirm: () => void
   onCancel: () => void
 }) {
@@ -48,7 +51,7 @@ export function DestructiveConfirmation({
           onClick={onConfirm}
           disabled={pending || confirmDisabled}
         >
-          <Trash2 aria-hidden="true" />
+          {confirmIcon}
           {pending ? pendingLabel : confirmLabel}
         </Button>
       </div>

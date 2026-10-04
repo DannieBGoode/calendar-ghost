@@ -466,6 +466,24 @@ class Clock(Protocol):
     def now(self) -> datetime: ...
 
 
+@dataclass(frozen=True, slots=True)
+class SchedulerProgress:
+    """What the scheduler did last, so Installation Status can see a scheduler that stopped."""
+
+    running_since: datetime
+    """When the scheduler was created; the baseline until its first pass completes."""
+    pass_started_at: datetime | None
+    """When the pass running now started; None between passes."""
+    last_completed_at: datetime | None
+    """When the last pass that raised nothing completed."""
+    last_pass_rule_ids: frozenset[str] = frozenset()
+    """The rules that pass listed, so a rule resumed since then is not yet expected to have run."""
+
+
+class SchedulerHeartbeat(Protocol):
+    def progress(self) -> SchedulerProgress: ...
+
+
 class IdGenerator(Protocol):
     def new(self) -> str: ...
 
@@ -737,6 +755,48 @@ class AdministratorAccess(Protocol):
     def session_is_valid(self, token: str | None) -> bool: ...
 
     def revoke(self, token: str | None) -> None: ...
+
+
+class IntegrationTokenScope(StrEnum):
+    STATUS_READ = "status:read"
+
+
+@dataclass(frozen=True, slots=True)
+class IntegrationTokenSummary:
+    """An Integration Token as the administrator sees it; never the token or its hash."""
+
+    id: str
+    name: str
+    scope: IntegrationTokenScope
+    created_at: datetime
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class IssuedIntegrationToken:
+    summary: IntegrationTokenSummary
+    token: str = field(repr=False)
+    """Shown once, when issued; only its hash is kept. Kept out of the repr, so a log line or
+    traceback that prints this value never shows the token."""
+
+
+class IntegrationTokens(Protocol):
+    """Named credentials the administrator issues so monitors and agents can read status."""
+
+    def issue(self, name: str) -> IssuedIntegrationToken: ...
+
+    def list(self) -> Sequence[IntegrationTokenSummary]:
+        """Every token, newest first, revoked ones last."""
+        ...
+
+    def revoke(self, token_id: str) -> bool:
+        """Whether a token that was not yet revoked is revoked now."""
+        ...
+
+    def authenticate(self, token: str) -> IntegrationTokenSummary | None:
+        """The token's summary when it is well formed, known, and not revoked."""
+        ...
 
 
 class FullPassRecords(Protocol):

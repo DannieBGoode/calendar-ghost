@@ -235,7 +235,11 @@ def test_migration_17_upgrades_a_genuine_version_16_database(
     """
     database = tmp_path / "test.db"
     original_migrations = sqlite_module._FORWARD_MIGRATIONS
-    monkeypatch.setattr(sqlite_module, "_FORWARD_MIGRATIONS", original_migrations[:-1])
+    # Migrations after 17 are unrelated to connected_accounts; stop at 17 so this test's before
+    # and after snapshots are not disturbed by tables a later migration adds.
+    through_16 = tuple(migration for migration in original_migrations if migration[0] < 17)
+    through_17 = tuple(migration for migration in original_migrations if migration[0] <= 17)
+    monkeypatch.setattr(sqlite_module, "_FORWARD_MIGRATIONS", through_16)
 
     initialize_database(database)
     with sqlite3.connect(database) as connection:
@@ -247,7 +251,7 @@ def test_migration_17_upgrades_a_genuine_version_16_database(
         _populate_version_16_database(connection)
         before = _snapshot(connection)
 
-    monkeypatch.setattr(sqlite_module, "_FORWARD_MIGRATIONS", original_migrations)
+    monkeypatch.setattr(sqlite_module, "_FORWARD_MIGRATIONS", through_17)
 
     initialize_database(database)
 
@@ -300,7 +304,11 @@ def test_an_injected_failure_during_migration_17_rolls_back_atomically(
     """
     database = tmp_path / "test.db"
     original_migrations = sqlite_module._FORWARD_MIGRATIONS
-    monkeypatch.setattr(sqlite_module, "_FORWARD_MIGRATIONS", original_migrations[:-1])
+    # Migrations after 17 are unrelated to connected_accounts; stop at 17 so the injected failure
+    # in migration 17 is the only thing this test exercises.
+    through_16 = tuple(migration for migration in original_migrations if migration[0] < 17)
+    through_17 = tuple(migration for migration in original_migrations if migration[0] <= 17)
+    monkeypatch.setattr(sqlite_module, "_FORWARD_MIGRATIONS", through_16)
 
     initialize_database(database)
     with sqlite3.connect(database) as connection:
@@ -311,7 +319,7 @@ def test_an_injected_failure_during_migration_17_rolls_back_atomically(
     assert before_check is not None
     assert "CHECK (provider = 'google')" in before_check
 
-    monkeypatch.setattr(sqlite_module, "_FORWARD_MIGRATIONS", original_migrations)
+    monkeypatch.setattr(sqlite_module, "_FORWARD_MIGRATIONS", through_17)
 
     real_migrations = files("calendar_sync.infrastructure.persistence")
     good_sql = real_migrations.joinpath("0017_provider_kinds.sql").read_text()
