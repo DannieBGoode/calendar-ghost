@@ -11,6 +11,8 @@ TOKEN_PREFIX = "cgs_"  # noqa: S105
 # The prefix and 32 random bytes in unpadded URL-safe base64.
 _TOKEN = re.compile(r"cgs_[A-Za-z0-9_-]{43}")
 NAME_LIMIT = 80
+# Control and format characters, and the line and paragraph separators that break a line.
+_REFUSED_CATEGORIES = ("C", "Zl", "Zp")
 
 
 def is_well_formed(token: str) -> bool:
@@ -20,7 +22,7 @@ def is_well_formed(token: str) -> bool:
 def token_name(raw: str) -> str:
     name = raw.strip()
     if not 1 <= len(name) <= NAME_LIMIT or any(
-        unicodedata.category(character).startswith("C") for character in name
+        unicodedata.category(character).startswith(_REFUSED_CATEGORIES) for character in name
     ):
         raise InvalidIntegrationTokenName("name must be 1 to 80 printable characters")
     return name

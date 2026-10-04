@@ -28,7 +28,10 @@ def test_names_are_trimmed() -> None:
     assert token_name("  Uptime Kuma  ") == "Uptime Kuma"
 
 
-@pytest.mark.parametrize("name", ["", "   ", "x" * 81, "Kuma\nadmin", "Kuma\x1b[31m"])
+@pytest.mark.parametrize(
+    "name",
+    ["", "   ", "x" * 81, "Kuma\nadmin", "Kuma\x1b[31m", "Kuma\u2028admin", "Kuma\u2029admin"],
+)
 def test_names_must_be_short_printable_text(name: str) -> None:
     with pytest.raises(InvalidIntegrationTokenName):
         token_name(name)

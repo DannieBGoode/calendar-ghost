@@ -65,7 +65,7 @@ class SqliteIntegrationTokens:
             rows = connection.execute(
                 f"""
                 SELECT {_COLUMNS} FROM integration_tokens
-                ORDER BY revoked_at IS NOT NULL, created_at DESC
+                ORDER BY revoked_at IS NOT NULL, created_at DESC, id
                 """  # noqa: S608
             ).fetchall()
         return [_summary(row) for row in rows]

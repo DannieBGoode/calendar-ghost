@@ -127,6 +127,24 @@ def test_tokens_are_listed_newest_first_with_revoked_ones_last(tmp_path: Path) -
     assert second.summary.last_used_at is None
 
 
+class _NamedIds:
+    def __init__(self, *ids: str) -> None:
+        self._ids = list(ids)
+
+    def new(self) -> str:
+        return self._ids.pop(0)
+
+
+def test_tokens_issued_at_the_same_moment_are_listed_in_a_stable_order(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    tokens = SqliteIntegrationTokens(database, MovableClock(ISSUED), _NamedIds("id-b", "id-a"))
+    tokens.issue("Issued first")
+    tokens.issue("Issued second")
+
+    assert [token.id for token in tokens.list()] == ["id-a", "id-b"]
+
+
 def test_invalid_names_are_refused_before_anything_is_stored(tmp_path: Path) -> None:
     tokens, _, _ = _tokens(tmp_path)
     with pytest.raises(InvalidIntegrationTokenName):
