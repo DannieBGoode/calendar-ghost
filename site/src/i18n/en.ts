@@ -1,11 +1,23 @@
+/** One step in the "How it works" list: title and body stay strings, but a translation must
+ * supply exactly three (matched by the `[Step, Step, Step]` tuple below), not more or fewer. */
+interface Step {
+  title: string
+  body: string
+}
+
 // Every user-visible word on the site. A new language copies this module and
-// `satisfies Messages`, so a missing key fails `astro check`.
+// `satisfies Messages`, so a missing key fails `astro check`. Fixed-length lists (the five
+// weekdays, the three self-host steps matched to `SELF_HOST_COMMANDS`, the five things that
+// always stay behind, and the three "how it works" steps) are typed as tuples, so a translation
+// with the wrong count also fails `astro check`. The tuples widen their elements back to `string`
+// (not literal English text), so a translation is free to use its own words.
 export const en = {
   meta: {
     title: "Calendar Ghost: private calendar sync you host yourself",
     description:
-      "Sync your Google calendars on your own server. Share only “Busy”, or the details you choose. Open source, self-hosted, no trackers.",
+      "Sync your Google calendars on your own server. Share only “Busy”, or the event's details. Open source, self-hosted, no trackers.",
     notFoundTitle: "Page not found · Calendar Ghost",
+    ogImageAlt: "Calendar Ghost: a work week where personal plans show only as Busy",
   },
   nav: {
     label: "Main",
@@ -25,7 +37,7 @@ export const en = {
     secondary: "Star on GitHub",
   },
   demo: {
-    days: ["Mon", "Tue", "Wed", "Thu", "Fri"],
+    days: ["Mon", "Tue", "Wed", "Thu", "Fri"] as [string, string, string, string, string],
     youSee: "What you see",
     workSees: "What work sees",
     busy: "Busy",
@@ -65,7 +77,7 @@ export const en = {
         title: "Preview, then sync.",
         body: "See exactly what will be written before anything changes. Then it runs by itself every five minutes.",
       },
-    ],
+    ] as [Step, Step, Step],
   },
   week: {
     title: "One week, every calendar.",
@@ -81,7 +93,13 @@ export const en = {
     busyOnlyBody: "Only the time crosses over, titled “Busy”.",
     withDetailsBody: "The title, description, and place cross over too.",
     alwaysStaysTitle: "Always stays behind",
-    alwaysStays: ["Guests", "Organizer", "Meeting links", "Attachments", "Invitations"],
+    alwaysStays: ["Guests", "Organizer", "Meeting links", "Attachments", "Invitations"] as [
+      string,
+      string,
+      string,
+      string,
+      string,
+    ],
     guests: "Dr. Ruiz",
     link: "meet.google.com/abc-defg-hij",
     summary:
@@ -142,7 +160,7 @@ export const en = {
       "Get the code.",
       "Create your settings file, then fill it in as the guide shows.",
       "Start it, then open http://localhost:8000.",
-    ],
+    ] as [string, string, string],
     copy: "Copy",
     copied: "Copied",
     selected: "Selected. Press Ctrl+C or ⌘C.",

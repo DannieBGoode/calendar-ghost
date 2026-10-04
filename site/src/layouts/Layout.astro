@@ -8,7 +8,7 @@ import "../styles/demos.css"
 // instead of swapping in after layout and shifting the page (the lowest-risk fix for CLS).
 import figtreeLatinWoff2 from "@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2?url"
 import frauncesLatinWoff2 from "@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2?url"
-import { LOCALES, hasLanguagePicker, localePath, stripLocale, type Locale } from "../i18n"
+import { LOCALES, hasLanguagePicker, localePath, messagesFor, stripLocale, type Locale } from "../i18n"
 
 interface Props {
   title: string
@@ -21,6 +21,7 @@ const site = Astro.site ?? new URL("https://calendarghost.com")
 const canonical = new URL(Astro.url.pathname, site)
 const ogImage = new URL("/og.png", site)
 const lang = Astro.currentLocale ?? "en"
+const ogImageAlt = messagesFor(Astro.currentLocale).meta.ogImageAlt
 const unprefixedPath = stripLocale(Astro.url.pathname)
 const alternates = hasLanguagePicker()
   ? (Object.keys(LOCALES) as Locale[]).map((locale) => ({
@@ -45,10 +46,12 @@ const alternates = hasLanguagePicker()
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfbfe" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0e19" />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Calendar Ghost" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical.href} />
     <meta property="og:image" content={ogImage.href} />
+    <meta property="og:image:alt" content={ogImageAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     {noindex && <meta name="robots" content="noindex" />}
   </head>
