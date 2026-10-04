@@ -1,0 +1,83 @@
+---
+// Stop 2: the whole week. One section where the home page has two: the ghost passes over Sam's
+// week turning each plan into Busy on work's side, then the slider compares the two views.
+import Avatar from "../../components/Avatar.astro"
+import Icon from "../../components/Icon.astro"
+import type { Messages } from "../../i18n"
+import { JourneyReveal } from "./JourneyReveal"
+import Stop from "./Stop.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const rules = [
+  ["personal", "work"],
+  ["family", "work"],
+] as const
+---
+
+<section id="how-it-works" class="j-section j-week" aria-labelledby="week-title">
+  <div class="j-wrap">
+    <Stop m={m} n={2} name="week" />
+    <div class="j-week-head">
+      <div>
+        <h2 id="week-title">{m.week.title}</h2>
+        <p class="j-lead">{m.week.body}</p>
+      </div>
+      <ul class="j-rules" aria-hidden="true">
+        {
+          rules.map(([source, destination]) => (
+            <li>
+              <span class="j-rule-end">
+                <Avatar calendar={source} />
+                {m.demo.calendars[source]}
+              </span>
+              <Icon name="arrowRight" class="j-rule-arrow" />
+              <span class="j-rule-end">
+                <Avatar calendar={destination} />
+                {m.demo.calendars[destination]}
+              </span>
+              <span class="j-rule-busy">{m.demo.busy}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+    <JourneyReveal
+      client:visible
+      m={m.demo}
+      motion={m.motion}
+      weekHeight={440}
+      phoneWeekHeight={340}
+      handleSize={150}
+      phoneHandleSize={112}
+    />
+  </div>
+</section>
+
+<style>
+  .j-week-head { display: grid; gap: var(--space-md) var(--space-lg); align-items: end; margin-bottom: var(--space-lg); }
+  .j-week-head > * { min-width: 0; }
+  .j-week-head h2 { max-width: 15ch; }
+  .j-week-head .j-lead { margin: 0; }
+  .j-rules { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; justify-items: start; }
+  .j-rules li {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.45rem 0.6rem 0.45rem 0.45rem;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--surface); font-weight: 650; font-size: 0.9375rem;
+  }
+  .j-rule-end { display: inline-flex; align-items: center; gap: 0.4rem; }
+  .j-rules :global(.avatar) { width: 1.75rem; height: 1.75rem; }
+  .j-rules :global(.j-rule-arrow) { width: 1rem; height: 1rem; color: var(--muted-foreground); }
+  .j-rule-busy {
+    margin-left: 0.25rem; padding: 0.1rem 0.5rem; border: 1px dashed var(--primary); border-radius: 0.35rem;
+    background: var(--event-busy); font-size: 0.8125rem;
+  }
+  @media (min-width: 900px) {
+    .j-week-head { grid-template-columns: minmax(0, 1fr) auto; }
+    .j-rules { justify-items: end; }
+  }
+  .j-week :global(.reveal) { margin: 0; }
+  .j-week :global(.cal-event.is-waiting) { opacity: 0; transform: scale(0.94); }
+</style>

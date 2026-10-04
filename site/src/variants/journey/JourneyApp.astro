@@ -1,0 +1,55 @@
+---
+// Stop 6: the app, framed as where you watch the ghost work.
+import type { Messages } from "../../i18n"
+import ActivityHistory from "../../mockups/ActivityHistory.astro"
+import OverviewHealth from "../../mockups/OverviewHealth.astro"
+import RulesList from "../../mockups/RulesList.astro"
+import Stop from "./Stop.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="j-section j-app" aria-labelledby="app-title">
+  <div class="j-wrap">
+    <Stop m={m} n={6} name="app" />
+    <div class="j-app-head">
+      <h2 id="app-title">{m.app.title}</h2>
+      <p class="j-lead">{m.variants.journey.app.body}</p>
+    </div>
+    <div class="j-app-grid">
+      <figure class="j-app-overview">
+        <OverviewHealth m={m} />
+        <figcaption>{m.app.overview.caption}</figcaption>
+      </figure>
+      <figure class="j-app-rules">
+        <RulesList m={m} />
+        <figcaption>{m.app.rules.caption}</figcaption>
+      </figure>
+      <figure class="j-app-activity">
+        <ActivityHistory m={m} />
+        <figcaption>{m.app.activity.caption}</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<style>
+  .j-app-head { display: grid; gap: var(--space-sm) var(--space-lg); align-items: end; margin-bottom: var(--space-lg); }
+  .j-app-head h2 { margin: 0; }
+  .j-app-head .j-lead { margin: 0; max-width: 40ch; }
+  @media (min-width: 900px) { .j-app-head { grid-template-columns: auto minmax(0, 1fr); } .j-app-head .j-lead { justify-self: end; } }
+  figure { margin: 0; min-width: 0; }
+  figcaption { margin-top: 0.7rem; color: var(--muted-foreground); font-size: var(--step--1); }
+  .j-app-grid { display: grid; gap: var(--space-lg); align-items: start; }
+  /* Not a row of equal boxes: the Overview leads; Rules and Activity follow at different widths. */
+  @media (min-width: 1024px) {
+    .j-app-grid { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 2.5rem 2rem; }
+    .j-app-overview { grid-column: 1 / -1; }
+    .j-app-activity { grid-column: 1; grid-row: 2; }
+    .j-app-rules { grid-column: 2; grid-row: 2; margin-top: var(--space-lg); }
+  }
+</style>

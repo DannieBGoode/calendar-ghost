@@ -1,0 +1,56 @@
+---
+// Stop 3: why it exists. Short, signed, and co-signed by the ghost.
+import type { Messages } from "../../i18n"
+import { Ghost, SpeechBubble } from "../../islands/Ghost"
+import Stop from "./Stop.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const [opening, , closing] = m.why.body
+---
+
+<section class="j-section j-why" aria-labelledby="why-title">
+  <div class="j-wrap">
+    <Stop m={m} n={3} name="why" />
+    <div class="j-note">
+      <h2 id="why-title">{m.why.title}</h2>
+      <p class="j-note-opening">{opening}</p>
+      <p class="j-note-closing">{closing}</p>
+      <div class="j-note-sign">
+        <p class="j-signature">{m.why.signature}</p>
+        <div class="j-cosign" aria-hidden="true">
+          <Ghost face="wink" tone="lantern" alive="brief" float size={150} />
+          <SpeechBubble side="left">{m.variants.journey.why.ghost}</SpeechBubble>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .j-why { padding-top: var(--space-xl); }
+  .j-note {
+    position: relative; max-width: 50rem; padding: clamp(1.75rem, 5vw, 3.5rem);
+    border: 1px solid var(--border); border-radius: 1.75rem; background: var(--surface);
+    /* Ruled like a letter pad, faintly. */
+    background-image: repeating-linear-gradient(to bottom, transparent 0 2.1rem, color-mix(in oklch, var(--primary), transparent 90%) 2.1rem calc(2.1rem + 1px));
+    background-position: 0 1.6rem;
+  }
+  .j-note h2 { font-size: var(--step-2); color: var(--muted-foreground); margin-bottom: var(--space-md); }
+  .j-note-opening { font: 400 clamp(1.375rem, 1.15rem + 0.9vw, 1.875rem)/1.4 var(--font-display); letter-spacing: -0.01em; max-width: 34ch; }
+  .j-note-closing { color: var(--muted-foreground); font-size: var(--step-0); }
+  .j-note-sign { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem 2rem; margin-top: var(--space-md); }
+  .j-signature { margin: 0; font: 400 var(--step-1)/1.2 var(--font-display); color: var(--primary); }
+  .j-cosign { position: relative; display: flex; align-items: center; flex-direction: row-reverse; gap: 0.6rem; }
+  /* On wide screens the ghost leans on the note's edge, beside the signature. */
+  @media (min-width: 1000px) {
+    .j-note { margin-left: 4rem; }
+    .j-cosign { position: absolute; right: -11.5rem; bottom: 2rem; }
+  }
+  .j-cosign :global(.speech-bubble) { position: relative; inset: auto; }
+  .j-cosign :global(.speech-bubble)::before { top: calc(50% - 0.325rem); }
+  .j-cosign :global(.ghost) { --ghost-cutout: transparent; }
+</style>

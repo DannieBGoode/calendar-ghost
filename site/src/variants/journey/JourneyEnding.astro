@@ -1,0 +1,158 @@
+---
+// The last stop, in the ghost's own voice. It flies down with the plan picked in the hero, sets it
+// down on Work's calendar, steps back and waves; the call to action is what it says. Forked from
+// sections/Footer.astro because the call to action is the ghost speaking and the footer is the
+// end of the journey's night sky.
+import Avatar from "../../components/Avatar.astro"
+import type { Messages } from "../../i18n"
+import { Ghost } from "../../islands/Ghost"
+import { LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../../links"
+import LanguagePicker from "../../sections/LanguagePicker.astro"
+import Carried from "./Carried.astro"
+import Stop from "./Stop.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<footer class="j-end">
+  <div class="j-wrap">
+    <Stop m={m} n={9} name="end" />
+    <div class="j-end-grid">
+      <div class="j-end-scene" data-wake aria-hidden="true">
+        <span class="j-end-shelf">
+          <span class="j-end-shelf-head"><Avatar calendar="work" />{m.demo.calendars.work}</span>
+          <span class="j-end-slot"></span>
+        </span>
+        <span class="j-end-drop"><Carried m={m} /></span>
+        <span class="j-end-flyer">
+          <span class="j-end-wave"><Ghost face="proud" then="wink" tone="moss" alive="brief" size={190} /></span>
+        </span>
+      </div>
+      <div class="j-end-speech">
+        <h2>{m.variants.journey.ending.says}</h2>
+        <div class="ctas">
+          <a class="btn btn-primary j-btn-big" href="#self-host">{m.hero.primary}</a>
+          <a class="btn j-btn-big" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+            <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="j-end-meta">
+      <p><a href={LICENSE_URL}>{m.footer.license}</a></p>
+      <p><a href={TRADEMARKS_URL}>{m.footer.trademarks}</a> · <a href={REPO_URL}>{m.footer.github}</a></p>
+      <LanguagePicker m={m} />
+      <p>{m.footer.noTrackers}</p>
+    </div>
+  </div>
+</footer>
+
+<style>
+  /* The night sky at the end of the trip: the hero's dotted sky, after dark, whatever the device
+     uses. The band re-declares the dark Twilight tokens so everything inside draws for the dark. */
+  .j-end {
+    color-scheme: dark;
+    --night: oklch(0.235 0.075 279);
+    --background: var(--night);
+    --foreground: oklch(0.95 0.012 285);
+    --surface: oklch(0.28 0.06 280);
+    --muted: oklch(0.32 0.05 280);
+    --muted-foreground: oklch(0.82 0.03 285);
+    --primary: oklch(0.8 0.11 278);
+    --primary-foreground: oklch(0.2 0.05 280);
+    --primary-soft: oklch(0.34 0.08 278);
+    --border: oklch(0.4 0.05 280);
+    --ring: oklch(0.8 0.11 278);
+    --event-busy: oklch(0.45 0.09 278 / 0.6);
+    --event-personal: oklch(0.45 0.09 155 / 0.9);
+    --event-personal-edge: oklch(0.72 0.12 155);
+    --event-family: oklch(0.5 0.09 80 / 0.85);
+    --event-family-edge: oklch(0.8 0.12 80);
+    position: relative; overflow: hidden; padding-block: var(--space-2xl) 2rem; color: var(--foreground);
+    background:
+      radial-gradient(circle at 1px 1px, oklch(0.9 0.04 285 / 0.22) 1px, transparent 1.6px) 0 0 / 22px 22px,
+      var(--night);
+  }
+  @media (prefers-color-scheme: dark) { .j-end { --night: oklch(0.215 0.07 279); } }
+  .j-end a:not(.btn) { color: var(--foreground); }
+  .j-end :global(.btn) { border-color: var(--border); }
+
+  .j-end-grid { display: grid; gap: var(--space-lg); align-items: center; margin-bottom: var(--space-xl); }
+  .j-end-grid > * { min-width: 0; }
+  @media (min-width: 900px) { .j-end-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(2rem, 5vw, 5rem); } }
+
+  /* The scene: Work's calendar with the slot, the plan set down in it, the ghost above. */
+  .j-end-scene { position: relative; height: 22rem; max-width: 26rem; }
+  .j-end-shelf {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 8.5rem; display: grid; align-content: start; gap: 0.7rem;
+    padding: 0.85rem 1rem; border: 1px solid var(--border); border-radius: 1.1rem; background: var(--surface);
+  }
+  .j-end-shelf-head { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.875rem; }
+  .j-end-shelf-head :global(.avatar) { width: 1.6rem; height: 1.6rem; }
+  .j-end-slot { height: 3.6rem; border: 1.5px dashed var(--border); border-radius: 0.7rem; }
+  .j-end-drop { position: absolute; left: 1rem; right: 1rem; bottom: 1rem; height: 3.6rem; transform-origin: 50% 100%; }
+  .j-end-drop :global(.j-carry), .j-end-drop :global(.j-carry-card) { display: grid; width: 100%; height: 100%; }
+  .j-end-drop :global(.j-carry-card) { align-content: center; padding: 0.4rem 0.9rem; font-size: 0.9375rem; border-radius: 0.7rem; }
+  .j-end-flyer { position: absolute; right: -0.5rem; bottom: 6.5rem; line-height: 0; }
+  .j-end-wave { display: block; transform-origin: 50% 90%; }
+  .j-end-flyer :global(.ghost) { --ghost-cutout: transparent; }
+
+  /* The call to action is the ghost talking: a big speech bubble, its tail pointing at it. */
+  .j-end-speech {
+    position: relative; display: grid; justify-items: start; gap: 1.5rem; padding: clamp(1.75rem, 4vw, 3rem);
+    border-radius: 2rem; background: oklch(0.96 0.015 285); color: oklch(0.22 0.06 280);
+    --primary: oklch(0.47 0.15 278); --primary-foreground: oklch(0.99 0.004 285); --border: oklch(0.86 0.02 285);
+    --surface: oklch(0.99 0.004 285); --foreground: oklch(0.22 0.06 280); --muted: oklch(0.93 0.02 285);
+  }
+  .j-end-speech::before {
+    content: ""; position: absolute; left: 3rem; top: -0.9rem; width: 2rem; height: 2rem;
+    background: inherit; transform: rotate(45deg); border-radius: 0.3rem;
+  }
+  @media (min-width: 900px) { .j-end-speech::before { left: -0.9rem; top: calc(50% - 1rem); } }
+  .j-end-speech h2 { margin: 0; max-width: 18ch; font-size: var(--step-3); }
+
+  .j-end-meta {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 2rem;
+    padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: var(--step--1); color: var(--muted-foreground);
+  }
+  .j-end-meta p { margin: 0; }
+
+  /* Once, when it is first well in view: down it comes, the plan settles, the ghost steps back and
+     waves. Without JavaScript or with reduced motion, the scene simply shows how it ends. */
+  .j-end-scene :global(.ghost[data-sequence] .ghost-face-first) { animation: none; opacity: 0; }
+  .j-end-scene :global(.ghost[data-sequence] .ghost-face-then) { animation: none; opacity: 1; }
+  @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+    .j-end-scene:not([data-awake]) .j-end-drop, .j-end-scene:not([data-awake]) .j-end-flyer { opacity: 0; }
+    .j-end-scene[data-awake] .j-end-drop { animation: j-end-drop 2.1s cubic-bezier(0.45, 0, 0.25, 1) both; }
+    .j-end-scene[data-awake] .j-end-flyer { animation: j-end-fly 2.9s cubic-bezier(0.45, 0, 0.25, 1) both; }
+    .j-end-scene[data-awake] .j-end-wave { animation: j-end-wave 1.5s ease-in-out 2.9s both; }
+    .j-end-scene[data-awake] :global(.ghost-face-first) { animation: j-end-face-first 2.4s both !important; }
+    .j-end-scene[data-awake] :global(.ghost-face-then) { animation: j-end-face-then 2.4s both !important; }
+  }
+  @keyframes j-end-drop {
+    0% { opacity: 0; transform: translate(4rem, -15rem); }
+    12% { opacity: 1; }
+    80% { transform: translate(0, -0.6rem); }
+    90% { transform: translate(0, 0) scale(1.03, 0.95); }
+    100% { opacity: 1; transform: none; }
+  }
+  @keyframes j-end-fly {
+    0% { opacity: 0; transform: translate(-6.5rem, -14.5rem); }
+    10% { opacity: 1; }
+    58% { transform: translate(-6.5rem, 0.4rem); }
+    72% { transform: translate(-6.5rem, 0.4rem); }
+    100% { opacity: 1; transform: none; }
+  }
+  @keyframes j-end-wave {
+    0%, 100% { transform: none; }
+    20% { transform: rotate(-11deg); }
+    45% { transform: rotate(9deg); }
+    70% { transform: rotate(-7deg); }
+  }
+  @keyframes j-end-face-first { 0%, 90% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes j-end-face-then { 0%, 90% { opacity: 0; } 100% { opacity: 1; } }
+</style>

@@ -1,0 +1,165 @@
+/* The /journey hero's crossing (JourneyCrossing.tsx). Global, because the island renders it, and
+   scoped to `.jc`.
+
+   The landed result is pure CSS: the two radio groups decide which plan, which mode, and so what
+   shows, so it is right without JavaScript and under reduced motion. During a run the island sets
+   `data-moment` and inline transforms on top of it, and clears them when it stops. */
+
+.jc {
+  --jc-ghost: 180px;
+  --jc-sky: color-mix(in oklch, var(--primary-soft) 55%, var(--background));
+  --jh: 3.5rem;
+  position: relative; display: grid; align-items: start; min-width: 0;
+  padding: clamp(1rem, 3vw, 2.25rem); border-radius: 1.75rem;
+  background:
+    radial-gradient(circle at 1px 1px, color-mix(in oklch, var(--primary), transparent 78%) 1px, transparent 1.6px) 0 0 / 22px 22px,
+    var(--jc-sky);
+  font-size: 0.875rem;
+}
+.jc .ghost { --ghost-cutout: var(--jc-sky); }
+@media (max-width: 899px) { .jc { --jc-ghost: 140px; } }
+@media (max-width: 639px) { .jc { --jc-ghost: 112px; --jh: 3rem; } }
+
+/* Which mode: the other one's words and result hide. */
+.jc:has(input[name="jc-mode"][value="busy"]:checked) [data-mode="details"],
+.jc:has(input[name="jc-mode"][value="details"]:checked) [data-mode="busy"] { display: none; }
+
+/* The choice of what crosses over: real radio buttons, drawn as a segmented switch. */
+.jc-controls { display: flex; flex-wrap: wrap; gap: 1rem 2.5rem; align-items: flex-end; margin-bottom: clamp(1.5rem, 3vw, 2.25rem); }
+.jc-toggle { margin-left: auto; }
+.jc-group { margin: 0; padding: 0; border: 0; min-width: 0; }
+.jc-group legend {
+  padding: 0; margin-bottom: 0.55rem; font-size: 0.75rem; font-weight: 750; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted-foreground);
+}
+.jc-options { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.jc-option {
+  position: relative; display: inline-flex; align-items: center; gap: 0.55rem; min-height: 3rem;
+  padding: 0.35rem 1rem 0.35rem 0.8rem; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--background); color: var(--foreground); cursor: pointer; font-weight: 650; font-size: 0.9375rem;
+}
+.jc-option input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.jc-option:hover { border-color: color-mix(in oklch, var(--primary), transparent 50%); }
+.jc-option:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+.jc-option:has(input:checked) { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+.jc-option-text { display: grid; line-height: 1.15; }
+.jc-segment { gap: 0; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--background); flex-wrap: nowrap; }
+.jc-segment .jc-option { border: 0; min-height: 2.75rem; padding-inline: 1.1rem; }
+.jc-explain { margin: 0; font: 400 var(--step-1)/1.25 var(--font-display); color: var(--foreground); text-wrap: balance; }
+
+/* The stage: Sam's calendar, the sky the ghost crosses, and Work. */
+.jc-cal {
+  position: relative; z-index: 1; min-width: 0; padding: 0.9rem 0.9rem 1rem;
+  border: 1px solid var(--border); border-radius: 1.1rem; background: var(--background);
+  box-shadow: 0 26px 50px -34px color-mix(in oklch, var(--primary), transparent 35%);
+}
+/* Two binder tabs on top, like the ghost's own: it is a calendar page, after all. */
+.jc-cal::before, .jc-cal::after {
+  content: ""; position: absolute; top: -0.6rem; width: 0.6rem; height: 1.2rem; border-radius: 999px;
+  background: color-mix(in oklch, var(--primary), var(--background) 55%);
+}
+.jc-cal::before { left: 32%; }
+.jc-cal::after { right: 32%; }
+.jc-cal-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.85rem; font-size: 0.875rem; }
+.jc-cal-head .avatar { width: 1.75rem; height: 1.75rem; }
+.jc-cal-head span { margin-left: auto; padding: 0.15rem 0.55rem; border-radius: 999px; background: var(--muted); font-size: 0.75rem; font-weight: 650; }
+
+/* A plan as Sam sees it: the card, then its guests and meeting link hanging under it. */
+.jc-card {
+  --event-edge: var(--event-personal-edge);
+  position: relative; display: grid; gap: 0.35rem; padding: 0.75rem 0.85rem 0.85rem;
+  border: 1px solid var(--event-edge); border-radius: 0.8rem; background: var(--event-personal);
+}
+.jc-part { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
+.jc-part > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jc-title { display: block; font-weight: 750; font-size: 1.0625rem; line-height: 1.25; }
+.jc-row { font-size: 0.8125rem; }
+.jc-icon { display: inline-flex; flex: none; width: 0.95rem; height: 0.95rem; }
+.jc-icon-svg { width: 100%; height: 100%; }
+.jc-attach { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.jc-pill {
+  max-width: 100%; padding: 0.3rem 0.65rem 0.3rem 0.55rem; border: 1px solid var(--border); border-radius: 999px;
+  background: var(--surface); font-size: 0.8125rem; font-weight: 550;
+}
+/* The Busy look the traveler takes on once its title has stayed behind. */
+.jc-card-busy {
+  position: absolute; inset: -1px; display: grid; align-content: start; gap: 0.35rem; padding: 0.75rem 0.85rem;
+  border: 1px dashed var(--primary); border-radius: inherit; opacity: 0;
+  background: linear-gradient(var(--event-busy), var(--event-busy)), var(--background);
+}
+.jc-card-busy b { font-size: 1.0625rem; line-height: 1.25; }
+
+/* Work's day, hour by hour, and the plan in its slot. */
+.jc-hours { position: relative; height: calc(var(--jh) * 4); }
+.jc-hour {
+  display: block; height: var(--jh); padding-top: 0.2rem; border-top: 1px dashed var(--border);
+  font-size: 0.6875rem; color: var(--muted-foreground);
+}
+.jc-landed {
+  position: absolute; left: 3rem; right: 0; top: calc(var(--from) * var(--jh) + 2px);
+  height: calc(var(--span) * var(--jh) - 4px); transform-origin: 50% 0;
+}
+.jc-landed .jc-slot { inset: 0; padding: 0.4rem 0.6rem; font-size: 0.8125rem; }
+.jc-landed .jc-slot > small { font-size: 0.75rem; }
+
+/* The route across the sky, and the traveler the ghost carries along it. */
+.jc-arc { display: block; width: 100%; fill: none; stroke: var(--primary); stroke-width: 2; stroke-dasharray: 2 10; stroke-linecap: round; opacity: 0.55; }
+.jc-arc path { vector-effect: non-scaling-stroke; }
+.jc-traveler { position: absolute; left: 0; top: 0; z-index: 2; opacity: 0; pointer-events: none; transform-origin: 0 0; }
+.jc-ghost, .jc-traveler { pointer-events: none; }
+
+/* The ghost and what it says. Its resting place is in the sky beside Work. */
+.jc-ghost { position: relative; z-index: 3; width: var(--jc-ghost); height: var(--jc-ghost); }
+.jc-ghost-wave { position: absolute; inset: 0; transform-origin: 50% 90%; }
+/* Faces swap at once, like a blink: a crossfade would show one body through the other. */
+.jc .jc-face { position: absolute; inset: 0; --ghost-size: 100%; opacity: 0; }
+.jc:where(:has(input[name="jc-mode"][value="busy"]:checked)) .jc-face-happy,
+.jc:where(:has(input[name="jc-mode"][value="details"]:checked)) .jc-face-wink { opacity: 1; }
+.jc:is([data-moment="fetch"], [data-moment="take"], [data-moment="peel"], [data-moment="carry"], [data-moment="set"]) .jc-face { opacity: 0; }
+.jc[data-moment="fetch"] .jc-face-neutral,
+.jc[data-moment="take"] .jc-face-happy,
+.jc[data-moment="peel"] .jc-face-wink,
+.jc[data-moment="carry"] .jc-face-proud,
+.jc[data-moment="set"] .jc-face-proud { opacity: 1; }
+.jc-says { font-size: 0.9375rem; }
+/* A line fades in when the ghost says it, and goes at once when it moves on. */
+.jc[data-moment="peel"] .jc-says-peel, .jc[data-moment="settle"] .jc-says-land { transition: opacity 240ms var(--ease-out); }
+.jc .jc-says-land { top: 0; max-width: 15rem; }
+.jc .jc-says-peel { top: 4%; opacity: 0; white-space: nowrap; }
+.jc:is([data-moment="fetch"], [data-moment="take"], [data-moment="peel"], [data-moment="carry"], [data-moment="set"]) .jc-says-land { opacity: 0; }
+.jc[data-moment="peel"] .jc-says-peel { opacity: 1; }
+
+/* Wide: three columns, the plan crossing from left to right, the explanation under the sky. */
+@media (min-width: 900px) {
+  .jc { grid-template-columns: minmax(0, 19rem) minmax(0, 1fr) minmax(0, 17.5rem); }
+  .jc-controls { grid-column: 1 / -1; grid-row: 1; }
+  .jc-from { grid-column: 1; grid-row: 2; }
+  .jc-arc { grid-column: 2; grid-row: 2; height: 9rem; margin-top: 3.5rem; }
+  .jc-to { grid-column: 3; grid-row: 2; margin-top: 2.5rem; }
+  .jc-ghost { grid-column: 2; grid-row: 2; justify-self: end; margin: 5.5rem 1.75rem 0 0; }
+  .jc-explain { grid-column: 2; grid-row: 2; align-self: end; justify-self: center; max-width: 19ch; padding: 0 1rem 0.25rem; text-align: center; }
+}
+/* Narrow: Sam's calendar above Work, and the plan carried down. */
+@media (max-width: 899px) {
+  .jc { grid-template-columns: minmax(0, 1fr); }
+  .jc > * { grid-column: 1; }
+  .jc-controls { grid-row: 1; }
+  .jc-explain { grid-row: 2; margin-bottom: 1.5rem; }
+  .jc-arc { grid-row: 4; justify-self: center; width: 60%; height: calc(var(--jc-ghost) + 1.5rem); transform: rotate(90deg) scaleX(0.6); }
+  .jc-from { grid-row: 3; }
+  .jc-to { grid-row: 5; }
+  .jc-ghost { grid-row: 4; justify-self: end; align-self: center; margin: 0.75rem 0.5rem; }
+  .jc .jc-says-land { max-width: min(13rem, 52vw); }
+  .jc .jc-says-peel { left: auto; right: calc(100% + 0.4rem); }
+  .jc .jc-says-peel::before { left: auto; right: -0.36rem; transform: rotate(-135deg); }
+}
+@media (max-width: 639px) {
+  .jc-option { min-height: 2.75rem; padding-inline: 0.7rem 0.8rem; font-size: 0.875rem; }
+  .jc-explain { font-size: 1.125rem; }
+  .jc { border-radius: 1.25rem; }
+  .jc-toggle { margin-left: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jc .jc-says { transition: none; }
+}

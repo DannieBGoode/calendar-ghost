@@ -1,0 +1,57 @@
+---
+// Stop 1: the crossing. The headline and pitch, then the visitor picks what crosses over and the
+// ghost carries Sam's Dentist appointment from Personal to Work.
+import { avatarUrls } from "../../avatars"
+import type { Messages } from "../../i18n"
+import { REPO_URL } from "../../links"
+import { JourneyCrossing } from "./JourneyCrossing"
+import { journeyDentist } from "./plans"
+import Stop from "./Stop.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const [firstLine, secondLine] = m.variants.bold.hero.titleLines
+---
+
+<section class="j-hero" aria-labelledby="hero-title">
+  <div class="j-wrap j-hero-head">
+    <div class="j-hero-title">
+      <h1 id="hero-title"><span>{firstLine}</span> <span class="j-accent">{secondLine}</span></h1>
+    </div>
+    <div class="j-hero-pitch">
+      <p class="j-lead">{m.hero.sub}</p>
+      <div class="ctas">
+        <a class="btn btn-primary j-btn-big" href="#self-host">{m.hero.primary}</a>
+        <a class="btn j-btn-big" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
+        </a>
+      </div>
+    </div>
+  </div>
+  <div class="j-wrap j-hero-demo">
+    <Stop m={m} n={1} name="crossing" />
+    <JourneyCrossing
+      client:load
+      m={{
+        switchLabel: m.crossing.switchLabel,
+        busyOnly: m.crossing.busyOnly,
+        withDetails: m.crossing.withDetails,
+        busyOnlyBody: m.crossing.busyOnlyBody,
+        withDetailsBody: m.crossing.withDetailsBody,
+        peel: m.variants.journey.crossing.peel,
+        busySays: m.ghost.crossingBusy,
+        detailsSays: m.ghost.crossingDetails,
+        busy: m.demo.busy,
+        summary: m.crossing.summary,
+        day: m.demo.days[0],
+        calendars: m.demo.calendars,
+        motion: m.motion,
+      }}
+      plan={journeyDentist(m)}
+      avatars={await avatarUrls()}
+    />
+  </div>
+</section>

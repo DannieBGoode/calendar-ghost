@@ -31,6 +31,16 @@ describe("English copy", () => {
     expect(en.variants.bold.hero.titleLines.join(" ")).toBe(en.hero.title)
   })
 
+  it("lists the self-host facts /journey shows, true to docs/self-hosting.md", () => {
+    expect(en.variants.journey.selfHost.facts).toEqual([
+      "One container",
+      "One SQLite file",
+      "amd64 and arm64",
+      "No Calendar Ghost account",
+      "No trackers",
+    ])
+  })
+
   it("never calls the app pre-alpha", () => {
     expect(strings(en).filter(([, text]) => /pre-?alpha/i.test(text))).toEqual([])
   })

@@ -1,0 +1,52 @@
+---
+// Stop 8: questions.
+import type { Messages } from "../../i18n"
+import Stop from "./Stop.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="j-section j-faq" aria-labelledby="faq-title">
+  <div class="j-wrap j-faq-grid">
+    <div>
+      <Stop m={m} n={8} name="questions" />
+      <h2 id="faq-title">{m.faq.title}</h2>
+    </div>
+    <div class="j-faq-list">
+      {
+        m.faq.items.map((item) => (
+          <details>
+            <summary>{item.q}</summary>
+            <p>{item.a}</p>
+          </details>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .j-faq { padding-bottom: var(--space-xl); }
+  .j-faq-grid { display: grid; gap: var(--space-md); }
+  .j-faq-grid > * { min-width: 0; }
+  @media (min-width: 900px) { .j-faq-grid { grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: clamp(3rem, 6vw, 6rem); align-items: start; } }
+  details { border-top: 1px solid var(--border); }
+  details:last-child { border-bottom: 1px solid var(--border); }
+  summary {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 4rem; padding-block: 0.75rem;
+    cursor: pointer; list-style: none; font: 400 var(--step-1)/1.25 var(--font-display);
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: "+"; flex: none; display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%;
+    background: var(--primary-soft); color: var(--primary); font: 500 1.4rem/1 var(--font-sans);
+    transition: transform 240ms var(--ease-out);
+  }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { margin: 0 0 1.25rem; color: var(--muted-foreground); }
+  @media (prefers-reduced-motion: reduce) { summary::after { transition: none; } }
+</style>

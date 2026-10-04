@@ -1,0 +1,26 @@
+---
+// The plan the ghost carries down the page: the Dentist, as it crossed over in the hero (Busy, or
+// its title). Both are rendered; journey.css shows the one the hero's switch says, so it follows
+// the visitor's choice with or without JavaScript.
+import type { Messages } from "../../i18n"
+import { DENTIST_TIME, clock } from "./crossing"
+
+interface Props {
+  m: Messages
+  class?: string
+}
+
+const { m, class: className } = Astro.props
+const when = `${m.demo.days[DENTIST_TIME.day]} ${clock(DENTIST_TIME.start)}`
+---
+
+<span class:list={["j-carry", className]} aria-hidden="true">
+  <span class="j-carry-card is-busy" data-mode="busy">
+    <b>{m.demo.busy}</b>
+    <small>{when}</small>
+  </span>
+  <span class="j-carry-card" data-mode="details">
+    <b>{m.demo.events.dentist.title}</b>
+    <small>{when}</small>
+  </span>
+</span>

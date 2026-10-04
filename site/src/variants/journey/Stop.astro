@@ -1,0 +1,21 @@
+---
+// A stop on the ghost's journey down the page: a small stamp with its number and name. On wide
+// screens it also marks its place on the route in the margin (journey.css).
+import type { Messages } from "../../i18n"
+import { format } from "../../i18n/format"
+
+interface Props {
+  m: Messages
+  n: number
+  name: keyof Messages["variants"]["journey"]["stops"]
+  class?: string
+}
+
+const { m, n, name, class: className } = Astro.props
+const copy = m.variants.journey
+---
+
+<p class:list={["j-stop", className]} aria-hidden="true">
+  <span class="j-stop-n">{format(copy.stop, { n })}</span>
+  <span class="j-stop-name">{copy.stops[name]}</span>
+</p>

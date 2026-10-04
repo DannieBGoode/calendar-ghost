@@ -1,0 +1,96 @@
+---
+// Stop 4: the proof. Every trust claim in words, each title linking to the documentation that
+// proves it: three lead claims set large (it puts a deleted event back, never carries its own
+// event home, and shows a preview before writing), then the rest as a compact checklist.
+import DocLink from "../../components/DocLink.astro"
+import Icon from "../../components/Icon.astro"
+import type { Messages } from "../../i18n"
+import type { IconName } from "../../icons"
+import { TRUST_DOCS } from "../../links"
+import Stop from "./Stop.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+// One icon per claim, in the order of `trust.cards`.
+const ICONS: readonly IconName[] = ["rotateCcw", "eye", "mailX", "refreshCwOff", "repeat", "listChecks", "shieldCheck", "activity"]
+const claims = m.trust.cards.map((card, index) => ({
+  card,
+  doc: TRUST_DOCS[index] ?? TRUST_DOCS[0],
+  icon: ICONS[index] ?? "shieldCheck",
+}))
+// Fixes itself, No loops, Preview first lead; the others follow in their usual order.
+const LEAD = [0, 3, 1]
+const lead = LEAD.map((index) => claims[index]!)
+const rest = claims.filter((_, index) => !LEAD.includes(index))
+---
+
+<section id="features" class="j-section j-proof" aria-labelledby="trust-title">
+  <div class="j-wrap">
+    <Stop m={m} n={4} name="proof" />
+    <div class="jp-head">
+      <h2 id="trust-title">{m.trust.title}</h2>
+      <p class="j-lead">{m.variants.journey.proof.lead}</p>
+    </div>
+    <ol class="jp-lead">
+      {
+        lead.map(({ card, doc, icon }) => (
+          <li>
+            <Icon name={icon} class="jp-lead-icon" />
+            <h3>
+              <DocLink m={m} href={doc}>
+                {card.title}
+              </DocLink>
+            </h3>
+            <p>{card.body}</p>
+          </li>
+        ))
+      }
+    </ol>
+    <ul class="jp-checklist">
+      {
+        rest.map(({ card, doc, icon }) => (
+          <li>
+            <Icon name={icon} class="jp-check-icon" />
+            <p>
+              <strong>
+                <DocLink m={m} href={doc}>
+                  {card.title}
+                </DocLink>
+              </strong>{" "}
+              {card.body}
+            </p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .jp-head { display: grid; gap: var(--space-sm) var(--space-lg); align-items: end; }
+  .jp-head h2 { max-width: 11ch; margin: 0; }
+  .jp-head .j-lead { margin: 0; }
+  @media (min-width: 900px) { .jp-head { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+
+  /* The three lead claims: large words, no boxes, a hairline above each. */
+  .jp-lead { list-style: none; margin: var(--space-xl) 0 0; padding: 0; display: grid; gap: var(--space-lg) clamp(2rem, 4vw, 3.5rem); }
+  .jp-lead li { min-width: 0; padding-top: 1.5rem; border-top: 2px solid var(--foreground); }
+  .jp-lead h3 { margin: 1rem 0 0.6rem; font: 400 var(--step-2)/1.1 var(--font-display); letter-spacing: -0.01em; }
+  .jp-lead p { margin: 0; color: var(--muted-foreground); font-size: var(--step-0); }
+  .jp-lead :global(.jp-lead-icon) {
+    display: block; width: 2.75rem; height: 2.75rem; padding: 0.65rem; border-radius: 50%;
+    background: var(--primary-soft); color: var(--primary);
+  }
+  @media (min-width: 900px) { .jp-lead { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+  /* The rest: a compact checklist. */
+  .jp-checklist { list-style: none; margin: var(--space-xl) 0 0; padding: 0; display: grid; gap: 1.1rem 3rem; }
+  .jp-checklist li { display: flex; gap: 0.85rem; align-items: flex-start; min-width: 0; padding-top: 1.1rem; border-top: 1px solid var(--border); }
+  .jp-checklist p { margin: 0; color: var(--muted-foreground); }
+  .jp-checklist strong { color: var(--foreground); }
+  .jp-checklist :global(.jp-check-icon) { flex: none; width: 1.25rem; height: 1.25rem; margin-top: 0.2rem; color: var(--primary); }
+  @media (min-width: 900px) { .jp-checklist { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>

@@ -334,6 +334,43 @@ export const en = {
       faq: { ghost: "Ask away. I'm transparent." },
       footer: { cta: "Give me a server. I'll handle the busywork." },
     },
+    journey: {
+      /** The small stamp at each stop of the ghost's journey down the page, then the stop's name. */
+      stop: "Stop {n}",
+      stops: {
+        crossing: "The crossing",
+        week: "The whole week",
+        why: "Why it exists",
+        proof: "The proof",
+        homelab: "Your homelab",
+        app: "The app",
+        server: "Your server",
+        questions: "Questions",
+        end: "Last stop",
+      },
+      crossing: {
+        /** What the ghost says to the parts of the event it leaves behind. */
+        peel: "Not you. You stay home.",
+        /** The Dentist's description, the one part the demo week does not already name. */
+        description: "Bring the referral letter.",
+      },
+      proof: { lead: "Each claim links to the documentation that proves it." },
+      why: { ghost: "Co-signed." },
+      app: {
+        body: "Where you watch the ghost work: the app's own screens, redrawn with made-up data for Sam's calendars.",
+      },
+      selfHost: {
+        factsLabel: "At a glance",
+        facts: ["One container", "One SQLite file", "amd64 and arm64", "No Calendar Ghost account", "No trackers"] as [
+          string,
+          string,
+          string,
+          string,
+          string,
+        ],
+      },
+      ending: { says: "Delivered. Give me a server, and I'll carry the rest." },
+    },
   },
 }
 
