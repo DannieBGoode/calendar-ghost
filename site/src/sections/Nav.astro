@@ -41,7 +41,7 @@ const links = [
 <style>
   .nav { position: sticky; top: 0; z-index: 10; background: color-mix(in oklch, var(--background), transparent 12%); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
   .nav-inner { display: flex; align-items: center; justify-content: space-between; min-height: 4rem; gap: 1rem; }
-  .nav-brand { display: flex; align-items: center; gap: 0.5rem; color: var(--foreground); text-decoration: none; font-weight: 650; }
+  .nav-brand { display: flex; align-items: center; gap: 0.5rem; color: var(--foreground); text-decoration: none; font-weight: 650; white-space: nowrap; }
   .nav-brand :global(.nav-mark) { width: 28px; height: 28px; }
   .nav-links { display: flex; align-items: center; gap: 1rem; }
   .nav-links ul { list-style: none; margin: 0; padding: 0; }
@@ -54,5 +54,8 @@ const links = [
   @media (max-width: 719px) {
     .nav-wide { display: none; }
     .nav-narrow { display: block; }
+  }
+  @media (max-width: 479px) {
+    .nav-links > .btn { display: none; }
   }
 </style>
