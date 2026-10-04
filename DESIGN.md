@@ -153,7 +153,8 @@ Overview health hero, loading, and empty states; labels and explanations always 
 in `CONTEXT.md`, never calling a Managed Projection a "ghost."
 
 **The Landing Page Register Rule.** On the landing page (`site/`), the ghost is the main character:
-it carries events between calendars, reacts, and reuses the Overview faces. Microcopy may joke.
+it carries events between calendars, reacts, and reuses the Overview faces (adding proud, surprised,
+and wink), drawn filled at character size by `site/src/islands/Ghost.tsx`. Microcopy may joke.
 Explanations stay literal and true to the glossary, and every decorative motion stops under
 `prefers-reduced-motion`. The rest of this document describes the application.
 

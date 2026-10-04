@@ -1,5 +1,5 @@
 ---
-import { GhostMark } from "../islands/GhostMark"
+import { Ghost, SpeechBubble } from "../islands/Ghost"
 import type { Messages } from "../i18n"
 import { LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../links"
 import LanguagePicker from "./LanguagePicker.astro"
@@ -13,7 +13,10 @@ const { m } = Astro.props
 
 <footer class="footer">
   <div class="container footer-cta">
-    <GhostMark className="footer-mark" face="sleepy" />
+    <div class="ghost-says">
+      <Ghost face="sleepy" tone="lantern" alive="brief" float size={96} />
+      <SpeechBubble className="speech-bubble-inline">{m.ghost.footer}</SpeechBubble>
+    </div>
     <h2>{m.footer.cta}</h2>
     <a class="btn btn-primary" href="#self-host">{m.hero.primary}</a>
   </div>
@@ -28,7 +31,7 @@ const { m } = Astro.props
 <style>
   .footer { border-top: 1px solid var(--border); padding-block: 4rem 2rem; }
   .footer-cta { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; margin-bottom: 3rem; }
-  .footer-cta :global(.footer-mark) { width: 56px; height: 56px; }
+  .footer-cta .ghost-says { margin-bottom: 0.5rem; }
   .footer-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 2rem; font-size: 0.875rem; color: var(--muted-foreground); }
   .footer-meta p { margin: 0; }
 </style>

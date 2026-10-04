@@ -1,5 +1,5 @@
 ---
-import { GhostMark } from "../islands/GhostMark"
+import { Ghost } from "../islands/Ghost"
 import type { Messages } from "../i18n"
 
 interface Props {
@@ -13,13 +13,12 @@ const { m } = Astro.props
   <div class="container why">
     <h2 id="why-title">{m.why.title}</h2>
     {m.why.body.map((paragraph) => <p>{paragraph}</p>)}
-    <p class="signature"><GhostMark className="why-mark" /> {m.why.signature}</p>
+    <p class="signature"><Ghost face="wink" alive="brief" size={56} /> {m.why.signature}</p>
   </div>
 </section>
 
 <style>
   .why { max-width: 42rem; }
   .why p { font-size: 1.0625rem; }
-  .signature { display: flex; align-items: center; gap: 0.5rem; font-weight: 650; }
-  .signature :global(.why-mark) { width: 24px; height: 24px; }
+  .signature { display: flex; align-items: center; gap: 0.35rem; font-weight: 650; }
 </style>
