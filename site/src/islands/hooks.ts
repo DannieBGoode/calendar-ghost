@@ -59,10 +59,12 @@ export function useAnimationFrame(onFrame: (elapsedMs: number) => void, active: 
   }, [active])
 }
 
-/** Eye offset toward the pointer for the ghost inside `ref`. */
-export function usePointerEyes(ref: RefObject<Element | null>): { x: number; y: number } {
+/** Eye offset toward the pointer for the ghost inside `ref`. Listens only while `active`, so an
+ * island off screen does not track the pointer for nothing. */
+export function usePointerEyes(ref: RefObject<Element | null>, active = true): { x: number; y: number } {
   const [eyes, setEyes] = useState({ x: 0, y: 0 })
   useEffect(() => {
+    if (!active) return
     let frame = 0
     const onMove = (event: PointerEvent) => {
       cancelAnimationFrame(frame)
@@ -77,6 +79,6 @@ export function usePointerEyes(ref: RefObject<Element | null>): { x: number; y: 
       window.removeEventListener("pointermove", onMove)
       cancelAnimationFrame(frame)
     }
-  }, [ref])
+  }, [ref, active])
   return eyes
 }

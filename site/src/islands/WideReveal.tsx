@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties } from "react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { eventBox } from "../demo/layout"
 import { SAM_WEEK } from "../demo/week"
 import type { Messages } from "../i18n"
@@ -12,6 +12,11 @@ import { WeekGrid } from "./WeekGrid"
 const FRAME = { heightPx: 380, headerPx: 36, gapPx: 3 }
 const PLACED = SAM_WEEK.map((event) => ({ event, box: eventBox(event, FRAME) }))
 
+/** Two decimals is enough to smooth the sweep; trimmed so whole percentages render without them. */
+function splitStyle(percent: number): string {
+  return `${Math.round(percent * 100) / 100}%`
+}
+
 /** The hero: Sam's week as Sam sees it, revealed over what work sees, with the ghost as handle. */
 export function WideReveal({ m }: { m: Messages["demo"] }) {
   const frame = useRef<HTMLDivElement>(null)
@@ -22,11 +27,20 @@ export function WideReveal({ m }: { m: Messages["demo"] }) {
   const reducedMotion = useReducedMotion()
   const onScreen = useOnScreen(frame)
   const pageVisible = usePageVisible()
-  const eyes = usePointerEyes(handle)
+  const eyes = usePointerEyes(handle, onScreen)
   const animating = shouldAnimate({ onScreen, pageVisible, reducedMotion, held: held !== null })
   useAnimationFrame((elapsed) => setAuto(sweepPercent(phase + elapsed)), animating)
 
-  const split = Math.round(held ?? auto)
+  // When the loop stops (scrolled away, tab hidden, reduced motion), remember the phase at the
+  // point it stopped, so the next run resumes from there instead of jumping back to center.
+  const wasAnimating = useRef(animating)
+  useEffect(() => {
+    if (wasAnimating.current && !animating) setPhase(sweepTimeFor(auto))
+    wasAnimating.current = animating
+  }, [animating, auto])
+
+  const splitValue = held ?? auto
+  const split = Math.round(splitValue)
   const release = () => {
     if (held === null) return
     setPhase(sweepTimeFor(held))
@@ -34,29 +48,44 @@ export function WideReveal({ m }: { m: Messages["demo"] }) {
     setHeld(null)
   }
 
+  // These two layers never depend on `split`, so memoizing them keeps a sweep frame to updating
+  // only the CSS variable, the range input, and the handle.
+  const workLayer = useMemo(
+    () => (
+      <div className="reveal-layer reveal-work" aria-hidden="true">
+        <WeekGrid days={m.days} className="reveal-week">
+          {PLACED.map(({ event, box }) =>
+            event.kind === "work" ? (
+              <EventCard key={event.key} box={box} look="work" title={m.events[event.key].title} detail={m.events[event.key].detail} />
+            ) : (
+              <EventCard key={event.key} box={box} look="busy" title={m.busy} />
+            ),
+          )}
+        </WeekGrid>
+        <span className="reveal-tag reveal-tag-work">{m.workSees}</span>
+      </div>
+    ),
+    [m],
+  )
+  const youLayer = useMemo(
+    () => (
+      <div className="reveal-layer reveal-you" aria-hidden="true">
+        <WeekGrid days={m.days} className="reveal-week">
+          {PLACED.map(({ event, box }) => (
+            <EventCard key={event.key} box={box} look={event.kind} title={m.events[event.key].title} detail={m.events[event.key].detail} />
+          ))}
+        </WeekGrid>
+        <span className="reveal-tag reveal-tag-you">{m.youSee}</span>
+      </div>
+    ),
+    [m],
+  )
+
   return (
     <figure className="reveal">
-      <div ref={frame} className="reveal-frame" style={{ "--split": `${split}%` } as CSSProperties}>
-        <div className="reveal-layer reveal-work" aria-hidden="true">
-          <WeekGrid days={m.days} className="reveal-week">
-            {PLACED.map(({ event, box }) =>
-              event.kind === "work" ? (
-                <EventCard key={event.key} box={box} look="work" title={m.events[event.key].title} detail={m.events[event.key].detail} />
-              ) : (
-                <EventCard key={event.key} box={box} look="busy" title={m.busy} />
-              ),
-            )}
-          </WeekGrid>
-          <span className="reveal-tag reveal-tag-work">{m.workSees}</span>
-        </div>
-        <div className="reveal-layer reveal-you" aria-hidden="true">
-          <WeekGrid days={m.days} className="reveal-week">
-            {PLACED.map(({ event, box }) => (
-              <EventCard key={event.key} box={box} look={event.kind} title={m.events[event.key].title} detail={m.events[event.key].detail} />
-            ))}
-          </WeekGrid>
-          <span className="reveal-tag reveal-tag-you">{m.youSee}</span>
-        </div>
+      <div ref={frame} className="reveal-frame" style={{ "--split": splitStyle(splitValue) } as CSSProperties}>
+        {workLayer}
+        {youLayer}
         <div className="reveal-divider" aria-hidden="true" />
         <div ref={handle} className="reveal-handle" aria-hidden="true">
           <GhostMark className="ghost-bob" eyes={eyes} />
