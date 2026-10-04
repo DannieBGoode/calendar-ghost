@@ -1,0 +1,33 @@
+---
+import { WideReveal } from "../islands/WideReveal"
+import type { Messages } from "../i18n"
+import { REPO_URL } from "../links"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="hero section">
+  <div class="container hero-copy">
+    <p class="chip">{m.hero.chip}</p>
+    <h1>{m.hero.title}</h1>
+    <p class="lead">{m.hero.sub}</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="#self-host">{m.hero.primary}</a>
+      <a class="btn" href={REPO_URL}><span aria-hidden="true">★</span> {m.hero.secondary}</a>
+    </div>
+  </div>
+  <div class="container">
+    <WideReveal client:load m={m.demo} />
+  </div>
+</section>
+
+<style>
+  .hero { padding-top: clamp(2.5rem, 6vw, 5rem); }
+  .hero-copy { text-align: center; display: flex; flex-direction: column; align-items: center; }
+  .hero-copy .lead { margin-inline: auto; }
+  .hero-copy .ctas { justify-content: center; }
+</style>

@@ -28,3 +28,41 @@
   .ghost-bob { animation: none; }
   .cal-event { transition: none; }
 }
+
+/* The Wide Reveal. The top layer shows Sam's view up to --split; below it, what work sees. */
+.reveal { margin: 2.5rem 0 0; }
+.reveal-frame {
+  --split: 55%;
+  position: relative; height: 380px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
+}
+.reveal-layer { position: absolute; inset: 0; overflow: hidden; }
+.reveal-work { background: var(--surface); }
+.reveal-you { background: var(--reveal-you); clip-path: inset(0 calc(100% - var(--split)) 0 0); }
+/* On a phone the week is wider than the frame, so Monday to Wednesday fill it. */
+.reveal-week { width: 100%; }
+@media (max-width: 639px) { .reveal-week { width: calc(100% * 5 / 3); } }
+.reveal-tag {
+  position: absolute; bottom: 0.6rem; z-index: 2; font-size: 0.75rem; font-weight: 700;
+  padding: 0.2rem 0.6rem; border-radius: 999px; background: var(--muted);
+}
+.reveal-tag-you { left: 0.6rem; }
+.reveal-tag-work { right: 0.6rem; }
+.reveal-divider {
+  position: absolute; top: 0; bottom: 0; left: var(--split); width: 2px; margin-left: -1px; z-index: 3;
+  background: var(--brand-line); box-shadow: 0 0 18px color-mix(in oklch, var(--primary), transparent 40%);
+}
+.reveal-handle {
+  position: absolute; top: 50%; left: var(--split); width: 56px; height: 56px; margin: -28px 0 0 -28px;
+  z-index: 4; pointer-events: none;
+}
+.reveal-handle svg { width: 100%; height: 100%; overflow: visible; }
+/* The real control: a transparent range input over the whole frame, for mouse, touch, and keys. */
+.reveal-range {
+  position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%; margin: 0;
+  opacity: 0; cursor: ew-resize; touch-action: pan-y;
+}
+.reveal-range::-webkit-slider-thumb { -webkit-appearance: none; width: 56px; height: 380px; }
+.reveal-range::-moz-range-thumb { width: 56px; height: 380px; border: 0; }
+.reveal-frame:has(.reveal-range:focus-visible) { outline: 2px solid var(--ring); outline-offset: 3px; }
+.reveal-hint { text-align: center; font-size: 0.8125rem; color: var(--muted-foreground); margin-top: 0.6rem; }
