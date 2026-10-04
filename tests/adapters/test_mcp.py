@@ -147,5 +147,8 @@ def test_paths_below_mcp_are_not_found_and_the_web_ui_is_unaffected(mcp: Any) ->
     below = client.post("/mcp/", headers={"Authorization": f"Bearer {token}"}, json={})
     assert below.status_code == 404
     assert client.post("/mcp/extra", json={}).status_code == 404
-    assert client.get("/rules").status_code in {200, 404}
+    # The compiled Web UI is committed, so its client-side routes still serve the application.
+    web_ui = client.get("/rules")
+    assert web_ui.status_code == 200
+    assert web_ui.headers["content-type"].startswith("text/html")
     assert "mcp" not in client.get("/api/openapi.json").text
