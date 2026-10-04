@@ -110,8 +110,6 @@ export function call<P extends keyof paths, M extends MethodOf<P>>(
 /** Response and request bodies, generated from the backend's OpenAPI schema (web/openapi.json). */
 type Schemas = components["schemas"]
 
-export type SetupStatus = Schemas["SetupStatusResponse"]
-export type SessionStatus = Schemas["SessionResponse"]
 /** `blocked_events` counts events of existing rules whose latest decision was a block. */
 export type Dashboard = Schemas["DashboardResponse"]
 /** A rule's calendar with the name Google last gave it; null until Google lists it. */
@@ -132,10 +130,7 @@ export type RuleSummary = Schemas["RuleSummaryResponse"]
 export type RecentChange = Schemas["RecentChangeResponse"]
 export type RuleDetail = Schemas["RuleDetailResponse"]
 export type RulePolicyPayload = Schemas["UpdateRulePolicyRequest"]
-export type RuleEndpointPayload = Schemas["CalendarEndpointPayload"]
-export type GoogleConfiguration = Schemas["GoogleConfigurationResponse"]
 export type ConnectedAccount = Schemas["ConnectedAccountResponse"]
-export type GoogleAccountAccess = Schemas["GoogleAccountAccessResponse"]
 export type DiscoveredCalendar = Schemas["DiscoveredCalendarResponse"]
 export type RulePreview = Schemas["RulePreviewResponse"]
 export type SyncResult = Schemas["SyncResultResponse"]
@@ -144,7 +139,6 @@ export type SyncResult = Schemas["SyncResultResponse"]
 export type ReconcileResult = Schemas["ReconcileResultResponse"]
 export type AuditEntry = Schemas["AuditEntryResponse"]
 export type ActivityCategory = AuditEntry["category"]
-export type RecordedTime = Schemas["RecordedTimeResponse"]
 export type FieldChange = Schemas["FieldChangeResponse"]
 /** What changed in an entry's source event; values other than titles are kept for 90 days. */
 export type SourceChange = Schemas["SourceChangeResponse"]
@@ -157,14 +151,10 @@ export type ActivityFilters = {
   query?: string | undefined
 }
 export type EventSnapshot = Schemas["EventSnapshotResponse"]
-export type ActivityEvent = Schemas["ActivityEventResponse"]
 export type Incident = Schemas["IncidentResponse"]
 
 export type DatabaseUsage = Schemas["DatabaseUsageResponse"]
 export type LogUsage = Schemas["LogUsageResponse"]
-export type StorageUsage = Schemas["StorageResponse"]
-export type ClearableActivity = Schemas["ClearableActivityResponse"]
-export type ClearedActivity = Schemas["ClearedActivityResponse"]
 export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
 
 export const ACTIVITY_PAGE_SIZE = 100
