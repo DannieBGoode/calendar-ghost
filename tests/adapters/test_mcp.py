@@ -225,3 +225,21 @@ def test_a_valid_token_before_the_server_starts_gets_service_unavailable() -> No
         503,
         {"detail": "the MCP server is starting or stopping"},
     )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-protected-resource/mcp",
+        "/.well-known/oauth-authorization-server",
+        "/.well-known/openid-configuration/mcp",
+    ],
+)
+def test_oauth_discovery_is_not_answered_by_the_web_ui(mcp: Any, path: str) -> None:
+    # MCP clients look for OAuth metadata before using a bearer token; an HTML page with 200
+    # would read as metadata. Calendar Ghost has none, so it says so in JSON.
+    client, _ = mcp
+    response = client.get(path)
+    assert response.status_code == 404
+    assert response.headers["content-type"] == "application/json"

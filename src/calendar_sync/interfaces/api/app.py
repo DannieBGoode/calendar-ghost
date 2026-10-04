@@ -95,6 +95,11 @@ def create_app(container: Container | None = None) -> FastAPI:
     # One exact route, ahead of the API fallback and the Web UI catch-all (ADR 0023).
     app.router.routes.append(Route("/mcp", mcp.app, include_in_schema=False))
     app.router.routes.append(Route("/mcp/{path:path}", McpNotFound(), include_in_schema=False))
+    # MCP clients look for OAuth metadata here before they use a bearer token. Calendar Ghost has
+    # none, so these answer 404 in JSON instead of the Web UI page, which would read as metadata.
+    app.router.routes.append(
+        Route("/.well-known/{path:path}", McpNotFound(), include_in_schema=False)
+    )
 
     # Registered after every API route so an unknown API path is a JSON error for any method
     # instead of falling through to the web page.
