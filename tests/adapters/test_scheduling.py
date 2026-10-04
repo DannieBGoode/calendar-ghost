@@ -24,6 +24,7 @@ from calendar_sync.application.ports import (
     IncidentResolution,
     RuleRunOutcome,
     RunKind,
+    SchedulerProgress,
     UnitOfWork,
     UnitOfWorkFactory,
 )
@@ -848,3 +849,37 @@ def test_a_pass_that_raises_is_not_counted_as_completed() -> None:
     progress = scheduler.progress()
     assert progress.pass_started_at is None
     assert progress.last_completed_at is None
+
+
+class ObservingClock(SteppingClock):
+    """A stepping clock that also records what the scheduler reports each time it is read."""
+
+    def __init__(self, start: datetime) -> None:
+        super().__init__(start)
+        self.scheduler: SyncScheduler | None = None
+        self.seen: list[SchedulerProgress] = []
+
+    def now(self) -> datetime:
+        if self.scheduler is not None:
+            self.seen.append(self.scheduler.progress())
+        return super().now()
+
+
+def test_a_completed_pass_is_published_before_the_running_pass_is_cleared() -> None:
+    clock = ObservingClock(datetime(2026, 10, 3, 9, 0, tzinfo=UTC))
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, RecordingExecuteRule([])),
+        InMemoryUnitOfWorkFactory(),
+        cast(RunHealth, Mock()),
+        clock=clock,
+    )
+    clock.scheduler = scheduler
+
+    asyncio.run(scheduler.run_once())
+
+    # The first read starts the pass. Every later read happens while it runs, so none may show
+    # "no pass running" next to the previous completion: a request thread would read stalled.
+    assert clock.seen[1:]
+    assert all(progress.pass_started_at is not None for progress in clock.seen[1:])
+    assert scheduler.progress().pass_started_at is None
+    assert scheduler.progress().last_completed_at is not None

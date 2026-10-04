@@ -67,9 +67,13 @@ class SyncScheduler:
         self._pass_started_at = self._clock.now()
         try:
             await self._run_pass()
-        finally:
+        except BaseException:
             self._pass_started_at = None
+            raise
+        # Publish the completion before clearing the running pass, so a request thread never
+        # reads "no pass running" next to the previous completion and reports a false stall.
         self._last_completed_at = self._clock.now()
+        self._pass_started_at = None
 
     def progress(self) -> SchedulerProgress:
         return SchedulerProgress(
