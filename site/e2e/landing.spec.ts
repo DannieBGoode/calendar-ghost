@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
-import { TRUST_DOCS } from "../src/links"
+import { STATUS_CHECK_COMMAND } from "../src/content/integrations"
+import { INTEGRATIONS_URL, TRUST_DOCS } from "../src/links"
 
 const split = (page: Page) =>
   page.locator(".reveal-frame").evaluate((frame) => getComputedStyle(frame).getPropertyValue("--split").trim())
@@ -197,4 +198,33 @@ test("each trust claim links to the documentation that proves it", async ({ page
     await expect(link).toContainText(en.trust.cards[index]!.title)
     await expect(link).toContainText(en.trust.docs)
   }
+})
+
+for (const path of ["/", "/bold"]) {
+  test(`${path}: monitors and agents come after the trust list, with a status check to copy`, async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: undefined }))
+    await page.goto(path)
+    const ids = await page.locator("main > section").evaluateAll((sections) => sections.map((section) => section.id))
+    expect(ids.indexOf("integrations")).toBe(ids.indexOf("features") + 1)
+    expect(ids.indexOf("self-host")).toBe(ids.indexOf("integrations") + 1)
+    const section = page.locator("#integrations")
+    await expect(section.getByRole("heading", { level: 2 })).toHaveText(en.integrations.title)
+    await expect(section.getByRole("link", { name: en.integrations.guide })).toHaveAttribute("href", INTEGRATIONS_URL)
+    const copy = section.locator('button[data-copy="integrations-status-check"]')
+    await copy.click()
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(STATUS_CHECK_COMMAND)
+    await expect(copy).toHaveText(en.selfHost.selected)
+  })
+}
+
+test("without JavaScript, the integrations mockups show their final state", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false })
+  const page = await context.newPage()
+  await page.goto("/")
+  await page.locator("#integrations").scrollIntoViewIfNeeded()
+  await expect(page.locator(".int-chat .int-msg-ghost")).toHaveText(en.integrations.agent.answer)
+  await expect(page.locator(".int-chat .int-msg-ghost")).toBeVisible()
+  expect(await page.locator(".int-chat .int-reply").evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
+  expect(await page.locator(".int-beats i").last().evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
+  await context.close()
 })

@@ -6,6 +6,7 @@ import "../variants/bold/bold.css"
 import Layout from "../layouts/Layout.astro"
 import { messagesFor } from "../i18n"
 import HowItWorksStrip from "../sections/HowItWorksStrip.astro"
+import Integrations from "../sections/Integrations.astro"
 import Nav from "../sections/Nav.astro"
 import BoldApp from "../variants/bold/BoldApp.astro"
 import BoldCrossing from "../variants/bold/BoldCrossing.astro"
@@ -30,6 +31,7 @@ const m = messagesFor(Astro.currentLocale)
       <BoldCrossing m={m} />
       <BoldApp m={m} />
       <BoldTrust m={m} />
+      <Integrations m={m} class="b-section" />
       <BoldSelfHost m={m} />
       <BoldWhy m={m} />
       <BoldFaq m={m} />

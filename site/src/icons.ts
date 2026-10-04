@@ -3,6 +3,7 @@
 import Activity from "lucide-static/icons/activity.svg?raw"
 import ArrowRight from "lucide-static/icons/arrow-right.svg?raw"
 import ArrowUpRight from "lucide-static/icons/arrow-up-right.svg?raw"
+import Bell from "lucide-static/icons/bell.svg?raw"
 import Check from "lucide-static/icons/check.svg?raw"
 import CircleCheck from "lucide-static/icons/circle-check.svg?raw"
 import CircleSlash from "lucide-static/icons/circle-slash.svg?raw"
@@ -26,6 +27,7 @@ export const ICONS = {
   activity: Activity,
   arrowRight: ArrowRight,
   arrowUpRight: ArrowUpRight,
+  bell: Bell,
   check: Check,
   circleCheck: CircleCheck,
   circleSlash: CircleSlash,

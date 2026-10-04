@@ -12,6 +12,7 @@ const VARIANTS = [
       en.crossing.title,
       en.app.title,
       en.trust.title,
+      en.integrations.title,
       en.selfHost.title,
       en.why.title,
       en.faq.title,
