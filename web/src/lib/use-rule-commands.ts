@@ -9,6 +9,7 @@ import {
   reconcileResultMessage,
   syncResultMessage,
 } from "@/lib/rule-run"
+import { withoutKey } from "@/lib/utils"
 
 export type RuleCommand = "preview" | "enable" | "sync" | "reconcile" | "pause"
 export type RuleFeedback = { tone: "success" | "error"; text: string }
@@ -84,11 +85,7 @@ export function useRuleCommands() {
   }
 
   function clearFeedback(ruleId: string) {
-    setFeedback((current) => {
-      const next = { ...current }
-      delete next[ruleId]
-      return next
-    })
+    setFeedback((current) => withoutKey(current, ruleId))
   }
 
   function notify(ruleId: string, next: RuleFeedback) {
@@ -147,18 +144,14 @@ export function useRuleCommands() {
         // after the refetch so a delayed or failed refresh cannot leave the spinner on screen.
         queryClient.setQueryData<RuleSummary[]>(["rules"], (rules) =>
           rules?.map((rule) =>
-            rule.id === ruleId ? clearCompletedWork(rule, command, commandStartedAt)! : rule,
+            rule.id === ruleId ? (clearCompletedWork(rule, command, commandStartedAt) ?? rule) : rule,
           ),
         )
         queryClient.setQueryData<RuleDetail>(["rule", ruleId], (rule) =>
           clearCompletedWork(rule, command, commandStartedAt),
         )
       }
-      setPending((current) => {
-        const next = { ...current }
-        delete next[ruleId]
-        return next
-      })
+      setPending((current) => withoutKey(current, ruleId))
       window.requestAnimationFrame(() => {
         const active = document.activeElement
         if (!active || active === document.body || !active.isConnected) focusTarget?.()?.focus()

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Literal
 
 from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
@@ -28,12 +29,15 @@ from calendar_sync.domain.services import EventProjector, SyncDecisionService
 _SAMPLE_SIZE = 10
 
 
+PreviewItemKind = Literal["single", "series", "occurrence"]
+
+
 @dataclass(frozen=True, slots=True)
 class PreviewItem:
     source_event_id: str
     projected_title: str
     all_day: bool
-    kind: str
+    kind: PreviewItemKind
     planned_action: SyncAction
 
 
@@ -188,7 +192,7 @@ class PreviewSyncRule:
             mapping = uow.mappings.for_source(rule.id, event.reference)
             actual = self.provider.get_event(mapping.destination) if mapping else None
             action = self.decisions.decide(rule, event, mapping, actual).action
-            kind = "series" if event.recurrence is not None else "single"
+            kind: PreviewItemKind = "series" if event.recurrence is not None else "single"
             return PreviewItem(
                 event.reference.event_id.value, title, event.is_all_day, kind, action
             )

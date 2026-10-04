@@ -50,17 +50,23 @@ from calendar_sync.interfaces.api.dependencies import app_services, available, r
 from calendar_sync.interfaces.api.schemas import (
     CalendarEndpointPayload,
     CreateRuleRequest,
+    DriftResponse,
     NamedCalendarEndpointResponse,
+    PreviewItemResponse,
     PreviewSummaryResponse,
     ProjectionChoice,
+    ReconcileResultResponse,
+    ReconciliationConflictResponse,
     RemovalResponse,
     ReplaceRuleRequest,
     RuleDetailResponse,
+    RulePreviewResponse,
     RuleReplacementResponse,
     RuleResponse,
     RuleSummaryResponse,
     RuleWorkResponse,
     RunOutcomeResponse,
+    SyncResultResponse,
     UpdateRulePolicyRequest,
 )
 
@@ -119,7 +125,7 @@ def list_rules(services: Services) -> list[RuleSummaryResponse]:
 )
 def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
     transformation = TransformationPolicy(
-        content=_projection_content(request.privacy_policy),
+        content=ProjectionContent(request.privacy_policy),
         all_day=_all_day(request.sync_all_day_events),
         tentative=TentativeEventPolicy(request.tentative_events),
         unanswered=UnansweredInvitationPolicy(request.unanswered_invitations),
@@ -137,9 +143,10 @@ def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
 
 @router.post(
     "/api/v1/rules/{rule_id}/sync",
+    response_model=SyncResultResponse,
     dependencies=[Depends(require_admin)],
 )
-async def sync_now(rule_id: str, services: Services) -> dict[str, int | str]:
+async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
     execute_sync_rule = available(
         services.execute_sync_rule,
         "configure a calendar provider and the installation master key before synchronizing",
@@ -148,21 +155,22 @@ async def sync_now(rule_id: str, services: Services) -> dict[str, int | str]:
         result = await asyncio.to_thread(execute_sync_rule.execute, SyncRuleId(rule_id))
     except RuleNotExecutable as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
-    return {
-        "rule_id": result.rule_id.value,
-        "created": result.created,
-        "updated": result.updated,
-        "deleted": result.deleted,
-        "ignored": result.ignored,
-        "conflicts": result.conflicts,
-    }
+    return SyncResultResponse(
+        rule_id=result.rule_id.value,
+        created=result.created,
+        updated=result.updated,
+        deleted=result.deleted,
+        ignored=result.ignored,
+        conflicts=result.conflicts,
+    )
 
 
 @router.post(
     "/api/v1/rules/{rule_id}/reconcile",
+    response_model=ReconcileResultResponse,
     dependencies=[Depends(require_admin)],
 )
-async def reconcile_now(rule_id: str, services: Services) -> dict[str, object]:
+async def reconcile_now(rule_id: str, services: Services) -> ReconcileResultResponse:
     reconcile = available(
         services.reconcile_now,
         "configure a calendar provider and the installation master key before reconciling",
@@ -172,29 +180,29 @@ async def reconcile_now(rule_id: str, services: Services) -> dict[str, object]:
     except RuleNotExecutable as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     result, report = reconciled.sync, reconciled.report
-    return {
-        "rule_id": result.rule_id.value,
-        "created": result.created,
-        "updated": result.updated,
-        "deleted": result.deleted,
-        "ignored": result.ignored,
-        "conflicts": result.conflicts,
-        "consistent": report.is_consistent,
-        "checked_mappings": report.checked_mappings,
-        # What is still different after the sync; reported, not repaired.
-        "drift": [{"kind": item.kind.value, "detail": item.detail} for item in report.drift],
-        # Blocked by the reconciliation itself, beside the sync's own `conflicts`.
-        "reconciliation_conflicts": [
-            {"reason": item.reason.value, "detail": item.detail} for item in report.conflicts
+    return ReconcileResultResponse(
+        rule_id=result.rule_id.value,
+        created=result.created,
+        updated=result.updated,
+        deleted=result.deleted,
+        ignored=result.ignored,
+        conflicts=result.conflicts,
+        consistent=report.is_consistent,
+        checked_mappings=report.checked_mappings,
+        drift=[DriftResponse(kind=item.kind.value, detail=item.detail) for item in report.drift],
+        reconciliation_conflicts=[
+            ReconciliationConflictResponse(reason=item.reason.value, detail=item.detail)
+            for item in report.conflicts
         ],
-    }
+    )
 
 
 @router.post(
     "/api/v1/rules/{rule_id}/preview",
+    response_model=RulePreviewResponse,
     dependencies=[Depends(require_admin)],
 )
-async def preview_rule(rule_id: str, services: Services) -> dict[str, object]:
+async def preview_rule(rule_id: str, services: Services) -> RulePreviewResponse:
     preview_sync_rule = available(
         services.preview_sync_rule,
         "configure a calendar provider and the installation master key before previewing",
@@ -203,23 +211,23 @@ async def preview_rule(rule_id: str, services: Services) -> dict[str, object]:
         preview = await asyncio.to_thread(preview_sync_rule.execute, SyncRuleId(rule_id))
     except RuleNotExecutable as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
-    return {
-        "rule_id": preview.rule_id.value,
-        "eligible_events": preview.eligible_events,
-        "excluded_events": preview.excluded_events,
-        "recurring_series": preview.recurring_series,
-        "occurrence_changes": preview.occurrence_changes,
-        "sample": [
-            {
-                "source_event_id": item.source_event_id,
-                "projected_title": item.projected_title,
-                "all_day": item.all_day,
-                "kind": item.kind,
-                "planned_action": item.planned_action.value,
-            }
+    return RulePreviewResponse(
+        rule_id=preview.rule_id.value,
+        eligible_events=preview.eligible_events,
+        excluded_events=preview.excluded_events,
+        recurring_series=preview.recurring_series,
+        occurrence_changes=preview.occurrence_changes,
+        sample=[
+            PreviewItemResponse(
+                source_event_id=item.source_event_id,
+                projected_title=item.projected_title,
+                all_day=item.all_day,
+                kind=item.kind,
+                planned_action=item.planned_action.value,
+            )
             for item in preview.sample
         ],
-    }
+    )
 
 
 @router.post(
@@ -269,7 +277,7 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
 def change_rule_policy(
     rule_id: str, request: UpdateRulePolicyRequest, services: Services
 ) -> RuleResponse:
-    content = _projection_content(request.privacy_policy)
+    content = ProjectionContent(request.privacy_policy)
     all_day = _all_day(request.sync_all_day_events)
     try:
         rule = services.change_sync_rule_policy.execute(
@@ -400,15 +408,6 @@ def _named_rule_response(rule: SyncRule, names: Mapping[CalendarEndpoint, str]) 
 
 def _all_day(sync_all_day_events: bool) -> AllDaySyncPolicy:
     return AllDaySyncPolicy.INCLUDE if sync_all_day_events else AllDaySyncPolicy.EXCLUDE
-
-
-def _projection_content(value: str) -> ProjectionContent:
-    try:
-        return ProjectionContent(value)
-    except ValueError as error:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "unknown privacy policy"
-        ) from error
 
 
 def _work_response(work: RuleWork | None) -> RuleWorkResponse | None:

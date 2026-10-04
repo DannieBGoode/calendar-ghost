@@ -33,6 +33,15 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The Web UI's API types are generated from the backend's OpenAPI schema
+  ([ADR 0025](docs/adr/0025-generate-web-api-types-from-openapi.md)), so a changed response fails
+  the frontend type check instead of breaking a page. The sync, reconcile, and preview routes now
+  declare their response bodies, which are unchanged, and each Web UI call is typed by the route it
+  names. An unknown `privacy_policy` in a rule request is still rejected with 422, now with
+  FastAPI's standard validation detail.
+- The frontend quality gate adds stricter TypeScript (`noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes`), type-aware ESLint with complexity and size bounds and folder
+  layering, React Doctor, and `npm audit --audit-level=high`. CI runs all of them.
 - The Overview shows the server's health verdict, so it always agrees with the status API.
 - Settings → No Google accounts connected explains the next step in quiet text instead of red: an
   installation without an account yet is not failing.
@@ -148,6 +157,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- The calendar replacement form no longer shows a rule's previous calendars after the rule
+  refreshes; untouched fields follow the rule, and edits are kept.
+- The Web UI's request helper keeps headers passed as a `Headers` object.
+- A request validation error (422) shows its messages instead of `[object Object]`.
 - Reconcile Now returns a completed rule to **Enabled** immediately, without requiring a page refresh.
 - Rules keep their calendars' names when the page reloads. Names were read from Google on every load, so rules showed "Secondary calendar" until Google answered, and always for an account that was disconnected. Each calendar's name is now kept when its account's calendars are listed (SQLite migration 16) and returned with the rule as `source.calendar_name` and `destination.calendar_name` by `GET /api/v1/rules` and `GET /api/v1/rules/{id}`; a rename in Google replaces it the next time the calendars are listed, and only a changed name is written.
 - Reconcile now shows its progress without reloading the page. Rules and Rule Details refresh every two seconds while a command they sent runs, so its progress appears as soon as the service reports it. Reconcile now counts its full pass ("Syncing every event from Family to Work, then checking each one this rule wrote."), times itself from its start through the check, and stays named Reconciling after a reload: `running` reports it as one reconciliation and adds `stage`, `"sync"` during the full pass and `"reconciliation"` during the check.

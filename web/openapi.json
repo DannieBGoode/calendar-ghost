@@ -1,0 +1,4566 @@
+{
+  "components": {
+    "schemas": {
+      "ActivityEventResponse": {
+        "properties": {
+          "destination": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EventSnapshotResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/EventSnapshotResponse"
+          }
+        },
+        "required": [
+          "source",
+          "destination"
+        ],
+        "title": "ActivityEventResponse",
+        "type": "object"
+      },
+      "AuditEntryResponse": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "changed",
+              "unchanged",
+              "skipped",
+              "blocked"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "changed_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changed Fields"
+          },
+          "destination_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination Event Id"
+          },
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedEventResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "repeated": {
+            "default": false,
+            "title": "Repeated",
+            "type": "boolean"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "source_event_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Event Id"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "occurred_at",
+          "rule_id",
+          "action",
+          "outcome",
+          "category",
+          "reason",
+          "detail",
+          "source_event_id",
+          "destination_event_id",
+          "event",
+          "repeated",
+          "changed_fields"
+        ],
+        "title": "AuditEntryResponse",
+        "type": "object"
+      },
+      "CalendarEndpointPayload": {
+        "properties": {
+          "calendar_id": {
+            "minLength": 1,
+            "title": "Calendar Id",
+            "type": "string"
+          },
+          "connected_account_id": {
+            "minLength": 1,
+            "title": "Connected Account Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connected_account_id",
+          "calendar_id"
+        ],
+        "title": "CalendarEndpointPayload",
+        "type": "object"
+      },
+      "ClearActivityRequest": {
+        "properties": {
+          "older_than_days": {
+            "title": "Older Than Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "older_than_days"
+        ],
+        "title": "ClearActivityRequest",
+        "type": "object"
+      },
+      "ClearableActivityResponse": {
+        "properties": {
+          "entries": {
+            "title": "Entries",
+            "type": "integer"
+          },
+          "older_than_days": {
+            "title": "Older Than Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "older_than_days",
+          "entries"
+        ],
+        "title": "ClearableActivityResponse",
+        "type": "object"
+      },
+      "ClearedActivityResponse": {
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/DatabaseUsageResponse"
+          },
+          "removed": {
+            "title": "Removed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "removed",
+          "database"
+        ],
+        "title": "ClearedActivityResponse",
+        "type": "object"
+      },
+      "ConnectedAccountResponse": {
+        "properties": {
+          "authorized_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorized At"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "rule_count": {
+            "title": "Rule Count",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "email",
+          "provider",
+          "avatar_url",
+          "state",
+          "rule_count",
+          "authorized_at"
+        ],
+        "title": "ConnectedAccountResponse",
+        "type": "object"
+      },
+      "CreateRuleRequest": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/CalendarEndpointPayload"
+          },
+          "privacy_policy": {
+            "default": "busy_only",
+            "enum": [
+              "busy_only",
+              "copy_details"
+            ],
+            "title": "Privacy Policy",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEndpointPayload"
+          },
+          "sync_all_day_events": {
+            "default": true,
+            "title": "Sync All Day Events",
+            "type": "boolean"
+          },
+          "tentative_events": {
+            "default": "mark",
+            "enum": [
+              "sync",
+              "mark",
+              "skip"
+            ],
+            "title": "Tentative Events",
+            "type": "string"
+          },
+          "unanswered_invitations": {
+            "default": "as_tentative",
+            "enum": [
+              "wait",
+              "as_tentative"
+            ],
+            "title": "Unanswered Invitations",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "destination"
+        ],
+        "title": "CreateRuleRequest",
+        "type": "object"
+      },
+      "DashboardResponse": {
+        "properties": {
+          "blocked_entry_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Entry Id"
+          },
+          "blocked_events": {
+            "default": 0,
+            "title": "Blocked Events",
+            "type": "integer"
+          },
+          "blocked_rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Rule Id"
+          },
+          "connected_accounts": {
+            "title": "Connected Accounts",
+            "type": "integer"
+          },
+          "disconnected_accounts": {
+            "title": "Disconnected Accounts",
+            "type": "integer"
+          },
+          "enabled_rules": {
+            "title": "Enabled Rules",
+            "type": "integer"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "needs_attention": {
+            "title": "Needs Attention",
+            "type": "boolean"
+          },
+          "open_incidents": {
+            "title": "Open Incidents",
+            "type": "integer"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemResponse"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "waiting",
+              "paused",
+              "setup",
+              "healthy"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stopped_rules": {
+            "title": "Stopped Rules",
+            "type": "integer"
+          },
+          "sync_rules": {
+            "title": "Sync Rules",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "needs_attention",
+          "problems",
+          "connected_accounts",
+          "disconnected_accounts",
+          "sync_rules",
+          "enabled_rules",
+          "stopped_rules",
+          "open_incidents",
+          "last_synced_at",
+          "blocked_events",
+          "blocked_entry_id",
+          "blocked_rule_id"
+        ],
+        "title": "DashboardResponse",
+        "type": "object"
+      },
+      "DatabaseUsageResponse": {
+        "properties": {
+          "activity_entries": {
+            "title": "Activity Entries",
+            "type": "integer"
+          },
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "oldest_activity_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Activity At"
+          },
+          "reclaimable_bytes": {
+            "title": "Reclaimable Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bytes",
+          "reclaimable_bytes",
+          "activity_entries",
+          "oldest_activity_at"
+        ],
+        "title": "DatabaseUsageResponse",
+        "type": "object"
+      },
+      "DiscoveredCalendarResponse": {
+        "properties": {
+          "access_role": {
+            "title": "Access Role",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "primary": {
+            "title": "Primary",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "writable": {
+            "title": "Writable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "summary",
+          "access_role",
+          "writable",
+          "primary"
+        ],
+        "title": "DiscoveredCalendarResponse",
+        "type": "object"
+      },
+      "DriftResponse": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "detail"
+        ],
+        "title": "DriftResponse",
+        "type": "object"
+      },
+      "EventSnapshotResponse": {
+        "properties": {
+          "all_day": {
+            "default": false,
+            "title": "All Day",
+            "type": "boolean"
+          },
+          "cancelled": {
+            "default": false,
+            "title": "Cancelled",
+            "type": "boolean"
+          },
+          "ends": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends"
+          },
+          "found": {
+            "title": "Found",
+            "type": "boolean"
+          },
+          "recurring": {
+            "default": false,
+            "title": "Recurring",
+            "type": "boolean"
+          },
+          "starts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "web_link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Web Link"
+          }
+        },
+        "required": [
+          "found",
+          "cancelled",
+          "title",
+          "all_day",
+          "starts",
+          "ends",
+          "recurring",
+          "web_link"
+        ],
+        "title": "EventSnapshotResponse",
+        "type": "object"
+      },
+      "FieldChangeResponse": {
+        "properties": {
+          "added": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Added",
+            "type": "array"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "after_time": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedTimeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "before_time": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedTimeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "removed": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed",
+            "type": "array"
+          }
+        },
+        "required": [
+          "field",
+          "before",
+          "after",
+          "before_time",
+          "after_time",
+          "added",
+          "removed"
+        ],
+        "title": "FieldChangeResponse",
+        "type": "object"
+      },
+      "GoogleAccountAccessResponse": {
+        "properties": {
+          "calendar_api": {
+            "title": "Calendar Api",
+            "type": "boolean"
+          },
+          "calendar_list_access": {
+            "title": "Calendar List Access",
+            "type": "boolean"
+          },
+          "calendars_visible": {
+            "title": "Calendars Visible",
+            "type": "integer"
+          },
+          "event_access": {
+            "title": "Event Access",
+            "type": "boolean"
+          },
+          "writable_calendars": {
+            "title": "Writable Calendars",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calendar_api",
+          "calendar_list_access",
+          "event_access",
+          "calendars_visible",
+          "writable_calendars"
+        ],
+        "title": "GoogleAccountAccessResponse",
+        "type": "object"
+      },
+      "GoogleConfigurationResponse": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri"
+          }
+        },
+        "required": [
+          "configured",
+          "redirect_uri"
+        ],
+        "title": "GoogleConfigurationResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IncidentResponse": {
+        "properties": {
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "opened_at": {
+            "title": "Opened At",
+            "type": "string"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "enum": [
+                  "sync_succeeded",
+                  "blocks_cleared",
+                  "rule_removed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "resolved"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule_id",
+          "category",
+          "state",
+          "summary",
+          "opened_at",
+          "updated_at",
+          "resolved_at",
+          "resolution",
+          "account_id"
+        ],
+        "title": "IncidentResponse",
+        "type": "object"
+      },
+      "IntegrationTokenResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scope": {
+            "const": "status:read",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "created_at",
+          "last_used_at",
+          "revoked_at"
+        ],
+        "title": "IntegrationTokenResponse",
+        "type": "object"
+      },
+      "IssueIntegrationTokenRequest": {
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "IssueIntegrationTokenRequest",
+        "type": "object"
+      },
+      "IssuedIntegrationTokenResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "scope": {
+            "const": "status:read",
+            "title": "Scope",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "scope",
+          "created_at",
+          "last_used_at",
+          "revoked_at",
+          "token"
+        ],
+        "title": "IssuedIntegrationTokenResponse",
+        "type": "object"
+      },
+      "LogUsageResponse": {
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "files": {
+            "title": "Files",
+            "type": "integer"
+          },
+          "newest_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newest At"
+          },
+          "oldest_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest At"
+          }
+        },
+        "required": [
+          "bytes",
+          "files",
+          "oldest_at",
+          "newest_at"
+        ],
+        "title": "LogUsageResponse",
+        "type": "object"
+      },
+      "NamedCalendarEndpointResponse": {
+        "properties": {
+          "calendar_id": {
+            "minLength": 1,
+            "title": "Calendar Id",
+            "type": "string"
+          },
+          "calendar_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Name"
+          },
+          "connected_account_id": {
+            "minLength": 1,
+            "title": "Connected Account Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connected_account_id",
+          "calendar_id",
+          "calendar_name"
+        ],
+        "title": "NamedCalendarEndpointResponse",
+        "type": "object"
+      },
+      "PasswordRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "PasswordRequest",
+        "type": "object"
+      },
+      "PreviewItemResponse": {
+        "properties": {
+          "all_day": {
+            "title": "All Day",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "single",
+              "series",
+              "occurrence"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "planned_action": {
+            "enum": [
+              "create",
+              "update",
+              "delete",
+              "ignore",
+              "conflict"
+            ],
+            "title": "Planned Action",
+            "type": "string"
+          },
+          "projected_title": {
+            "title": "Projected Title",
+            "type": "string"
+          },
+          "source_event_id": {
+            "title": "Source Event Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_event_id",
+          "projected_title",
+          "all_day",
+          "kind",
+          "planned_action"
+        ],
+        "title": "PreviewItemResponse",
+        "type": "object"
+      },
+      "PreviewSummaryResponse": {
+        "properties": {
+          "completed_at": {
+            "title": "Completed At",
+            "type": "string"
+          },
+          "eligible_events": {
+            "title": "Eligible Events",
+            "type": "integer"
+          },
+          "excluded_events": {
+            "title": "Excluded Events",
+            "type": "integer"
+          },
+          "occurrence_changes": {
+            "title": "Occurrence Changes",
+            "type": "integer"
+          },
+          "recurring_series": {
+            "title": "Recurring Series",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "completed_at",
+          "eligible_events",
+          "excluded_events",
+          "recurring_series",
+          "occurrence_changes"
+        ],
+        "title": "PreviewSummaryResponse",
+        "type": "object"
+      },
+      "ProblemResponse": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "overdue",
+              "blocked",
+              "waiting"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "rule_id",
+          "summary",
+          "since"
+        ],
+        "title": "ProblemResponse",
+        "type": "object"
+      },
+      "RecentChangeResponse": {
+        "description": "One written event; an identical repair repeated among recent entries is counted on it.",
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/AuditEntryResponse"
+          },
+          "first_occurred_at": {
+            "title": "First Occurred At",
+            "type": "string"
+          },
+          "repeats": {
+            "title": "Repeats",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entry",
+          "repeats",
+          "first_occurred_at"
+        ],
+        "title": "RecentChangeResponse",
+        "type": "object"
+      },
+      "ReconcileResultResponse": {
+        "properties": {
+          "checked_mappings": {
+            "title": "Checked Mappings",
+            "type": "integer"
+          },
+          "conflicts": {
+            "title": "Conflicts",
+            "type": "integer"
+          },
+          "consistent": {
+            "title": "Consistent",
+            "type": "boolean"
+          },
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "drift": {
+            "items": {
+              "$ref": "#/components/schemas/DriftResponse"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "ignored": {
+            "title": "Ignored",
+            "type": "integer"
+          },
+          "reconciliation_conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/ReconciliationConflictResponse"
+            },
+            "title": "Reconciliation Conflicts",
+            "type": "array"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rule_id",
+          "created",
+          "updated",
+          "deleted",
+          "ignored",
+          "conflicts",
+          "consistent",
+          "checked_mappings",
+          "drift",
+          "reconciliation_conflicts"
+        ],
+        "title": "ReconcileResultResponse",
+        "type": "object"
+      },
+      "ReconciliationConflictResponse": {
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "detail"
+        ],
+        "title": "ReconciliationConflictResponse",
+        "type": "object"
+      },
+      "RecordedEventResponse": {
+        "description": "The source event as its run recorded it; see ADR 0014.",
+        "properties": {
+          "all_day": {
+            "default": false,
+            "title": "All Day",
+            "type": "boolean"
+          },
+          "cancelled": {
+            "default": false,
+            "title": "Cancelled",
+            "type": "boolean"
+          },
+          "ends": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends"
+          },
+          "moved_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordedTimeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recurring": {
+            "default": false,
+            "title": "Recurring",
+            "type": "boolean"
+          },
+          "renamed_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renamed From"
+          },
+          "starts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "all_day",
+          "starts",
+          "ends",
+          "recurring",
+          "cancelled",
+          "renamed_from",
+          "moved_from"
+        ],
+        "title": "RecordedEventResponse",
+        "type": "object"
+      },
+      "RecordedTimeResponse": {
+        "properties": {
+          "all_day": {
+            "default": false,
+            "title": "All Day",
+            "type": "boolean"
+          },
+          "ends": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends"
+          },
+          "starts": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Starts"
+          }
+        },
+        "required": [
+          "all_day",
+          "starts",
+          "ends"
+        ],
+        "title": "RecordedTimeResponse",
+        "type": "object"
+      },
+      "RemovalResponse": {
+        "properties": {
+          "conflicts": {
+            "title": "Conflicts",
+            "type": "integer"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "detached": {
+            "title": "Detached",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deleted",
+          "detached",
+          "conflicts"
+        ],
+        "title": "RemovalResponse",
+        "type": "object"
+      },
+      "ReplaceRuleRequest": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/CalendarEndpointPayload"
+          },
+          "projections": {
+            "enum": [
+              "delete",
+              "detach"
+            ],
+            "title": "Projections",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEndpointPayload"
+          }
+        },
+        "required": [
+          "source",
+          "destination",
+          "projections"
+        ],
+        "title": "ReplaceRuleRequest",
+        "type": "object"
+      },
+      "RuleDetailResponse": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/NamedCalendarEndpointResponse"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "initial_lookback_days": {
+            "title": "Initial Lookback Days",
+            "type": "integer"
+          },
+          "last_reconciliation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOutcomeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOutcomeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviewSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mapping_count": {
+            "title": "Mapping Count",
+            "type": "integer"
+          },
+          "privacy_policy": {
+            "enum": [
+              "busy_only",
+              "copy_details"
+            ],
+            "title": "Privacy Policy",
+            "type": "string"
+          },
+          "reprojection_required": {
+            "title": "Reprojection Required",
+            "type": "boolean"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleWorkResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/NamedCalendarEndpointResponse"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "sync_all_day_events": {
+            "title": "Sync All Day Events",
+            "type": "boolean"
+          },
+          "tentative_events": {
+            "enum": [
+              "sync",
+              "mark",
+              "skip"
+            ],
+            "title": "Tentative Events",
+            "type": "string"
+          },
+          "unanswered_invitations": {
+            "enum": [
+              "wait",
+              "as_tentative"
+            ],
+            "title": "Unanswered Invitations",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "destination",
+          "privacy_policy",
+          "sync_all_day_events",
+          "tentative_events",
+          "unanswered_invitations",
+          "state",
+          "reprojection_required",
+          "initial_lookback_days",
+          "mapping_count",
+          "last_sync",
+          "last_reconciliation",
+          "latest_preview",
+          "running"
+        ],
+        "title": "RuleDetailResponse",
+        "type": "object"
+      },
+      "RulePreviewResponse": {
+        "properties": {
+          "eligible_events": {
+            "title": "Eligible Events",
+            "type": "integer"
+          },
+          "excluded_events": {
+            "title": "Excluded Events",
+            "type": "integer"
+          },
+          "occurrence_changes": {
+            "title": "Occurrence Changes",
+            "type": "integer"
+          },
+          "recurring_series": {
+            "title": "Recurring Series",
+            "type": "integer"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "sample": {
+            "items": {
+              "$ref": "#/components/schemas/PreviewItemResponse"
+            },
+            "title": "Sample",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rule_id",
+          "eligible_events",
+          "excluded_events",
+          "recurring_series",
+          "occurrence_changes",
+          "sample"
+        ],
+        "title": "RulePreviewResponse",
+        "type": "object"
+      },
+      "RuleReplacementResponse": {
+        "properties": {
+          "conflicts": {
+            "title": "Conflicts",
+            "type": "integer"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "detached": {
+            "title": "Detached",
+            "type": "integer"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/RuleResponse"
+          }
+        },
+        "required": [
+          "rule",
+          "deleted",
+          "detached",
+          "conflicts"
+        ],
+        "title": "RuleReplacementResponse",
+        "type": "object"
+      },
+      "RuleResponse": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/CalendarEndpointPayload"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "privacy_policy": {
+            "enum": [
+              "busy_only",
+              "copy_details"
+            ],
+            "title": "Privacy Policy",
+            "type": "string"
+          },
+          "reprojection_required": {
+            "title": "Reprojection Required",
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/components/schemas/CalendarEndpointPayload"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "sync_all_day_events": {
+            "title": "Sync All Day Events",
+            "type": "boolean"
+          },
+          "tentative_events": {
+            "enum": [
+              "sync",
+              "mark",
+              "skip"
+            ],
+            "title": "Tentative Events",
+            "type": "string"
+          },
+          "unanswered_invitations": {
+            "enum": [
+              "wait",
+              "as_tentative"
+            ],
+            "title": "Unanswered Invitations",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "destination",
+          "privacy_policy",
+          "sync_all_day_events",
+          "tentative_events",
+          "unanswered_invitations",
+          "state",
+          "reprojection_required"
+        ],
+        "title": "RuleResponse",
+        "type": "object"
+      },
+      "RuleSummaryResponse": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/NamedCalendarEndpointResponse"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sync": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOutcomeResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PreviewSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "privacy_policy": {
+            "enum": [
+              "busy_only",
+              "copy_details"
+            ],
+            "title": "Privacy Policy",
+            "type": "string"
+          },
+          "reprojection_required": {
+            "title": "Reprojection Required",
+            "type": "boolean"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RuleWorkResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "$ref": "#/components/schemas/NamedCalendarEndpointResponse"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "sync_all_day_events": {
+            "title": "Sync All Day Events",
+            "type": "boolean"
+          },
+          "tentative_events": {
+            "enum": [
+              "sync",
+              "mark",
+              "skip"
+            ],
+            "title": "Tentative Events",
+            "type": "string"
+          },
+          "unanswered_invitations": {
+            "enum": [
+              "wait",
+              "as_tentative"
+            ],
+            "title": "Unanswered Invitations",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "destination",
+          "privacy_policy",
+          "sync_all_day_events",
+          "tentative_events",
+          "unanswered_invitations",
+          "state",
+          "reprojection_required",
+          "last_sync",
+          "latest_preview",
+          "running"
+        ],
+        "title": "RuleSummaryResponse",
+        "type": "object"
+      },
+      "RuleWorkResponse": {
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "handling": {
+            "anyOf": [
+              {
+                "enum": [
+                  "delete",
+                  "detach"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handling"
+          },
+          "kind": {
+            "enum": [
+              "preview",
+              "sync",
+              "reconciliation",
+              "removal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preview",
+                  "sync",
+                  "reconciliation",
+                  "removal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "required": [
+          "kind",
+          "started_at",
+          "handling",
+          "total",
+          "done",
+          "stage"
+        ],
+        "title": "RuleWorkResponse",
+        "type": "object"
+      },
+      "RunOutcomeResponse": {
+        "properties": {
+          "checked_mappings": {
+            "title": "Checked Mappings",
+            "type": "integer"
+          },
+          "completed_at": {
+            "title": "Completed At",
+            "type": "string"
+          },
+          "conflicts": {
+            "title": "Conflicts",
+            "type": "integer"
+          },
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "drift": {
+            "title": "Drift",
+            "type": "integer"
+          },
+          "failure_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Kind"
+          },
+          "full_run": {
+            "title": "Full Run",
+            "type": "boolean"
+          },
+          "last_succeeded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Succeeded At"
+          },
+          "succeeded": {
+            "title": "Succeeded",
+            "type": "boolean"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "completed_at",
+          "succeeded",
+          "full_run",
+          "created",
+          "updated",
+          "deleted",
+          "conflicts",
+          "checked_mappings",
+          "drift",
+          "failure_kind",
+          "last_succeeded_at"
+        ],
+        "title": "RunOutcomeResponse",
+        "type": "object"
+      },
+      "SchedulerResponse": {
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "current_pass_started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Pass Started At"
+          },
+          "last_pass_completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Pass Completed At"
+          }
+        },
+        "required": [
+          "configured",
+          "last_pass_completed_at",
+          "current_pass_started_at"
+        ],
+        "title": "SchedulerResponse",
+        "type": "object"
+      },
+      "SessionResponse": {
+        "properties": {
+          "authenticated": {
+            "title": "Authenticated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "authenticated"
+        ],
+        "title": "SessionResponse",
+        "type": "object"
+      },
+      "SetupStatusResponse": {
+        "properties": {
+          "administrator_configured": {
+            "title": "Administrator Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "administrator_configured"
+        ],
+        "title": "SetupStatusResponse",
+        "type": "object"
+      },
+      "SourceChangeResponse": {
+        "description": "What changed in the entry's source event; values are kept for 90 days.",
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/FieldChangeResponse"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "values_available": {
+            "title": "Values Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "fields",
+          "values_available",
+          "changes"
+        ],
+        "title": "SourceChangeResponse",
+        "type": "object"
+      },
+      "StatusCalendarResponse": {
+        "properties": {
+          "calendar": {
+            "title": "Calendar",
+            "type": "string"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "required": [
+          "calendar",
+          "provider"
+        ],
+        "title": "StatusCalendarResponse",
+        "type": "object"
+      },
+      "StatusCountsResponse": {
+        "properties": {
+          "blocked_events": {
+            "title": "Blocked Events",
+            "type": "integer"
+          },
+          "disconnected_accounts": {
+            "title": "Disconnected Accounts",
+            "type": "integer"
+          },
+          "open_incidents": {
+            "title": "Open Incidents",
+            "type": "integer"
+          },
+          "overdue": {
+            "title": "Overdue",
+            "type": "integer"
+          },
+          "paused": {
+            "title": "Paused",
+            "type": "integer"
+          },
+          "rules": {
+            "title": "Rules",
+            "type": "integer"
+          },
+          "running": {
+            "title": "Running",
+            "type": "integer"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rules",
+          "running",
+          "stopped",
+          "paused",
+          "overdue",
+          "open_incidents",
+          "blocked_events",
+          "disconnected_accounts"
+        ],
+        "title": "StatusCountsResponse",
+        "type": "object"
+      },
+      "StatusIncidentResponse": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "opened_at": {
+            "title": "Opened At",
+            "type": "string"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule_id",
+          "category",
+          "summary",
+          "opened_at"
+        ],
+        "title": "StatusIncidentResponse",
+        "type": "object"
+      },
+      "StatusResponse": {
+        "properties": {
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/StatusCountsResponse"
+          },
+          "incidents": {
+            "items": {
+              "$ref": "#/components/schemas/StatusIncidentResponse"
+            },
+            "title": "Incidents",
+            "type": "array"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "needs_attention": {
+            "title": "Needs Attention",
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/ProblemResponse"
+            },
+            "title": "Problems",
+            "type": "array"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/StatusRuleResponse"
+            },
+            "title": "Rules",
+            "type": "array"
+          },
+          "scheduler": {
+            "$ref": "#/components/schemas/SchedulerResponse"
+          },
+          "status": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "waiting",
+              "paused",
+              "setup",
+              "healthy"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "needs_attention",
+          "summary",
+          "version",
+          "checked_at",
+          "last_synced_at",
+          "scheduler",
+          "counts",
+          "problems",
+          "rules",
+          "incidents"
+        ],
+        "title": "StatusResponse",
+        "type": "object"
+      },
+      "StatusRuleResponse": {
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/StatusCalendarResponse"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_succeeded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Succeeded At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProblemResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projection": {
+            "title": "Projection",
+            "type": "string"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Running"
+          },
+          "source": {
+            "$ref": "#/components/schemas/StatusCalendarResponse"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "source",
+          "destination",
+          "projection",
+          "last_succeeded_at",
+          "running",
+          "problem"
+        ],
+        "title": "StatusRuleResponse",
+        "type": "object"
+      },
+      "StorageResponse": {
+        "properties": {
+          "activity_ages": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Activity Ages",
+            "type": "array"
+          },
+          "database": {
+            "$ref": "#/components/schemas/DatabaseUsageResponse"
+          },
+          "logs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LogUsageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "database",
+          "logs",
+          "activity_ages"
+        ],
+        "title": "StorageResponse",
+        "type": "object"
+      },
+      "SyncResultResponse": {
+        "properties": {
+          "conflicts": {
+            "title": "Conflicts",
+            "type": "integer"
+          },
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "ignored": {
+            "title": "Ignored",
+            "type": "integer"
+          },
+          "rule_id": {
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "updated": {
+            "title": "Updated",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rule_id",
+          "created",
+          "updated",
+          "deleted",
+          "ignored",
+          "conflicts"
+        ],
+        "title": "SyncResultResponse",
+        "type": "object"
+      },
+      "UpdateRulePolicyRequest": {
+        "properties": {
+          "privacy_policy": {
+            "enum": [
+              "busy_only",
+              "copy_details"
+            ],
+            "title": "Privacy Policy",
+            "type": "string"
+          },
+          "sync_all_day_events": {
+            "title": "Sync All Day Events",
+            "type": "boolean"
+          },
+          "tentative_events": {
+            "enum": [
+              "sync",
+              "mark",
+              "skip"
+            ],
+            "title": "Tentative Events",
+            "type": "string"
+          },
+          "unanswered_invitations": {
+            "enum": [
+              "wait",
+              "as_tentative"
+            ],
+            "title": "Unanswered Invitations",
+            "type": "string"
+          }
+        },
+        "required": [
+          "privacy_policy",
+          "sync_all_day_events",
+          "tentative_events",
+          "unanswered_invitations"
+        ],
+        "title": "UpdateRulePolicyRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Calendar Ghost",
+    "version": "0.1.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/accounts": {
+      "get": {
+        "operationId": "list_accounts_api_v1_accounts_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectedAccountResponse"
+                  },
+                  "title": "Response List Accounts Api V1 Accounts Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Accounts"
+      }
+    },
+    "/api/v1/accounts/{account_id}": {
+      "delete": {
+        "operationId": "delete_account_api_v1_accounts__account_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Account"
+      }
+    },
+    "/api/v1/accounts/{account_id}/calendars": {
+      "get": {
+        "operationId": "discover_calendars_api_v1_accounts__account_id__calendars_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DiscoveredCalendarResponse"
+                  },
+                  "title": "Response Discover Calendars Api V1 Accounts  Account Id  Calendars Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discover Calendars"
+      }
+    },
+    "/api/v1/accounts/{account_id}/disconnect": {
+      "post": {
+        "operationId": "disconnect_account_api_v1_accounts__account_id__disconnect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectedAccountResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Disconnect Account"
+      }
+    },
+    "/api/v1/accounts/{account_id}/verify": {
+      "post": {
+        "operationId": "verify_account_access_api_v1_accounts__account_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleAccountAccessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Account Access"
+      }
+    },
+    "/api/v1/audit-entries": {
+      "get": {
+        "operationId": "list_activity_api_v1_audit_entries_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "rule_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rule Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "changed",
+                      "unchanged",
+                      "skipped",
+                      "blocked"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntryResponse"
+                  },
+                  "title": "Response List Activity Api V1 Audit Entries Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Activity"
+      }
+    },
+    "/api/v1/audit-entries/{entry_id}": {
+      "get": {
+        "operationId": "get_activity_entry_api_v1_audit_entries__entry_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEntryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Activity Entry"
+      }
+    },
+    "/api/v1/audit-entries/{entry_id}/changes": {
+      "get": {
+        "operationId": "get_activity_entry_changes_api_v1_audit_entries__entry_id__changes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceChangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Activity Entry Changes"
+      }
+    },
+    "/api/v1/audit-entries/{entry_id}/event": {
+      "get": {
+        "operationId": "inspect_activity_event_api_v1_audit_entries__entry_id__event_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "entry_id",
+            "required": true,
+            "schema": {
+              "title": "Entry Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inspect Activity Event"
+      }
+    },
+    "/api/v1/dashboard": {
+      "get": {
+        "operationId": "dashboard_api_v1_dashboard_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dashboard"
+      }
+    },
+    "/api/v1/google/configuration": {
+      "get": {
+        "operationId": "google_configuration_api_v1_google_configuration_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleConfigurationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Google Configuration"
+      }
+    },
+    "/api/v1/incidents": {
+      "get": {
+        "operationId": "list_incidents_api_v1_incidents_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IncidentResponse"
+                  },
+                  "title": "Response List Incidents Api V1 Incidents Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Incidents"
+      }
+    },
+    "/api/v1/integration-tokens": {
+      "get": {
+        "operationId": "list_integration_tokens_api_v1_integration_tokens_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/IntegrationTokenResponse"
+                  },
+                  "title": "Response List Integration Tokens Api V1 Integration Tokens Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Integration Tokens"
+      },
+      "post": {
+        "operationId": "issue_integration_token_api_v1_integration_tokens_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueIntegrationTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedIntegrationTokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Integration Token"
+      }
+    },
+    "/api/v1/integration-tokens/{token_id}": {
+      "delete": {
+        "operationId": "revoke_integration_token_api_v1_integration_tokens__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "title": "Token Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Integration Token"
+      }
+    },
+    "/api/v1/oauth/google/start": {
+      "get": {
+        "operationId": "start_google_oauth_api_v1_oauth_google_start_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Google Oauth"
+      }
+    },
+    "/api/v1/recent-changes": {
+      "get": {
+        "operationId": "recent_changes_api_v1_recent_changes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecentChangeResponse"
+                  },
+                  "title": "Response Recent Changes Api V1 Recent Changes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recent Changes"
+      }
+    },
+    "/api/v1/rules": {
+      "get": {
+        "operationId": "list_rules_api_v1_rules_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RuleSummaryResponse"
+                  },
+                  "title": "Response List Rules Api V1 Rules Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Rules"
+      },
+      "post": {
+        "operationId": "create_rule_api_v1_rules_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Rule"
+      }
+    },
+    "/api/v1/rules/{rule_id}": {
+      "delete": {
+        "operationId": "remove_rule_api_v1_rules__rule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "projections",
+            "required": true,
+            "schema": {
+              "enum": [
+                "delete",
+                "detach"
+              ],
+              "title": "Projections",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RemovalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Rule"
+      },
+      "get": {
+        "operationId": "rule_details_api_v1_rules__rule_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rule Details"
+      },
+      "patch": {
+        "operationId": "change_rule_policy_api_v1_rules__rule_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRulePolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Rule Policy"
+      }
+    },
+    "/api/v1/rules/{rule_id}/enable": {
+      "post": {
+        "operationId": "enable_rule_api_v1_rules__rule_id__enable_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Enable Rule"
+      }
+    },
+    "/api/v1/rules/{rule_id}/pause": {
+      "post": {
+        "operationId": "pause_rule_api_v1_rules__rule_id__pause_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Pause Rule"
+      }
+    },
+    "/api/v1/rules/{rule_id}/preview": {
+      "post": {
+        "operationId": "preview_rule_api_v1_rules__rule_id__preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Rule"
+      }
+    },
+    "/api/v1/rules/{rule_id}/reconcile": {
+      "post": {
+        "operationId": "reconcile_now_api_v1_rules__rule_id__reconcile_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReconcileResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reconcile Now"
+      }
+    },
+    "/api/v1/rules/{rule_id}/replace": {
+      "post": {
+        "operationId": "replace_rule_calendars_api_v1_rules__rule_id__replace_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplaceRuleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleReplacementResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replace Rule Calendars"
+      }
+    },
+    "/api/v1/rules/{rule_id}/sync": {
+      "post": {
+        "operationId": "sync_now_api_v1_rules__rule_id__sync_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResultResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Now"
+      }
+    },
+    "/api/v1/session": {
+      "delete": {
+        "operationId": "log_out_api_v1_session_delete",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Log Out"
+      },
+      "get": {
+        "operationId": "session_status_api_v1_session_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Status"
+      },
+      "post": {
+        "operationId": "log_in_api_v1_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Log In"
+      }
+    },
+    "/api/v1/setup": {
+      "get": {
+        "operationId": "setup_status_api_v1_setup_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Setup Status"
+      }
+    },
+    "/api/v1/setup/admin": {
+      "post": {
+        "operationId": "create_admin_api_v1_setup_admin_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Admin"
+      }
+    },
+    "/api/v1/status": {
+      "get": {
+        "operationId": "installation_status_api_v1_status_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Installation Status"
+      }
+    },
+    "/api/v1/storage": {
+      "get": {
+        "operationId": "storage_usage_api_v1_storage_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Storage Usage"
+      }
+    },
+    "/api/v1/storage/activity": {
+      "get": {
+        "operationId": "clearable_activity_api_v1_storage_activity_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "older_than_days",
+            "required": true,
+            "schema": {
+              "title": "Older Than Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearableActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clearable Activity"
+      }
+    },
+    "/api/v1/storage/activity/clear": {
+      "post": {
+        "operationId": "clear_activity_api_v1_storage_activity_clear_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClearActivityRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClearedActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear Activity"
+      }
+    },
+    "/api/v1/storage/logs": {
+      "delete": {
+        "operationId": "purge_logs_api_v1_storage_logs_delete",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Purge Logs"
+      },
+      "get": {
+        "operationId": "download_logs_api_v1_storage_logs_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download Logs"
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    }
+  }
+}

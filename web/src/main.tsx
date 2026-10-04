@@ -12,7 +12,10 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
 })
 
-createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root")
+if (!root) throw new Error("index.html has no #root element")
+
+createRoot(root).render(
   <StrictMode>
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>

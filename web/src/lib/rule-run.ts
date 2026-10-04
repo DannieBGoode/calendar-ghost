@@ -1,4 +1,4 @@
-import type { RulePreview, RunOutcome, SyncResult } from "@/lib/api"
+import type { ReconcileResult, RulePreview, RunOutcome, SyncResult } from "@/lib/api"
 import { failureLabel, plural } from "@/lib/rule-change"
 import { relativeTime } from "@/lib/relative-time"
 
@@ -31,7 +31,7 @@ export function syncResultMessage(result: SyncResult): string {
   )
 }
 
-type Drift = NonNullable<SyncResult["drift"]>
+type Drift = ReconcileResult["drift"]
 
 /** Each kind of difference the check found, in plain words, in the order it found them. */
 function driftParts(drift: Drift, destination: string): string[] {
@@ -60,10 +60,10 @@ function driftParts(drift: Drift, destination: string): string[] {
  * changing anything. Whatever the check still finds survived a full sync, so it is a difference
  * the sync cannot settle, or a check that is wrong, rather than a change made during the check.
  */
-export function reconcileResultMessage(result: SyncResult, destination: string): string {
-  const checked = `Checked ${plural(result.checked_mappings ?? 0, "event")} this rule wrote to ${destination}`
-  const drift = result.drift ?? []
-  const blocked = result.conflicts + (result.reconciliation_conflicts?.length ?? 0)
+export function reconcileResultMessage(result: ReconcileResult, destination: string): string {
+  const checked = `Checked ${plural(result.checked_mappings, "event")} this rule wrote to ${destination}`
+  const drift = result.drift
+  const blocked = result.conflicts + result.reconciliation_conflicts.length
   // A blocked projection could not be verified, so only a check without blocks says all match.
   const check = drift.length
     ? [

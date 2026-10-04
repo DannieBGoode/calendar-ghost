@@ -17,6 +17,7 @@ function account(state: string, authorizedAt: string | null, id = "failed-accoun
     id,
     display_name: "Personal",
     email: "person@example.test",
+    provider: "google",
     avatar_url: null,
     state,
     rule_count: 1,

@@ -104,6 +104,7 @@ function ruleAction(problem: RuleProblem): HealthAction {
 }
 
 /** Every current problem, most urgent first. */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[] {
   const problems: Problem[] = []
   const of = (kind: RuleProblem["kind"]) => ruleProblems.filter((problem) => problem.kind === kind)
@@ -135,7 +136,7 @@ function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[
     })
   } else if (stoppedCount > 0) {
     const stopped = of("stopped")
-    const named = stoppedCount === 1 && stopped[0].name ? stopped[0] : null
+    const named = stoppedCount === 1 && stopped[0]?.name ? stopped[0] : null
     problems.push({
       tone: "stopped",
       headline: stoppedHeadline,
@@ -149,8 +150,8 @@ function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[
   }
 
   const review = of("review")
-  if (review.length > 0) {
-    const [named] = review
+  const [named] = review
+  if (named) {
     const others = review.length - 1
     problems.push({
       tone: "review",
@@ -217,6 +218,7 @@ function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[
  * The server decides the tone (ADR 0024); the most urgent problem leads, and the hero lists the
  * rest below it.
  */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function overviewHealth(
   dashboard: Dashboard,
   now: number = Date.now(),

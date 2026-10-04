@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- debt: split this file before adding to it */
 import { useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
@@ -70,6 +71,7 @@ function ruleName(endpoints: RuleEndpoints): string {
   return `${endpoints.source.name} → ${endpoints.destination.name}`
 }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const now = useNow()
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard, refetchInterval: REFRESH_INTERVAL })

@@ -28,6 +28,7 @@ const navItems: { id: AppView; label: string; icon: typeof Waypoints }[] = [
   { id: "settings", label: "Settings", icon: Settings2 },
 ]
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export default function App() {
   const setup = useQuery({ queryKey: ["setup"], queryFn: api.setup })
   const session = useQuery({

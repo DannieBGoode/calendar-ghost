@@ -11,7 +11,7 @@ const entry = readFileSync(new URL("../main.tsx", import.meta.url), "utf8")
 type Tokens = Map<string, string>
 
 function tokensFromBody(body: string): Tokens {
-  return new Map([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]))
+  return new Map([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1] ?? "", (m[2] ?? "").trim()]))
 }
 
 function block(selector: RegExp): Tokens {
@@ -24,7 +24,7 @@ function block(selector: RegExp): Tokens {
 function blocksFor(selector: string): string[] {
   const escaped = selector.replace(/[.[\]]/g, "\\$&")
   const re = new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, "g")
-  return [...stylesheet.matchAll(re)].map((m) => m[1])
+  return [...stylesheet.matchAll(re)].map((m) => m[1] ?? "")
 }
 
 const light = block(/:root \{([\s\S]*?)\n\}/)
@@ -37,15 +37,20 @@ const midnight = new Map([
 function resolve(tokens: Tokens, name: string): string {
   const value = tokens.get(name)
   if (!value) throw new Error(`Missing --${name}`)
-  const reference = value.match(/^var\(--([\w-]+)\)$/)
-  return reference ? resolve(tokens, reference[1]) : value
+  const reference = /^var\(--([\w-]+)\)$/.exec(value)?.[1]
+  return reference ? resolve(tokens, reference) : value
+}
+
+/** The lightness, chroma, and hue of an `oklch(L C H)` value. */
+function oklch(value: string): [number, number, number] {
+  const match = /oklch\(([\d.]+) ([\d.]+) ([\d.]+)/.exec(value)
+  if (!match) throw new Error(`Not oklch: ${value}`)
+  return [Number(match[1]), Number(match[2]), Number(match[3])]
 }
 
 /** WCAG relative luminance of an `oklch(L C H)` value, via OKLab and linear sRGB. */
 function luminance(value: string): number {
-  const match = value.match(/oklch\(([\d.]+) ([\d.]+) ([\d.]+)/)
-  if (!match) throw new Error(`Not oklch: ${value}`)
-  const [L, C, h] = match.slice(1).map(Number)
+  const [L, C, h] = oklch(value)
   const a = C * Math.cos((h * Math.PI) / 180)
   const b = C * Math.sin((h * Math.PI) / 180)
   const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
@@ -70,10 +75,7 @@ function gammaEncode(channel: number): number {
 
 /** Hex-encodes an `oklch(L C H)` value's resolved token for comparison against shipped hexes. */
 function hex(tokens: Tokens, name: string): string {
-  const value = resolve(tokens, name)
-  const match = value.match(/oklch\(([\d.]+) ([\d.]+) ([\d.]+)/)
-  if (!match) throw new Error(`Not oklch: ${value}`)
-  const [L, C, h] = match.slice(1).map(Number)
+  const [L, C, h] = oklch(resolve(tokens, name))
   const a = C * Math.cos((h * Math.PI) / 180)
   const b = C * Math.sin((h * Math.PI) / 180)
   const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
@@ -115,7 +117,7 @@ const NON_TEXT: [string, string][] = [
   ["ring", "surface"],
 ]
 
-const healthHero = tokensFromBody(blocksFor(".health-hero")[0])
+const healthHero = tokensFromBody(blocksFor(".health-hero")[0] ?? "")
 
 function healthHeroTokens(theme: Tokens, tone: "healthy" | "attention" | "setup"): Tokens {
   return new Map([
@@ -168,7 +170,7 @@ describe("Twilight identity", () => {
 describe("Midnight palette", () => {
   it("is blue, not indigo, wherever it differs from Twilight", () => {
     const hue = (tokens: Tokens, name: string) =>
-      Number(resolve(tokens, name).match(/oklch\([\d.]+ [\d.]+ ([\d.]+)/)?.[1])
+      Number(/oklch\([\d.]+ [\d.]+ ([\d.]+)/.exec(resolve(tokens, name))?.[1])
     for (const token of ["background", "surface", "primary", "twilight-canvas"]) {
       expect(hue(midnight, token)).toBeGreaterThanOrEqual(230)
       expect(hue(midnight, token)).toBeLessThanOrEqual(255)
@@ -184,7 +186,7 @@ describe("Mobile auth theme toggle", () => {
     // the light-appearance surface tokens.
     expect(blocks.length).toBeGreaterThanOrEqual(2)
 
-    const override = new Map([...light, ...tokensFromBody(blocks[1])])
+    const override = new Map([...light, ...tokensFromBody(blocks[1] ?? "")])
     expect(contrast(override, "muted-foreground", "background")).toBeGreaterThanOrEqual(3)
     expect(contrast(override, "foreground", "background")).toBeGreaterThanOrEqual(4.5)
   })

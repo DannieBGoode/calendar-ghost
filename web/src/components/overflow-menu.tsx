@@ -85,7 +85,7 @@ export function OverflowMenu({ label, items }: { label: string; items: OverflowM
   }
 
   function onBlur(event: FocusEvent<HTMLDivElement>) {
-    if (open && !root.current?.contains(event.relatedTarget as Node | null)) setOpen(false)
+    if (open && !root.current?.contains(event.relatedTarget)) setOpen(false)
   }
 
   return (

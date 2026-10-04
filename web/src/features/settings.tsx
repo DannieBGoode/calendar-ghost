@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- debt: split this file before adding to it */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   Check,
@@ -54,7 +55,7 @@ import {
 } from "@/lib/storage"
 import type { DarkPalette, ThemePreference } from "@/lib/theme"
 import { useNow } from "@/lib/use-now"
-import { cn } from "@/lib/utils"
+import { cn, withoutKey } from "@/lib/utils"
 
 type GoogleReturn = {
   mismatch: { redirectOrigin: string; redirectUri: string } | null
@@ -233,6 +234,7 @@ export function SettingsPage() {
   return <SettingsView googleConfigured={google.data.configured} redirectUri={google.data.redirect_uri} />
 }
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 function SettingsView({
   googleConfigured,
   redirectUri,
@@ -277,11 +279,7 @@ function SettingsView({
     onSuccess: async (account) => {
       setConfirmingAccountId(null)
       setStatusMessage(`${account.display_name} was disconnected.`)
-      setAccessChecks((current) => {
-        const next = { ...current }
-        delete next[account.id]
-        return next
-      })
+      setAccessChecks((current) => withoutKey(current, account.id))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
@@ -306,11 +304,7 @@ function SettingsView({
           ? `${displayName} and ${ruleCount} affected Directional Sync Rule${ruleCount === 1 ? "" : "s"} were permanently deleted.`
           : `${displayName} was permanently deleted.`,
       )
-      setAccessChecks((current) => {
-        const next = { ...current }
-        delete next[accountId]
-        return next
-      })
+      setAccessChecks((current) => withoutKey(current, accountId))
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
@@ -497,6 +491,7 @@ function SettingsView({
                 </button>
                 {accountsOpen && (
                   <ul className="account-list" id="account-list">
+            {/* eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it */}
             {accounts.data.map((account) => {
               const connected = account.state === "connected"
               const confirming = confirmingAccountId === account.id
@@ -764,6 +759,7 @@ const COPIED_FOR_MS = 2000
  * Integration Tokens as one Settings group. It stays collapsed to a summary row, as Connected
  * accounts does, because most administrators never need it.
  */
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function IntegrationsSection() {
   const queryClient = useQueryClient()
   const now = useNow()
@@ -1039,6 +1035,7 @@ export function IntegrationsSection() {
   )
 }
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 function StorageSection() {
   const queryClient = useQueryClient()
   const storage = useQuery({ queryKey: ["storage"], queryFn: api.storage })

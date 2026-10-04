@@ -1,4 +1,5 @@
-import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
+/* eslint-disable max-lines -- debt: split this file before adding to it */
+import { keepPreviousData, skipToken, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query"
 import {
   ArrowRight,
   ChevronDown,
@@ -63,7 +64,7 @@ import {
   type DiscoveredCalendar,
   type EventSnapshot,
   type Incident,
-  type Rule,
+  type RuleSummary,
 } from "@/lib/api"
 import {
   accessRenewedSince,
@@ -73,7 +74,7 @@ import { plural } from "@/lib/rule-change"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
 type RuleContext = {
-  rulesById: Map<string, Rule>
+  rulesById: Map<string, RuleSummary>
   accountsById: Map<string, ConnectedAccount>
   calendarsByAccount: Map<string, DiscoveredCalendar[] | undefined>
   rulesLoaded: boolean
@@ -108,6 +109,7 @@ function useActivityLocation() {
 }
 
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
@@ -146,8 +148,8 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   // A shared link or an older page can name an entry that is not loaded.
   const directEntry = useQuery({
     queryKey: ["activity-entry", entryId],
-    queryFn: () => api.activityEntry(entryId as number),
-    enabled: entryId !== null && listedEntry === undefined && !activity.isPending,
+    queryFn: entryId === null ? skipToken : () => api.activityEntry(entryId),
+    enabled: listedEntry === undefined && !activity.isPending,
     retry: false,
   })
   const selected = listedEntry ?? (directEntry.data?.id === entryId ? directEntry.data : undefined)
@@ -337,7 +339,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
                   ))}
                 </table>
                 {activity.hasNextPage && (
-                  <Button variant="outline" className="activity-more" onClick={() => activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
+                  <Button variant="outline" className="activity-more" onClick={() => void activity.fetchNextPage()} disabled={activity.isFetchingNextPage}>
                     {activity.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
                   </Button>
                 )}
@@ -384,7 +386,7 @@ function rulePickerOptions(
   context: RuleContext,
 ): { options: RulePickerOption[]; showAccounts: boolean } {
   const rules = [...context.rulesById.values()]
-  const endpoint = (value: Rule["source"]) => ({
+  const endpoint = (value: RuleSummary["source"]) => ({
     calendar: endpointName(value, context),
     accountId: value.connected_account_id,
     account: context.accountsById.get(value.connected_account_id),
@@ -419,6 +421,7 @@ function rulePickerOptions(
   return { options, showAccounts: [...calendars.values()].some((ids) => ids.size > 1) }
 }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 function EmptyActivity({
   ruleId,
   show,
@@ -644,8 +647,8 @@ function ActivityDetail({
   focusRef: RefObject<boolean>
   onClose: () => void
   onOpenRule: OpenRule
-  onNewer?: () => void
-  onOlder?: () => void
+  onNewer?: (() => void) | undefined
+  onOlder?: (() => void) | undefined
 }) {
   const close = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") onClose()
@@ -684,6 +687,7 @@ function ActivityDetail({
   )
 }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 function EntryDetails({
   entry,
   context,
@@ -875,7 +879,7 @@ function ResolvedIncidents({ incidents, context }: { incidents: Incident[]; cont
   )
 }
 
-function endpointName(endpoint: Rule["source"], context: RuleContext): string {
+function endpointName(endpoint: RuleSummary["source"], context: RuleContext): string {
   return ruleEndpointLabel(
     endpoint,
     context.accountsById.get(endpoint.connected_account_id),

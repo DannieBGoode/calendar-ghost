@@ -17,6 +17,7 @@ const accounts: ConnectedAccount[] = [
     id: "personal",
     display_name: "Daniel Calatayud",
     email: "daniel@example.com",
+    provider: "google",
     avatar_url: null,
     state: "connected",
     rule_count: 0,
@@ -26,6 +27,7 @@ const accounts: ConnectedAccount[] = [
     id: "work",
     display_name: "Work Calendar",
     email: "work@example.com",
+    provider: "google",
     avatar_url: "https://images.example.invalid/work.png",
     state: "connected",
     rule_count: 0,
@@ -38,6 +40,7 @@ const typeaheadAccounts: ConnectedAccount[] = [
     id: "personal",
     display_name: "Personal Calendar",
     email: "personal@example.com",
+    provider: "google",
     avatar_url: null,
     state: "connected",
     rule_count: 0,
@@ -47,6 +50,7 @@ const typeaheadAccounts: ConnectedAccount[] = [
     id: "project",
     display_name: "Project Calendar",
     email: "project@example.com",
+    provider: "google",
     avatar_url: null,
     state: "connected",
     rule_count: 0,
@@ -56,6 +60,7 @@ const typeaheadAccounts: ConnectedAccount[] = [
     id: "work",
     display_name: "Work Calendar",
     email: "work@example.com",
+    provider: "google",
     avatar_url: null,
     state: "connected",
     rule_count: 0,
@@ -110,7 +115,7 @@ function mountInteractive(
     )
   })
   return {
-    trigger: container.querySelector('[role="combobox"]') as HTMLButtonElement,
+    trigger: container.querySelector<HTMLButtonElement>('[role="combobox"]')!,
     onChange,
   }
 }
@@ -126,7 +131,9 @@ function press(
     cancelable: true,
     ...options,
   })
-  act(() => trigger.dispatchEvent(event))
+  act(() => {
+    trigger.dispatchEvent(event)
+  })
   return event
 }
 
@@ -138,20 +145,30 @@ function click(element: Element) {
 
 function mouseDown(element: Element) {
   const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true })
-  act(() => element.dispatchEvent(event))
+  act(() => {
+    element.dispatchEvent(event)
+  })
   return event
 }
 
 function mouseMove(element: Element) {
-  act(() => element.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })))
+  act(() => {
+    element.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }))
+  })
 }
 
 function listbox() {
-  return container.querySelector('[role="listbox"]') as HTMLDivElement
+  return container.querySelector<HTMLDivElement>('[role="listbox"]')!
 }
 
 function options() {
-  return Array.from(container.querySelectorAll('[role="option"]')) as HTMLDivElement[]
+  return Array.from(container.querySelectorAll<HTMLDivElement>('[role="option"]'))
+}
+
+function option(index: number) {
+  const found = options()[index]
+  if (!found) throw new Error(`No option ${index}`)
+  return found
 }
 
 describe("account select", () => {
@@ -207,15 +224,14 @@ describe("account select", () => {
     expect(listbox().hidden).toBe(true)
 
     click(first.trigger)
-    const accountOptions = options()
-    mouseMove(accountOptions[1])
+    mouseMove(option(1))
     expect(first.trigger.getAttribute("aria-activedescendant")).toContain("option-1")
-    click(accountOptions[1])
+    click(option(1))
     expect(first.onChange).toHaveBeenCalledWith("work")
     expect(first.trigger.getAttribute("aria-expanded")).toBe("false")
 
     click(first.trigger)
-    click(options()[0])
+    click(option(0))
     expect(first.onChange).toHaveBeenCalledTimes(1)
   })
 
@@ -338,6 +354,8 @@ describe("account select", () => {
   })
 
   it("prevents pointer blur, closes on trigger blur, and scrolls the active option", () => {
+    // Saved only to restore it below; it is never called detached from an element.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     const originalScrollIntoView = Element.prototype.scrollIntoView
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView
@@ -347,9 +365,8 @@ describe("account select", () => {
       click(trigger)
       expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" })
 
-      const accountOptions = options()
-      expect(mouseDown(accountOptions[1]).defaultPrevented).toBe(true)
-      mouseMove(accountOptions[1])
+      expect(mouseDown(option(1)).defaultPrevented).toBe(true)
+      mouseMove(option(1))
       expect(scrollIntoView).toHaveBeenCalledTimes(2)
 
       act(() => {

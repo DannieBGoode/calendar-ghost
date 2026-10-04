@@ -92,6 +92,16 @@ web/ and interfaces/  ->  application/  ->  domain/
 - Ruff bounds function complexity and argument count. Existing `# noqa: C901`, `PLR0912`,
   `PLR0913`, and `PLR0915` markers are debt to shrink, not a pattern to copy: split new code
   instead of suppressing the rule.
+- ESLint applies the same kind of bounds to `web/src`. Each violation that predates them carries an
+  `eslint-disable` comment marked `debt`, the frontend's `# noqa`: split the code instead of adding
+  one. A marker that no longer suppresses anything fails lint, so remove it after a split.
+- In `web/src`, features compose components, components render `lib`, and `lib` imports neither;
+  `components/ui` imports only other UI primitives. ESLint's `no-restricted-imports` enforces this
+  for alias and relative imports.
+- Call the API through `api` in `web/src/lib/api.ts`. Each method names its route and HTTP method,
+  which select the generated path, query, body, and response types; never pass a type by hand.
+- React Doctor (`npm --prefix web run doctor`) fails on any warning. Fix the code; change
+  `web/doctor.config.ts` only for a documented false positive.
 
 ## Synchronization and persistence safety
 
@@ -171,11 +181,19 @@ Run the complete backend quality gate:
 Run the complete frontend quality gate:
 
 ```sh
+npm --prefix web audit --audit-level=high
+npm --prefix web run api:check
 npm --prefix web run typecheck
 npm --prefix web run lint
+npm --prefix web run doctor
 npm --prefix web run test
 npm --prefix web run build
 ```
+
+The frontend's API types are generated from the backend's OpenAPI schema (ADR 0025). After changing
+a response or request model in `interfaces/api/schemas.py`, run
+`.venv/bin/python scripts/export_openapi.py` and `npm --prefix web run api:types`, and commit both
+generated files. Never edit `web/openapi.json` or `web/src/lib/api-schema.ts` by hand.
 
 For release-facing changes, also build the image for the supported architectures through CI or
 `docker compose build`. Tests must not require a personal Google account.

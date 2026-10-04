@@ -52,7 +52,7 @@ function systemPrefersDark(): boolean {
 }
 
 function subscribeToSystemPreference(onChange: () => void): () => void {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => {}
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => undefined
 
   const mediaQuery = window.matchMedia(SYSTEM_DARK_MODE_QUERY)
   mediaQuery.addEventListener("change", onChange)

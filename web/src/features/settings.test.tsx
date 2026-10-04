@@ -84,7 +84,7 @@ function click(element: Element) {
 }
 
 function button(label: string, scope: ParentNode = container): HTMLButtonElement {
-  const found = Array.from(scope.querySelectorAll("button")).find((item) => item.textContent?.trim() === label)
+  const found = Array.from(scope.querySelectorAll("button")).find((item) => item.textContent.trim() === label)
   if (!found) throw new Error(`No button labelled ${label}`)
   return found
 }
@@ -92,11 +92,11 @@ function button(label: string, scope: ParentNode = container): HTMLButtonElement
 function rowOf(name: string): HTMLElement {
   const heading = Array.from(container.querySelectorAll(".group-body h3")).find((item) => item.textContent === name)
   if (!heading) throw new Error(`No token named ${name}`)
-  return heading.closest(".setting-row") as HTMLElement
+  return heading.closest<HTMLElement>(".setting-row")!
 }
 
 function summary(): HTMLButtonElement {
-  return container.querySelector(".group-summary") as HTMLButtonElement
+  return container.querySelector<HTMLButtonElement>(".group-summary")!
 }
 
 async function openGroup() {
@@ -105,12 +105,12 @@ async function openGroup() {
 }
 
 async function issueToken(name: string) {
-  const input = container.querySelector("#integration-name") as HTMLInputElement
+  const input = container.querySelector<HTMLInputElement>("#integration-name")!
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, name)
     input.dispatchEvent(new Event("input", { bubbles: true }))
   })
-  const form = input.closest("form") as HTMLFormElement
+  const form = input.closest<HTMLFormElement>("form")!
   act(() => {
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
   })
@@ -140,11 +140,11 @@ describe("IntegrationsSection", () => {
     const heading = container.querySelector(".token-reveal h3")
     expect(heading?.textContent).toBe("Copy the token for Claude Code now")
     expect(document.activeElement).toBe(heading)
-    expect((container.querySelector(".token-field input") as HTMLInputElement).value).toBe(issued.token)
+    expect(container.querySelector<HTMLInputElement>(".token-field input")!.value).toBe(issued.token)
     const status = container.querySelector('[role="status"]')
     expect(status?.textContent).toBe("Token for Claude Code issued. Copy it now; it is shown only once.")
     expect(container.querySelector(".token-reveal")?.getAttribute("role")).toBeNull()
-    expect((container.querySelector("#integration-name") as HTMLInputElement).value).toBe("")
+    expect(container.querySelector<HTMLInputElement>("#integration-name")!.value).toBe("")
 
     act(() => root?.unmount())
     root = null
@@ -173,7 +173,7 @@ describe("IntegrationsSection", () => {
     await settle()
 
     expect(container.textContent).toContain("Select the token and copy it.")
-    expect((container.querySelector(".token-field input") as HTMLInputElement).value).toBe(issued.token)
+    expect(container.querySelector<HTMLInputElement>(".token-field input")!.value).toBe(issued.token)
   })
 
   it("says the token was copied, then offers to copy it again", async () => {
@@ -205,7 +205,7 @@ describe("IntegrationsSection", () => {
     const revoke = button("Revoke", rowOf("Homepage"))
 
     click(revoke)
-    const confirmation = container.querySelector("#revoke-token-homepage") as HTMLElement
+    const confirmation = container.querySelector<HTMLElement>("#revoke-token-homepage")!
     expect(confirmation).not.toBeNull()
     expect(confirmation.textContent).toContain("Revoke Homepage?")
     expect(revoke.getAttribute("aria-expanded")).toBe("true")
@@ -224,7 +224,7 @@ describe("IntegrationsSection", () => {
     await openGroup()
     click(button("Revoke", rowOf("Homepage")))
 
-    click(button("Revoke token", container.querySelector("#revoke-token-homepage") as HTMLElement))
+    click(button("Revoke token", container.querySelector<HTMLElement>("#revoke-token-homepage")!))
     await settle()
 
     expect(api.revokeIntegrationToken).toHaveBeenCalledWith("token-homepage")

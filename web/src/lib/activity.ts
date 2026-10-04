@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- debt: split this file before adding to it */
 import type { ActivityShow } from "@/lib/activity-location"
 import {
   ApiError,
@@ -348,20 +349,24 @@ function changedFields(entry: Partial<Pick<AuditEntry, "reason" | "changed_field
   return entry.changed_fields ?? []
 }
 
+const FIELD_LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" })
+
 /** "Title and description changed in Personal": the fields in a sentence, then the calendar. */
 function changedTrigger(fields: string[], names: RuleNames | null): string {
   const labels = fields.map((field, index) => (index === 0 ? fieldLabel(field) : fieldLabel(field).toLowerCase()))
-  const list = new Intl.ListFormat("en", { style: "long", type: "conjunction" }).format(labels)
+  const list = FIELD_LIST.format(labels)
   return named(`${list} changed in {source}`, names)
 }
 
 /** The entry's copy with the rule's calendars named. */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function describeEntry(
   entry: Pick<AuditEntry, "reason" | "action" | "detail"> & Partial<Pick<AuditEntry, "changed_fields">>,
   names: RuleNames | null = null,
 ): ReasonCopy {
-  if (changedFields(entry).length && (entry.reason === "projection_current" || entry.reason === "occurrence_current")) {
-    return { effect: named(REASONS[entry.reason].effect, names), explanation: named(UNCHANGED_BY_SOURCE_CHANGE, names) }
+  const current = entry.reason === "projection_current" || entry.reason === "occurrence_current" ? REASONS[entry.reason] : undefined
+  if (current && changedFields(entry).length) {
+    return { effect: named(current.effect, names), explanation: named(UNCHANGED_BY_SOURCE_CHANGE, names) }
   }
   const known = entry.reason ? REASONS[entry.reason] : RULE_ACTIONS[entry.action]
   const copy = known ?? {
@@ -422,6 +427,7 @@ const REPAIRS = new Set(["projection_missing", "destination_drift_repaired", "oc
 const MOVES = new Set(["source_changed", "occurrence_changed"])
 
 /** The What happened column: what was observed, then what Calendar Ghost did, with an icon for the outcome. */
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function whatHappened(
   entry: Pick<AuditEntry, "reason" | "action" | "detail" | "category"> &
     Partial<Pick<AuditEntry, "event" | "repeated" | "changed_fields">>,

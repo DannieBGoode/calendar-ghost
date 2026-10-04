@@ -132,6 +132,7 @@ describe("state and outcome labels", () => {
       checked_mappings: 42,
       drift: 0,
       failure_kind: null,
+      last_succeeded_at: null,
     }
     expect(runOutcomeSummary(base, "sync")).toBe("Succeeded: 2 created, 1 updated, 0 deleted")
     expect(runOutcomeSummary({ ...base, conflicts: 1 }, "sync")).toBe(

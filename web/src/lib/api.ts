@@ -1,3 +1,5 @@
+import type { components, paths } from "@/lib/api-schema"
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -8,14 +10,12 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  })
+  const headers = new Headers(init?.headers)
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json")
+  const response = await fetch(path, { ...init, credentials: "same-origin", headers })
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { detail?: string } | null
-    throw new ApiError(body?.detail ?? "The request could not be completed.", response.status)
+    const body: unknown = await response.json().catch(() => null)
+    throw new ApiError(errorDetail(body) ?? "The request could not be completed.", response.status)
   }
   if (response.status === 204) return undefined as T
   try {
@@ -28,387 +28,209 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
 }
 
-export type SetupStatus = { administrator_configured: boolean }
-export type SessionStatus = { authenticated: boolean }
-export type InstallationHealth = "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy"
-export type ServerProblem = {
-  kind: "stalled" | "stopped" | "review" | "overdue" | "blocked" | "waiting"
-  rule_id: string | null
-  summary: string
-  since: string | null
-}
-export type Dashboard = {
-  /** The server's verdict; the Overview never derives its own (ADR 0024). */
-  status: InstallationHealth
-  needs_attention: boolean
-  /** Every current problem, most urgent first. */
-  problems: ServerProblem[]
-  connected_accounts: number
-  disconnected_accounts: number
-  sync_rules: number
-  enabled_rules: number
-  stopped_rules: number
-  open_incidents: number
-  last_synced_at: string | null
-  /** Events of existing rules whose latest decision was a block; the newest one is named. */
-  blocked_events: number
-  blocked_entry_id: number | null
-  blocked_rule_id: string | null
-}
-export type RuleCalendar = {
-  connected_account_id: string
-  calendar_id: string
-  /** The name Google last gave the calendar; rule lists and details include it, null until listed. */
-  calendar_name?: string | null
-}
-export type Rule = {
-  id: string
-  source: RuleCalendar
-  destination: RuleCalendar
-  privacy_policy: "busy_only" | "copy_details"
-  sync_all_day_events: boolean
-  tentative_events: TentativeEvents
-  unanswered_invitations: UnansweredInvitations
-  state: string
-  reprojection_required: boolean
-}
-/** What a rule does with events its source calendar answered Maybe to. */
-export type TentativeEvents = "sync" | "mark" | "skip"
-/** What a rule does with invitations its source calendar has not answered yet. */
-export type UnansweredInvitations = "wait" | "as_tentative"
-export type ProjectionHandling = "delete" | "detach"
-export type RemovalResult = { deleted: number; detached: number; conflicts: number }
-export type RunOutcome = {
-  completed_at: string
-  succeeded: boolean
-  full_run: boolean
-  created: number
-  updated: number
-  deleted: number
-  conflicts: number
-  checked_mappings: number
-  drift: number
-  failure_kind: string | null
-  last_succeeded_at?: string | null
-}
-export type PreviewSummary = {
-  completed_at: string
-  eligible_events: number
-  excluded_events: number
-  recurring_series: number
-  occurrence_changes: number
-}
-/** Work the service is running for a rule right now; it survives a page reload. */
-export type RunningWork = {
-  kind: "preview" | "sync" | "reconciliation" | "removal"
-  started_at: string
-  handling: ProjectionHandling | null
-  /** What a removal or sync handles, once it has counted it: projections, or reported events. */
-  total: number | null
-  done: number
-  /** Reconcile now's part running now: its full pass, whose counts these are, then the check. */
-  stage: "sync" | "reconciliation" | null
-}
-export type RuleSummary = Rule & {
-  last_sync: RunOutcome | null
-  latest_preview: PreviewSummary | null
-  running: RunningWork | null
-}
-/** One written event; an identical repair repeated among recent entries is counted on it. */
-export type RecentChange = {
-  entry: AuditEntry
-  repeats: number
-  first_occurred_at: string
-}
-export type RuleDetail = Rule & {
-  initial_lookback_days: number
-  mapping_count: number
-  last_sync: RunOutcome | null
-  last_reconciliation: RunOutcome | null
-  latest_preview: PreviewSummary | null
-  running: RunningWork | null
-}
-export type RulePolicyPayload = {
-  privacy_policy: "busy_only" | "copy_details"
-  sync_all_day_events: boolean
-  tentative_events: TentativeEvents
-  unanswered_invitations: UnansweredInvitations
-}
-export type RuleEndpointPayload = { connected_account_id: string; calendar_id: string }
-export type GoogleConfiguration = { configured: boolean; redirect_uri: string | null }
-export type ConnectedAccount = {
-  id: string
-  display_name: string
-  email: string
-  avatar_url: string | null
-  state: string
-  rule_count: number
-  /** When the account was last connected or reauthorized; null while disconnected. */
-  authorized_at: string | null
-}
-export type GoogleAccountAccess = {
-  calendar_api: boolean
-  calendar_list_access: boolean
-  event_access: boolean
-  calendars_visible: number
-  writable_calendars: number
-}
-export type DiscoveredCalendar = {
-  id: string
-  summary: string
-  writable: boolean
-  primary: boolean
-}
-export type RulePreview = {
-  rule_id: string
-  eligible_events: number
-  excluded_events: number
-  recurring_series: number
-  occurrence_changes: number
-  sample: {
-    source_event_id: string
-    projected_title: string
-    all_day: boolean
-    kind: "single" | "series" | "occurrence"
-    planned_action: "create" | "update" | "delete" | "ignore" | "conflict"
-  }[]
-}
-export type SyncResult = {
-  rule_id: string
-  created: number
-  updated: number
-  deleted: number
-  ignored: number
-  conflicts: number
-  consistent?: boolean
-  checked_mappings?: number
-  /** Reconcile Now only: what still differs after its sync. Reported, never repaired. */
-  drift?: { kind: string; detail: string }[]
-  /** Reconcile Now only: blocks the check itself recorded, beside the sync's `conflicts`. */
-  reconciliation_conflicts?: { reason: string; detail: string }[]
-}
-export type ActivityCategory = "changed" | "unchanged" | "skipped" | "blocked"
-export type AuditEntry = {
-  id: number
-  run_id: string | null
-  occurred_at: string
-  rule_id: string
-  action: string
-  outcome: string
-  category: ActivityCategory
-  reason: string | null
-  detail: string
-  source_event_id: string | null
-  destination_event_id: string | null
-  /** The source event as its run recorded it; null for entries recorded before names were kept. */
-  event: RecordedEvent | null
-  /** A repair that redoes the same event's previous one, recorded by an earlier run. */
-  repeated: boolean
-  /** The source fields this entry's Source Change touched; null when it recorded none. */
-  changed_fields: string[] | null
-}
-export type RecordedTime = { all_day: boolean; starts: string | null; ends: string | null }
-export type FieldChange = {
-  field: string
-  before: string | null
-  after: string | null
-  before_time: RecordedTime | null
-  after_time: RecordedTime | null
-  added: string[]
-  removed: string[]
-}
-/** What changed in an entry's source event; values other than titles are kept for 90 days. */
-export type SourceChange = {
-  fields: string[]
-  values_available: boolean
-  changes: FieldChange[]
-}
-export type RecordedEvent = {
-  title: string
-  all_day: boolean
-  starts: string | null
-  ends: string | null
-  recurring: boolean
-  cancelled: boolean
-  renamed_from: string | null
-  /** The time the previous entry recorded, when this entry saw the event move. */
-  moved_from: { all_day: boolean; starts: string | null; ends: string | null } | null
-}
-export type ActivityFilters = {
-  ruleId?: string
-  categories?: ActivityCategory[]
-  before?: number
-  /** Matches recorded event titles, ignoring case. */
-  query?: string
-}
-export type EventSnapshot = {
-  found: boolean
-  cancelled: boolean
-  title: string
-  all_day: boolean
-  starts: string | null
-  ends: string | null
-  recurring: boolean
-  web_link: string | null
-}
-export type ActivityEvent = { source: EventSnapshot; destination: EventSnapshot | null }
-export type Incident = {
-  id: string
-  rule_id: string | null
-  category: string
-  state: "open" | "resolved"
-  summary: string
-  opened_at: string
-  updated_at: string
-  resolved_at: string | null
-  /** Why a resolved incident resolved; null while open or when the reason was not recorded. */
-  resolution: "sync_succeeded" | "blocks_cleared" | "rule_removed" | null
-  /** The Connected Account whose failure opened or last refreshed it; null when not recorded. */
-  account_id: string | null
+/**
+ * The message in an error body: a route's own `detail` string, or the messages of FastAPI's
+ * request validation errors, whose `detail` is a list.
+ */
+export function errorDetail(body: unknown): string | null {
+  if (typeof body !== "object" || body === null || !("detail" in body)) return null
+  const { detail } = body
+  if (typeof detail === "string") return detail
+  if (!Array.isArray(detail)) return null
+  const messages = detail.flatMap((item: unknown) =>
+    typeof item === "object" && item !== null && "msg" in item && typeof item.msg === "string" ? [item.msg] : [],
+  )
+  return messages.length ? messages.join("; ") : null
 }
 
-export type DatabaseUsage = {
-  bytes: number
-  reclaimable_bytes: number
-  activity_entries: number
-  oldest_activity_at: string | null
+type Method = "get" | "post" | "patch" | "delete"
+/** The methods a path declares in the schema. */
+type MethodOf<P extends keyof paths> = {
+  [M in Method]: paths[P][M] extends { responses: unknown } ? M : never
+}[Method]
+type Operation<P extends keyof paths, M extends MethodOf<P>> = paths[P][M]
+type JsonContent<R> = R extends { content: { "application/json": infer B } } ? B : undefined
+/** The body of a route's success response; undefined for 204 No Content. */
+type Success<O> = O extends { responses: infer R } ? JsonContent<R[Extract<keyof R, 200 | 201 | 204>]> : never
+type QueryValue = string | number | boolean | readonly (string | number)[] | null | undefined
+
+/**
+ * What a route takes besides its path and method. Each part is required exactly when the schema
+ * requires it, and absent when the route declares none.
+ */
+type Inputs<O> = (O extends { parameters: { path: infer Path } } ? { params: Path } : { params?: never }) &
+  (O extends { parameters: { query: infer Query } }
+    ? { query: Query }
+    : O extends { parameters: { query?: infer Query } }
+      ? [Query] extends [undefined]
+        ? { query?: never }
+        : { query?: Query }
+      : { query?: never }) &
+  (O extends { requestBody: { content: { "application/json": infer Body } } } ? { body: Body } : { body?: never })
+/** The inputs argument, optional only when the route requires none. */
+type InputArgs<O> = Record<never, never> extends Inputs<O> ? [inputs?: Inputs<O>] : [inputs: Inputs<O>]
+
+function queryString(query: Readonly<Record<string, QueryValue>>): string {
+  const search = new URLSearchParams()
+  for (const [name, value] of Object.entries(query)) {
+    if (value === null || value === undefined) continue
+    if (Array.isArray(value)) for (const item of value) search.append(name, String(item))
+    else search.set(name, String(value))
+  }
+  return search.size ? `?${search}` : ""
 }
-export type LogUsage = {
-  bytes: number
-  files: number
-  oldest_at: string | null
-  newest_at: string | null
+
+/**
+ * Calls one route. Its path template and method select every type from the generated schema:
+ * the path values, query, and body it requires, and the body it returns. A call cannot name one
+ * route and expect another route's body, or leave out an input the route requires.
+ */
+/** Exported for the type tests in api.test.ts; app code calls `api`. */
+export function call<P extends keyof paths, M extends MethodOf<P>>(
+  path: P,
+  method: M,
+  ...[inputs]: InputArgs<Operation<P, M>>
+): Promise<Success<Operation<P, M>>> {
+  const { params, query, body } = (inputs ?? {}) as {
+    params?: Readonly<Record<string, string | number>>
+    query?: Readonly<Record<string, QueryValue>>
+    body?: unknown
+  }
+  const filled = path.replace(/\{(\w+)\}/g, (_, name: string) => {
+    const value = params?.[name]
+    if (value === undefined) throw new Error(`Missing path parameter ${name} for ${path}`)
+    return encodeURIComponent(String(value))
+  })
+  return request<Success<Operation<P, M>>>(`${filled}${query ? queryString(query) : ""}`, {
+    method: method.toUpperCase(),
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
 }
-export type StorageUsage = {
-  database: DatabaseUsage
-  logs: LogUsage | null
-  activity_ages: number[]
+
+/** Response and request bodies, generated from the backend's OpenAPI schema (web/openapi.json). */
+type Schemas = components["schemas"]
+
+/**
+ * `status` is the server's verdict; the Overview never derives its own (ADR 0024). `problems`
+ * lists every current problem, most urgent first, and `blocked_events` counts events of existing
+ * rules whose latest decision was a block.
+ */
+export type Dashboard = Schemas["DashboardResponse"]
+export type InstallationHealth = Dashboard["status"]
+export type ServerProblem = Schemas["ProblemResponse"]
+/** A rule's calendar with the name Google last gave it; null until Google lists it. */
+export type RuleCalendar = Schemas["NamedCalendarEndpointResponse"]
+export type Rule = Schemas["RuleResponse"]
+/** What a rule does with events its source calendar answered Maybe to. */
+export type TentativeEvents = Rule["tentative_events"]
+/** What a rule does with invitations its source calendar has not answered yet. */
+export type UnansweredInvitations = Rule["unanswered_invitations"]
+export type ProjectionHandling = Schemas["ReplaceRuleRequest"]["projections"]
+export type RemovalResult = Schemas["RemovalResponse"]
+export type RunOutcome = Schemas["RunOutcomeResponse"]
+export type PreviewSummary = Schemas["PreviewSummaryResponse"]
+/** Work the service is running for a rule right now; it survives a page reload. */
+export type RunningWork = Schemas["RuleWorkResponse"]
+export type RuleSummary = Schemas["RuleSummaryResponse"]
+/** One written event; an identical repair repeated among recent entries is counted on it. */
+export type RecentChange = Schemas["RecentChangeResponse"]
+export type RuleDetail = Schemas["RuleDetailResponse"]
+export type RulePolicyPayload = Schemas["UpdateRulePolicyRequest"]
+export type ConnectedAccount = Schemas["ConnectedAccountResponse"]
+export type DiscoveredCalendar = Schemas["DiscoveredCalendarResponse"]
+export type RulePreview = Schemas["RulePreviewResponse"]
+export type SyncResult = Schemas["SyncResultResponse"]
+/** Reconcile Now's sync, plus what still differs after it (reported, never repaired) and the
+ * blocks the check itself recorded, beside the sync's `conflicts`. */
+export type ReconcileResult = Schemas["ReconcileResultResponse"]
+export type AuditEntry = Schemas["AuditEntryResponse"]
+export type ActivityCategory = AuditEntry["category"]
+export type FieldChange = Schemas["FieldChangeResponse"]
+/** What changed in an entry's source event; values other than titles are kept for 90 days. */
+export type SourceChange = Schemas["SourceChangeResponse"]
+export type RecordedEvent = Schemas["RecordedEventResponse"]
+export type ActivityFilters = {
+  ruleId?: string | undefined
+  categories?: ActivityCategory[] | undefined
+  before?: number | undefined
+  /** Matches recorded event titles, ignoring case. */
+  query?: string | undefined
 }
-export type ClearableActivity = { older_than_days: number; entries: number }
-export type ClearedActivity = { removed: number; database: DatabaseUsage }
+export type EventSnapshot = Schemas["EventSnapshotResponse"]
+export type Incident = Schemas["IncidentResponse"]
+
+export type DatabaseUsage = Schemas["DatabaseUsageResponse"]
+export type LogUsage = Schemas["LogUsageResponse"]
 export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
 
-export type IntegrationToken = {
-  id: string
-  name: string
-  scope: "status:read"
-  created_at: string
-  last_used_at: string | null
-  revoked_at: string | null
-}
-export type IssuedIntegrationToken = IntegrationToken & { token: string }
+export type IntegrationToken = Schemas["IntegrationTokenResponse"]
+export type IssuedIntegrationToken = Schemas["IssuedIntegrationTokenResponse"]
 
 export const ACTIVITY_PAGE_SIZE = 100
 
 export const api = {
-  setup: () => request<SetupStatus>("/api/v1/setup"),
-  session: () => request<SessionStatus>("/api/v1/session"),
-  createAdmin: (password: string) =>
-    request<SessionStatus>("/api/v1/setup/admin", {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    }),
-  logIn: (password: string) =>
-    request<SessionStatus>("/api/v1/session", {
-      method: "POST",
-      body: JSON.stringify({ password }),
-    }),
-  logOut: () => request<void>("/api/v1/session", { method: "DELETE" }),
-  dashboard: () => request<Dashboard>("/api/v1/dashboard"),
-  rules: () => request<RuleSummary[]>("/api/v1/rules"),
-  rule: (ruleId: string) => request<RuleDetail>(`/api/v1/rules/${encodeURIComponent(ruleId)}`),
+  setup: () => call("/api/v1/setup", "get"),
+  session: () => call("/api/v1/session", "get"),
+  createAdmin: (password: string) => call("/api/v1/setup/admin", "post", { body: { password } }),
+  logIn: (password: string) => call("/api/v1/session", "post", { body: { password } }),
+  logOut: () => call("/api/v1/session", "delete"),
+  dashboard: () => call("/api/v1/dashboard", "get"),
+  rules: () => call("/api/v1/rules", "get"),
+  rule: (ruleId: string) => call("/api/v1/rules/{rule_id}", "get", { params: { rule_id: ruleId } }),
   updateRulePolicy: (ruleId: string, payload: RulePolicyPayload) =>
-    request<Rule>(`/api/v1/rules/${encodeURIComponent(ruleId)}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
+    call("/api/v1/rules/{rule_id}", "patch", { params: { rule_id: ruleId }, body: payload }),
   removeRule: (ruleId: string, projections: ProjectionHandling) =>
-    request<RemovalResult>(
-      `/api/v1/rules/${encodeURIComponent(ruleId)}?projections=${projections}`,
-      { method: "DELETE" },
-    ),
-  replaceRuleCalendars: (
-    ruleId: string,
-    payload: {
-      source: RuleEndpointPayload
-      destination: RuleEndpointPayload
-      projections: ProjectionHandling
-    },
-  ) =>
-    request<{ rule: Rule } & RemovalResult>(
-      `/api/v1/rules/${encodeURIComponent(ruleId)}/replace`,
-      { method: "POST", body: JSON.stringify(payload) },
-    ),
-  googleConfiguration: () =>
-    request<GoogleConfiguration>("/api/v1/google/configuration"),
-  accounts: () => request<ConnectedAccount[]>("/api/v1/accounts"),
+    call("/api/v1/rules/{rule_id}", "delete", {
+      params: { rule_id: ruleId },
+      query: { projections },
+    }),
+  replaceRuleCalendars: (ruleId: string, payload: Schemas["ReplaceRuleRequest"]) =>
+    call("/api/v1/rules/{rule_id}/replace", "post", { params: { rule_id: ruleId }, body: payload }),
+  googleConfiguration: () => call("/api/v1/google/configuration", "get"),
+  accounts: () => call("/api/v1/accounts", "get"),
   disconnectAccount: (accountId: string) =>
-    request<ConnectedAccount>(`/api/v1/accounts/${encodeURIComponent(accountId)}/disconnect`, {
-      method: "POST",
-    }),
+    call("/api/v1/accounts/{account_id}/disconnect", "post", { params: { account_id: accountId } }),
   deleteAccount: (accountId: string) =>
-    request<void>(`/api/v1/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" }),
+    call("/api/v1/accounts/{account_id}", "delete", { params: { account_id: accountId } }),
   verifyAccountAccess: (accountId: string) =>
-    request<GoogleAccountAccess>(`/api/v1/accounts/${encodeURIComponent(accountId)}/verify`, {
-      method: "POST",
-    }),
+    call("/api/v1/accounts/{account_id}/verify", "post", { params: { account_id: accountId } }),
   calendars: (accountId: string) =>
-    request<DiscoveredCalendar[]>(`/api/v1/accounts/${encodeURIComponent(accountId)}/calendars`),
-  createRule: (payload: {
-    source: { connected_account_id: string; calendar_id: string }
-    destination: { connected_account_id: string; calendar_id: string }
-  } & RulePolicyPayload) =>
-    request<Rule>("/api/v1/rules", { method: "POST", body: JSON.stringify(payload) }),
+    call("/api/v1/accounts/{account_id}/calendars", "get", { params: { account_id: accountId } }),
+  createRule: (payload: Schemas["CreateRuleRequest"]) => call("/api/v1/rules", "post", { body: payload }),
   previewRule: (ruleId: string) =>
-    request<RulePreview>(`/api/v1/rules/${encodeURIComponent(ruleId)}/preview`, {
-      method: "POST",
-    }),
-  enableRule: (ruleId: string) =>
-    request<Rule>(`/api/v1/rules/${encodeURIComponent(ruleId)}/enable`, {
-      method: "POST",
-    }),
-  pauseRule: (ruleId: string) =>
-    request<Rule>(`/api/v1/rules/${encodeURIComponent(ruleId)}/pause`, {
-      method: "POST",
-    }),
-  syncRule: (ruleId: string) =>
-    request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/sync`, {
-      method: "POST",
-    }),
+    call("/api/v1/rules/{rule_id}/preview", "post", { params: { rule_id: ruleId } }),
+  enableRule: (ruleId: string) => call("/api/v1/rules/{rule_id}/enable", "post", { params: { rule_id: ruleId } }),
+  pauseRule: (ruleId: string) => call("/api/v1/rules/{rule_id}/pause", "post", { params: { rule_id: ruleId } }),
+  syncRule: (ruleId: string) => call("/api/v1/rules/{rule_id}/sync", "post", { params: { rule_id: ruleId } }),
   reconcileRule: (ruleId: string) =>
-    request<SyncResult>(`/api/v1/rules/${encodeURIComponent(ruleId)}/reconcile`, {
-      method: "POST",
+    call("/api/v1/rules/{rule_id}/reconcile", "post", { params: { rule_id: ruleId } }),
+  activity: ({ ruleId, categories, before, query }: ActivityFilters = {}) =>
+    call("/api/v1/audit-entries", "get", {
+      query: {
+        limit: ACTIVITY_PAGE_SIZE,
+        rule_id: ruleId || null,
+        category: categories ?? null,
+        before: before ?? null,
+        q: query?.trim() || null,
+      },
     }),
-  activity: ({ ruleId, categories, before, query }: ActivityFilters = {}) => {
-    const params = new URLSearchParams({ limit: String(ACTIVITY_PAGE_SIZE) })
-    if (ruleId) params.set("rule_id", ruleId)
-    for (const category of categories ?? []) params.append("category", category)
-    if (before) params.set("before", String(before))
-    if (query?.trim()) params.set("q", query.trim())
-    return request<AuditEntry[]>(`/api/v1/audit-entries?${params}`)
-  },
-  activityEntry: (entryId: number) => request<AuditEntry>(`/api/v1/audit-entries/${entryId}`),
+  activityEntry: (entryId: number) =>
+    call("/api/v1/audit-entries/{entry_id}", "get", { params: { entry_id: entryId } }),
   activityEvent: (entryId: number) =>
-    request<ActivityEvent>(`/api/v1/audit-entries/${entryId}/event`),
+    call("/api/v1/audit-entries/{entry_id}/event", "get", { params: { entry_id: entryId } }),
   activityChanges: (entryId: number) =>
-    request<SourceChange>(`/api/v1/audit-entries/${entryId}/changes`),
-  incidents: () => request<Incident[]>("/api/v1/incidents"),
-  recentChanges: (limit = 5) => request<RecentChange[]>(`/api/v1/recent-changes?limit=${limit}`),
-  storage: () => request<StorageUsage>("/api/v1/storage"),
+    call("/api/v1/audit-entries/{entry_id}/changes", "get", { params: { entry_id: entryId } }),
+  incidents: () => call("/api/v1/incidents", "get"),
+  recentChanges: (limit = 5) =>
+    call("/api/v1/recent-changes", "get", { query: { limit } }),
+  storage: () => call("/api/v1/storage", "get"),
   clearableActivity: (days: number) =>
-    request<ClearableActivity>(`/api/v1/storage/activity?older_than_days=${days}`),
+    call("/api/v1/storage/activity", "get", { query: { older_than_days: days } }),
   clearActivity: (days: number) =>
-    request<ClearedActivity>("/api/v1/storage/activity/clear", {
-      method: "POST",
-      body: JSON.stringify({ older_than_days: days }),
-    }),
-  purgeLogs: () => request<void>(STORAGE_LOGS_URL, { method: "DELETE" }),
-  integrationTokens: () => request<IntegrationToken[]>("/api/v1/integration-tokens"),
-  issueIntegrationToken: (name: string) =>
-    request<IssuedIntegrationToken>("/api/v1/integration-tokens", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    }),
+    call("/api/v1/storage/activity/clear", "post", { body: { older_than_days: days } }),
+  purgeLogs: () => call(STORAGE_LOGS_URL, "delete"),
+  integrationTokens: () => call("/api/v1/integration-tokens", "get"),
+  issueIntegrationToken: (name: string) => call("/api/v1/integration-tokens", "post", { body: { name } }),
   revokeIntegrationToken: (id: string) =>
-    request<void>(`/api/v1/integration-tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    call("/api/v1/integration-tokens/{token_id}", "delete", { params: { token_id: id } }),
 }

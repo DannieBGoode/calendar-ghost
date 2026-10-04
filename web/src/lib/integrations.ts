@@ -6,19 +6,22 @@ export type IntegrationExample = { title: string; description: string; code: str
 // Host names that only resolve inside a home network or on this machine.
 const LOCAL_SUFFIXES = [".localhost", ".local", ".lan", ".home.arpa", ".internal"]
 
+// Private and local IPv4 blocks: the first octet, then the lowest and highest second octet.
+const PRIVATE_IPV4: readonly (readonly [number, number, number])[] = [
+  [10, 0, 255],
+  [127, 0, 255],
+  [172, 16, 31],
+  [192, 168, 168],
+  [169, 254, 254],
+  // Tailscale and other carrier-grade NAT addresses never cross the internet in the clear.
+  [100, 64, 127],
+]
+
 function privateIpv4(host: string): boolean {
   const parts = host.split(".").map(Number)
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false
-  const [a, b] = parts
-  return (
-    a === 10 ||
-    a === 127 ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 169 && b === 254) ||
-    // Tailscale and other carrier-grade NAT addresses never cross the internet in the clear.
-    (a === 100 && b >= 64 && b <= 127)
-  )
+  const [a, b = -1] = parts
+  return PRIVATE_IPV4.some(([first, low, high]) => a === first && b >= low && b <= high)
 }
 
 function privateIpv6(host: string): boolean {

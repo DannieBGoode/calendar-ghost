@@ -24,7 +24,7 @@ export function RuleStatusBadge({
 }: {
   state: string
   stopped: boolean
-  working?: RuleWorkKind
+  working?: RuleWorkKind | undefined
 }) {
   if (state === "removing" || working) {
     return (
@@ -71,7 +71,7 @@ export function RuleNextAction({
   state: string
   disconnected: boolean
   pending: RuleCommand | undefined
-  describedBy?: string
+  describedBy?: string | undefined
   onRun: (command: RuleCommand) => void
   onViewChange: (view: AppView) => void
 }) {

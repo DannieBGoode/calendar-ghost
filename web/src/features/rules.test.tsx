@@ -15,6 +15,7 @@ function account(id: string): ConnectedAccount {
     id,
     display_name: `Account ${id}`,
     email: `${id}@example.test`,
+    provider: "google",
     avatar_url: null,
     state: "connected",
     rule_count: 0,
@@ -24,22 +25,22 @@ function account(id: string): ConnectedAccount {
 
 // Source account: one writable calendar, one read-only.
 const accountA = account("a")
-const workA: DiscoveredCalendar = { id: "work-a", summary: "Work A", writable: true, primary: true }
-const holidaysA: DiscoveredCalendar = { id: "holidays-a", summary: "Holidays A", writable: false, primary: false }
+const workA: DiscoveredCalendar = { id: "work-a", summary: "Work A", access_role: "owner", writable: true, primary: true }
+const holidaysA: DiscoveredCalendar = { id: "holidays-a", summary: "Holidays A", access_role: "reader", writable: false, primary: false }
 
 // Initial destination account: two writable calendars, one read-only.
 const accountB = account("b")
-const workB1: DiscoveredCalendar = { id: "work-b1", summary: "Work B1", writable: true, primary: true }
-const holidaysB: DiscoveredCalendar = { id: "holidays-b", summary: "Holidays B", writable: false, primary: false }
-const workB2: DiscoveredCalendar = { id: "work-b2", summary: "Work B2", writable: true, primary: false }
+const workB1: DiscoveredCalendar = { id: "work-b1", summary: "Work B1", access_role: "owner", writable: true, primary: true }
+const holidaysB: DiscoveredCalendar = { id: "holidays-b", summary: "Holidays B", access_role: "reader", writable: false, primary: false }
+const workB2: DiscoveredCalendar = { id: "work-b2", summary: "Work B2", access_role: "owner", writable: true, primary: false }
 
 // A switch target with its own single writable calendar.
 const accountD = account("d")
-const workD1: DiscoveredCalendar = { id: "work-d1", summary: "Work D1", writable: true, primary: true }
+const workD1: DiscoveredCalendar = { id: "work-d1", summary: "Work D1", access_role: "owner", writable: true, primary: true }
 
 // A switch target with no writable calendars at all.
 const accountC = account("c")
-const holidaysC: DiscoveredCalendar = { id: "holidays-c", summary: "Holidays C", writable: false, primary: true }
+const holidaysC: DiscoveredCalendar = { id: "holidays-c", summary: "Holidays C", access_role: "reader", writable: false, primary: true }
 
 const calendarsByAccount: Record<string, DiscoveredCalendar[]> = {
   a: [workA, holidaysA],
@@ -89,20 +90,20 @@ function click(element: Element) {
 }
 
 function selectOptions(id: string): HTMLOptionElement[] {
-  return Array.from(container.querySelectorAll(`#${id} option`)) as HTMLOptionElement[]
+  return Array.from(container.querySelectorAll<HTMLOptionElement>(`#${id} option`))
 }
 
 function selectElement(id: string): HTMLSelectElement {
-  return container.querySelector(`#${id}`) as HTMLSelectElement
+  return container.querySelector<HTMLSelectElement>(`#${id}`)!
 }
 
 /** Switches an AccountSelect combobox (scoped to its own wrapper) to the account at `targetId`. */
 function switchAccount(triggerId: string, targetId: string) {
-  const trigger = container.querySelector(`#${triggerId}`) as HTMLButtonElement
-  const wrapper = trigger.closest(".account-select") as HTMLElement
+  const trigger = container.querySelector<HTMLButtonElement>(`#${triggerId}`)!
+  const wrapper = trigger.closest<HTMLElement>(".account-select")!
   click(trigger)
   const options = Array.from(wrapper.querySelectorAll('[role="option"]'))
-  const target = options.find((option) => option.textContent?.includes(`Account ${targetId}`))
+  const target = options.find((option) => option.textContent.includes(`Account ${targetId}`))
   if (!target) throw new Error(`No account option for ${targetId}`)
   click(target)
 }
@@ -149,7 +150,7 @@ describe("RuleBuilder", () => {
     expect(destinationSelect.value).toBe("")
     expect(container.textContent).toContain("This account has no writable calendars to choose.")
 
-    const submit = container.querySelector('button[type="submit"]') as HTMLButtonElement
+    const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]')!
     expect(submit.disabled).toBe(true)
   })
 })

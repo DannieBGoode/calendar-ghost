@@ -4,7 +4,7 @@ const sources = import.meta.glob(["../**/*.{ts,tsx}", "!../**/product-name.test.
   query: "?raw",
   import: "default",
   eager: true,
-}) as Record<string, string>
+})
 
 describe("product name", () => {
   it("never shows the retired name", () => {

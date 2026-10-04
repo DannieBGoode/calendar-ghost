@@ -37,13 +37,21 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+      # Fails on a known high or critical advisory in any installed package, build tools included,
+      # because they run in CI and in the image build.
+      - run: npm audit --audit-level=high
+      - run: npm run api:check
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run doctor
       - run: npm run test
       - run: npm run build
 
   docker:
     runs-on: ubuntu-latest
+    # A build takes 4 to 8 minutes; a stalled emulated arm64 step fails here instead of after
+    # GitHub's six-hour default.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-qemu-action@v4

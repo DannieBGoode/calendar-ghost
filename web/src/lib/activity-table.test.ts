@@ -84,7 +84,7 @@ describe("activity location", () => {
 
 describe("activity filters", () => {
   it("hides no-change checks unless asked for", () => {
-    expect(SHOW_FILTERS[0].value).toBe("")
+    expect(SHOW_FILTERS[0]?.value).toBe("")
     expect(showCategories("")).toEqual(["changed", "skipped", "blocked"])
     expect(showCategories("all")).toBeUndefined()
     expect(showCategories("unchanged")).toEqual(["unchanged"])

@@ -41,7 +41,8 @@ describe("integrationExamples", () => {
   it("connects desktop apps through the mcp-remote bridge, allowing plain HTTP only where needed", () => {
     const desktop = (origin: string) => {
       const example = integrationExamples(origin).find((item) => item.title === "Claude Desktop and other apps")
-      return JSON.parse(example?.code ?? "{}").mcpServers["calendar-ghost"]
+      const config = JSON.parse(example?.code ?? "{}") as { mcpServers: Record<string, { args: string[] }> }
+      return config.mcpServers["calendar-ghost"]
     }
 
     expect(desktop("https://ghost.example.lan")).toEqual({
@@ -49,8 +50,8 @@ describe("integrationExamples", () => {
       args: ["-y", "mcp-remote", "https://ghost.example.lan/mcp", "--header", "Authorization:${AUTH_HEADER}"],
       env: { AUTH_HEADER: "Bearer <token>" },
     })
-    expect(desktop("http://localhost:8000").args).not.toContain("--allow-http")
-    expect(desktop("http://ghost.lan:8000").args).toEqual([
+    expect(desktop("http://localhost:8000")?.args).not.toContain("--allow-http")
+    expect(desktop("http://ghost.lan:8000")?.args).toEqual([
       "-y",
       "mcp-remote",
       "http://ghost.lan:8000/mcp",
@@ -117,7 +118,7 @@ describe("integrationSummary", () => {
 
 describe("copyToken", () => {
   it("copies with the Clipboard API when it is available and succeeds", async () => {
-    const writeText = async () => undefined
+    const writeText = () => Promise.resolve()
     expect(await copyToken("secret", { writeText })).toBe("copied")
   })
 
@@ -126,9 +127,7 @@ describe("copyToken", () => {
   })
 
   it("falls back when the Clipboard API rejects, such as on a plain HTTP origin", async () => {
-    const writeText = async () => {
-      throw new Error("The request is not allowed by the user agent.")
-    }
+    const writeText = () => Promise.reject(new Error("The request is not allowed by the user agent."))
     expect(await copyToken("secret", { writeText })).toBe("unavailable")
   })
 })

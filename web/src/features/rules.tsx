@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowRight, CheckCircle2, Plus, ShieldAlert } from "lucide-react"
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useEffect, useRef, useState, type SyntheticEvent } from "react"
 
 import { AccountSelect } from "@/components/account-select"
 import { GhostMark } from "@/components/ghost-mark"
@@ -45,6 +45,7 @@ type RulesViewProps = {
   onOpenRule: OpenRule
 }
 
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function RulesView({
   notice,
   createRule,
@@ -174,6 +175,7 @@ export function RulesView({
         )
       ) : (
         <ul className="rule-list page-card" aria-label="Sync rules">
+          {/* eslint-disable-next-line complexity -- debt: split this before adding to it */}
           {rules.data.map((rule) => {
             const { source, destination, disconnected } = endpoints(rule)
             const stopped = rule.state === "degraded" || disconnected.length > 0
@@ -296,6 +298,7 @@ export function RulesView({
 }
 
 /** Exported so rendered tests can exercise calendar-picker wiring without the full rules list. */
+// eslint-disable-next-line complexity, max-lines-per-function -- debt: split this before adding to it
 export function RuleBuilder({
   accounts,
   onCreated,
@@ -374,7 +377,7 @@ export function RuleBuilder({
       !sameEndpoint,
   )
 
-  function submit(event: FormEvent) {
+  function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
     if (canSubmit) create.mutate()
   }

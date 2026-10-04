@@ -25,7 +25,7 @@ export function HappenedLine({
   signed = true,
 }: {
   happened: Happened
-  suffix?: string
+  suffix?: string | undefined
   /** False where a marker beside the line already shows the sign. */
   signed?: boolean
 }) {

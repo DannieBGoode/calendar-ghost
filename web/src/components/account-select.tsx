@@ -26,7 +26,7 @@ export function AccountSelect({
   const [open, setOpen] = useState(false)
   const selectedIndex = accounts.findIndex((account) => account.id === value)
   const selected = accounts[selectedIndex] ?? accounts[0]
-  const [active, setActive] = useState(Math.max(selectedIndex, 0))
+  const [active, setActive] = useState(() => Math.max(selectedIndex, 0))
   const activeIndex = Math.min(active, Math.max(accounts.length - 1, 0))
 
   useEffect(() => {
@@ -56,6 +56,7 @@ export function AccountSelect({
     )
   }
 
+  // eslint-disable-next-line complexity -- debt: split this before adding to it
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     const printable = event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey
     if (!open) {

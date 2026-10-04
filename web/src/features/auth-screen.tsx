@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Check, LockKeyhole } from "lucide-react"
-import { useId, useState, type FormEvent } from "react"
+import { useId, useState, type SyntheticEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +12,7 @@ import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL, TAGLINE } from "@/lib/brand"
 
 type AuthScreenProps = { mode: "setup" | "login" }
 
+// eslint-disable-next-line complexity -- debt: split this before adding to it
 export function AuthScreen({ mode }: AuthScreenProps) {
   const passwordId = useId()
   const confirmationId = useId()
@@ -30,7 +31,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const mismatch = isSetup && confirmation.length > 0 && password !== confirmation
   const canSubmit = password.length >= 12 && (!isSetup || password === confirmation)
 
-  function submit(event: FormEvent) {
+  function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
     if (canSubmit) mutation.mutate()
   }
