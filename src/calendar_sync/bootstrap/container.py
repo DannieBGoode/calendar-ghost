@@ -10,7 +10,6 @@ from calendar_sync.application.accounts import (
 )
 from calendar_sync.application.activity import (
     ActivityQueries,
-    GetDashboard,
     InspectActivityEvent,
     OperationsQueries,
 )
@@ -117,7 +116,6 @@ class Container:
     activity: ActivityQueries
     operations: OperationsQueries
     storage: StorageAdministration
-    get_dashboard: GetDashboard
     get_installation_status: GetInstallationStatus
     integration_tokens: IntegrationTokens
     inspect_activity_event: InspectActivityEvent
@@ -307,7 +305,6 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         activity=adapters.activity,
         operations=adapters.operations,
         storage=StorageAdministration(adapters.database_storage, locks, clock, adapters.log_files),
-        get_dashboard=GetDashboard(unit_of_work, adapters.operations),
         get_installation_status=GetInstallationStatus(
             list_sync_rules, adapters.operations, clock, scheduler
         ),

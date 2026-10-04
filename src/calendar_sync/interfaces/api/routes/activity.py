@@ -11,8 +11,8 @@ from calendar_sync.application.activity import (
     ActivityEvent,
     ActivityFilter,
     ActivityQueries,
+    Dashboard,
     FieldChange,
-    GetDashboard,
     InspectActivityEvent,
     RecordedTime,
 )
@@ -43,8 +43,6 @@ class ActivityServices(Protocol):
     @property
     def activity(self) -> ActivityQueries: ...
     @property
-    def get_dashboard(self) -> GetDashboard: ...
-    @property
     def get_installation_status(self) -> GetInstallationStatus: ...
     @property
     def inspect_activity_event(self) -> InspectActivityEvent: ...
@@ -60,8 +58,9 @@ router = APIRouter()
     dependencies=[Depends(require_admin)],
 )
 def dashboard(services: Services) -> DashboardResponse:
-    summary = services.get_dashboard.execute()
+    # One read: the counts come from the same rules and overview the verdict was decided on.
     verdict = services.get_installation_status.execute()
+    summary = Dashboard.of([rule.summary.rule.state for rule in verdict.rules], verdict.overview)
     return DashboardResponse(
         status=verdict.health.value,
         needs_attention=verdict.needs_attention,
