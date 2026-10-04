@@ -750,7 +750,7 @@ function SettingsView({
   )
 }
 
-function IntegrationsSection() {
+export function IntegrationsSection() {
   const queryClient = useQueryClient()
   const now = useNow()
   const tokens = useQuery({ queryKey: ["integration-tokens"], queryFn: api.integrationTokens })
