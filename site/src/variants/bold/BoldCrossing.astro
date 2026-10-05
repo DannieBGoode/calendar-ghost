@@ -10,6 +10,9 @@ interface Props {
 }
 
 const { m } = Astro.props
+// Matched by position to `crossing.alwaysStays` (Guests, Organizer, Meeting links, Attachments,
+// Invitations), so each item gets its own mark instead of repeating one icon.
+const ALWAYS_STAYS_ICONS = ["users", "userRound", "video", "paperclip", "mail"] as const
 ---
 
 <section class="b-section b-close b-crossing" aria-labelledby="crossing-title">
@@ -25,9 +28,9 @@ const { m } = Astro.props
         <h3>{m.crossing.alwaysStaysTitle}</h3>
         <ul>
           {
-            m.crossing.alwaysStays.map((item) => (
+            m.crossing.alwaysStays.map((item, index) => (
               <li>
-                <Icon name="house" class="b-stays-icon" />
+                <Icon name={ALWAYS_STAYS_ICONS[index]} class="b-stays-icon" />
                 {item}
               </li>
             ))

@@ -14,18 +14,19 @@ import Cpu from "lucide-static/icons/cpu.svg?raw"
 import Database from "lucide-static/icons/database.svg?raw"
 import Eye from "lucide-static/icons/eye.svg?raw"
 import EyeOff from "lucide-static/icons/eye-off.svg?raw"
-import House from "lucide-static/icons/house.svg?raw"
 import ListChecks from "lucide-static/icons/list-checks.svg?raw"
 import Mail from "lucide-static/icons/mail.svg?raw"
 import MailX from "lucide-static/icons/mail-x.svg?raw"
 import MapPin from "lucide-static/icons/map-pin.svg?raw"
 import Minus from "lucide-static/icons/minus.svg?raw"
+import Paperclip from "lucide-static/icons/paperclip.svg?raw"
 import RefreshCwOff from "lucide-static/icons/refresh-cw-off.svg?raw"
 import Repeat from "lucide-static/icons/repeat.svg?raw"
 import RotateCcw from "lucide-static/icons/rotate-ccw.svg?raw"
 import ShieldCheck from "lucide-static/icons/shield-check.svg?raw"
 import Trash2 from "lucide-static/icons/trash-2.svg?raw"
 import User from "lucide-static/icons/user.svg?raw"
+import UserRound from "lucide-static/icons/user-round.svg?raw"
 import Users from "lucide-static/icons/users.svg?raw"
 import UserX from "lucide-static/icons/user-x.svg?raw"
 import Video from "lucide-static/icons/video.svg?raw"
@@ -48,12 +49,12 @@ export const ICONS = {
   database: Database,
   eye: Eye,
   eyeOff: EyeOff,
-  house: House,
   listChecks: ListChecks,
   mail: Mail,
   mailX: MailX,
   mapPin: MapPin,
   minus: Minus,
+  paperclip: Paperclip,
   refreshCwOff: RefreshCwOff,
   repeat: Repeat,
   rotateCcw: RotateCcw,
@@ -61,6 +62,7 @@ export const ICONS = {
   tilde: Tilde,
   trash: Trash2,
   user: User,
+  userRound: UserRound,
   users: Users,
   userX: UserX,
   video: Video,
