@@ -293,6 +293,29 @@ for (const path of ["/", "/bold", "/journey"]) {
       await expect(footer.getByText(en.footer.noTrackers, { exact: true })).toBeVisible()
     })
 
+    for (const width of [1440, 390]) {
+      test(`at ${width}px, the Overview's "All good!" bubble points at the ghost`, async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width, height: 900 } })
+        const page = await context.newPage()
+        await page.goto(path)
+        const health = page.locator(".mock-health")
+        await health.scrollIntoViewIfNeeded()
+        const ghost = (await health.locator(".mock-health-ghost").boundingBox())!
+        const bubble = (await health.locator(".mock-health-bubble").boundingBox())!
+        // Under the ghost, centered on it, with its tail on the top edge pointing up.
+        expect(bubble.y).toBeGreaterThanOrEqual(ghost.y + ghost.height - 1)
+        expect(Math.abs(bubble.x + bubble.width / 2 - (ghost.x + ghost.width / 2))).toBeLessThan(2)
+        const tail = await health.locator(".mock-health-bubble").evaluate((element) => {
+          const style = getComputedStyle(element, "::before")
+          return { top: parseFloat(style.top), transform: style.transform }
+        })
+        expect(tail.top).toBeLessThan(0)
+        // rotate(135deg): the corner where its two borders meet points up.
+        expect(tail.transform).toMatch(/^matrix\(-0\.70710\d*, 0\.70710\d*, -0\.70710\d*, -0\.70710\d*/)
+        await context.close()
+      })
+    }
+
     test("the app is shown feature by feature, each with its mockup, on alternating sides", async ({ page }) => {
       await page.goto(path)
       const features = page.locator(".feat")

@@ -44,7 +44,14 @@
 .mock-health-dot-1 { top: 34%; left: -6%; }
 .mock-health-dot-2 { bottom: 14%; left: 2%; }
 .mock-health-dot-3 { bottom: 8%; right: -4%; }
-.mock-health-bubble { --bubble-bg: color-mix(in oklch, var(--success-surface) 80%, var(--background)); --bubble-edge: var(--success-border); }
+/* The ghost says it: the bubble sits under the ghost at every width, its tail pointing up at it
+   (beside the ghost there is not room enough in the mockup's narrow column). */
+.mock-health .ghost-says { flex-direction: column; flex-wrap: nowrap; gap: 0.6rem; }
+.mock-health .speech-bubble.mock-health-bubble {
+  --bubble-bg: color-mix(in oklch, var(--success-surface) 80%, var(--background)); --bubble-edge: var(--success-border);
+  text-align: center;
+}
+.mock-health .speech-bubble.mock-health-bubble::before { top: -0.36rem; bottom: auto; left: calc(50% - 0.325rem); right: auto; transform: rotate(135deg); }
 .mock-health-bubble strong { color: var(--success-foreground); }
 @container (min-width: 40rem) {
   .mock-health-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); min-height: 15rem; }
