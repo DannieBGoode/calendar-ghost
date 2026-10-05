@@ -1,0 +1,115 @@
+---
+// The nav's Device/Light/Dark toggle. Unlike the app's own binary light/dark switch
+// (web/src/components/theme-toggle.tsx), this one cycles all three states DESIGN.md's Appearance
+// section describes, since the point here is letting a visitor preview both themes without
+// touching their OS setting. It reuses the app's localStorage pattern (lib/theme.ts), under the
+// site's own key, and applies a choice with no page reload or flash (Layout.astro's inline head
+// script runs the same logic before first paint).
+//
+// Compact and icon-only by design (MotionToggle's `compact` mode is the same idiom): the current
+// state is still the button's name, for assistive technology and as a tooltip.
+import Icon from "./Icon.astro"
+import { format } from "../i18n/format"
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const label = (state: string) => format(m.theme.current, { state })
+---
+
+<button
+  type="button"
+  class="theme-toggle"
+  data-theme-toggle
+  data-choice="device"
+  data-label-device={m.theme.device}
+  data-label-light={m.theme.light}
+  data-label-dark={m.theme.dark}
+  data-label-template={m.theme.current}
+  title={label(m.theme.device)}
+  aria-label={label(m.theme.device)}
+>
+  <span class="theme-toggle-icon" data-theme-icon="device"><Icon name="monitor" /></span>
+  <span class="theme-toggle-icon" data-theme-icon="light"><Icon name="sun" /></span>
+  <span class="theme-toggle-icon" data-theme-icon="dark"><Icon name="moon" /></span>
+  <span class="sr-only" data-theme-state>{label(m.theme.device)}</span>
+</button>
+
+<script>
+  import { format } from "../i18n/format"
+  import {
+    applyThemePreference,
+    nextThemePreference,
+    readThemePreference,
+    SYSTEM_DARK_MODE_QUERY,
+    THEME_STORAGE_KEY,
+    writeThemePreference,
+    type ThemePreference,
+  } from "../lib/theme"
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-theme-toggle]")) {
+    const words: Record<ThemePreference, string> = {
+      device: button.dataset.labelDevice ?? "",
+      light: button.dataset.labelLight ?? "",
+      dark: button.dataset.labelDark ?? "",
+    }
+    const template = button.dataset.labelTemplate ?? "{state}"
+    const stateText = button.querySelector<HTMLElement>("[data-theme-state]")
+
+    const render = (preference: ThemePreference) => {
+      button.dataset.choice = preference
+      const label = format(template, { state: words[preference] })
+      button.title = label
+      button.setAttribute("aria-label", label)
+      if (stateText) stateText.textContent = label
+    }
+
+    // Corrects the button to match a stored choice: the markup above always starts at Device,
+    // since the page is prerendered and cannot read localStorage at build time (the `<html>`
+    // element itself is already right by now, set before paint by Layout.astro's head script).
+    let preference = readThemePreference() ?? "device"
+    render(preference)
+
+    button.addEventListener("click", () => {
+      preference = nextThemePreference(preference)
+      writeThemePreference(preference)
+      applyThemePreference(preference)
+      render(preference)
+    })
+
+    // Another tab changing the choice (or clearing storage) updates this one too.
+    window.addEventListener("storage", (event) => {
+      if (event.key !== THEME_STORAGE_KEY && event.key !== null) return
+      preference = readThemePreference() ?? "device"
+      applyThemePreference(preference)
+      render(preference)
+    })
+
+    // Under Device, the browser chrome color still needs to track a live OS change.
+    if (typeof matchMedia === "function") {
+      matchMedia(SYSTEM_DARK_MODE_QUERY).addEventListener("change", () => {
+        if (preference === "device") applyThemePreference(preference)
+      })
+    }
+  }
+</script>
+
+<style>
+  .theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 2.75rem; height: 2.75rem; padding: 0;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--foreground); cursor: pointer;
+  }
+  .theme-toggle:hover { background: var(--muted); }
+  .theme-toggle-icon { display: none; width: 1.125rem; height: 1.125rem; }
+  .theme-toggle-icon :global(svg) { width: 100%; height: 100%; }
+  .theme-toggle[data-choice="device"] [data-theme-icon="device"],
+  .theme-toggle[data-choice="light"] [data-theme-icon="light"],
+  .theme-toggle[data-choice="dark"] [data-theme-icon="dark"] {
+    display: inline-flex;
+  }
+</style>

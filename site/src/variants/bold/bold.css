@@ -28,8 +28,13 @@
 
   font-size: var(--step-0);
 }
+:root[data-theme="dark"] .bold {
+  --reveal-you: oklch(0.255 0.055 288);
+  --night: oklch(0.215 0.075 279);
+  --night-deep: oklch(0.165 0.055 279);
+}
 @media (prefers-color-scheme: dark) {
-  .bold {
+  :root:not([data-theme="light"]) .bold {
     --reveal-you: oklch(0.255 0.055 288);
     --night: oklch(0.215 0.075 279);
     --night-deep: oklch(0.165 0.055 279);

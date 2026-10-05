@@ -60,8 +60,9 @@ const [ask, promise] = m.variants.bold.footer.lines
     border-radius: clamp(1.75rem, 4vw, 3rem);
     background: var(--slab); color: var(--foreground);
   }
+  :root[data-theme="dark"] .b-poster { --slab: oklch(0.36 0.13 278); --surface: oklch(0.32 0.12 278); --muted: oklch(0.3 0.11 278); --primary-foreground: oklch(0.28 0.12 278); --border: oklch(0.52 0.1 278); }
   @media (prefers-color-scheme: dark) {
-    .b-poster { --slab: oklch(0.36 0.13 278); --surface: oklch(0.32 0.12 278); --muted: oklch(0.3 0.11 278); --primary-foreground: oklch(0.28 0.12 278); --border: oklch(0.52 0.1 278); }
+    :root:not([data-theme="light"]) .b-poster { --slab: oklch(0.36 0.13 278); --surface: oklch(0.32 0.12 278); --muted: oklch(0.3 0.11 278); --primary-foreground: oklch(0.28 0.12 278); --border: oklch(0.52 0.1 278); }
   }
   .b-poster a:not(.btn) { color: var(--foreground); }
   .b-poster .btn:not(.btn-primary) { background: transparent; border-color: color-mix(in oklch, var(--foreground), transparent 45%); }

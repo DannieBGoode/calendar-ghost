@@ -47,6 +47,15 @@ export const en = {
     pause: "Pause animation",
     play: "Play animation",
   },
+  /** The nav's Device/Light/Dark toggle (components/ThemeToggle.astro, lib/theme.ts). `current`
+   * names the state out loud for assistive technology; `{state}` is filled with one of the three
+   * words. */
+  theme: {
+    device: "Device",
+    light: "Light",
+    dark: "Dark",
+    current: "Theme: {state}",
+  },
   /** What the ghost says in its speech bubbles. Jokes only: never the only place a fact lives. */
   ghost: {
     crossingBusy: "Dentist? What dentist?",

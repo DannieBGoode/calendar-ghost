@@ -119,6 +119,7 @@ test("small controls are at least 44px tall", async ({ browser }) => {
     page.locator(".crossing-switch button"),
     page.locator("button[data-copy]"),
     page.locator(".faq summary"),
+    page.locator("[data-theme-toggle]"),
   ]
   for (const control of controls) {
     await expect(control.first()).toBeVisible()
@@ -564,3 +565,90 @@ for (const path of ["/", "/bold"]) {
     })
   }
 }
+
+const bodyBackground = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+
+for (const path of ["/", "/bold", "/journey", "/home/hero-a2", "/versions"]) {
+  test(`${path}: the theme toggle is there, 44px tall, and names its state`, async ({ page }) => {
+    await page.goto(path)
+    const toggle = page.locator("[data-theme-toggle]")
+    await expect(toggle).toBeVisible()
+    expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    expect((await toggle.boundingBox())!.width).toBeGreaterThanOrEqual(44)
+    await expect(toggle).toHaveAttribute("aria-label", `Theme: ${en.theme.device}`)
+  })
+}
+
+test("cycling the toggle switches the page between light and dark tokens, whatever the device is set to", async ({
+  browser,
+}) => {
+  for (const colorScheme of ["light", "dark"] as const) {
+    const context = await browser.newContext({ colorScheme })
+    const page = await context.newPage()
+    await page.goto("/")
+    const toggle = page.locator("[data-theme-toggle]")
+    const device = await bodyBackground(page)
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("data-choice", "light")
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
+    const light = await bodyBackground(page)
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("data-choice", "dark")
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
+    const dark = await bodyBackground(page)
+
+    // Light and Dark always differ from each other, and each stays put under its own explicit
+    // choice no matter what the device (colorScheme) says.
+    expect(light).not.toBe(dark)
+    expect(await bodyBackground(page)).toBe(dark)
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("data-choice", "device")
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme")
+    expect(await bodyBackground(page)).toBe(device)
+
+    await context.close()
+  }
+})
+
+test("the theme choice survives a reload", async ({ page }) => {
+  await page.goto("/")
+  const toggle = page.locator("[data-theme-toggle]")
+  await toggle.click() // Light
+  await toggle.click() // Dark
+  const before = await bodyBackground(page)
+  await expect(toggle).toHaveAttribute("aria-label", `Theme: ${en.theme.dark}`)
+
+  await page.reload()
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
+  expect(await bodyBackground(page)).toBe(before)
+  await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("data-choice", "dark")
+  await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("aria-label", `Theme: ${en.theme.dark}`)
+})
+
+test("Device follows the emulated prefers-color-scheme, and keeps following it on reload", async ({ browser }) => {
+  const dark = await (async () => {
+    const context = await browser.newContext({ colorScheme: "dark" })
+    const page = await context.newPage()
+    await page.goto("/")
+    await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("data-choice", "device")
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme")
+    const background = await bodyBackground(page)
+    await context.close()
+    return background
+  })()
+
+  const light = await (async () => {
+    const context = await browser.newContext({ colorScheme: "light" })
+    const page = await context.newPage()
+    await page.goto("/")
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme")
+    const background = await bodyBackground(page)
+    await context.close()
+    return background
+  })()
+
+  expect(dark).not.toBe(light)
+})

@@ -40,14 +40,44 @@ const alternates = hasLanguagePicker()
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fbfbfe" />
+    <script is:inline>
+      // Applies a stored Device/Light/Dark choice (lib/theme.ts, same keys and logic, duplicated
+      // here in plain JS: this script must stay inline and same-origin, so it cannot import a
+      // module) before first paint, so there is no flash of the wrong theme. Without JavaScript,
+      // or with no choice stored, this never runs and the page simply follows the device, as it
+      // always has (tokens.css's `@media (prefers-color-scheme: dark)` rules).
+      ;(() => {
+        const storageKey = "calendar-ghost-site-theme"
+        let saved = null
+        try {
+          saved = localStorage.getItem(storageKey)
+        } catch {
+          // Storage can be unavailable in privacy-restricted browser contexts.
+        }
+        const preference = saved === "light" || saved === "dark" ? saved : "device"
+        const prefersDark =
+          typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches
+        const root = document.documentElement
+        if (preference === "device") {
+          delete root.dataset.theme
+          root.style.colorScheme = "light dark"
+        } else {
+          root.dataset.theme = preference
+          root.style.colorScheme = preference
+        }
+        const resolved = preference === "device" ? (prefersDark ? "dark" : "light") : preference
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute("content", resolved === "dark" ? "#0d0e19" : "#fbfbfe")
+      })()
+    </script>
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical.href} />
     {alternates.map((alt) => <link rel="alternate" hreflang={alt.locale} href={alt.href} />)}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     {preloadFonts.map((href) => <link rel="preload" as="font" type="font/woff2" href={href} crossorigin />)}
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbfbfe" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0e19" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Calendar Ghost" />
     <meta property="og:title" content={title} />

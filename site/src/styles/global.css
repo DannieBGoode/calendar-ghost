@@ -79,6 +79,9 @@ a { color: var(--primary); }
   background: var(--night);
   color: var(--foreground);
 }
-@media (prefers-color-scheme: dark) { .night { --night: oklch(0.215 0.07 279); } }
+:root[data-theme="dark"] .night { --night: oklch(0.215 0.07 279); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .night { --night: oklch(0.215 0.07 279); }
+}
 .night a:not(.btn) { color: var(--foreground); }
 .night .btn { border-color: var(--border); }

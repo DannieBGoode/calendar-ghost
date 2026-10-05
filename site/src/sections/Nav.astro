@@ -2,6 +2,7 @@
 import { GhostMark } from "../islands/GhostMark"
 import type { Messages } from "../i18n"
 import { REPO_URL } from "../links"
+import ThemeToggle from "../components/ThemeToggle.astro"
 import LanguagePicker from "./LanguagePicker.astro"
 
 interface Props {
@@ -35,6 +36,7 @@ const links = [
         </ul>
       </details>
       <LanguagePicker m={m} />
+      <ThemeToggle m={m} />
       <a class="btn btn-small" href={REPO_URL} target="_blank" rel="noopener noreferrer">
         <span aria-hidden="true">★</span> {m.nav.star}<span class="sr-only"> {m.nav.newTab}</span>
       </a>

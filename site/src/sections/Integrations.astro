@@ -136,8 +136,9 @@ const AGENT = "Claude Code"
     --int-ok: oklch(0.70 0.15 155);
     --int-mock-bg: var(--surface);
   }
+  :root[data-theme="dark"] .int { --int-ok: oklch(0.74 0.14 155); }
   @media (prefers-color-scheme: dark) {
-    .int { --int-ok: oklch(0.74 0.14 155); }
+    :root:not([data-theme="light"]) .int { --int-ok: oklch(0.74 0.14 155); }
   }
   .int code { font-size: 0.875em; }
 

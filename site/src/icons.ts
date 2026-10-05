@@ -19,6 +19,8 @@ import Mail from "lucide-static/icons/mail.svg?raw"
 import MailX from "lucide-static/icons/mail-x.svg?raw"
 import MapPin from "lucide-static/icons/map-pin.svg?raw"
 import Minus from "lucide-static/icons/minus.svg?raw"
+import Monitor from "lucide-static/icons/monitor.svg?raw"
+import Moon from "lucide-static/icons/moon.svg?raw"
 import Paperclip from "lucide-static/icons/paperclip.svg?raw"
 import Plus from "lucide-static/icons/plus.svg?raw"
 import RefreshCwOff from "lucide-static/icons/refresh-cw-off.svg?raw"
@@ -26,6 +28,7 @@ import Repeat from "lucide-static/icons/repeat.svg?raw"
 import RotateCcw from "lucide-static/icons/rotate-ccw.svg?raw"
 import ShieldCheck from "lucide-static/icons/shield-check.svg?raw"
 import SquareTerminal from "lucide-static/icons/square-terminal.svg?raw"
+import Sun from "lucide-static/icons/sun.svg?raw"
 import Trash2 from "lucide-static/icons/trash-2.svg?raw"
 import User from "lucide-static/icons/user.svg?raw"
 import UserRound from "lucide-static/icons/user-round.svg?raw"
@@ -56,6 +59,8 @@ export const ICONS = {
   mailX: MailX,
   mapPin: MapPin,
   minus: Minus,
+  monitor: Monitor,
+  moon: Moon,
   paperclip: Paperclip,
   plus: Plus,
   refreshCwOff: RefreshCwOff,
@@ -63,6 +68,7 @@ export const ICONS = {
   rotateCcw: RotateCcw,
   shieldCheck: ShieldCheck,
   squareTerminal: SquareTerminal,
+  sun: Sun,
   tilde: Tilde,
   trash: Trash2,
   user: User,

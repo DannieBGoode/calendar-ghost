@@ -9,8 +9,9 @@
   --hh-gutter: clamp(1.25rem, 4vw, 2.5rem);
   position: relative;
 }
+:root[data-theme="dark"] .hh { --reveal-you: oklch(0.255 0.055 288); }
 @media (prefers-color-scheme: dark) {
-  .hh { --reveal-you: oklch(0.255 0.055 288); }
+  :root:not([data-theme="light"]) .hh { --reveal-you: oklch(0.255 0.055 288); }
 }
 
 .hh h1 {

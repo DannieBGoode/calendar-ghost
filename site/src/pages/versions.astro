@@ -2,14 +2,20 @@
 // The team's index of every landing page version and iteration (src/versions.ts). Internal: not
 // indexed, not in the sitemap, linked from no public page. Its words live in versions.ts, not in
 // i18n/en.ts (see AGENTS.md, "Landing page").
+import ThemeToggle from "../components/ThemeToggle.astro"
 import Layout from "../layouts/Layout.astro"
+import { messagesFor } from "../i18n"
 import { EARLIER_STATES, STATUS_LABELS, VERSIONS, VIEW_WITH_GIT, isLive, worktreeCommand } from "../versions"
 
 const title = "Versions · Calendar Ghost"
 const description = "Every version and iteration of the Calendar Ghost landing page."
+const m = messagesFor(Astro.currentLocale)
 ---
 
 <Layout title={title} description={description} noindex>
+  <div class="versions-theme">
+    <ThemeToggle m={m} />
+  </div>
   <main class="container versions">
     <h1>Versions</h1>
     <p class="lead">Every version of the landing page and every iteration of it. Old iterations are never overwritten: each new one is a new route.</p>
@@ -69,6 +75,7 @@ const description = "Every version and iteration of the Calendar Ghost landing p
 </Layout>
 
 <style>
+  .versions-theme { position: fixed; top: 0.75rem; right: 0.75rem; z-index: 50; }
   .versions { padding-block: clamp(2.5rem, 6vw, 4.5rem); max-width: 52rem; }
   .versions-group { margin-top: 2.5rem; }
   .versions-group h2 { font-size: 1.75rem; }
