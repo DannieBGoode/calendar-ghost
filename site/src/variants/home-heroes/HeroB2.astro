@@ -1,0 +1,167 @@
+---
+// Hero B2, one event, quieter: the copy column from A, and beside it B's idea at a calmer scale.
+// On one soft surface, Sam's Dentist (title, time, place; the guest and the meeting link as two
+// small chips under it) and three hours of Work, where it has landed as Busy. The ghost carries
+// it over once, a little after the page loads, then rests; a pointer coming over the demo, a new
+// choice, or the play control carries it again. No speech bubbles, no caption.
+import "../journey/crossing.css"
+import { avatarUrls } from "../../avatars"
+import type { Messages } from "../../i18n"
+import { JourneyCrossing } from "../journey/JourneyCrossing"
+import { journeyDentist } from "../journey/plans"
+import HeroPitch from "./HeroPitch.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const [firstLine, secondLine] = m.variants.bold.hero.titleLines
+---
+
+<section class="hh hh-b2" aria-labelledby="hero-title">
+  <div class="hh-b2-grid">
+    <div class="hh-b2-copy">
+      <h1 id="hero-title"><span>{firstLine}</span> <span class="hh-accent">{secondLine}</span></h1>
+      <HeroPitch m={m} />
+    </div>
+    <div class="hh-b2-demo">
+      <JourneyCrossing
+        client:load
+        compactToggle
+        once
+        firstRestMs={1200}
+        hours={{ from: 14, to: 17 }}
+        rows={["time", "place"]}
+        says={false}
+        peelStyle="fade"
+        m={{
+          switchLabel: m.crossing.switchLabel,
+          busyOnly: m.crossing.busyOnly,
+          withDetails: m.crossing.withDetails,
+          busyOnlyBody: m.crossing.busyOnlyBody,
+          withDetailsBody: m.crossing.withDetailsBody,
+          peel: m.variants.journey.crossing.peel,
+          busySays: m.ghost.crossingBusy,
+          detailsSays: m.ghost.crossingDetails,
+          busy: m.demo.busy,
+          summary: m.crossing.summary,
+          day: m.demo.days[0],
+          calendars: m.demo.calendars,
+          motion: m.motion,
+        }}
+        plan={journeyDentist(m)}
+        avatars={await avatarUrls()}
+      />
+    </div>
+  </div>
+</section>
+
+<style>
+  .hh-b2 { padding-block: clamp(1.5rem, 4vh, 3rem) 0; }
+  .hh-b2-grid { width: min(72rem, 100% - 2 * var(--hh-gutter)); margin-inline: auto; display: grid; gap: 2rem; }
+  .hh-b2-copy, .hh-b2-demo { min-width: 0; }
+  .hh-b2-copy h1 { margin: 0 0 1.25rem; font-size: clamp(2.5rem, 1.6rem + 3.4vw, 3.5rem); }
+
+  /* One soft surface: no dotted sky, no shadows, no binder tabs. The two calendars sit flat on it,
+     side by side at every width, with the ghost resting between them. */
+  .hh-b2-demo :global(.jc) {
+    --jc-ghost: 64px;
+    --jh: 2.5rem;
+    grid-template-columns: minmax(0, 12.5rem) minmax(4.5rem, 1fr) minmax(0, 11rem);
+    grid-template-rows: auto auto;
+    column-gap: 0; padding: clamp(1rem, 2.5vw, 1.75rem);
+    border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
+    font-size: 0.875rem;
+  }
+  .hh-b2-demo :global(.jc > *) { grid-column: auto; }
+  .hh-b2-demo :global(.jc .ghost) { --ghost-cutout: var(--surface); }
+  .hh-b2-demo :global(.jc .ghost[data-tone="mist"]) {
+    /* White on dark with its glow; on light, outlined and without a halo. */
+    --ghost-edge: light-dark(oklch(0.6 0.08 280), oklch(0.9 0.035 285));
+    --ghost-glow: light-dark(transparent, oklch(0.9 0.07 285 / 0.4));
+  }
+  .hh-b2-demo :global(.jc-arc) { display: none; }
+  .hh-b2-demo :global(.jc-from) { grid-column: 1; grid-row: 2; }
+  .hh-b2-demo :global(.jc-to) { grid-column: 3; grid-row: 2; margin-top: 0; }
+  .hh-b2-demo :global(.jc-ghost) { grid-column: 2; grid-row: 2; justify-self: center; align-self: start; margin: 4.25rem 0 0; }
+  .hh-b2-demo :global(.jc-cal) { padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+  .hh-b2-demo :global(.jc-cal::before), .hh-b2-demo :global(.jc-cal::after) { content: none; }
+  .hh-b2-demo :global(.jc-cal-head) { gap: 0.45rem; margin-bottom: 0.75rem; font-size: 0.8125rem; }
+  .hh-b2-demo :global(.jc-cal-head .avatar) { width: 1.5rem; height: 1.5rem; }
+  .hh-b2-demo :global(.jc-cal-head > span) { display: none; }
+
+  /* The switch: small, with the demo. Each choice is a 44px target; the pill drawn inside it is
+     smaller, and the one picked is a soft tint, not a solid fill. Its heading and the sentence
+     that says what crosses over stay for screen readers. */
+  .hh-b2-demo :global(.jc-controls) { grid-column: 1 / -1; grid-row: 1; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+  .hh-b2-demo :global(.jc-group legend), .hh-b2-demo :global(.jc-explain) {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+  .hh-b2-demo :global(.jc-segment) { gap: 0.25rem; padding: 0; border: 0; background: none; }
+  .hh-b2-demo :global(.jc-segment .jc-option) {
+    min-height: 2.75rem; padding: 0; border: 0; background: none; color: var(--muted-foreground);
+    font-size: 0.8125rem; font-weight: 600;
+  }
+  .hh-b2-demo :global(.jc-segment .jc-option-text) { padding: 0.4rem 0.8rem; border-radius: 999px; border: 1px solid transparent; }
+  .hh-b2-demo :global(.jc-segment .jc-option:hover .jc-option-text) { border-color: var(--border); }
+  .hh-b2-demo :global(.jc-segment .jc-option:has(input:checked)) { background: none; color: var(--foreground); }
+  .hh-b2-demo :global(.jc-segment .jc-option:has(input:checked) .jc-option-text) {
+    background: var(--background); border-color: var(--border);
+  }
+  .hh-b2-demo :global(.jc-toggle) { margin-left: auto; }
+  .hh-b2-demo :global(.jc-toggle .motion-toggle) { color: var(--muted-foreground); }
+
+  /* Sam's Dentist, compact: the title, then time and place; the guest and the link as two small
+     muted chips under the card. */
+  .hh-b2-demo :global(.jc-card) { gap: 0.3rem; padding: 0.7rem 0.8rem 0.75rem; border-radius: 0.6rem; }
+  .hh-b2-demo :global(.jc-title) { font-size: 1rem; font-weight: 700; }
+  .hh-b2-demo :global(.jc-row) { font-size: 0.8125rem; }
+  .hh-b2-demo :global(.jc-icon) { width: 0.85rem; height: 0.85rem; }
+  .hh-b2-demo :global(.jc-attach) { gap: 0.35rem; margin-top: 0.45rem; }
+  .hh-b2-demo :global(.jc-pill) {
+    padding: 0.15rem 0.5rem 0.15rem 0.4rem; background: none; color: var(--muted-foreground);
+    font-size: 0.75rem; font-weight: 500;
+  }
+  .hh-b2-demo :global(.jc-pill .jc-icon) { width: 0.75rem; height: 0.75rem; }
+
+  /* The guest and the link stay behind: the ghost's copy never carries them. */
+  .hh-b2-demo :global(.jc-traveler .jc-attach) { visibility: hidden; }
+
+  /* Busy, as on Work and on the copy in flight: a plain fill and the ghost glyph, a solid edge. */
+  .hh-b2-demo :global(.cal-event.is-busy) {
+    --event-edge: color-mix(in oklch, var(--primary), transparent 55%);
+    background: var(--event-busy);
+    border-style: solid;
+  }
+  .hh-b2-demo :global(.jc-card-busy) {
+    border: 1px solid color-mix(in oklch, var(--primary), transparent 55%);
+    background: linear-gradient(var(--event-busy), var(--event-busy)), var(--surface);
+    padding: 0.7rem 0.8rem;
+  }
+  .hh-b2-demo :global(.jc-card-busy b) { font-size: 1rem; }
+  .hh-b2-demo :global(.jc-landed) { left: 2.75rem; }
+  .hh-b2-demo :global(.jc-landed .jc-slot) { padding: 0.35rem 0.55rem; font-size: 0.8125rem; }
+  .hh-b2-demo :global(.jc-hour) { border-top-color: color-mix(in oklch, var(--border), transparent 30%); }
+
+  /* Side by side from 960px: the copy in A's column, the demo beside it. */
+  @media (min-width: 960px) {
+    .hh-b2 { padding-top: clamp(2rem, 5vh, 3.5rem); }
+    .hh-b2-grid {
+      grid-template-columns: minmax(0, clamp(26rem, 13rem + 20vw, 30rem)) minmax(0, 1fr);
+      column-gap: clamp(2rem, 4vw, 4rem);
+      align-items: center;
+    }
+  }
+
+  /* Phones: the same three columns, narrower, and a smaller ghost between them. */
+  @media (max-width: 639px) {
+    .hh-b2-demo :global(.jc) { --jc-ghost: 52px; grid-template-columns: minmax(0, 1fr) 3.5rem minmax(0, 0.9fr); padding: 0.9rem; }
+    .hh-b2-demo :global(.jc-ghost) { margin-top: 3.75rem; }
+    .hh-b2-demo :global(.jc-card) { padding: 0.55rem 0.6rem 0.6rem; }
+    .hh-b2-demo :global(.jc-row) { font-size: 0.75rem; }
+    .hh-b2-demo :global(.jc-landed) { left: 2.4rem; }
+    .hh-b2-demo :global(.jc-landed .jc-slot) { padding: 0.3rem 0.45rem; font-size: 0.75rem; }
+    .hh-b2-demo :global(.jc-segment .jc-option-text) { padding-inline: 0.65rem; }
+  }
+</style>

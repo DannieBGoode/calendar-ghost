@@ -1,0 +1,12 @@
+---
+// Home page, hero iteration B2: one event, quieter. See src/versions.ts.
+import { messagesFor } from "../../i18n"
+import HeroB2 from "../../variants/home-heroes/HeroB2.astro"
+import HomeHeroPage from "../../variants/home-heroes/HomeHeroPage.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<HomeHeroPage path="/home/hero-b2">
+  <HeroB2 m={m} />
+</HomeHeroPage>

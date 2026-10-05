@@ -42,7 +42,7 @@ describe("the versions index", () => {
     expect(NON_PRODUCTION_PATHS).not.toContain("/")
     expect(NON_PRODUCTION_PATHS).toContain(VERSIONS_PATH)
     expect(NON_PRODUCTION_PATHS).toEqual(
-      expect.arrayContaining(["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-c", "/home/hero-a2"]),
+      expect.arrayContaining(["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-c", "/home/hero-a2", "/home/hero-b2"]),
     )
   })
 

@@ -91,6 +91,15 @@ const VARIANTS = [
     controls: HOME_CONTROLS,
   },
   {
+    path: "/home/hero-b2",
+    title: en.hero.title,
+    rest: null,
+    headings: HOME_HEADINGS,
+    /** The hero's crossing (it plays once, then on request), the week, the home page's crossing. */
+    loops: 3,
+    controls: [".jc-option", ...HOME_CONTROLS],
+  },
+  {
     path: "/home/hero-c",
     title: en.variants.homeHeroes.c.title,
     rest: "50%",
@@ -447,6 +456,11 @@ const HOME_HEROES = [
     point: ".hh-a2 .reveal-frame",
   },
   {
+    path: "/home/hero-b2",
+    /** Where the Dentist lands on Work: Busy, 15:00 to 16:30. */
+    point: '.jc-landed [data-mode="busy"]',
+  },
+  {
     path: "/home/hero-c",
     /** The proof under the headline: two days of what Sam sees against what work sees. */
     point: ".hh-c-proof .reveal-frame",
@@ -591,6 +605,71 @@ test.describe("home hero iterations", () => {
     await slider.blur()
     await expect(page.locator(".hh-a2 .reveal-frame")).toHaveAttribute("data-touched", "")
     await expect(hint).toHaveCSS("opacity", "0")
+  })
+
+  test("/home/hero-b2 without JavaScript: Busy has landed, the guest and link stayed home, and nobody speaks", async ({ browser }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false })
+    const page = await context.newPage()
+    await page.goto("/home/hero-b2")
+    const landed = page.locator('.hh-b2 .jc-landed [data-mode="busy"]')
+    await expect(landed).toBeVisible()
+    await expect(landed).toContainText(en.demo.busy)
+    await expect(landed).toContainText("15:00–16:30")
+    const card = page.locator(".hh-b2 .jc-from")
+    await expect(card).toContainText(en.demo.events.dentist.detail)
+    await expect(card).toContainText(en.crossing.guests)
+    await expect(card).toContainText(en.crossing.link)
+    await expect(card).not.toContainText(en.variants.journey.crossing.description)
+    await expect(page.locator(".hh-b2 .jc-to")).not.toContainText(en.crossing.guests)
+    // Work shows only the hours around the Dentist.
+    await expect(page.locator(".hh-b2 .jc-hour")).toHaveText(["14:00", "15:00", "16:00"])
+    await expect(page.locator(".hh .speech-bubble")).toHaveCount(0)
+    // The switch's heading and its sentence are there for screen readers, not on screen.
+    await expect(page.locator(".hh-b2").getByRole("group", { name: en.crossing.switchLabel })).toBeAttached()
+    await expect(page.locator(".hh-b2 .jc-explain")).toHaveCSS("position", "absolute")
+    await context.close()
+  })
+
+  test("/home/hero-b2 carries the Dentist once, rests on Busy, and carries it again when a pointer comes over it", async ({ page }) => {
+    await page.goto("/home/hero-b2")
+    const crossing = page.locator(".hh-b2 .jc")
+    await expect(crossing).toHaveAttribute("data-moment", "fetch", { timeout: 2500 })
+    await expect(crossing).toHaveAttribute("data-moment", "carry", { timeout: 6000 })
+    await expect(crossing).not.toHaveAttribute("data-moment", /.+/, { timeout: 6000 })
+    await expect(page.locator('.hh-b2 .jc-landed [data-mode="busy"]')).toBeVisible()
+    // It rests: no second run by itself.
+    await page.waitForTimeout(3000)
+    await expect(crossing).not.toHaveAttribute("data-moment", /.+/)
+    await page.locator(".hh-b2 .jc-to").hover()
+    await expect(crossing).toHaveAttribute("data-moment", "fetch", { timeout: 1000 })
+  })
+
+  for (const scheme of ["light", "dark"] as const) {
+    test(`/home/hero-b2 in ${scheme}: a ghost 56 to 72px wide, ${scheme === "light" ? "outlined, with no halo" : "white and glowing"}`, async ({ browser }) => {
+      const context = await browser.newContext({ colorScheme: scheme })
+      const page = await context.newPage()
+      await page.goto("/home/hero-b2")
+      const ghost = page.locator(".hh-b2 .jc-ghost")
+      const box = (await ghost.boundingBox())!
+      expect(box.width).toBeGreaterThanOrEqual(56)
+      expect(box.width).toBeLessThanOrEqual(72)
+      const glow = await page
+        .locator(".hh-b2 .jc-ghost .ghost")
+        .first()
+        .evaluate((element) => getComputedStyle(element, "::before").backgroundColor)
+      if (scheme === "light") expect(glow).toBe("rgba(0, 0, 0, 0)")
+      else expect(glow).not.toBe("rgba(0, 0, 0, 0)")
+      await context.close()
+    })
+  }
+
+  test("/home/hero-b2 on a phone: the landed Busy is on the first screen", async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" })
+    const page = await context.newPage()
+    await page.goto("/home/hero-b2")
+    await expect(page.locator('.hh-b2 .jc-landed [data-mode="busy"]')).toBeInViewport({ ratio: 1 })
+    await expect(page.getByRole("link", { name: en.hero.primary }).first()).toBeInViewport()
+    await context.close()
   })
 
   /** Where Busy's left edge sits against the event's: 0 when Busy covers the whole event. */

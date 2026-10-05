@@ -74,6 +74,14 @@ export const VERSIONS: readonly Version[] = [
         date: "2026-10-05",
         commit: "0000000",
       },
+      {
+        name: "Hero B2: one event, quieter",
+        status: "candidate",
+        path: "/home/hero-b2",
+        tries: "B's carry at a calmer scale: a compact Dentist card and three hours of Work on one soft surface; it plays once, then rests on Busy.",
+        date: "2026-10-05",
+        commit: "0000000",
+      },
     ],
   },
   {
