@@ -135,7 +135,8 @@
   .ghost[data-alive="brief"][data-awake][data-float] .ghost-float { animation: ghost-float 2.4s ease-in-out 2; }
   .ghost[data-alive="brief"][data-awake][data-float] .ghost-shadow { animation: ghost-shadow 2.4s ease-in-out 2; }
   .ghost[data-alive="brief"][data-awake] .ghost-z { animation: ghost-z 2.4s ease-out 2; }
-  .ghost[data-alive="brief"][data-awake] .ghost-z-two { animation-delay: 0.6s; }
+  /* Two runs of 2.4s and this delay end at 5s, the most motion may last without a pause control. */
+  .ghost[data-alive="brief"][data-awake] .ghost-z-two { animation-delay: 0.2s; }
   .ghost[data-alive="brief"][data-awake] .ghost-glance { animation: ghost-glance 2.2s ease-in-out 1 0.3s; }
   .ghost[data-alive="brief"][data-awake] .ghost-sparkles path { animation: ghost-twinkle 1.6s ease-in-out 3; }
   .ghost[data-alive="brief"][data-awake][data-glow]::before { animation: ghost-glow 2.4s ease-in-out 2; }
