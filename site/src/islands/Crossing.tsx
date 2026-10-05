@@ -3,7 +3,7 @@ import type { AvatarUrls } from "../avatars"
 import { crossingFields, type CrossingMode } from "../demo/crossing"
 import type { Messages } from "../i18n"
 import { iconMarkup, type IconName } from "../icons"
-import { Ghost } from "./Ghost"
+import { Ghost, SpeechBubble } from "./Ghost"
 import { useOnScreen, usePageVisible, useReducedMotion } from "./hooks"
 import { MotionToggle } from "./MotionToggle"
 
@@ -68,7 +68,7 @@ export function Crossing({
   m,
   avatars,
 }: {
-  m: Pick<Messages, "crossing" | "demo" | "motion">
+  m: Pick<Messages, "crossing" | "demo" | "motion" | "ghost">
   /** Sam's portraits, shown beside each calendar's name (see avatars/index.ts). */
   avatars?: AvatarUrls
 }) {
@@ -216,6 +216,9 @@ export function Crossing({
           }}
         >
           <Ghost face="neutral" then={mode === "busy" ? "happy" : "wink"} alive="loop" />
+          <SpeechBubble side="top" className="crossing-says">
+            {mode === "busy" ? m.ghost.crossingBusy : m.ghost.crossingDetails}
+          </SpeechBubble>
         </div>
       </div>
       <p className="sr-only">{m.crossing.summary}</p>

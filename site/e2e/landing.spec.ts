@@ -60,6 +60,8 @@ test("without JavaScript, the content and the hero's resting state are there", a
   await expect(page.locator('button[data-copy="self-host-command-0"]')).toBeHidden()
   await expect(page.locator(".crossing-stage .crossing-landed").getByText(en.demo.busy)).toBeVisible()
   await expect(page.locator(".crossing-stays").getByText(en.crossing.alwaysStays[0])).toBeVisible()
+  // No CSS state gates the bubble without JavaScript: the ghost just says the resting line.
+  await expect(page.locator(".crossing-says")).toHaveText(en.ghost.crossingBusy)
   await expect(page.locator("#how-it-works .how-preview-row").first()).toContainText(en.demo.busy)
   // Nothing loops without JavaScript, so there is nothing to pause.
   await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
@@ -318,6 +320,9 @@ for (const path of ["/", "/bold"]) {
     const crossing = page.locator(".crossing")
     await crossing.scrollIntoViewIfNeeded()
     await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
+    // Still in flight: the ghost has not said anything yet.
+    const bubble = crossing.locator(".crossing-says")
+    expect(await bubble.evaluate((element) => getComputedStyle(element).opacity)).toBe("0")
     await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
     const landed = crossing.locator(".crossing-work .crossing-landed")
     await expect(landed.getByText(en.demo.busy)).toBeVisible()
@@ -330,50 +335,78 @@ for (const path of ["/", "/bold"]) {
     })
     expect(look.edge).toBe("solid")
     expect(look.fill).not.toMatch(/rgba\(.*, 0\)|transparent/)
+    // Once it has landed, the ghost says so, tail pointing at it.
+    await expect(bubble).toHaveText(en.ghost.crossingBusy)
+    expect(await bubble.evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
     // A new choice runs it again and lands the details.
     await crossing.getByRole("button", { name: en.crossing.withDetails }).click()
     await expect(crossing).toHaveAttribute("data-run", "running")
     await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
     await expect(landed.getByText(en.demo.events.dentist.title)).toBeVisible()
     await expect(landed.getByText(en.demo.events.dentist.detail)).toBeVisible()
+    await expect(bubble).toHaveText(en.ghost.crossingDetails)
   })
 
-  for (const width of [1440, 390]) {
-    test(`${path} at ${width}px: the crossing explains itself, with what stays behind on the Personal card`, async ({ browser }) => {
-      const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" })
-      const page = await context.newPage()
-      await page.goto(path)
-      const crossing = page.locator(".crossing")
-      await crossing.scrollIntoViewIfNeeded()
-      // The switch and its one line sit with the demo, on top of it.
-      const bar = (await crossing.locator(".crossing-bar").boundingBox())!
-      const personal = (await crossing.locator(".crossing-personal").boundingBox())!
-      const work = (await crossing.locator(".crossing-work").boundingBox())!
-      expect(bar.y + bar.height).toBeLessThanOrEqual(personal.y)
-      await expect(crossing.locator(".crossing-explain")).toHaveText(en.crossing.busyOnlyBody)
-      // Each part that never crosses over is a chip with its icon on the Personal card.
-      const stays = crossing.locator(".crossing-personal .crossing-stays")
-      await expect(stays.getByRole("heading", { name: en.crossing.alwaysStaysTitle })).toBeVisible()
-      for (const item of en.crossing.alwaysStays) {
-        const chip = stays.getByRole("listitem").filter({ hasText: item })
-        await expect(chip).toBeVisible()
-        await expect(chip.locator("svg")).toHaveCount(1)
-      }
-      if (width >= 1000) {
-        // Side by side, close together, and large.
-        expect(Math.abs(work.y - personal.y)).toBeLessThan(2)
-        expect(work.x - (personal.x + personal.width)).toBeLessThan(160)
-        expect(personal.width).toBeGreaterThan(420)
-        expect(work.width).toBeGreaterThan(420)
-      } else {
-        // Stacked: Personal, then Work.
-        expect(work.y).toBeGreaterThan(personal.y + personal.height)
-      }
-      // Under reduced motion it has simply landed.
-      await expect(crossing).toHaveAttribute("data-run", "rested")
-      await expect(crossing.locator(".crossing-landed").getByText(en.demo.busy)).toBeVisible()
-      await context.close()
-    })
+  for (const width of [1440, 1024, 390]) {
+    for (const colorScheme of ["light", "dark"] as const) {
+      test(`${path} at ${width}px ${colorScheme}: the crossing explains itself, with what stays behind on the Personal card`, async ({
+        browser,
+      }) => {
+        const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce", colorScheme })
+        const page = await context.newPage()
+        await page.goto(path)
+        const crossing = page.locator(".crossing")
+        await crossing.scrollIntoViewIfNeeded()
+        // The switch and its one line sit with the demo, on top of it.
+        const bar = (await crossing.locator(".crossing-bar").boundingBox())!
+        const personal = (await crossing.locator(".crossing-personal").boundingBox())!
+        const work = (await crossing.locator(".crossing-work").boundingBox())!
+        expect(bar.y + bar.height).toBeLessThanOrEqual(personal.y)
+        await expect(crossing.locator(".crossing-explain")).toHaveText(en.crossing.busyOnlyBody)
+        // Each part that never crosses over is a chip with its icon on the Personal card.
+        const stays = crossing.locator(".crossing-personal .crossing-stays")
+        await expect(stays.getByRole("heading", { name: en.crossing.alwaysStaysTitle })).toBeVisible()
+        for (const item of en.crossing.alwaysStays) {
+          const chip = stays.getByRole("listitem").filter({ hasText: item })
+          await expect(chip).toBeVisible()
+          await expect(chip.locator("svg")).toHaveCount(1)
+        }
+        if (width >= 1000) {
+          // Side by side, close together, and large.
+          expect(Math.abs(work.y - personal.y)).toBeLessThan(2)
+          expect(work.x - (personal.x + personal.width)).toBeLessThan(160)
+          expect(personal.width).toBeGreaterThan(420)
+          expect(work.width).toBeGreaterThan(420)
+        } else {
+          // Stacked: Personal, then Work.
+          expect(work.y).toBeGreaterThan(personal.y + personal.height)
+        }
+        // Under reduced motion it has simply landed.
+        await expect(crossing).toHaveAttribute("data-run", "rested")
+        await expect(crossing.locator(".crossing-landed").getByText(en.demo.busy)).toBeVisible()
+
+        // The ghost's speech bubble rests beside it, tail pointing at it, saying the Busy-only
+        // line, and never over Work's landed Busy block or the switch.
+        const bubble = crossing.locator(".crossing-says")
+        await expect(bubble).toBeVisible()
+        await expect(bubble).toHaveAttribute("data-side", "top")
+        await expect(bubble).toHaveText(en.ghost.crossingBusy)
+        const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+          a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+        const landedBox = (await crossing.locator(".crossing-landed").boundingBox())!
+        const switchBox = (await crossing.locator(".crossing-switch").boundingBox())!
+        expect(overlaps((await bubble.boundingBox())!, landedBox)).toBe(false)
+        expect(overlaps((await bubble.boundingBox())!, switchBox)).toBe(false)
+
+        // A new choice changes what it says, and it still clears both.
+        await crossing.getByRole("button", { name: en.crossing.withDetails }).click()
+        await expect(bubble).toHaveText(en.ghost.crossingDetails)
+        expect(overlaps((await bubble.boundingBox())!, (await crossing.locator(".crossing-landed").boundingBox())!)).toBe(false)
+        expect(overlaps((await bubble.boundingBox())!, (await crossing.locator(".crossing-switch").boundingBox())!)).toBe(false)
+
+        await context.close()
+      })
+    }
   }
 }
 

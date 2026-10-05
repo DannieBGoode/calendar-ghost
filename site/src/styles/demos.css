@@ -295,6 +295,24 @@
 .crossing-ghost .ghost-face-first { opacity: 0; }
 .crossing:not([data-run="running"]) .crossing-ghost .ghost-face-first,
 .crossing:not([data-run="running"]) .crossing-ghost .ghost-face-then { animation: none; }
+/* What the ghost says once it has set the copy down: narrow, so it keeps clear of Work's landed
+   Busy block and the switch. The compound selector beats `.speech-bubble`'s own max-width
+   regardless of stylesheet order.
+   Stacked (narrow): the lane between the cards is too short for the bubble to clear Personal's
+   "always stays behind" chips above it, so it sits below the ghost instead, tail pointing up;
+   what it falls over there is Work's own name, which is decorative (aria-hidden) already. */
+.crossing-ghost .speech-bubble.crossing-says {
+  max-width: 9.5rem; text-align: center; top: calc(100% + 0.2rem); bottom: auto;
+}
+.crossing-ghost .speech-bubble.crossing-says::before { top: -0.36rem; bottom: auto; transform: rotate(135deg); }
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .crossing:not([data-run]) .crossing-says,
+  .crossing[data-run="ready"] .crossing-says { opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crossing[data-run="running"] .crossing-says { animation: crossing-says 4.8s linear both; }
+}
+@keyframes crossing-says { 0%, 84% { opacity: 0; } 88%, 100% { opacity: 1; } }
 /* In flight, the copy is lifted off the page: a shadow under it, shown only while it is up. */
 .crossing-landed::after {
   content: ""; position: absolute; inset: 0; z-index: -2; border-radius: inherit; opacity: 0;
@@ -311,6 +329,10 @@
     margin-top: calc(2.85rem + 0.5rem + var(--crossing-hour) * 1.75); border-top: 2px dotted color-mix(in oklch, var(--primary), transparent 45%);
   }
   .crossing-ghost { grid-row: 1; grid-column: 2; align-self: start; margin-top: calc(2.85rem + 0.5rem + var(--crossing-hour) * 1.75 - 44px); width: 88px; height: 88px; }
+  /* Side by side there is headroom above the ghost before either card's content starts: the
+     bubble goes back to sitting above it, tail pointing down. */
+  .crossing-ghost .speech-bubble.crossing-says { top: auto; bottom: calc(100% + 0.2rem); }
+  .crossing-ghost .speech-bubble.crossing-says::before { top: auto; bottom: -0.36rem; transform: rotate(-45deg); }
 }
 
 /* Before a run (with JavaScript and motion allowed, from the first paint): Work's slot is still

@@ -18,7 +18,7 @@ const { m } = Astro.props
     <h2 id="crossing-title">{m.crossing.title}</h2>
     <Crossing
       client:visible
-      m={{ crossing: m.crossing, demo: m.demo, motion: m.motion }}
+      m={{ crossing: m.crossing, demo: m.demo, motion: m.motion, ghost: m.ghost }}
       avatars={await avatarUrls()}
     />
   </div>
