@@ -203,7 +203,7 @@ test("calendars show Sam's portraits, never letters", async ({ page }) => {
 
 test("each trust claim links to the documentation that proves it", async ({ page }) => {
   await page.goto("/")
-  const links = page.locator("#features a.doc-link")
+  const links = page.locator("#trust a.doc-link")
   expect(await links.evaluateAll((all) => all.map((link) => link.getAttribute("href")))).toEqual([...TRUST_DOCS])
   for (const [index, link] of (await links.all()).entries()) {
     await expect(link).toContainText(en.trust.cards[index]!.title)
@@ -211,12 +211,23 @@ test("each trust claim links to the documentation that proves it", async ({ page
   }
 })
 
+for (const path of ["/", "/bold", "/journey", "/home/hero-a"]) {
+  test(`${path}: the nav's Features link lands on the app's features, and the trust list has its own anchor`, async ({ page }) => {
+    await page.goto(path)
+    const link = page.locator("nav .nav-wide").getByRole("link", { name: en.nav.features, exact: true })
+    await expect(link).toHaveAttribute("href", `${path}#features`)
+    await expect(page.locator("#features h2")).toHaveText(en.app.title)
+    await expect(page.locator("#features .feat")).toHaveCount(3)
+    await expect(page.locator("#trust h2")).toHaveText(en.trust.title)
+  })
+}
+
 for (const path of ["/", "/bold"]) {
   test(`${path}: monitors and agents come after the trust list, with a status check to copy`, async ({ page }) => {
     await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: undefined }))
     await page.goto(path)
     const ids = await page.locator("main > section").evaluateAll((sections) => sections.map((section) => section.id))
-    expect(ids.indexOf("integrations")).toBe(ids.indexOf("features") + 1)
+    expect(ids.indexOf("integrations")).toBe(ids.indexOf("trust") + 1)
     expect(ids.indexOf("self-host")).toBe(ids.indexOf("integrations") + 1)
     const section = page.locator("#integrations")
     await expect(section.getByRole("heading", { level: 2 })).toHaveText(en.integrations.title)

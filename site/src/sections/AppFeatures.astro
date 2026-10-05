@@ -23,7 +23,7 @@ const features = m.app.features
 const hasHealthExtra = Astro.slots.has("health")
 ---
 
-<section class:list={[sectionClass, "feats"]} aria-labelledby="app-title">
+<section id="features" class:list={[sectionClass, "feats"]} aria-labelledby="app-title">
   <div class="container">
     <div class:list={["feats-head", { "feats-head-split": split }]}>
       <div>

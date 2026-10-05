@@ -234,7 +234,7 @@ for (const variant of VARIANTS) {
       await page.goto(variant.path)
       // A page may show the claims in its own order, so each link is checked by its claim's title.
       const links = await page
-        .locator("#features a.doc-link")
+        .locator("#trust a.doc-link")
         .evaluateAll((all) => all.map((link) => ({ text: link.textContent ?? "", href: link.getAttribute("href") })))
       expect(links).toHaveLength(TRUST_DOCS.length)
       for (const [index, card] of en.trust.cards.entries()) {
@@ -361,8 +361,8 @@ test.describe("/journey", () => {
       const page = await context.newPage()
       await page.goto("/journey")
       const carrier = page.locator(".j-rail-carrier")
-      const contentLeft = (await page.locator("#features .j-wrap").boundingBox())!.x
-      for (const section of ["#how-it-works", "#features", "#integrations", "#self-host"]) {
+      const contentLeft = (await page.locator("#trust .j-wrap").boundingBox())!.x
+      for (const section of ["#how-it-works", "#trust", "#features", "#integrations", "#self-host"]) {
         await page.locator(section).scrollIntoViewIfNeeded()
         await expect(carrier).toBeVisible()
         const box = (await carrier.boundingBox())!
