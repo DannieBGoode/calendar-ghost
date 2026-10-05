@@ -66,6 +66,14 @@ export const VERSIONS: readonly Version[] = [
         date: "2026-10-05",
         commit: "a7d8db3",
       },
+      {
+        name: "Hero A2: A, cleaner",
+        status: "candidate",
+        path: "/home/hero-a2",
+        tries: "A's copy column beside a calmer week inside the page: three events, a plain Busy, lighter lines, every control on screen.",
+        date: "2026-10-05",
+        commit: "0000000",
+      },
     ],
   },
   {

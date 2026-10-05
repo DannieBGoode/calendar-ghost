@@ -1,0 +1,12 @@
+---
+// Home page, hero iteration A2: A, cleaner. See src/versions.ts.
+import { messagesFor } from "../../i18n"
+import HeroA2 from "../../variants/home-heroes/HeroA2.astro"
+import HomeHeroPage from "../../variants/home-heroes/HomeHeroPage.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<HomeHeroPage path="/home/hero-a2">
+  <HeroA2 m={m} />
+</HomeHeroPage>

@@ -82,6 +82,15 @@ const VARIANTS = [
     controls: [".jc-option", ...HOME_CONTROLS],
   },
   {
+    path: "/home/hero-a2",
+    title: en.hero.title,
+    rest: "40%",
+    headings: HOME_HEADINGS,
+    /** The hero, the week, the crossing. */
+    loops: 3,
+    controls: HOME_CONTROLS,
+  },
+  {
     path: "/home/hero-c",
     title: en.variants.homeHeroes.c.title,
     rest: "50%",
@@ -433,6 +442,11 @@ const HOME_HEROES = [
     point: '.jc-landed [data-mode="busy"]',
   },
   {
+    path: "/home/hero-a2",
+    /** The week, inside the page's width. */
+    point: ".hh-a2 .reveal-frame",
+  },
+  {
     path: "/home/hero-c",
     /** The proof under the headline: two days of what Sam sees against what work sees. */
     point: ".hh-c-proof .reveal-frame",
@@ -532,6 +546,51 @@ test.describe("home hero iterations", () => {
     await page.goto("/home/hero-b")
     // It rests on the landed result first, then flies back to fetch the Dentist.
     await expect(page.locator(".jc")).toHaveAttribute("data-moment", "fetch", { timeout: 2000 })
+  })
+
+  for (const width of [390, 1024, 1280, 1440]) {
+    test(`/home/hero-a2 at ${width}px keeps its week and its pause control inside the page`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height: 900 } })
+      const page = await context.newPage()
+      await page.goto("/home/hero-a2")
+      const frame = (await page.locator(".hh-a2 .reveal-frame").boundingBox())!
+      expect(frame.x).toBeGreaterThanOrEqual(0)
+      expect(frame.x + frame.width).toBeLessThanOrEqual(width)
+      const pause = page.locator(".hh-a2 .reveal-frame").getByRole("button", { name: en.motion.pause })
+      const button = (await pause.boundingBox())!
+      expect(button.height).toBeGreaterThanOrEqual(44)
+      expect(button.x).toBeGreaterThanOrEqual(frame.x)
+      expect(button.x + button.width).toBeLessThanOrEqual(Math.min(width, frame.x + frame.width) + 1)
+      await context.close()
+    })
+  }
+
+  test("/home/hero-a2 shows a calmer week: one work meeting, two plans as Busy, a plain Busy fill", async ({ page }) => {
+    await page.goto("/home/hero-a2")
+    const you = page.locator(".hh-a2 .reveal-you .cal-event")
+    await expect(you).toHaveCount(3)
+    await expect(you).toHaveText([
+      new RegExp(en.demo.events.standup.title),
+      new RegExp(en.demo.events.dentist.title),
+      new RegExp(en.demo.events.gym.title),
+    ])
+    const busy = page.locator(".hh-a2 .reveal-work .cal-event.is-busy")
+    await expect(busy).toHaveCount(2)
+    for (const block of await busy.all()) {
+      await expect(block).toHaveText(en.demo.busy)
+      expect(await block.evaluate((element) => getComputedStyle(element).backgroundImage)).toBe("none")
+    }
+  })
+
+  test("/home/hero-a2's hint goes for good once the visitor has held the ghost", async ({ page }) => {
+    await page.goto("/home/hero-a2")
+    const hint = page.locator(".hh-a2 .reveal-handle-hint")
+    await expect(hint).toHaveCSS("opacity", "1")
+    const slider = page.getByRole("slider", { name: en.demo.sliderLabel })
+    await slider.focus()
+    await slider.blur()
+    await expect(page.locator(".hh-a2 .reveal-frame")).toHaveAttribute("data-touched", "")
+    await expect(hint).toHaveCSS("opacity", "0")
   })
 
   /** Where Busy's left edge sits against the event's: 0 when Busy covers the whole event. */

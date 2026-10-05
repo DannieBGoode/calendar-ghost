@@ -41,7 +41,9 @@ describe("the versions index", () => {
   it("keeps every route but production out of the sitemap, the index included", () => {
     expect(NON_PRODUCTION_PATHS).not.toContain("/")
     expect(NON_PRODUCTION_PATHS).toContain(VERSIONS_PATH)
-    expect(NON_PRODUCTION_PATHS).toEqual(expect.arrayContaining(["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-c"]))
+    expect(NON_PRODUCTION_PATHS).toEqual(
+      expect.arrayContaining(["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-c", "/home/hero-a2"]),
+    )
   })
 
   it("says where each iteration stands: production is the one current page, and hero C is rejected", () => {
