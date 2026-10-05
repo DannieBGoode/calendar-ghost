@@ -1,0 +1,12 @@
+---
+// Home page, hero iteration C: the headline is the demo. See src/versions.ts.
+import { messagesFor } from "../../i18n"
+import HeroC from "../../variants/home-heroes/HeroC.astro"
+import HomeHeroPage from "../../variants/home-heroes/HomeHeroPage.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<HomeHeroPage path="/home/hero-c">
+  <HeroC m={m} />
+</HomeHeroPage>
