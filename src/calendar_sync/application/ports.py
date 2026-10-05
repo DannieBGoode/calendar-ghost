@@ -638,7 +638,8 @@ class IncidentRepository(Protocol):
     def open(self, incident: IncidentReport, at: datetime) -> bool:
         """Open or refresh the Incident under its key; whether it was newly opened.
 
-        Reopening a resolved Incident starts a new episode, so its opening time is `at`.
+        Reopening a resolved Incident starts a new episode, so its opening time is `at`. One
+        about an account alone opens only while that account's authorization has lapsed.
         """
         ...
 

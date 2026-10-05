@@ -83,8 +83,9 @@ class SqliteIncidentRepository:
         self._ids = ids or UuidIdGenerator()
 
     def open(self, incident: IncidentReport, at: datetime) -> bool:
-        # An Incident about an account alone is opened only while the account exists, checked in
-        # the same statement, so it cannot outlive a deletion that ran just before it.
+        # An Incident about an account alone is its Lapsed Authorization, so it opens only while
+        # the account exists and is lapsed, checked in the same statement: neither a deletion
+        # nor a restoration that ran just before it can leave it open.
         account_only = incident.account_id if incident.rule_id is None else None
         with transaction(self._database_path) as connection:
             existing = connection.execute(
@@ -97,7 +98,10 @@ class SqliteIncidentRepository:
                     summary, opened_at, updated_at, message_code, message_params
                 )
                 SELECT ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?
-                WHERE ? IS NULL OR EXISTS (SELECT 1 FROM connected_accounts WHERE id = ?)
+                WHERE ? IS NULL OR EXISTS (
+                    SELECT 1 FROM connected_accounts
+                    WHERE id = ? AND authorization_lapsed_at IS NOT NULL
+                )
                 ON CONFLICT(deduplication_key) DO UPDATE SET
                     account_id = excluded.account_id,
                     category = excluded.category,

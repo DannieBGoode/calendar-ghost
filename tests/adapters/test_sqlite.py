@@ -1065,6 +1065,7 @@ def test_an_account_incident_is_not_opened_once_its_account_is_deleted(tmp_path:
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     kept = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    _lapse(database, kept.id)
     incidents = SqliteIncidentRepository(database)
 
     def lapse(account_id: str) -> IncidentReport:
@@ -1094,12 +1095,9 @@ def test_restoring_keeps_open_the_incident_of_a_newer_lapse(tmp_path: Path) -> N
     work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
     incidents = SqliteIncidentRepository(database)
     key = f"authorization:{work.id.value}"
-    incidents.open(IncidentReport(key, None, "authentication", "expired", account_id=work.id), NOW)
     unit_of_work = SqliteUnitOfWorkFactory(database)
-    with unit_of_work() as uow:
-        later = datetime.now(UTC)
-        assert uow.accounts.lapse(work.id, later, attempted_at=later)
-        uow.commit()
+    _lapse(database, work.id)
+    incidents.open(IncidentReport(key, None, "authentication", "expired", account_id=work.id), NOW)
 
     restored = IncidentResolution.ACCESS_RESTORED
     incidents.resolve(key, NOW, restored, while_authorized=work.id)
@@ -1112,6 +1110,33 @@ def test_restoring_keeps_open_the_incident_of_a_newer_lapse(tmp_path: Path) -> N
     incidents.resolve(key, NOW, restored, while_authorized=work.id)
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT state FROM incidents").fetchone() == ("resolved",)
+
+
+def test_restoring_before_a_lapse_opens_its_incident_leaves_none_open(tmp_path: Path) -> None:
+    # Restoration cleared the lapse after it was recorded but before its Incident opened.
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    _lapse(database, work.id)
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        assert uow.accounts.clear_lapse(work.id, recorded_before=datetime.now(UTC))
+        uow.commit()
+
+    report = IncidentReport(
+        f"authorization:{work.id.value}", None, "authentication", "expired", account_id=work.id
+    )
+    assert not SqliteIncidentRepository(database).open(report, NOW)
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM incidents").fetchone() == (0,)
+
+
+def _lapse(database: Path, account_id: ConnectedAccountId) -> None:
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        now = datetime.now(UTC)
+        assert uow.accounts.lapse(account_id, now, attempted_at=now)
+        uow.commit()
 
 
 def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
