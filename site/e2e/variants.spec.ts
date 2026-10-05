@@ -71,6 +71,15 @@ const VARIANTS = [
     loops: 3,
     controls: HOME_CONTROLS,
   },
+  {
+    path: "/home/hero-b",
+    title: en.hero.title,
+    rest: null,
+    headings: HOME_HEADINGS,
+    /** The hero's crossing, the week, the home page's crossing. */
+    loops: 3,
+    controls: [".jc-option", ...HOME_CONTROLS],
+  },
 ]
 
 /** Scrolls through the whole page so every island hydrates and every once-only scene wakes. */
@@ -408,6 +417,11 @@ const HOME_HEROES = [
     /** The demo's point: what work sees, beside the divider. */
     point: ".hh-a .reveal-frame",
   },
+  {
+    path: "/home/hero-b",
+    /** Where the Dentist lands on Work: Busy, 15:00 to 16:30. */
+    point: '.jc-landed [data-mode="busy"]',
+  },
 ]
 
 test.describe("home hero iterations", () => {
@@ -483,5 +497,25 @@ test.describe("home hero iterations", () => {
     await expect(phone.getByText(en.variants.homeHeroes.handleHint.touch)).toBeVisible()
     await expect(phone.getByText(en.variants.homeHeroes.handleHint.mouse)).toBeHidden()
     await touch.close()
+  })
+
+  test("/home/hero-b without JavaScript: the Dentist has landed on Work as Busy, and its guest and link stayed with Sam", async ({ browser }) => {
+    const context = await browser.newContext({ javaScriptEnabled: false })
+    const page = await context.newPage()
+    await page.goto("/home/hero-b")
+    const landed = page.locator('.jc-landed [data-mode="busy"]')
+    await expect(landed).toBeVisible()
+    await expect(landed).toContainText(en.demo.busy)
+    await expect(landed).toContainText("15:00–16:30")
+    await expect(page.locator(".jc-from")).toContainText(en.crossing.guests)
+    await expect(page.locator(".jc-from")).toContainText(en.crossing.link)
+    await expect(page.locator(".jc-to")).not.toContainText(en.crossing.guests)
+    await context.close()
+  })
+
+  test("/home/hero-b starts carrying within two seconds", async ({ page }) => {
+    await page.goto("/home/hero-b")
+    // It rests on the landed result first, then flies back to fetch the Dentist.
+    await expect(page.locator(".jc")).toHaveAttribute("data-moment", "fetch", { timeout: 2000 })
   })
 })
