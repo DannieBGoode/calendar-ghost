@@ -256,9 +256,9 @@ class RuleHealth:
             current = uow.rules.get(rule.id)
             if current is None or current.state is not SyncRuleState.ENABLED:
                 return
-            # Restoring the account after it lapsed, but before this write, found this rule still
-            # enabled and so resumed nothing; stopping it now would leave it stopped for good.
-            # Restoring after this write finds it awaiting and resumes it.
+            # Restoring decides for each rule under this same write lock, after clearing the lapse.
+            # If it cleared the lapse before this check, the rule keeps running; if after, it
+            # waits for this lock and then finds the rule awaiting and resumes it.
             if lapsed is not None and uow.accounts.authorized(lapsed):
                 return
             uow.rules.save(current.degrade(awaiting_reauthorization=lapsed is not None))

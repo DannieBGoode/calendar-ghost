@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -29,6 +30,7 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import ConnectedAccountId, SyncReason, SyncRuleId, SyncRuleState
@@ -37,6 +39,7 @@ from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
 )
+from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteOperationsQueries,
     open_blocks,
@@ -47,10 +50,12 @@ from calendar_sync.infrastructure.persistence.health import (
 )
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
+    SqliteConnectedAccountRecords,
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
+from calendar_sync.infrastructure.security import CredentialCipher
 from tests.helpers import endpoint, rule
 
 
@@ -1007,3 +1012,52 @@ def test_the_rules_a_pass_listed_are_published_only_when_it_completes() -> None:
     assert seen_during_pass == [frozenset()]
     # Only enabled rules are listed by a pass; a paused one is not.
     assert scheduler.progress().last_pass_rule_ids == frozenset({enabled.id.value})
+
+
+def test_restoring_an_account_while_its_rule_is_being_stopped_leaves_the_rule_running(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Restoration clears the lapse after the stopping run read it, but before that run's write.
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    running = replace(
+        rule(), source=endpoint(work.id.value, "home"), destination=endpoint(work.id.value, "work")
+    )
+    unit_of_work = SqliteUnitOfWorkFactory(database)
+    with unit_of_work() as uow:
+        uow.rules.add(running)
+        uow.commit()
+    health = _rule_health(database, unit_of_work)
+    restoring: list[Thread] = []
+    checked = SqliteConnectedAccountRecords.authorized
+
+    def restored_after_reading(
+        self: SqliteConnectedAccountRecords, account_id: ConnectedAccountId
+    ) -> bool:
+        authorized = checked(self, account_id)
+        if restoring:
+            return authorized
+        restoring.append(Thread(target=health.lapses.restored, args=(work.id,)))
+        restoring[0].start()
+        # Restoration clears the lapse at once, then waits for this rule's write lock.
+        while _lapsed(store, work.id):
+            time.sleep(0.01)
+        return authorized
+
+    monkeypatch.setattr(SqliteConnectedAccountRecords, "authorized", restored_after_reading)
+    expired = ProviderFailure(ProviderFailureKind.AUTHENTICATION, "expired", account_id=work.id)
+
+    health.record_failure(running, expired, attempted_at=datetime.now(UTC))
+    restoring[0].join(timeout=5)
+
+    with unit_of_work() as uow:
+        stopped = uow.rules.get(running.id)
+    assert stopped is not None
+    assert stopped.state is SyncRuleState.ENABLED
+
+
+def _lapsed(store: SqliteConnectedAccountStore, account_id: ConnectedAccountId) -> bool:
+    account = store.get(account_id)
+    return account is not None and account.authorization_lapsed_at is not None

@@ -79,12 +79,11 @@ class LapsedAuthorizations:
         """
         with self.unit_of_work() as uow:
             uow.accounts.clear_lapse(account_id)
-            waiting = tuple(
-                rule.id
-                for rule in uow.rules.list()
-                if rule.awaiting_reauthorization and rule.uses_account(account_id)
-            )
             uow.commit()
+        with self.unit_of_work() as uow:
+            # Every rule of the account, not only those already stopped: a run may stop one
+            # until its write lock is released, and `_resume` decides under that lock.
+            waiting = tuple(rule.id for rule in uow.rules.list() if rule.uses_account(account_id))
         self.incidents.resolve(
             authorization_key(account_id), self.clock.now(), IncidentResolution.ACCESS_RESTORED
         )
