@@ -206,14 +206,20 @@ class RuleHealth:
     def record_failure(
         self, rule: SyncRule, failure: ProviderFailure, *, attempted_at: datetime | None = None
     ) -> None:
-        """Record a failed run that began at `attempted_at`, or just now when not given."""
+        """Record a failed run that began at `attempted_at`, or just now when not given.
+
+        The failed request's own time, when the provider gives it, is more precise than when the
+        run began, which may be long before the request that failed.
+        """
         now = self.clock.now()
         consecutive = self.records.record_failure(rule.id, failure.kind, now)
         response = self.policy.after_failure(rule.id, failure, consecutive)
         if response.lapsed is not None:
             # The lapse stops every enabled rule of the account, this one included, unless the
             # account was reauthorized while the run was in flight.
-            self.lapses.lapsed(response.lapsed, failure, attempted_at=attempted_at or now)
+            self.lapses.lapsed(
+                response.lapsed, failure, attempted_at=failure.attempted_at or attempted_at or now
+            )
             return
         if response.degrade:
             self._degrade(rule)
@@ -229,7 +235,9 @@ class RuleHealth:
         if self.incidents.open(incident, now):
             self._notify(incident, now)
         if failure.account_id is not None:
-            self.lapses.lapsed(failure.account_id, failure, attempted_at=attempted_at)
+            self.lapses.lapsed(
+                failure.account_id, failure, attempted_at=failure.attempted_at or attempted_at
+            )
 
     def recovery_blocked(
         self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
@@ -241,7 +249,9 @@ class RuleHealth:
         account, the rule's own Incident names the failure instead.
         """
         if failure.account_id is not None:
-            self.lapses.lapsed(failure.account_id, failure, attempted_at=attempted_at)
+            self.lapses.lapsed(
+                failure.account_id, failure, attempted_at=failure.attempted_at or attempted_at
+            )
             return
         now = self.clock.now()
         incident = self.policy.provider_incident(rule_id, failure)

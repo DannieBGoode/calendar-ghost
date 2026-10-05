@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 import time
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import replace
@@ -54,8 +55,18 @@ class GoogleCalendarProvider:
     ) -> None:
         self._service_for = service_for
         self._clock = clock or SystemClock()
+        # When this thread last read each account's credentials, for the failures they meet.
+        self._credentials_read = threading.local()
         # Seconds from an arbitrary start, for timing calls; the clock tells wall time.
         self._timer = timer
+
+    def _service(self, account: ConnectedAccountId) -> Any:
+        """The account's Calendar service, built from its credentials as they are now."""
+        read: dict[ConnectedAccountId, datetime] = self._credentials_read.__dict__.setdefault(
+            "at", {}
+        )
+        read[account] = self._clock.now()
+        return self._service_for(account)
 
     def _call(self, operation: str, request: Any) -> Any:
         """Send one Google request, tallying and logging it by its operation name alone."""
@@ -96,7 +107,7 @@ class GoogleCalendarProvider:
 
         items: list[CalendarEvent] = []
         try:
-            events_api = self._service_for(source.connected_account_id).events()
+            events_api = self._service(source.connected_account_id).events()
             while True:
                 response = self._call("events.list", events_api.list(**parameters))
                 items.extend(to_domain_event(item, source) for item in response.get("items", []))
@@ -122,7 +133,7 @@ class GoogleCalendarProvider:
         try:
             payload = self._call(
                 "events.get",
-                self._service_for(reference.calendar.connected_account_id)
+                self._service(reference.calendar.connected_account_id)
                 .events()
                 .get(
                     calendarId=reference.calendar.calendar_id.value,
@@ -141,7 +152,7 @@ class GoogleCalendarProvider:
         try:
             existing = self._call(
                 "events.list",
-                self._service_for(destination.connected_account_id)
+                self._service(destination.connected_account_id)
                 .events()
                 .list(
                     calendarId=destination.calendar_id.value,
@@ -168,7 +179,7 @@ class GoogleCalendarProvider:
         try:
             payload = self._call(
                 "events.insert",
-                self._service_for(destination.connected_account_id)
+                self._service(destination.connected_account_id)
                 .events()
                 .insert(
                     calendarId=destination.calendar_id.value,
@@ -202,7 +213,7 @@ class GoogleCalendarProvider:
         try:
             payload = self._call(
                 "events.update",
-                self._service_for(destination.calendar.connected_account_id)
+                self._service(destination.calendar.connected_account_id)
                 .events()
                 .update(
                     calendarId=destination.calendar.calendar_id.value,
@@ -238,7 +249,7 @@ class GoogleCalendarProvider:
         try:
             self._call(
                 "events.delete",
-                self._service_for(destination.calendar.connected_account_id)
+                self._service(destination.calendar.connected_account_id)
                 .events()
                 .delete(
                     calendarId=destination.calendar.calendar_id.value,
@@ -284,7 +295,7 @@ class GoogleCalendarProvider:
     ) -> Sequence[CalendarEvent]:
         """Every page of one events.list request, without asking for a synchronization token."""
         try:
-            events_api = self._service_for(calendar.connected_account_id).events()
+            events_api = self._service(calendar.connected_account_id).events()
             items: list[CalendarEvent] = []
             while True:
                 response = self._call("events.list", events_api.list(**parameters))
@@ -308,7 +319,7 @@ class GoogleCalendarProvider:
             "showDeleted": True,
         }
         try:
-            events_api = self._service_for(series.calendar.connected_account_id).events()
+            events_api = self._service(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):
                 response = self._call("events.instances", events_api.instances(**parameters))
                 for item in response.get("items", []):
@@ -359,7 +370,7 @@ class GoogleCalendarProvider:
         }
         found: dict[OccurrenceStart, CalendarEvent] = {}
         try:
-            events_api = self._service_for(series.calendar.connected_account_id).events()
+            events_api = self._service(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):
                 response = self._call("events.instances", events_api.instances(**parameters))
                 for item in response.get("items", []):
@@ -392,7 +403,7 @@ class GoogleCalendarProvider:
             "fields": LIVE_OCCURRENCE_FIELDS,
         }
         try:
-            events_api = self._service_for(series.calendar.connected_account_id).events()
+            events_api = self._service(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):
                 response = self._call("events.instances", events_api.instances(**parameters))
                 # showDeleted=False should omit cancelled instances; the status is checked anyway,
@@ -434,7 +445,7 @@ class GoogleCalendarProvider:
             return ()
         exceptions: list[CalendarEvent] = []
         try:
-            events_api = self._service_for(series.calendar.connected_account_id).events()
+            events_api = self._service(series.calendar.connected_account_id).events()
             for _ in range(OCCURRENCE_PAGE_LIMIT):
                 response = self._call("events.instances", events_api.instances(**parameters))
                 for item in response.get("items", []):
@@ -478,7 +489,7 @@ class GoogleCalendarProvider:
         try:
             payload = self._call(
                 "events.patch",
-                self._service_for(destination_series.calendar.connected_account_id)
+                self._service(destination_series.calendar.connected_account_id)
                 .events()
                 .patch(
                     calendarId=destination_series.calendar.calendar_id.value,
@@ -508,7 +519,7 @@ class GoogleCalendarProvider:
         try:
             self._call(
                 "events.delete",
-                self._service_for(destination_series.calendar.connected_account_id)
+                self._service(destination_series.calendar.connected_account_id)
                 .events()
                 .delete(
                     calendarId=destination_series.calendar.calendar_id.value,
@@ -524,11 +535,15 @@ class GoogleCalendarProvider:
 
     def _failure(self, error: Exception, account: ConnectedAccountId) -> ProviderFailure:
         # The clock turns a Retry-After date into the seconds the retry helper waits. The account
-        # names whose access to renew when Google rejected its credentials.
+        # names whose access to renew when Google rejected its credentials, and when the request
+        # read them tells whether a Reauthorization has replaced them since.
+        now = self._clock.now()
+        read: dict[ConnectedAccountId, datetime] = self._credentials_read.__dict__.get("at", {})
         return replace(
-            _provider_failure(error, self._clock.now()),
+            _provider_failure(error, now),
             account_id=account,
             provider=ProviderKind.GOOGLE,
+            attempted_at=read.get(account, now),
         )
 
     def _owned_occurrence(

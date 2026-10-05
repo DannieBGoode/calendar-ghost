@@ -359,3 +359,23 @@ def test_a_failure_without_a_provider_has_a_null_provider() -> None:
     assert report.message == IncidentMessage(
         "provider_failure", {"kind": "infrastructure", "provider": None}
     )
+
+
+def test_a_refusal_of_a_request_made_after_reauthorization_lapses_its_account() -> None:
+    # The run began before the account was reauthorized, but its failing request read the new
+    # credentials, so the refusal is about them.
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule()
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    unit_of_work.state.authorized_at[ACCOUNT] = NOW
+    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
+    expired = replace(
+        _failure(ProviderFailureKind.AUTHENTICATION),
+        account_id=ACCOUNT,
+        attempted_at=NOW + timedelta(seconds=1),
+    )
+
+    health.record_failure(rule(), expired, attempted_at=NOW - timedelta(minutes=1))
+
+    assert unit_of_work.state.lapsed == {ACCOUNT: NOW + timedelta(seconds=1)}
+    assert unit_of_work.state.rules[RULE].awaiting_reauthorization

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 from calendar_sync.application.providers import ProviderKind
@@ -71,6 +72,9 @@ class ProviderFailure(ApplicationError):
     """The Connected Account whose request failed, when the provider knows it."""
     provider: ProviderKind | None = None
     """The provider that failed, when the adapter names it, so incidents can (ADR 0022)."""
+    attempted_at: datetime | None = None
+    """When the failed request read the account's credentials, when the adapter knows it, so a
+    refusal of credentials since replaced is told apart from one of the current ones (ADR 0027)."""
 
     @property
     def retryable(self) -> bool:
