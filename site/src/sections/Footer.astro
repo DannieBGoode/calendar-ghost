@@ -1,10 +1,10 @@
 ---
 // The home page's ending: night falls, and the ghost keeps watch. A Twilight band with rounded
 // shoulders, like the top of the ghost's own head, holds the last call to action beside the white
-// ghost dozing in its lantern glow (sync really runs every five minutes, so the joke is true), then
-// the page's organized links.
+// ghost dozing in its lantern glow. A sleeping ghost does not talk: the line under it is plain
+// narration (sync really runs every five minutes). Then the page's organized links.
 import type { Messages } from "../i18n"
-import { Ghost, SpeechBubble } from "../islands/Ghost"
+import { Ghost } from "../islands/Ghost"
 import { REPO_URL } from "../links"
 import FooterLinks from "./FooterLinks.astro"
 
@@ -27,9 +27,9 @@ const { m } = Astro.props
         </a>
       </div>
     </div>
-    <div class="footer-watch" aria-hidden="true">
+    <div class="footer-watch">
       <span class="footer-ghost"><Ghost face="sleepy" alive="brief" float size={168} /></span>
-      <SpeechBubble side="left" className="footer-bubble">{m.ghost.footer}</SpeechBubble>
+      <p class="footer-watch-note">{m.footer.watch}</p>
     </div>
   </div>
   <div class="container footer-links">
@@ -59,19 +59,17 @@ const { m } = Astro.props
   .footer-body { max-width: 40ch; margin: 0 0 1.75rem; font-size: 1.125rem; line-height: 1.6; color: var(--muted-foreground); }
   .footer-btn { min-height: 3.25rem; padding-inline: 1.4rem; font-size: 1rem; }
 
-  /* The ghost asleep on watch, its bubble beside it. */
-  .footer-watch { display: flex; flex-direction: row-reverse; align-items: center; gap: 0.5rem; }
-  .footer-watch :global(.footer-bubble) { position: relative; inset: auto; max-width: 15rem; font-size: 0.9375rem; }
-  .footer-watch :global(.footer-bubble)::before { top: calc(50% - 0.325rem); left: auto; right: -0.36rem; transform: rotate(-135deg); }
-  .footer-watch :global(.speech-bubble) { --bubble-bg: oklch(0.96 0.015 285); --bubble-edge: transparent; color: oklch(0.22 0.06 280); }
+  /* The ghost asleep on watch, and under it, quietly, why it can. */
+  .footer-watch { display: grid; justify-items: center; gap: 1rem; }
+  .footer-watch-note { margin: 0; max-width: 24ch; text-align: center; font-size: 0.9375rem; line-height: 1.5; color: var(--muted-foreground); text-wrap: balance; }
   .footer-ghost { line-height: 0; }
 
   .footer-links { margin-top: clamp(3.5rem, 6vw, 5rem); padding-top: clamp(2rem, 4vw, 3rem); border-top: 1px solid var(--border); }
 
   /* On a phone the ghost leads: the closing moment first, then the call to action. */
   @media (max-width: 899px) {
-    .footer-watch { order: -1; flex-direction: row; justify-content: flex-start; }
-    .footer-watch :global(.footer-bubble)::before { left: -0.36rem; right: auto; transform: rotate(45deg); }
+    .footer-watch { order: -1; grid-template-columns: auto minmax(0, 1fr); justify-items: start; align-items: center; gap: 1.25rem; }
+    .footer-watch-note { text-align: left; }
     .footer-ghost :global(.ghost) { --ghost-size: 120px !important; }
   }
   @media (max-width: 479px) {
@@ -80,6 +78,5 @@ const { m } = Astro.props
   }
   @media (min-width: 900px) {
     .footer-close { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
-    .footer-watch { justify-content: center; }
   }
 </style>

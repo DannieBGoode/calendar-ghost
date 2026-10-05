@@ -124,6 +124,14 @@ test("small controls are at least 44px tall", async ({ browser }) => {
   await context.close()
 })
 
+test("the footer's dozing ghost says nothing; the five-minute line is plain text", async ({ page }) => {
+  await page.goto("/")
+  const watch = page.locator(".footer-watch")
+  await expect(watch.locator(".speech-bubble")).toHaveCount(0)
+  await expect(watch.locator('.ghost[data-face="sleepy"]')).toHaveCount(1)
+  await expect(watch.locator("p")).toHaveText(en.footer.watch)
+})
+
 test("a ghost that idles briefly wakes when it scrolls into view", async ({ page }) => {
   await page.goto("/")
   const sleeper = page.locator('.footer .ghost[data-alive="brief"]')
@@ -291,6 +299,10 @@ for (const path of ["/", "/bold", "/journey"]) {
       await expect(links.getByRole("list", { name: en.footer.projectTitle }).getByRole("listitem")).toHaveCount(4)
       await expect(links.getByRole("list", { name: en.footer.legalTitle }).getByRole("listitem")).toHaveCount(2)
       await expect(footer.getByText(en.footer.noTrackers, { exact: true })).toBeVisible()
+      await expect(footer.getByText(en.footer.noTrackersBody, { exact: true })).toBeVisible()
+      await expect(footer).not.toContainText("network tab")
+      // A sleeping ghost does not talk.
+      await expect(footer.locator(".speech-bubble")).toHaveCount(0)
     })
 
     for (const width of [1440, 390]) {

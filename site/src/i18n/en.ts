@@ -47,7 +47,6 @@ export const en = {
   ghost: {
     crossingBusy: "Dentist? What dentist?",
     crossingDetails: "Title and place came along. The guest list stayed home.",
-    footer: "Zzz. Checking again in five minutes.",
     notFound: "This page never crossed over.",
   },
   hero: {
@@ -323,7 +322,9 @@ export const en = {
     trademarks: "Trademarks",
     license: "Open source under the GNU AGPL, version 3 or later.",
     noTrackers: "This page has no trackers.",
-    noTrackersBody: "No analytics, no cookies, nothing loaded from another site. Your browser's network tab can check.",
+    noTrackersBody: "No analytics, no cookies, nothing loaded from another site.",
+    /** Under the dozing ghost on the home page's footer: narration, not speech. */
+    watch: "Sync runs every five minutes. In between, the ghost naps.",
   },
   notFound: {
     title: "Nothing here but a ghost.",
