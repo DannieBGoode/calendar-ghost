@@ -65,7 +65,13 @@ const [firstLine, secondLine] = m.variants.bold.hero.titleLines
   .hh-b-demo :global(.jc-toggle) { align-self: flex-end; }
   .hh-b-demo :global(.jc-title) { font: 600 clamp(1.5rem, 1.2rem + 1vw, 2rem)/1.1 var(--font-display); letter-spacing: -0.02em; }
   .hh-b-demo :global(.jc-card) { gap: 0.5rem; padding: 1rem 1.1rem 1.1rem; }
-  .hh-b-demo :global(.jc-card-busy) { padding: 1rem 1.1rem; }
+  /* The copy in flight wears the same Busy as the one it lands as (heroes.css). */
+  .hh-b-demo :global(.jc-card-busy) {
+    padding: 1rem 1.1rem;
+    background:
+      repeating-linear-gradient(45deg, color-mix(in oklch, var(--primary) 12%, transparent) 0 0.3125rem, transparent 0.3125rem 0.625rem),
+      linear-gradient(var(--event-busy), var(--event-busy)), var(--background);
+  }
   .hh-b-demo :global(.jc-card-busy b) { font: 600 clamp(1.5rem, 1.2rem + 1vw, 2rem)/1.1 var(--font-display); }
   .hh-b-demo :global(.jc-row) { font-size: 0.9375rem; }
   .hh-b-demo :global(.jc-pill) { font-size: 0.875rem; }
