@@ -21,7 +21,7 @@ const VARIANTS = [
     /** Self-running loops, each with its own pause control: the hero, the week, the crossing. */
     loops: 3,
     /** Discrete controls that must be finger-sized. */
-    controls: [".crossing-switch button", "button[data-copy]", "main summary"],
+    controls: [".how-segment button", ".crossing-switch button", "button[data-copy]", "main summary"],
   },
   {
     path: "/journey",

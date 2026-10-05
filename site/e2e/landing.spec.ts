@@ -50,6 +50,7 @@ test("without JavaScript, the content and the hero's resting state are there", a
   expect(await split(page)).toBe("55%")
   await expect(page.locator('button[data-copy="self-host-command-0"]')).toBeHidden()
   await expect(page.locator(".crossing-stage").getByText(en.demo.busy).first()).toBeVisible()
+  await expect(page.locator("#how-it-works .how-preview-row").first()).toContainText(en.demo.busy)
   // Nothing loops without JavaScript, so there is nothing to pause.
   await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
   await context.close()
@@ -102,6 +103,7 @@ test("small controls are at least 44px tall", async ({ browser }) => {
   await page.locator(".crossing").scrollIntoViewIfNeeded()
   const controls = [
     page.locator(".nav-narrow summary"),
+    page.locator(".how-segment button"),
     page.locator(".crossing-switch button"),
     page.locator("button[data-copy]"),
     page.locator(".faq summary"),
@@ -214,6 +216,24 @@ for (const path of ["/", "/bold"]) {
     await copy.click()
     expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(STATUS_CHECK_COMMAND)
     await expect(copy).toHaveText(en.selfHost.selected)
+  })
+}
+
+for (const path of ["/", "/bold"]) {
+  test(`${path}: the How it works switch changes what step 3's preview shows`, async ({ page }) => {
+    await page.goto(path)
+    const strip = page.locator("#how-it-works")
+    await strip.scrollIntoViewIfNeeded()
+    const rows = strip.locator(".how-preview-row")
+    await expect(rows.first()).toContainText(en.demo.busy)
+    const details = strip.getByRole("button", { name: en.crossing.withDetails })
+    await details.click()
+    await expect(details).toHaveAttribute("aria-pressed", "true")
+    await expect(rows.nth(0)).toContainText(en.demo.events.dentist.title)
+    await expect(rows.nth(1)).toContainText(en.demo.events.gym.title)
+    await expect(rows.nth(2)).toContainText(en.demo.events.therapy.title)
+    await strip.getByRole("button", { name: en.crossing.busyOnly }).click()
+    await expect(rows.first()).toContainText(en.demo.busy)
   })
 }
 
