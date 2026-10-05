@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs"
 import { join, relative } from "node:path"
 import { describe, expect, it } from "vitest"
-import { EARLIER_STATES, NON_PRODUCTION_PATHS, VERSIONS, VERSIONS_PATH } from "./versions"
+import { EARLIER_STATES, NON_PRODUCTION_PATHS, STATUS_LABELS, VERSIONS, VERSIONS_PATH } from "./versions"
 
 // The indirection through `here` keeps Vite's static `new URL(url, import.meta.url)` asset
 // transform from rewriting this path (as in links.test.ts).
@@ -42,6 +42,12 @@ describe("the versions index", () => {
     expect(NON_PRODUCTION_PATHS).not.toContain("/")
     expect(NON_PRODUCTION_PATHS).toContain(VERSIONS_PATH)
     expect(NON_PRODUCTION_PATHS).toEqual(expect.arrayContaining(["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-c"]))
+  })
+
+  it("says where each iteration stands: production is the one current page, and hero C is rejected", () => {
+    for (const iteration of iterations) expect(Object.keys(STATUS_LABELS), iteration.name).toContain(iteration.status)
+    expect(iterations.filter((iteration) => iteration.status === "current").map((iteration) => iteration.path)).toEqual(["/"])
+    expect(iterations.find((iteration) => iteration.path === "/home/hero-c")?.status).toBe("rejected")
   })
 
   it("groups the home page first, with production as its first iteration", () => {

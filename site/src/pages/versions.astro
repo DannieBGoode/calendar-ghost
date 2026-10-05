@@ -3,7 +3,7 @@
 // indexed, not in the sitemap, linked from no public page. Its words live in versions.ts, not in
 // i18n/en.ts (see AGENTS.md, "Landing page").
 import Layout from "../layouts/Layout.astro"
-import { EARLIER_STATES, VERSIONS } from "../versions"
+import { EARLIER_STATES, STATUS_LABELS, VERSIONS } from "../versions"
 
 const title = "Versions · Calendar Ghost"
 const description = "Every version and iteration of the Calendar Ghost landing page."
@@ -20,8 +20,11 @@ const description = "Every version and iteration of the Calendar Ghost landing p
           <h2 id={`v-${version.name}`}>{version.name}</h2>
           <ol>
             {version.iterations.map((iteration) => (
-              <li>
-                <a class="versions-name" href={iteration.path}>{iteration.name}</a>
+              <li data-status={iteration.status}>
+                <span class="versions-title">
+                  <a class="versions-name" href={iteration.path}>{iteration.name}</a>
+                  <span class="versions-status">{STATUS_LABELS[iteration.status]}</span>
+                </span>
                 <code>{iteration.path}</code>
                 <p>{iteration.tries}</p>
                 <p class="versions-meta">
@@ -65,7 +68,16 @@ const description = "Every version and iteration of the Calendar Ghost landing p
     padding: 1rem 1.1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
   }
   .versions ol li p { grid-column: 1 / -1; margin: 0.35rem 0 0; }
+  .versions-title { display: flex; flex-wrap: wrap; align-items: center; column-gap: 0.75rem; }
   .versions-name { font-weight: 700; font-size: 1.0625rem; display: inline-flex; align-items: center; min-height: 2.75rem; }
+  .versions-status {
+    padding: 0.15rem 0.55rem; border: 1px solid var(--border); border-radius: 999px;
+    font-size: 0.75rem; font-weight: 650; color: var(--muted-foreground);
+  }
+  [data-status="current"] .versions-status { border-color: var(--primary); color: var(--primary); }
+  [data-status="rejected"] .versions-status { border-style: dashed; }
+  /* A rejected iteration stays for comparison, set back from the others. */
+  .versions ol li[data-status="rejected"] { background: transparent; }
   .versions ol li > code { align-self: center; }
   .versions-meta { font-size: 0.875rem; color: var(--muted-foreground); }
   .versions code { font-size: 0.875em; overflow-wrap: anywhere; }

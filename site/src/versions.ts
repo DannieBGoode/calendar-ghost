@@ -6,8 +6,15 @@
 // tools, not public copy, so their words live here instead of in i18n/en.ts (AGENTS.md, "Landing
 // page"). None of it is indexed or in the sitemap.
 
+/**
+ * Where an iteration stands: `current` is the live page, a `candidate` is still in the running,
+ * and a `rejected` one stays for comparison but is not to be built on.
+ */
+export type IterationStatus = "current" | "candidate" | "rejected"
+
 export interface Iteration {
   name: string
+  status: IterationStatus
   /** The route, starting with "/". */
   path: string
   /** One line on what it tries. */
@@ -29,6 +36,7 @@ export const VERSIONS: readonly Version[] = [
     iterations: [
       {
         name: "Iteration 1 (production)",
+        status: "current",
         path: "/",
         tries: "A centered two-line headline over the full Wide Reveal week; the live page.",
         date: "2026-10-05",
@@ -36,6 +44,7 @@ export const VERSIONS: readonly Version[] = [
       },
       {
         name: "Hero A: a quieter /bold",
+        status: "candidate",
         path: "/home/hero-a",
         tries: "Pitch in a narrow column; a larger, cropped week runs off the right edge, sweeping left first so Busy shows at once.",
         date: "2026-10-05",
@@ -43,6 +52,7 @@ export const VERSIONS: readonly Version[] = [
       },
       {
         name: "Hero B: one event, big",
+        status: "candidate",
         path: "/home/hero-b",
         tries: "No week: the ghost carries one large Dentist card to Work, where it lands as Busy and the guest and link stay behind.",
         date: "2026-10-05",
@@ -50,6 +60,7 @@ export const VERSIONS: readonly Version[] = [
       },
       {
         name: "Hero C: the headline is the demo",
+        status: "rejected",
         path: "/home/hero-c",
         tries: "\"Work sees [Dentist]\": the ghost draws Busy over a real event in the headline, with two days of the week as proof.",
         date: "2026-10-05",
@@ -62,6 +73,7 @@ export const VERSIONS: readonly Version[] = [
     iterations: [
       {
         name: "Bold",
+        status: "candidate",
         path: "/bold",
         tries: "The home page's structure with a stronger hand: big type, a split hero, a night band, a poster footer.",
         date: "2026-10-05",
@@ -74,6 +86,7 @@ export const VERSIONS: readonly Version[] = [
     iterations: [
       {
         name: "Journey",
+        status: "candidate",
         path: "/journey",
         tries: "One story: the ghost carries Sam's Dentist appointment down the page, and every section is a stop.",
         date: "2026-10-05",
@@ -100,6 +113,13 @@ export const NON_PRODUCTION_PATHS: readonly string[] = [
   VERSIONS_PATH,
   ...VERSIONS.flatMap((version) => version.iterations.map((iteration) => iteration.path)).filter((path) => path !== "/"),
 ]
+
+/** How the index names each status. */
+export const STATUS_LABELS: Record<IterationStatus, string> = {
+  current: "Current",
+  candidate: "Candidate",
+  rejected: "Rejected",
+}
 
 /** The "Versions" link's words. */
 export const VERSIONS_LINK_LABEL = "Versions"

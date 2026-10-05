@@ -118,9 +118,10 @@ the Docker build context, and has its own `Site` workflow.
 - Self-host commands must match the README's quick start; a unit test compares them.
 - Design versions and iterations sit beside production, never on top of it: a new iteration is a
   new route (home hero iterations under `site/src/pages/home/`), never a change to an old one.
-  Append each to `site/src/versions.ts` with the commit that added it; that list drives the
-  internal index at `/versions` and the sitemap exclusion, and each such page passes `noindex` to
-  its layout. The index and the small "Versions" link on iteration pages are internal tools, so
+  Append each to `site/src/versions.ts` with the commit that added it and where it stands
+  (`current`, `candidate`, or `rejected`; a rejected route stays for comparison). That list drives
+  the internal index at `/versions` and the sitemap exclusion, and each such page passes `noindex`
+  to its layout. The index and the small "Versions" link on iteration pages are internal tools, so
   their words live in `versions.ts`, the one exception to the `en.ts` rule.
 - To add a language: add its code to `astro.config.mjs` `locales`, and add a module under
   `site/src/i18n/` that `satisfies Messages` and is registered in `LOCALES`. Then add its pages

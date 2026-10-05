@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
 import { TRUST_DOCS } from "../src/links"
-import { NON_PRODUCTION_PATHS, VERSIONS, VERSIONS_LINK_LABEL, VERSIONS_PATH } from "../src/versions"
+import { NON_PRODUCTION_PATHS, STATUS_LABELS, VERSIONS, VERSIONS_LINK_LABEL, VERSIONS_PATH } from "../src/versions"
 
 /** The home page's sections, whose headings every home hero iteration keeps. */
 const HOME_HEADINGS = [
@@ -595,6 +595,8 @@ test.describe("the versions index", () => {
         const link = group.getByRole("link", { name: iteration.name })
         await expect(link).toHaveAttribute("href", iteration.path)
         await expect(group).toContainText(iteration.commit)
+        const entry = group.getByRole("listitem").filter({ has: page.getByRole("link", { name: iteration.name, exact: true }) })
+        await expect(entry.locator(".versions-status")).toHaveText(STATUS_LABELS[iteration.status])
       }
     }
     for (const commit of ["20ec416", "92f5823", "579b106", "3b9dc7d"]) await expect(page.getByText(commit)).toBeVisible()
