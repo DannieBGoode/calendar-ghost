@@ -127,24 +127,23 @@ class SqliteConnectedAccountRecords:
     def lapse(
         self, account_id: ConnectedAccountId, at: datetime, *, attempted_at: datetime
     ) -> bool:
-        row = self._connection.execute(
+        # One statement, so a Reauthorization cannot land between the check and the write. A
+        # connected account's last update is when it was last authorized. julianday compares to
+        # about a millisecond, so a request begun in the same millisecond still lapses it.
+        cursor = self._connection.execute(
             """
-            SELECT state, updated_at, authorization_lapsed_at FROM connected_accounts WHERE id = ?
+            UPDATE connected_accounts
+            SET authorization_lapsed_at = COALESCE(authorization_lapsed_at, ?)
+            WHERE id = ? AND state = ? AND julianday(updated_at) <= julianday(?)
             """,
-            (account_id.value,),
-        ).fetchone()
-        if row is None or str(row["state"]) != ConnectedAccountState.CONNECTED.value:
-            return False
-        # A connected account's last update is when it was last authorized.
-        authorized = datetime.fromisoformat(str(row["updated_at"]))
-        if authorized.replace(tzinfo=authorized.tzinfo or UTC) > attempted_at:
-            return False
-        if row["authorization_lapsed_at"] is None:
-            self._connection.execute(
-                "UPDATE connected_accounts SET authorization_lapsed_at = ? WHERE id = ?",
-                (at.isoformat(), account_id.value),
-            )
-        return True
+            (
+                at.isoformat(),
+                account_id.value,
+                ConnectedAccountState.CONNECTED.value,
+                attempted_at.isoformat(),
+            ),
+        )
+        return cursor.rowcount == 1
 
     def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
         cursor = self._connection.execute(
