@@ -16,7 +16,7 @@ const VARIANTS = [
       en.selfHost.title,
       en.why.title,
       en.faq.title,
-      en.variants.bold.footer.cta,
+      en.variants.bold.footer.lines.join(" "),
     ],
     /** Self-running loops, each with its own pause control: the hero, the week, the crossing. */
     loops: 3,

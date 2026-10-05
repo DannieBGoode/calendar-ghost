@@ -308,11 +308,22 @@ export const en = {
     ],
   },
   footer: {
-    cta: "Ready to try it?",
-    license: "Open source under the GNU AGPL, version 3 or later.",
-    trademarks: "Trademarks",
+    cta: "Ready when your server is.",
+    body: "Free and open source. It runs on a home server, a VPS, or a Raspberry Pi.",
+    tagline: "Private calendar sync you host yourself.",
+    /** The footer's links, as a screen reader names them. */
+    label: "About Calendar Ghost",
+    projectTitle: "Project",
+    legalTitle: "Legal",
     github: "GitHub",
+    guide: "Self-hosting guide",
+    docs: "Documentation",
+    changelog: "Changelog",
+    licenseLink: "AGPL-3.0 license",
+    trademarks: "Trademarks",
+    license: "Open source under the GNU AGPL, version 3 or later.",
     noTrackers: "This page has no trackers.",
+    noTrackersBody: "No analytics, no cookies, nothing loaded from another site. Your browser's network tab can check.",
   },
   notFound: {
     title: "Nothing here but a ghost.",
@@ -343,11 +354,11 @@ export const en = {
       },
       selfHost: {
         ghost: "Home sweet home server.",
-        noTrackersBody: "No analytics, no cookies, nothing loaded from another site. Your browser's network tab can check.",
       },
       why: { ghost: "True story." },
       faq: { ghost: "Ask away. I'm transparent." },
-      footer: { cta: "Give me a server. I'll handle the busywork." },
+      /** The footer's call to action, the ghost talking, one sentence per line. */
+      footer: { lines: ["Give me a server.", "I'll handle the busywork."] as [string, string] },
     },
     journey: {
       /** The small stamp at each stop of the ghost's journey down the page, then the stop's name. */

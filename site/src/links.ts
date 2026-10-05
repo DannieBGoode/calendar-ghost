@@ -3,6 +3,9 @@ export const REPO_URL = "https://github.com/DannieBGoode/calendar-ghost"
 export const GUIDE_URL = `${REPO_URL}/blob/main/docs/self-hosting.md`
 export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`
 export const TRADEMARKS_URL = `${REPO_URL}/blob/main/TRADEMARKS.md`
+export const CHANGELOG_URL = `${REPO_URL}/blob/main/CHANGELOG.md`
+/** The documentation folder, as GitHub lists it. */
+export const DOCS_URL = `${REPO_URL}/tree/main/docs`
 
 const DOCS = `${REPO_URL}/blob/main`
 /** Section 6 of the self-hosting guide: Integration Tokens, the status API, and the MCP server. */

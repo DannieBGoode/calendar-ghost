@@ -54,3 +54,31 @@ a { color: var(--primary); }
 }
 .doc-link:hover { color: var(--primary); text-decoration-color: currentColor; }
 .doc-link-icon { display: inline-block; width: 0.9em; height: 0.9em; margin-left: 0.15em; vertical-align: -0.08em; color: var(--primary); }
+/* A night band: the deep Twilight indigo at the end of the day, in either appearance. It re-declares
+   the dark tokens, so everything inside (text, buttons, events, and the ghost, through
+   `color-scheme`) draws as it does in dark appearance. */
+.night {
+  color-scheme: dark;
+  --night: oklch(0.235 0.075 279);
+  --background: var(--night);
+  --foreground: oklch(0.95 0.012 285);
+  --surface: oklch(0.28 0.06 280);
+  --muted: oklch(0.32 0.05 280);
+  --muted-foreground: oklch(0.82 0.03 285);
+  --primary: oklch(0.8 0.11 278);
+  --primary-foreground: oklch(0.2 0.05 280);
+  --primary-soft: oklch(0.34 0.08 278);
+  --border: oklch(0.4 0.05 280);
+  --ring: oklch(0.8 0.11 278);
+  --brand-glow: oklch(0.93 0.03 285);
+  --brand-line: oklch(0.93 0.03 285);
+  --brand-eyes: oklch(0.2 0.04 280);
+  --event-busy: oklch(0.45 0.09 278 / 0.6);
+  --event-personal: oklch(0.45 0.09 155 / 0.9);
+  --event-personal-edge: oklch(0.72 0.12 155);
+  background: var(--night);
+  color: var(--foreground);
+}
+@media (prefers-color-scheme: dark) { .night { --night: oklch(0.215 0.07 279); } }
+.night a:not(.btn) { color: var(--foreground); }
+.night .btn { border-color: var(--border); }

@@ -1,58 +1,92 @@
 ---
-// The ending, in the ghost's own voice. Forked from sections/Footer.astro because the call to
-// action is the ghost speaking (a big bubble), and "no trackers" moved up to Self-host.
+// The ending as a poster: one slab of Lantern Indigo, the ghost's last line in the page's biggest
+// type, the white ghost rising over the slab's top edge in its glow, and the links on the slab
+// itself, so the footer is one finished object instead of a call to action over a row of links.
 import type { Messages } from "../../i18n"
 import { Ghost } from "../../islands/Ghost"
-import { LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../../links"
-import LanguagePicker from "../../sections/LanguagePicker.astro"
+import { REPO_URL } from "../../links"
+import FooterLinks from "../../sections/FooterLinks.astro"
 
 interface Props {
   m: Messages
 }
 
 const { m } = Astro.props
+const [ask, promise] = m.variants.bold.footer.lines
 ---
 
 <footer class="b-footer">
-  <div class="b-wrap b-footer-cta">
-    <span class="b-footer-ghost" aria-hidden="true">
-      <Ghost face="happy" tone="lantern" alive="brief" float size={210} />
+  <div class="b-poster">
+    <span class="b-poster-ghost" aria-hidden="true">
+      <Ghost face="happy" alive="brief" float size={240} />
     </span>
-    <div class="b-footer-speech">
-      <h2>{m.variants.bold.footer.cta}</h2>
-      <a class="btn btn-primary b-btn-big" href="#self-host">{m.hero.primary}</a>
+    <div class="b-poster-call">
+      <h2><span>{ask}</span> <em>{promise}</em></h2>
+      <div class="ctas">
+        <a class="btn btn-primary b-btn-big" href="#self-host">{m.hero.primary}</a>
+        <a class="btn b-btn-big" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
+        </a>
+      </div>
     </div>
-  </div>
-  <div class="b-wrap b-footer-meta">
-    <p><a href={LICENSE_URL}>{m.footer.license}</a></p>
-    <p><a href={TRADEMARKS_URL}>{m.footer.trademarks}</a> · <a href={REPO_URL}>{m.footer.github}</a></p>
-    <LanguagePicker m={m} />
+    <div class="b-poster-links">
+      <FooterLinks m={m} />
+    </div>
   </div>
 </footer>
 
 <style>
-  .b-footer { padding-block: var(--space-xl) 2rem; }
-  .b-footer-cta {
-    display: grid; justify-items: start; gap: 1rem; margin-bottom: var(--space-xl);
+  .b-footer { padding: clamp(7rem, 12vw, 10rem) clamp(0.75rem, 2vw, 1.5rem) clamp(0.75rem, 2vw, 1.5rem); }
+
+  /* The slab carries its own tokens: white on Lantern Indigo, a white button for the main call. It
+     declares `color-scheme: dark` so the ghost draws as the lantern it is on a dark surface. */
+  .b-poster {
+    color-scheme: dark;
+    --slab: oklch(0.45 0.15 278);
+    --background: var(--slab);
+    --foreground: oklch(0.985 0.006 285);
+    --muted-foreground: oklch(0.92 0.03 285);
+    --surface: oklch(0.4 0.14 278);
+    --muted: oklch(0.36 0.13 278);
+    --border: oklch(0.62 0.11 278);
+    --primary: oklch(0.985 0.006 285);
+    --primary-foreground: oklch(0.32 0.13 278);
+    --ring: oklch(0.985 0.006 285);
+    --brand-glow: oklch(0.985 0.006 285);
+    --brand-line: oklch(0.985 0.006 285);
+    --brand-eyes: oklch(0.32 0.13 278);
+    position: relative; width: min(84rem, 100%); margin-inline: auto;
+    padding: clamp(4.5rem, 8vw, 7rem) clamp(1.25rem, 5vw, 5rem) clamp(1.5rem, 3vw, 2.25rem);
+    border-radius: clamp(1.75rem, 4vw, 3rem);
+    background: var(--slab); color: var(--foreground);
   }
-  /* The call to action is a big speech bubble, its tail pointing at the ghost. */
-  .b-footer-speech {
-    position: relative; display: grid; justify-items: start; justify-self: start; gap: 1.5rem;
-    padding: clamp(1.75rem, 4vw, 3rem); border-radius: 2rem;
-    background: var(--primary-soft); color: var(--foreground);
+  @media (prefers-color-scheme: dark) {
+    .b-poster { --slab: oklch(0.36 0.13 278); --surface: oklch(0.32 0.12 278); --muted: oklch(0.3 0.11 278); --primary-foreground: oklch(0.28 0.12 278); --border: oklch(0.52 0.1 278); }
   }
-  .b-footer-speech::before {
-    content: ""; position: absolute; left: 3rem; top: -0.9rem; width: 2rem; height: 2rem;
-    background: var(--primary-soft); transform: rotate(45deg); border-radius: 0.3rem;
+  .b-poster a:not(.btn) { color: var(--foreground); }
+  .b-poster .btn:not(.btn-primary) { background: transparent; border-color: color-mix(in oklch, var(--foreground), transparent 45%); }
+  .b-poster .btn:not(.btn-primary):hover { background: var(--muted); }
+  .b-poster .btn-primary:hover { background: oklch(0.93 0.03 285); }
+
+  /* The ghost rises over the slab's top edge, breaking the frame. Half of it is on the page, so
+     it follows the page's appearance (with its outline on a light page), not the slab's. */
+  .b-poster-ghost {
+    color-scheme: light dark;
+    position: absolute; top: 0; right: clamp(1.5rem, 8vw, 7rem); line-height: 0; transform: translateY(-56%);
   }
-  .b-footer-speech h2 { margin: 0; max-width: 16ch; font-size: var(--step-3); }
-  @media (min-width: 800px) {
-    .b-footer-cta { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 2rem; }
-    .b-footer-speech::before { left: -0.9rem; top: calc(50% - 1rem); }
+
+  .b-poster-call { display: grid; justify-items: start; gap: var(--space-lg); }
+  .b-poster-call h2 { margin: 0; max-width: 15ch; font-size: var(--step-5); line-height: 0.95; letter-spacing: -0.035em; }
+  .b-poster-call h2 span, .b-poster-call h2 em { display: block; }
+  .b-poster-call h2 em { font-style: italic; font-variation-settings: "SOFT" 100, "WONK" 1; }
+
+  .b-poster-links { margin-top: clamp(4rem, 8vw, 6.5rem); padding-top: clamp(2rem, 4vw, 2.75rem); border-top: 1px solid var(--border); }
+
+  @media (max-width: 639px) {
+    .b-footer { padding-top: 6rem; }
+    .b-poster-ghost { right: 1rem; }
+    .b-poster-ghost :global(.ghost) { --ghost-size: 132px !important; }
+    .b-poster .ctas { display: grid; width: 100%; }
+    .b-poster .b-btn-big { justify-content: center; }
   }
-  .b-footer-meta {
-    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 2rem;
-    padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: var(--step--1); color: var(--muted-foreground);
-  }
-  .b-footer-meta p { margin: 0; }
 </style>

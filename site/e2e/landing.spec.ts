@@ -1,7 +1,16 @@
 import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
 import { STATUS_CHECK_COMMAND } from "../src/content/integrations"
-import { INTEGRATIONS_URL, TRUST_DOCS } from "../src/links"
+import {
+  CHANGELOG_URL,
+  DOCS_URL,
+  GUIDE_URL,
+  INTEGRATIONS_URL,
+  LICENSE_URL,
+  REPO_URL,
+  TRADEMARKS_URL,
+  TRUST_DOCS,
+} from "../src/links"
 
 const split = (page: Page) =>
   page.locator(".reveal-frame").evaluate((frame) => getComputedStyle(frame).getPropertyValue("--split").trim())
@@ -251,6 +260,28 @@ test("without JavaScript, the integrations mockups show their final state", asyn
 
 for (const path of ["/", "/bold", "/journey"]) {
   test.describe(`${path}, shared promises`, () => {
+    test("the footer ends with a call to action and an organized set of links", async ({ page }) => {
+      await page.goto(path)
+      const footer = page.locator("footer")
+      await expect(footer.getByRole("link", { name: en.hero.primary })).toHaveAttribute("href", "#self-host")
+      const star = footer.getByRole("link", { name: new RegExp(en.hero.secondary) })
+      await expect(star).toHaveAttribute("href", REPO_URL)
+      await expect(star).toHaveAttribute("target", "_blank")
+      const links = footer.getByRole("navigation", { name: en.footer.label })
+      const expected: [string, string][] = [
+        [en.footer.github, REPO_URL],
+        [en.footer.guide, GUIDE_URL],
+        [en.footer.docs, DOCS_URL],
+        [en.footer.changelog, CHANGELOG_URL],
+        [en.footer.licenseLink, LICENSE_URL],
+        [en.footer.trademarks, TRADEMARKS_URL],
+      ]
+      for (const [name, href] of expected) await expect(links.getByRole("link", { name, exact: true })).toHaveAttribute("href", href)
+      await expect(links.getByRole("list", { name: en.footer.projectTitle }).getByRole("listitem")).toHaveCount(4)
+      await expect(links.getByRole("list", { name: en.footer.legalTitle }).getByRole("listitem")).toHaveCount(2)
+      await expect(footer.getByText(en.footer.noTrackers, { exact: true })).toBeVisible()
+    })
+
     test("the app is shown feature by feature, each with its mockup, on alternating sides", async ({ page }) => {
       await page.goto(path)
       const features = page.locator(".feat")
@@ -264,6 +295,17 @@ for (const path of ["/", "/bold", "/journey"]) {
         sides.push(shot.x > copy.x)
       }
       expect(sides).toEqual([true, false, true])
+    })
+
+    test("the green ghost appears only where it means healthy", async ({ page }) => {
+      await page.goto(path)
+      const outside = await page.locator('.ghost[data-tone="moss"]').evaluateAll(
+        (ghosts) =>
+          // The home hero keeps its ghost until its own redesign.
+          ghosts.filter((ghost) => !ghost.closest(".mock-health, .int-tile, .hero .reveal-handle")).length,
+      )
+      expect(outside).toBe(0)
+      await expect(page.locator('.ghost[data-tone="mist"][data-glow]').first()).toBeAttached()
     })
 
     test("in the agent mockup, the AI assistant answers, not the ghost", async ({ page }) => {

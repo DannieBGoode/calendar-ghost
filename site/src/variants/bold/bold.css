@@ -43,6 +43,9 @@
 .bold p, .bold li { max-width: 65ch; }
 .bold .b-lead { font-size: var(--step-1); line-height: 1.45; color: var(--muted-foreground); max-width: 34ch; }
 
+/* A big button, for the page's main calls to action. */
+.bold .b-btn-big { min-height: 3.25rem; padding-inline: 1.4rem; font-size: 1rem; }
+
 .bold .b-wrap { width: min(72rem, 100% - 2.5rem); margin-inline: auto; }
 .bold .b-narrow { width: min(60rem, 100% - 2.5rem); margin-inline: auto; }
 

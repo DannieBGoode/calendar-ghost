@@ -3,13 +3,14 @@
 // arrives here (on wide screens it flies down from the margin and becomes this scene's ghost; on
 // narrower ones it flies in from above), sets the card into the slot on Work's calendar, steps
 // back and waves. The card is the hero's choice: Busy, or the title. The call to action is what
-// the ghost says. Forked from sections/Footer.astro because the call to action is the ghost
-// speaking and the footer is the end of the journey's night sky.
+// the ghost says. Under it, the shared links, dressed as the back of the ticket: the route ends at
+// a terminus, the groups are titled in the page's serif, and the no-trackers proof is a stamp
+// like the stops' own.
 import Avatar from "../../components/Avatar.astro"
 import type { Messages } from "../../i18n"
 import { Ghost } from "../../islands/Ghost"
-import { LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../../links"
-import LanguagePicker from "../../sections/LanguagePicker.astro"
+import { REPO_URL } from "../../links"
+import FooterLinks from "../../sections/FooterLinks.astro"
 import Carried from "./Carried.astro"
 import Stop from "./Stop.astro"
 
@@ -20,7 +21,7 @@ interface Props {
 const { m } = Astro.props
 ---
 
-<footer class="j-end">
+<footer class="j-end night">
   <div class="j-wrap">
     <Stop m={m} n={9} name="end" />
     <div class="j-end-grid">
@@ -32,7 +33,7 @@ const { m } = Astro.props
         <span class="j-end-puff"></span>
         <span class="j-end-drop"><Carried m={m} /></span>
         <span class="j-end-flyer">
-          <span class="j-end-wave"><Ghost face="happy" then="wink" tone="moss" size={190} /></span>
+          <span class="j-end-wave"><Ghost face="happy" then="wink" size={190} /></span>
         </span>
       </div>
       <div class="j-end-speech">
@@ -45,11 +46,8 @@ const { m } = Astro.props
         </div>
       </div>
     </div>
-    <div class="j-end-meta">
-      <p><a href={LICENSE_URL}>{m.footer.license}</a></p>
-      <p><a href={TRADEMARKS_URL}>{m.footer.trademarks}</a> · <a href={REPO_URL}>{m.footer.github}</a></p>
-      <LanguagePicker m={m} />
-      <p>{m.footer.noTrackers}</p>
+    <div class="j-end-links">
+      <FooterLinks m={m} />
     </div>
   </div>
 </footer>
@@ -114,29 +112,11 @@ const { m } = Astro.props
   /* The night sky at the end of the trip: the hero's dotted sky, after dark, whatever the device
      uses. The band re-declares the dark Twilight tokens so everything inside draws for the dark. */
   .j-end {
-    color-scheme: dark;
-    --night: oklch(0.235 0.075 279);
-    --background: var(--night);
-    --foreground: oklch(0.95 0.012 285);
-    --surface: oklch(0.28 0.06 280);
-    --muted: oklch(0.32 0.05 280);
-    --muted-foreground: oklch(0.82 0.03 285);
-    --primary: oklch(0.8 0.11 278);
-    --primary-foreground: oklch(0.2 0.05 280);
-    --primary-soft: oklch(0.34 0.08 278);
-    --border: oklch(0.4 0.05 280);
-    --ring: oklch(0.8 0.11 278);
-    --event-busy: oklch(0.45 0.09 278 / 0.6);
-    --event-personal: oklch(0.45 0.09 155 / 0.9);
-    --event-personal-edge: oklch(0.72 0.12 155);
-    position: relative; overflow: hidden; padding-block: var(--space-2xl) 2rem; color: var(--foreground);
+    position: relative; overflow: hidden; padding-block: var(--space-2xl) 2rem;
     background:
       radial-gradient(circle at 1px 1px, oklch(0.9 0.04 285 / 0.22) 1px, transparent 1.6px) 0 0 / 22px 22px,
       var(--night);
   }
-  @media (prefers-color-scheme: dark) { .j-end { --night: oklch(0.215 0.07 279); } }
-  .j-end a:not(.btn) { color: var(--foreground); }
-  .j-end :global(.btn) { border-color: var(--border); }
 
   .j-end-grid { display: grid; gap: var(--space-lg); align-items: end; margin-bottom: var(--space-xl); }
   .j-end-grid > * { min-width: 0; }
@@ -176,11 +156,29 @@ const { m } = Astro.props
   @media (min-width: 900px) { .j-end-speech::before { left: -0.9rem; top: calc(50% - 1rem); } }
   .j-end-speech h2 { margin: 0; max-width: 18ch; font-size: var(--step-3); }
 
-  .j-end-meta {
-    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 2rem;
-    padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: var(--step--1); color: var(--muted-foreground);
+  /* The back of the ticket. The route ends here: a dotted line from a terminus mark. */
+  .j-end-links { position: relative; padding-top: clamp(2.25rem, 4vw, 3rem); }
+  .j-end-links::before {
+    content: ""; position: absolute; top: 0; left: 1.5rem; right: 0; height: 2px;
+    background: radial-gradient(circle, color-mix(in oklch, var(--primary), transparent 35%) 1px, transparent 1.5px) 0 0 / 10px 2px;
   }
-  .j-end-meta p { margin: 0; }
+  .j-end-links::after {
+    content: ""; position: absolute; top: -7px; left: 0; width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--primary); background: var(--primary);
+    box-shadow: 0 0 0 4px var(--night);
+  }
+  .j-end-links :global(.flinks-home) { font: 400 1.25rem/1 var(--font-display); }
+  .j-end-links :global(.flinks-title) {
+    font: 400 1.125rem/1.2 var(--font-display); letter-spacing: 0; text-transform: none; color: var(--primary);
+  }
+  /* The proof, stamped like a stop. */
+  .j-end-links :global(.flinks-proof-title) {
+    justify-self: start; padding: 0.45rem 0.7rem; border: 1.5px solid currentColor; border-radius: 0.4rem;
+    color: var(--primary); font: 400 1rem/1.15 var(--font-display); transform: rotate(-2deg); transform-origin: 0 50%;
+  }
+  .j-end-links :global(.flinks-proof-icon) { color: currentColor; }
+  .j-end-links :global(.flinks-proof) { gap: 0.75rem; }
+  .j-end-links :global(.flinks-base) { border-top-style: dashed; }
 
   /* The ghost's face: happy while it carries, a wink once the card is down. */
   .j-end-scene :global(.ghost[data-sequence] .ghost-face-first) { animation: none; opacity: 0; }

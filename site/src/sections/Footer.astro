@@ -1,8 +1,12 @@
 ---
-import { Ghost, SpeechBubble } from "../islands/Ghost"
+// The home page's ending: night falls, and the ghost keeps watch. A Twilight band with rounded
+// shoulders, like the top of the ghost's own head, holds the last call to action beside the white
+// ghost dozing in its lantern glow (sync really runs every five minutes, so the joke is true), then
+// the page's organized links.
 import type { Messages } from "../i18n"
-import { LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../links"
-import LanguagePicker from "./LanguagePicker.astro"
+import { Ghost, SpeechBubble } from "../islands/Ghost"
+import { REPO_URL } from "../links"
+import FooterLinks from "./FooterLinks.astro"
 
 interface Props {
   m: Messages
@@ -11,27 +15,71 @@ interface Props {
 const { m } = Astro.props
 ---
 
-<footer class="footer">
-  <div class="container footer-cta">
-    <div class="ghost-says">
-      <Ghost face="sleepy" tone="lantern" alive="brief" float size={96} />
-      <SpeechBubble className="speech-bubble-inline">{m.ghost.footer}</SpeechBubble>
+<footer class="footer night">
+  <div class="container footer-close">
+    <div class="footer-pitch">
+      <h2>{m.footer.cta}</h2>
+      <p class="footer-body">{m.footer.body}</p>
+      <div class="ctas">
+        <a class="btn btn-primary footer-btn" href="#self-host">{m.hero.primary}</a>
+        <a class="btn footer-btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
+        </a>
+      </div>
     </div>
-    <h2>{m.footer.cta}</h2>
-    <a class="btn btn-primary" href="#self-host">{m.hero.primary}</a>
+    <div class="footer-watch" aria-hidden="true">
+      <span class="footer-ghost"><Ghost face="sleepy" alive="brief" float size={168} /></span>
+      <SpeechBubble side="left" className="footer-bubble">{m.ghost.footer}</SpeechBubble>
+    </div>
   </div>
-  <div class="container footer-meta">
-    <p><a href={LICENSE_URL}>{m.footer.license}</a></p>
-    <p><a href={TRADEMARKS_URL}>{m.footer.trademarks}</a> · <a href={REPO_URL}>{m.footer.github}</a></p>
-    <LanguagePicker m={m} />
-    <p>{m.footer.noTrackers}</p>
+  <div class="container footer-links">
+    <FooterLinks m={m} />
   </div>
 </footer>
 
 <style>
-  .footer { border-top: 1px solid var(--border); padding-block: 4rem 2rem; }
-  .footer-cta { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; margin-bottom: 3rem; }
-  .footer-cta .ghost-says { margin-bottom: 0.5rem; }
-  .footer-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 2rem; font-size: 0.875rem; color: var(--muted-foreground); }
-  .footer-meta p { margin: 0; }
+  .footer {
+    --shoulder: clamp(2rem, 6vw, 5rem);
+    position: relative; margin-top: clamp(2rem, 5vw, 4rem); padding-block: clamp(4rem, 9vw, 7.5rem) 2rem;
+    border-radius: var(--shoulder) var(--shoulder) 0 0;
+    /* A few stars, no more. */
+    background:
+      radial-gradient(1.5px 1.5px at 8% 22%, oklch(0.95 0.02 285 / 0.7), transparent),
+      radial-gradient(1px 1px at 21% 9%, oklch(0.95 0.02 285 / 0.55), transparent),
+      radial-gradient(1.5px 1.5px at 39% 30%, oklch(0.95 0.02 285 / 0.45), transparent),
+      radial-gradient(1px 1px at 57% 12%, oklch(0.95 0.02 285 / 0.6), transparent),
+      radial-gradient(1.5px 1.5px at 73% 6%, oklch(0.95 0.02 285 / 0.55), transparent),
+      radial-gradient(1px 1px at 92% 18%, oklch(0.95 0.02 285 / 0.5), transparent),
+      var(--night);
+  }
+
+  .footer-close { display: grid; gap: var(--space-lg, 2.5rem); align-items: center; }
+  .footer-close > * { min-width: 0; }
+  .footer-pitch h2 { margin: 0 0 1rem; max-width: 13ch; font-size: clamp(2.5rem, 1.6rem + 3.4vw, 4.5rem); line-height: 1.02; letter-spacing: -0.025em; text-wrap: balance; }
+  .footer-body { max-width: 40ch; margin: 0 0 1.75rem; font-size: 1.125rem; line-height: 1.6; color: var(--muted-foreground); }
+  .footer-btn { min-height: 3.25rem; padding-inline: 1.4rem; font-size: 1rem; }
+
+  /* The ghost asleep on watch, its bubble beside it. */
+  .footer-watch { display: flex; flex-direction: row-reverse; align-items: center; gap: 0.5rem; }
+  .footer-watch :global(.footer-bubble) { position: relative; inset: auto; max-width: 15rem; font-size: 0.9375rem; }
+  .footer-watch :global(.footer-bubble)::before { top: calc(50% - 0.325rem); left: auto; right: -0.36rem; transform: rotate(-135deg); }
+  .footer-watch :global(.speech-bubble) { --bubble-bg: oklch(0.96 0.015 285); --bubble-edge: transparent; color: oklch(0.22 0.06 280); }
+  .footer-ghost { line-height: 0; }
+
+  .footer-links { margin-top: clamp(3.5rem, 6vw, 5rem); padding-top: clamp(2rem, 4vw, 3rem); border-top: 1px solid var(--border); }
+
+  /* On a phone the ghost leads: the closing moment first, then the call to action. */
+  @media (max-width: 899px) {
+    .footer-watch { order: -1; flex-direction: row; justify-content: flex-start; }
+    .footer-watch :global(.footer-bubble)::before { left: -0.36rem; right: auto; transform: rotate(45deg); }
+    .footer-ghost :global(.ghost) { --ghost-size: 120px !important; }
+  }
+  @media (max-width: 479px) {
+    .footer .ctas { display: grid; }
+    .footer-btn { justify-content: center; }
+  }
+  @media (min-width: 900px) {
+    .footer-close { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+    .footer-watch { justify-content: center; }
+  }
 </style>
