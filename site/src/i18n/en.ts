@@ -166,8 +166,13 @@ export const en = {
       bubbleBody: "Your calendars are in sync.",
     },
     rules: {
-      alt: "Calendar Ghost Rules: Family to Work, Personal to Work, and Work to Personal, each Busy only and enabled",
-      policy: "Busy only, including all-day events",
+      alt: "Calendar Ghost Rules: Family to Work and Personal to Work as Busy only, and Work to Personal with details, all enabled",
+      /** One per rule, in list order: work sees Busy; Sam's own Personal calendar gets the details. */
+      policies: [
+        "Busy only, including all-day events",
+        "Busy only, including all-day events",
+        "With details, including all-day events",
+      ] as [string, string, string],
       enabled: "Enabled",
       accounts: { family: "sam@family.example", personal: "sam@personal.example", work: "sam@work.example" },
       synced: ["Last synced 4 minutes ago", "Last synced 3 minutes ago", "Last synced 2 minutes ago"] as [
