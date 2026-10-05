@@ -163,3 +163,16 @@ def test_a_lapse_found_outside_a_sync_run_stops_the_accounts_enabled_rules() -> 
         "previewed": (SyncRuleState.PREVIEWED, False),
         "elsewhere": (SyncRuleState.ENABLED, False),
     }
+
+
+def test_a_passing_check_clears_a_refusal_of_a_request_begun_before_it() -> None:
+    # An older request was refused while Check access ran; the check then passed.
+    unit_of_work, _, lapses = _installation()
+    unit_of_work.state.accounts[PERSONAL] = ConnectedAccountState.CONNECTED
+    awaiting = rule().degrade(awaiting_reauthorization=True)
+    unit_of_work.state.rules = {awaiting.id: awaiting}
+    check_began = NOW - timedelta(seconds=1)
+    lapses.lapsed(WORK, EXPIRED, attempted_at=check_began - timedelta(seconds=1))
+
+    assert lapses.restored(WORK, accepted_at=check_began) == 1
+    assert unit_of_work.state.lapsed == {}

@@ -124,35 +124,35 @@ class SqliteConnectedAccountRecords:
         ).fetchone()
         return ConnectedAccountState(str(row["state"])) if row else None
 
-    def lapse(
-        self, account_id: ConnectedAccountId, at: datetime, *, attempted_at: datetime
-    ) -> bool:
+    def lapse(self, account_id: ConnectedAccountId, *, attempted_at: datetime) -> bool:
         # One statement, so a Reauthorization cannot land between the check and the write. A
         # connected account's last update is when it was last authorized. Both times are UTC ISO
         # 8601 text, which orders as the instants do, to the microsecond; julianday would round
-        # to the millisecond.
+        # to the millisecond. The lapse keeps the start of the latest refused request.
+        attempted = attempted_at.astimezone(UTC).isoformat()
         cursor = self._connection.execute(
             """
             UPDATE connected_accounts
-            SET authorization_lapsed_at = COALESCE(authorization_lapsed_at, ?)
+            SET authorization_lapsed_at = MAX(COALESCE(authorization_lapsed_at, ?), ?)
             WHERE id = ? AND state = ? AND updated_at <= ?
             """,
             (
-                at.astimezone(UTC).isoformat(),
+                attempted,
+                attempted,
                 account_id.value,
                 ConnectedAccountState.CONNECTED.value,
-                attempted_at.astimezone(UTC).isoformat(),
+                attempted,
             ),
         )
         return cursor.rowcount == 1
 
-    def clear_lapse(self, account_id: ConnectedAccountId, *, recorded_before: datetime) -> bool:
+    def clear_lapse(self, account_id: ConnectedAccountId, *, requested_before: datetime) -> bool:
         cursor = self._connection.execute(
             """
             UPDATE connected_accounts SET authorization_lapsed_at = NULL
             WHERE id = ? AND authorization_lapsed_at <= ?
             """,
-            (account_id.value, recorded_before.astimezone(UTC).isoformat()),
+            (account_id.value, requested_before.astimezone(UTC).isoformat()),
         )
         return cursor.rowcount == 1
 

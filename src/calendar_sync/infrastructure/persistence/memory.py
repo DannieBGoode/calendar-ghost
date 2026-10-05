@@ -86,20 +86,19 @@ class InMemoryConnectedAccountRecords:
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None:
         return self._state.accounts.get(account_id)
 
-    def lapse(
-        self, account_id: ConnectedAccountId, at: datetime, *, attempted_at: datetime
-    ) -> bool:
+    def lapse(self, account_id: ConnectedAccountId, *, attempted_at: datetime) -> bool:
         if self._state.accounts.get(account_id) is not ConnectedAccountState.CONNECTED:
             return False
         authorized = self._state.authorized_at.get(account_id)
         if authorized is not None and authorized > attempted_at:
             return False
-        self._state.lapsed.setdefault(account_id, at)
+        latest = self._state.lapsed.get(account_id)
+        self._state.lapsed[account_id] = max(latest, attempted_at) if latest else attempted_at
         return True
 
-    def clear_lapse(self, account_id: ConnectedAccountId, *, recorded_before: datetime) -> bool:
+    def clear_lapse(self, account_id: ConnectedAccountId, *, requested_before: datetime) -> bool:
         lapsed = self._state.lapsed.get(account_id)
-        if lapsed is None or lapsed > recorded_before:
+        if lapsed is None or lapsed > requested_before:
             return False
         del self._state.lapsed[account_id]
         return True

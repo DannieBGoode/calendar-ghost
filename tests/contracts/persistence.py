@@ -466,16 +466,18 @@ class PersistenceContract:
         harness.connect_account(ACCOUNT)
         with harness.unit_of_work() as uow:
             assert uow.accounts.authorized(ACCOUNT)
-            assert uow.accounts.lapse(ACCOUNT, NOW, attempted_at=NOW)
-            assert uow.accounts.lapse(ACCOUNT, NOW, attempted_at=NOW)
+            assert uow.accounts.lapse(ACCOUNT, attempted_at=NOW)
+            assert uow.accounts.lapse(ACCOUNT, attempted_at=NOW)
             uow.commit()
 
         with harness.unit_of_work() as uow:
             assert not uow.accounts.authorized(ACCOUNT)
             # A lapse recorded after the provider accepted the account stands.
-            assert not uow.accounts.clear_lapse(ACCOUNT, recorded_before=NOW - timedelta(seconds=1))
-            assert uow.accounts.clear_lapse(ACCOUNT, recorded_before=NOW)
-            assert not uow.accounts.clear_lapse(ACCOUNT, recorded_before=NOW)
+            assert not uow.accounts.clear_lapse(
+                ACCOUNT, requested_before=NOW - timedelta(seconds=1)
+            )
+            assert uow.accounts.clear_lapse(ACCOUNT, requested_before=NOW)
+            assert not uow.accounts.clear_lapse(ACCOUNT, requested_before=NOW)
             uow.commit()
         with harness.unit_of_work() as uow:
             assert uow.accounts.authorized(ACCOUNT)
@@ -486,7 +488,7 @@ class PersistenceContract:
         # The account was authorized at NOW; this request used the credentials it replaced.
         harness.connect_account(ACCOUNT)
         with harness.unit_of_work() as uow:
-            assert not uow.accounts.lapse(ACCOUNT, NOW, attempted_at=NOW - timedelta(minutes=1))
+            assert not uow.accounts.lapse(ACCOUNT, attempted_at=NOW - timedelta(minutes=1))
             uow.commit()
         with harness.unit_of_work() as uow:
             assert uow.accounts.authorized(ACCOUNT)
@@ -496,8 +498,8 @@ class PersistenceContract:
         harness.connect_account(ACCOUNT)
         harness.disconnect_account(ACCOUNT)
         with harness.unit_of_work() as uow:
-            assert not uow.accounts.lapse(ACCOUNT, NOW, attempted_at=NOW)
-            assert not uow.accounts.lapse(missing, NOW, attempted_at=NOW)
+            assert not uow.accounts.lapse(ACCOUNT, attempted_at=NOW)
+            assert not uow.accounts.lapse(missing, attempted_at=NOW)
             assert not uow.accounts.authorized(ACCOUNT)
             assert not uow.accounts.authorized(missing)
 

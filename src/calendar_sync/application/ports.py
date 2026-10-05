@@ -423,21 +423,21 @@ class ConnectedAccountRecords(Protocol):
 
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None: ...
 
-    def lapse(
-        self, account_id: ConnectedAccountId, at: datetime, *, attempted_at: datetime
-    ) -> bool:
-        """Record Lapsed Authorization for a request refused at `attempted_at`; whether it lapsed.
+    def lapse(self, account_id: ConnectedAccountId, *, attempted_at: datetime) -> bool:
+        """Record Lapsed Authorization for a refused request begun at `attempted_at`; whether it
+        lapsed.
 
-        True when the connected account is lapsed now, newly or already. A request made before the
-        account was last authorized used superseded credentials, so its refusal lapses nothing.
+        True when the connected account is lapsed now, newly or already; the lapse keeps the
+        start of the latest refused request. A request made before the account was last
+        authorized used superseded credentials, so its refusal lapses nothing.
         """
         ...
 
-    def clear_lapse(self, account_id: ConnectedAccountId, *, recorded_before: datetime) -> bool:
-        """Clear a Lapsed Authorization recorded before `recorded_before`; whether it cleared one.
+    def clear_lapse(self, account_id: ConnectedAccountId, *, requested_before: datetime) -> bool:
+        """Clear a Lapsed Authorization whose refused requests all began before `requested_before`,
+        when a request begun then was accepted; whether it cleared one.
 
-        A lapse recorded later came from a refusal the provider gave after it accepted the
-        account, so it stands.
+        A refusal of a request begun later stands, so the lapse does.
         """
         ...
 
@@ -722,7 +722,8 @@ class ConnectedAccount:
     provider: ProviderKind = field(kw_only=True)
     """The calendar service the account belongs to; it never changes (ADR 0022)."""
     authorization_lapsed_at: str | None = field(default=None, kw_only=True)
-    """When the provider stopped accepting a connected account's credentials (ADR 0027)."""
+    """While the provider refuses a connected account's credentials, when the latest refused
+    request began; None while it accepts them (ADR 0027)."""
 
 
 class ConnectedAccountRepository(AccountAuthorizations, Protocol):

@@ -88,6 +88,9 @@ class SqliteIncidentRepository:
         # nor a restoration that ran just before it can leave it open.
         account_only = incident.account_id if incident.rule_id is None else None
         with transaction(self._database_path) as connection:
+            # Held from the read to the write, so two reports of one Incident cannot both find
+            # it closed and both notify.
+            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 "SELECT state FROM incidents WHERE deduplication_key = ?", (incident.key,)
             ).fetchone()

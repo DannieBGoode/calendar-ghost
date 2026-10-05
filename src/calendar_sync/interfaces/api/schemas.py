@@ -246,7 +246,8 @@ class ConnectedAccountResponse(ApiResponse):
     rule_count: int
     authorized_at: str | None
     authorization_lapsed_at: str | None
-    """When the provider stopped accepting the account; null while it accepts it (ADR 0027)."""
+    """While the provider refuses the account, when the latest refused request began; null while
+    it accepts it (ADR 0027)."""
 
 
 class GoogleAccountAccessResponse(ApiResponse):

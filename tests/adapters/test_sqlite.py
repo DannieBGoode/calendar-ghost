@@ -3,7 +3,7 @@ from dataclasses import replace
 from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
-from threading import Thread
+from threading import Barrier, Thread
 
 import pytest
 
@@ -1105,7 +1105,7 @@ def test_restoring_keeps_open_the_incident_of_a_newer_lapse(tmp_path: Path) -> N
         assert connection.execute("SELECT state FROM incidents").fetchone() == ("open",)
 
     with unit_of_work() as uow:
-        assert uow.accounts.clear_lapse(work.id, recorded_before=datetime.now(UTC))
+        assert uow.accounts.clear_lapse(work.id, requested_before=datetime.now(UTC))
         uow.commit()
     incidents.resolve(key, NOW, restored, while_authorized=work.id)
     with sqlite3.connect(database) as connection:
@@ -1120,7 +1120,7 @@ def test_restoring_before_a_lapse_opens_its_incident_leaves_none_open(tmp_path: 
     work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
     _lapse(database, work.id)
     with SqliteUnitOfWorkFactory(database)() as uow:
-        assert uow.accounts.clear_lapse(work.id, recorded_before=datetime.now(UTC))
+        assert uow.accounts.clear_lapse(work.id, requested_before=datetime.now(UTC))
         uow.commit()
 
     report = IncidentReport(
@@ -1135,7 +1135,7 @@ def test_restoring_before_a_lapse_opens_its_incident_leaves_none_open(tmp_path: 
 def _lapse(database: Path, account_id: ConnectedAccountId) -> None:
     with SqliteUnitOfWorkFactory(database)() as uow:
         now = datetime.now(UTC)
-        assert uow.accounts.lapse(account_id, now, attempted_at=now)
+        assert uow.accounts.lapse(account_id, attempted_at=now)
         uow.commit()
 
 
@@ -1158,3 +1158,29 @@ def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
     assert latest is not None
     assert latest.last_full_succeeded_at == completed
+
+
+def test_concurrent_reports_of_one_incident_open_it_once(tmp_path: Path) -> None:
+    # Each report notifies only when it opened the Incident, so exactly one may say it did.
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    incidents = SqliteIncidentRepository(database)
+    for attempt in range(10):
+        report = IncidentReport(
+            f"provider:rule-{attempt}", SyncRuleId("rule-1"), "authentication", "expired"
+        )
+        start = Barrier(4)
+        opened: list[bool] = []
+
+        def report_it(
+            report: IncidentReport = report, start: Barrier = start, opened: list[bool] = opened
+        ) -> None:
+            start.wait()
+            opened.append(incidents.open(report, NOW))
+
+        threads = [Thread(target=report_it) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert opened.count(True) == 1

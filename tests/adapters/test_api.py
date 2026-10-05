@@ -1041,7 +1041,7 @@ def test_reauthorizing_resumes_the_rules_lapsed_authorization_stopped(
     with adapters.unit_of_work() as uow:
         uow.rules.add(stopped)
         now = datetime.now(UTC)
-        uow.accounts.lapse(work.id, now, attempted_at=now)
+        uow.accounts.lapse(work.id, attempted_at=now)
         uow.commit()
     # Completing consent saves the new credentials, as Google's callback does.
     reauthorize = Mock(

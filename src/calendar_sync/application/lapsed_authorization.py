@@ -64,7 +64,7 @@ class LapsedAuthorizations:
         """
         now = self.clock.now()
         with self.unit_of_work() as uow:
-            lapsed = uow.accounts.lapse(account_id, now, attempted_at=attempted_at)
+            lapsed = uow.accounts.lapse(account_id, attempted_at=attempted_at)
             enabled = tuple(
                 rule.id
                 for rule in uow.rules.list()
@@ -81,15 +81,15 @@ class LapsedAuthorizations:
         return True
 
     def restored(self, account_id: ConnectedAccountId, *, accepted_at: datetime) -> int:
-        """The provider accepted the account at `accepted_at`: clear the lapse that superseded,
-        and resume the rules it alone stopped; how many resumed.
+        """The provider accepted a request begun at `accepted_at`: clear a lapse from requests
+        begun before it, and resume the rules it alone stopped; how many resumed.
 
-        A lapse recorded later, from a refusal given after that acceptance, stands, and nothing
-        resumes. A rule whose other account still has no valid authorization stays stopped until
-        that account is restored too.
+        A refusal of a request begun later stands, and nothing resumes. A rule whose other
+        account still has no valid authorization stays stopped until that account is restored
+        too.
         """
         with self.unit_of_work() as uow:
-            uow.accounts.clear_lapse(account_id, recorded_before=accepted_at)
+            uow.accounts.clear_lapse(account_id, requested_before=accepted_at)
             authorized = uow.accounts.authorized(account_id)
             uow.commit()
         if not authorized:
