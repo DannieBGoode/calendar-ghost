@@ -3,7 +3,7 @@ import sitemap from "@astrojs/sitemap"
 import { defineConfig } from "astro/config"
 
 // Design variants kept for side-by-side comparison; they carry `noindex` and stay out of the sitemap.
-const VARIANT_PATHS = ["/bold", "/journey"]
+const VARIANT_PATHS = ["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-c"]
 
 export default defineConfig({
   site: "https://calendarghost.com",

@@ -1,0 +1,21 @@
+---
+// What every home hero iteration says under its headline: one plain line, the two calls to action,
+// and a muted line of plain facts.
+import type { Messages } from "../../i18n"
+import { REPO_URL } from "../../links"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<p class="hh-line">{m.variants.homeHeroes.line}</p>
+<div class="ctas hh-ctas">
+  <a class="btn btn-primary hh-btn" href="#self-host">{m.hero.primary}</a>
+  <a class="btn hh-btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+    <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
+  </a>
+</div>
+<p class="hh-meta">{m.variants.homeHeroes.meta}</p>

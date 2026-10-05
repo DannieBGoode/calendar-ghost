@@ -2,10 +2,31 @@ import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
 import { TRUST_DOCS } from "../src/links"
 
-/** The alternative page designs, each with the headings a visitor must find without JavaScript. */
+/** The home page's sections, whose headings every home hero iteration keeps. */
+const HOME_HEADINGS = [
+  en.how.title,
+  en.week.title,
+  en.crossing.title,
+  en.app.title,
+  en.trust.title,
+  en.integrations.title,
+  en.selfHost.title,
+  en.why.title,
+  en.faq.title,
+  en.footer.cta,
+]
+const HOME_CONTROLS = [".how-segment button", ".crossing-switch button", "button[data-copy]", "main summary"]
+
+/**
+ * The alternative page designs, each with the headings a visitor must find without JavaScript.
+ * `title` is the headline's accessible name; `rest` is where a Wide Reveal on the page rests
+ * (null when it has none).
+ */
 const VARIANTS = [
   {
     path: "/bold",
+    title: en.hero.title,
+    rest: "55%",
     headings: [
       en.how.title,
       en.week.title,
@@ -25,6 +46,8 @@ const VARIANTS = [
   },
   {
     path: "/journey",
+    title: en.hero.title,
+    rest: "55%",
     headings: [
       en.week.title,
       en.why.title,
@@ -38,6 +61,15 @@ const VARIANTS = [
     /** The crossing in the hero, and the week. */
     loops: 2,
     controls: [".jc-option", "button[data-copy]", "main summary"],
+  },
+  {
+    path: "/home/hero-a",
+    title: en.hero.title,
+    rest: "40%",
+    headings: HOME_HEADINGS,
+    /** The hero, the week, the crossing. */
+    loops: 3,
+    controls: HOME_CONTROLS,
   },
 ]
 
@@ -107,10 +139,12 @@ for (const variant of VARIANTS) {
       await page.waitForTimeout(400)
       const running = (await animations(page)).filter((animation) => animation.state === "running")
       expect(running).toEqual([])
-      const split = () => page.locator(".reveal-frame").evaluate((frame) => getComputedStyle(frame).getPropertyValue("--split").trim())
-      expect(await split()).toBe("55%")
-      await page.waitForTimeout(1000)
-      expect(await split()).toBe("55%")
+      if (variant.rest) {
+        const split = () => page.locator(".reveal-frame").evaluate((frame) => getComputedStyle(frame).getPropertyValue("--split").trim())
+        expect(await split()).toBe(variant.rest)
+        await page.waitForTimeout(1000)
+        expect(await split()).toBe(variant.rest)
+      }
       await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
       await context.close()
     })
@@ -119,7 +153,7 @@ for (const variant of VARIANTS) {
       const context = await browser.newContext({ javaScriptEnabled: false })
       const page = await context.newPage()
       await page.goto(variant.path)
-      await expect(page.getByRole("heading", { level: 1 })).toHaveText(en.hero.title)
+      await expect(page.getByRole("heading", { level: 1 })).toHaveAccessibleName(variant.title)
       for (const heading of variant.headings) {
         await expect(page.getByRole("heading", { level: 2, name: heading })).toBeVisible()
       }
@@ -364,5 +398,90 @@ test.describe("/journey", () => {
     await expect(noScript.locator(".j-end-flyer")).toBeVisible()
     await expect(noScript.locator(".j-end .j-carry-card:visible")).toContainText(en.demo.busy)
     await plain.close()
+  })
+})
+
+/** The home hero iterations: what each one's first screen must show at a laptop's size. */
+const HOME_HEROES = [
+  {
+    path: "/home/hero-a",
+    /** The demo's point: what work sees, beside the divider. */
+    point: ".hh-a .reveal-frame",
+  },
+]
+
+test.describe("home hero iterations", () => {
+  for (const hero of HOME_HEROES) {
+    for (const [width, height] of [
+      [1280, 800],
+      [1024, 768],
+    ] as const) {
+      test(`${hero.path} at ${width}x${height}: the headline, the line, the calls to action, and the demo's point fit the first screen`, async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" })
+        const page = await context.newPage()
+        await page.goto(hero.path)
+        const fits = async (selector: string) => {
+          const box = (await page.locator(selector).first().boundingBox())!
+          expect(box.y, selector).toBeGreaterThanOrEqual(0)
+          expect(box.y + box.height, selector).toBeLessThanOrEqual(height)
+        }
+        for (const selector of ["h1", ".hh-line", ".hh-ctas", ".hh-meta", hero.point]) await fits(selector)
+        await expect(page.locator(".hh-line")).toHaveText(en.variants.homeHeroes.line)
+        await expect(page.locator(".hh-meta")).toHaveText(en.variants.homeHeroes.meta)
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+        await context.close()
+      })
+    }
+
+    test(`${hero.path}: the hero's ghost is never the green one`, async ({ page }) => {
+      await page.goto(hero.path)
+      await expect(page.locator(".hh .ghost").first()).toBeAttached()
+      await expect(page.locator('.hh .ghost[data-tone="moss"]')).toHaveCount(0)
+    })
+  }
+
+  test("/home/hero-a sweeps left first, so Busy fills the frame within 2.5 seconds", async ({ page }) => {
+    await page.goto("/home/hero-a")
+    const split = () =>
+      page.locator(".reveal-frame").evaluate((frame) => Number.parseFloat(getComputedStyle(frame).getPropertyValue("--split")))
+    await expect.poll(split, { timeout: 2500 }).toBeLessThan(25)
+  })
+
+  test("/home/hero-a pins its labels to the divider and keeps its pause control in the frame's corner", async ({ page }) => {
+    await page.goto("/home/hero-a")
+    const slider = page.getByRole("slider", { name: en.demo.sliderLabel })
+    await slider.focus()
+    await slider.fill("50")
+    const frame = (await page.locator(".reveal-frame").boundingBox())!
+    const divider = (await page.locator(".reveal-divider").boundingBox())!
+    const you = (await page.locator(".reveal-pin-you").boundingBox())!
+    const work = (await page.locator(".reveal-pin-work").boundingBox())!
+    expect(divider.x - (you.x + you.width)).toBeGreaterThan(0)
+    expect(divider.x - (you.x + you.width)).toBeLessThan(16)
+    expect(work.x - (divider.x + divider.width)).toBeGreaterThan(0)
+    expect(work.x - (divider.x + divider.width)).toBeLessThan(16)
+    await expect(page.locator(".reveal-pin-you")).toHaveText(en.demo.youSee)
+    await expect(page.locator(".reveal-pin-work")).toHaveText(en.demo.workSees)
+    const pause = page.locator(".reveal-frame").getByRole("button", { name: en.motion.pause })
+    const button = (await pause.boundingBox())!
+    expect(button.height).toBeGreaterThanOrEqual(44)
+    expect(button.width).toBeGreaterThanOrEqual(44)
+    expect(button.y).toBeLessThanOrEqual(frame.y + 1)
+    expect(Math.min(frame.x + frame.width, 1280) - (button.x + button.width)).toBeLessThanOrEqual(1)
+  })
+
+  test("/home/hero-a's hint says to move a mouse, or to drag on a touch screen", async ({ browser }) => {
+    const desktop = await browser.newContext()
+    const page = await desktop.newPage()
+    await page.goto("/home/hero-a")
+    await expect(page.getByText(en.variants.homeHeroes.handleHint.mouse)).toBeVisible()
+    await expect(page.getByText(en.variants.homeHeroes.handleHint.touch)).toBeHidden()
+    await desktop.close()
+    const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
+    const phone = await touch.newPage()
+    await phone.goto("/home/hero-a")
+    await expect(phone.getByText(en.variants.homeHeroes.handleHint.touch)).toBeVisible()
+    await expect(phone.getByText(en.variants.homeHeroes.handleHint.mouse)).toBeHidden()
+    await touch.close()
   })
 })
