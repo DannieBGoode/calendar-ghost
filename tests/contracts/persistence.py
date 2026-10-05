@@ -472,8 +472,10 @@ class PersistenceContract:
 
         with harness.unit_of_work() as uow:
             assert not uow.accounts.authorized(ACCOUNT)
-            assert uow.accounts.clear_lapse(ACCOUNT)
-            assert not uow.accounts.clear_lapse(ACCOUNT)
+            # A lapse recorded after the provider accepted the account stands.
+            assert not uow.accounts.clear_lapse(ACCOUNT, recorded_before=NOW - timedelta(seconds=1))
+            assert uow.accounts.clear_lapse(ACCOUNT, recorded_before=NOW)
+            assert not uow.accounts.clear_lapse(ACCOUNT, recorded_before=NOW)
             uow.commit()
         with harness.unit_of_work() as uow:
             assert uow.accounts.authorized(ACCOUNT)

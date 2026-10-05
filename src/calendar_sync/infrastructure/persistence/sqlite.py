@@ -138,7 +138,7 @@ class SqliteConnectedAccountRecords:
             WHERE id = ? AND state = ? AND updated_at <= ?
             """,
             (
-                at.isoformat(),
+                at.astimezone(UTC).isoformat(),
                 account_id.value,
                 ConnectedAccountState.CONNECTED.value,
                 attempted_at.astimezone(UTC).isoformat(),
@@ -146,13 +146,13 @@ class SqliteConnectedAccountRecords:
         )
         return cursor.rowcount == 1
 
-    def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
+    def clear_lapse(self, account_id: ConnectedAccountId, *, recorded_before: datetime) -> bool:
         cursor = self._connection.execute(
             """
             UPDATE connected_accounts SET authorization_lapsed_at = NULL
-            WHERE id = ? AND authorization_lapsed_at IS NOT NULL
+            WHERE id = ? AND authorization_lapsed_at <= ?
             """,
-            (account_id.value,),
+            (account_id.value, recorded_before.astimezone(UTC).isoformat()),
         )
         return cursor.rowcount == 1
 

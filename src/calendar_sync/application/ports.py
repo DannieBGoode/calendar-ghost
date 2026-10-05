@@ -433,8 +433,12 @@ class ConnectedAccountRecords(Protocol):
         """
         ...
 
-    def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
-        """Clear the account's Lapsed Authorization; whether it had lapsed."""
+    def clear_lapse(self, account_id: ConnectedAccountId, *, recorded_before: datetime) -> bool:
+        """Clear a Lapsed Authorization recorded before `recorded_before`; whether it cleared one.
+
+        A lapse recorded later came from a refusal the provider gave after it accepted the
+        account, so it stands.
+        """
         ...
 
     def authorized(self, account_id: ConnectedAccountId) -> bool:

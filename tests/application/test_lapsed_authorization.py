@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
@@ -79,7 +79,7 @@ def test_restoring_access_resumes_only_rules_the_lapse_alone_stopped() -> None:
     unit_of_work.state.rules = {awaiting.id: awaiting, needs_preview.id: needs_preview}
     lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
 
-    resumed = lapses.restored(WORK)
+    resumed = lapses.restored(WORK, accepted_at=NOW)
 
     assert resumed == 1
     assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.ENABLED
@@ -97,10 +97,10 @@ def test_a_rule_waits_while_its_other_account_is_still_lapsed() -> None:
     lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
     lapses.lapsed(PERSONAL, replace(EXPIRED, account_id=PERSONAL), attempted_at=NOW)
 
-    assert lapses.restored(WORK) == 0
+    assert lapses.restored(WORK, accepted_at=NOW) == 0
     assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.DEGRADED
 
-    assert lapses.restored(PERSONAL) == 1
+    assert lapses.restored(PERSONAL, accepted_at=NOW) == 1
     assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.ENABLED
 
 
@@ -108,5 +108,20 @@ def test_restoring_an_account_that_never_lapsed_changes_no_rule() -> None:
     unit_of_work, _, lapses = _installation()
     unit_of_work.state.rules = {rule().id: rule()}
 
-    assert lapses.restored(WORK) == 0
+    assert lapses.restored(WORK, accepted_at=NOW) == 0
     assert unit_of_work.state.rules[rule().id] == rule()
+
+
+def test_a_refusal_after_the_provider_accepted_the_account_stands() -> None:
+    # Google accepted the account, then refused a later request before restoring ran.
+    unit_of_work, incidents, lapses = _installation()
+    awaiting = rule().degrade(awaiting_reauthorization=True)
+    unit_of_work.state.rules = {awaiting.id: awaiting}
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
+
+    resumed = lapses.restored(WORK, accepted_at=NOW - timedelta(seconds=1))
+
+    assert resumed == 0
+    assert unit_of_work.state.lapsed == {WORK: NOW}
+    assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.DEGRADED
+    assert incidents.resolved == []

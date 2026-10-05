@@ -1039,7 +1039,13 @@ def test_restoring_an_account_while_its_rule_is_being_stopped_leaves_the_rule_ru
         authorized = checked(self, account_id)
         if restoring:
             return authorized
-        restoring.append(Thread(target=health.lapses.restored, args=(work.id,)))
+        restoring.append(
+            Thread(
+                target=health.lapses.restored,
+                args=(work.id,),
+                kwargs={"accepted_at": datetime.now(UTC)},
+            )
+        )
         restoring[0].start()
         # Restoration clears the lapse at once, then waits for this rule's write lock.
         while _lapsed(store, work.id):

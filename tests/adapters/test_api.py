@@ -1043,7 +1043,13 @@ def test_reauthorizing_resumes_the_rules_lapsed_authorization_stopped(
         now = datetime.now(UTC)
         uow.accounts.lapse(work.id, now, attempted_at=now)
         uow.commit()
-    monkeypatch.setattr(_google(adapters), "complete", Mock(return_value=work))
+    # Completing consent saves the new credentials, as Google's callback does.
+    reauthorize = Mock(
+        side_effect=lambda *_: store.save(
+            "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+        )
+    )
+    monkeypatch.setattr(_google(adapters), "complete", reauthorize)
 
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/setup/admin", json=PASSWORD)

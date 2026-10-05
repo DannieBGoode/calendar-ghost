@@ -71,15 +71,20 @@ class LapsedAuthorizations:
             self.notifications.incident_opened(incident, now)
         return True
 
-    def restored(self, account_id: ConnectedAccountId) -> int:
-        """Clear the account's lapse and resume the rules it alone stopped; how many resumed.
+    def restored(self, account_id: ConnectedAccountId, *, accepted_at: datetime) -> int:
+        """The provider accepted the account at `accepted_at`: clear the lapse that superseded,
+        and resume the rules it alone stopped; how many resumed.
 
-        A rule whose other account still has no valid authorization stays stopped until that
-        account is restored too.
+        A lapse recorded later, from a refusal given after that acceptance, stands, and nothing
+        resumes. A rule whose other account still has no valid authorization stays stopped until
+        that account is restored too.
         """
         with self.unit_of_work() as uow:
-            uow.accounts.clear_lapse(account_id)
+            uow.accounts.clear_lapse(account_id, recorded_before=accepted_at)
+            authorized = uow.accounts.authorized(account_id)
             uow.commit()
+        if not authorized:
+            return 0
         with self.unit_of_work() as uow:
             # Every rule of the account, not only those already stopped: a run may stop one
             # until its write lock is released, and `_resume` decides under that lock.

@@ -97,8 +97,12 @@ class InMemoryConnectedAccountRecords:
         self._state.lapsed.setdefault(account_id, at)
         return True
 
-    def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
-        return self._state.lapsed.pop(account_id, None) is not None
+    def clear_lapse(self, account_id: ConnectedAccountId, *, recorded_before: datetime) -> bool:
+        lapsed = self._state.lapsed.get(account_id)
+        if lapsed is None or lapsed > recorded_before:
+            return False
+        del self._state.lapsed[account_id]
+        return True
 
     def authorized(self, account_id: ConnectedAccountId) -> bool:
         return (

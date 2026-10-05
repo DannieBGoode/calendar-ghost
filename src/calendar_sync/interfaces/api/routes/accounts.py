@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated, Protocol
 from urllib.parse import urlencode
 
@@ -134,7 +135,9 @@ def complete_google_oauth(
     except AuthorizationFailed:
         return RedirectResponse("/settings?google=authorization_failed", status_code=303)
     lapses = services.lapsed_authorizations
-    resumed = lapses.restored(account.id) if lapses is not None else 0
+    # Google accepted the account when its new credentials were saved.
+    accepted_at = datetime.fromisoformat(account.authorized_at or datetime.now(UTC).isoformat())
+    resumed = lapses.restored(account.id, accepted_at=accepted_at) if lapses is not None else 0
     query = urlencode({"google": "connected", "account": account.id.value, "resumed": resumed})
     return RedirectResponse(f"/settings?{query}", status_code=303)
 

@@ -94,7 +94,7 @@ class CheckAccountAccess:
                 )
                 self.lapses.lapsed(account_id, failure, attempted_at=started)
             raise
-        return AccessCheck(access, self.lapses.restored(account_id))
+        return AccessCheck(access, self.lapses.restored(account_id, accepted_at=started))
 
 
 @dataclass(slots=True)

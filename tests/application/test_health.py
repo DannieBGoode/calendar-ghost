@@ -301,7 +301,7 @@ class RestoredRightAfterLapsing(LapsedAuthorizations):
         self, account_id: ConnectedAccountId, failure: ProviderFailure, *, attempted_at: datetime
     ) -> bool:
         lapsed = super().lapsed(account_id, failure, attempted_at=attempted_at)
-        self.restored(account_id)
+        self.restored(account_id, accepted_at=self.clock.now())
         return lapsed
 
 
