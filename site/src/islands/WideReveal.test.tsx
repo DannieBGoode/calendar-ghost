@@ -68,6 +68,15 @@ describe("WideReveal", () => {
     expect(pinned).toContain(`<span class="sr-only">${en.motion.pause}</span>`)
   })
 
+  it("shows only the events a page picks, each still as work sees it", () => {
+    const html = renderToString(<WideReveal m={en.demo} motion={en.motion} events={["standup", "dentist", "gym"]} />)
+    expect(html.split(`>${en.demo.busy}<`).length - 1).toBe(2)
+    expect(html.split(`>${en.demo.events.standup.title}<`).length - 1).toBe(2)
+    expect(html.split(`>${en.demo.events.dentist.title}<`).length - 1).toBe(1)
+    expect(html).not.toContain(en.demo.events.clientCall.title)
+    expect(html).not.toContain(en.demo.events.recital.title)
+  })
+
   describe("in the browser", () => {
     let container: HTMLDivElement
     beforeEach(() => {
@@ -128,6 +137,20 @@ describe("WideReveal", () => {
 
       await act(async () => new Promise((resolve) => setTimeout(resolve, 500)))
       expect(ghost()).toBe("happy")
+      await act(async () => root.unmount())
+    })
+
+    it("remembers, with labels on the divider, that a visitor has taken hold of the ghost", async () => {
+      const root = createRoot(container)
+      const hint = { mouse: "Move over the week", touch: "Drag the ghost" }
+      await act(async () => root.render(<WideReveal m={en.demo} motion={en.motion} labels="divider" handleHint={hint} />))
+      const frame = container.querySelector<HTMLElement>(".reveal-frame")!
+      expect(frame.hasAttribute("data-touched")).toBe(false)
+      const slider = container.querySelector<HTMLInputElement>("input[type=range]")!
+      await act(async () => slider.focus())
+      await act(async () => slider.blur())
+      expect(frame.hasAttribute("data-held")).toBe(false)
+      expect(frame.hasAttribute("data-touched")).toBe(true)
       await act(async () => root.unmount())
     })
 

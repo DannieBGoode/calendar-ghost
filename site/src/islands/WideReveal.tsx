@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { eventBox } from "../demo/layout"
-import { SAM_WEEK } from "../demo/week"
+import { SAM_WEEK, type DemoEvent, type EventKey } from "../demo/week"
 import type { Messages } from "../i18n"
 import { format } from "../i18n/format"
 import { EventCard } from "./EventCard"
@@ -13,9 +13,9 @@ import { WeekGrid } from "./WeekGrid"
 const FRAME = { heightPx: 380, headerPx: 36, gapPx: 3 }
 const HANDLE_PX = 104
 
-/** Sam's week laid out in a week `heightPx` tall. */
-function placeWeek(heightPx: number) {
-  return SAM_WEEK.map((event) => ({ event, box: eventBox(event, { ...FRAME, heightPx }) }))
+/** Sam's week (or the part of it a page shows) laid out in a week `heightPx` tall. */
+function placeWeek(heightPx: number, week: readonly DemoEvent[] = SAM_WEEK) {
+  return week.map((event) => ({ event, box: eventBox(event, { ...FRAME, heightPx }) }))
 }
 const PLACED = placeWeek(FRAME.heightPx)
 
@@ -72,6 +72,8 @@ export interface WideRevealProps {
   labels?: "corners" | "divider"
   /** With `labels="divider"`, the hint under the handle: one for a mouse, one for touch. */
   handleHint?: { mouse: string; touch: string }
+  /** Which of Sam's events the week shows (default all of them), for a calmer week. */
+  events?: readonly EventKey[]
 }
 
 /** The hero: Sam's week as Sam sees it, revealed over what work sees, with the ghost as handle. */
@@ -87,15 +89,25 @@ export function WideReveal({
   sweep = {},
   labels = "corners",
   handleHint,
+  events,
 }: WideRevealProps) {
   const pinned = labels === "divider"
   const { rest = REVEAL_REST, direction, swing } = sweep
-  const placed = useMemo(() => (weekHeight === FRAME.heightPx ? PLACED : placeWeek(weekHeight)), [weekHeight])
+  const week = useMemo(() => (events ? SAM_WEEK.filter((event) => events.includes(event.key)) : SAM_WEEK), [events])
+  const placed = useMemo(
+    () => (weekHeight === FRAME.heightPx && week === SAM_WEEK ? PLACED : placeWeek(weekHeight, week)),
+    [weekHeight, week],
+  )
   // Each event's place on phones, by index, when the week there has its own height.
-  const phonePlaced = useMemo(() => (phoneWeekHeight ? placeWeek(phoneWeekHeight) : null), [phoneWeekHeight])
+  const phonePlaced = useMemo(() => (phoneWeekHeight ? placeWeek(phoneWeekHeight, week) : null), [phoneWeekHeight, week])
   const frame = useRef<HTMLDivElement>(null)
   const handle = useRef<HTMLDivElement>(null)
   const [held, setHeld] = useState<number | null>(null)
+  // Whether a visitor has taken hold of the ghost yet: a page may drop its hint for good then.
+  const [touched, setTouched] = useState(false)
+  useEffect(() => {
+    if (held !== null) setTouched(true)
+  }, [held])
   const [auto, setAuto] = useState(rest)
   const [phase, setPhase] = useState(() => sweepTimeFor(rest, { direction, swing }))
   const [paused, setPaused] = useState(false)
@@ -186,6 +198,7 @@ export function WideReveal({
         data-playing={paused ? "false" : "true"}
         data-labels={pinned ? "divider" : undefined}
         data-held={pinned && held !== null ? "" : undefined}
+        data-touched={pinned && touched ? "" : undefined}
         style={{ ...sizing, "--split": splitStyle(splitValue) } as CSSProperties}
       >
         {workLayer}

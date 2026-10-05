@@ -90,7 +90,7 @@
 .jc-card-busy b { font-size: 1.0625rem; line-height: 1.25; }
 
 /* Work's day, hour by hour, and the plan in its slot. */
-.jc-hours { position: relative; height: calc(var(--jh) * 4); }
+.jc-hours { position: relative; height: calc(var(--jh) * var(--jc-hours, 4)); }
 .jc-hour {
   display: block; height: var(--jh); padding-top: 0.2rem; border-top: 1px dashed var(--border);
   font-size: 0.6875rem; color: var(--muted-foreground);

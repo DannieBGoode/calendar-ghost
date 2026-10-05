@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { AvatarUrls } from "../../avatars"
 import type { Messages } from "../../i18n"
 import { iconMarkup, type IconName } from "../../icons"
@@ -40,15 +40,19 @@ function PartIcon({ part }: { part: Exclude<Part, "title"> }) {
   return <span className="jc-icon" dangerouslySetInnerHTML={{ __html: iconMarkup(PART_ICONS[part], "jc-icon-svg") }} />
 }
 
+/** The rows a plan's card can show under its title, in order. */
+export type CardRow = "time" | "place" | "description"
+const CARD_ROWS: readonly CardRow[] = ["time", "place", "description"]
+
 /** The plan as Sam's own calendar shows it: the card, then its guests and meeting link. */
-function PlanCard({ plan, when, busy }: { plan: PlanText; when: string; busy?: string }) {
+function PlanCard({ plan, when, busy, rows }: { plan: PlanText; when: string; busy?: string; rows: readonly CardRow[] }) {
   return (
     <>
       <div className="jc-card">
         <span className="jc-part jc-title" data-part="title">
           {plan.title}
         </span>
-        {(["time", "place", "description"] as const).map((part) => (
+        {rows.map((part) => (
           <span key={part} className="jc-part jc-row" data-part={part}>
             <PartIcon part={part} />
             <span>{part === "time" ? when : plan[part]}</span>
@@ -135,6 +139,11 @@ export function JourneyCrossing({
   avatars,
   compactToggle = false,
   firstRestMs = RUN.total - FIRST_MS,
+  once = false,
+  hours = WORK_HOURS,
+  rows = CARD_ROWS,
+  says = true,
+  peelStyle = "fly",
 }: {
   m: JourneyCrossingCopy
   plan: PlanText
@@ -143,6 +152,20 @@ export function JourneyCrossing({
   compactToggle?: boolean
   /** How long the landed state holds before the first run (default 2.8 seconds). */
   firstRestMs?: number
+  /**
+   * Play one run, then rest on the landed state (default: loop). A visitor's pointer coming over
+   * the crossing, a new choice, or the play control plays it again.
+   */
+  once?: boolean
+  /** The hours Work's day shows (default 13:00 to 17:00); the Dentist must fit between them. */
+  hours?: { from: number; to: number }
+  /** The rows under the plan's title (default time, place, and description). */
+  rows?: readonly CardRow[]
+  /** Whether the ghost says its lines in speech bubbles (default true). */
+  says?: boolean
+  /** How the parts that stay behind leave the ghost's copy: they fly home (default), or they
+   * fade where they are, for a calmer run. */
+  peelStyle?: "fly" | "fade"
 }) {
   const root = useRef<HTMLDivElement>(null)
   const source = useRef<HTMLDivElement>(null)
@@ -151,18 +174,28 @@ export function JourneyCrossing({
   const ghost = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<CrossingMode>("busy")
   const [paused, setPaused] = useState(false)
+  // With `once`, whether the run is over and the crossing rests on the landed state.
+  const [rested, setRested] = useState(false)
   const hydrated = useHydrated()
   const reducedMotion = useReducedMotion()
   const onScreen = useOnScreen(root)
   const pageVisible = usePageVisible()
-  const running = hydrated && !reducedMotion && onScreen && pageVisible && !paused
-  const stays = staysBehind(mode)
+  // The ghost idles (blinks) whenever it may move; the run itself plays only until it rests.
+  const live = hydrated && !reducedMotion && onScreen && pageVisible && !paused
+  const running = live && !rested
+  // A row the card does not show has nothing to peel off.
+  const stays = useMemo(() => {
+    const hidden: readonly Part[] = CARD_ROWS.filter((row) => !rows.includes(row))
+    return staysBehind(mode).filter((part) => !hidden.includes(part))
+  }, [mode, rows])
   const when = `${m.day} ${clock(DENTIST_TIME.start)}–${clock(DENTIST_TIME.end)}`
 
   // The run's clock survives pauses; `restart` marks that the ghost may be mid-air and should
   // fade in at its resting place instead of jumping there.
   const clockMs = useRef(RUN.total - firstRestMs)
   const restart = useRef(false)
+  // With `once`: whether the clock has started the run proper (it starts in the landed rest).
+  const lapped = useRef(false)
   const geometry = useRef<Geometry | null>(null)
   const touched = useRef(new Set<HTMLElement>())
 
@@ -252,6 +285,10 @@ export function JourneyCrossing({
       stays.forEach((part, index) => {
         const element = travelerEl.querySelector<HTMLElement>(`[data-part="${part}"]`)
         const flight = progress(ms, peelWindow(index))
+        if (peelStyle === "fade") {
+          style(element, "", 1 - easeInOut(flight))
+          return
+        }
         const eased = easeInOut(flight)
         const hop = Math.sin(Math.PI * flight)
         const turn = (index % 2 === 0 ? -1 : 1) * 12 * hop
@@ -295,7 +332,7 @@ export function JourneyCrossing({
       const wave = waving > 0 && waving < 1 ? Math.sin(waving * Math.PI * 6) * 11 * Math.sin(Math.PI * waving) : 0
       style(ghostEl.querySelector<HTMLElement>(".jc-ghost-wave"), wave ? `rotate(${wave}deg)` : "")
     },
-    [measure, stays, style],
+    [measure, stays, style, peelStyle],
   )
 
   // The run's loop: one frame at a time while it may play; it remembers where it stopped.
@@ -310,13 +347,31 @@ export function JourneyCrossing({
         clockMs.current = 0
         restart.current = false
         geometry.current = null
+        lapped.current = true
+      }
+      if (once && lapped.current && clockMs.current >= RUN.settle[1]) {
+        // One run is enough: rest on the landed state the page shows without JavaScript.
+        clear()
+        clockMs.current = FIRST_MS
+        lapped.current = false
+        setRested(true)
+        return
       }
       apply(clockMs.current)
       frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [running, apply])
+  }, [running, apply, clear, once])
+
+  /** With `once`: play the run again from the start. */
+  const replay = useCallback(() => {
+    clear()
+    restart.current = false
+    clockMs.current = 0
+    lapped.current = true
+    setRested(false)
+  }, [clear])
 
   // A new choice: with motion, the ghost goes to fetch the plan again now; paused or without
   // motion, the result simply shows.
@@ -336,6 +391,8 @@ export function JourneyCrossing({
     }
     restart.current = midRun
     clockMs.current = 0
+    lapped.current = true
+    setRested(false)
   }, [mode, clear])
 
   // Reduced motion, or a resize mid-run: back to the landed state, measured afresh next time.
@@ -353,11 +410,21 @@ export function JourneyCrossing({
     return () => window.removeEventListener("resize", onResize)
   }, [])
 
-  const hourRows = Array.from({ length: WORK_HOURS.to - WORK_HOURS.from }, (_, index) => WORK_HOURS.from + index)
-  const slot = { "--from": DENTIST_TIME.start - WORK_HOURS.from, "--span": DENTIST_TIME.end - DENTIST_TIME.start } as CSSProperties
+  const hourRows = Array.from({ length: hours.to - hours.from }, (_, index) => hours.from + index)
+  const slot = { "--from": DENTIST_TIME.start - hours.from, "--span": DENTIST_TIME.end - DENTIST_TIME.start } as CSSProperties
+  // Only another day length is written, so the default renders exactly as before.
+  const hoursStyle = hourRows.length === WORK_HOURS.to - WORK_HOURS.from ? undefined : ({ "--jc-hours": hourRows.length } as CSSProperties)
 
   return (
-    <div ref={root} className="jc" data-hydrated={hydrated ? "true" : "false"} data-playing={running ? "true" : "false"}>
+    <div
+      ref={root}
+      className="jc"
+      data-hydrated={hydrated ? "true" : "false"}
+      data-playing={live ? "true" : "false"}
+      onPointerEnter={() => {
+        if (once && rested && live) replay()
+      }}
+    >
       <div className="jc-controls">
         <fieldset className="jc-group jc-modes">
           <legend>{m.switchLabel}</legend>
@@ -371,7 +438,16 @@ export function JourneyCrossing({
           </div>
         </fieldset>
         <div className="jc-toggle">
-          <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={m.motion} compact={compactToggle} />
+          <MotionToggle
+            paused={paused}
+            onToggle={() => {
+              // Play after a pause also plays a run that has ended.
+              if (paused && rested) replay()
+              setPaused((value) => !value)
+            }}
+            m={m.motion}
+            compact={compactToggle}
+          />
         </div>
       </div>
 
@@ -387,7 +463,7 @@ export function JourneyCrossing({
           <span>{m.day}</span>
         </header>
         <div ref={source} className="jc-source">
-          <PlanCard plan={plan} when={when} />
+          <PlanCard plan={plan} when={when} rows={rows} />
         </div>
       </div>
 
@@ -401,7 +477,7 @@ export function JourneyCrossing({
           <b>{m.calendars.work}</b>
           <span>{m.day}</span>
         </header>
-        <div className="jc-hours">
+        <div className="jc-hours" style={hoursStyle}>
           {hourRows.map((hour) => (
             <span key={hour} className="jc-hour">
               {clock(hour)}
@@ -424,7 +500,7 @@ export function JourneyCrossing({
       </div>
 
       <div ref={traveler} className="jc-traveler" aria-hidden="true">
-        <PlanCard plan={plan} when={when} busy={mode === "busy" ? m.busy : undefined} />
+        <PlanCard plan={plan} when={when} busy={mode === "busy" ? m.busy : undefined} rows={rows} />
       </div>
 
       <div ref={ghost} className="jc-ghost" aria-hidden="true">
@@ -433,13 +509,17 @@ export function JourneyCrossing({
             <Ghost key={face} face={face} look={{ x: -1.3, y: 0.5 }} alive="loop" className={`jc-face jc-face-${face}`} />
           ))}
         </div>
-        <SpeechBubble side="right" className="jc-says jc-says-peel">
-          {m.peel}
-        </SpeechBubble>
-        <SpeechBubble side="left" className="jc-says jc-says-land">
-          <span data-mode="busy">{m.busySays}</span>
-          <span data-mode="details">{m.detailsSays}</span>
-        </SpeechBubble>
+        {says ? (
+          <>
+            <SpeechBubble side="right" className="jc-says jc-says-peel">
+              {m.peel}
+            </SpeechBubble>
+            <SpeechBubble side="left" className="jc-says jc-says-land">
+              <span data-mode="busy">{m.busySays}</span>
+              <span data-mode="details">{m.detailsSays}</span>
+            </SpeechBubble>
+          </>
+        ) : null}
       </div>
 
       <p className="sr-only">{m.summary}</p>

@@ -51,4 +51,30 @@ describe("JourneyCrossing before JavaScript runs", () => {
     expect(compact).toMatch(/class="motion-toggle is-compact" hidden=""/)
     expect(compact).toContain(`<span class="sr-only">${en.motion.pause}</span>`)
   })
+
+  it("shows Work from 13:00 to 17:00 and the full card unless a page asks for less", () => {
+    expect(html.match(/class="jc-hour"/g)).toHaveLength(4)
+    expect(html).not.toContain("--jc-hours")
+    expect(html).toContain(journeyDentist(en).description)
+    expect(html).toContain("speech-bubble")
+
+    const calm = renderToString(
+      <JourneyCrossing m={copy} plan={journeyDentist(en)} avatars={avatars} hours={{ from: 14, to: 17 }} rows={["time", "place"]} says={false} once />,
+    )
+    // Three hours around the Dentist (15:00 to 16:30), the slot an hour down from the top.
+    expect(calm.match(/class="jc-hour"/g)).toHaveLength(3)
+    expect(calm).toContain("--jc-hours:3")
+    expect(calm).toContain("--from:1;")
+    expect(calm).not.toContain(">13:00<")
+    // Sam's card keeps its time and place and drops the description (which still lands on Work
+    // with details, as Details Projection says); the ghost says nothing.
+    const card = calm.slice(calm.indexOf('class="jc-source"'), calm.indexOf('class="jc-cal jc-to"'))
+    expect(card).toContain("Mon 15:00–16:30")
+    expect(card).toContain(en.demo.events.dentist.detail)
+    expect(card).not.toContain(journeyDentist(en).description)
+    expect(calm).not.toContain("speech-bubble")
+    // The guest and the meeting link still hang under Sam's card.
+    expect(card).toContain(en.crossing.guests)
+    expect(card).toContain(en.crossing.link)
+  })
 })
