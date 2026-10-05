@@ -48,6 +48,8 @@ from calendar_sync.domain.model import (
 class MemoryState:
     accounts: dict[ConnectedAccountId, ConnectedAccountState] = field(default_factory=dict)
     lapsed: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
+    authorized_at: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
+    """When each account was last authorized; one missing was authorized before any request."""
     rules: dict[SyncRuleId, SyncRule] = field(default_factory=dict)
     mappings: dict[tuple[SyncRuleId, EventRef], EventMapping] = field(default_factory=dict)
     occurrences: dict[tuple[EventMappingId, OccurrenceStart], OccurrenceMapping] = field(
@@ -84,13 +86,15 @@ class InMemoryConnectedAccountRecords:
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None:
         return self._state.accounts.get(account_id)
 
-    def lapse(self, account_id: ConnectedAccountId, at: datetime) -> bool:
-        if (
-            self._state.accounts.get(account_id) is not ConnectedAccountState.CONNECTED
-            or account_id in self._state.lapsed
-        ):
+    def lapse(
+        self, account_id: ConnectedAccountId, at: datetime, *, attempted_at: datetime
+    ) -> bool:
+        if self._state.accounts.get(account_id) is not ConnectedAccountState.CONNECTED:
             return False
-        self._state.lapsed[account_id] = at
+        authorized = self._state.authorized_at.get(account_id)
+        if authorized is not None and authorized > attempted_at:
+            return False
+        self._state.lapsed.setdefault(account_id, at)
         return True
 
     def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
@@ -107,6 +111,7 @@ class InMemoryConnectedAccountRecords:
             return False
         del self._state.accounts[account_id]
         self._state.lapsed.pop(account_id, None)
+        self._state.authorized_at.pop(account_id, None)
         self._state.calendar_names = {
             endpoint: name
             for endpoint, name in self._state.calendar_names.items()

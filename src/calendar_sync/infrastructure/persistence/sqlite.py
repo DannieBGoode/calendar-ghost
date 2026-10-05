@@ -124,15 +124,27 @@ class SqliteConnectedAccountRecords:
         ).fetchone()
         return ConnectedAccountState(str(row["state"])) if row else None
 
-    def lapse(self, account_id: ConnectedAccountId, at: datetime) -> bool:
-        cursor = self._connection.execute(
+    def lapse(
+        self, account_id: ConnectedAccountId, at: datetime, *, attempted_at: datetime
+    ) -> bool:
+        row = self._connection.execute(
             """
-            UPDATE connected_accounts SET authorization_lapsed_at = ?
-            WHERE id = ? AND state = ? AND authorization_lapsed_at IS NULL
+            SELECT state, updated_at, authorization_lapsed_at FROM connected_accounts WHERE id = ?
             """,
-            (at.isoformat(), account_id.value, ConnectedAccountState.CONNECTED.value),
-        )
-        return cursor.rowcount == 1
+            (account_id.value,),
+        ).fetchone()
+        if row is None or str(row["state"]) != ConnectedAccountState.CONNECTED.value:
+            return False
+        # A connected account's last update is when it was last authorized.
+        authorized = datetime.fromisoformat(str(row["updated_at"]))
+        if authorized.replace(tzinfo=authorized.tzinfo or UTC) > attempted_at:
+            return False
+        if row["authorization_lapsed_at"] is None:
+            self._connection.execute(
+                "UPDATE connected_accounts SET authorization_lapsed_at = ? WHERE id = ?",
+                (at.isoformat(), account_id.value),
+            )
+        return True
 
     def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
         cursor = self._connection.execute(
@@ -160,7 +172,14 @@ class SqliteConnectedAccountRecords:
             "DELETE FROM connected_accounts WHERE id = ? AND state = ?",
             (account_id.value, ConnectedAccountState.DISCONNECTED.value),
         )
-        return cursor.rowcount == 1
+        if cursor.rowcount != 1:
+            return False
+        # The account's own Incidents, such as its Lapsed Authorization, go with it; its rules
+        # take theirs when they are purged.
+        self._connection.execute(
+            "DELETE FROM incidents WHERE account_id = ? AND rule_id IS NULL", (account_id.value,)
+        )
+        return True
 
 
 class SqliteSyncRuleRepository:

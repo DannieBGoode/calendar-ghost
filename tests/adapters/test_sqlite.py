@@ -981,6 +981,82 @@ def test_migration_20_lapses_accounts_an_open_authorization_incident_names(
         connection.execute("UPDATE incidents SET resolution = 'access_restored' WHERE id = 'i-4'")
 
 
+def test_migration_20_leaves_rules_that_need_a_preview_for_other_reasons(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    gone = store.save("Old", "old@example.test", "{}", provider=ProviderKind.GOOGLE)
+    store.disconnect(gone.id)
+    degraded = rule(state=SyncRuleState.DEGRADED)
+    # Changed materially after authorization stopped it, and one using a disconnected account.
+    changed = replace(
+        degraded,
+        id=SyncRuleId("changed"),
+        source=endpoint(work.id.value, "work"),
+        reprojection_required=True,
+    )
+    orphaned = replace(
+        degraded,
+        id=SyncRuleId("orphaned"),
+        source=endpoint(work.id.value, "work"),
+        destination=endpoint(gone.id.value, "old"),
+    )
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.add(changed)
+        uow.rules.add(orphaned)
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE connected_accounts DROP COLUMN authorization_lapsed_at")
+        connection.execute("ALTER TABLE sync_rules DROP COLUMN awaiting_reauthorization")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 20")
+        connection.executemany(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, account_id, category, state,
+                summary, opened_at, updated_at)
+            VALUES (?, ?, ?, ?, 'authentication', 'open', 's', ?, ?)
+            """,
+            [
+                (f"i-{name}", f"provider:{name}", name, work.id.value, "9999", "9999")
+                for name in ("changed", "orphaned")
+            ],
+        )
+
+    initialize_database(database)
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        assert not any(rule.awaiting_reauthorization for rule in uow.rules.list())
+
+
+def test_deleting_a_disconnected_account_deletes_its_own_incidents(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    lapsed = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    other = store.save("Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE)
+    with sqlite3.connect(database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, account_id, category, state,
+                summary, opened_at, updated_at)
+            VALUES (?, ?, NULL, ?, 'authentication', 'open', 's', 't', 't')
+            """,
+            [
+                (f"i-{account.id.value}", f"authorization:{account.id.value}", account.id.value)
+                for account in (lapsed, other)
+            ],
+        )
+    store.disconnect(lapsed.id)
+
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        assert uow.accounts.delete_disconnected(lapsed.id)
+        uow.commit()
+
+    with sqlite3.connect(database) as connection:
+        kept = connection.execute("SELECT account_id FROM incidents").fetchall()
+    assert kept == [(other.id.value,)]
+
+
 def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)

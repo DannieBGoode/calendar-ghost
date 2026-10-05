@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from calendar_sync.application.errors import ProviderFailure
 from calendar_sync.application.locking import RuleLocks
@@ -51,15 +52,24 @@ class LapsedAuthorizations:
     locks: RuleLocks = field(default_factory=RuleLocks)
     notifications: IncidentNotifications | None = None
 
-    def lapsed(self, account_id: ConnectedAccountId, failure: ProviderFailure) -> None:
-        """Record that the provider refused the account's credentials, opening its Incident."""
+    def lapsed(
+        self, account_id: ConnectedAccountId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> bool:
+        """Record that the provider refused a request made at `attempted_at`; whether it lapsed.
+
+        A request begun before the account's latest Reauthorization used credentials that were
+        since replaced, so its refusal lapses nothing and opens no Incident.
+        """
         now = self.clock.now()
         with self.unit_of_work() as uow:
-            uow.accounts.lapse(account_id, now)
+            lapsed = uow.accounts.lapse(account_id, now, attempted_at=attempted_at)
             uow.commit()
+        if not lapsed:
+            return False
         incident = lapse_incident(account_id, failure)
         if self.incidents.open(incident, now) and self.notifications is not None:
             self.notifications.incident_opened(incident, now)
+        return True
 
     def restored(self, account_id: ConnectedAccountId) -> int:
         """Clear the account's lapse and resume the rules it alone stopped; how many resumed.

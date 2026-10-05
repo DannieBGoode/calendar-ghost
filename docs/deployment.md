@@ -152,7 +152,8 @@ Migration 20 records Lapsed Authorization
 `sync_rules`, and replaces the `incidents.resolution` column, keeping its values, so it also
 accepts `access_restored`. On upgrade, a connected account that an open authorization Incident names
 and that was not reauthorized since is marked lapsed, and degraded rules that such an Incident
-stopped are marked to resume with it. Rolling back works with the same database: earlier releases
+stopped are marked to resume with it, unless the rule was changed materially since or uses a
+disconnected account; those still need a recovery preview. Rolling back works with the same database: earlier releases
 ignore the new columns, so lapsed accounts show as connected again and their rules need a recovery
 preview. An earlier release cannot read an Incident resolved as `access_restored`, so Activity's
 incident list fails until those Incidents are removed with their rules or accounts, or the

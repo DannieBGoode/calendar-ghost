@@ -131,7 +131,9 @@ class RunHealth(Protocol):
         full_pass_run: str | None = None,
     ) -> None: ...
 
-    def record_failure(self, rule: SyncRule, failure: ProviderFailure) -> None: ...
+    def record_failure(
+        self, rule: SyncRule, failure: ProviderFailure, *, attempted_at: datetime | None = None
+    ) -> None: ...
 
 
 @dataclass(slots=True)
@@ -201,27 +203,37 @@ class RuleHealth:
             return None
         return (incident, now) if self.incidents.open(incident, now) else None
 
-    def record_failure(self, rule: SyncRule, failure: ProviderFailure) -> None:
+    def record_failure(
+        self, rule: SyncRule, failure: ProviderFailure, *, attempted_at: datetime | None = None
+    ) -> None:
+        """Record a failed run that began at `attempted_at`, or just now when not given."""
         now = self.clock.now()
         consecutive = self.records.record_failure(rule.id, failure.kind, now)
         response = self.policy.after_failure(rule.id, failure, consecutive)
+        if response.lapsed is not None and not self.lapses.lapsed(
+            response.lapsed, failure, attempted_at=attempted_at or now
+        ):
+            # Reauthorized while the run was in flight; its refusal stops nothing.
+            return
         if response.degrade:
             self._degrade(rule, awaiting_reauthorization=response.lapsed is not None)
-        if response.lapsed is not None:
-            self.lapses.lapsed(response.lapsed, failure)
         if response.incident is not None and self.incidents.open(response.incident, now):
             self._notify(response.incident, now)
 
-    def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+    def removal_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
         """Open or refresh the one Incident for a removal stopped by lost authorization."""
         now = self.clock.now()
         incident = self.policy.removal_blocked(rule_id, failure)
         if self.incidents.open(incident, now):
             self._notify(incident, now)
         if failure.account_id is not None:
-            self.lapses.lapsed(failure.account_id, failure)
+            self.lapses.lapsed(failure.account_id, failure, attempted_at=attempted_at)
 
-    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+    def recovery_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
         """Record the lost authorization a preview met.
 
         A rule whose calendars belong to two accounts can stop on the first and meet the second
@@ -229,7 +241,7 @@ class RuleHealth:
         account, the rule's own Incident names the failure instead.
         """
         if failure.account_id is not None:
-            self.lapses.lapsed(failure.account_id, failure)
+            self.lapses.lapsed(failure.account_id, failure, attempted_at=attempted_at)
             return
         now = self.clock.now()
         incident = self.policy.provider_incident(rule_id, failure)

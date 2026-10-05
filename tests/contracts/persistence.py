@@ -460,14 +460,14 @@ class PersistenceContract:
             assert uow.accounts.state(ACCOUNT) is None
             assert not uow.accounts.delete_disconnected(ACCOUNT)
 
-    def test_a_connected_account_lapses_once_until_its_lapse_clears(
+    def test_a_connected_account_stays_lapsed_until_its_lapse_clears(
         self, harness: PersistenceHarness
     ) -> None:
         harness.connect_account(ACCOUNT)
         with harness.unit_of_work() as uow:
             assert uow.accounts.authorized(ACCOUNT)
-            assert uow.accounts.lapse(ACCOUNT, NOW)
-            assert not uow.accounts.lapse(ACCOUNT, NOW)
+            assert uow.accounts.lapse(ACCOUNT, NOW, attempted_at=NOW)
+            assert uow.accounts.lapse(ACCOUNT, NOW, attempted_at=NOW)
             uow.commit()
 
         with harness.unit_of_work() as uow:
@@ -478,13 +478,24 @@ class PersistenceContract:
         with harness.unit_of_work() as uow:
             assert uow.accounts.authorized(ACCOUNT)
 
+    def test_a_request_made_before_the_last_authorization_lapses_nothing(
+        self, harness: PersistenceHarness
+    ) -> None:
+        # The account was authorized at NOW; this request used the credentials it replaced.
+        harness.connect_account(ACCOUNT)
+        with harness.unit_of_work() as uow:
+            assert not uow.accounts.lapse(ACCOUNT, NOW, attempted_at=NOW - timedelta(minutes=1))
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.authorized(ACCOUNT)
+
     def test_only_a_connected_account_lapses(self, harness: PersistenceHarness) -> None:
         missing = ConnectedAccountId("missing")
         harness.connect_account(ACCOUNT)
         harness.disconnect_account(ACCOUNT)
         with harness.unit_of_work() as uow:
-            assert not uow.accounts.lapse(ACCOUNT, NOW)
-            assert not uow.accounts.lapse(missing, NOW)
+            assert not uow.accounts.lapse(ACCOUNT, NOW, attempted_at=NOW)
+            assert not uow.accounts.lapse(missing, NOW, attempted_at=NOW)
             assert not uow.accounts.authorized(ACCOUNT)
             assert not uow.accounts.authorized(missing)
 

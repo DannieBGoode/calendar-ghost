@@ -100,7 +100,9 @@ class RecoveryIncidents:
     def __init__(self) -> None:
         self.blocked: list[tuple[SyncRuleId, ProviderFailure]] = []
 
-    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+    def recovery_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
         self.blocked.append((rule_id, failure))
 
 

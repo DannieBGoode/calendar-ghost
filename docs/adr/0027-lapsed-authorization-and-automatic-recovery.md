@@ -18,7 +18,9 @@ write consequences of a configuration. An expired grant changes neither.
   account, set by any provider request refused for authentication or authorization (a sync run, a
   preview, an access check), and cleared by Reauthorization or by an access check the provider
   accepts. A false 401 during a provider outage therefore needs no OAuth round trip, while a
-  refresh token the provider revoked can never pass a check. It is separate from the
+  refresh token the provider revoked can never pass a check. A refusal of a request that began
+  before the account's latest authorization used replaced credentials, so it lapses nothing and
+  stops no rule. It is separate from the
   connected or disconnected state: the credentials stay stored and the rules keep their mappings
   and incremental positions. Settings, Rules, the Overview, Installation Status, and MCP read this
   one fact to choose the next step, which is "Reauthorize account" for the account that lapsed.
@@ -55,4 +57,5 @@ check can restart rules, and its result says how many. `docs/domain-model.md` an
 describe the recovery preview as the only way back and change with the implementation. An Incident
 for Lapsed Authorization names no rule, so Incident Notifications may carry a null `rule_id`.
 Migration 20 marks accounts and rules that an open authorization Incident already stopped, so an
-upgraded installation shows the account to reauthorize at once.
+upgraded installation shows the account to reauthorize at once. Deleting a Disconnected Account
+deletes its own Incidents with it, as its rules' Incidents go with the rules.

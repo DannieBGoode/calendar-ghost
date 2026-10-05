@@ -127,7 +127,9 @@ class RemoveSyncRule:
                     conflicts += 1
                 except ProviderFailure as failure:
                     if failure.requires_authorization and self.incidents is not None:
-                        self.incidents.removal_blocked(rule.id, failure)
+                        self.incidents.removal_blocked(
+                            rule.id, failure, attempted_at=work.started_at
+                        )
                     raise RemovalInterrupted(
                         deleted + conflicts, len(mappings) - deleted - conflicts, failure
                     ) from failure

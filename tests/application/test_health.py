@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -232,7 +232,7 @@ def test_recovery_lapses_the_account_still_unauthorized() -> None:
     health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
     failure = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
 
-    health.recovery_blocked(RULE, failure)
+    health.recovery_blocked(RULE, failure, attempted_at=NOW)
 
     assert unit_of_work.state.lapsed == {ACCOUNT: NOW}
     assert incidents.events == [("open", "authorization:work-account", NOW)]
@@ -248,7 +248,7 @@ def test_recovery_without_the_account_refreshes_the_rules_incident() -> None:
     incidents.open_keys.add("provider:rule-1")
     health = RuleHealth(unit_of_work, records, incidents, FixedClock())
 
-    health.recovery_blocked(RULE, _failure(ProviderFailureKind.AUTHENTICATION))
+    health.recovery_blocked(RULE, _failure(ProviderFailureKind.AUTHENTICATION), attempted_at=NOW)
 
     assert incidents.events == [("open", "provider:rule-1", NOW)]
     assert unit_of_work.state.lapsed == {}
@@ -271,6 +271,26 @@ def test_a_refused_account_stops_its_rule_until_reauthorization() -> None:
     assert [event[1] for event in incidents.events] == ["authorization:work-account"] * 2
     # One notification for the account, however many times its rules fail.
     assert len(notifications.opened) == 1
+
+
+def test_a_refusal_of_credentials_reauthorization_replaced_stops_nothing() -> None:
+    # The run began with the old credentials; the account was reauthorized before it failed.
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule()
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    unit_of_work.state.authorized_at[ACCOUNT] = NOW
+    incidents, notifications = Incidents(), Notifications()
+    health = RuleHealth(
+        unit_of_work, Records(), incidents, FixedClock(), notifications=notifications
+    )
+    expired = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
+
+    health.record_failure(rule(), expired, attempted_at=NOW - timedelta(minutes=1))
+
+    assert unit_of_work.state.rules[RULE].state is SyncRuleState.ENABLED
+    assert unit_of_work.state.lapsed == {}
+    assert incidents.events == []
+    assert notifications.opened == []
 
 
 def test_a_permanent_failure_stops_its_rule_for_a_preview() -> None:

@@ -82,6 +82,7 @@ class CheckAccountAccess:
     lapses: LapsedAuthorizations
 
     def execute(self, account_id: ConnectedAccountId) -> AccessCheck:
+        started = self.lapses.clock.now()
         try:
             access = self.calendars.verify_access(account_id)
         except AccountAccessCheckFailed as error:
@@ -91,7 +92,7 @@ class CheckAccountAccess:
                 failure = ProviderFailure(
                     error.kind, str(error), account_id=account_id, provider=provider
                 )
-                self.lapses.lapsed(account_id, failure)
+                self.lapses.lapsed(account_id, failure, attempted_at=started)
             raise
         return AccessCheck(access, self.lapses.restored(account_id))
 

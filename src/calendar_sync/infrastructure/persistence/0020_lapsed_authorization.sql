@@ -22,13 +22,23 @@ WHERE state = 'connected' AND EXISTS (
 );
 
 -- Rules such an Incident stopped resume with their accounts, as rules stopped from now on do.
+-- A rule changed materially since, or one with a disconnected account, still needs a preview.
 UPDATE sync_rules SET awaiting_reauthorization = 1
-WHERE state = 'degraded' AND id IN (
-    SELECT rule_id FROM incidents
-    WHERE state = 'open'
-        AND deduplication_key LIKE 'provider:%'
-        AND category IN ('authentication', 'authorization')
-);
+WHERE state = 'degraded'
+    AND reprojection_required = 0
+    AND NOT EXISTS (
+        SELECT 1 FROM connected_accounts
+        WHERE connected_accounts.id IN (
+                sync_rules.source_account_id, sync_rules.destination_account_id
+            )
+            AND connected_accounts.state != 'connected'
+    )
+    AND id IN (
+        SELECT rule_id FROM incidents
+        WHERE state = 'open'
+            AND deduplication_key LIKE 'provider:%'
+            AND category IN ('authentication', 'authorization')
+    );
 
 -- An Incident for Lapsed Authorization resolves when access is restored. SQLite cannot change the
 -- CHECK constraint migration 12 put on `resolution`, so the column is replaced with its values.

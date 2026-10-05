@@ -25,6 +25,7 @@ class TestInMemoryUnitOfWork(PersistenceContract):
 
         def connect(account_id: ConnectedAccountId) -> None:
             factory.state.accounts[account_id] = ConnectedAccountState.CONNECTED
+            factory.state.authorized_at[account_id] = NOW
 
         def disconnect(account_id: ConnectedAccountId) -> None:
             factory.state.accounts[account_id] = ConnectedAccountState.DISCONNECTED

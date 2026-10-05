@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -492,7 +492,9 @@ class Incidents:
     def __init__(self) -> None:
         self.blocked: list[tuple[SyncRuleId, ProviderFailureKind]] = []
 
-    def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+    def removal_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
         self.blocked.append((rule_id, failure.kind))
 
 

@@ -47,7 +47,7 @@ def _installation() -> tuple[InMemoryUnitOfWorkFactory, Incidents, LapsedAuthori
 def test_a_lapse_marks_the_account_and_opens_one_incident_for_it() -> None:
     unit_of_work, incidents, lapses = _installation()
 
-    lapses.lapsed(WORK, EXPIRED)
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
 
     assert unit_of_work.state.lapsed == {WORK: NOW}
     (incident,) = incidents.opened
@@ -65,7 +65,7 @@ def test_a_disconnected_account_does_not_lapse() -> None:
     unit_of_work, _, lapses = _installation()
     unit_of_work.state.accounts[WORK] = ConnectedAccountState.DISCONNECTED
 
-    lapses.lapsed(WORK, EXPIRED)
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
 
     assert unit_of_work.state.lapsed == {}
 
@@ -77,7 +77,7 @@ def test_restoring_access_resumes_only_rules_the_lapse_alone_stopped() -> None:
         rule().degrade(), id=SyncRuleId("rule-2"), source=endpoint("personal-account", "other")
     )
     unit_of_work.state.rules = {awaiting.id: awaiting, needs_preview.id: needs_preview}
-    lapses.lapsed(WORK, EXPIRED)
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
 
     resumed = lapses.restored(WORK)
 
@@ -94,8 +94,8 @@ def test_a_rule_waits_while_its_other_account_is_still_lapsed() -> None:
     unit_of_work, _, lapses = _installation()
     awaiting = rule().degrade(awaiting_reauthorization=True)
     unit_of_work.state.rules = {awaiting.id: awaiting}
-    lapses.lapsed(WORK, EXPIRED)
-    lapses.lapsed(PERSONAL, replace(EXPIRED, account_id=PERSONAL))
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
+    lapses.lapsed(PERSONAL, replace(EXPIRED, account_id=PERSONAL), attempted_at=NOW)
 
     assert lapses.restored(WORK) == 0
     assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.DEGRADED

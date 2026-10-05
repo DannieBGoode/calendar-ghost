@@ -423,8 +423,14 @@ class ConnectedAccountRecords(Protocol):
 
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None: ...
 
-    def lapse(self, account_id: ConnectedAccountId, at: datetime) -> bool:
-        """Record Lapsed Authorization on a connected account; whether it newly lapsed."""
+    def lapse(
+        self, account_id: ConnectedAccountId, at: datetime, *, attempted_at: datetime
+    ) -> bool:
+        """Record Lapsed Authorization for a request refused at `attempted_at`; whether it lapsed.
+
+        True when the connected account is lapsed now, newly or already. A request made before the
+        account was last authorized used superseded credentials, so its refusal lapses nothing.
+        """
         ...
 
     def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
@@ -668,13 +674,17 @@ class RuleHealthRecords(Protocol):
 
 
 class RemovalIncidents(Protocol):
-    def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+    def removal_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
         """Open or refresh the one Incident for a removal stopped by lost authorization."""
         ...
 
 
 class RecoveryIncidents(Protocol):
-    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+    def recovery_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
         """Record the lost authorization a preview met, lapsing the account it names."""
         ...
 

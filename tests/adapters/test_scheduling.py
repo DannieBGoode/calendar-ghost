@@ -95,7 +95,9 @@ class RecordingHealth:
     def audit_floor(self) -> int:
         return 0
 
-    def record_failure(self, _rule: object, failure: ProviderFailure) -> None:
+    def record_failure(
+        self, _rule: object, failure: ProviderFailure, *, attempted_at: datetime | None = None
+    ) -> None:
         self.failures.append(failure)
 
 
@@ -306,8 +308,8 @@ def test_blocked_removal_opens_one_incident_that_completed_removal_resolves(
     health = _rule_health(database, unit_of_work, IncidentNotifier([channel]))
     failure = ProviderFailure(ProviderFailureKind.AUTHORIZATION, "synthetic denial")
 
-    health.removal_blocked(rule().id, failure)
-    health.removal_blocked(rule().id, failure)
+    health.removal_blocked(rule().id, failure, attempted_at=datetime.now(UTC))
+    health.removal_blocked(rule().id, failure, attempted_at=datetime.now(UTC))
 
     with sqlite3.connect(database) as connection:
         incidents = connection.execute(

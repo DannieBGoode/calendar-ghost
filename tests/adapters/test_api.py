@@ -1040,7 +1040,8 @@ def test_reauthorizing_resumes_the_rules_lapsed_authorization_stopped(
     ).degrade(awaiting_reauthorization=True)
     with adapters.unit_of_work() as uow:
         uow.rules.add(stopped)
-        uow.accounts.lapse(work.id, datetime(2026, 9, 29, 9, 0, tzinfo=UTC))
+        now = datetime.now(UTC)
+        uow.accounts.lapse(work.id, now, attempted_at=now)
         uow.commit()
     monkeypatch.setattr(_google(adapters), "complete", Mock(return_value=work))
 
