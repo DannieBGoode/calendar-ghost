@@ -5,13 +5,17 @@ interface Step {
   body: string
 }
 
-/** One row of the Activity mockup: when, which event, what the source showed, what was done. */
+/** One row of the Activity mockup: one event, what Calendar Ghost did about it, and why. */
 interface ActivityRow {
-  time: string
+  /** What Calendar Ghost did, in plain words, first: "Added to Work". */
+  outcome: string
+  /** What the source calendar showed, the reason: "New in Personal". */
+  trigger: string
+  /** The event, and when it happens. */
   title: string
   when: string
-  trigger: string
-  effect: string
+  /** When the sync made the decision. */
+  time: string
 }
 
 // Every user-visible word on the site. A new language copies this module and
@@ -144,7 +148,7 @@ export const en = {
       activity: {
         screen: "Activity",
         title: "Activity log",
-        body: "One line per event: what the source calendar showed, then what Calendar Ghost did about it.",
+        body: "One line per event: what Calendar Ghost did, and why.",
       },
       health: {
         screen: "Overview",
@@ -173,30 +177,16 @@ export const en = {
       ],
     },
     activity: {
-      alt: "Calendar Ghost Activity: what happened to three events, and why",
+      alt: "Calendar Ghost Activity: what happened to five of Sam's events, and why",
+      /** Sam's week (demo/week.ts), plus two evening events the week does not show. The words
+       * follow the app's Activity (web/src/lib/activity-reasons.ts), outcome first. */
       rows: [
-        {
-          time: "7:01 PM",
-          title: "Dentist appointment",
-          when: "Mon, Oct 5, 1:00 PM – 2:00 PM",
-          trigger: "Not answered yet",
-          effect: "skipped",
-        },
-        {
-          time: "7:01 PM",
-          title: "School pickup",
-          when: "Tue, Oct 6, 5:00 PM – 6:00 PM",
-          trigger: "Declined",
-          effect: "removed from Work",
-        },
-        {
-          time: "7:01 PM",
-          title: "PTA meeting",
-          when: "Sun, Oct 11, 8:00 PM – 9:00 PM",
-          trigger: "Your response changed in Personal",
-          effect: "updated in Work",
-        },
-      ] as [ActivityRow, ActivityRow, ActivityRow],
+        { outcome: "Added to Work", trigger: "New in Personal", title: "Dentist", when: "Mon 15:00–16:30", time: "09:41" },
+        { outcome: "Updated in Work", trigger: "Moved from 11:00 in Personal", title: "Gym", when: "Tue 12:00–13:00", time: "09:41" },
+        { outcome: "Added to Work", trigger: "New in Family", title: "School drop-off", when: "Wed 09:00–10:00", time: "09:36" },
+        { outcome: "Removed from Work", trigger: "Cancelled in Personal", title: "Haircut", when: "Thu 17:30–18:00", time: "09:31" },
+        { outcome: "Skipped", trigger: "Declined", title: "Book club", when: "Thu 19:00–20:30", time: "09:31" },
+      ] as [ActivityRow, ActivityRow, ActivityRow, ActivityRow, ActivityRow],
     },
   },
   trust: {

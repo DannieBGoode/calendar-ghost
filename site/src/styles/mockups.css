@@ -87,30 +87,35 @@
   .mock-badge { grid-column: 1; grid-row: 3; justify-self: start; }
 }
 
-/* Activity history. */
-.mock-activity { padding: 0.25rem 1.25rem; }
+/* Activity: one event per row. The outcome leads, with its sign, and the reason beside it; the
+   event follows; the rule (two portraits) and the time sit quietly on the right. */
+.mock-activity { padding: 0.35rem clamp(1rem, 4cqi, 1.5rem); }
 .mock-act {
-  display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 1.15fr) auto; gap: 0.35rem 1rem;
-  align-items: start; padding: 0.95rem 0; font-size: 0.875rem; line-height: 1.4;
+  display: grid; grid-template-columns: 2rem auto minmax(0, 1fr) auto; column-gap: 0.85rem; row-gap: 0.2rem;
+  grid-template-areas: "sign outcome trigger rule" "sign event event time";
+  align-items: baseline; padding: 0.9rem 0; line-height: 1.35;
 }
 .mock-act + .mock-act { border-top: 1px solid var(--border); }
-.mock-act-time { color: var(--muted-foreground); font-size: 0.8125rem; padding-top: 0.05rem; }
-.mock-act-event { display: grid; }
-.mock-act-event b { font-weight: 650; }
-.mock-act-event small { color: var(--muted-foreground); font-size: 0.8125rem; }
-.mock-act-happened { display: flex; align-items: flex-start; gap: 0.45rem; }
-.mock-act-happened[data-tone="quiet"] { color: var(--muted-foreground); }
-.mock-sign {
-  display: inline-grid; place-items: center; flex: none; width: 1.125rem; height: 1.125rem; margin-top: 0.05rem;
-  border-radius: 50%; background: var(--success-soft); color: var(--success-foreground);
+.mock-act-sign {
+  grid-area: sign; align-self: start; display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%;
+  background: var(--success-soft); color: var(--success-foreground);
 }
-.mock-act-happened[data-tone="quiet"] .mock-sign { background: var(--muted); color: var(--muted-foreground); }
-.mock-sign .mock-icon { width: 0.7rem; height: 0.7rem; stroke-width: 3; }
-.mock-act-rule { display: inline-flex; align-items: center; white-space: nowrap; color: var(--muted-foreground); font-size: 0.8125rem; }
-.mock-act-rule .mock-arrow { margin-inline: 0.25rem; }
-@container (max-width: 34rem) {
-  .mock-act { grid-template-columns: minmax(0, 1fr) auto; }
-  .mock-act-time { grid-column: 1; grid-row: 1; }
-  .mock-act-rule { grid-column: 2; grid-row: 1; }
-  .mock-act-event, .mock-act-happened { grid-column: 1 / -1; }
+.mock-act[data-mark="skipped"] .mock-act-sign { background: var(--muted); color: var(--muted-foreground); }
+.mock-act-sign .mock-icon { width: 1rem; height: 1rem; stroke-width: 2.75; }
+.mock-act-outcome { grid-area: outcome; font-size: 0.9375rem; font-weight: 700; white-space: nowrap; }
+.mock-act[data-mark="skipped"] .mock-act-outcome { font-weight: 650; color: var(--muted-foreground); }
+.mock-act-trigger { grid-area: trigger; min-width: 0; margin-left: -0.4rem !important; font-size: 0.9375rem; color: var(--muted-foreground); }
+.mock-act-trigger::before { content: "·"; margin-right: 0.45rem; }
+.mock-act-event { grid-area: event; min-width: 0; font-size: 0.875rem; color: var(--muted-foreground); }
+.mock-act-title { margin-right: 0.5rem; font-weight: 650; white-space: nowrap; color: var(--foreground); }
+.mock-act-when { white-space: nowrap; }
+.mock-act-rule { grid-area: rule; justify-self: end; align-self: center; display: inline-flex; align-items: center; gap: 0.2rem; }
+.mock-act-rule .avatar { width: 1.375rem; height: 1.375rem; }
+.mock-act-arrow { width: 0.8rem; height: 0.8rem; color: var(--muted-foreground); }
+.mock-act-time { grid-area: time; justify-self: end; font-size: 0.75rem; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+/* Narrow: the event comes right under the outcome, and the reason under the event. */
+@container (max-width: 30rem) {
+  .mock-act { grid-template-columns: 2rem minmax(0, 1fr) auto; grid-template-areas: "sign outcome rule" "sign event time" "sign trigger trigger"; }
+  .mock-act-trigger { margin-left: 0 !important; font-size: 0.8125rem; }
+  .mock-act-trigger::before { content: none; }
 }

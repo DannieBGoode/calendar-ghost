@@ -440,6 +440,38 @@ for (const path of ["/", "/bold", "/journey"]) {
       })
     }
 
+    for (const width of [1440, 390]) {
+      test(`at ${width}px, the Activity mockup leads each event with its outcome and its sign, in Sam's week`, async ({ browser }) => {
+        const context = await browser.newContext({ viewport: { width, height: 900 } })
+        const page = await context.newPage()
+        await page.goto(path)
+        const mock = page.locator(".mock-activity")
+        await mock.scrollIntoViewIfNeeded()
+        const rows = mock.locator(".mock-act")
+        await expect(rows).toHaveCount(en.app.activity.rows.length)
+        const marks = await rows.evaluateAll((all) => all.map((row) => row.getAttribute("data-mark")))
+        expect(marks).toEqual(["added", "changed", "added", "removed", "skipped"])
+        await expect(rows.first()).toContainText("Dentist")
+        await expect(rows.first()).toContainText("Mon 15:00–16:30")
+        const box = (await mock.boundingBox())!
+        for (const [index, row] of (await rows.all()).entries()) {
+          const copy = en.app.activity.rows[index]!
+          await expect(row.locator(".mock-act-outcome")).toHaveText(copy.outcome)
+          await expect(row.locator(".mock-act-sign svg")).toHaveCount(1)
+          await expect(row.locator(".mock-act-rule img.avatar")).toHaveCount(2)
+          const outcome = (await row.locator(".mock-act-outcome").boundingBox())!
+          const event = (await row.locator(".mock-act-event").boundingBox())!
+          expect(outcome.y + outcome.height).toBeLessThanOrEqual(event.y + 1)
+          // Nothing spills out of the mockup, even on a phone.
+          for (const part of await row.locator(":scope > *").all()) {
+            const partBox = (await part.boundingBox())!
+            expect(partBox.x + partBox.width).toBeLessThanOrEqual(box.x + box.width + 0.5)
+          }
+        }
+        await context.close()
+      })
+    }
+
     test("the app is shown feature by feature, each with its mockup, on alternating sides", async ({ page }) => {
       await page.goto(path)
       const features = page.locator(".feat")

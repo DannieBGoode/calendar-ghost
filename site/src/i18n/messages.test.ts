@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { en } from "./en"
 import { format } from "./format"
+import { SAM_WEEK } from "../demo/week"
 import { hasLanguagePicker, localePath, messagesFor, stripLocale, type Locale } from "./index"
 
 function strings(value: unknown, path = "en"): [string, string][] {
@@ -102,5 +103,27 @@ describe("locales", () => {
 describe("format", () => {
   it("fills placeholders and leaves unknown ones", () => {
     expect(format("{percent}% of {thing}", { percent: 40 })).toBe("40% of {thing}")
+  })
+})
+
+describe("the Activity mockup", () => {
+  const clock = (hours: number) => `${String(Math.floor(hours)).padStart(2, "0")}:${hours % 1 ? "30" : "00"}`
+
+  it("tells Sam's week as the rest of the page does: each event of the week at its own day and time", () => {
+    const titles = new Map(Object.entries(en.demo.events).map(([key, event]) => [event.title, key]))
+    const fromWeek = en.app.activity.rows.filter((row) => titles.has(row.title))
+    expect(fromWeek.map((row) => row.title)).toEqual(["Dentist", "Gym", "School drop-off"])
+    for (const row of fromWeek) {
+      const event = SAM_WEEK.find((item) => item.key === titles.get(row.title))!
+      expect(row.when).toBe(`${en.demo.days[event.day]} ${clock(event.start)}–${clock(event.end)}`)
+    }
+  })
+
+  it("names no event the week shows during working hours as removed or skipped", () => {
+    // A removed or skipped event is not on Work, so it must not be one the week shows there.
+    const weekTitles = new Set(Object.values(en.demo.events).map((event) => event.title))
+    for (const row of en.app.activity.rows.filter((item) => /^(Removed|Skipped)/.test(item.outcome))) {
+      expect(weekTitles.has(row.title)).toBe(false)
+    }
   })
 })

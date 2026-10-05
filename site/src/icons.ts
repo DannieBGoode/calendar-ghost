@@ -20,6 +20,7 @@ import MailX from "lucide-static/icons/mail-x.svg?raw"
 import MapPin from "lucide-static/icons/map-pin.svg?raw"
 import Minus from "lucide-static/icons/minus.svg?raw"
 import Paperclip from "lucide-static/icons/paperclip.svg?raw"
+import Plus from "lucide-static/icons/plus.svg?raw"
 import RefreshCwOff from "lucide-static/icons/refresh-cw-off.svg?raw"
 import Repeat from "lucide-static/icons/repeat.svg?raw"
 import RotateCcw from "lucide-static/icons/rotate-ccw.svg?raw"
@@ -56,6 +57,7 @@ export const ICONS = {
   mapPin: MapPin,
   minus: Minus,
   paperclip: Paperclip,
+  plus: Plus,
   refreshCwOff: RefreshCwOff,
   repeat: Repeat,
   rotateCcw: RotateCcw,
