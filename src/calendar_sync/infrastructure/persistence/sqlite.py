@@ -83,6 +83,7 @@ _FORWARD_MIGRATIONS = (
     (17, "0017_provider_kinds.sql"),
     (18, "0018_integration_tokens.sql"),
     (19, "0019_incident_messages.sql"),
+    (20, "0020_lapsed_authorization.sql"),
 )
 
 
@@ -123,6 +124,36 @@ class SqliteConnectedAccountRecords:
         ).fetchone()
         return ConnectedAccountState(str(row["state"])) if row else None
 
+    def lapse(self, account_id: ConnectedAccountId, at: datetime) -> bool:
+        cursor = self._connection.execute(
+            """
+            UPDATE connected_accounts SET authorization_lapsed_at = ?
+            WHERE id = ? AND state = ? AND authorization_lapsed_at IS NULL
+            """,
+            (at.isoformat(), account_id.value, ConnectedAccountState.CONNECTED.value),
+        )
+        return cursor.rowcount == 1
+
+    def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
+        cursor = self._connection.execute(
+            """
+            UPDATE connected_accounts SET authorization_lapsed_at = NULL
+            WHERE id = ? AND authorization_lapsed_at IS NOT NULL
+            """,
+            (account_id.value,),
+        )
+        return cursor.rowcount == 1
+
+    def authorized(self, account_id: ConnectedAccountId) -> bool:
+        row = self._connection.execute(
+            """
+            SELECT 1 FROM connected_accounts
+            WHERE id = ? AND state = ? AND authorization_lapsed_at IS NULL
+            """,
+            (account_id.value, ConnectedAccountState.CONNECTED.value),
+        ).fetchone()
+        return row is not None
+
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         # The first write of the transaction takes SQLite's write lock until commit or rollback.
         cursor = self._connection.execute(
@@ -156,8 +187,9 @@ class SqliteSyncRuleRepository:
                     destination_account_id, destination_calendar_id,
                     privacy_policy, all_day_policy, busy_title,
                     tentative_policy, unanswered_policy,
-                    initial_lookback_days, state, reprojection_required
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    initial_lookback_days, state, reprojection_required,
+                    awaiting_reauthorization
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 _rule_values(rule),
             )
@@ -184,7 +216,8 @@ class SqliteSyncRuleRepository:
                 destination_account_id = ?, destination_calendar_id = ?,
                 privacy_policy = ?, all_day_policy = ?, busy_title = ?,
                 tentative_policy = ?, unanswered_policy = ?,
-                initial_lookback_days = ?, state = ?, reprojection_required = ?
+                initial_lookback_days = ?, state = ?, reprojection_required = ?,
+                awaiting_reauthorization = ?
             WHERE id = ?
             """,
             (*_rule_values(rule)[1:], rule.id.value),
@@ -780,6 +813,7 @@ def _rule_values(rule: SyncRule) -> tuple[object, ...]:
         rule.initial_lookback_days,
         rule.state.value,
         int(rule.reprojection_required),
+        int(rule.awaiting_reauthorization),
     )
 
 
@@ -804,6 +838,7 @@ def _rule_from_row(row: sqlite3.Row) -> SyncRule:
         initial_lookback_days=int(row["initial_lookback_days"]),
         state=SyncRuleState(str(row["state"])),
         reprojection_required=bool(row["reprojection_required"]),
+        awaiting_reauthorization=bool(row["awaiting_reauthorization"]),
     )
 
 

@@ -35,6 +35,7 @@ const accountA: ConnectedAccount = {
   state: "connected",
   rule_count: 1,
   authorized_at: at(3, 9),
+  authorization_lapsed_at: null,
 }
 const accountB: ConnectedAccount = { ...accountA, id: "acct-b", display_name: "Partner Calendar", email: "partner@example.test" }
 const calendars: Record<string, DiscoveredCalendar[]> = {

@@ -279,7 +279,7 @@ class Scenario(StrEnum):
     """Blocked events, one persisting into an Incident; every rule keeps running."""
     HEALTHY = "healthy"
     STOPPED = "stopped"
-    """The Personal account's authorization expired, so both of its rules are Degraded."""
+    """Google stopped accepting the Personal account, so both of its rules stopped for it."""
     WAITING = "waiting"
     """Google is limiting Family → Work's requests; the rule keeps retrying by itself."""
     SEVERAL = "several"
@@ -295,12 +295,14 @@ _BLOCKED = frozenset({Scenario.REVIEW, Scenario.SEVERAL})
 LIMITED_RULE = SyncRuleId("preview-family-work")
 
 
-def _scenario_accounts(scenario: Scenario) -> tuple[ConnectedAccount, ...]:
+def _scenario_accounts(scenario: Scenario, now: datetime) -> tuple[ConnectedAccount, ...]:
     if scenario is Scenario.SETUP:
         return ()
     if scenario in _EXPIRED:
+        # Lapsed Authorization: still connected, but Google no longer accepts it (ADR 0027).
+        lapsed_at = (now - timedelta(minutes=60)).isoformat()
         return tuple(
-            replace(account, state=ConnectedAccountState.DISCONNECTED)
+            replace(account, authorization_lapsed_at=lapsed_at)
             if account.id == PERSONAL_ACCOUNT
             else account
             for account in ACCOUNTS
@@ -313,7 +315,7 @@ def _scenario_rules(scenario: Scenario) -> tuple[SyncRule, ...]:
         return tuple(replace(rule, state=SyncRuleState.PAUSED) for rule in PREVIEW_RULES)
     if scenario in _EXPIRED:
         return tuple(
-            replace(rule, state=SyncRuleState.DEGRADED) if _uses_personal(rule) else rule
+            rule.degrade(awaiting_reauthorization=True) if _uses_personal(rule) else rule
             for rule in PREVIEW_RULES
         )
     return PREVIEW_RULES
@@ -369,7 +371,7 @@ def build_preview_container(
         ),
         list_connected_accounts=ListConnectedAccounts(
             adapters.unit_of_work,
-            cast(ConnectedAccountRepository, PreviewAccounts(_scenario_accounts(scenario))),
+            cast(ConnectedAccountRepository, PreviewAccounts(_scenario_accounts(scenario, moment))),
         ),
         authorization=cast(AccountAuthorization, google),
         account_calendars=cast(AccountCalendars, google),
@@ -575,8 +577,8 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
             """
             INSERT INTO connected_accounts (
                 id, provider, display_name, email, encrypted_credentials,
-                state, created_at, updated_at
-            ) VALUES (?, 'google', ?, ?, x'00', ?, ?, ?)
+                state, created_at, updated_at, authorization_lapsed_at
+            ) VALUES (?, 'google', ?, ?, x'00', ?, ?, ?, ?)
             """,
             [
                 (
@@ -586,8 +588,9 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                     account.state.value,
                     now.isoformat(),
                     now.isoformat(),
+                    account.authorization_lapsed_at,
                 )
-                for account in _scenario_accounts(scenario)
+                for account in _scenario_accounts(scenario, now)
             ],
         )
         if scenario not in _BLOCKED:
@@ -599,12 +602,28 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                 """,
                 [(rule.id.value, now.isoformat()) for rule in PREVIEW_RULES],
             )
+        if scenario in _EXPIRED:
+            # One Incident for the account, however many of its rules stopped.
+            connection.execute(
+                """
+                INSERT INTO incidents (
+                    id, deduplication_key, rule_id, account_id, category, state, summary,
+                    opened_at, updated_at, message_code, message_params
+                ) VALUES (?, ?, NULL, ?, 'authentication', 'open', ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"authorization:{PERSONAL_ACCOUNT.value}",
+                    f"authorization:{PERSONAL_ACCOUNT.value}",
+                    PERSONAL_ACCOUNT.value,
+                    "Authorization for Google Calendar expired",
+                    (now - timedelta(minutes=60)).isoformat(),
+                    (now - timedelta(minutes=2)).isoformat(),
+                    "authorization_lapsed",
+                    json.dumps({"kind": "authentication", "provider": "google"}),
+                ),
+            )
         # Provider Incidents, worded as the service words them.
-        provider_incidents = [
-            (rule.id, "authentication", "Authorization for Google Calendar expired", 60)
-            for rule in PREVIEW_RULES
-            if scenario in _EXPIRED and _uses_personal(rule)
-        ]
+        provider_incidents = []
         if scenario in _LIMITED:
             provider_incidents.append(
                 (LIMITED_RULE, "rate_limit", "Google Calendar is limiting requests", 25)

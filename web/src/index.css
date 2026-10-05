@@ -2041,6 +2041,32 @@ p {
   margin-top: 1rem;
 }
 
+/* Why a connected account needs reauthorization, under its identity. */
+.account-lapse-note {
+  margin-top: 0.75rem;
+  color: var(--warning-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+/* The account a stopped rule, Activity, or Google's return pointed to. */
+.account-item[data-focused] {
+  margin-inline: -0.75rem;
+  padding-inline: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--warning-surface);
+  box-shadow: inset 0 0 0 1px var(--warning-border);
+}
+
+.account-item[data-focused]:focus {
+  outline: none;
+}
+
+.account-item[data-focused]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 .setting-row {
   min-height: 4.75rem;
   padding: 1rem 0;

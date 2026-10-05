@@ -68,6 +68,7 @@ def dashboard(services: Services) -> DashboardResponse:
         problems=[problem_response(problem) for problem in verdict.problems],
         connected_accounts=summary.connected_accounts,
         disconnected_accounts=summary.disconnected_accounts,
+        lapsed_accounts=summary.lapsed_accounts,
         sync_rules=summary.sync_rules,
         enabled_rules=summary.enabled_rules,
         stopped_rules=summary.stopped_rules,

@@ -108,7 +108,7 @@ class SqliteIncidentRepository:
                 (
                     self._ids.new(),
                     incident.key,
-                    incident.rule_id.value,
+                    incident.rule_id.value if incident.rule_id else None,
                     incident.account_id.value if incident.account_id else None,
                     incident.category,
                     incident.summary,

@@ -18,6 +18,11 @@ export function activitySearch(ruleId: string): string {
   return `?rule=${encodeURIComponent(ruleId)}`
 }
 
+/** Settings, opened at one Connected Account's row, such as the one a stopped rule needs. */
+export function accountSearch(accountId: string): string {
+  return `?account=${encodeURIComponent(accountId)}`
+}
+
 const APP_VIEW_PATHS: Record<AppView, string> = {
   overview: "/overview",
   rules: "/rules",

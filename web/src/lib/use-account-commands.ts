@@ -23,6 +23,14 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
     onSuccess: ({ accountId, access }) => {
       setAccessChecks((current) => ({ ...current, [accountId]: access }))
     },
+    // A check Google refuses lapses the account; one it passes restores it and resumes rules.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["accounts"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
+        queryClient.invalidateQueries({ queryKey: ["rules"] }),
+        queryClient.invalidateQueries({ queryKey: ["incidents"] }),
+      ]),
   })
   const disconnect = useMutation({
     mutationFn: api.disconnectAccount,

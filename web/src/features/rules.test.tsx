@@ -10,6 +10,7 @@ import { StaticI18nProvider } from "@/i18n/provider"
 import { pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
 import type { ConnectedAccount, DiscoveredCalendar, RuleSummary, RunOutcome } from "@/lib/api"
+import type { ViewChange } from "@/lib/navigation"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -23,6 +24,7 @@ function account(id: string): ConnectedAccount {
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   }
 }
 
@@ -255,12 +257,19 @@ function jsonResponse(body: unknown): Response {
   return { ok: true, status: 200, json: () => Promise.resolve(body) } as Response
 }
 
-async function renderRulesList(i18n: I18n) {
+async function renderRulesList(
+  i18n: I18n,
+  {
+    rows = RULE_ROWS,
+    accounts = [accountA, accountB, accountC, accountD],
+    onViewChange = () => undefined,
+  }: { rows?: RuleSummary[]; accounts?: ConnectedAccount[]; onViewChange?: ViewChange } = {},
+) {
   vi.stubGlobal("fetch", vi.fn((input: string | URL) => Promise.resolve(respond(String(input)))))
   function respond(url: string): Response {
     const path = url.split("?")[0] ?? ""
-    if (path === "/api/v1/rules") return jsonResponse(RULE_ROWS)
-    if (path === "/api/v1/accounts") return jsonResponse([accountA, accountB, accountC, accountD])
+    if (path === "/api/v1/rules") return jsonResponse(rows)
+    if (path === "/api/v1/accounts") return jsonResponse(accounts)
     const calendars = /^\/api\/v1\/accounts\/(.+)\/calendars$/.exec(path)
     if (calendars) return jsonResponse(calendarsByAccount[decodeURIComponent(calendars[1] ?? "")] ?? [])
     return jsonResponse({})
@@ -274,7 +283,7 @@ async function renderRulesList(i18n: I18n) {
         children: createElement(
           QueryClientProvider,
           { client: queryClient },
-          createElement(RulesView, { notice: null, createRule: false, onViewChange: () => undefined, onOpenRule: () => undefined }),
+          createElement(RulesView, { notice: null, createRule: false, onViewChange, onOpenRule: () => undefined }),
         ),
       }),
     )
@@ -297,6 +306,25 @@ describe("RulesView", () => {
     expect(text).toMatch(/2 of 8 checked · Running for \d+ s · It keeps running if you leave this page\./)
     expect(text).toContain("Preview to restart")
     expect(container.querySelector('[aria-label="More actions for Work A to Work B1"]')).not.toBeNull()
+  })
+
+  it("sends a rule an expired Google account stopped to that account in Settings", async () => {
+    const lapsed = { ...accountB, authorization_lapsed_at: justNow }
+    const stopped = ruleSummary("stopped", {
+      state: "degraded",
+      last_sync: { ...lastSync, succeeded: false, failure_kind: "authentication" },
+    })
+    const onViewChange = vi.fn()
+    await renderRulesList(testI18n(), { rows: [stopped], accounts: [accountA, lapsed], onViewChange })
+
+    expect(container.textContent).not.toContain("Preview to restart")
+    expect(container.querySelector(".rule-note")?.textContent).toBe(
+      `Synchronization stopped: ${lapsed.email} must be reauthorized before this rule can run.`,
+    )
+    const link = [...container.querySelectorAll("a")].find((anchor) => anchor.textContent === "Reauthorize account")
+    expect(link?.getAttribute("href")).toBe("/settings?account=b")
+    click(link!)
+    expect(onViewChange).toHaveBeenCalledWith("settings", { search: "?account=b" })
   })
 
   it("has no untranslated text in rule rows, their status, and their commands", async () => {

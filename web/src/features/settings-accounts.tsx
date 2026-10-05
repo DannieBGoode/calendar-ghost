@@ -10,7 +10,7 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { codeTag, rich } from "@/i18n/rich"
 import type { MessageKey } from "@/i18n/types"
-import { accountSummary } from "@/lib/account-summary"
+import { accountSummary, needsReauthorization } from "@/lib/account-summary"
 import { type ConnectedAccount, api } from "@/lib/api"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
 import { type AccountCommands, useAccountCommands } from "@/lib/use-account-commands"
@@ -55,10 +55,13 @@ function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
 export function AccountsSection({
   googleConfigured,
   justConnected,
+  focusAccountId,
   returnHelp,
 }: {
   googleConfigured: boolean
   justConnected: boolean
+  /** The account a stopped rule or Google's return pointed to, shown open and in view. */
+  focusAccountId: string | null
   returnHelp: GoogleReturn
 }) {
   const { t } = useI18n()
@@ -94,6 +97,7 @@ export function AccountsSection({
           choice={accountsChoice}
           onChoose={setAccountsChoice}
           justConnected={justConnected}
+          focusAccountId={focusAccountId}
           googleConfigured={googleConfigured}
           returnHelp={returnHelp}
           commands={commands}
@@ -131,6 +135,7 @@ function AccountGroup({
   choice,
   onChoose,
   justConnected,
+  focusAccountId,
   googleConfigured,
   returnHelp,
   commands,
@@ -139,6 +144,7 @@ function AccountGroup({
   choice: boolean | null
   onChoose: (open: boolean) => void
   justConnected: boolean
+  focusAccountId: string | null
   googleConfigured: boolean
   returnHelp: GoogleReturn
   commands: AccountCommands
@@ -152,6 +158,7 @@ function AccountGroup({
     Boolean(
       summary.needsAttention ||
         justConnected ||
+        focusAccountId ||
         commands.confirmingAccountId ||
         commands.deletingAccountId,
     )
@@ -174,7 +181,12 @@ function AccountGroup({
             onToggle={() => onChoose(!accountsOpen)}
           />
           {accountsOpen && (
-            <AccountList accounts={accounts} googleConfigured={googleConfigured} commands={commands} />
+            <AccountList
+              accounts={accounts}
+              focusAccountId={focusAccountId}
+              googleConfigured={googleConfigured}
+              commands={commands}
+            />
           )}
         </>
       )}
@@ -246,23 +258,28 @@ function AccountSummaryToggle({
 
 function AccountList({
   accounts,
+  focusAccountId,
   googleConfigured,
   commands,
 }: {
   accounts: ConnectedAccount[]
+  focusAccountId: string | null
   googleConfigured: boolean
   commands: AccountCommands
 }) {
   const names = accounts.map((account) => account.display_name)
   const sharedNames = new Set(names.filter((name, index) => names.indexOf(name) !== index))
+  // Accounts to reauthorize lead, so the fix is the first thing in the list.
+  const ordered = [...accounts.filter(needsReauthorization), ...accounts.filter((a) => !needsReauthorization(a))]
   return (
     <ul className="account-list" id="account-list">
-      {accounts.map((account) => (
+      {ordered.map((account) => (
         <AccountRow
           key={account.id}
           account={account}
           sharedName={sharedNames.has(account.display_name)}
           googleConfigured={googleConfigured}
+          focused={account.id === focusAccountId}
           commands={commands}
         />
       ))}

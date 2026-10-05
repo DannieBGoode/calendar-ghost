@@ -5,11 +5,16 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 
 from calendar_sync.application.errors import (
+    AUTHORIZATION_FAILURES,
+    AccountAccessCheckFailed,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
+    ProviderFailure,
 )
+from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
+    AccountAccess,
     AccountCalendars,
     ConnectedAccount,
     ConnectedAccountRepository,
@@ -57,6 +62,40 @@ class DiscoverCalendars:
         return discovered
 
 
+@dataclass(frozen=True, slots=True)
+class AccessCheck:
+    access: AccountAccess
+    rules_resumed: int
+    """Rules that Lapsed Authorization alone had stopped, resumed because the check passed."""
+
+
+@dataclass(slots=True)
+class CheckAccountAccess:
+    """Ask the provider whether it accepts the account, recording what it answered (ADR 0027).
+
+    A refusal for authentication or authorization lapses the account; a passing check clears a
+    lapse, as Reauthorization does, and resumes the rules the lapse alone stopped.
+    """
+
+    calendars: AccountCalendars
+    accounts: ConnectedAccountRepository
+    lapses: LapsedAuthorizations
+
+    def execute(self, account_id: ConnectedAccountId) -> AccessCheck:
+        try:
+            access = self.calendars.verify_access(account_id)
+        except AccountAccessCheckFailed as error:
+            if error.kind in AUTHORIZATION_FAILURES:
+                account = self.accounts.get(account_id)
+                provider = account.provider if account is not None else None
+                failure = ProviderFailure(
+                    error.kind, str(error), account_id=account_id, provider=provider
+                )
+                self.lapses.lapsed(account_id, failure)
+            raise
+        return AccessCheck(access, self.lapses.restored(account_id))
+
+
 @dataclass(slots=True)
 class DisconnectConnectedAccount:
     """Discard an account's credentials after degrading every rule that could still write."""
@@ -76,6 +115,10 @@ class DisconnectConnectedAccount:
                 rule = uow.rules.get(rule_id)
                 if rule is not None and rule.state in _DEGRADED_ON_DISCONNECT:
                     uow.rules.save(rule.degrade())
+                    uow.commit()
+                elif rule is not None and rule.awaiting_reauthorization:
+                    # Disconnecting is a deliberate stop, so recovering needs a preview.
+                    uow.rules.save(rule.require_preview())
                     uow.commit()
         account = self.accounts.disconnect(account_id)
         with self.unit_of_work() as uow:

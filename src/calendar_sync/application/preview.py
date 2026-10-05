@@ -93,10 +93,9 @@ class PreviewSyncRule:
         try:
             scope, sample = self._read(rule)
         except ProviderFailure as failure:
-            # Previewing is how a stopped rule recovers; lost authorization it meets on either
-            # account keeps the Incident pointing at the account still to reauthorize.
-            recovering = rule.state is SyncRuleState.DEGRADED
-            if recovering and failure.requires_authorization and self.incidents is not None:
+            # Lost authorization a preview meets on either account lapses that account, so
+            # Settings and the rule point at the account to reauthorize (ADR 0027).
+            if failure.requires_authorization and self.incidents is not None:
                 self.incidents.recovery_blocked(rule.id, failure)
             raise
         with self.locks.for_writes(rule.id), self.unit_of_work() as uow:

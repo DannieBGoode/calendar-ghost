@@ -250,7 +250,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Start Google Oauth */
+        /**
+         * Start Google Oauth
+         * @description Start Google's consent; reauthorizing a known `account` suggests its email to Google.
+         */
         get: operations["start_google_oauth_api_v1_oauth_google_start_get"];
         put?: never;
         post?: never;
@@ -644,6 +647,8 @@ export interface components {
         };
         /** ConnectedAccountResponse */
         ConnectedAccountResponse: {
+            /** Authorization Lapsed At */
+            authorization_lapsed_at: string | null;
             /** Authorized At */
             authorized_at: string | null;
             /** Avatar Url */
@@ -706,6 +711,8 @@ export interface components {
             disconnected_accounts: number;
             /** Enabled Rules */
             enabled_rules: number;
+            /** Lapsed Accounts */
+            lapsed_accounts: number;
             /** Last Synced At */
             last_synced_at: string | null;
             /** Needs Attention */
@@ -817,6 +824,8 @@ export interface components {
             calendars_visible: number;
             /** Event Access */
             event_access: boolean;
+            /** Rules Resumed */
+            rules_resumed: number;
             /** Writable Calendars */
             writable_calendars: number;
         };
@@ -856,7 +865,7 @@ export interface components {
             /** Opened At */
             opened_at: string;
             /** Resolution */
-            resolution: ("sync_succeeded" | "blocks_cleared" | "rule_removed") | null;
+            resolution: ("sync_succeeded" | "blocks_cleared" | "rule_removed" | "access_restored") | null;
             /** Resolved At */
             resolved_at: string | null;
             /** Rule Id */
@@ -1295,6 +1304,8 @@ export interface components {
             blocked_events: number;
             /** Disconnected Accounts */
             disconnected_accounts: number;
+            /** Lapsed Accounts */
+            lapsed_accounts: number;
             /** Open Incidents */
             open_incidents: number;
             /** Overdue */
@@ -1916,7 +1927,9 @@ export interface operations {
     };
     start_google_oauth_api_v1_oauth_google_start_get: {
         parameters: {
-            query?: never;
+            query?: {
+                account?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: {

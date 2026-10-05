@@ -270,9 +270,18 @@ class SqliteOperationsQueries:
     def overview(self) -> OperationsOverview:
         with _reading(self._database_path) as connection:
             accounts = tuple(
-                AccountStanding(str(row["id"]), str(row["state"]), str(row["provider"]))
+                AccountStanding(
+                    str(row["id"]),
+                    str(row["state"]),
+                    str(row["provider"]),
+                    lapsed=row["state"] == "connected"
+                    and row["authorization_lapsed_at"] is not None,
+                )
                 for row in connection.execute(
-                    "SELECT id, state, provider FROM connected_accounts ORDER BY id"
+                    """
+                    SELECT id, state, provider, authorization_lapsed_at
+                    FROM connected_accounts ORDER BY id
+                    """
                 )
             )
             incidents = int(

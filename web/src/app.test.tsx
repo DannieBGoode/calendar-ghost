@@ -21,6 +21,7 @@ const dashboard: Dashboard = {
   problems: [],
   connected_accounts: 0,
   disconnected_accounts: 0,
+  lapsed_accounts: 0,
   sync_rules: 0,
   enabled_rules: 0,
   stopped_rules: 0,

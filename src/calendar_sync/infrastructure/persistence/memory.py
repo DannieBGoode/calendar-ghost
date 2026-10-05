@@ -47,6 +47,7 @@ from calendar_sync.domain.model import (
 @dataclass(slots=True)
 class MemoryState:
     accounts: dict[ConnectedAccountId, ConnectedAccountState] = field(default_factory=dict)
+    lapsed: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
     rules: dict[SyncRuleId, SyncRule] = field(default_factory=dict)
     mappings: dict[tuple[SyncRuleId, EventRef], EventMapping] = field(default_factory=dict)
     occurrences: dict[tuple[EventMappingId, OccurrenceStart], OccurrenceMapping] = field(
@@ -83,10 +84,29 @@ class InMemoryConnectedAccountRecords:
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None:
         return self._state.accounts.get(account_id)
 
+    def lapse(self, account_id: ConnectedAccountId, at: datetime) -> bool:
+        if (
+            self._state.accounts.get(account_id) is not ConnectedAccountState.CONNECTED
+            or account_id in self._state.lapsed
+        ):
+            return False
+        self._state.lapsed[account_id] = at
+        return True
+
+    def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
+        return self._state.lapsed.pop(account_id, None) is not None
+
+    def authorized(self, account_id: ConnectedAccountId) -> bool:
+        return (
+            self._state.accounts.get(account_id) is ConnectedAccountState.CONNECTED
+            and account_id not in self._state.lapsed
+        )
+
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         if self._state.accounts.get(account_id) is not ConnectedAccountState.DISCONNECTED:
             return False
         del self._state.accounts[account_id]
+        self._state.lapsed.pop(account_id, None)
         self._state.calendar_names = {
             endpoint: name
             for endpoint, name in self._state.calendar_names.items()

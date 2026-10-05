@@ -11,6 +11,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
+from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     Clock,
@@ -22,7 +23,7 @@ from calendar_sync.application.ports import (
     RuleHealthRecords,
     UnitOfWorkFactory,
 )
-from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 PROVIDER_INCIDENT_THRESHOLD = 3
 """Consecutive failed runs after which a temporary or rate-limited condition opens an Incident."""
@@ -33,20 +34,13 @@ INTERVENTION_FAILURES = AUTHORIZATION_FAILURES | {
     ProviderFailureKind.INFRASTRUCTURE,
 }
 
-_FAILURE_SUMMARIES = {
-    ProviderFailureKind.AUTHENTICATION: "Authorization for {calendar} expired",
-    ProviderFailureKind.AUTHORIZATION: "Access to {calendar} was denied",
-    ProviderFailureKind.RATE_LIMIT: "{Calendar} is limiting requests",
-    ProviderFailureKind.TEMPORARY: "{Calendar} is temporarily unavailable",
-    ProviderFailureKind.PERMANENT: "{Calendar} rejected synchronization",
-    ProviderFailureKind.INFRASTRUCTURE: "Local synchronization infrastructure failed",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class FailureResponse:
     degrade: bool
     incident: IncidentReport | None
+    lapsed: ConnectedAccountId | None = None
+    """The account whose authorization lapsed; its own Incident replaces the rule's."""
 
 
 def _failure_message(code: str, failure: ProviderFailure) -> IncidentMessage:
@@ -68,10 +62,7 @@ class RuleHealthPolicy:
     @staticmethod
     def summary(failure: ProviderFailure) -> str:
         """What failed, naming the provider when the failure says which one (ADR 0022)."""
-        calendar = failure.provider_name
-        return _FAILURE_SUMMARIES[failure.kind].format(
-            calendar=calendar, Calendar=calendar[0].upper() + calendar[1:]
-        )
+        return failure.summary
 
     @staticmethod
     def provider_key(rule_id: SyncRuleId) -> str:
@@ -84,6 +75,8 @@ class RuleHealthPolicy:
     def after_failure(
         self, rule_id: SyncRuleId, failure: ProviderFailure, consecutive_failures: int
     ) -> FailureResponse:
+        if failure.requires_authorization and failure.account_id is not None:
+            return FailureResponse(degrade=True, incident=None, lapsed=failure.account_id)
         degrade = failure.kind in INTERVENTION_FAILURES
         if not degrade and consecutive_failures < self.threshold:
             return FailureResponse(degrade=False, incident=None)
@@ -152,6 +145,12 @@ class RuleHealth:
     locks: RuleLocks = field(default_factory=RuleLocks)
     notifications: IncidentNotifications | None = None
     policy: RuleHealthPolicy = field(default_factory=RuleHealthPolicy)
+    lapses: LapsedAuthorizations = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.lapses = LapsedAuthorizations(
+            self.unit_of_work, self.incidents, self.clock, self.locks, self.notifications
+        )
 
     def audit_floor(self) -> int:
         return self.records.audit_floor()
@@ -207,7 +206,9 @@ class RuleHealth:
         consecutive = self.records.record_failure(rule.id, failure.kind, now)
         response = self.policy.after_failure(rule.id, failure, consecutive)
         if response.degrade:
-            self._degrade(rule)
+            self._degrade(rule, awaiting_reauthorization=response.lapsed is not None)
+        if response.lapsed is not None:
+            self.lapses.lapsed(response.lapsed, failure)
         if response.incident is not None and self.incidents.open(response.incident, now):
             self._notify(response.incident, now)
 
@@ -217,25 +218,31 @@ class RuleHealth:
         incident = self.policy.removal_blocked(rule_id, failure)
         if self.incidents.open(incident, now):
             self._notify(incident, now)
+        if failure.account_id is not None:
+            self.lapses.lapsed(failure.account_id, failure)
 
     def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
-        """Refresh a stopped rule's Incident with the lost authorization its recovery met.
+        """Record the lost authorization a preview met.
 
         A rule whose calendars belong to two accounts can stop on the first and meet the second
-        only while recovering, so the Incident then names the account still to reauthorize.
+        only while recovering, so the second account's authorization lapses too. Without the
+        account, the rule's own Incident names the failure instead.
         """
+        if failure.account_id is not None:
+            self.lapses.lapsed(failure.account_id, failure)
+            return
         now = self.clock.now()
         incident = self.policy.provider_incident(rule_id, failure)
         if self.incidents.open(incident, now):
             self._notify(incident, now)
 
-    def _degrade(self, rule: SyncRule) -> None:
+    def _degrade(self, rule: SyncRule, *, awaiting_reauthorization: bool) -> None:
         if rule.state is not SyncRuleState.ENABLED:
             return
         with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
             current = uow.rules.get(rule.id)
             if current is not None and current.state is SyncRuleState.ENABLED:
-                uow.rules.save(current.degrade())
+                uow.rules.save(current.degrade(awaiting_reauthorization=awaiting_reauthorization))
                 uow.commit()
 
     def _notify(self, incident: IncidentReport, at: datetime) -> None:

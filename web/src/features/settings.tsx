@@ -34,21 +34,36 @@ export function SettingsPage() {
   return <SettingsView googleConfigured={google.data.configured} redirectUri={google.data.redirect_uri} />
 }
 
-/** The outcome Google returned with, read once; returning ends the authorization attempt. */
-function useOAuthOutcome(): OAuthOutcome | null {
-  const [outcome] = useState(() => {
+type SettingsArrival = {
+  outcome: OAuthOutcome | null
+  /** The account Google returned with, or the one a stopped rule pointed to. */
+  accountId: string | null
+  /** Rules that resumed because the account was reauthorized. */
+  resumed: number
+}
+
+const ARRIVAL_PARAMS = ["google", "account", "resumed"]
+
+/** What brought the administrator here, read once; returning ends the authorization attempt. */
+function useSettingsArrival(): SettingsArrival {
+  const [arrival] = useState(() => {
+    const params = new URLSearchParams(window.location.search)
     // Any outcome, even one this version cannot name, ends the attempt started here.
-    if (new URLSearchParams(window.location.search).get("google")) clearAuthorizationStart()
-    return oauthOutcome(window.location.search)
+    if (params.get("google")) clearAuthorizationStart()
+    return {
+      outcome: oauthOutcome(window.location.search),
+      accountId: params.get("account"),
+      resumed: Number(params.get("resumed")) || 0,
+    }
   })
   useEffect(() => {
-    // A reload should not announce the same connection again.
+    // A reload should not announce the same connection, or point at the same account, again.
     const url = new URL(window.location.href)
-    if (!url.searchParams.has("google")) return
-    url.searchParams.delete("google")
+    if (!ARRIVAL_PARAMS.some((name) => url.searchParams.has(name))) return
+    for (const name of ARRIVAL_PARAMS) url.searchParams.delete(name)
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
   }, [])
-  return outcome
+  return arrival
 }
 
 function SettingsView({
@@ -59,7 +74,7 @@ function SettingsView({
   redirectUri: string | null
 }) {
   const { t } = useI18n()
-  const outcome = useOAuthOutcome()
+  const { outcome, accountId, resumed } = useSettingsArrival()
   const returnHelp = useGoogleReturn(redirectUri)
 
   return (
@@ -69,11 +84,12 @@ function SettingsView({
         <p className="page-intro">{t("settings.page.intro")}</p>
       </div>
 
-      {outcome && <OAuthOutcomeNotice outcome={outcome} googleConfigured={googleConfigured} />}
+      {outcome && <OAuthOutcomeNotice outcome={outcome} resumed={resumed} googleConfigured={googleConfigured} />}
 
       <AccountsSection
         googleConfigured={googleConfigured}
         justConnected={outcome === "connected"}
+        focusAccountId={accountId}
         returnHelp={returnHelp}
       />
 
@@ -87,7 +103,15 @@ function SettingsView({
 }
 
 /** The notice for the outcome the OAuth callback reported; failures offer to try again. */
-function OAuthOutcomeNotice({ outcome, googleConfigured }: { outcome: OAuthOutcome; googleConfigured: boolean }) {
+function OAuthOutcomeNotice({
+  outcome,
+  resumed,
+  googleConfigured,
+}: {
+  outcome: OAuthOutcome
+  resumed: number
+  googleConfigured: boolean
+}) {
   const { t } = useI18n()
   const messages = OAUTH_OUTCOME_MESSAGES[outcome]
   const succeeded = outcome === "connected"
@@ -99,7 +123,9 @@ function OAuthOutcomeNotice({ outcome, googleConfigured }: { outcome: OAuthOutco
       {succeeded ? <CheckCircle2 aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}
       <div>
         <h2>{t(messages.title)}</h2>
-        <p>{t(messages.body)}</p>
+        <p>
+          {succeeded && resumed > 0 ? t("settings.oauthOutcome.connected.resumed", { count: resumed }) : t(messages.body)}
+        </p>
       </div>
       {!succeeded && googleConfigured && (
         <Button variant="outline" asChild>

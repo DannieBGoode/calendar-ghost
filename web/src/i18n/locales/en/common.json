@@ -32,6 +32,8 @@
     "network": "The browser could not reach Calendar Ghost.",
     "unreadableResponse": "The service returned an unreadable response.",
     "account_access_check_failed": "Calendar Ghost could not check this account's calendars. Try again shortly.",
+    "account_access_check_failed_authentication": "Google no longer accepts this account. Reauthorize it to restart the rules that use it.",
+    "account_access_check_failed_authorization": "Google denied this account's calendar access. Reauthorize it, and confirm the Calendar API is enabled for your Google Cloud project.",
     "account_disconnected": "This account is disconnected. Reauthorize it in Settings first.",
     "account_management_unavailable": "Managing accounts needs the installation master key to be configured.",
     "account_must_be_disconnected": "Disconnect this account before you delete it permanently.",
@@ -107,6 +109,7 @@
       "one": "{count} event could not be synced and was still blocked at the daily check.",
       "other": "{count} events could not be synced and were still blocked at the daily check."
     },
-    "removalStopped": "Rule Removal stopped: {reason}"
+    "removalStopped": "Rule Removal stopped: {reason}",
+    "authorizationLapsed": "A {provider} account needs reauthorization"
   }
 }

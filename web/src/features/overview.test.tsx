@@ -28,6 +28,7 @@ const accountA: ConnectedAccount = {
   state: "connected",
   rule_count: 1,
   authorized_at: justNow(90_000),
+  authorization_lapsed_at: null,
 }
 const accountB: ConnectedAccount = {
   id: "acct-b",
@@ -38,6 +39,7 @@ const accountB: ConnectedAccount = {
   state: "connected",
   rule_count: 1,
   authorized_at: justNow(90_000),
+  authorization_lapsed_at: null,
 }
 
 const rule: RuleSummary = {
@@ -129,6 +131,7 @@ const attentionDashboard: Dashboard = {
   problems: [providerFailure],
   connected_accounts: 2,
   disconnected_accounts: 0,
+  lapsed_accounts: 0,
   sync_rules: 1,
   enabled_rules: 1,
   stopped_rules: 0,

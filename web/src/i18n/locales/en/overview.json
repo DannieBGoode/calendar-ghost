@@ -127,9 +127,9 @@
   },
   "accountSummary": {
     "connectedOnly": { "one": "{count} account connected", "other": "{count} accounts connected" },
-    "disconnectedOnly": {
-      "one": "{count} account disconnected, it needs reauthorization",
-      "other": "{count} accounts disconnected, they need reauthorization"
+    "reauthorizeOnly": {
+      "one": "{count} account needs reauthorization",
+      "other": "{count} accounts need reauthorization"
     },
     "mixed": {
       "one": "{count} account connected, {reauthorize}",

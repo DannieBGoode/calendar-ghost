@@ -40,7 +40,8 @@ class SqliteConnectedAccountStore:
         with transaction(self._database_path) as connection:
             rows = connection.execute(
                 """
-                SELECT id, provider, display_name, email, state, avatar_url, updated_at
+                SELECT id, provider, display_name, email, state, avatar_url, updated_at,
+                    authorization_lapsed_at
                 FROM connected_accounts ORDER BY email
                 """
             ).fetchall()
@@ -50,7 +51,8 @@ class SqliteConnectedAccountStore:
         with transaction(self._database_path) as connection:
             row = connection.execute(
                 """
-                SELECT id, provider, display_name, email, state, avatar_url, updated_at
+                SELECT id, provider, display_name, email, state, avatar_url, updated_at,
+                    authorization_lapsed_at
                 FROM connected_accounts WHERE id = ?
                 """,
                 (account_id.value,),
@@ -70,7 +72,11 @@ class SqliteConnectedAccountStore:
         provider: ProviderKind,
         avatar_url: str | None = None,
     ) -> ConnectedAccount:
-        """Connect an account, or reauthorize the one with this provider and email."""
+        """Connect an account, or reauthorize the one with this provider and email.
+
+        Reauthorizing clears Lapsed Authorization; resuming the rules it stopped is the
+        application's to do (ADR 0027).
+        """
         now = self._clock.now().isoformat()
         account_id = self._ids.new()
         encrypted = self._cipher.encrypt(credential_json)
@@ -86,13 +92,15 @@ class SqliteConnectedAccountStore:
                     avatar_url = excluded.avatar_url,
                     encrypted_credentials = excluded.encrypted_credentials,
                     state = 'connected',
+                    authorization_lapsed_at = NULL,
                     updated_at = excluded.updated_at
                 """,
                 (account_id, provider.value, display_name, email, avatar_url, encrypted, now, now),
             )
             row = connection.execute(
                 """
-                SELECT id, provider, display_name, email, state, avatar_url, updated_at
+                SELECT id, provider, display_name, email, state, avatar_url, updated_at,
+                    authorization_lapsed_at
                 FROM connected_accounts WHERE provider = ? AND email = ?
                 """,
                 (provider.value, email),
@@ -201,6 +209,9 @@ def _account_from_row(row: sqlite3.Row) -> ConnectedAccount:
         _optional_text(row["avatar_url"]),
         str(row["updated_at"]) if connected else None,
         provider=ProviderKind(str(row["provider"])),
+        authorization_lapsed_at=_optional_text(row["authorization_lapsed_at"])
+        if connected
+        else None,
     )
 
 

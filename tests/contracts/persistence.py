@@ -38,7 +38,6 @@ from calendar_sync.domain.model import (
     OccurrenceState,
     ProjectionFingerprint,
     SyncRuleId,
-    SyncRuleState,
     TimedInterval,
 )
 from tests.helpers import NOW, endpoint, rule, week_start
@@ -162,14 +161,14 @@ class PersistenceContract:
             uow.rules.add(RULE)
             uow.rules.add(OTHER_RULE)
             uow.commit()
-        paused = replace(RULE, state=SyncRuleState.PAUSED)
+        stopped = RULE.degrade(awaiting_reauthorization=True)
         with harness.unit_of_work() as uow:
-            uow.rules.save(paused)
+            uow.rules.save(stopped)
             uow.commit()
 
         with harness.unit_of_work() as uow:
-            assert uow.rules.list() == (OTHER_RULE, paused)
-            assert uow.rules.get(RULE.id) == paused
+            assert uow.rules.list() == (OTHER_RULE, stopped)
+            assert uow.rules.get(RULE.id) == stopped
 
     def test_a_second_rule_for_one_direction_is_refused(self, harness: PersistenceHarness) -> None:
         with harness.unit_of_work() as uow:
@@ -460,6 +459,34 @@ class PersistenceContract:
         with harness.unit_of_work() as uow:
             assert uow.accounts.state(ACCOUNT) is None
             assert not uow.accounts.delete_disconnected(ACCOUNT)
+
+    def test_a_connected_account_lapses_once_until_its_lapse_clears(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.authorized(ACCOUNT)
+            assert uow.accounts.lapse(ACCOUNT, NOW)
+            assert not uow.accounts.lapse(ACCOUNT, NOW)
+            uow.commit()
+
+        with harness.unit_of_work() as uow:
+            assert not uow.accounts.authorized(ACCOUNT)
+            assert uow.accounts.clear_lapse(ACCOUNT)
+            assert not uow.accounts.clear_lapse(ACCOUNT)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.authorized(ACCOUNT)
+
+    def test_only_a_connected_account_lapses(self, harness: PersistenceHarness) -> None:
+        missing = ConnectedAccountId("missing")
+        harness.connect_account(ACCOUNT)
+        harness.disconnect_account(ACCOUNT)
+        with harness.unit_of_work() as uow:
+            assert not uow.accounts.lapse(ACCOUNT, NOW)
+            assert not uow.accounts.lapse(missing, NOW)
+            assert not uow.accounts.authorized(ACCOUNT)
+            assert not uow.accounts.authorized(missing)
 
     def test_calendar_names_belong_to_an_existing_account_and_go_with_it(
         self, harness: PersistenceHarness

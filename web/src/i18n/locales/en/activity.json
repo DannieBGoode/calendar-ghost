@@ -448,7 +448,8 @@
     "resolution": {
       "syncSucceeded": "Resolved by a successful sync.",
       "blocksCleared": "Resolved when the daily check found nothing still blocked.",
-      "ruleRemoved": "Closed when the rule was removed."
+      "ruleRemoved": "Closed when the rule was removed.",
+      "accessRestored": "Resolved when Google accepted the account again."
     }
   }
 }

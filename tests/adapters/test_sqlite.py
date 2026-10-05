@@ -220,7 +220,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == list(range(1, 20))
+    assert versions == list(range(1, 21))
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -898,6 +898,87 @@ def test_migration_19_keeps_earlier_incidents_without_a_message(tmp_path: Path) 
     # An earlier release recorded only the English summary, which the Web UI keeps showing.
     assert versions.count(19) == 1
     assert message == (None, None)
+
+
+def test_migration_20_lapses_accounts_an_open_authorization_incident_names(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    renewed = store.save("Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE)
+    degraded = rule(state=SyncRuleState.DEGRADED)
+    stopped = replace(degraded, id=SyncRuleId("stopped"), source=endpoint(work.id.value, "work"))
+    other = replace(degraded, id=SyncRuleId("other"), source=endpoint(renewed.id.value, "home"))
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        uow.rules.add(stopped)
+        uow.rules.add(other)
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE connected_accounts DROP COLUMN authorization_lapsed_at")
+        connection.execute("ALTER TABLE sync_rules DROP COLUMN awaiting_reauthorization")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 20")
+        # The work account failed after it was last authorized; the home account was
+        # reauthorized after its failure, and its rule failed for another reason.
+        connection.executemany(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, account_id, category, state,
+                summary, opened_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, 'open', 's', ?, ?)
+            """,
+            [
+                (
+                    "i-1",
+                    "provider:stopped",
+                    "stopped",
+                    work.id.value,
+                    "authentication",
+                    "9999-01-01T00:00:00+00:00",
+                    "9999-01-01T00:00:00+00:00",
+                ),
+                (
+                    "i-2",
+                    "provider:other",
+                    "other",
+                    renewed.id.value,
+                    "permanent",
+                    "2000-01-01T00:00:00+00:00",
+                    "2000-01-01T00:00:00+00:00",
+                ),
+                (
+                    "i-3",
+                    "removal:other",
+                    "other",
+                    renewed.id.value,
+                    "authorization",
+                    "2000-01-01T00:00:00+00:00",
+                    "2000-01-01T00:00:00+00:00",
+                ),
+            ],
+        )
+        connection.execute(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at, resolved_at, resolution)
+            VALUES ('i-4', 'blocked:other', 'other', 'conflict', 'resolved', 's', 't', 't', 't',
+                'rule_removed')
+            """
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    lapsed = {account.id: account.authorization_lapsed_at for account in store.list()}
+    assert lapsed == {work.id: "9999-01-01T00:00:00+00:00", renewed.id: None}
+    with SqliteUnitOfWorkFactory(database)() as uow:
+        awaiting = {rule.id: rule.awaiting_reauthorization for rule in uow.rules.list()}
+    assert awaiting == {stopped.id: True, other.id: False}
+    with sqlite3.connect(database) as connection:
+        # Earlier resolutions are kept, and the new one is accepted.
+        resolution = "SELECT resolution FROM incidents WHERE id = 'i-4'"
+        assert connection.execute(resolution).fetchone() == ("rule_removed",)
+        connection.execute("UPDATE incidents SET resolution = 'access_restored' WHERE id = 'i-4'")
 
 
 def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:

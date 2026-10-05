@@ -12,6 +12,7 @@ const healthy: Dashboard = {
   problems: [],
   connected_accounts: 2,
   disconnected_accounts: 0,
+  lapsed_accounts: 0,
   sync_rules: 3,
   enabled_rules: 2,
   stopped_rules: 0,
@@ -159,6 +160,7 @@ describe("overviewHealth", () => {
         status: "stopped",
         connected_accounts: 0,
         disconnected_accounts: 1,
+        lapsed_accounts: 0,
         stopped_rules: 2,
         enabled_rules: 0,
         problems: [
@@ -273,6 +275,7 @@ describe("overviewHealth", () => {
         ...healthy,
         status: "stopped",
         disconnected_accounts: 1,
+        lapsed_accounts: 0,
         stopped_rules: 1,
         problems: [problem("stopped", "rule-7", "A calendar account needs reauthorization", null)],
       },

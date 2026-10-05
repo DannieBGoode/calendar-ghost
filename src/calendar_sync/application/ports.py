@@ -423,6 +423,18 @@ class ConnectedAccountRecords(Protocol):
 
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None: ...
 
+    def lapse(self, account_id: ConnectedAccountId, at: datetime) -> bool:
+        """Record Lapsed Authorization on a connected account; whether it newly lapsed."""
+        ...
+
+    def clear_lapse(self, account_id: ConnectedAccountId) -> bool:
+        """Clear the account's Lapsed Authorization; whether it had lapsed."""
+        ...
+
+    def authorized(self, account_id: ConnectedAccountId) -> bool:
+        """Whether the account is connected and its authorization has not lapsed."""
+        ...
+
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         """Delete the account if it is disconnected; whether it was.
 
@@ -591,7 +603,8 @@ class IncidentReport:
     """An Incident to open or refresh; repeated reports under one key update one Incident."""
 
     key: str
-    rule_id: SyncRuleId
+    rule_id: SyncRuleId | None
+    """None for an Incident about a Connected Account rather than one rule."""
     category: str
     summary: str
     """Operational wording only; never an event title or other event content."""
@@ -607,6 +620,8 @@ class IncidentResolution(StrEnum):
     SYNC_SUCCEEDED = "sync_succeeded"
     BLOCKS_CLEARED = "blocks_cleared"
     RULE_REMOVED = "rule_removed"
+    ACCESS_RESTORED = "access_restored"
+    """The account's Lapsed Authorization cleared (ADR 0027)."""
 
 
 class IncidentRepository(Protocol):
@@ -660,7 +675,7 @@ class RemovalIncidents(Protocol):
 
 class RecoveryIncidents(Protocol):
     def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
-        """Refresh a stopped rule's Incident with the lost authorization its recovery met."""
+        """Record the lost authorization a preview met, lapsing the account it names."""
         ...
 
 
@@ -680,6 +695,8 @@ class ConnectedAccount:
     """When the account was last connected or reauthorized; None while disconnected."""
     provider: ProviderKind = field(kw_only=True)
     """The calendar service the account belongs to; it never changes (ADR 0022)."""
+    authorization_lapsed_at: str | None = field(default=None, kw_only=True)
+    """When the provider stopped accepting a connected account's credentials (ADR 0027)."""
 
 
 class ConnectedAccountRepository(AccountAuthorizations, Protocol):
@@ -732,7 +749,9 @@ class AccountAccess:
 class AccountAuthorization(Protocol):
     """The provider's state-protected OAuth flow that connects or reauthorizes an account."""
 
-    def authorization_url(self) -> str: ...
+    def authorization_url(self, login_hint: str | None = None) -> str:
+        """The provider's consent URL; `login_hint` suggests the account being reauthorized."""
+        ...
 
     def complete(self, state: str, code: str) -> ConnectedAccount: ...
 

@@ -52,6 +52,16 @@ AUTHORIZATION_FAILURES = frozenset(
 TRANSIENT_FAILURES = frozenset({ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY})
 
 
+_FAILURE_SUMMARIES = {
+    ProviderFailureKind.AUTHENTICATION: "Authorization for {calendar} expired",
+    ProviderFailureKind.AUTHORIZATION: "Access to {calendar} was denied",
+    ProviderFailureKind.RATE_LIMIT: "{Calendar} is limiting requests",
+    ProviderFailureKind.TEMPORARY: "{Calendar} is temporarily unavailable",
+    ProviderFailureKind.PERMANENT: "{Calendar} rejected synchronization",
+    ProviderFailureKind.INFRASTRUCTURE: "Local synchronization infrastructure failed",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderFailure(ApplicationError):
     kind: ProviderFailureKind
@@ -74,6 +84,14 @@ class ProviderFailure(ApplicationError):
     def provider_name(self) -> str:
         """How messages name the failed provider: "Google Calendar", or a neutral phrase."""
         return self.provider.calendar_name if self.provider else "the calendar provider"
+
+    @property
+    def summary(self) -> str:
+        """What failed, naming the provider when the failure says which one (ADR 0022)."""
+        calendar = self.provider_name
+        return _FAILURE_SUMMARIES[self.kind].format(
+            calendar=calendar, Calendar=calendar[0].upper() + calendar[1:]
+        )
 
     def __str__(self) -> str:
         return self.detail
@@ -163,6 +181,13 @@ class CalendarPermissionRequired(AuthorizationFailed):
 
 class AccountAccessCheckFailed(ApplicationError):
     """The provider did not confirm a Connected Account's calendar access."""
+
+    def __init__(
+        self, detail: str, kind: ProviderFailureKind = ProviderFailureKind.PERMANENT
+    ) -> None:
+        super().__init__(detail)
+        self.kind = kind
+        """How the provider refused, so an authorization refusal can lapse the account."""
 
 
 class ActivityEventNotFound(ApplicationError):

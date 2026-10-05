@@ -1,3 +1,4 @@
+from dataclasses import replace
 from email.message import EmailMessage
 from typing import Any, ClassVar
 
@@ -49,3 +50,17 @@ def test_incident_email_names_the_product(monkeypatch: pytest.MonkeyPatch) -> No
     (message,) = RecordingSmtp.sent
     assert message["Subject"].startswith("Calendar Ghost incident: ")
     assert "Open Calendar Ghost Activity for current status." in message.get_content()
+
+
+def test_an_account_incident_email_names_no_rule(monkeypatch: pytest.MonkeyPatch) -> None:
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+    channel = SmtpChannel(
+        host="smtp.example", port=587, sender="a@example.com", recipient="b@example.com"
+    )
+
+    channel.send(replace(incident(), rule_id=None, category="authentication"))
+
+    (message,) = RecordingSmtp.sent
+    assert "Rule:" not in message.get_content()
+    assert "Category: authentication" in message.get_content()
