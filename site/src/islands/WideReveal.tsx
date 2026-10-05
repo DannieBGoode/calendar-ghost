@@ -4,7 +4,7 @@ import { SAM_WEEK } from "../demo/week"
 import type { Messages } from "../i18n"
 import { format } from "../i18n/format"
 import { EventCard } from "./EventCard"
-import { Ghost, SpeechBubble, type GhostFace } from "./Ghost"
+import { Ghost, SpeechBubble, type GhostFace, type GhostTone } from "./Ghost"
 import { useAnimationFrame, useOnScreen, usePageVisible, usePointerEyes, useReducedMotion } from "./hooks"
 import { MotionToggle } from "./MotionToggle"
 import { REVEAL_REST, clampPercent, shouldAnimate, sweepPercent, sweepTimeFor } from "./motion"
@@ -53,6 +53,9 @@ export interface WideRevealProps {
   phoneHandleSize?: number
   /** What the ghost says while a visitor holds it, if anything. */
   heldSays?: string
+  /** The handle's tone. The default stays moss, so the home hero keeps its ghost until its own
+   * redesign; other pages pass the default character, mist. */
+  ghostTone?: GhostTone
 }
 
 /** The hero: Sam's week as Sam sees it, revealed over what work sees, with the ghost as handle. */
@@ -64,6 +67,7 @@ export function WideReveal({
   handleSize = HANDLE_PX,
   phoneHandleSize,
   heldSays,
+  ghostTone = "moss",
 }: WideRevealProps) {
   const placed = useMemo(() => (weekHeight === FRAME.heightPx ? PLACED : placeWeek(weekHeight)), [weekHeight])
   // Each event's place on phones, by index, when the week there has its own height.
@@ -169,7 +173,7 @@ export function WideReveal({
         </div>
         <div className="reveal-rail" aria-hidden="true">
           <div ref={handle} className="reveal-handle" data-face={face}>
-            <Ghost face={face} look={eyes} alive="loop" className="reveal-ghost" />
+            <Ghost face={face} tone={ghostTone} look={eyes} alive="loop" className="reveal-ghost" />
             {heldSays && held !== null ? (
               <SpeechBubble side="top" className="reveal-says">
                 {heldSays}

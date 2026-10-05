@@ -10,6 +10,11 @@ import type { CSSProperties, ReactNode } from "react"
  * around it holds what floats outside the body (sparkles, sweat, "z"s, startle rays).
  */
 export type GhostFace = "neutral" | "happy" | "proud" | "surprised" | "concerned" | "sleepy" | "wink"
+/**
+ * - `mist`: the default character, the white ghost with a soft lantern glow around it.
+ * - `lantern`: Lantern Indigo, for a few accents (How it works, the 404, the Why signature).
+ * - `moss`: green, only where it means "healthy", as in the app (the Overview, a dashboard tile).
+ */
 export type GhostTone = "moss" | "lantern" | "mist"
 /**
  * How the ghost idles by itself (blinking, floating, drifting "z"s).
@@ -144,6 +149,9 @@ export interface GhostProps {
   float?: boolean
   /** Rendered width in CSS pixels; the default comes from `--ghost-size`. */
   size?: number
+  /** A soft radial lantern glow behind the ghost (on by default for the mist tone). It breathes
+   * with the ghost's idle life (`alive`), so it is still when the ghost is. */
+  glow?: boolean
   className?: string
 }
 
@@ -151,14 +159,18 @@ export interface GhostProps {
 export function Ghost({
   face = "neutral",
   then,
-  tone = "moss",
+  tone = "mist",
   look = { x: 0, y: 0 },
   alive = "still",
   float = false,
   size,
+  glow = tone === "mist",
   className,
 }: GhostProps) {
-  const style = size ? ({ "--ghost-size": `${size}px` } as CSSProperties) : undefined
+  // The glow reaches about a fifth of the ghost's size past its body (ghost.css).
+  const style = size
+    ? ({ "--ghost-size": `${size}px`, ...(glow ? { "--ghost-glow-r": `${Math.round(size * 0.2)}px` } : {}) } as CSSProperties)
+    : undefined
   return (
     <span
       className={className ? `ghost ${className}` : "ghost"}
@@ -167,6 +179,7 @@ export function Ghost({
       data-sequence={then ? "" : undefined}
       data-alive={alive}
       data-float={float ? "" : undefined}
+      data-glow={glow ? "" : undefined}
       style={style}
       aria-hidden="true"
     >

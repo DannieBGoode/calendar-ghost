@@ -36,7 +36,7 @@ const beats = Array.from({ length: BEATS }, (_, index) => index === ALERT_AT)
       </div>
       <!-- The one answer every tool reads: the status API's verdict, and the MCP tool that gives it. -->
       <div class="int-hub" aria-hidden="true">
-        <span class="int-hub-ghost"><Ghost face="happy" tone="moss" alive="brief" float /></span>
+        <span class="int-hub-ghost"><Ghost face="happy" alive="brief" float /></span>
         <div class="int-json">
           <span class="int-route"><b>GET</b> /api/v1/status</span>
           <pre><code><span class="int-p">{"{"}</span>

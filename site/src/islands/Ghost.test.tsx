@@ -49,6 +49,19 @@ describe("Ghost", () => {
     expect(html).toContain('data-alive="brief"')
     expect(html).toContain("ghost-shadow")
   })
+
+  it("is the white ghost by default, with its lantern glow", () => {
+    const html = renderToString(<Ghost />)
+    expect(html).toContain('data-tone="mist"')
+    expect(html).toContain("data-glow")
+  })
+
+  it("glows only where asked: by default for mist, never for moss or lantern unless told", () => {
+    expect(renderToString(<Ghost tone="moss" />)).not.toContain("data-glow")
+    expect(renderToString(<Ghost tone="lantern" />)).not.toContain("data-glow")
+    expect(renderToString(<Ghost tone="lantern" glow />)).toContain("data-glow")
+    expect(renderToString(<Ghost tone="mist" glow={false} />)).not.toContain("data-glow")
+  })
 })
 
 describe("SpeechBubble", () => {

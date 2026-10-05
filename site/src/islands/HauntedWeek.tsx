@@ -20,13 +20,13 @@ export function HauntedWeek({
   m,
   motion,
   summary,
-  ghostTone = "moss",
+  ghostTone = "mist",
   avatars,
 }: {
   m: Messages["demo"]
   motion: Messages["motion"]
   summary: string
-  /** The roaming ghost's tone (default moss, the healthy green). */
+  /** The roaming ghost's tone (default mist, the white ghost with its glow). */
   ghostTone?: GhostTone
   /** Sam's portraits; the work one sits beside the calendar's name (see avatars/index.ts). */
   avatars?: AvatarUrls
