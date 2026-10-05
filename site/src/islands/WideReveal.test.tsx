@@ -43,6 +43,31 @@ describe("WideReveal", () => {
     expect(Number(phone)).toBeLessThan(Number(wide))
   })
 
+  it("rests where a page asks, so the page reads right before it sweeps and without JavaScript", () => {
+    const html = renderToString(<WideReveal m={en.demo} motion={en.motion} sweep={{ rest: 40, direction: "left", swing: 30 }} />)
+    expect(html).toContain("--split:40%")
+  })
+
+  it("keeps its labels in the corners and its controls under the frame unless a page pins them to the divider", () => {
+    const plain = renderToString(<WideReveal m={en.demo} motion={en.motion} />)
+    expect(plain).toContain("reveal-tag-you")
+    expect(plain).toContain("demo-foot")
+    expect(plain).not.toContain("reveal-pins")
+    expect(plain).not.toContain("data-labels")
+
+    const hint = { mouse: "Move over the week", touch: "Drag the ghost" }
+    const pinned = renderToString(<WideReveal m={en.demo} motion={en.motion} labels="divider" handleHint={hint} />)
+    expect(pinned).toContain('data-labels="divider"')
+    expect(pinned).not.toContain("reveal-tag")
+    expect(pinned).not.toContain("demo-foot")
+    // Both labels ride the divider, and the hint sits with the handle in both wordings.
+    expect(pinned).toMatch(new RegExp(`reveal-pins.*${en.demo.youSee}.*${en.demo.workSees}`))
+    expect(pinned).toMatch(new RegExp(`reveal-handle.*${hint.mouse}.*${hint.touch}`))
+    // The pause control is an icon button inside the frame, still named in words.
+    expect(pinned).toMatch(/class="reveal-frame".*class="motion-toggle is-compact".*<\/div><figcaption/)
+    expect(pinned).toContain(`<span class="sr-only">${en.motion.pause}</span>`)
+  })
+
   describe("in the browser", () => {
     let container: HTMLDivElement
     beforeEach(() => {

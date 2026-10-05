@@ -15,6 +15,13 @@ describe("MotionToggle", () => {
     expect(renderToString(<Harness />)).toContain("hidden")
   })
 
+  it("as an icon button, keeps its words as its name and its tooltip", () => {
+    const html = renderToString(<MotionToggle paused={false} onToggle={() => {}} m={en.motion} compact />)
+    expect(html).toContain("is-compact")
+    expect(html).toContain(`title="${en.motion.pause}"`)
+    expect(html).toContain(`<span class="sr-only">${en.motion.pause}</span>`)
+  })
+
   it("pauses, then plays", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement("div")

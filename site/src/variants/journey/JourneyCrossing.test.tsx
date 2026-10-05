@@ -45,4 +45,10 @@ describe("JourneyCrossing before JavaScript runs", () => {
   it("has no pause control until it has hydrated", () => {
     expect(html).toMatch(/class="motion-toggle" hidden=""/)
   })
+
+  it("can show its pause control as an icon button, still named in words", () => {
+    const compact = renderToString(<JourneyCrossing m={copy} plan={journeyDentist(en)} avatars={avatars} compactToggle />)
+    expect(compact).toMatch(/class="motion-toggle is-compact" hidden=""/)
+    expect(compact).toContain(`<span class="sr-only">${en.motion.pause}</span>`)
+  })
 })

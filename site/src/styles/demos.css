@@ -119,6 +119,38 @@
 .reveal .demo-foot { justify-content: space-between; }
 .reveal-hint { margin: 0 0 0 0.25rem; font-size: 0.8125rem; color: var(--muted-foreground); }
 
+/* Labels pinned to the divider (WideReveal labels="divider"): "What you see" on its left and
+   "What work sees" on its right, in the strip under the week, so they travel with it. Near either
+   end of the frame they stop at its edge instead of leaving it. */
+.reveal-pins { z-index: 3; transform: translateX(clamp(var(--pin-you-w, 8.5rem), var(--split), calc(100% - var(--pin-work-w, 9.5rem)))); }
+.reveal-pin {
+  position: absolute; bottom: 0.45rem; padding: 0.2rem 0.6rem; border-radius: 999px; white-space: nowrap;
+  font-size: 0.8125rem; font-weight: 700; line-height: 1.35;
+}
+.reveal-pin-you { right: calc(100% + 0.45rem); background: var(--foreground); color: var(--background); }
+.reveal-pin-work { left: 0.45rem; background: var(--background); color: var(--foreground); box-shadow: inset 0 0 0 1px var(--border); }
+/* The hint, under the ghost handle: the words for a mouse, or for touch. */
+.reveal-handle-hint {
+  position: absolute; top: calc(100% + 0.35rem); left: 50%; transform: translateX(-50%);
+  padding: 0.2rem 0.6rem; border-radius: 999px; white-space: nowrap;
+  font-size: 0.8125rem; font-weight: 600; background: var(--background); color: var(--foreground);
+  box-shadow: 0 0 0 1px var(--border); transition: opacity 240ms var(--ease-out);
+}
+.reveal-hint-touch { display: none; }
+@media (hover: none), (pointer: coarse) {
+  .reveal-hint-mouse { display: none; }
+  .reveal-hint-touch { display: inline; }
+}
+/* Once a visitor has the ghost, it no longer needs saying. */
+.reveal-frame[data-held] .reveal-handle-hint { opacity: 0; }
+/* The pause control: an icon button in the frame's top-right corner, over the range input. */
+.motion-toggle.is-compact { justify-content: center; width: 2.75rem; padding: 0; }
+.reveal-frame > .motion-toggle {
+  position: absolute; top: 0; right: 0; z-index: 6; border-radius: 0 0 0 var(--radius);
+  background: var(--surface); box-shadow: inset 1px -1px 0 var(--border); color: var(--foreground);
+}
+@media (prefers-reduced-motion: reduce) { .reveal-handle-hint { transition: none; } }
+
 /* The Haunted Week. */
 .haunt { margin: 2rem 0 0; }
 .haunt-frame {

@@ -7,7 +7,7 @@ import { EventCard } from "./EventCard"
 import { Ghost, SpeechBubble, type GhostFace, type GhostTone } from "./Ghost"
 import { useAnimationFrame, useOnScreen, usePageVisible, usePointerEyes, useReducedMotion } from "./hooks"
 import { MotionToggle } from "./MotionToggle"
-import { REVEAL_REST, clampPercent, shouldAnimate, sweepPercent, sweepTimeFor } from "./motion"
+import { REVEAL_REST, SWEEP_PERIOD_MS, clampPercent, shouldAnimate, sweepPercent, sweepTimeFor, type SweepShape } from "./motion"
 import { WeekGrid } from "./WeekGrid"
 
 const FRAME = { heightPx: 380, headerPx: 36, gapPx: 3 }
@@ -56,6 +56,22 @@ export interface WideRevealProps {
   /** The handle's tone. The default stays moss, so the home hero keeps its ghost until its own
    * redesign; other pages pass the default character, mist. */
   ghostTone?: GhostTone
+  /**
+   * Where the split rests before it sweeps, and without JavaScript (`rest`, in percent, default
+   * 55); which way it heads first (`direction`, default right); and how far it swings each way
+   * from the middle (`swing`, default 38 points).
+   */
+  sweep?: { rest?: number } & Omit<SweepShape, "periodMs">
+  /**
+   * Where the two views' labels go.
+   * - `corners` (default): in the frame's bottom corners, with the hint and the pause control
+   *   under the frame.
+   * - `divider`: pinned to the divider, so they travel with it; the hint sits under the ghost
+   *   handle and the pause control is an icon button in the frame's top-right corner.
+   */
+  labels?: "corners" | "divider"
+  /** With `labels="divider"`, the hint under the handle: one for a mouse, one for touch. */
+  handleHint?: { mouse: string; touch: string }
 }
 
 /** The hero: Sam's week as Sam sees it, revealed over what work sees, with the ghost as handle. */
@@ -68,15 +84,20 @@ export function WideReveal({
   phoneHandleSize,
   heldSays,
   ghostTone = "moss",
+  sweep = {},
+  labels = "corners",
+  handleHint,
 }: WideRevealProps) {
+  const pinned = labels === "divider"
+  const { rest = REVEAL_REST, direction, swing } = sweep
   const placed = useMemo(() => (weekHeight === FRAME.heightPx ? PLACED : placeWeek(weekHeight)), [weekHeight])
   // Each event's place on phones, by index, when the week there has its own height.
   const phonePlaced = useMemo(() => (phoneWeekHeight ? placeWeek(phoneWeekHeight) : null), [phoneWeekHeight])
   const frame = useRef<HTMLDivElement>(null)
   const handle = useRef<HTMLDivElement>(null)
   const [held, setHeld] = useState<number | null>(null)
-  const [auto, setAuto] = useState(REVEAL_REST)
-  const [phase, setPhase] = useState(() => sweepTimeFor(REVEAL_REST))
+  const [auto, setAuto] = useState(rest)
+  const [phase, setPhase] = useState(() => sweepTimeFor(rest, { direction, swing }))
   const [paused, setPaused] = useState(false)
   const reducedMotion = useReducedMotion()
   const onScreen = useOnScreen(frame)
@@ -84,21 +105,21 @@ export function WideReveal({
   const eyes = usePointerEyes(handle, onScreen)
   const animating = shouldAnimate({ onScreen, pageVisible, reducedMotion, held: held !== null || paused })
   const face = useHandleFace(held !== null)
-  useAnimationFrame((elapsed) => setAuto(sweepPercent(phase + elapsed)), animating)
+  useAnimationFrame((elapsed) => setAuto(sweepPercent(phase + elapsed, SWEEP_PERIOD_MS, swing)), animating)
 
   // When the loop stops (scrolled away, tab hidden, reduced motion), remember the phase at the
   // point it stopped, so the next run resumes from there instead of jumping back to center.
   const wasAnimating = useRef(animating)
   useEffect(() => {
-    if (wasAnimating.current && !animating) setPhase(sweepTimeFor(auto))
+    if (wasAnimating.current && !animating) setPhase(sweepTimeFor(auto, { direction, swing }))
     wasAnimating.current = animating
-  }, [animating, auto])
+  }, [animating, auto, direction, swing])
 
   const splitValue = held ?? auto
   const split = Math.round(splitValue)
   const release = () => {
     if (held === null) return
-    setPhase(sweepTimeFor(held))
+    setPhase(sweepTimeFor(held, { direction, swing }))
     setAuto(held)
     setHeld(null)
   }
@@ -124,10 +145,10 @@ export function WideReveal({
             ),
           )}
         </WeekGrid>
-        <span className="reveal-tag reveal-tag-work">{m.workSees}</span>
+        {pinned ? null : <span className="reveal-tag reveal-tag-work">{m.workSees}</span>}
       </div>
     ),
-    [m, placed, phonePlaced],
+    [m, placed, phonePlaced, pinned],
   )
   const youLayer = useMemo(
     () => (
@@ -144,10 +165,10 @@ export function WideReveal({
             />
           ))}
         </WeekGrid>
-        <span className="reveal-tag reveal-tag-you">{m.youSee}</span>
+        {pinned ? null : <span className="reveal-tag reveal-tag-you">{m.youSee}</span>}
       </div>
     ),
-    [m, placed, phonePlaced],
+    [m, placed, phonePlaced, pinned],
   )
   // Only a non-default size is written, so the default page renders exactly as before.
   const sizing: Record<string, string> = {}
@@ -155,6 +176,7 @@ export function WideReveal({
   if (handleSize !== HANDLE_PX) sizing["--handle-size"] = `${handleSize}px`
   if (phoneWeekHeight) sizing["--reveal-week-h-phone"] = `${phoneWeekHeight}px`
   if (phoneHandleSize) sizing["--handle-size-phone"] = `${phoneHandleSize}px`
+  const toggle = <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={motion} compact={pinned} />
 
   return (
     <figure className="reveal">
@@ -162,6 +184,8 @@ export function WideReveal({
         ref={frame}
         className="reveal-frame"
         data-playing={paused ? "false" : "true"}
+        data-labels={pinned ? "divider" : undefined}
+        data-held={pinned && held !== null ? "" : undefined}
         style={{ ...sizing, "--split": splitStyle(splitValue) } as CSSProperties}
       >
         {workLayer}
@@ -171,6 +195,12 @@ export function WideReveal({
         <div className="reveal-rail" aria-hidden="true">
           <div className="reveal-divider" />
         </div>
+        {pinned ? (
+          <div className="reveal-rail reveal-pins" aria-hidden="true">
+            <span className="reveal-pin reveal-pin-you">{m.youSee}</span>
+            <span className="reveal-pin reveal-pin-work">{m.workSees}</span>
+          </div>
+        ) : null}
         <div className="reveal-rail" aria-hidden="true">
           <div ref={handle} className="reveal-handle" data-face={face}>
             <Ghost face={face} tone={ghostTone} look={eyes} alive="loop" className="reveal-ghost" />
@@ -178,6 +208,12 @@ export function WideReveal({
               <SpeechBubble side="top" className="reveal-says">
                 {heldSays}
               </SpeechBubble>
+            ) : null}
+            {pinned && handleHint ? (
+              <span className="reveal-handle-hint">
+                <span className="reveal-hint-mouse">{handleHint.mouse}</span>
+                <span className="reveal-hint-touch">{handleHint.touch}</span>
+              </span>
             ) : null}
           </div>
         </div>
@@ -200,14 +236,17 @@ export function WideReveal({
           onPointerLeave={release}
           onBlur={release}
         />
+        {pinned ? toggle : null}
       </div>
       <figcaption className="sr-only">{m.revealSummary}</figcaption>
-      <div className="demo-foot">
-        <p className="reveal-hint" aria-hidden="true">
-          {m.hint}
-        </p>
-        <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={motion} />
-      </div>
+      {pinned ? null : (
+        <div className="demo-foot">
+          <p className="reveal-hint" aria-hidden="true">
+            {m.hint}
+          </p>
+          {toggle}
+        </div>
+      )}
     </figure>
   )
 }

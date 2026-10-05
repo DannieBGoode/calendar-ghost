@@ -10,19 +10,29 @@ export function MotionToggle({
   paused,
   onToggle,
   m,
+  compact = false,
 }: {
   paused: boolean
   onToggle: () => void
   m: Messages["motion"]
+  /** A 44px icon button: its words are still its name, for assistive technology and as a tooltip. */
+  compact?: boolean
 }) {
   const hydrated = useHydrated()
   const reducedMotion = useReducedMotion()
+  const label = paused ? m.play : m.pause
   return (
-    <button type="button" className="motion-toggle" hidden={!hydrated || reducedMotion} onClick={onToggle}>
+    <button
+      type="button"
+      className={compact ? "motion-toggle is-compact" : "motion-toggle"}
+      hidden={!hydrated || reducedMotion}
+      onClick={onToggle}
+      title={compact ? label : undefined}
+    >
       <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
         {paused ? <path d="M5 3.5v9l7.5-4.5Z" /> : <path d="M4.5 3.5h2.5v9H4.5ZM9 3.5h2.5v9H9Z" />}
       </svg>
-      {paused ? m.play : m.pause}
+      {compact ? <span className="sr-only">{label}</span> : label}
     </button>
   )
 }

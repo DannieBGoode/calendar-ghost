@@ -17,10 +17,13 @@ import { MotionToggle } from "./MotionToggle"
 export function LoopStage({
   motion,
   className,
+  compact = false,
   children,
 }: {
   motion: Messages["motion"]
   className?: string
+  /** Show the pause control as a 44px icon button (see MotionToggle). */
+  compact?: boolean
   children?: ReactNode
 }) {
   const root = useRef<HTMLDivElement>(null)
@@ -38,7 +41,7 @@ export function LoopStage({
     >
       {children}
       <div className="demo-foot">
-        <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={motion} />
+        <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={motion} compact={compact} />
       </div>
     </div>
   )

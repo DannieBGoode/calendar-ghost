@@ -129,7 +129,21 @@ export interface JourneyCrossingCopy {
  * and under reduced motion. With JavaScript, each run is an overlay on that result: it starts and
  * ends on it, and clears its inline styles when it stops.
  */
-export function JourneyCrossing({ m, plan, avatars }: { m: JourneyCrossingCopy; plan: PlanText; avatars: AvatarUrls }) {
+export function JourneyCrossing({
+  m,
+  plan,
+  avatars,
+  compactToggle = false,
+  firstRestMs = RUN.total - FIRST_MS,
+}: {
+  m: JourneyCrossingCopy
+  plan: PlanText
+  avatars: AvatarUrls
+  /** Show the pause control as a 44px icon button (the home hero iteration B uses it). */
+  compactToggle?: boolean
+  /** How long the landed state holds before the first run (default 2.8 seconds). */
+  firstRestMs?: number
+}) {
   const root = useRef<HTMLDivElement>(null)
   const source = useRef<HTMLDivElement>(null)
   const traveler = useRef<HTMLDivElement>(null)
@@ -147,7 +161,7 @@ export function JourneyCrossing({ m, plan, avatars }: { m: JourneyCrossingCopy; 
 
   // The run's clock survives pauses; `restart` marks that the ghost may be mid-air and should
   // fade in at its resting place instead of jumping there.
-  const clockMs = useRef(FIRST_MS)
+  const clockMs = useRef(RUN.total - firstRestMs)
   const restart = useRef(false)
   const geometry = useRef<Geometry | null>(null)
   const touched = useRef(new Set<HTMLElement>())
@@ -357,7 +371,7 @@ export function JourneyCrossing({ m, plan, avatars }: { m: JourneyCrossingCopy; 
           </div>
         </fieldset>
         <div className="jc-toggle">
-          <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={m.motion} />
+          <MotionToggle paused={paused} onToggle={() => setPaused((value) => !value)} m={m.motion} compact={compactToggle} />
         </div>
       </div>
 
