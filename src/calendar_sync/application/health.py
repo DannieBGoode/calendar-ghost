@@ -210,13 +210,13 @@ class RuleHealth:
         now = self.clock.now()
         consecutive = self.records.record_failure(rule.id, failure.kind, now)
         response = self.policy.after_failure(rule.id, failure, consecutive)
-        if response.lapsed is not None and not self.lapses.lapsed(
-            response.lapsed, failure, attempted_at=attempted_at or now
-        ):
-            # Reauthorized while the run was in flight; its refusal stops nothing.
+        if response.lapsed is not None:
+            # The lapse stops every enabled rule of the account, this one included, unless the
+            # account was reauthorized while the run was in flight.
+            self.lapses.lapsed(response.lapsed, failure, attempted_at=attempted_at or now)
             return
         if response.degrade:
-            self._degrade(rule, lapsed=response.lapsed)
+            self._degrade(rule)
         if response.incident is not None and self.incidents.open(response.incident, now):
             self._notify(response.incident, now)
 
@@ -248,21 +248,14 @@ class RuleHealth:
         if self.incidents.open(incident, now):
             self._notify(incident, now)
 
-    def _degrade(self, rule: SyncRule, *, lapsed: ConnectedAccountId | None) -> None:
-        """Stop the rule; one stopped by `lapsed` awaits that account's Reauthorization."""
+    def _degrade(self, rule: SyncRule) -> None:
         if rule.state is not SyncRuleState.ENABLED:
             return
         with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
             current = uow.rules.get(rule.id)
-            if current is None or current.state is not SyncRuleState.ENABLED:
-                return
-            # Restoring decides for each rule under this same write lock, after clearing the lapse.
-            # If it cleared the lapse before this check, the rule keeps running; if after, it
-            # waits for this lock and then finds the rule awaiting and resumes it.
-            if lapsed is not None and uow.accounts.authorized(lapsed):
-                return
-            uow.rules.save(current.degrade(awaiting_reauthorization=lapsed is not None))
-            uow.commit()
+            if current is not None and current.state is SyncRuleState.ENABLED:
+                uow.rules.save(current.degrade())
+                uow.commit()
 
     def _notify(self, incident: IncidentReport, at: datetime) -> None:
         if self.notifications is not None:

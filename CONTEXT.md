@@ -46,8 +46,8 @@ change them.
 The condition of a Connected Account whose stored credentials its provider no longer accepts, as
 when a Google grant expires or is revoked. The account stays connected, so its rules keep their
 mappings and incremental positions. Any provider request that the provider refuses for
-authentication or authorization marks it, whether a sync run, a preview, or an access check.
-Reauthorization clears it, and so does an access check the provider accepts. Once it clears and
+authentication or authorization marks it, whether a sync run, a preview, or an access check, and
+it stops every enabled rule of the account. Reauthorization clears it, and so does an access check the provider accepts. Once it clears and
 every account a Degraded Rule uses is authorized, a rule stopped only by Lapsed Authorization
 returns to scheduled synchronization on its own, continuing from its preserved incremental positions
 so changes made in either calendar while it was stopped are synchronized or repaired; a rule

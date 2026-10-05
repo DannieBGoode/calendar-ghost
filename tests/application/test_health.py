@@ -302,14 +302,11 @@ def test_a_refusal_of_credentials_reauthorization_replaced_stops_nothing() -> No
 
 
 class RestoredRightAfterLapsing(LapsedAuthorizations):
-    """Reauthorization that lands between lapsing an account and stopping its rule."""
+    """Reauthorization that lands between lapsing an account and stopping its rules."""
 
-    def lapsed(
-        self, account_id: ConnectedAccountId, failure: ProviderFailure, *, attempted_at: datetime
-    ) -> bool:
-        lapsed = super().lapsed(account_id, failure, attempted_at=attempted_at)
+    def _stop(self, rule_id: SyncRuleId, account_id: ConnectedAccountId) -> None:
         self.restored(account_id, accepted_at=self.clock.now())
-        return lapsed
+        super()._stop(rule_id, account_id)
 
 
 def test_a_rule_whose_account_was_restored_before_it_stopped_keeps_running() -> None:

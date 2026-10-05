@@ -57,15 +57,24 @@ class LapsedAuthorizations:
     ) -> bool:
         """Record that the provider refused a request made at `attempted_at`; whether it lapsed.
 
-        A request begun before the account's latest Reauthorization used credentials that were
-        since replaced, so its refusal lapses nothing and opens no Incident.
+        A lapse stops every enabled rule of the account, however it was found: a sync run, a
+        preview, a removal, or an access check. A request begun before the account's latest
+        Reauthorization used credentials that were since replaced, so its refusal lapses
+        nothing, stops nothing, and opens no Incident.
         """
         now = self.clock.now()
         with self.unit_of_work() as uow:
             lapsed = uow.accounts.lapse(account_id, now, attempted_at=attempted_at)
+            enabled = tuple(
+                rule.id
+                for rule in uow.rules.list()
+                if rule.state is SyncRuleState.ENABLED and rule.uses_account(account_id)
+            )
             uow.commit()
         if not lapsed:
             return False
+        for rule_id in enabled:
+            self._stop(rule_id, account_id)
         incident = lapse_incident(account_id, failure)
         if self.incidents.open(incident, now) and self.notifications is not None:
             self.notifications.incident_opened(incident, now)
@@ -97,6 +106,20 @@ class LapsedAuthorizations:
             while_authorized=account_id,
         )
         return sum(self._resume(rule_id) for rule_id in waiting)
+
+    def _stop(self, rule_id: SyncRuleId, account_id: ConnectedAccountId) -> None:
+        """Stop an enabled rule until the account is authorized again; waits for any write."""
+        with self.locks.for_writes(rule_id), self.unit_of_work() as uow:
+            rule = uow.rules.get(rule_id)
+            if rule is None or rule.state is not SyncRuleState.ENABLED:
+                return
+            # Restoring decides for each rule under this same write lock, after clearing the lapse.
+            # If it cleared the lapse before this check, the rule keeps running; if after, it
+            # waits for this lock and then finds the rule awaiting and resumes it.
+            if uow.accounts.authorized(account_id):
+                return
+            uow.rules.save(rule.degrade(awaiting_reauthorization=True))
+            uow.commit()
 
     def _resume(self, rule_id: SyncRuleId) -> bool:
         with self.locks.for_writes(rule_id), self.unit_of_work() as uow:

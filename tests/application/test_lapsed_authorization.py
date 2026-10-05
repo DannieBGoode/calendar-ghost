@@ -132,3 +132,34 @@ def test_a_refusal_after_the_provider_accepted_the_account_stands() -> None:
     assert unit_of_work.state.lapsed == {WORK: NOW}
     assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.DEGRADED
     assert incidents.resolved == []
+
+
+def test_a_lapse_found_outside_a_sync_run_stops_the_accounts_enabled_rules() -> None:
+    # Check access or a preview found it, so no failing run stopped these rules first.
+    unit_of_work, _, lapses = _installation()
+    enabled = rule()
+    previewed = replace(
+        rule(state=SyncRuleState.PREVIEWED),
+        id=SyncRuleId("previewed"),
+        source=endpoint("work-account", "other"),
+    )
+    elsewhere = replace(
+        rule(),
+        id=SyncRuleId("elsewhere"),
+        source=endpoint("other-account", "home"),
+        destination=endpoint("other-account", "away"),
+    )
+    unit_of_work.state.rules = {r.id: r for r in (enabled, previewed, elsewhere)}
+
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
+
+    states = {
+        rule_id.value: (stored.state, stored.awaiting_reauthorization)
+        for rule_id, stored in unit_of_work.state.rules.items()
+    }
+    assert states == {
+        "rule-1": (SyncRuleState.DEGRADED, True),
+        # Never enabled, so restoring must not enable it; enabling it later fails and stops it.
+        "previewed": (SyncRuleState.PREVIEWED, False),
+        "elsewhere": (SyncRuleState.ENABLED, False),
+    }

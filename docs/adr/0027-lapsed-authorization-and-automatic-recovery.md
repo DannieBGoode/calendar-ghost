@@ -24,6 +24,8 @@ write consequences of a configuration. An expired grant changes neither.
   connected or disconnected state: the credentials stay stored and the rules keep their mappings
   and incremental positions. Settings, Rules, the Overview, Installation Status, and MCP read this
   one fact to choose the next step, which is "Reauthorize account" for the account that lapsed.
+- **A lapse stops every enabled rule of the account**, whichever request found it, so no rule keeps
+  calling the provider for an account it refused.
 - **A rule stopped only by Lapsed Authorization resumes on its own.** The Degraded Rule records
   why it stopped. When every account it uses is authorized again, whether by Reauthorization or a
   passing access check, a rule whose only stop cause is
