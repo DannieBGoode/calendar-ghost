@@ -59,7 +59,7 @@ const avatars = await avatarUrls()
       <!-- The ghost's resting place is the last step; the track carries it there from the first. -->
       <div class="how-track" aria-hidden="true">
         <div class="how-ghost">
-          <span class="how-bob"><Ghost face="happy" tone="moss" float size={104} /></span>
+          <span class="how-bob"><Ghost face="happy" tone="lantern" float size={104} /></span>
           <SpeechBubble side="top" className="how-bubble">{copy.ghost}</SpeechBubble>
         </div>
       </div>
@@ -73,12 +73,20 @@ const avatars = await avatarUrls()
   .how h2 { max-width: 12ch; }
   .how-strip { position: relative; margin-top: var(--space-lg, 2.5rem); }
   .how-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xl, 3.5rem); position: relative; z-index: 1; }
-  .how-steps li { min-width: 0; }
+  /* Each step: its piece of the app, then the big italic number on the title's line (sharing its
+     baseline), and the body under the title, so the number hangs in the margin like a list
+     marker. The same on phones. */
+  .how-steps li {
+    min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.7rem;
+    align-items: baseline;
+  }
+  .how-steps li > .how-frag { grid-column: 1 / -1; margin-bottom: 1.4rem; }
+  .how-steps li > :not(.how-frag, .how-step-n) { grid-column: 2; }
   /* The page's h3 size when it has a scale (/bold), otherwise a step up from body text. */
-  .how-steps h3 { margin-top: 0.25rem; font-size: var(--step-1, 1.25rem); line-height: 1.25; }
+  .how-steps h3 { margin: 0 0 0.3rem; font-size: var(--step-1, 1.25rem); line-height: 1.25; }
   .how-steps p:not(.how-step-n) { color: var(--muted-foreground); margin: 0; }
   .how-step-n {
-    margin: 1.5rem 0 0; font: italic 600 var(--step-2, 2rem)/1 var(--font-display); color: var(--primary);
+    grid-column: 1; margin: 0; min-width: 1.1ch; font: italic 600 var(--step-2, 2rem)/1 var(--font-display); color: var(--primary);
     font-variation-settings: "SOFT" 100, "WONK" 1;
   }
 
