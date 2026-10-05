@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs"
 import { join, relative } from "node:path"
 import { describe, expect, it } from "vitest"
-import { EARLIER_STATES, NON_PRODUCTION_PATHS, STATUS_LABELS, VERSIONS, VERSIONS_PATH } from "./versions"
+import { EARLIER_STATES, NON_PRODUCTION_PATHS, STATUS_LABELS, VERSIONS, VERSIONS_PATH, isLive, worktreeCommand } from "./versions"
 
 // The indirection through `here` keeps Vite's static `new URL(url, import.meta.url)` asset
 // transform from rewriting this path (as in links.test.ts).
@@ -22,8 +22,15 @@ const iterations = VERSIONS.flatMap((version) => version.iterations)
 
 describe("the versions index", () => {
   it("lists every page route, so no iteration goes missing from it", () => {
-    const listed = new Set([...iterations.map((iteration) => iteration.path), VERSIONS_PATH, "/404"])
+    const listed = new Set([...iterations.filter(isLive).map((iteration) => iteration.path), VERSIONS_PATH, "/404"])
     expect(routes().filter((route) => !listed.has(route))).toEqual([])
+  })
+
+  it("keeps no route for a discarded iteration", () => {
+    const discarded = iterations.filter((iteration) => !isLive(iteration)).map((iteration) => iteration.path)
+    expect(discarded).toEqual(["/home/hero-c"])
+    expect(routes().filter((route) => discarded.includes(route))).toEqual([])
+    expect(NON_PRODUCTION_PATHS).not.toContain("/home/hero-c")
   })
 
   it("lists each route once, with a date and the short commit that added it", () => {
@@ -42,14 +49,17 @@ describe("the versions index", () => {
     expect(NON_PRODUCTION_PATHS).not.toContain("/")
     expect(NON_PRODUCTION_PATHS).toContain(VERSIONS_PATH)
     expect(NON_PRODUCTION_PATHS).toEqual(
-      expect.arrayContaining(["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-c", "/home/hero-a2", "/home/hero-b2"]),
+      expect.arrayContaining(["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-a2", "/home/hero-b2"]),
     )
   })
 
-  it("says where each iteration stands: production is the one current page, and hero C is rejected", () => {
+  it("says where each iteration stands: production is the one current page, and hero C is discarded", () => {
     for (const iteration of iterations) expect(Object.keys(STATUS_LABELS), iteration.name).toContain(iteration.status)
     expect(iterations.filter((iteration) => iteration.status === "current").map((iteration) => iteration.path)).toEqual(["/"])
-    expect(iterations.find((iteration) => iteration.path === "/home/hero-c")?.status).toBe("rejected")
+    const heroC = iterations.find((iteration) => iteration.path === "/home/hero-c")
+    expect(heroC?.status).toBe("discarded")
+    expect(heroC?.commit).toBe("a7d8db3")
+    expect(worktreeCommand("a7d8db3")).toBe("git worktree add ../calendar-ghost-a7d8db3 a7d8db3")
   })
 
   it("groups the home page first, with production as its first iteration", () => {

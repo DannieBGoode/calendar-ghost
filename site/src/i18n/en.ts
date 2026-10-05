@@ -388,7 +388,7 @@ export const en = {
       },
       ending: { says: "Delivered. Give me a server, and I'll carry the rest." },
     },
-    /** The home page's hero iterations (/home/hero-a, /home/hero-b, /home/hero-c). Each tries
+    /** The home page's hero iterations (/home/hero-a, -b, -a2, -b2). Each tries
      * another first screen above the home page's own sections. */
     homeHeroes: {
       /** One plain line under the headline. */
@@ -397,13 +397,6 @@ export const en = {
       meta: "Open source (AGPL) · Docker · Google Calendar",
       /** The hint under the ghost handle: for a mouse, then for touch. */
       handleHint: { mouse: "Move over the week", touch: "Drag the ghost" },
-      /** Hero C: the headline is the demo. */
-      c: {
-        /** The words before the event in the animated headline. */
-        lead: "Work sees",
-        /** The headline as one sentence, for assistive technology (the animated one is hidden). */
-        title: "Work sees Busy, not your Dentist appointment.",
-      },
     },
   },
 }

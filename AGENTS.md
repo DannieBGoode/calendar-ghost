@@ -119,7 +119,9 @@ the Docker build context, and has its own `Site` workflow.
 - Design versions and iterations sit beside production, never on top of it: a new iteration is a
   new route (home hero iterations under `site/src/pages/home/`), never a change to an old one.
   Append each to `site/src/versions.ts` with the commit that added it and where it stands
-  (`current`, `candidate`, or `rejected`; a rejected route stays for comparison). That list drives
+  (`current`, `candidate`, `rejected`, or `discarded`; a rejected route stays for comparison, and a
+  discarded one loses its route and code but keeps its entry and commit, so the index tells how to
+  see it with git). That list drives
   the internal index at `/versions` and the sitemap exclusion, and each such page passes `noindex`
   to its layout. The index and the small "Versions" link on iteration pages are internal tools, so
   their words live in `versions.ts`, the one exception to the `en.ts` rule.

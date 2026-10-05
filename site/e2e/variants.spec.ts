@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
 import { TRUST_DOCS } from "../src/links"
-import { NON_PRODUCTION_PATHS, STATUS_LABELS, VERSIONS, VERSIONS_LINK_LABEL, VERSIONS_PATH } from "../src/versions"
+import { NON_PRODUCTION_PATHS, STATUS_LABELS, VERSIONS, VERSIONS_LINK_LABEL, VERSIONS_PATH, VIEW_WITH_GIT } from "../src/versions"
 
 /** The home page's sections, whose headings every home hero iteration keeps. */
 const HOME_HEADINGS = [
@@ -98,15 +98,6 @@ const VARIANTS = [
     /** The hero's crossing (it plays once, then on request), the week, the home page's crossing. */
     loops: 3,
     controls: [".jc-option", ...HOME_CONTROLS],
-  },
-  {
-    path: "/home/hero-c",
-    title: en.variants.homeHeroes.c.title,
-    rest: "50%",
-    headings: HOME_HEADINGS,
-    /** The headline, the two-day strip, the week, the crossing. */
-    loops: 4,
-    controls: HOME_CONTROLS,
   },
 ]
 
@@ -460,11 +451,6 @@ const HOME_HEROES = [
     /** Where the Dentist lands on Work: Busy, 15:00 to 16:30. */
     point: '.jc-landed [data-mode="busy"]',
   },
-  {
-    path: "/home/hero-c",
-    /** The proof under the headline: two days of what Sam sees against what work sees. */
-    point: ".hh-c-proof .reveal-frame",
-  },
 ]
 
 test.describe("home hero iterations", () => {
@@ -671,51 +657,19 @@ test.describe("home hero iterations", () => {
     await expect(page.getByRole("link", { name: en.hero.primary }).first()).toBeInViewport()
     await context.close()
   })
-
-  /** Where Busy's left edge sits against the event's: 0 when Busy covers the whole event. */
-  const busyOffset = (page: Page) =>
-    page.evaluate(() => {
-      const slot = document.querySelector(".hh-c-slot")!.getBoundingClientRect()
-      const busy = document.querySelector(".hh-c-cover")!.getBoundingClientRect()
-      return Math.round(busy.x - slot.x)
-    })
-
-  test("/home/hero-c says its headline once to assistive technology, and rests on Busy without motion or JavaScript", async ({ browser }) => {
-    for (const options of [{ reducedMotion: "reduce" as const }, { javaScriptEnabled: false }]) {
-      const context = await browser.newContext(options)
-      const page = await context.newPage()
-      await page.goto("/home/hero-c")
-      const heading = page.getByRole("heading", { level: 1 })
-      await expect(heading).toHaveAccessibleName(en.variants.homeHeroes.c.title)
-      await expect(heading.locator(".hh-c-says")).toHaveAttribute("aria-hidden", "true")
-      await expect(heading.locator(".hh-c-busy")).toBeVisible()
-      await expect(heading.locator(".hh-c-busy")).toContainText(en.demo.busy)
-      expect(await busyOffset(page)).toBe(0)
-      await page.waitForTimeout(2500)
-      expect(await busyOffset(page)).toBe(0)
-      await context.close()
-    }
-  })
-
-  test("/home/hero-c lifts Busy off the Dentist within a few seconds, and its pause control stops it", async ({ page }) => {
-    await page.goto("/home/hero-c")
-    await expect.poll(() => busyOffset(page), { timeout: 3500 }).toBeLessThan(-20)
-    await page.locator(".hh-c-stage").getByRole("button", { name: en.motion.pause }).click()
-    await expect(page.locator(".hh-c-stage")).toHaveAttribute("data-playing", "false")
-    // The compositor may draw one more frame after the pause lands.
-    await page.waitForTimeout(150)
-    const paused = await busyOffset(page)
-    await page.waitForTimeout(800)
-    expect(await busyOffset(page)).toBe(paused)
-  })
 })
 
 test.describe("the versions index", () => {
   const listed = VERSIONS.flatMap((version) => version.iterations)
 
-  test("every route it lists responds, and only production is in the sitemap", async ({ request }) => {
+  test("every live route it lists responds, a discarded one is gone, and only production is in the sitemap", async ({ request }) => {
     const sitemap = await (await request.get("/sitemap-0.xml")).text()
-    for (const { path } of listed) {
+    for (const { path, status } of listed) {
+      if (status === "discarded") {
+        expect((await request.get(path)).status(), path).toBe(404)
+        expect(sitemap, path).not.toContain(`calendarghost.com${path}<`)
+        continue
+      }
       expect((await request.get(path)).status(), path).toBe(200)
       if (path === "/") expect(sitemap).toContain("<loc>https://calendarghost.com/</loc>")
       else expect(sitemap, path).not.toContain(`calendarghost.com${path}<`)
@@ -730,9 +684,18 @@ test.describe("the versions index", () => {
     for (const version of VERSIONS) {
       const group = page.getByRole("region", { name: version.name, exact: true })
       for (const iteration of version.iterations) {
+        await expect(group).toContainText(iteration.commit)
+        if (iteration.status === "discarded") {
+          // No live link: the entry says how to see it with git instead.
+          await expect(group.getByRole("link", { name: iteration.name })).toHaveCount(0)
+          const entry = group.getByRole("listitem").filter({ hasText: iteration.name })
+          await expect(entry.locator(".versions-status")).toHaveText(STATUS_LABELS.discarded)
+          await expect(entry).toContainText(VIEW_WITH_GIT)
+          await expect(entry).toContainText(`git worktree add ../calendar-ghost-${iteration.commit} ${iteration.commit}`)
+          continue
+        }
         const link = group.getByRole("link", { name: iteration.name })
         await expect(link).toHaveAttribute("href", iteration.path)
-        await expect(group).toContainText(iteration.commit)
         const entry = group.getByRole("listitem").filter({ has: page.getByRole("link", { name: iteration.name, exact: true }) })
         await expect(entry.locator(".versions-status")).toHaveText(STATUS_LABELS[iteration.status])
       }

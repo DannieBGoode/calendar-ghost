@@ -8,14 +8,15 @@
 
 /**
  * Where an iteration stands: `current` is the live page, a `candidate` is still in the running,
- * and a `rejected` one stays for comparison but is not to be built on.
+ * a `rejected` one stays for comparison but is not to be built on, and a `discarded` one has no
+ * route any more: its entry stays, to see with git at the commit that added it.
  */
-export type IterationStatus = "current" | "candidate" | "rejected"
+export type IterationStatus = "current" | "candidate" | "rejected" | "discarded"
 
 export interface Iteration {
   name: string
   status: IterationStatus
-  /** The route, starting with "/". */
+  /** The route, starting with "/" (for a discarded iteration, the route it had). */
   path: string
   /** One line on what it tries. */
   tries: string
@@ -60,7 +61,7 @@ export const VERSIONS: readonly Version[] = [
       },
       {
         name: "Hero C: the headline is the demo",
-        status: "rejected",
+        status: "discarded",
         path: "/home/hero-c",
         tries: "\"Work sees [Dentist]\": the ghost draws Busy over a real event in the headline, with two days of the week as proof.",
         date: "2026-10-05",
@@ -123,11 +124,18 @@ export const EARLIER_STATES: readonly { commit: string; what: string }[] = [
 /** The index's own route. */
 export const VERSIONS_PATH = "/versions"
 
+/** Whether the iteration still has its route (every status but `discarded`). */
+export function isLive(iteration: Iteration): boolean {
+  return iteration.status !== "discarded"
+}
+
 /** Every route that is not the production page: not indexed, kept out of the sitemap, and given
  * the small link back to the index. */
 export const NON_PRODUCTION_PATHS: readonly string[] = [
   VERSIONS_PATH,
-  ...VERSIONS.flatMap((version) => version.iterations.map((iteration) => iteration.path)).filter((path) => path !== "/"),
+  ...VERSIONS.flatMap((version) => version.iterations.filter(isLive).map((iteration) => iteration.path)).filter(
+    (path) => path !== "/",
+  ),
 ]
 
 /** How the index names each status. */
@@ -135,6 +143,15 @@ export const STATUS_LABELS: Record<IterationStatus, string> = {
   current: "Current",
   candidate: "Candidate",
   rejected: "Rejected",
+  discarded: "Discarded",
+}
+
+/** What a discarded entry shows instead of a link. */
+export const VIEW_WITH_GIT = "View with git:"
+
+/** The command that checks out the commit that added an iteration, beside your work. */
+export function worktreeCommand(commit: string): string {
+  return `git worktree add ../calendar-ghost-${commit} ${commit}`
 }
 
 /** The "Versions" link's words. */

@@ -3,7 +3,7 @@
 // indexed, not in the sitemap, linked from no public page. Its words live in versions.ts, not in
 // i18n/en.ts (see AGENTS.md, "Landing page").
 import Layout from "../layouts/Layout.astro"
-import { EARLIER_STATES, STATUS_LABELS, VERSIONS } from "../versions"
+import { EARLIER_STATES, STATUS_LABELS, VERSIONS, VIEW_WITH_GIT, isLive, worktreeCommand } from "../versions"
 
 const title = "Versions · Calendar Ghost"
 const description = "Every version and iteration of the Calendar Ghost landing page."
@@ -22,11 +22,21 @@ const description = "Every version and iteration of the Calendar Ghost landing p
             {version.iterations.map((iteration) => (
               <li data-status={iteration.status}>
                 <span class="versions-title">
-                  <a class="versions-name" href={iteration.path}>{iteration.name}</a>
+                  {isLive(iteration) ? (
+                    <a class="versions-name" href={iteration.path}>{iteration.name}</a>
+                  ) : (
+                    <span class="versions-name">{iteration.name}</span>
+                  )}
                   <span class="versions-status">{STATUS_LABELS[iteration.status]}</span>
                 </span>
                 <code>{iteration.path}</code>
                 <p>{iteration.tries}</p>
+                {!isLive(iteration) && (
+                  <p class="versions-git">
+                    {VIEW_WITH_GIT} <code>{worktreeCommand(iteration.commit)}</code>, then open{" "}
+                    <code>{iteration.path}</code>.
+                  </p>
+                )}
                 <p class="versions-meta">
                   {iteration.date} · <code>{iteration.commit}</code>
                 </p>
@@ -75,9 +85,14 @@ const description = "Every version and iteration of the Calendar Ghost landing p
     font-size: 0.75rem; font-weight: 650; color: var(--muted-foreground);
   }
   [data-status="current"] .versions-status { border-color: var(--primary); color: var(--primary); }
-  [data-status="rejected"] .versions-status { border-style: dashed; }
-  /* A rejected iteration stays for comparison, set back from the others. */
-  .versions ol li[data-status="rejected"] { background: transparent; }
+  [data-status="rejected"] .versions-status, [data-status="discarded"] .versions-status { border-style: dashed; }
+  /* A rejected iteration stays for comparison, set back from the others; a discarded one has no
+     route, only its commit. */
+  .versions ol li[data-status="rejected"], .versions ol li[data-status="discarded"] { background: transparent; }
+  .versions ol li[data-status="discarded"] { border-style: dashed; }
+  .versions ol li[data-status="discarded"] .versions-name { color: var(--muted-foreground); }
+  .versions ol li[data-status="discarded"] > code { text-decoration: line-through; color: var(--muted-foreground); }
+  .versions-git { font-size: 0.9375rem; }
   .versions ol li > code { align-self: center; }
   .versions-meta { font-size: 0.875rem; color: var(--muted-foreground); }
   .versions code { font-size: 0.875em; overflow-wrap: anywhere; }
