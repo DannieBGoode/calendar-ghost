@@ -72,7 +72,7 @@ export const VERSIONS: readonly Version[] = [
         path: "/home/hero-a2",
         tries: "A's copy column beside a calmer week inside the page: three events, a plain Busy, lighter lines, every control on screen.",
         date: "2026-10-05",
-        commit: "0000000",
+        commit: "ffdf41b",
       },
       {
         name: "Hero B2: one event, quieter",
@@ -80,7 +80,7 @@ export const VERSIONS: readonly Version[] = [
         path: "/home/hero-b2",
         tries: "B's carry at a calmer scale: a compact Dentist card and three hours of Work on one soft surface; it plays once, then rests on Busy.",
         date: "2026-10-05",
-        commit: "0000000",
+        commit: "9d55fab",
       },
     ],
   },
