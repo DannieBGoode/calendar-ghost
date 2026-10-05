@@ -32,7 +32,14 @@ class Incidents:
         self.opened.append(incident)
         return len(self.opened) == 1
 
-    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
+    def resolve(
+        self,
+        key: str,
+        at: datetime,
+        resolution: IncidentResolution,
+        *,
+        while_authorized: ConnectedAccountId | None = None,
+    ) -> None:
         self.resolved.append((key, resolution))
 
 

@@ -642,8 +642,19 @@ class IncidentRepository(Protocol):
         """
         ...
 
-    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
-        """Resolve the Incident under this key, if it is open, recording why."""
+    def resolve(
+        self,
+        key: str,
+        at: datetime,
+        resolution: IncidentResolution,
+        *,
+        while_authorized: ConnectedAccountId | None = None,
+    ) -> None:
+        """Resolve the Incident under this key, if it is open, recording why.
+
+        With `while_authorized`, only if that account is authorized when it resolves, checked
+        atomically, so a lapse recorded just before keeps its Incident open.
+        """
         ...
 
 

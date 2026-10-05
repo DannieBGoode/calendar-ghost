@@ -6,7 +6,7 @@ from pathlib import Path
 
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.ports import IdGenerator, IncidentReport, IncidentResolution
-from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.activity_queries import open_blocks
 from calendar_sync.infrastructure.persistence.connections import transaction
@@ -131,13 +131,26 @@ class SqliteIncidentRepository:
             return False
         return existing is None or existing[0] != "open"
 
-    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
+    def resolve(
+        self,
+        key: str,
+        at: datetime,
+        resolution: IncidentResolution,
+        *,
+        while_authorized: ConnectedAccountId | None = None,
+    ) -> None:
+        account = while_authorized.value if while_authorized else None
         with transaction(self._database_path) as connection:
             connection.execute(
                 """
                 UPDATE incidents SET
                     state = 'resolved', updated_at = ?, resolved_at = ?, resolution = ?
-                WHERE deduplication_key = ? AND state = 'open'
+                WHERE deduplication_key = ? AND state = 'open' AND (
+                    ? IS NULL OR EXISTS (
+                        SELECT 1 FROM connected_accounts
+                        WHERE id = ? AND state = 'connected' AND authorization_lapsed_at IS NULL
+                    )
+                )
                 """,
-                (at.isoformat(), at.isoformat(), resolution.value, key),
+                (at.isoformat(), at.isoformat(), resolution.value, key, account, account),
             )

@@ -19,6 +19,7 @@ from calendar_sync.application.ports import (
     ConnectedAccountState,
     DiscoveredCalendar,
     IncidentReport,
+    IncidentResolution,
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
@@ -1082,6 +1083,35 @@ def test_an_account_incident_is_not_opened_once_its_account_is_deleted(tmp_path:
     with sqlite3.connect(database) as connection:
         opened = connection.execute("SELECT account_id FROM incidents").fetchall()
     assert opened == [(kept.id.value,)]
+
+
+def test_restoring_keeps_open_the_incident_of_a_newer_lapse(tmp_path: Path) -> None:
+    # A refusal after restoration cleared the lapse records a new one and reopens the Incident
+    # before restoration resolves it; the Incident must stay open for the current lapse.
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    incidents = SqliteIncidentRepository(database)
+    key = f"authorization:{work.id.value}"
+    incidents.open(IncidentReport(key, None, "authentication", "expired", account_id=work.id), NOW)
+    unit_of_work = SqliteUnitOfWorkFactory(database)
+    with unit_of_work() as uow:
+        later = datetime.now(UTC)
+        assert uow.accounts.lapse(work.id, later, attempted_at=later)
+        uow.commit()
+
+    restored = IncidentResolution.ACCESS_RESTORED
+    incidents.resolve(key, NOW, restored, while_authorized=work.id)
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT state FROM incidents").fetchone() == ("open",)
+
+    with unit_of_work() as uow:
+        assert uow.accounts.clear_lapse(work.id, recorded_before=datetime.now(UTC))
+        uow.commit()
+    incidents.resolve(key, NOW, restored, while_authorized=work.id)
+    with sqlite3.connect(database) as connection:
+        assert connection.execute("SELECT state FROM incidents").fetchone() == ("resolved",)
 
 
 def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:

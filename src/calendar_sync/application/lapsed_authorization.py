@@ -89,8 +89,12 @@ class LapsedAuthorizations:
             # Every rule of the account, not only those already stopped: a run may stop one
             # until its write lock is released, and `_resume` decides under that lock.
             waiting = tuple(rule.id for rule in uow.rules.list() if rule.uses_account(account_id))
+        # A newer lapse recorded since keeps its reopened Incident open.
         self.incidents.resolve(
-            authorization_key(account_id), self.clock.now(), IncidentResolution.ACCESS_RESTORED
+            authorization_key(account_id),
+            self.clock.now(),
+            IncidentResolution.ACCESS_RESTORED,
+            while_authorized=account_id,
         )
         return sum(self._resume(rule_id) for rule_id in waiting)
 
