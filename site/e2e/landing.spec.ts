@@ -132,6 +132,51 @@ test("the footer's dozing ghost says nothing; the five-minute line is plain text
   await expect(watch.locator("p")).toHaveText(en.footer.watch)
 })
 
+for (const path of ["/", "/bold"]) {
+  test(`${path}: the How it works ghost first appears where its flight starts, so nothing jumps`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(path)
+    const strip = page.locator(".how-strip")
+    await expect(strip).not.toHaveAttribute("data-awake", "")
+    const at = () =>
+      strip.evaluate((element) => {
+        const box = element.querySelector(".how-ghost .ghost")!.getBoundingClientRect()
+        const track = element.querySelector(".how-track")!
+        return { x: box.x, y: box.y, opacity: getComputedStyle(track).opacity }
+      })
+    const waiting = await at()
+    // The flight's first frame: wake the strip, then hold every animation at time 0.
+    await strip.evaluate((element) => {
+      element.setAttribute("data-awake", "")
+      for (const animation of element.getAnimations({ subtree: true })) {
+        animation.pause()
+        animation.currentTime = 0
+      }
+    })
+    const first = await at()
+    expect(Math.abs(first.x - waiting.x)).toBeLessThan(0.5)
+    expect(Math.abs(first.y - waiting.y)).toBeLessThan(0.5)
+    expect(first.opacity).toBe(waiting.opacity)
+    // And the flight goes somewhere: its last frame is to the right.
+    await strip.evaluate((element) => {
+      for (const animation of element.getAnimations({ subtree: true })) animation.finish()
+    })
+    expect((await at()).x).toBeGreaterThan(waiting.x + 200)
+  })
+}
+
+test("without JavaScript or with reduced motion, the How it works ghost rests at the last step", async ({ browser }) => {
+  for (const options of [{ javaScriptEnabled: false }, { reducedMotion: "reduce" as const }]) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...options })
+    const page = await context.newPage()
+    await page.goto("/")
+    const ghost = (await page.locator(".how-ghost .ghost").boundingBox())!
+    const last = (await page.locator(".how-steps li").nth(2).boundingBox())!
+    expect(ghost.x).toBeGreaterThan(last.x)
+    await context.close()
+  }
+})
+
 test("a ghost that idles briefly wakes when it scrolls into view", async ({ page }) => {
   await page.goto("/")
   const sleeper = page.locator('.footer .ghost[data-alive="brief"]')

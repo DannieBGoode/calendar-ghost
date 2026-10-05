@@ -163,7 +163,16 @@ const avatars = await avatarUrls()
   }
 
   /* The flight: once, when the strip first comes into view. The track moves across (a share of
-     the strip's width), the ghost bobs along the wave. */
+     the strip's width), the ghost bobs along the wave. Until then, with JavaScript to wake it, the
+     ghost already waits where the flight starts (each property below is its keyframes' 0%), so
+     nothing jumps when it sets off. Without JavaScript, or with reduced motion, it rests at the
+     end. */
+  @media (min-width: 900px) and (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+    .how-strip:not([data-awake]) .how-track { transform: translateX(-66%); }
+    .how-strip:not([data-awake]) .how-bob { transform: translateY(4.5rem); }
+    .how-strip:not([data-awake]) .ghost-pose { transform: rotate(10deg); }
+    .how-strip:not([data-awake]) .how-bubble { opacity: 0; }
+  }
   @media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
     .how-strip[data-awake] .how-track { animation: how-fly 3.2s cubic-bezier(0.45, 0, 0.25, 1) both; }
     .how-strip[data-awake] .how-bob { animation: how-bob 3.2s ease-in-out both; }
@@ -171,8 +180,7 @@ const avatars = await avatarUrls()
     .how-strip[data-awake] .ghost-pose { animation: how-lean 3.2s ease-in-out both; }
   }
   @keyframes how-fly {
-    0% { transform: translateX(-66%); opacity: 0; }
-    8% { opacity: 1; }
+    0% { transform: translateX(-66%); }
     100% { transform: translateX(0); }
   }
   @keyframes how-bob {
