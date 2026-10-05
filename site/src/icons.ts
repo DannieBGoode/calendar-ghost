@@ -24,6 +24,7 @@ import RefreshCwOff from "lucide-static/icons/refresh-cw-off.svg?raw"
 import Repeat from "lucide-static/icons/repeat.svg?raw"
 import RotateCcw from "lucide-static/icons/rotate-ccw.svg?raw"
 import ShieldCheck from "lucide-static/icons/shield-check.svg?raw"
+import SquareTerminal from "lucide-static/icons/square-terminal.svg?raw"
 import Trash2 from "lucide-static/icons/trash-2.svg?raw"
 import User from "lucide-static/icons/user.svg?raw"
 import UserRound from "lucide-static/icons/user-round.svg?raw"
@@ -59,6 +60,7 @@ export const ICONS = {
   repeat: Repeat,
   rotateCcw: RotateCcw,
   shieldCheck: ShieldCheck,
+  squareTerminal: SquareTerminal,
   tilde: Tilde,
   trash: Trash2,
   user: User,

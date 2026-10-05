@@ -242,9 +242,60 @@ test("without JavaScript, the integrations mockups show their final state", asyn
   const page = await context.newPage()
   await page.goto("/")
   await page.locator("#integrations").scrollIntoViewIfNeeded()
-  await expect(page.locator(".int-chat .int-msg-ghost")).toHaveText(en.integrations.agent.answer)
-  await expect(page.locator(".int-chat .int-msg-ghost")).toBeVisible()
+  await expect(page.locator(".int-chat .int-msg-agent")).toHaveText(en.integrations.agent.answer)
+  await expect(page.locator(".int-chat .int-msg-agent")).toBeVisible()
   expect(await page.locator(".int-chat .int-reply").evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
   expect(await page.locator(".int-beats i").last().evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
   await context.close()
 })
+
+for (const path of ["/", "/bold", "/journey"]) {
+  test.describe(`${path}, shared promises`, () => {
+    test("the app is shown feature by feature, each with its mockup, on alternating sides", async ({ page }) => {
+      await page.goto(path)
+      const features = page.locator(".feat")
+      const titles = [en.app.features.rules.title, en.app.features.activity.title, en.app.features.health.title]
+      await expect(features.getByRole("heading", { level: 3 })).toHaveText(titles)
+      const sides: boolean[] = []
+      for (const feature of await features.all()) {
+        await expect(feature.getByRole("img")).toHaveCount(1)
+        const copy = (await feature.locator(".feat-copy").boundingBox())!
+        const shot = (await feature.locator(".feat-shot").boundingBox())!
+        sides.push(shot.x > copy.x)
+      }
+      expect(sides).toEqual([true, false, true])
+    })
+
+    test("in the agent mockup, the AI assistant answers, not the ghost", async ({ page }) => {
+      await page.goto(path)
+      const chat = page.locator(".int-chat")
+      await expect(chat.locator(".ghost")).toHaveCount(0)
+      await expect(chat.locator(".int-agent-name")).toHaveText("Claude Code")
+      await expect(chat).toContainText("calendar-ghost · get_status")
+    })
+  })
+}
+
+for (const path of ["/", "/bold"]) {
+  for (const width of [1440, 390]) {
+    test(`${path} at ${width}px: each How it works number sits on its title's line, the body under the title`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height: 900 } })
+      const page = await context.newPage()
+      await page.goto(path)
+      const steps = page.locator(".how-steps li")
+      await expect(steps).toHaveCount(3)
+      for (const step of await steps.all()) {
+        const number = (await step.locator(".how-step-n").boundingBox())!
+        const title = (await step.locator("h3").boundingBox())!
+        const body = (await step.locator("h3 + p").boundingBox())!
+        expect(number.x + number.width).toBeLessThanOrEqual(title.x)
+        // On the same line: the number overlaps the title's first line vertically.
+        expect(number.y).toBeLessThan(title.y + title.height)
+        expect(number.y + number.height).toBeGreaterThan(title.y)
+        expect(body.y).toBeGreaterThanOrEqual(title.y + title.height - 1)
+        expect(Math.abs(body.x - title.x)).toBeLessThanOrEqual(1)
+      }
+      await context.close()
+    })
+  }
+}

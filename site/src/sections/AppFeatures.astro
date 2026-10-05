@@ -1,0 +1,108 @@
+---
+// The app, feature by feature: each one a short title, one plain sentence, and its mockup, the
+// mockup on alternating sides (not a grid of boxes). Every page with the app section uses it; a
+// page passes its own section class, can put a stamp above the heading (`eyebrow` slot), set the
+// heading and lead side by side (`split`), and add something to the health mockup (`health`
+// slot, for example a ghost peeking over it).
+import type { Messages } from "../i18n"
+import ActivityHistory from "../mockups/ActivityHistory.astro"
+import OverviewHealth from "../mockups/OverviewHealth.astro"
+import RulesList from "../mockups/RulesList.astro"
+
+interface Props {
+  m: Messages
+  class?: string
+  /** The lead under the heading (default `app.body`). */
+  lead?: string
+  /** Heading on the left, lead on the right, on wide screens. */
+  split?: boolean
+}
+
+const { m, class: sectionClass = "section", lead = m.app.body, split = false } = Astro.props
+const features = m.app.features
+const hasHealthExtra = Astro.slots.has("health")
+---
+
+<section class:list={[sectionClass, "feats"]} aria-labelledby="app-title">
+  <div class="container">
+    <div class:list={["feats-head", { "feats-head-split": split }]}>
+      <div>
+        <slot name="eyebrow" />
+        <h2 id="app-title">{m.app.title}</h2>
+      </div>
+      <p class="feats-lead">{lead}</p>
+    </div>
+    <ul class="feats-list">
+      <li class="feat">
+        <div class="feat-copy">
+          <p class="feat-screen">{features.rules.screen}</p>
+          <h3>{features.rules.title}</h3>
+          <p class="feat-body">{features.rules.body}</p>
+        </div>
+        <div class="feat-shot"><RulesList m={m} /></div>
+      </li>
+      <li class="feat feat-flip">
+        <div class="feat-copy">
+          <p class="feat-screen">{features.activity.screen}</p>
+          <h3>{features.activity.title}</h3>
+          <p class="feat-body">{features.activity.body}</p>
+        </div>
+        <div class="feat-shot"><ActivityHistory m={m} /></div>
+      </li>
+      <li class="feat">
+        <div class="feat-copy">
+          <p class="feat-screen">{features.health.screen}</p>
+          <h3>{features.health.title}</h3>
+          <p class="feat-body">{features.health.body}</p>
+        </div>
+        <div class:list={["feat-shot", "feat-shot-health", { "has-extra": hasHealthExtra }]}>
+          <slot name="health" />
+          <OverviewHealth m={m} />
+        </div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<style>
+  .feats-head { display: grid; gap: 0.5rem var(--space-lg, 2.5rem); align-items: end; }
+  .feats-head h2 { margin: 0 0 0.75rem; }
+  .feats-lead { margin: 0; max-width: 46ch; font-size: var(--step-1, 1.125rem); line-height: 1.45; color: var(--muted-foreground); }
+  @media (min-width: 900px) {
+    .feats-head-split { grid-template-columns: auto minmax(0, 1fr); }
+    .feats-head-split h2 { margin: 0; }
+    .feats-head-split .feats-lead { justify-self: end; max-width: 34ch; }
+  }
+
+  .feats-list {
+    list-style: none; margin: var(--space-xl, 3.5rem) 0 0; padding: 0;
+    display: grid; gap: var(--space-xl, 4rem);
+  }
+  /* A feature is a layout row, not a paragraph: no page's measure for list items applies. */
+  .feats .feat { display: grid; gap: 1.25rem; align-items: center; min-width: 0; max-width: none; }
+  .feat > * { min-width: 0; }
+  .feat-copy { max-width: 30rem; }
+  /* The app's screen the feature lives on, as a small label over the title. */
+  .feat-screen {
+    margin: 0 0 0.6rem; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--primary);
+  }
+  .feats .feat h3 {
+    margin: 0 0 0.7rem; font-family: var(--font-display); font-weight: var(--feat-title-weight, 560);
+    font-size: var(--feat-title, clamp(1.625rem, 1.25rem + 1.3vw, 2.25rem)); line-height: 1.1; letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  .feat-body { margin: 0; max-width: 38ch; font-size: 1.0625rem; line-height: 1.55; color: var(--muted-foreground); text-wrap: pretty; }
+  .feat-shot { position: relative; }
+  /* The mockups' rows are list items too; a page's measure for prose must not narrow them. */
+  .feat-shot :global(.mock li) { max-width: none; }
+  .feat-shot > :global(.mock) { position: relative; z-index: 1; }
+
+  /* Wide: the copy in a narrow column, the mockup in a wide one, sides alternating. */
+  @media (min-width: 900px) {
+    .feats-list { gap: clamp(4.5rem, 8vw, 7rem); }
+    .feat { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: clamp(2.5rem, 6vw, 6rem); }
+    .feat-flip { grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
+    .feat-flip .feat-copy { order: 2; }
+  }
+</style>

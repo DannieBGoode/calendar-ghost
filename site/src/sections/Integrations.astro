@@ -24,6 +24,8 @@ const copy = m.integrations
 const BEATS = 24
 const ALERT_AT = 9
 const beats = Array.from({ length: BEATS }, (_, index) => index === ALERT_AT)
+/** The AI assistant answering in the agent mockup: a product name, so not translated. */
+const AGENT = "Claude Code"
 ---
 
 <section id="integrations" class:list={[sectionClass, "int"]} aria-labelledby="integrations-title">
@@ -102,9 +104,13 @@ const beats = Array.from({ length: BEATS }, (_, index) => index === ALERT_AT)
         <div class="int-mock int-chat" aria-hidden="true" data-wake>
           <span class="int-msg int-msg-you">{copy.agent.question}</span>
           <span class="int-tool"><Icon name="check" class="int-tool-icon" />calendar-ghost · get_status</span>
+          <!-- The answer is the assistant's own, in its words; the ghost is what it asked. -->
           <span class="int-reply">
-            <Ghost face="happy" tone="moss" size={40} />
-            <span class="int-msg int-msg-ghost">{copy.agent.answer}</span>
+            <span class="int-agent-avatar"><Icon name="squareTerminal" class="int-agent-icon" /></span>
+            <span class="int-agent">
+              <b class="int-agent-name">{AGENT}</b>
+              <span class="int-msg int-msg-agent">{copy.agent.answer}</span>
+            </span>
           </span>
         </div>
         <p class="int-caption"><Coded text={copy.agent.caption} /></p>
@@ -229,12 +235,16 @@ const beats = Array.from({ length: BEATS }, (_, index) => index === ALERT_AT)
   }
   .int-tool { display: inline-flex; align-items: center; gap: 0.4rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; color: var(--muted-foreground); }
   .int-mock :global(.int-tool-icon) { width: 0.95rem; height: 0.95rem; color: var(--success-foreground); }
-  .int-reply { display: flex; align-items: flex-end; gap: 0.45rem; }
-  .int-reply :global(.ghost) { --ghost-cutout: var(--int-mock-bg); }
-  .int-msg-ghost {
-    max-width: 85%; border: 1px solid var(--success-border); border-bottom-left-radius: 0.25rem;
-    background: var(--success-surface); color: var(--foreground);
+  .int-reply { display: flex; align-items: flex-end; gap: 0.5rem; }
+  /* A neutral assistant avatar: a small terminal, no product logo. */
+  .int-agent-avatar {
+    display: grid; place-items: center; flex: none; width: 2rem; height: 2rem; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--muted); color: var(--foreground);
   }
+  .int-mock :global(.int-agent-icon) { width: 1.05rem; height: 1.05rem; }
+  .int-agent { display: grid; gap: 0.25rem; max-width: 85%; min-width: 0; }
+  .int-agent-name { font-size: 0.75rem; font-weight: 700; color: var(--muted-foreground); }
+  .int-msg-agent { border: 1px solid var(--border); border-bottom-left-radius: 0.25rem; background: var(--background); color: var(--foreground); }
 
   /* Try it, and what a token can and cannot do. */
   .int-foot { display: grid; gap: var(--space-lg, 2.5rem); margin-top: var(--space-xl, 3.5rem); }

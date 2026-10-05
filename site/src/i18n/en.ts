@@ -135,9 +135,26 @@ export const en = {
   app: {
     title: "See the app",
     body: "The app's own screens, redrawn with made-up data for Sam's calendars.",
+    /** The app, feature by feature: the screen it lives on, a short title, and one plain sentence. */
+    features: {
+      rules: {
+        screen: "Rules",
+        title: "As many rules as you need",
+        body: "Each rule reads one calendar and writes to one other, with its own choice of Busy only or details.",
+      },
+      activity: {
+        screen: "Activity",
+        title: "Activity log",
+        body: "One line per event: what the source calendar showed, then what Calendar Ghost did about it.",
+      },
+      health: {
+        screen: "Overview",
+        title: "Synchronization health at a glance",
+        body: "The Overview answers “is everything in sync?” in one line, and says what needs a look when something is wrong.",
+      },
+    },
     overview: {
       alt: "Calendar Ghost Overview: synchronization is healthy, with 3 rules running",
-      caption: "Overview: one plain answer to “is everything in sync?”",
       headline: "Synchronization is healthy",
       detail: "Calendar Ghost checks your calendars for changes every five minutes.",
       running: "3 rules running",
@@ -147,7 +164,6 @@ export const en = {
     },
     rules: {
       alt: "Calendar Ghost Rules: Family to Work, Personal to Work, and Work to Personal, each Busy only and enabled",
-      caption: "Rules: each one reads one calendar and writes one other.",
       policy: "Busy only, including all-day events",
       enabled: "Enabled",
       accounts: { family: "sam@family.example", personal: "sam@personal.example", work: "sam@work.example" },
@@ -159,7 +175,6 @@ export const en = {
     },
     activity: {
       alt: "Calendar Ghost Activity: what happened to three events, and why",
-      caption: "Activity: what happened to each event, and why.",
       rows: [
         {
           time: "7:01 PM",
@@ -237,7 +252,7 @@ export const en = {
     agent: {
       label: "AI agent",
       question: "Is my calendar sync working?",
-      answer: "All good! 3 rules running, last sync 2 minutes ago. Nothing for you to do.",
+      answer: "Calendar Ghost is healthy: 3 rules running, last synced 2 minutes ago. Nothing needs your attention.",
       caption: "The MCP server at `/mcp` lets Claude Code or Codex answer, and say what to do when something is wrong.",
     },
     checkTitle: "Check a token",
