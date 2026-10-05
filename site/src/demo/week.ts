@@ -22,7 +22,7 @@ export const SAM_WEEK: readonly DemoEvent[] = [
   { key: "oneOnOne", kind: "work", day: 2, start: 14, end: 15 },
   { key: "designReview", kind: "work", day: 3, start: 9.5, end: 10.5 },
   { key: "retro", kind: "work", day: 4, start: 11, end: 12 },
-  { key: "dentist", kind: "personal", day: 0, start: 15, end: 16 },
+  { key: "dentist", kind: "personal", day: 0, start: 15, end: 16.5 },
   { key: "gym", kind: "personal", day: 1, start: 12, end: 13 },
   { key: "schoolDropOff", kind: "family", day: 2, start: 9, end: 10 },
   { key: "therapy", kind: "personal", day: 3, start: 13, end: 14.5 },
