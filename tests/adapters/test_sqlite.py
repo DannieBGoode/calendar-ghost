@@ -18,6 +18,7 @@ from calendar_sync.application.ports import (
     CalendarAccess,
     ConnectedAccountState,
     DiscoveredCalendar,
+    IncidentReport,
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
@@ -46,6 +47,7 @@ from calendar_sync.domain.model import (
     UnansweredInvitationPolicy,
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
+from calendar_sync.infrastructure.persistence.health import SqliteIncidentRepository
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteUnitOfWorkFactory,
@@ -1055,6 +1057,31 @@ def test_deleting_a_disconnected_account_deletes_its_own_incidents(tmp_path: Pat
     with sqlite3.connect(database) as connection:
         kept = connection.execute("SELECT account_id FROM incidents").fetchall()
     assert kept == [(other.id.value,)]
+
+
+def test_an_account_incident_is_not_opened_once_its_account_is_deleted(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    kept = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    incidents = SqliteIncidentRepository(database)
+
+    def lapse(account_id: str) -> IncidentReport:
+        return IncidentReport(
+            f"authorization:{account_id}",
+            None,
+            "authentication",
+            "Authorization for Google Calendar expired",
+            account_id=ConnectedAccountId(account_id),
+        )
+
+    # The deletion ran between recording the lapse and opening its Incident.
+    assert not incidents.open(lapse("deleted"), NOW)
+    assert incidents.open(lapse(kept.id.value), NOW)
+
+    with sqlite3.connect(database) as connection:
+        opened = connection.execute("SELECT account_id FROM incidents").fetchall()
+    assert opened == [(kept.id.value,)]
 
 
 def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:

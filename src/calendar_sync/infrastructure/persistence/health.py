@@ -83,16 +83,21 @@ class SqliteIncidentRepository:
         self._ids = ids or UuidIdGenerator()
 
     def open(self, incident: IncidentReport, at: datetime) -> bool:
+        # An Incident about an account alone is opened only while the account exists, checked in
+        # the same statement, so it cannot outlive a deletion that ran just before it.
+        account_only = incident.account_id if incident.rule_id is None else None
         with transaction(self._database_path) as connection:
             existing = connection.execute(
                 "SELECT state FROM incidents WHERE deduplication_key = ?", (incident.key,)
             ).fetchone()
-            connection.execute(
+            cursor = connection.execute(
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, account_id, category, state,
                     summary, opened_at, updated_at, message_code, message_params
-                ) VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
+                )
+                SELECT ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?
+                WHERE ? IS NULL OR EXISTS (SELECT 1 FROM connected_accounts WHERE id = ?)
                 ON CONFLICT(deduplication_key) DO UPDATE SET
                     account_id = excluded.account_id,
                     category = excluded.category,
@@ -118,8 +123,12 @@ class SqliteIncidentRepository:
                     json.dumps(dict(incident.message.params), sort_keys=True)
                     if incident.message
                     else None,
+                    account_only.value if account_only else None,
+                    account_only.value if account_only else None,
                 ),
             )
+        if cursor.rowcount == 0:
+            return False
         return existing is None or existing[0] != "open"
 
     def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
