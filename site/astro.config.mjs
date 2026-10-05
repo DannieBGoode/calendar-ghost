@@ -1,16 +1,16 @@
 import react from "@astrojs/react"
 import sitemap from "@astrojs/sitemap"
 import { defineConfig } from "astro/config"
-
-// Design variants kept for side-by-side comparison; they carry `noindex` and stay out of the sitemap.
-const VARIANT_PATHS = ["/bold", "/journey", "/home/hero-a", "/home/hero-b", "/home/hero-c"]
+import { NON_PRODUCTION_PATHS } from "./src/versions.ts"
 
 export default defineConfig({
   site: "https://calendarghost.com",
   i18n: { defaultLocale: "en", locales: ["en"], routing: { prefixDefaultLocale: false } },
   integrations: [
     react(),
-    sitemap({ filter: (page) => !VARIANT_PATHS.some((path) => new URL(page).pathname.replace(/\/$/, "") === path) }),
+    // Versions and iterations kept for side-by-side comparison (src/versions.ts) carry `noindex`
+    // and stay out of the sitemap.
+    sitemap({ filter: (page) => !NON_PRODUCTION_PATHS.some((path) => new URL(page).pathname.replace(/\/$/, "") === path) }),
   ],
   // Screenshots are imported from docs/assets so the page and the README never drift.
   vite: { server: { fs: { allow: [".."] } } },

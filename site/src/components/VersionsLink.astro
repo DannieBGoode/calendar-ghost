@@ -1,0 +1,19 @@
+---
+// A small link back to the versions index, fixed in a corner of every iteration page that is not
+// production (src/versions.ts). Internal tooling, so its word lives in versions.ts.
+import { VERSIONS_LINK_LABEL, VERSIONS_PATH } from "../versions"
+---
+
+<a class="versions-link" href={VERSIONS_PATH}>{VERSIONS_LINK_LABEL}</a>
+
+<style>
+  .versions-link {
+    position: fixed; left: 0.75rem; bottom: 0.75rem; z-index: 50;
+    display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0 0.9rem;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--background); color: var(--foreground);
+    font: 650 0.8125rem/1 var(--font-sans); text-decoration: none;
+    box-shadow: 0 8px 20px -12px color-mix(in oklch, var(--foreground), transparent 50%);
+  }
+  .versions-link:hover { background: var(--muted); }
+  @media print { .versions-link { display: none; } }
+</style>

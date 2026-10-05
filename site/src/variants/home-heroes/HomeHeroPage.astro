@@ -4,6 +4,7 @@
 // it is not indexed and stays out of the sitemap. `/` itself does not use this shell, so a change
 // here never touches iteration 1.
 import "./heroes.css"
+import VersionsLink from "../../components/VersionsLink.astro"
 import Layout from "../../layouts/Layout.astro"
 import { messagesFor } from "../../i18n"
 import AppFeatures from "../../sections/AppFeatures.astro"
@@ -42,4 +43,5 @@ const m = messagesFor(Astro.currentLocale)
     <Faq m={m} />
   </main>
   <Footer m={m} />
+  <VersionsLink />
 </Layout>

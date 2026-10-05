@@ -3,6 +3,7 @@
 // Kept for side-by-side comparison, so it is not indexed and stays out of the sitemap.
 import "@fontsource-variable/fraunces/full-italic.css"
 import "../variants/bold/bold.css"
+import VersionsLink from "../components/VersionsLink.astro"
 import Layout from "../layouts/Layout.astro"
 import { messagesFor } from "../i18n"
 import HowItWorksStrip from "../sections/HowItWorksStrip.astro"
@@ -38,4 +39,5 @@ const m = messagesFor(Astro.currentLocale)
     </main>
     <BoldFooter m={m} />
   </div>
+  <VersionsLink />
 </Layout>

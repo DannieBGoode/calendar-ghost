@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
 import { TRUST_DOCS } from "../src/links"
+import { NON_PRODUCTION_PATHS, VERSIONS, VERSIONS_LINK_LABEL, VERSIONS_PATH } from "../src/versions"
 
 /** The home page's sections, whose headings every home hero iteration keeps. */
 const HOME_HEADINGS = [
@@ -568,5 +569,47 @@ test.describe("home hero iterations", () => {
     const paused = await busyOffset(page)
     await page.waitForTimeout(800)
     expect(await busyOffset(page)).toBe(paused)
+  })
+})
+
+test.describe("the versions index", () => {
+  const listed = VERSIONS.flatMap((version) => version.iterations)
+
+  test("every route it lists responds, and only production is in the sitemap", async ({ request }) => {
+    const sitemap = await (await request.get("/sitemap-0.xml")).text()
+    for (const { path } of listed) {
+      expect((await request.get(path)).status(), path).toBe(200)
+      if (path === "/") expect(sitemap).toContain("<loc>https://calendarghost.com/</loc>")
+      else expect(sitemap, path).not.toContain(`calendarghost.com${path}<`)
+    }
+    expect((await request.get(VERSIONS_PATH)).status()).toBe(200)
+    expect(sitemap).not.toContain(VERSIONS_PATH)
+  })
+
+  test("links every iteration, grouped by version, and is not indexed", async ({ page }) => {
+    await page.goto(VERSIONS_PATH)
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex")
+    for (const version of VERSIONS) {
+      const group = page.getByRole("region", { name: version.name, exact: true })
+      for (const iteration of version.iterations) {
+        const link = group.getByRole("link", { name: iteration.name })
+        await expect(link).toHaveAttribute("href", iteration.path)
+        await expect(group).toContainText(iteration.commit)
+      }
+    }
+    for (const commit of ["20ec416", "92f5823", "579b106", "3b9dc7d"]) await expect(page.getByText(commit)).toBeVisible()
+    await expect(page.getByText("git log -- site/")).toBeVisible()
+  })
+
+  test("every iteration that is not production links back to it from a fixed corner; production does not", async ({ page }) => {
+    for (const path of NON_PRODUCTION_PATHS.filter((path) => path !== VERSIONS_PATH)) {
+      await page.goto(path)
+      const link = page.getByRole("link", { name: VERSIONS_LINK_LABEL, exact: true })
+      await expect(link, path).toHaveAttribute("href", VERSIONS_PATH)
+      expect(await link.evaluate((element) => getComputedStyle(element).position)).toBe("fixed")
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    }
+    await page.goto("/")
+    await expect(page.getByRole("link", { name: VERSIONS_LINK_LABEL, exact: true })).toHaveCount(0)
   })
 })
