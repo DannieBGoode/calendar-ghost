@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import UTC
 from pathlib import Path
 
 from calendar_sync.application.errors import (
@@ -77,7 +78,8 @@ class SqliteConnectedAccountStore:
         Reauthorizing clears Lapsed Authorization; resuming the rules it stopped is the
         application's to do (ADR 0027).
         """
-        now = self._clock.now().isoformat()
+        # In UTC, so recording a lapse can compare it with a request's start as text.
+        now = self._clock.now().astimezone(UTC).isoformat()
         account_id = self._ids.new()
         encrypted = self._cipher.encrypt(credential_json)
         with transaction(self._database_path) as connection:

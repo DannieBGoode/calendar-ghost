@@ -128,19 +128,20 @@ class SqliteConnectedAccountRecords:
         self, account_id: ConnectedAccountId, at: datetime, *, attempted_at: datetime
     ) -> bool:
         # One statement, so a Reauthorization cannot land between the check and the write. A
-        # connected account's last update is when it was last authorized. julianday compares to
-        # about a millisecond, so a request begun in the same millisecond still lapses it.
+        # connected account's last update is when it was last authorized. Both times are UTC ISO
+        # 8601 text, which orders as the instants do, to the microsecond; julianday would round
+        # to the millisecond.
         cursor = self._connection.execute(
             """
             UPDATE connected_accounts
             SET authorization_lapsed_at = COALESCE(authorization_lapsed_at, ?)
-            WHERE id = ? AND state = ? AND julianday(updated_at) <= julianday(?)
+            WHERE id = ? AND state = ? AND updated_at <= ?
             """,
             (
                 at.isoformat(),
                 account_id.value,
                 ConnectedAccountState.CONNECTED.value,
-                attempted_at.isoformat(),
+                attempted_at.astimezone(UTC).isoformat(),
             ),
         )
         return cursor.rowcount == 1
