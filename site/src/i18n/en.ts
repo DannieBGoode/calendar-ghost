@@ -397,7 +397,7 @@ export const en = {
      * another first screen above the home page's own sections. */
     homeHeroes: {
       /** One plain line under the headline. */
-      line: "Copies events between your Google calendars, on your own server. Work sees Busy. Guests and meeting links stay home.",
+      line: "Copies events between your Google calendars, on your own server. Work sees Busy.",
       /** Plain facts beside the calls to action. */
       meta: "Open source (AGPL) · Docker · Google Calendar",
       /** The hint under the ghost handle: for a mouse, then for touch. */
