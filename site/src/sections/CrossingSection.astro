@@ -1,4 +1,7 @@
 ---
+// You choose what crosses over: the heading, then the demo across the container's full width,
+// with its switch and one-line explanation on top and the parts that always stay behind on the
+// Personal card itself (islands/Crossing.tsx).
 import { avatarUrls } from "../avatars"
 import { Crossing } from "../islands/Crossing"
 import type { Messages } from "../i18n"
@@ -12,24 +15,17 @@ const { m } = Astro.props
 
 <section class="section" aria-labelledby="crossing-title">
   <div class="container crossing-section">
-    <div>
-      <h2 id="crossing-title">{m.crossing.title}</h2>
-      <h3>{m.crossing.alwaysStaysTitle}</h3>
-      <ul class="stays">
-        {m.crossing.alwaysStays.map((item) => <li>{item}</li>)}
-      </ul>
-    </div>
+    <h2 id="crossing-title">{m.crossing.title}</h2>
     <Crossing
       client:visible
-      m={{ crossing: m.crossing, demo: m.demo, ghost: m.ghost, motion: m.motion }}
+      m={{ crossing: m.crossing, demo: m.demo, motion: m.motion }}
       avatars={await avatarUrls()}
     />
   </div>
 </section>
 
 <style>
-  .crossing-section { display: grid; gap: 2.5rem; }
+  .crossing-section { display: grid; gap: clamp(1.5rem, 3vw, 2.25rem); }
   .crossing-section > * { min-width: 0; }
-  @media (min-width: 960px) { .crossing-section { grid-template-columns: 1fr 1.6fr; align-items: start; } }
-  .stays { margin: 0; padding-left: 1.1rem; color: var(--muted-foreground); }
+  .crossing-section h2 { margin: 0; max-width: 16ch; }
 </style>

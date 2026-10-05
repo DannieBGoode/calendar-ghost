@@ -58,7 +58,8 @@ test("without JavaScript, the content and the hero's resting state are there", a
   await expect(page.getByRole("img", { name: en.app.overview.alt })).toBeVisible()
   expect(await split(page)).toBe("55%")
   await expect(page.locator('button[data-copy="self-host-command-0"]')).toBeHidden()
-  await expect(page.locator(".crossing-stage").getByText(en.demo.busy).first()).toBeVisible()
+  await expect(page.locator(".crossing-stage .crossing-landed").getByText(en.demo.busy)).toBeVisible()
+  await expect(page.locator(".crossing-stays").getByText(en.crossing.alwaysStays[0])).toBeVisible()
   await expect(page.locator("#how-it-works .how-preview-row").first()).toContainText(en.demo.busy)
   // Nothing loops without JavaScript, so there is nothing to pause.
   await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
@@ -308,6 +309,72 @@ for (const path of ["/", "/bold"]) {
     await strip.getByRole("button", { name: en.crossing.busyOnly }).click()
     await expect(rows.first()).toContainText(en.demo.busy)
   })
+}
+
+for (const path of ["/", "/bold"]) {
+  test(`${path}: the crossing runs once, then rests on a clearly visible Busy on Work`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(path)
+    const crossing = page.locator(".crossing")
+    await crossing.scrollIntoViewIfNeeded()
+    await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
+    await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
+    const landed = crossing.locator(".crossing-work .crossing-landed")
+    await expect(landed.getByText(en.demo.busy)).toBeVisible()
+    expect(await landed.evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
+    expect(await landed.evaluate((element) => getComputedStyle(element).transform)).toBe("none")
+    // A real fill and a solid edge, not a faint outline.
+    const look = await landed.evaluate((element) => {
+      const style = getComputedStyle(element)
+      return { edge: style.borderTopStyle, fill: style.backgroundColor }
+    })
+    expect(look.edge).toBe("solid")
+    expect(look.fill).not.toMatch(/rgba\(.*, 0\)|transparent/)
+    // A new choice runs it again and lands the details.
+    await crossing.getByRole("button", { name: en.crossing.withDetails }).click()
+    await expect(crossing).toHaveAttribute("data-run", "running")
+    await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
+    await expect(landed.getByText(en.demo.events.dentist.title)).toBeVisible()
+    await expect(landed.getByText(en.demo.events.dentist.detail)).toBeVisible()
+  })
+
+  for (const width of [1440, 390]) {
+    test(`${path} at ${width}px: the crossing explains itself, with what stays behind on the Personal card`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto(path)
+      const crossing = page.locator(".crossing")
+      await crossing.scrollIntoViewIfNeeded()
+      // The switch and its one line sit with the demo, on top of it.
+      const bar = (await crossing.locator(".crossing-bar").boundingBox())!
+      const personal = (await crossing.locator(".crossing-personal").boundingBox())!
+      const work = (await crossing.locator(".crossing-work").boundingBox())!
+      expect(bar.y + bar.height).toBeLessThanOrEqual(personal.y)
+      await expect(crossing.locator(".crossing-explain")).toHaveText(en.crossing.busyOnlyBody)
+      // Each part that never crosses over is a chip with its icon on the Personal card.
+      const stays = crossing.locator(".crossing-personal .crossing-stays")
+      await expect(stays.getByRole("heading", { name: en.crossing.alwaysStaysTitle })).toBeVisible()
+      for (const item of en.crossing.alwaysStays) {
+        const chip = stays.getByRole("listitem").filter({ hasText: item })
+        await expect(chip).toBeVisible()
+        await expect(chip.locator("svg")).toHaveCount(1)
+      }
+      if (width >= 1000) {
+        // Side by side, close together, and large.
+        expect(Math.abs(work.y - personal.y)).toBeLessThan(2)
+        expect(work.x - (personal.x + personal.width)).toBeLessThan(160)
+        expect(personal.width).toBeGreaterThan(420)
+        expect(work.width).toBeGreaterThan(420)
+      } else {
+        // Stacked: Personal, then Work.
+        expect(work.y).toBeGreaterThan(personal.y + personal.height)
+      }
+      // Under reduced motion it has simply landed.
+      await expect(crossing).toHaveAttribute("data-run", "rested")
+      await expect(crossing.locator(".crossing-landed").getByText(en.demo.busy)).toBeVisible()
+      await context.close()
+    })
+  }
 }
 
 test("without JavaScript, the integrations mockups show their final state", async ({ browser }) => {

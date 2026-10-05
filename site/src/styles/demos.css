@@ -180,124 +180,182 @@
   .haunt-ghost { transition: none; }
 }
 
-/* The Crossing: a 9-second loop. The ghost lifts the event, carries it across, and sets it down;
-   details that do not cross over fade out on the way. Then it says something about it. */
-.crossing { --cross-x: 138.1%; display: grid; gap: 1.5rem; min-width: 0; }
+/* The Crossing: Sam's Dentist on Personal, with every part of it, beside Work's afternoon. One
+   run (Crossing.tsx): the ghost fetches a copy from the card, the parts the choice leaves out fall
+   away as it carries the copy over, and it sets the copy down on Work. The parts that never cross
+   over stay on the Personal card all along. The island measures the run's distances
+   (`--crossing-*-x/y`), so one set of keyframes serves the wide and the stacked layout. */
+.crossing {
+  --crossing-hour: 3.5rem;
+  --crossing-lift: -18px;
+  container-type: inline-size; display: grid; gap: clamp(1.25rem, 3vw, 2rem); min-width: 0;
+}
+.crossing-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; }
 .crossing-switch {
   display: inline-flex; padding: 3px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface);
 }
 .crossing-switch button {
   all: unset; box-sizing: border-box; display: inline-flex; align-items: center; min-height: 2.75rem;
-  cursor: pointer; padding: 0 1rem; border-radius: 999px;
-  font-size: 0.875rem; font-weight: 600; color: var(--muted-foreground);
+  cursor: pointer; padding: 0 1.1rem; border-radius: 999px;
+  font-size: 0.9375rem; font-weight: 650; color: var(--muted-foreground);
 }
-.crossing-switch button[aria-pressed="true"] { background: var(--muted); color: var(--foreground); }
-.crossing-switch button:focus-visible { outline: 2px solid var(--ring); }
-.crossing-explain { margin: 0.6rem 0 0; color: var(--muted-foreground); }
-.crossing-stage { position: relative; height: 300px; }
-.crossing-cal {
-  position: absolute; top: 0; width: 42%; height: 100%; overflow: hidden;
-  border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+.crossing-switch button[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
+.crossing-switch button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.crossing-explain { flex: 1 1 16rem; margin: 0; font-size: 1.0625rem; line-height: 1.45; color: var(--foreground); }
+.crossing-bar .motion-toggle { margin-left: auto; color: var(--muted-foreground); }
+
+/* Stacked on narrow screens: Personal, the ghost's lane, then Work. */
+.crossing-stage { position: relative; display: grid; grid-template-rows: auto 6.5rem auto; }
+.crossing-personal { grid-row: 1; }
+.crossing-work { grid-row: 3; }
+.crossing-side { min-width: 0; }
+.crossing-name {
+  display: flex; align-items: center; gap: 0.55rem; height: 2.25rem; margin: 0 0 0.6rem;
+  font-size: 0.9375rem; font-weight: 700;
 }
-.crossing-personal { left: 0; }
-.crossing-work { right: 0; }
-.crossing-cal header {
-  display: flex; align-items: center; gap: 0.45rem; height: calc(2.4rem + 1px);
-  font-size: 0.75rem; font-weight: 600; padding: 0 0.75rem; border-bottom: 1px solid var(--border);
+.crossing-name .avatar { width: 2rem; height: 2rem; }
+.crossing-mark { display: contents; }
+.crossing-icon { width: 1em; height: 1em; flex: none; }
+
+/* Personal: the event as Sam's calendar shows it, every part of it. */
+.crossing-event {
+  border: 1px solid var(--event-personal-edge); border-radius: var(--panel-radius);
+  background: var(--surface); overflow: hidden;
 }
-.crossing-cal header .avatar { width: 1.375rem; height: 1.375rem; }
-.crossing-row {
-  height: 60px; padding: 3px 8px; font-size: 0.6875rem; color: var(--muted-foreground);
-  border-bottom: 1px dashed var(--border);
+.crossing-source { display: grid; gap: 0.35rem; padding: 1rem 1.15rem 1.1rem; background: var(--event-personal); }
+.crossing-source-title { font: 600 clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem)/1.15 var(--font-display); letter-spacing: -0.01em; }
+.crossing-source-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9375rem; font-weight: 550; }
+.crossing-source > * { display: flex; align-items: center; gap: 0.5rem; }
+/* What the choice sends is marked on the card too: an arrow toward Work. */
+.crossing-source > [data-crosses="true"]::after {
+  content: "→"; margin-left: auto; padding-left: 0.5rem; font: 700 1rem/1 var(--font-sans); color: var(--primary);
 }
-.crossing-original, .crossing-existing { left: 44px; right: 8px; height: 54px; }
-/* The Dentist runs 15:00 to 16:30, so its place, guest, and link chips fit inside the card even
-   when they wrap; the work event starts at 16:30, below it. */
-.crossing-original { top: 98px; height: 86px; }
-.crossing-existing { top: 188px; }
-.crossing-traveler {
-  position: absolute; left: 0; top: 0; width: 42%; height: 100%; pointer-events: none;
-  animation: crossing-move 9s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+.crossing-stays { padding: 0.85rem 1.15rem 1.1rem; }
+.crossing-stays h3 {
+  margin: 0 0 0.6rem; font: 700 0.75rem/1.2 var(--font-sans); letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted-foreground);
 }
-.crossing-card {
-  --event-edge: var(--event-personal-edge);
-  left: 44px; right: 8px; top: 98px; height: 86px;
-  border: 0; box-shadow: inset 0 0 0 1px var(--event-personal-edge);
-  background: var(--event-personal);
+.crossing-stays ul { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
+.crossing-stays li {
+  display: inline-flex; align-items: center; gap: 0.4rem; max-width: none; padding: 0.3rem 0.7rem 0.3rem 0.6rem; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--background); font-size: 0.875rem; font-weight: 600; line-height: 1.3;
 }
-/* The Busy look lies over the card and fades in as it crosses, so only opacity animates. Its
-   edge is an inset shadow because the card clips anything outside its padding box. */
-.crossing-card::before {
-  content: ""; position: absolute; inset: 0; border-radius: inherit;
-  box-shadow: inset 0 0 0 1px var(--primary);
-  background: linear-gradient(var(--event-busy), var(--event-busy)), var(--surface);
-  opacity: 0; animation: crossing-tint 9s infinite;
+.crossing-stays li .crossing-icon { color: var(--muted-foreground); }
+
+/* Work: Monday afternoon, one row an hour. */
+.crossing-day {
+  position: relative; padding: 0.5rem 0.75rem 0;
+  border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
 }
-.crossing-card > :not(.crossing-busy) { position: relative; }
-.crossing-busy { position: absolute; left: 7px; top: 4px; opacity: 0; animation: crossing-busy 9s infinite; }
-/* Override the shared .cal-event > span ellipsis rule: the chips line wraps instead of
-   truncating, so a faded chip never leaves a stray "…" behind. */
-.crossing-card > .crossing-chips { white-space: normal; text-overflow: clip; }
-.crossing-chips > small {
-  display: inline-block; margin: 3px 3px 0 0; padding: 1px 5px; border-radius: 4px;
-  background: color-mix(in oklch, var(--background), transparent 30%); font-size: 0.6875rem; font-weight: 500;
-  /* A chip never breaks inside a word; a long meeting link shortens with an ellipsis instead. */
-  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: top;
+.crossing-hour {
+  display: block; height: var(--crossing-hour); padding-top: 0.3rem;
+  border-top: 1px solid color-mix(in oklch, var(--border), transparent 20%);
+  font-size: 0.75rem; font-variant-numeric: tabular-nums; color: var(--muted-foreground);
 }
-.crossing-fades { animation: crossing-fade 9s infinite; }
-/* The ghost holds the card by its top edge, hem over the card. */
-.crossing-traveler .crossing-carrier { position: absolute; right: -4px; top: 30px; width: 88px; height: 88px; animation: crossing-carry 9s infinite; }
-.crossing-carrier .ghost { --ghost-cutout: var(--surface); --ghost-size: 100%; }
-.crossing .crossing-bubble { top: 4%; font-size: 0.8125rem; animation: crossing-bubble 9s infinite; }
-.crossing-traveler .ghost[data-sequence] .ghost-face-first { animation: crossing-face-first 9s infinite; }
-.crossing-traveler .ghost[data-sequence] .ghost-face-then { animation: crossing-face-then 9s infinite; }
-.crossing[data-playing="false"] .crossing-traveler,
-.crossing[data-playing="false"] .crossing-traveler *,
-.crossing[data-playing="false"] .crossing-traveler *::before { animation-play-state: paused; }
-@keyframes crossing-move {
-  0%, 5% { transform: translate(0, 0); opacity: 0; }
-  10% { transform: translate(0, 0); opacity: 1; }
-  18% { transform: translate(0, -34px); }
-  50% { transform: translate(var(--cross-x), -34px); }
-  58%, 92% { transform: translate(var(--cross-x), 0); opacity: 1; }
-  100% { transform: translate(var(--cross-x), 0); opacity: 0; }
+.crossing-hour:last-child { height: 2rem; }
+/* The landed copy, 15:00 to 16:30. Busy has its own look: Lantern Indigo, a solid edge, and the
+   ghost's own small silhouette before the word. */
+.crossing-landed {
+  position: absolute; left: 4rem; right: 0.75rem; top: calc(0.5rem + var(--crossing-hour)); height: calc(var(--crossing-hour) * 1.5);
+  display: grid; grid-template-areas: "head" "time" "place"; align-content: start; gap: 0.15rem;
+  padding: 0.55rem 0.75rem; border-radius: 8px; overflow: hidden; isolation: isolate;
+  border: 1px solid var(--primary); background: color-mix(in oklch, var(--primary) 20%, var(--surface));
+  font-size: 0.875rem; line-height: 1.3; color: var(--foreground);
 }
-@keyframes crossing-carry {
-  0%, 5% { opacity: 0; transform: translateY(-10px); }
-  11%, 84% { opacity: 1; transform: translate(0, 0); }
-  92%, 100% { opacity: 0; transform: translate(16px, -36px); }
+/* The copy starts in Personal's colors; this layer fades as it becomes Work's. */
+.crossing-landed::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit;
+  background: var(--event-personal); box-shadow: inset 0 0 0 1px var(--event-personal-edge); opacity: 0;
 }
-@keyframes crossing-face-first { 0%, 57% { opacity: 1; } 60%, 100% { opacity: 0; } }
-@keyframes crossing-face-then { 0%, 57% { opacity: 0; } 60%, 100% { opacity: 1; } }
-@keyframes crossing-bubble {
-  0%, 61% { opacity: 0; transform: translateY(4px); }
-  65%, 84% { opacity: 1; transform: translateY(0); }
-  88%, 100% { opacity: 0; transform: translateY(0); }
+.crossing-landed-title, .crossing-landed-busy { grid-area: head; font-weight: 700; font-size: 0.9375rem; }
+.crossing-landed-row { font-weight: 550; }
+.crossing-landed-time { grid-area: time; }
+.crossing-landed-place { grid-area: place; }
+.crossing-landed-busy { display: flex; align-items: center; gap: 0.35em; }
+.crossing-landed-busy::before {
+  content: ""; flex: none; width: 1.1em; height: 1.1em; background: var(--primary);
+  /* The ghost's silhouette (Ghost.tsx), eyes cut out. */
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='10 7 44 49'%3E%3Cpath fill-rule='evenodd' d='M22.5 14V11a2.5 2.5 0 0 1 5 0V14ZM36.5 14V11a2.5 2.5 0 0 1 5 0V14ZM12 27A13 13 0 0 1 25 14H39A13 13 0 0 1 52 27V48C52 51.8 49.6 54 47 54C44.4 54 42 51.8 42 48C42 46 40.9 44.5 39.5 44.5C38.1 44.5 37 46 37 48C37 51.8 34.6 54 32 54C29.4 54 27 51.8 27 48C27 46 25.9 44.5 24.5 44.5C23.1 44.5 22 46 22 48C22 51.8 19.6 54 17 54C14.4 54 12 51.8 12 48ZM21.2 32a3.8 4.6 0 1 0 7.6 0a3.8 4.6 0 1 0 -7.6 0ZM35.2 32a3.8 4.6 0 1 0 7.6 0a3.8 4.6 0 1 0 -7.6 0Z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
-@keyframes crossing-tint { 0%, 38% { opacity: 0; } 48%, 100% { opacity: 1; } }
-@keyframes crossing-fade { 0%, 26% { opacity: 1; } 42%, 100% { opacity: 0; } }
-@keyframes crossing-busy { 0%, 42% { opacity: 0; } 48%, 100% { opacity: 1; } }
-@media (max-width: 639px) {
-  .crossing { --cross-x: 112.8%; }
-  .crossing-cal, .crossing-traveler { width: 47%; }
-  .crossing-traveler .crossing-carrier { top: 42px; width: 68px; height: 68px; }
-  /* Higher and a little smaller, so the bubble sits over the empty first hour, not the event. */
-  .crossing .crossing-bubble { top: -0.75rem; max-width: 11.5rem; padding: 0.45rem 0.7rem; font-size: 0.75rem; }
+/* Landed: what the choice sends, and nothing else. */
+.crossing-landed [data-crosses="false"] { opacity: 0; }
+.crossing-landed-busy[data-crosses="false"] { visibility: hidden; }
+
+/* The ghost rests in the lane between the calendars, on the dotted way from one to the other. */
+.crossing-path {
+  grid-row: 2; grid-column: 1; align-self: stretch; justify-self: center; width: 0;
+  border-left: 2px dotted color-mix(in oklch, var(--primary), transparent 45%);
 }
-/* Landed: where the event ends up, with what crossed over and the ghost pleased about it. This
-   is the state under reduced motion, and before hydration (including without JavaScript), when
-   the loop would otherwise sit paused at its invisible first frame. */
-@media (prefers-reduced-motion: reduce) {
-  .crossing-traveler, .crossing-traveler *, .crossing-traveler *::before { animation: none !important; }
-  .crossing-traveler { transform: translate(var(--cross-x), 0); }
-  .crossing-card::before { opacity: 1; }
-  .crossing-fades { opacity: 0; }
-  .crossing-busy { opacity: 1; }
+.crossing-ghost {
+  position: relative; z-index: 3; width: 76px; height: 76px; pointer-events: none;
+  grid-row: 2; grid-column: 1; align-self: center; justify-self: center;
 }
-.crossing[data-hydrated="false"] .crossing-traveler,
-.crossing[data-hydrated="false"] .crossing-traveler *,
-.crossing[data-hydrated="false"] .crossing-traveler *::before { animation: none !important; }
-.crossing[data-hydrated="false"] .crossing-traveler { transform: translate(var(--cross-x), 0); }
-.crossing[data-hydrated="false"] .crossing-card::before { opacity: 1; }
-.crossing[data-hydrated="false"] .crossing-fades { opacity: 0; }
-.crossing[data-hydrated="false"] .crossing-busy { opacity: 1; }
+.crossing-ghost .ghost { --ghost-size: 100%; --ghost-cutout: var(--surface); }
+/* The faces follow the run (below), not the ghost's default one-time change. */
+.crossing-ghost .ghost-face-first { opacity: 0; }
+.crossing:not([data-run="running"]) .crossing-ghost .ghost-face-first,
+.crossing:not([data-run="running"]) .crossing-ghost .ghost-face-then { animation: none; }
+/* In flight, the copy is lifted off the page: a shadow under it, shown only while it is up. */
+.crossing-landed::after {
+  content: ""; position: absolute; inset: 0; z-index: -2; border-radius: inherit; opacity: 0;
+  box-shadow: 0 14px 28px -12px color-mix(in oklch, var(--primary), transparent 45%);
+}
+
+/* Side by side when there is room: the two calendars close, the ghost's lane between them. */
+@container (min-width: 46rem) {
+  .crossing-stage { --crossing-hour: 4.25rem; grid-template-columns: minmax(0, 1fr) clamp(6.5rem, 12cqi, 9rem) minmax(0, 1fr); grid-template-rows: auto; }
+  .crossing-personal { grid-row: 1; grid-column: 1; }
+  .crossing-work { grid-row: 1; grid-column: 3; }
+  .crossing-path {
+    grid-row: 1; grid-column: 2; align-self: start; justify-self: stretch; width: auto; height: 0; border-left: 0;
+    margin-top: calc(2.85rem + 0.5rem + var(--crossing-hour) * 1.75); border-top: 2px dotted color-mix(in oklch, var(--primary), transparent 45%);
+  }
+  .crossing-ghost { grid-row: 1; grid-column: 2; align-self: start; margin-top: calc(2.85rem + 0.5rem + var(--crossing-hour) * 1.75 - 44px); width: 88px; height: 88px; }
+}
+
+/* Before a run (with JavaScript and motion allowed, from the first paint): Work's slot is still
+   empty and the ghost waits, eyes open. Each value is its keyframes' 0%. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .crossing:not([data-run]) .crossing-landed, .crossing[data-run="ready"] .crossing-landed { opacity: 0; }
+  .crossing:not([data-run]) .crossing-ghost .ghost-face-first,
+  .crossing[data-run="ready"] .crossing-ghost .ghost-face-first { opacity: 1; }
+  .crossing:not([data-run]) .crossing-ghost .ghost-face-then,
+  .crossing[data-run="ready"] .crossing-ghost .ghost-face-then { opacity: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .crossing[data-run="running"] .crossing-ghost { animation: crossing-ghost 4.8s cubic-bezier(0.45, 0, 0.25, 1) both; }
+  .crossing[data-run="running"] .crossing-landed { animation: crossing-copy 4.8s cubic-bezier(0.45, 0, 0.25, 1) both; }
+  .crossing[data-run="running"] .crossing-landed::before { animation: crossing-tint 4.8s linear both; }
+  .crossing[data-run="running"] .crossing-landed::after { animation: crossing-up 4.8s linear both; }
+  .crossing[data-run="running"] .crossing-landed [data-crosses="false"] { animation: crossing-drop 4.8s linear both; }
+  .crossing[data-run="running"] .crossing-landed-busy[data-crosses="true"] { animation: crossing-busy 4.8s linear both; }
+  .crossing[data-run="running"] .crossing-ghost .ghost-face-first { animation: crossing-face-first 4.8s linear both; }
+  .crossing[data-run="running"] .crossing-ghost .ghost-face-then { animation: crossing-face-then 4.8s linear both; }
+}
+.crossing[data-playing="false"] .crossing-ghost,
+.crossing[data-playing="false"] .crossing-ghost *,
+.crossing[data-playing="false"] .crossing-landed,
+.crossing[data-playing="false"] .crossing-landed *,
+.crossing[data-playing="false"] .crossing-landed::before,
+.crossing[data-playing="false"] .crossing-landed::after { animation-play-state: paused; }
+@keyframes crossing-ghost {
+  0% { transform: translate(0, 0); }
+  20%, 30% { transform: translate(var(--crossing-fetch-x), var(--crossing-fetch-y)); }
+  36% { transform: translate(var(--crossing-fetch-x), calc(var(--crossing-fetch-y) + var(--crossing-lift))); }
+  76% { transform: translate(var(--crossing-set-x), calc(var(--crossing-set-y) + var(--crossing-lift))); }
+  84% { transform: translate(var(--crossing-set-x), var(--crossing-set-y)); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes crossing-copy {
+  0%, 25% { transform: translate(var(--crossing-copy-x), var(--crossing-copy-y)); opacity: 0; }
+  28% { transform: translate(var(--crossing-copy-x), var(--crossing-copy-y)); opacity: 1; }
+  36% { transform: translate(var(--crossing-copy-x), calc(var(--crossing-copy-y) + var(--crossing-lift))); }
+  76% { transform: translate(0, var(--crossing-lift)); }
+  84%, 100% { transform: translate(0, 0); opacity: 1; }
+}
+@keyframes crossing-up { 0%, 30% { opacity: 0; } 36%, 76% { opacity: 1; } 84%, 100% { opacity: 0; } }
+@keyframes crossing-tint { 0%, 40% { opacity: 1; } 62%, 100% { opacity: 0; } }
+@keyframes crossing-drop { 0%, 38% { opacity: 1; } 52%, 100% { opacity: 0; } }
+@keyframes crossing-busy { 0%, 48% { opacity: 0; } 60%, 100% { opacity: 1; } }
+@keyframes crossing-face-first { 0%, 84% { opacity: 1; } 88%, 100% { opacity: 0; } }
+@keyframes crossing-face-then { 0%, 84% { opacity: 0; } 88%, 100% { opacity: 1; } }
