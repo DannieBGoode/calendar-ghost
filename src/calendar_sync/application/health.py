@@ -216,7 +216,7 @@ class RuleHealth:
             # Reauthorized while the run was in flight; its refusal stops nothing.
             return
         if response.degrade:
-            self._degrade(rule, awaiting_reauthorization=response.lapsed is not None)
+            self._degrade(rule, lapsed=response.lapsed)
         if response.incident is not None and self.incidents.open(response.incident, now):
             self._notify(response.incident, now)
 
@@ -248,14 +248,21 @@ class RuleHealth:
         if self.incidents.open(incident, now):
             self._notify(incident, now)
 
-    def _degrade(self, rule: SyncRule, *, awaiting_reauthorization: bool) -> None:
+    def _degrade(self, rule: SyncRule, *, lapsed: ConnectedAccountId | None) -> None:
+        """Stop the rule; one stopped by `lapsed` awaits that account's Reauthorization."""
         if rule.state is not SyncRuleState.ENABLED:
             return
         with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
             current = uow.rules.get(rule.id)
-            if current is not None and current.state is SyncRuleState.ENABLED:
-                uow.rules.save(current.degrade(awaiting_reauthorization=awaiting_reauthorization))
-                uow.commit()
+            if current is None or current.state is not SyncRuleState.ENABLED:
+                return
+            # Restoring the account after it lapsed, but before this write, found this rule still
+            # enabled and so resumed nothing; stopping it now would leave it stopped for good.
+            # Restoring after this write finds it awaiting and resumes it.
+            if lapsed is not None and uow.accounts.authorized(lapsed):
+                return
+            uow.rules.save(current.degrade(awaiting_reauthorization=lapsed is not None))
+            uow.commit()
 
     def _notify(self, incident: IncidentReport, at: datetime) -> None:
         if self.notifications is not None:

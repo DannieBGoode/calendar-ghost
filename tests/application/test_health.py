@@ -12,6 +12,7 @@ from calendar_sync.application.health import (
     RuleHealth,
     RuleHealthPolicy,
 )
+from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.ports import (
     ConnectedAccountState,
     IncidentMessage,
@@ -291,6 +292,33 @@ def test_a_refusal_of_credentials_reauthorization_replaced_stops_nothing() -> No
     assert unit_of_work.state.lapsed == {}
     assert incidents.events == []
     assert notifications.opened == []
+
+
+class RestoredRightAfterLapsing(LapsedAuthorizations):
+    """Reauthorization that lands between lapsing an account and stopping its rule."""
+
+    def lapsed(
+        self, account_id: ConnectedAccountId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> bool:
+        lapsed = super().lapsed(account_id, failure, attempted_at=attempted_at)
+        self.restored(account_id)
+        return lapsed
+
+
+def test_a_rule_whose_account_was_restored_before_it_stopped_keeps_running() -> None:
+    # Reauthorization landed after the account lapsed but before the rule was stopped, so it
+    # found nothing to resume; the rule must not stop for an account that is authorized again.
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule()
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
+    health.lapses = RestoredRightAfterLapsing(unit_of_work, Incidents(), FixedClock())
+    expired = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
+
+    health.record_failure(rule(), expired)
+
+    assert unit_of_work.state.rules[RULE].state is SyncRuleState.ENABLED
+    assert unit_of_work.state.lapsed == {}
 
 
 def test_a_permanent_failure_stops_its_rule_for_a_preview() -> None:
