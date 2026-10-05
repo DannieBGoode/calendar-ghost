@@ -179,6 +179,19 @@ def test_disconnecting_degrades_validated_and_enabled_rules_only() -> None:
     }
 
 
+def test_disconnecting_makes_a_rule_awaiting_reauthorization_need_a_preview() -> None:
+    enabled = replace(_rule("stopped", ACCOUNT.value), state=SyncRuleState.ENABLED)
+    stopped = enabled.degrade(awaiting_reauthorization=True)
+    unit_of_work = _with_rules(stopped)
+
+    DisconnectConnectedAccount(unit_of_work, RecordingAccounts(_account()), RuleLocks()).execute(
+        ACCOUNT
+    )
+
+    kept = unit_of_work.state.rules[stopped.id]
+    assert (kept.state, kept.awaiting_reauthorization) == (SyncRuleState.DEGRADED, False)
+
+
 def test_disconnecting_an_unknown_account_changes_no_rule() -> None:
     affected = replace(_rule("affected", ACCOUNT.value), state=SyncRuleState.ENABLED)
     unit_of_work = _with_rules(affected)

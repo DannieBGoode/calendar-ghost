@@ -25,6 +25,7 @@ const accounts: ConnectedAccount[] = ["a", "b"].map((id) => ({
   state: "connected",
   rule_count: 1,
   authorized_at: "2026-10-02T00:00:00Z",
+  authorization_lapsed_at: null,
 }))
 
 function calendar(id: string): DiscoveredCalendar {

@@ -42,6 +42,18 @@ activity. Existing Managed Projections remain in their destination calendars and
 managed because the installation no longer has the authorization or ownership records required to
 change them.
 
+**Lapsed Authorization**:
+The condition of a Connected Account whose stored credentials its provider no longer accepts, as
+when a Google grant expires or is revoked. The account stays connected, so its rules keep their
+mappings and incremental positions. Any provider request that the provider refuses for
+authentication or authorization marks it, whether a sync run, a preview, or an access check, and
+it stops every enabled rule of the account. Reauthorization clears it, and so does an access check the provider accepts. Once it clears and
+every account a Degraded Rule uses is authorized, a rule stopped only by Lapsed Authorization
+returns to scheduled synchronization on its own, continuing from its preserved incremental positions
+so changes made in either calendar while it was stopped are synchronized or repaired; a rule
+stopped for any other reason still needs a recovery preview (ADR 0027).
+_Avoid_: Expired account, broken connection, disconnected
+
 ## Synchronization
 
 **Directional Sync Rule**:
@@ -186,11 +198,11 @@ A rule whose synchronization is safely suspended because it currently requires r
 _Avoid_: Failed rule, disabled rule
 
 **Reauthorization**:
-Renewal of a connected or disconnected account's authorization after access is lost or removed. Affected rules reconcile before returning to scheduled synchronization.
+Renewal of a connected or disconnected account's authorization after access is lost or removed. It clears Lapsed Authorization.
 _Avoid_: Reconnect, log in again
 
 **Incident**:
-A persistent operational condition requiring attention, such as expired authorization or identity corruption. Repeated sync attempts update one incident rather than creating duplicate alerts. An incident resolves after a successful scheduled sync, when a daily pass finds nothing still blocked, or when its rule is removed, and records which; one that opens again starts a new episode with its own opening time. Resolved incidents are kept as evidence until their Connected Account is deleted, but Activity leads only with open ones.
+A persistent operational condition requiring attention, such as expired authorization or identity corruption. Repeated sync attempts update one incident rather than creating duplicate alerts. An incident resolves after a successful scheduled sync, when a daily pass finds nothing still blocked, or when its rule is removed, and records which. An incident for Lapsed Authorization belongs to the Connected Account instead of one rule: it names every rule the lapse stopped, sends one notification, and resolves when the lapse clears; one that opens again starts a new episode with its own opening time. Resolved incidents are kept as evidence until their Connected Account is deleted, but Activity leads only with open ones.
 _Avoid_: Error message, failure log
 
 **Incident Notification**:
@@ -198,7 +210,7 @@ A deduplicated notice sent when an incident opens or resolves. The Web UI always
 _Avoid_: Error alert, retry notification
 
 **Installation Status**:
-The server's one verdict on the installation's health (stalled, stopped, review, waiting, paused, setup, or healthy) with every current problem, most urgent first. The Overview, the status API, and MCP all show it. It names rules by their calendars and never carries event content, calendar IDs, or account emails.
+The server's one verdict on the installation's health (stalled, stopped, review, waiting, paused, setup, or healthy) with every current problem, most urgent first. The Overview, the status API, and MCP all show it. It names rules by their calendars and never carries event content, calendar IDs, or account emails. A rule stopped by Lapsed Authorization is reported as stopped for that cause; the Web UI names the account from its own records, so monitors and agents learn only that a Google account needs reauthorization.
 _Avoid_: Health check, status page
 
 ## Access
@@ -296,9 +308,10 @@ diagnostics keep the glossary terms above.
 | Invitation Response | "you answered Maybe", "you declined", "you haven't answered"; "Your response" in a change |
 | Material Rule Change | "A change stops the rule from writing until you preview it again" |
 | Rule Preview, then enable | "Preview rule", then "Start syncing" |
-| Degraded Rule | "Stopped", with the cause and "Preview to restart" |
+| Degraded Rule | "Stopped", with the cause and its one next step: "Reauthorize account" when an account it uses has Lapsed Authorization, otherwise "Preview to restart" |
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
 | Connected Account | "Google account" |
+| Lapsed Authorization | "Needs reauthorization", naming the account; its action is "Reauthorize account" |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the administrator's step when one exists, otherwise that Calendar Ghost checks again daily |

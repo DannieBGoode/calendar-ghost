@@ -131,8 +131,10 @@ function stoppedProblem(i18n: I18n, dashboard: Dashboard, of: ProblemsByKind): P
   const stopped = of("stopped")
   if (stopped.length === 0) return null
   const headline = i18n.t("overview.health.stoppedHeadline", { count: stopped.length })
-  if (dashboard.disconnected_accounts > 0) {
-    const title = i18n.t("overview.health.disconnectedTitle", { count: dashboard.disconnected_accounts })
+  // Disconnected, or no longer accepted by Google: either way the fix is to reauthorize.
+  const unauthorized = dashboard.disconnected_accounts + dashboard.lapsed_accounts
+  if (unauthorized > 0) {
+    const title = i18n.t("overview.health.disconnectedTitle", { count: unauthorized })
     return {
       tone: "stopped",
       headline,

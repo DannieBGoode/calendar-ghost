@@ -27,6 +27,10 @@ function failure(i18n: I18n, message: IncidentMessage): string | null {
 
 function messageText(i18n: I18n, message: IncidentMessage): string | null {
   if (message.code === "provider_failure") return failure(i18n, message)
+  // An account's lapse names its failure; a rule it stopped, in a status problem, names none.
+  if (message.code === "authorization_lapsed") {
+    return failure(i18n, message) ?? i18n.t("common.incident.authorizationLapsed", messageParams(i18n, message.params))
+  }
   if (message.code === "removal_stopped") {
     const reason = failure(i18n, message)
     return reason ? i18n.t("common.incident.removalStopped", { reason }) : null

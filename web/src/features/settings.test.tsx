@@ -32,6 +32,7 @@ const connected: ConnectedAccount = {
   state: "connected",
   rule_count: 2,
   authorized_at: "2026-09-30T10:00:00+00:00",
+  authorization_lapsed_at: null,
 }
 const disconnected: ConnectedAccount = {
   id: "acct-b",
@@ -42,6 +43,7 @@ const disconnected: ConnectedAccount = {
   state: "disconnected",
   rule_count: 1,
   authorized_at: null,
+  authorization_lapsed_at: null,
 }
 
 type StorageUsage = Awaited<ReturnType<typeof api.storage>>
@@ -63,6 +65,7 @@ const sourceOnlyAccess: Awaited<ReturnType<typeof api.verifyAccountAccess>> = {
   event_access: true,
   calendars_visible: 3,
   writable_calendars: 0,
+  rules_resumed: 0,
 }
 
 const kuma: IntegrationToken = {
@@ -254,12 +257,45 @@ describe("SettingsPage", () => {
     expect(container.querySelector(".oauth-feedback h2")).toBeNull()
   })
 
+  it("leads with an account Google stopped accepting and offers to reauthorize it", async () => {
+    const lapsed = { ...connected, id: "acct-l", email: "lapsed@example.test", authorization_lapsed_at: justNow }
+    const scrolled = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined)
+    window.history.replaceState(null, "", "/settings?account=acct-l")
+    await renderSettings(testI18n(), { accounts: [connected, lapsed] })
+
+    const rows = [...container.querySelectorAll<HTMLLIElement>(".account-item")]
+    expect(rows.map((row) => row.id)).toEqual(["account-acct-l", "account-acct-a"])
+    const [first] = rows
+    expect(first?.querySelector(".account-actions > span")?.textContent).toContain("Needs reauthorization")
+    expect(first?.querySelector(".account-lapse-note")?.textContent).toBe(
+      "Google no longer accepts this account. Reauthorize it to restart the rules that use it.",
+    )
+    // Google is asked to offer this account first.
+    expect(first?.querySelector("a")?.getAttribute("href")).toBe("/api/v1/oauth/google/start?account=acct-l")
+    // Arriving from a stopped rule shows that account, and does so only once.
+    expect(first?.hasAttribute("data-focused")).toBe(true)
+    expect(scrolled).toHaveBeenCalledOnce()
+    expect(window.location.search).toBe("")
+    expect(container.querySelector(".account-summary-status")?.textContent).toBe(
+      "1 account connected, 1 needs reauthorization",
+    )
+  })
+
+  it("says how many rules restarted when Google returns after reauthorization", async () => {
+    window.history.replaceState(null, "", "/settings?google=connected&account=acct-a&resumed=2")
+    await renderSettings(testI18n())
+    expect(container.querySelector(".oauth-feedback p")?.textContent).toBe(
+      "Access is restored. 2 rules restarted and catch up on changes made while they were stopped.",
+    )
+  })
+
   it("keeps the English copy", async () => {
     window.history.replaceState(null, "", "/settings?google=connected")
     await renderSettings(testI18n())
     expect(container.querySelector(".oauth-feedback h2")?.textContent).toBe("Google account connected")
     const rows = [...container.querySelectorAll(".account-copy span")].map((span) => span.textContent)
-    expect(rows).toEqual(["Used by 2 rules", "1 rule stopped until it is reauthorized"])
+    // The account to reauthorize leads the list.
+    expect(rows).toEqual(["1 rule stopped until it is reauthorized", "Used by 2 rules"])
     // The visible word stands beside one screen reader phrase, rather than a glued " accounts".
     expect(container.querySelector(".account-summary-toggle [aria-hidden='true']")?.textContent).toBe("Hide")
     expect(container.querySelector(".account-summary-toggle .sr-only")?.textContent).toBe("Hide accounts")
@@ -268,7 +304,7 @@ describe("SettingsPage", () => {
     expect(summaries).toContain("48.2 MB · 61,204 Activity entries since Jun 12, 2026 · 1.2 MB can be reclaimed")
     expect(summaries).toContain("7.9 MB · Sep 12 – Oct 1, 2026")
 
-    await click(container.querySelector<HTMLButtonElement>(".account-action")!)
+    await click(button("Check access"))
     expect(container.querySelector(".account-access-result p")?.textContent).toBe(
       "Calendar-list and event permissions are available. 3 calendars are visible and 0 can be used as a destination. This account can still be used as a source.",
     )

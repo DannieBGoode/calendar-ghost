@@ -108,13 +108,14 @@ class SyncScheduler:
         # Every decision of this run, including its retries, is recorded above this entry, so a
         # run that turns out to list both calendars in full can stand in for the daily pass.
         floor = self._audit_floor()
+        started = self._clock.now()
         try:
             result = with_retries(lambda: self._execute_rule.execute(rule.id, full=full), _sleep)
         except RuleNotExecutable:
             # The rule was paused, edited, or removed after this pass listed it.
             return True
         except ProviderFailure as failure:
-            self._health.record_failure(rule, failure)
+            self._health.record_failure(rule, failure, attempted_at=started)
             return False
         except Exception as error:
             logger.exception("Unexpected synchronization failure for rule %s", rule.id.value)

@@ -40,13 +40,20 @@ describe("accountSummary", () => {
 
   it("says so when no account is connected", () => {
     const i18n = testI18n()
-    expect(accountSummary(i18n, [disconnected]).text).toBe("1 account disconnected, it needs reauthorization")
-    expect(accountSummary(i18n, [disconnected, disconnected]).text).toBe(
-      "2 accounts disconnected, they need reauthorization",
-    )
+    expect(accountSummary(i18n, [disconnected]).text).toBe("1 account needs reauthorization")
+    expect(accountSummary(i18n, [disconnected, disconnected]).text).toBe("2 accounts need reauthorization")
   })
 
   it("flags a disconnected account that stopped rules as urgent", () => {
     expect(accountSummary(testI18n(), [connected, { state: "disconnected", rule_count: 2 }]).stopsRules).toBe(true)
+  })
+
+  it("counts a connected account Google stopped accepting as needing reauthorization", () => {
+    const lapsed = { state: "connected", rule_count: 2, authorization_lapsed_at: "2026-10-05T09:00:00Z" }
+    expect(accountSummary(testI18n(), [connected, connected, lapsed])).toEqual({
+      text: "2 accounts connected, 1 needs reauthorization",
+      needsAttention: true,
+      stopsRules: true,
+    })
   })
 })

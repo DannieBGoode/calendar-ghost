@@ -146,6 +146,19 @@ Rolling back works with the same database: earlier releases ignore the columns. 
 that refreshes an open Incident updates its summary but not its message, so after upgrading again
 that Incident can show a stale message until it is next refreshed.
 
+Migration 20 records Lapsed Authorization
+([ADR 0027](adr/0027-lapsed-authorization-and-automatic-recovery.md)). It adds the nullable
+`authorization_lapsed_at` column to `connected_accounts` and `awaiting_reauthorization` to
+`sync_rules`, and replaces the `incidents.resolution` column, keeping its values, so it also
+accepts `access_restored`. On upgrade, a connected account that an open authorization Incident names
+and that was not reauthorized since is marked lapsed, and degraded rules that such an Incident
+stopped are marked to resume with it, unless the rule was changed materially since or uses a
+disconnected account; those still need a recovery preview. Rolling back works with the same database: earlier releases
+ignore the new columns, so lapsed accounts show as connected again and their rules need a recovery
+preview. An earlier release cannot read an Incident resolved as `access_restored`, so Activity's
+incident list fails until those Incidents are removed with their rules or accounts, or the
+release is upgraded again.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
 workers are not supported with the SQLite deployment.

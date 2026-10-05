@@ -4,7 +4,7 @@ import type { ConnectedAccount, Incident } from "@/lib/api"
 
 /** What the administrator can do about an open incident, if anything. */
 export type IncidentAction =
-  | { kind: "settings"; label: string }
+  | { kind: "settings"; label: string; accountId: string | null }
   | { kind: "rule"; ruleId: string; label: string }
   | { kind: "blocked"; ruleId: string; label: string }
 
@@ -37,7 +37,12 @@ function ruleAction(kind: "rule" | "blocked", ruleId: string | null, label: stri
   return ruleId ? { kind, ruleId, label } : null
 }
 
-function authorizationGuidance(i18n: I18n, ruleId: string | null, rule: IncidentRuleState | null): IncidentGuidance {
+function authorizationGuidance(
+  i18n: I18n,
+  incident: Incident,
+  ruleId: string | null,
+  rule: IncidentRuleState | null,
+): IncidentGuidance {
   // Reauthorizing renews access but leaves the rule stopped; only its recovery closes this.
   if (ruleId && rule?.accessRenewed) {
     return {
@@ -47,7 +52,11 @@ function authorizationGuidance(i18n: I18n, ruleId: string | null, rule: Incident
   }
   return {
     detail: i18n.t("activity.incidents.guidance.authorization"),
-    action: { kind: "settings", label: i18n.t("activity.incidents.action.reauthorize") },
+    action: {
+      kind: "settings",
+      label: i18n.t("activity.incidents.action.reauthorize"),
+      accountId: incident.account_id,
+    },
   }
 }
 
@@ -58,7 +67,7 @@ function authorizationGuidance(i18n: I18n, ruleId: string | null, rule: Incident
 export function incidentGuidance(i18n: I18n, incident: Incident, rule: IncidentRuleState | null): IncidentGuidance {
   const { t } = i18n
   const ruleId = rule ? incident.rule_id : null
-  if (AUTHORIZATION.has(incident.category)) return authorizationGuidance(i18n, ruleId, rule)
+  if (AUTHORIZATION.has(incident.category)) return authorizationGuidance(i18n, incident, ruleId, rule)
   if (STOPPED.has(incident.category)) {
     return {
       detail: t("activity.incidents.guidance.stopped"),
@@ -79,6 +88,7 @@ const RESOLUTIONS: Record<NonNullable<Incident["resolution"]>, MessageKey> = {
   sync_succeeded: "activity.incidents.resolution.syncSucceeded",
   blocks_cleared: "activity.incidents.resolution.blocksCleared",
   rule_removed: "activity.incidents.resolution.ruleRemoved",
+  access_restored: "activity.incidents.resolution.accessRestored",
 }
 
 /** Why a resolved incident closed; null when it closed before the reason was recorded. */

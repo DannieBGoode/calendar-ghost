@@ -11,6 +11,7 @@ from calendar_sync.application.errors import (
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
+    ProviderFailure,
     RemovalInterrupted,
     RemovalRequiresProvider,
     ReplacementInterrupted,
@@ -215,6 +216,9 @@ async def preview_rule(rule_id: str, services: Services) -> RulePreviewResponse:
         preview = await asyncio.to_thread(preview_sync_rule.execute, SyncRuleId(rule_id))
     except RuleNotExecutable as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except ProviderFailure as error:
+        # The provider refused to list the source; a lapsed authorization is already recorded.
+        raise problem_from(status.HTTP_424_FAILED_DEPENDENCY, error) from error
     return RulePreviewResponse(
         rule_id=preview.rule_id.value,
         eligible_events=preview.eligible_events,

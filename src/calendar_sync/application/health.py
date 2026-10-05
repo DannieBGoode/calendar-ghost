@@ -11,6 +11,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
+from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     Clock,
@@ -22,7 +23,7 @@ from calendar_sync.application.ports import (
     RuleHealthRecords,
     UnitOfWorkFactory,
 )
-from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 PROVIDER_INCIDENT_THRESHOLD = 3
 """Consecutive failed runs after which a temporary or rate-limited condition opens an Incident."""
@@ -33,20 +34,13 @@ INTERVENTION_FAILURES = AUTHORIZATION_FAILURES | {
     ProviderFailureKind.INFRASTRUCTURE,
 }
 
-_FAILURE_SUMMARIES = {
-    ProviderFailureKind.AUTHENTICATION: "Authorization for {calendar} expired",
-    ProviderFailureKind.AUTHORIZATION: "Access to {calendar} was denied",
-    ProviderFailureKind.RATE_LIMIT: "{Calendar} is limiting requests",
-    ProviderFailureKind.TEMPORARY: "{Calendar} is temporarily unavailable",
-    ProviderFailureKind.PERMANENT: "{Calendar} rejected synchronization",
-    ProviderFailureKind.INFRASTRUCTURE: "Local synchronization infrastructure failed",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class FailureResponse:
     degrade: bool
     incident: IncidentReport | None
+    lapsed: ConnectedAccountId | None = None
+    """The account whose authorization lapsed; its own Incident replaces the rule's."""
 
 
 def _failure_message(code: str, failure: ProviderFailure) -> IncidentMessage:
@@ -68,10 +62,7 @@ class RuleHealthPolicy:
     @staticmethod
     def summary(failure: ProviderFailure) -> str:
         """What failed, naming the provider when the failure says which one (ADR 0022)."""
-        calendar = failure.provider_name
-        return _FAILURE_SUMMARIES[failure.kind].format(
-            calendar=calendar, Calendar=calendar[0].upper() + calendar[1:]
-        )
+        return failure.summary
 
     @staticmethod
     def provider_key(rule_id: SyncRuleId) -> str:
@@ -84,6 +75,8 @@ class RuleHealthPolicy:
     def after_failure(
         self, rule_id: SyncRuleId, failure: ProviderFailure, consecutive_failures: int
     ) -> FailureResponse:
+        if failure.requires_authorization and failure.account_id is not None:
+            return FailureResponse(degrade=True, incident=None, lapsed=failure.account_id)
         degrade = failure.kind in INTERVENTION_FAILURES
         if not degrade and consecutive_failures < self.threshold:
             return FailureResponse(degrade=False, incident=None)
@@ -138,7 +131,9 @@ class RunHealth(Protocol):
         full_pass_run: str | None = None,
     ) -> None: ...
 
-    def record_failure(self, rule: SyncRule, failure: ProviderFailure) -> None: ...
+    def record_failure(
+        self, rule: SyncRule, failure: ProviderFailure, *, attempted_at: datetime | None = None
+    ) -> None: ...
 
 
 @dataclass(slots=True)
@@ -152,6 +147,12 @@ class RuleHealth:
     locks: RuleLocks = field(default_factory=RuleLocks)
     notifications: IncidentNotifications | None = None
     policy: RuleHealthPolicy = field(default_factory=RuleHealthPolicy)
+    lapses: LapsedAuthorizations = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.lapses = LapsedAuthorizations(
+            self.unit_of_work, self.incidents, self.clock, self.locks, self.notifications
+        )
 
     def audit_floor(self) -> int:
         return self.records.audit_floor()
@@ -202,28 +203,56 @@ class RuleHealth:
             return None
         return (incident, now) if self.incidents.open(incident, now) else None
 
-    def record_failure(self, rule: SyncRule, failure: ProviderFailure) -> None:
+    def record_failure(
+        self, rule: SyncRule, failure: ProviderFailure, *, attempted_at: datetime | None = None
+    ) -> None:
+        """Record a failed run that began at `attempted_at`, or just now when not given.
+
+        The failed request's own time, when the provider gives it, is more precise than when the
+        run began, which may be long before the request that failed.
+        """
         now = self.clock.now()
         consecutive = self.records.record_failure(rule.id, failure.kind, now)
         response = self.policy.after_failure(rule.id, failure, consecutive)
+        if response.lapsed is not None:
+            # The lapse stops every enabled rule of the account, this one included, unless the
+            # account was reauthorized while the run was in flight.
+            self.lapses.lapsed(
+                response.lapsed, failure, attempted_at=failure.attempted_at or attempted_at or now
+            )
+            return
         if response.degrade:
             self._degrade(rule)
         if response.incident is not None and self.incidents.open(response.incident, now):
             self._notify(response.incident, now)
 
-    def removal_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+    def removal_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
         """Open or refresh the one Incident for a removal stopped by lost authorization."""
         now = self.clock.now()
         incident = self.policy.removal_blocked(rule_id, failure)
         if self.incidents.open(incident, now):
             self._notify(incident, now)
+        if failure.account_id is not None:
+            self.lapses.lapsed(
+                failure.account_id, failure, attempted_at=failure.attempted_at or attempted_at
+            )
 
-    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
-        """Refresh a stopped rule's Incident with the lost authorization its recovery met.
+    def recovery_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
+        """Record the lost authorization a preview met.
 
         A rule whose calendars belong to two accounts can stop on the first and meet the second
-        only while recovering, so the Incident then names the account still to reauthorize.
+        only while recovering, so the second account's authorization lapses too. Without the
+        account, the rule's own Incident names the failure instead.
         """
+        if failure.account_id is not None:
+            self.lapses.lapsed(
+                failure.account_id, failure, attempted_at=failure.attempted_at or attempted_at
+            )
+            return
         now = self.clock.now()
         incident = self.policy.provider_incident(rule_id, failure)
         if self.incidents.open(incident, now):

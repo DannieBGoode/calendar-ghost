@@ -262,8 +262,8 @@ type RuleRowProps = {
 
 function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange, onOpenRule }: RuleRowProps) {
   const { t } = useI18n()
-  const { source, destination, disconnected } = endpoints
-  const stopped = rule.state === "degraded" || disconnected.length > 0
+  const { source, destination, unauthorized } = endpoints
+  const stopped = rule.state === "degraded" || unauthorized.length > 0
   const work = ruleWork({
     pending: commands.pending[rule.id],
     pendingSince: commands.pendingSince[rule.id],
@@ -293,7 +293,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
           <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} />
           <RuleNextAction
             state={state}
-            disconnected={disconnected.length > 0}
+            reauthorize={unauthorized[0]}
             pending={pending}
             describedBy={state === "dry_run_validated" ? `${headingId} ${previewId}` : headingId}
             onRun={run}
@@ -314,7 +314,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
           </Button>
           <RuleCommandMenu
             state={state}
-            disconnected={disconnected.length > 0}
+            unauthorized={unauthorized.length > 0}
             pending={pending}
             source={source.name}
             destination={destination.name}
@@ -399,7 +399,7 @@ function RuleNotes({
   previewId: string
 }) {
   const { t, format } = useI18n()
-  const { source, destination, disconnected } = endpoints
+  const { source, destination, unauthorized } = endpoints
   return (
     <>
       {rule.reprojection_required && ["draft", "paused", "degraded"].includes(rule.state) && (
@@ -407,8 +407,8 @@ function RuleNotes({
       )}
       {stopped && (
         <p className="rule-note">
-          {disconnected.length > 0
-            ? t("rules.list.stoppedDisconnected", { accounts: format.list(disconnected.map((account) => account.email)) })
+          {unauthorized.length > 0
+            ? t("rules.list.stoppedDisconnected", { accounts: format.list(unauthorized.map((account) => account.email)) })
             : t("rules.list.stoppedGeneric")}
         </p>
       )}

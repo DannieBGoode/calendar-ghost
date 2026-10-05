@@ -138,6 +138,8 @@ def _params(error: Exception) -> dict[str, ParamValue]:
         return _removal_params(error)
     if isinstance(error, ProviderFailure):
         return failure_params(error)
+    if isinstance(error, AccountAccessCheckFailed):
+        return {"reason": error.kind.value}
     return {}
 
 

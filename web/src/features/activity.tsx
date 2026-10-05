@@ -30,7 +30,7 @@ import { activitySearch, activityStateFromSearch, type ActivityLocationState } f
 import type { RuleContext } from "@/lib/activity-rule-context"
 import { ACTIVITY_PAGE_SIZE, api, type AuditEntry, type Incident } from "@/lib/api"
 import { splitIncidents, type IncidentAction } from "@/lib/incidents"
-import type { OpenRule, ViewChange } from "@/lib/navigation"
+import { accountSearch, type OpenRule, type ViewChange } from "@/lib/navigation"
 
 type UpdateLocation = (next: Partial<ActivityLocationState>, history: "push" | "replace") => void
 type ActivityFeed = UseInfiniteQueryResult<InfiniteData<AuditEntry[]>>
@@ -241,7 +241,9 @@ function ActivityPage({
   }
 
   function followIncident(action: IncidentAction) {
-    if (action.kind === "settings") onViewChange("settings")
+    if (action.kind === "settings") {
+      onViewChange("settings", action.accountId ? { search: accountSearch(action.accountId) } : undefined)
+    }
     else if (action.kind === "rule") onOpenRule(action.ruleId)
     else {
       update({ ruleId: action.ruleId, show: "blocked", query: "", entryId: null }, "push")

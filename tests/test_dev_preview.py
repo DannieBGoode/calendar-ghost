@@ -121,9 +121,12 @@ def test_preview_shows_source_changes_with_their_values(tmp_path: Path) -> None:
                 "blocked_events": 0,
             },
         ),
-        (Scenario.STOPPED, {"open_incidents": 2, "stopped_rules": 2, "blocked_events": 0}),
+        (
+            Scenario.STOPPED,
+            {"open_incidents": 1, "stopped_rules": 2, "blocked_events": 0, "lapsed_accounts": 1},
+        ),
         (Scenario.WAITING, {"open_incidents": 1, "stopped_rules": 0, "enabled_rules": 3}),
-        (Scenario.SEVERAL, {"open_incidents": 3, "stopped_rules": 2, "blocked_events": 2}),
+        (Scenario.SEVERAL, {"open_incidents": 2, "stopped_rules": 2, "blocked_events": 2}),
         (
             Scenario.PAUSED,
             {"status": "paused", "needs_attention": False, "enabled_rules": 0, "sync_rules": 3},
@@ -176,7 +179,7 @@ def test_preview_incidents_carry_messages_and_one_keeps_only_its_summary(tmp_pat
     }
     # Kept without a message so the Web UI's fallback to the stored summary stays visible.
     assert review["preview-resolved-rule_removed"] is None
-    assert stopped["provider:preview-personal-work"] == {
-        "code": "provider_failure",
+    assert stopped["authorization:preview-sam-personal"] == {
+        "code": "authorization_lapsed",
         "params": {"kind": "authentication", "provider": "google"},
     }

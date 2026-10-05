@@ -78,6 +78,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
             open_incidents=overview.open_incidents,
             blocked_events=len(overview.open_blocks),
             disconnected_accounts=overview.disconnected_accounts,
+            lapsed_accounts=overview.lapsed_accounts,
         ),
         problems=[problem_response(problem) for problem in status.problems],
         rules=[_rule(status, rule) for rule in status.rules],

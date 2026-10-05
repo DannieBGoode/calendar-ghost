@@ -440,3 +440,48 @@ def test_a_review_worthy_incident_wins_over_a_waiting_one_regardless_of_order() 
         assert len(status.problems) == 1
         assert status.problems[0].kind is ProblemKind.REVIEW
         assert status.problems[0].rule_id == "rule-1"
+
+
+LAPSED = (
+    AccountStanding("personal-account", "connected", "google"),
+    AccountStanding("work-account", "connected", "google", lapsed=True),
+)
+
+
+def test_rules_a_lapsed_account_stops_need_reauthorization_and_name_no_account() -> None:
+    stopped = _rule("rule-1", SyncRuleState.DEGRADED)
+    running = _rule("rule-2")
+    account_incident = replace(
+        _incident(None, "authentication"), id="incident-account", account_id="work-account"
+    )
+
+    status = _assess(
+        [_summary(stopped), _summary(running)],
+        _overview(accounts=LAPSED, open_incidents=1),
+        (account_incident,),
+    )
+
+    assert status.health is InstallationHealth.STOPPED
+    # The account's Incident is covered by the rules it stopped, so it is not a problem itself.
+    assert [(p.kind, p.rule_id) for p in status.problems] == [
+        (ProblemKind.STOPPED, "rule-1"),
+        (ProblemKind.STOPPED, "rule-2"),
+    ]
+    assert [p.message for p in status.problems] == [
+        IncidentMessage("authorization_lapsed", {"provider": "google"})
+    ] * 2
+    assert "@" not in status.summary
+    assert status.overview.lapsed_accounts == 1
+
+
+def test_a_lapsed_account_no_rule_uses_is_still_a_problem_to_review() -> None:
+    account_incident = replace(
+        _incident(None, "authentication"), id="incident-account", account_id="work-account"
+    )
+    paused = _rule("rule-1", SyncRuleState.PAUSED)
+
+    status = _assess(
+        [_summary(paused)], _overview(accounts=LAPSED, open_incidents=1), (account_incident,)
+    )
+
+    assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.REVIEW, None)]

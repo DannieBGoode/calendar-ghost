@@ -192,11 +192,15 @@ The Activity screen names the reason it could not load audit entries and inciden
 Open **Activity**. The rule's incident says what stopped it and offers the next step. The rule keeps
 its mappings and last successful incremental positions, and writes nothing while degraded.
 
-- **Authorization for Google Calendar expired** or **Access to Google Calendar was denied**: choose
-  **Reauthorize in Settings** and reauthorize the Google account Google rejected. Once that account
-  is reauthorized, the incident offers **Recover this rule** instead. If the rule's calendars belong
-  to two accounts and the other one has also lost access, recovering the rule points the incident
-  back to Settings for that account.
+- **Authorization for Google Calendar expired** or **Access to Google Calendar was denied**: Google
+  stopped accepting a connected account (Lapsed Authorization). The incident names the account, and
+  **Settings → Connected accounts** marks it **Needs reauthorization**. The stopped rule's
+  **Reauthorize account**, the Overview, and the incident each open Settings at that account. Choose
+  **Reauthorize account** there; Google offers that account first. Once Google accepts it again,
+  every rule the lapse alone stopped restarts on its own, with no preview, and the return to
+  Settings says how many. If the rule's calendars belong to two accounts and both lost access, it
+  restarts once both are reauthorized. If you think Google's refusal was momentary, choose **Check
+  access** first: a check that passes clears the lapse and restarts the same rules.
 - **Google Calendar rejected synchronization**: Google refused a request for a reason other than
   authorization or rate limiting, or answered in a way Calendar Ghost could not use. Choose **Review
   this rule** and check that both calendars still exist and are shared with the accounts the rule
@@ -248,7 +252,9 @@ does not create an account or retain Google credentials.
 
 ## A connected account fails Check access
 
-The Google Calendar API is enabled on the Google Cloud project, not separately on each Google
+If Google no longer accepts the account, the check says so and the account is marked **Needs
+reauthorization**; choose **Reauthorize account**. If Google denied calendar access, the Google
+Calendar API may be off: it is enabled on the Google Cloud project, not separately on each Google
 identity. Confirm that the API remains enabled for the project owning the OAuth client, then choose
 **Reauthorize account** for the affected identity. **Check access** verifies both calendar-list and
 event access through read-only requests. A successful check also reports the number of writable

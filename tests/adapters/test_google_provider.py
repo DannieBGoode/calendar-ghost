@@ -1059,3 +1059,28 @@ def test_google_refuses_to_update_a_projection_this_rule_does_not_own() -> None:
 
     assert raised.value.provider is ProviderKind.GOOGLE
     events_api.update.assert_not_called()
+
+
+def test_a_failure_says_when_its_request_read_the_accounts_credentials() -> None:
+    # A run's later request may read credentials a Reauthorization replaced after the run
+    # began, so the failure carries its own request's time, not the run's.
+    class Ticking:
+        def __init__(self) -> None:
+            self.moment = NOW
+
+        def now(self) -> datetime:
+            self.moment += timedelta(seconds=1)
+            return self.moment
+
+    clock = Ticking()
+    events_api = MagicMock()
+    events_api.list.return_value = request_raising(401)
+    service = MagicMock()
+    service.events.return_value = events_api
+    provider = GoogleCalendarProvider(lambda _account_id: service, clock)
+
+    with pytest.raises(ProviderFailure) as failure:
+        provider.changes(endpoint("personal-account", "personal-calendar"), None, NOW)
+
+    # Read at the first tick; the failure was built at the second.
+    assert failure.value.attempted_at == NOW + timedelta(seconds=1)

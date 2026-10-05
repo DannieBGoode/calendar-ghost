@@ -27,6 +27,7 @@ from calendar_sync.application.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
+    ProviderFailureKind,
 )
 from calendar_sync.application.ports import (
     AccountAccess,
@@ -98,15 +99,17 @@ class GoogleOAuthService:
         self._refresh_locks: dict[ConnectedAccountId, Lock] = {}
         self._refresh_guard = Lock()
 
-    def authorization_url(self) -> str:
+    def authorization_url(self, login_hint: str | None = None) -> str:
         self._require_client_configuration()
         state = secrets.token_urlsafe(32)
         self._store_state(state)
         flow = self._flow(state)
+        hint = {"login_hint": login_hint} if login_hint else {}
         url, _ = flow.authorization_url(
             access_type="offline",
             include_granted_scopes="true",
             prompt="consent",
+            **hint,
         )
         return str(url)
 
@@ -202,15 +205,20 @@ class GoogleOAuthService:
             # A refresh Google rejected carries no status; one it could not answer is retryable.
             revoked = isinstance(error, RefreshError) and not error.retryable
             if status_code == 401 or revoked:
-                detail = "Google authorization has expired; reauthorize this account"
-            elif status_code == 403:
-                detail = (
+                raise AccountAccessCheckFailed(
+                    "Google authorization has expired; reauthorize this account",
+                    ProviderFailureKind.AUTHENTICATION,
+                ) from error
+            if status_code == 403:
+                raise AccountAccessCheckFailed(
                     "Google Calendar access was denied; confirm the Calendar API is enabled "
-                    "and reauthorize this account"
-                )
-            else:
-                detail = "Google Calendar access could not be verified; try again"
-            raise AccountAccessCheckFailed(detail) from error
+                    "and reauthorize this account",
+                    ProviderFailureKind.AUTHORIZATION,
+                ) from error
+            raise AccountAccessCheckFailed(
+                "Google Calendar access could not be verified; try again",
+                ProviderFailureKind.TEMPORARY,
+            ) from error
         return AccountAccess(
             calendars_visible=len(calendars),
             writable_calendars=sum(

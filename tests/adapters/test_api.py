@@ -127,6 +127,7 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
             "problems": [],
             "connected_accounts": 0,
             "disconnected_accounts": 0,
+            "lapsed_accounts": 0,
             "sync_rules": 0,
             "enabled_rules": 0,
             "stopped_rules": 0,
@@ -463,6 +464,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
             "state": "connected",
             "rule_count": 4,
             "authorized_at": account.authorized_at,
+            "authorization_lapsed_at": None,
         }
     ]
     assert account.authorized_at is not None
@@ -775,8 +777,43 @@ def test_connected_account_access_can_be_verified(
         "event_access": True,
         "calendars_visible": 3,
         "writable_calendars": 2,
+        "rules_resumed": 0,
     }
     verify_access.assert_called_once_with(ConnectedAccountId("account-1"))
+
+
+def test_an_access_check_google_refuses_lapses_the_account_and_one_it_passes_restores_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
+    )
+    _connect_accounts(database, "personal-account", "work-account")
+    with adapters.unit_of_work() as uow:
+        uow.rules.add(rule().degrade(awaiting_reauthorization=True))
+        uow.commit()
+    refused = AccountAccessCheckFailed("expired", ProviderFailureKind.AUTHENTICATION)
+    verify_access = Mock(side_effect=[refused, AccountAccess(3, 2)])
+    monkeypatch.setattr(_google(adapters), "verify_access", verify_access)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        failed = client.post("/api/v1/accounts/work-account/verify")
+        lapsed = client.get("/api/v1/accounts").json()
+        passed = client.post("/api/v1/accounts/work-account/verify")
+        restored = client.get("/api/v1/accounts").json()
+        rules = client.get("/api/v1/rules").json()
+
+    assert failed.status_code == 424
+    assert (failed.json()["code"], failed.json()["params"]) == (
+        "account_access_check_failed",
+        {"reason": "authentication"},
+    )
+    assert [item["authorization_lapsed_at"] is not None for item in lapsed] == [False, True]
+    assert passed.json()["rules_resumed"] == 1
+    assert [item["authorization_lapsed_at"] for item in restored] == [None, None]
+    assert [item["state"] for item in rules] == ["enabled"]
 
 
 def test_rules_name_their_calendars_as_google_last_listed_them(
@@ -966,7 +1003,10 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     google = _google(adapters)
-    complete = Mock()
+    account = _account_store(adapters).save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    complete = Mock(return_value=account)
     monkeypatch.setattr(google, "complete", complete)
     app = create_app(container)
 
@@ -977,8 +1017,82 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=connected"
+    assert response.headers["location"] == (
+        f"/settings?google=connected&account={account.id.value}&resumed=0"
+    )
     complete.assert_called_once_with("synthetic-state", "synthetic-code")
+
+
+def test_reauthorizing_resumes_the_rules_lapsed_authorization_stopped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
+    )
+    store = _account_store(adapters)
+    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    home = store.save("Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE)
+    stopped = replace(
+        rule(),
+        source=endpoint(home.id.value, "home"),
+        destination=endpoint(work.id.value, "work"),
+    ).degrade(awaiting_reauthorization=True)
+    with adapters.unit_of_work() as uow:
+        uow.rules.add(stopped)
+        now = datetime.now(UTC)
+        uow.accounts.lapse(work.id, attempted_at=now)
+        uow.commit()
+    # Completing consent saves the new credentials, as Google's callback does.
+    reauthorize = Mock(
+        side_effect=lambda *_: store.save(
+            "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+        )
+    )
+    monkeypatch.setattr(_google(adapters), "complete", reauthorize)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        lapsed = client.get("/api/v1/accounts").json()
+        response = client.get(
+            "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code",
+            follow_redirects=False,
+        )
+        restored = client.get("/api/v1/accounts").json()
+        rules = client.get("/api/v1/rules").json()
+
+    assert [item["authorization_lapsed_at"] is not None for item in lapsed] == [False, True]
+    assert response.headers["location"].endswith(f"account={work.id.value}&resumed=1")
+    assert [item["authorization_lapsed_at"] for item in restored] == [None, None]
+    assert [item["state"] for item in rules] == ["enabled"]
+
+
+def test_reauthorizing_starts_google_consent_with_the_accounts_email(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    account = _account_store(adapters).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    authorization_url = Mock(return_value="https://accounts.example.test/consent")
+    monkeypatch.setattr(_google(adapters), "authorization_url", authorization_url)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/setup/admin", json=PASSWORD)
+        hinted = client.get(
+            f"/api/v1/oauth/google/start?account={account.id.value}", follow_redirects=False
+        )
+        unknown = client.get("/api/v1/oauth/google/start?account=missing", follow_redirects=False)
+        new = client.get("/api/v1/oauth/google/start", follow_redirects=False)
+
+    assert [r.status_code for r in (hinted, unknown, new)] == [302, 302, 302]
+    assert [call.args for call in authorization_url.call_args_list] == [
+        ("work@example.test",),
+        (None,),
+        (None,),
+    ]
 
 
 def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Path) -> None:
@@ -2695,7 +2809,7 @@ class DeniedAccountProvider:
         )
 
 
-def test_recovering_a_rule_moves_its_incident_to_the_account_still_unauthorized(
+def test_recovering_a_rule_lapses_the_account_still_unauthorized(
     tmp_path: Path,
 ) -> None:
     # The rule stopped when Google rejected the destination account, which was then
@@ -2724,11 +2838,16 @@ def test_recovering_a_rule_moves_its_incident_to_the_account_still_unauthorized(
         client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
         preview = client.post("/api/v1/rules/rule-1/preview")
         incidents = client.get("/api/v1/incidents").json()
+        accounts = client.get("/api/v1/accounts").json()
 
-    assert preview.status_code == 500
-    assert [(item["state"], item["account_id"]) for item in incidents] == [
-        ("open", "personal-account")
-    ]
+    assert preview.status_code == 424
+    assert preview.json()["code"] == "provider_failed"
+    assert {(item["rule_id"], item["account_id"]) for item in incidents} == {
+        (None, "personal-account"),
+        ("rule-1", "work-account"),
+    }
+    lapsed = {item["id"]: item["authorization_lapsed_at"] is not None for item in accounts}
+    assert lapsed == {"personal-account": True, "work-account": False}
 
 
 def test_calendars_of_a_provider_this_installation_has_not_configured_are_unavailable(

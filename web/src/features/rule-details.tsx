@@ -28,6 +28,7 @@ import {
   type RuleDetail,
 } from "@/lib/api"
 import { appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
+import { needsReauthorization } from "@/lib/account-summary"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 import { REMOVAL_REFRESH_MS, reportedRemoval, useActiveRemoval, type ActiveRemoval } from "@/lib/rule-removal"
 import { recoveryExplanation } from "@/lib/rule-run"
@@ -218,8 +219,9 @@ function RuleDetailsPage({
   const sourceAccount = accountsById.get(detail.source.connected_account_id)
   const destinationAccount = accountsById.get(detail.destination.connected_account_id)
   const destinationConnected = destinationAccount?.state === "connected"
-  const disconnected = [sourceAccount, destinationAccount].some(
-    (account) => account?.state === "disconnected",
+  // The account to reauthorize first: disconnected, or no longer accepted by Google.
+  const unauthorized = [sourceAccount, destinationAccount].find(
+    (account): account is ConnectedAccount => account !== undefined && needsReauthorization(account),
   )
   const sourceName = ruleEndpointLabel(
     i18n,
@@ -262,12 +264,12 @@ function RuleDetailsPage({
         <div className="rule-actions">
           <RuleStatusBadge
             state={displayState}
-            stopped={detail.state === "degraded" || disconnected}
+            stopped={detail.state === "degraded" || unauthorized !== undefined}
             working={work?.kind}
           />
           <RuleNextAction
             state={displayState}
-            disconnected={disconnected}
+            reauthorize={unauthorized}
             pending={pending}
             describedBy={displayState === "dry_run_validated" ? "rule-preview-ready" : undefined}
             onRun={run}
@@ -275,7 +277,7 @@ function RuleDetailsPage({
           />
           <RuleCommandMenu
             state={displayState}
-            disconnected={disconnected}
+            unauthorized={unauthorized !== undefined}
             pending={pending}
             source={sourceName}
             destination={destinationName}
@@ -287,7 +289,7 @@ function RuleDetailsPage({
       <RuleNotes
         detail={detail}
         displayState={displayState}
-        disconnected={disconnected}
+        unauthorized={unauthorized}
         work={work}
         feedback={commands.feedback[detail.id]}
         sourceName={sourceName}
@@ -368,7 +370,7 @@ function RuleHeading({
 function RuleNotes({
   detail,
   displayState,
-  disconnected,
+  unauthorized,
   work,
   feedback,
   sourceName,
@@ -377,7 +379,7 @@ function RuleNotes({
 }: {
   detail: RuleDetail
   displayState: string
-  disconnected: boolean
+  unauthorized: ConnectedAccount | undefined
   work: RuleWork | null
   feedback: RuleFeedback | undefined
   sourceName: string
@@ -385,9 +387,15 @@ function RuleNotes({
   now: number
 }) {
   const i18n = useI18n()
-  const stopped = displayState === "degraded" && !disconnected
+  const stopped = displayState === "degraded" && !unauthorized
   return (
     <>
+      {unauthorized && displayState !== "removing" && (
+        <div className="rule-recovery-note">
+          <ShieldAlert aria-hidden="true" />
+          <p>{i18n.t("rules.list.stoppedDisconnected", { accounts: unauthorized.email })}</p>
+        </div>
+      )}
       {stopped && (
         <div className="rule-recovery-note">
           <ShieldAlert aria-hidden="true" />

@@ -32,6 +32,7 @@ const accounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
   {
     id: "work",
@@ -42,6 +43,7 @@ const accounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
 ]
 
@@ -55,6 +57,7 @@ const typeaheadAccounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
   {
     id: "project",
@@ -65,6 +68,7 @@ const typeaheadAccounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
   {
     id: "work",
@@ -75,6 +79,7 @@ const typeaheadAccounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
 ]
 

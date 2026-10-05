@@ -35,8 +35,9 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
   and Managed Origin ownership, and a destination occurrence is cancelled only when the source
   proves it cancelled or absent from an existing series. See ADR 0011.
 - Preview is side-effect-free and required before enabling a new or materially changed rule.
-- Pausing preserves mappings and projections. Reauthorization and resume begin with validation and
-  reconciliation.
+- Pausing preserves mappings and projections. Resuming a paused or degraded rule begins with
+  validation and reconciliation, except that a rule stopped only by Lapsed Authorization resumes on
+  its own once its accounts are authorized again (ADR 0027).
 - Event content never reaches logs, incidents, or notifications. SQLite keeps only what Activity
   needs: each Audit Entry's source event title, time, recurrence, and cancellation (ADR 0014), and
   Source Observations and Source Change values (ADR 0017). Titles are plain text; descriptions,

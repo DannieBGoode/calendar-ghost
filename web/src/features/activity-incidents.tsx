@@ -10,13 +10,12 @@ import { incidentRuleState, type RuleContext } from "@/lib/activity-rule-context
 import type { Incident } from "@/lib/api"
 import { incidentClosedAt, incidentGuidance, incidentResolution, type IncidentAction } from "@/lib/incidents"
 
+/** The rule an Incident is about; an account's own Incident, such as a lapse, names the account. */
 function IncidentRule({ incident, context }: { incident: Incident; context: RuleContext }) {
   const { t } = context.i18n
-  return incident.rule_id ? (
-    <RuleDirection ruleId={incident.rule_id} context={context} />
-  ) : (
-    <span>{t("activity.incidents.installation")}</span>
-  )
+  if (incident.rule_id) return <RuleDirection ruleId={incident.rule_id} context={context} />
+  const account = incident.account_id ? context.accountsById.get(incident.account_id) : undefined
+  return <span>{account?.email ?? t("activity.incidents.installation")}</span>
 }
 
 /** Only incidents that still need attention lead the page, each with its next step. */

@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class IncidentNotification:
-    rule_id: str
+    rule_id: str | None
+    """None for an Incident about a Connected Account, such as Lapsed Authorization."""
     category: str
     summary: str
     occurred_at: str
@@ -31,7 +32,10 @@ class IncidentNotifier:
     def incident_opened(self, incident: IncidentReport, at: datetime) -> None:
         self.notify(
             IncidentNotification(
-                incident.rule_id.value, incident.category, incident.summary, at.isoformat()
+                incident.rule_id.value if incident.rule_id else None,
+                incident.category,
+                incident.summary,
+                at.isoformat(),
             )
         )
 
@@ -88,12 +92,13 @@ class SmtpChannel(NotificationChannel):
         message["Subject"] = f"Calendar Ghost incident: {incident.summary}"
         message["From"] = self.sender
         message["To"] = self.recipient
+        rule = (f"Rule: {incident.rule_id}",) if incident.rule_id else ()
         message.set_content(
             "\n".join(
                 (
                     incident.summary,
                     "",
-                    f"Rule: {incident.rule_id}",
+                    *rule,
                     f"Category: {incident.category}",
                     f"Opened: {incident.occurred_at}",
                     "",

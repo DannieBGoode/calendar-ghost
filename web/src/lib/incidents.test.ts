@@ -26,6 +26,7 @@ function account(state: string, authorizedAt: string | null, id = "failed-accoun
     state,
     rule_count: 1,
     authorized_at: authorizedAt,
+    authorization_lapsed_at: null,
   }
 }
 
@@ -53,6 +54,8 @@ describe("incident guidance", () => {
         expect(incidentGuidance(i18n, incident({ category }), rule).action).toEqual({
           kind: "settings",
           label: "Reauthorize in Settings",
+          // Settings opens at the account that failed.
+          accountId: "failed-account",
         })
       }
     }

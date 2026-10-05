@@ -39,6 +39,16 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- When Google stops accepting a connected account, Calendar Ghost now says which account and how
+  to fix it ([ADR 0027](docs/adr/0027-lapsed-authorization-and-automatic-recovery.md)). Settings
+  lists that account first as **Needs reauthorization** with **Reauthorize account**, which asks
+  Google to offer that account. A rule it stopped names the account, and its next step opens
+  Settings at that account instead of offering a preview that could only fail. The Overview,
+  Activity, the status API, and MCP count it as an account to reauthorize. Once Google accepts the
+  account again, by reauthorizing or by a **Check access** that passes, the rules its lapse alone
+  stopped restart on their own and Settings says how many. One Incident and one notification
+  cover the account instead of one per rule. Check access names why Google refused, and a preview
+  that meets an account Google refuses answers with a clear error instead of a server error.
 - The Web UI's API types are generated from the backend's OpenAPI schema
   ([ADR 0025](docs/adr/0025-generate-web-api-types-from-openapi.md)), so a changed response fails
   the frontend type check instead of breaking a page. The sync, reconcile, and preview routes now

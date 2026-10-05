@@ -100,7 +100,9 @@ class RecoveryIncidents:
     def __init__(self) -> None:
         self.blocked: list[tuple[SyncRuleId, ProviderFailure]] = []
 
-    def recovery_blocked(self, rule_id: SyncRuleId, failure: ProviderFailure) -> None:
+    def recovery_blocked(
+        self, rule_id: SyncRuleId, failure: ProviderFailure, *, attempted_at: datetime
+    ) -> None:
         self.blocked.append((rule_id, failure))
 
 
@@ -118,10 +120,10 @@ def _denied_preview(
     return use_case, incidents, failure
 
 
-def test_recovering_a_stopped_rule_reports_the_account_still_unauthorized() -> None:
-    use_case, incidents, failure = _denied_preview(
-        SyncRuleState.DEGRADED, ProviderFailureKind.AUTHENTICATION
-    )
+@pytest.mark.parametrize("state", [SyncRuleState.DEGRADED, SyncRuleState.DRAFT])
+def test_a_preview_reports_the_account_still_unauthorized(state: SyncRuleState) -> None:
+    # Any preview that meets lost authorization lapses that account (ADR 0027).
+    use_case, incidents, failure = _denied_preview(state, ProviderFailureKind.AUTHENTICATION)
 
     with pytest.raises(ProviderFailure):
         use_case.execute(SyncRuleId("rule-1"))
@@ -129,19 +131,10 @@ def test_recovering_a_stopped_rule_reports_the_account_still_unauthorized() -> N
     assert incidents.blocked == [(SyncRuleId("rule-1"), failure)]
 
 
-@pytest.mark.parametrize(
-    ("state", "kind"),
-    [
-        # A new rule's preview reports its failure inline; there is no Incident to refresh.
-        (SyncRuleState.DRAFT, ProviderFailureKind.AUTHENTICATION),
-        # Reauthorizing would not help, so the Incident keeps pointing where it does.
-        (SyncRuleState.DEGRADED, ProviderFailureKind.TEMPORARY),
-    ],
-)
-def test_other_preview_failures_leave_incidents_alone(
-    state: SyncRuleState, kind: ProviderFailureKind
-) -> None:
-    use_case, incidents, _failure = _denied_preview(state, kind)
+@pytest.mark.parametrize("state", [SyncRuleState.DEGRADED, SyncRuleState.DRAFT])
+def test_other_preview_failures_leave_incidents_alone(state: SyncRuleState) -> None:
+    # Reauthorizing would not help, so the Incident keeps pointing where it does.
+    use_case, incidents, _failure = _denied_preview(state, ProviderFailureKind.TEMPORARY)
 
     with pytest.raises(ProviderFailure):
         use_case.execute(SyncRuleId("rule-1"))

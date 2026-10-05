@@ -201,7 +201,10 @@ def test_migration_17_keeps_accounts_and_their_calendar_names(tmp_path: Path) ->
         )
         uow.commit()
     with sqlite3.connect(database) as connection:
-        connection.execute("DELETE FROM schema_migrations WHERE version = 17")
+        # Migration 17 rebuilds connected_accounts without the column migration 20 adds, so both
+        # run again, as they would in order.
+        connection.execute("DELETE FROM schema_migrations WHERE version IN (17, 20)")
+        connection.execute("ALTER TABLE sync_rules DROP COLUMN awaiting_reauthorization")
 
     initialize_database(database)
 

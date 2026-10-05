@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.health import (
     PROVIDER_INCIDENT_THRESHOLD,
+    FailureResponse,
     RuleHealth,
     RuleHealthPolicy,
 )
-from calendar_sync.application.ports import IncidentMessage, IncidentReport, IncidentResolution
+from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.ports import (
+    ConnectedAccountState,
+    IncidentMessage,
+    IncidentReport,
+    IncidentResolution,
+)
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
@@ -28,6 +35,7 @@ INTERVENTION = (
     ProviderFailureKind.INFRASTRUCTURE,
 )
 TRANSIENT = (ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY)
+AUTHORIZATION = (ProviderFailureKind.AUTHENTICATION, ProviderFailureKind.AUTHORIZATION)
 
 
 def _failure(kind: ProviderFailureKind) -> ProviderFailure:
@@ -38,7 +46,7 @@ def _failure(kind: ProviderFailureKind) -> ProviderFailure:
 def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
     kind: ProviderFailureKind,
 ) -> None:
-    failure = replace(_failure(kind), account_id=ACCOUNT)
+    failure = replace(_failure(kind), account_id=None if kind in AUTHORIZATION else ACCOUNT)
     response = RuleHealthPolicy().after_failure(RULE, failure, consecutive_failures=1)
 
     assert response.degrade
@@ -47,9 +55,21 @@ def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
         RULE,
         kind.value,
         RuleHealthPolicy.summary(failure),
-        account_id=ACCOUNT,
+        account_id=failure.account_id,
         message=IncidentMessage("provider_failure", {"kind": kind.value, "provider": None}),
     )
+    assert response.lapsed is None
+
+
+@pytest.mark.parametrize("kind", AUTHORIZATION)
+def test_an_account_the_provider_refuses_lapses_instead_of_opening_a_rule_incident(
+    kind: ProviderFailureKind,
+) -> None:
+    failure = replace(_failure(kind), account_id=ACCOUNT)
+
+    response = RuleHealthPolicy().after_failure(RULE, failure, consecutive_failures=1)
+
+    assert response == FailureResponse(degrade=True, incident=None, lapsed=ACCOUNT)
 
 
 @pytest.mark.parametrize(
@@ -163,7 +183,14 @@ class Incidents:
         self.open_keys.add(incident.key)
         return newly
 
-    def resolve(self, key: str, at: datetime, resolution: IncidentResolution) -> None:
+    def resolve(
+        self,
+        key: str,
+        at: datetime,
+        resolution: IncidentResolution,
+        *,
+        while_authorized: ConnectedAccountId | None = None,
+    ) -> None:
         self.events.append(("resolve", key, at))
         self.resolutions[key] = resolution
         self.open_keys.discard(key)
@@ -204,22 +231,111 @@ def test_rule_health_times_everything_by_its_clock_and_notifies_only_new_inciden
     assert {at for *_, at in incidents.events} | set(records.times) == {NOW}
 
 
-def test_recovery_refreshes_the_incident_with_the_account_still_unauthorized() -> None:
+def test_recovery_lapses_the_account_still_unauthorized() -> None:
     # The rule stopped on one account; recovering it met the other, which also lost access.
     unit_of_work = InMemoryUnitOfWorkFactory()
     unit_of_work.state.rules[RULE] = rule(state=SyncRuleState.DEGRADED)
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     records, incidents, notifications = Records(), Incidents(), Notifications()
-    incidents.open_keys.add("provider:rule-1")
     health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
     failure = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
 
-    health.recovery_blocked(RULE, failure)
+    health.recovery_blocked(RULE, failure, attempted_at=NOW)
+
+    assert unit_of_work.state.lapsed == {ACCOUNT: NOW}
+    assert incidents.events == [("open", "authorization:work-account", NOW)]
+    assert incidents.reports[-1].rule_id is None
+    assert [incident.key for incident, _ in notifications.opened] == ["authorization:work-account"]
+    # A preview is not a failed sync run.
+    assert records.failures == {}
+
+
+def test_recovery_without_the_account_refreshes_the_rules_incident() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    records, incidents = Records(), Incidents()
+    incidents.open_keys.add("provider:rule-1")
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock())
+
+    health.recovery_blocked(RULE, _failure(ProviderFailureKind.AUTHENTICATION), attempted_at=NOW)
 
     assert incidents.events == [("open", "provider:rule-1", NOW)]
-    assert incidents.reports[-1].account_id == ACCOUNT
-    # Refreshing an open Incident notifies nobody, and a preview is not a failed sync run.
+    assert unit_of_work.state.lapsed == {}
+
+
+def test_a_refused_account_stops_its_rule_until_reauthorization() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule()
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    records, incidents, notifications = Records(), Incidents(), Notifications()
+    health = RuleHealth(unit_of_work, records, incidents, FixedClock(), notifications=notifications)
+    expired = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
+
+    health.record_failure(rule(), expired)
+    health.record_failure(rule(), expired)
+
+    stopped = unit_of_work.state.rules[RULE]
+    assert (stopped.state, stopped.awaiting_reauthorization) == (SyncRuleState.DEGRADED, True)
+    assert unit_of_work.state.lapsed == {ACCOUNT: NOW}
+    assert [event[1] for event in incidents.events] == ["authorization:work-account"] * 2
+    # One notification for the account, however many times its rules fail.
+    assert len(notifications.opened) == 1
+
+
+def test_a_refusal_of_credentials_reauthorization_replaced_stops_nothing() -> None:
+    # The run began with the old credentials; the account was reauthorized before it failed.
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule()
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    unit_of_work.state.authorized_at[ACCOUNT] = NOW
+    incidents, notifications = Incidents(), Notifications()
+    health = RuleHealth(
+        unit_of_work, Records(), incidents, FixedClock(), notifications=notifications
+    )
+    expired = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
+
+    health.record_failure(rule(), expired, attempted_at=NOW - timedelta(minutes=1))
+
+    assert unit_of_work.state.rules[RULE].state is SyncRuleState.ENABLED
+    assert unit_of_work.state.lapsed == {}
+    assert incidents.events == []
     assert notifications.opened == []
-    assert records.failures == {}
+
+
+class RestoredRightAfterLapsing(LapsedAuthorizations):
+    """Reauthorization that lands between lapsing an account and stopping its rules."""
+
+    def _stop(self, rule_id: SyncRuleId, account_id: ConnectedAccountId) -> None:
+        self.restored(account_id, accepted_at=self.clock.now())
+        super()._stop(rule_id, account_id)
+
+
+def test_a_rule_whose_account_was_restored_before_it_stopped_keeps_running() -> None:
+    # Reauthorization landed after the account lapsed but before the rule was stopped, so it
+    # found nothing to resume; the rule must not stop for an account that is authorized again.
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule()
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
+    health.lapses = RestoredRightAfterLapsing(unit_of_work, Incidents(), FixedClock())
+    expired = replace(_failure(ProviderFailureKind.AUTHENTICATION), account_id=ACCOUNT)
+
+    health.record_failure(rule(), expired)
+
+    assert unit_of_work.state.rules[RULE].state is SyncRuleState.ENABLED
+    assert unit_of_work.state.lapsed == {}
+
+
+def test_a_permanent_failure_stops_its_rule_for_a_preview() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule()
+    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
+
+    health.record_failure(
+        rule(), replace(_failure(ProviderFailureKind.PERMANENT), account_id=ACCOUNT)
+    )
+
+    assert not unit_of_work.state.rules[RULE].awaiting_reauthorization
+    assert unit_of_work.state.lapsed == {}
 
 
 def test_every_incident_report_carries_a_message() -> None:
@@ -243,3 +359,23 @@ def test_a_failure_without_a_provider_has_a_null_provider() -> None:
     assert report.message == IncidentMessage(
         "provider_failure", {"kind": "infrastructure", "provider": None}
     )
+
+
+def test_a_refusal_of_a_request_made_after_reauthorization_lapses_its_account() -> None:
+    # The run began before the account was reauthorized, but its failing request read the new
+    # credentials, so the refusal is about them.
+    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work.state.rules[RULE] = rule()
+    unit_of_work.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    unit_of_work.state.authorized_at[ACCOUNT] = NOW
+    health = RuleHealth(unit_of_work, Records(), Incidents(), FixedClock())
+    expired = replace(
+        _failure(ProviderFailureKind.AUTHENTICATION),
+        account_id=ACCOUNT,
+        attempted_at=NOW + timedelta(seconds=1),
+    )
+
+    health.record_failure(rule(), expired, attempted_at=NOW - timedelta(minutes=1))
+
+    assert unit_of_work.state.lapsed == {ACCOUNT: NOW + timedelta(seconds=1)}
+    assert unit_of_work.state.rules[RULE].awaiting_reauthorization

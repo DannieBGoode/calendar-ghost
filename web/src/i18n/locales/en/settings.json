@@ -26,7 +26,11 @@
   "oauthOutcome": {
     "connected": {
       "title": "Google account connected",
-      "body": "Calendar permissions were confirmed and the account is ready for Directional Sync Rules."
+      "body": "Calendar permissions were confirmed and the account is ready for Directional Sync Rules.",
+      "resumed": {
+        "one": "Access is restored. {count} rule restarted and catches up on changes made while it was stopped.",
+        "other": "Access is restored. {count} rules restarted and catch up on changes made while they were stopped."
+      }
     },
     "calendarPermissionRequired": {
       "title": "Calendar access wasn’t granted",
@@ -86,8 +90,10 @@
     },
     "state": {
       "connected": "Connected",
-      "disconnected": "Disconnected"
+      "disconnected": "Disconnected",
+      "lapsed": "Needs reauthorization"
     },
+    "lapsed": "Google no longer accepts this account. Reauthorize it to restart the rules that use it.",
     "actions": {
       "checkAccess": "Check access",
       "checkingAccess": "Checking access…",
@@ -99,6 +105,10 @@
     },
     "access": {
       "title": "Calendar API access confirmed",
+      "resumed": {
+        "one": "{count} rule that stopped when access lapsed restarted.",
+        "other": "{count} rules that stopped when access lapsed restarted."
+      },
       "body": {
         "one": "Calendar-list and event permissions are available. {count} calendar is visible and {writable} can be used as a destination.",
         "other": "Calendar-list and event permissions are available. {count} calendars are visible and {writable} can be used as a destination."

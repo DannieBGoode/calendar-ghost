@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
@@ -68,6 +69,39 @@ def test_validated_rule_can_be_degraded_before_enablement() -> None:
 
     with pytest.raises(InvalidStateTransition):
         rule(state=SyncRuleState.DRAFT).degrade()
+
+
+def test_a_rule_stopped_by_lapsed_authorization_resumes_without_a_preview() -> None:
+    stopped = rule().degrade(awaiting_reauthorization=True)
+
+    resumed = stopped.resume_after_reauthorization()
+
+    assert (resumed.state, resumed.awaiting_reauthorization) == (SyncRuleState.ENABLED, False)
+
+
+def test_a_rule_stopped_for_any_other_reason_needs_a_preview_to_resume() -> None:
+    with pytest.raises(InvalidStateTransition):
+        rule().degrade().resume_after_reauthorization()
+    with pytest.raises(InvalidStateTransition):
+        rule().resume_after_reauthorization()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        SyncRule.mark_previewed,
+        SyncRule.pause,
+        SyncRule.require_preview,
+        SyncRule.begin_removal,
+        lambda stopped: stopped.change_policy(TransformationPolicy(ProjectionContent.DETAILS)),
+    ],
+)
+def test_acting_on_a_rule_awaiting_reauthorization_makes_its_recovery_need_a_preview(
+    change: Callable[[SyncRule], SyncRule],
+) -> None:
+    stopped = rule().degrade(awaiting_reauthorization=True)
+
+    assert not change(stopped).awaiting_reauthorization
 
 
 def test_all_day_range_uses_exclusive_end_date() -> None:

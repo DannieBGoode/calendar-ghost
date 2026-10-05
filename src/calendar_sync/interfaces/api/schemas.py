@@ -218,6 +218,8 @@ class DashboardResponse(ApiResponse):
     problems: list[ProblemResponse]
     connected_accounts: int
     disconnected_accounts: int
+    lapsed_accounts: int
+    """Connected accounts whose authorization lapsed and that need reauthorization."""
     sync_rules: int
     enabled_rules: int
     stopped_rules: int
@@ -243,6 +245,9 @@ class ConnectedAccountResponse(ApiResponse):
     state: str
     rule_count: int
     authorized_at: str | None
+    authorization_lapsed_at: str | None
+    """While the provider refuses the account, when the latest refused request began; null while
+    it accepts it (ADR 0027)."""
 
 
 class GoogleAccountAccessResponse(ApiResponse):
@@ -251,6 +256,8 @@ class GoogleAccountAccessResponse(ApiResponse):
     event_access: bool
     calendars_visible: int
     writable_calendars: int
+    rules_resumed: int
+    """Rules that Lapsed Authorization alone had stopped, resumed because the check passed."""
 
 
 class DiscoveredCalendarResponse(ApiResponse):
@@ -410,6 +417,8 @@ class StatusCountsResponse(ApiResponse):
     open_incidents: int
     blocked_events: int
     disconnected_accounts: int
+    lapsed_accounts: int
+    """Connected accounts whose authorization lapsed and that need reauthorization."""
 
 
 class StatusCalendarResponse(ApiResponse):

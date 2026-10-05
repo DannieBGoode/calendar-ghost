@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { PreviewSummary } from "@/lib/api"
-import { appPathForView, isPlainLeftClick, type AppView } from "@/lib/navigation"
+import { accountSearch, appPathForView, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
 import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
@@ -64,31 +64,33 @@ export function RuleStatusBadge({
  */
 export function RuleNextAction({
   state,
-  disconnected,
+  reauthorize,
   pending,
   describedBy,
   onRun,
   onViewChange,
 }: {
   state: string
-  disconnected: boolean
+  /** An account of the rule to reauthorize first; its Settings row is the next step. */
+  reauthorize: { id: string } | undefined
   pending: RuleCommand | undefined
   describedBy?: string | undefined
   onRun: (command: RuleCommand) => void
-  onViewChange: (view: AppView) => void
+  onViewChange: ViewChange
 }) {
   const { t } = useI18n()
   if (state === "disabled" || state === "removing") return null
-  if (disconnected) {
+  if (reauthorize) {
+    const search = accountSearch(reauthorize.id)
     return (
       <Button variant="outline" asChild>
         <a
-          href={appPathForView("settings")}
+          href={`${appPathForView("settings")}${search}`}
           aria-describedby={describedBy}
           onClick={(event) => {
             if (!isPlainLeftClick(event)) return
             event.preventDefault()
-            onViewChange("settings")
+            onViewChange("settings", { search })
           }}
         >
           {t("ruleDetails.commands.reauthorize")}
@@ -129,7 +131,7 @@ export function RuleNextAction({
 
 export function RuleCommandMenu({
   state,
-  disconnected,
+  unauthorized,
   pending,
   source,
   destination,
@@ -137,7 +139,8 @@ export function RuleCommandMenu({
   onRun,
 }: {
   state: string
-  disconnected: boolean
+  /** Whether an account of the rule needs reauthorization, so running it now would fail. */
+  unauthorized: boolean
   pending: RuleCommand | undefined
   source: string
   destination: string
@@ -148,7 +151,7 @@ export function RuleCommandMenu({
   const { t } = useI18n()
   const busy = pending !== undefined
   const items: OverflowMenuItem[] = []
-  if (state === "enabled" && !disconnected) {
+  if (state === "enabled" && !unauthorized) {
     items.push(
       {
         id: "sync",

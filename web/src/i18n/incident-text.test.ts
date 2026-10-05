@@ -28,6 +28,13 @@ describe("incidentText", () => {
       .toBe("Rule Removal stopped: Access to Google Calendar was denied")
   })
 
+  it("renders an account's lapsed authorization, and a rule it stopped without naming the account", () => {
+    const lapsed = { code: "authorization_lapsed", params: { kind: "authentication", provider: "google" } }
+    expect(incidentText(i18n, { summary: "", message: lapsed })).toBe("Authorization for Google Calendar expired")
+    expect(incidentText(i18n, { summary: "", message: { code: "authorization_lapsed", params: { provider: "google" } } }))
+      .toBe("A Google Calendar account needs reauthorization")
+  })
+
   it("uses the stored summary for legacy, unknown, or malformed messages", () => {
     expect(incidentText(i18n, legacy)).toBe("Stored English summary")
     expect(incidentText(i18n, { ...legacy, message: { code: "new_code", params: {} } })).toBe("Stored English summary")
