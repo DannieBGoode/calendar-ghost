@@ -25,8 +25,8 @@ const [firstLine, secondLine] = m.variants.bold.hero.titleLines
       <p class="b-hero-hint" aria-hidden="true">
         <span>{m.variants.bold.hero.hint}</span>
         <svg viewBox="0 0 120 48" focusable="false">
-          <path d="M4 10C30 4 62 6 84 22C92 28 98 34 104 42" />
-          <path d="M92 40L105 43L106 30" />
+          <path d="M4 38C30 44 62 42 84 26C92 20 98 14 104 6" />
+          <path d="M92 8L105 5L106 18" />
         </svg>
       </p>
     </div>
@@ -61,7 +61,9 @@ const [firstLine, secondLine] = m.variants.bold.hero.titleLines
   .b-hero-copy .ctas { margin-top: 1.5rem; }
   .b-btn-big { min-height: 3.25rem; padding-inline: 1.4rem; font-size: 1rem; }
 
-  /* The hint: a note in the margin with an arrow that points at the ghost. */
+  /* The hint: a note in the margin with an arrow that points up and right, at the ghost handle
+     on the divider. Only at 1100px and up does the demo sit beside it at a height the arrow can
+     reach; narrower, the week stacks below instead, so the arrow would point at nothing. */
   .b-hero-hint {
     display: flex; align-items: flex-start; gap: 0.5rem; margin: 1.5rem 0 0;
     font: italic 500 var(--step-1)/1.2 var(--font-display); color: var(--foreground);
@@ -72,26 +74,24 @@ const [firstLine, secondLine] = m.variants.bold.hero.titleLines
     fill: none; stroke: var(--primary); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
   }
 
-  /* On a phone the week runs edge to edge. */
+  /* Below 1100px the week stacks under the copy, so the margin note (and its arrow) is hidden;
+     the demo's own plain-text hint takes over. On a phone the week runs edge to edge too. */
   @media (max-width: 1099px) {
-    .b-hero-hint { margin-top: 1.5rem; }
-    .b-hero-hint svg { transform: rotate(60deg); margin-top: 0.2rem; width: 4.5rem; }
+    .b-hero-hint { display: none; }
     .b-hero-demo { grid-column: 1 / -1; }
     .b-hero-demo :global(.reveal-frame) { border-radius: 0; border-inline: 0; }
     .b-hero-demo :global(.demo-foot) { padding-inline: 1.25rem; }
+    .b-hero-demo :global(.reveal-hint) { visibility: visible; }
   }
 
-  /* Phones: the headline, the call to action, and the top of the week share the first screen.
-     The margin note gives way to the demo's own hint under the week. */
+  /* Phones: the headline, the call to action, and the top of the week share the first screen. */
   @media (max-width: 639px) {
     .b-hero-grid { row-gap: 1.25rem; }
     .b-hero-copy h1 { margin-bottom: 1rem; }
     .b-hero-copy .b-lead { font-size: 1.0625rem; line-height: 1.5; }
     .b-hero-copy .ctas { margin-top: 1rem; }
     .b-btn-big { min-height: 2.75rem; padding-inline: 1rem; font-size: 0.9375rem; }
-    .b-hero-hint { display: none; }
     .b-hero-demo :global(.reveal) { margin-top: 0; }
-    .b-hero-demo :global(.reveal-hint) { visibility: visible; }
   }
 
   /* Wide screens: copy on the left; the week takes the rest and runs off the right edge. */
