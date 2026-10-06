@@ -98,7 +98,7 @@
 
 /* Idle life: blinking, floating, and drifting "z"s. A `loop` ghost keeps living: inside a demo
    with its own pause control, or on its own (the footer's sleeper, the Overview's healthy ghost),
-   where the nav's site-wide "Pause animations" stops it. A `brief` ghost wakes once when it is
+   where the footer's site-wide "Pause animations" stops it. A `brief` ghost wakes once when it is
    first seen (see Layout.astro) and is still again within five seconds. */
 @keyframes ghost-blink {
   0%, 92%, 100% { transform: scaleY(1); }
@@ -152,7 +152,7 @@
 }
 /* A demo's pause control stops its ghost with it. */
 [data-playing="false"] .ghost *, [data-playing="false"] .ghost::before { animation-play-state: paused !important; }
-/* Nothing idles under reduced motion, or once the visitor pressed the nav's "Pause animations"
+/* Nothing idles under reduced motion, or once the visitor pressed the footer's "Pause animations"
    (lib/motion-preference.ts): every ghost shows where it ends. */
 @media (prefers-reduced-motion: reduce) {
   .ghost *, .ghost::before, .ghost-pose { animation: none !important; transition: none !important; }

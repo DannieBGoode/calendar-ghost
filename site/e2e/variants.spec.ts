@@ -259,7 +259,7 @@ for (const variant of VARIANTS) {
       expect(endless.length).toBeGreaterThan(0)
       for (const animation of endless.filter((animation) => animation.governed)) expect(animation.state, animation.name).toBe("paused")
       // Motion outside every demo either stops by itself within five seconds, or is a decorative
-      // loop the nav's site-wide Pause animations stops (WCAG 2.2.2).
+      // loop the footer's site-wide Pause animations stops (WCAG 2.2.2).
       await page.getByRole("button", { name: en.motion.pauseAll, exact: true }).click()
       for (const animation of await animations(page)) {
         if (animation.governed || animation.state !== "running") continue

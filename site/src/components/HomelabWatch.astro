@@ -3,7 +3,7 @@
 // server rack whose status lights blink softly, and ticks its checklist, one box at a time, then
 // starts its round again. Flat like Ghost.tsx (one fill, an outline, no gloss); the ghost is the
 // default mist tone, Lantern Indigo on light pages and the white glowing ghost on dark ones.
-// Decorative only (the section's sentence says what matters). It loops, so the nav's "Pause
+// Decorative only (the section's sentence says what matters). It loops, so the footer's "Pause
 // animations" and reduced motion stop it on its finished state: every box ticked, every light on.
 import { Ghost } from "../islands/Ghost"
 
@@ -80,7 +80,7 @@ const ROWS = [12, 24, 36]
 
   /* The round, about 6s: each light dips now and then on its own beat; the boxes are ticked one
      by one, held, and cleared for the next round. Only opacity and transform move. Still (every
-     box ticked, every light on) under reduced motion, without JavaScript, and when the nav's
+     box ticked, every light on) under reduced motion, without JavaScript, and when the footer's
      "Pause animations" is pressed. */
   @media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
     :global(:root:not([data-motion="paused"])) .watch-light { animation: watch-blink 2.4s ease-in-out infinite; animation-delay: calc(var(--watch-i) * -0.7s); }

@@ -92,14 +92,15 @@ test("every self-running demo has a pause control a finger can hit", async ({ pa
   }
 })
 
-test("with reduced motion, there is nothing to pause, and the site-wide control shows as on", async ({ page }) => {
+test("with reduced motion, there is nothing to pause, and the site-wide control says animations are off", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   await page.goto("/")
   await expect(page.locator(".reveal-frame")).toBeVisible()
   await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
-  const all = page.getByRole("button", { name: en.motion.pauseAll, exact: true })
-  await expect(all).toHaveAttribute("aria-pressed", "true")
+  const all = page.getByRole("button", { name: en.motion.pausedByDevice, exact: true })
+  await expect(all).toBeVisible()
   await expect(all).toHaveAttribute("aria-disabled", "true")
+  await expect(page.getByRole("button", { name: en.motion.pauseAll, exact: true })).toHaveCount(0)
 })
 
 /** The animations running under `selector` (the ghost's loops), counted in the page. */
@@ -122,18 +123,21 @@ test("the footer's sleeping ghost, the health ghost, and the homelab's night wat
   expect(float).toBe("infinite")
 })
 
-test("the nav's Pause animations stops every loop, is remembered, and applies before first paint", async ({ page }) => {
+test("the footer's Pause animations stops every loop, is remembered, and applies before first paint", async ({ page }) => {
   await page.goto("/")
-  const all = page.locator("nav").getByRole("button", { name: en.motion.pauseAll, exact: true })
+  const all = page.locator("footer").getByRole("button", { name: en.motion.pauseAll, exact: true })
+  const play = page.locator("footer").getByRole("button", { name: en.motion.playAll, exact: true })
+  await all.scrollIntoViewIfNeeded()
   await expect(all).toBeVisible()
   expect((await all.boundingBox())!.height).toBeGreaterThanOrEqual(44)
-  expect((await all.boundingBox())!.width).toBeGreaterThanOrEqual(44)
-  await expect(all).toHaveAttribute("aria-pressed", "false")
+  // Its words say what it does; it is not a pressed-state toggle whose name would then mislead.
+  await expect(all).not.toHaveAttribute("aria-pressed")
   await page.locator(".footer-watch .ghost").scrollIntoViewIfNeeded()
   expect(await running(page, ".footer-watch .ghost")).toBeGreaterThan(0)
 
   await all.click()
-  await expect(all).toHaveAttribute("aria-pressed", "true")
+  await expect(play).toBeVisible()
+  await expect(all).toHaveCount(0)
   await expect(page.locator("html")).toHaveAttribute("data-motion", "paused")
   expect(await running(page, ".footer-watch .ghost")).toBe(0)
   expect(await running(page, ".mock-health .ghost")).toBe(0)
@@ -151,28 +155,42 @@ test("the nav's Pause animations stops every loop, is remembered, and applies be
   // Remembered, and on <html> before any module script runs.
   await page.reload({ waitUntil: "commit" })
   await page.waitForSelector("html[data-motion='paused']", { state: "attached" })
-  await expect(all).toHaveAttribute("aria-pressed", "true")
+  await expect(play).toBeAttached()
   expect(await page.evaluate(() => localStorage.getItem("calendar-ghost-site-motion"))).toBe("paused")
 
   // Pressed again, everything moves again.
-  await all.click()
-  await expect(all).toHaveAttribute("aria-pressed", "false")
+  await play.scrollIntoViewIfNeeded()
+  await play.click()
+  await expect(all).toBeVisible()
   await expect(page.locator("html")).not.toHaveAttribute("data-motion")
   await page.locator(".footer-watch .ghost").scrollIntoViewIfNeeded()
   expect(await running(page, ".footer-watch .ghost")).toBeGreaterThan(0)
 })
 
 for (const path of ["/", "/bold", "/journey", "/home/hero-e4", "/docs/self-hosting"]) {
-  test(`${path}: the nav has the site-wide Pause animations beside the theme toggle`, async ({ page }) => {
+  test(`${path}: the site-wide Pause animations sits in the footer's small print, not in the nav`, async ({ page }) => {
     await page.goto(path)
-    const all = page.getByRole("button", { name: en.motion.pauseAll, exact: true })
+    await expect(page.locator("header.nav button[data-motion-toggle]")).toHaveCount(0)
+    const all = page.locator(".flinks-base").getByRole("button", { name: en.motion.pauseAll, exact: true })
+    await all.scrollIntoViewIfNeeded()
     await expect(all).toBeVisible()
-    const theme = (await page.locator("[data-theme-toggle]").boundingBox())!
-    const box = (await all.boundingBox())!
-    expect(Math.abs(box.y - theme.y)).toBeLessThan(2)
-    expect(theme.x - (box.x + box.width)).toBeLessThan(16)
+    expect((await all.boundingBox())!.height).toBeGreaterThanOrEqual(44)
   })
 }
+
+test("at 320px the nav fits the name, the menu, and the theme toggle", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 320, height: 640 } })
+  const page = await context.newPage()
+  await page.goto("/")
+  const brand = page.locator(".nav-brand span")
+  await expect(brand).toBeVisible()
+  const theme = (await page.locator("[data-theme-toggle]").boundingBox())!
+  const menu = (await page.locator(".nav-narrow summary").boundingBox())!
+  const name = (await brand.boundingBox())!
+  expect(name.x + name.width).toBeLessThanOrEqual(menu.x)
+  expect(theme.x + theme.width).toBeLessThanOrEqual(320)
+  await context.close()
+})
 
 for (const width of [320, 390]) {
   test(`nothing scrolls sideways on a ${width}px screen`, async ({ browser }) => {

@@ -2,7 +2,9 @@
 // The footer's link area, shared by every page: who this is, the project's links, the legal ones,
 // and this page's own proof that it tracks no one. Each page's footer gives it its own look by
 // re-declaring the color tokens around it and, where it needs to, styling the `.flinks-*` parts.
+// Its small print carries the site-wide "Pause animations" (components/MotionPreference.astro).
 import Icon from "../components/Icon.astro"
+import MotionPreference from "../components/MotionPreference.astro"
 import type { Messages } from "../i18n"
 import { GhostMark } from "../islands/GhostMark"
 import { CHANGELOG_URL, DOCS_URL, GUIDE_URL, LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../links"
@@ -68,7 +70,10 @@ const groups = [
   </div>
   <div class="flinks-base">
     <p>{copy.license}</p>
-    <LanguagePicker m={m} />
+    <span class="flinks-base-end">
+      <MotionPreference m={m} />
+      <LanguagePicker m={m} />
+    </span>
   </div>
 </div>
 
@@ -108,6 +113,7 @@ const groups = [
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 2rem;
     padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: 0.875rem;
   }
+  .flinks-base-end { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.5rem; }
 
   @media (min-width: 900px) {
     .flinks { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr); }

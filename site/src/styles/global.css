@@ -84,7 +84,7 @@ a { color: var(--primary); }
 }
 .night a:not(.btn) { color: var(--foreground); }
 .night .btn { border-color: var(--border); }
-/* The nav's "Pause animations" (lib/motion-preference.ts) holds every demo's CSS loop where it is,
+/* The footer's "Pause animations" (lib/motion-preference.ts) holds every demo's CSS loop where it is,
    as each demo's own pause control does (`data-playing`); the islands rest on their still state
    (islands/hooks.ts), and the ghosts stop idling (ghost.css). */
 :root[data-motion="paused"] [data-playing] *,

@@ -1,8 +1,9 @@
-// The site-wide "Pause animations" control (components/MotionPreference.astro). Decorative loops
+// The site-wide "Pause animations" control (components/MotionPreference.astro, in the footer's
+// small print on every page that has a footer). Decorative loops
 // that run longer than five seconds need a way to stop them (WCAG 2.2.2): one press stops every
 // loop on the page, the demos included, and the choice is saved like the theme, under the site's
 // own key. The device's reduced-motion setting stops the same loops by itself, and then the
-// control shows as on.
+// control says the animations are off.
 //
 // A stop is applied as `data-motion="paused"` on `<html>`: the stylesheets hold every CSS loop
 // under it, and the islands treat it as reduced motion (islands/hooks.ts). Layout.astro's inline

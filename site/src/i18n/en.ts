@@ -55,10 +55,12 @@ export const en = {
   motion: {
     pause: "Pause animation",
     play: "Play animation",
-    /** The nav's site-wide toggle (components/MotionPreference.astro): pressed, every loop on the
-     * page stops. Its name stays the same; `aria-pressed` says whether it is on. */
+    /** The footer's site-wide control (components/MotionPreference.astro): its words say what a
+     * press does. Pressed, every loop on the page stops; pressed again, they play. */
     pauseAll: "Pause animations",
-    /** Its tooltip when the device already asks for reduced motion, so it is on and stays on. */
+    playAll: "Play animations",
+    /** What it says instead when the device already asks for reduced motion, so the animations
+     * are off and stay off. */
     pausedByDevice: "Animations are off: your device asks for reduced motion",
   },
   /** The nav's Light/Dark toggle (components/ThemeToggle.astro, lib/theme.ts). `current` names the
