@@ -56,4 +56,20 @@ const ICONS: readonly IconName[] = [
     flex: none; width: 1.25rem; height: 1.25rem; margin-top: 0.05rem; color: var(--primary); stroke-width: 2;
   }
   .claims p { margin: 0; color: var(--muted-foreground); font-size: 0.9375rem; }
+  /* On a phone, one centred column: each claim's icon above its title, its sentence under it at a
+     comfortable measure, with a short hairline between claims. */
+  @media (max-width: 639px) {
+    #trust-title { text-align: center; }
+    .claims { justify-items: center; margin-top: 1.25rem; }
+    .claims li {
+      display: grid; justify-items: center; gap: 0.4rem; width: 100%; max-width: 22rem;
+      padding: 1.5rem 0; border-top: 0; text-align: center;
+    }
+    .claims li + li::before {
+      content: ""; position: absolute; top: 0; left: 50%; width: 3rem; height: 1px;
+      background: var(--border); transform: translateX(-50%);
+    }
+    .claims h3 { flex-direction: column; align-items: center; gap: 0.5rem; margin: 0; }
+    .claims :global(.claim-icon) { width: 1.5rem; height: 1.5rem; margin: 0; }
+  }
 </style>
