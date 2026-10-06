@@ -142,6 +142,7 @@ test("the footer's Pause animations stops every loop, is remembered, and applies
   expect(await running(page, ".footer-watch .ghost")).toBe(0)
   expect(await running(page, ".mock-health .ghost")).toBe(0)
   expect(await running(page, "#integrations .watch")).toBe(0)
+  expect(await running(page, ".int-mon")).toBe(0)
   // The footer's sleep talk is simply there.
   await expect(page.locator(".footer-sleep-talk")).toHaveCSS("opacity", "1")
   // The demos rest too, so their own pause controls go.
@@ -915,6 +916,90 @@ test("every link to the self-hosting guide on the home page opens the page rende
   expect(hrefs.filter((href) => href.includes("self-hosting.md"))).toEqual([])
   expect(hrefs).toContain(GUIDE_URL)
   expect(hrefs).toContain(INTEGRATIONS_URL)
+})
+
+test.describe("the Haunted Week", () => {
+  const incoming = (page: Page) => page.locator(".haunt .hw-event.is-incoming")
+
+  test("rests on its final state without JavaScript or with reduced motion: every plan Busy, Work's meetings as they are", async ({ browser }) => {
+    for (const options of [{ javaScriptEnabled: false }, { reducedMotion: "reduce" as const }]) {
+      const context = await browser.newContext(options)
+      const page = await context.newPage()
+      await page.goto("/")
+      await page.locator(".haunt").scrollIntoViewIfNeeded()
+      await expect(incoming(page)).toHaveCount(5)
+      for (const event of await incoming(page).all()) {
+        await expect(event).toHaveAttribute("data-state", "busy")
+        await expect(event.locator(".hw-face.is-busy")).toHaveCSS("opacity", "1")
+        await expect(event.locator(".hw-face.is-busy")).toContainText(en.demo.busy)
+        await expect(event.locator(".hw-glyph")).toHaveCount(1)
+        await expect(event.locator(".hw-dot")).toHaveCount(1)
+      }
+      await expect(page.locator(".haunt .hw-event.is-work")).toHaveCount(5)
+      await expect(page.locator(".haunt .hw-event.is-work").first()).toContainText(en.demo.events.standup.title)
+      await context.close()
+    }
+  })
+
+  test("a plan arrives in transit, with its calendar's portrait and a dashed outline, then turns Busy", async ({ page }) => {
+    await page.goto("/")
+    await page.locator(".haunt").scrollIntoViewIfNeeded()
+    const dentist = incoming(page).first()
+    await expect(dentist).toHaveAttribute("data-state", "transit", { timeout: 4000 })
+    await expect(dentist.locator(".hw-face.is-transit")).toContainText(en.demo.events.dentist.title)
+    await expect(dentist.locator("img.avatar")).toHaveCount(1)
+    await expect(dentist.locator(".hw-skin.is-transit")).toHaveCSS("border-top-style", "dashed")
+    await expect.poll(() => dentist.evaluate((element) => Number(getComputedStyle(element).opacity))).toBeLessThan(1)
+    // No "from Personal" line: the portrait says where it comes from.
+    await expect(dentist).not.toContainText("from")
+    await expect(dentist).toHaveAttribute("data-state", "busy", { timeout: 6000 })
+    // The ghost is the actor: 64 to 80px.
+    const ghost = (await page.locator(".haunt-ghost").boundingBox())!
+    expect(ghost.width).toBeGreaterThanOrEqual(64)
+    expect(ghost.width).toBeLessThanOrEqual(80)
+  })
+
+  for (const width of [320, 390, 1440]) {
+    test(`at ${width}px every day shows, inside the frame, with event text of at least 13px`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/")
+      const frame = page.locator(".haunt-frame")
+      await frame.scrollIntoViewIfNeeded()
+      const box = (await frame.boundingBox())!
+      const days = page.locator(".haunt .hw-day:visible:not(.is-empty)")
+      await expect(days).toHaveText([...en.demo.days])
+      for (const day of await days.all()) {
+        const dayBox = (await day.boundingBox())!
+        expect(dayBox.x).toBeGreaterThanOrEqual(box.x)
+        expect(dayBox.x + dayBox.width).toBeLessThanOrEqual(box.x + box.width + 0.5)
+        expect(dayBox.y + dayBox.height).toBeLessThanOrEqual(box.y + box.height)
+      }
+      for (const event of await page.locator(".haunt .hw-event").all()) {
+        const eventBox = (await event.boundingBox())!
+        expect(eventBox.x + eventBox.width).toBeLessThanOrEqual(box.x + box.width)
+        expect(eventBox.y + eventBox.height).toBeLessThanOrEqual(box.y + box.height)
+      }
+      const sizes = await page.locator(".haunt .hw-event .hw-title").evaluateAll((titles) => titles.map((title) => parseFloat(getComputedStyle(title).fontSize)))
+      expect(Math.min(...sizes)).toBeGreaterThanOrEqual(13)
+      await context.close()
+    })
+  }
+
+  test("its pause control sits on the calendar's bar, says Pause and Play, and holds the loop", async ({ page }) => {
+    await page.goto("/")
+    await page.locator(".haunt").scrollIntoViewIfNeeded()
+    const pause = page.locator(".haunt-bar").getByRole("button", { name: en.motion.pause, exact: true })
+    await expect(pause).toHaveText(en.motion.pauseShort)
+    expect((await pause.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    await pause.click()
+    const play = page.locator(".haunt-bar").getByRole("button", { name: en.motion.play, exact: true })
+    await expect(play).toHaveText(en.motion.playShort)
+    const states = () => incoming(page).evaluateAll((events) => events.map((event) => event.getAttribute("data-state")).join())
+    const held = await states()
+    await page.waitForTimeout(1200)
+    expect(await states()).toBe(held)
+  })
 })
 
 test("the homelab's night watch: one ghost by a rack, its checklist ticked when nothing moves", async ({ browser }) => {

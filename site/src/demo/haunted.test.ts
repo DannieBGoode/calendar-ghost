@@ -1,37 +1,90 @@
 import { describe, expect, it } from "vitest"
-import { HAUNTED_PERIOD_MS, HAUNTED_STILL_MS, hauntedFrame } from "./haunted"
+import { HAUNTED_PERIOD_MS, HAUNTED_STILL_MS, hauntedFrame, phoneCell, pointOnPath, waypoints, type PathPoint } from "./haunted"
+import { SAM_WEEK } from "./week"
 
-const DAYS = [0, 1, 2, 3, 4]
+const INCOMING = SAM_WEEK.filter((event) => event.kind !== "work")
+const COUNT = INCOMING.length
+
+/** The moment the ghost reaches waypoint `index` (0 is the way in, the last is the way out). */
+const reachMs = (index: number) => 1700 + (5400 * index) / (COUNT + 1)
+
+function expectNear(actual: PathPoint, expected: PathPoint) {
+  expect(actual.x).toBeCloseTo(expected.x, 6)
+  expect(actual.row).toBeCloseTo(expected.row, 6)
+  expect(actual.y).toBeCloseTo(expected.y, 6)
+}
 
 describe("hauntedFrame", () => {
   it("starts empty, with the ghost out of sight", () => {
-    const frame = hauntedFrame(0, DAYS)
-    expect(frame.shown).toEqual([false, false, false, false, false])
-    expect(frame.busy).toEqual([false, false, false, false, false])
-    expect(frame.ghost.visible).toBe(false)
+    const frame = hauntedFrame(0, COUNT)
+    expect(frame.incoming).toEqual(["away", "away", "away", "away", "away"])
+    expect(frame.run).toBeNull()
   })
 
-  it("slides every event in before the ghost arrives", () => {
-    const frame = hauntedFrame(1000, DAYS)
-    expect(frame.shown).toEqual([true, true, true, true, true])
-    expect(frame.busy.some(Boolean)).toBe(false)
+  it("brings every event in, in transit, before the ghost arrives", () => {
+    const frame = hauntedFrame(1500, COUNT)
+    expect(frame.incoming).toEqual(["transit", "transit", "transit", "transit", "transit"])
+    expect(frame.run).toBeNull()
   })
 
-  it("turns an event into Busy once the ghost has passed its day", () => {
-    const frame = hauntedFrame(4000, DAYS)
-    expect(frame.ghost.visible).toBe(true)
-    expect(frame.busy).toEqual([true, true, false, false, false])
+  it("turns each event into Busy the moment the ghost touches it, in order", () => {
+    expect(hauntedFrame(reachMs(1) - 10, COUNT).incoming[0]).toBe("transit")
+    expect(hauntedFrame(reachMs(1) + 10, COUNT).incoming).toEqual(["busy", "transit", "transit", "transit", "transit"])
+    const middle = hauntedFrame(reachMs(3) + 10, COUNT)
+    expect(middle.run).toBeGreaterThan(0)
+    expect(middle.incoming).toEqual(["busy", "busy", "busy", "transit", "transit"])
   })
 
-  it("rests with every event Busy and nothing fading", () => {
-    const frame = hauntedFrame(HAUNTED_STILL_MS, DAYS)
-    expect(frame.busy).toEqual([true, true, true, true, true])
+  it("rests with every event Busy, the ghost gone, and nothing fading", () => {
+    const frame = hauntedFrame(HAUNTED_STILL_MS, COUNT)
+    expect(frame.incoming.every((state) => state === "busy")).toBe(true)
     expect(frame.fading).toBe(false)
-    expect(frame.ghost.visible).toBe(false)
+    expect(frame.run).toBeNull()
   })
 
   it("fades out at the end and repeats", () => {
-    expect(hauntedFrame(8600, DAYS).fading).toBe(true)
-    expect(hauntedFrame(HAUNTED_PERIOD_MS + 1000, DAYS)).toEqual(hauntedFrame(1000, DAYS))
+    expect(hauntedFrame(8600, COUNT).fading).toBe(true)
+    expect(hauntedFrame(HAUNTED_PERIOD_MS + 1000, COUNT)).toEqual(hauntedFrame(1000, COUNT))
+  })
+})
+
+describe("the ghost's path", () => {
+  it("enters and leaves beyond the week's edges, in both layouts", () => {
+    for (const layout of ["wide", "phone"] as const) {
+      const points = waypoints(INCOMING, layout)
+      expect(pointOnPath(points, 0).x).toBeLessThan(0)
+      expect(pointOnPath(points, 1).x).toBeGreaterThan(layout === "wide" ? 5 : 3)
+    }
+  })
+
+  it("passes over the middle of each incoming event's top edge, when that event turns Busy", () => {
+    const wide = waypoints(INCOMING, "wide")
+    const phone = waypoints(INCOMING, "phone")
+    INCOMING.forEach((event, index) => {
+      const u = (index + 1) / (COUNT + 1)
+      expectNear(pointOnPath(wide, u), { x: event.day + 0.5, row: 0, y: event.start - 9 })
+      const cell = phoneCell(event.day)
+      expectNear(pointOnPath(phone, u), { x: cell.col + 0.5, row: cell.row, y: event.start - 9 })
+      expect(hauntedFrame(reachMs(index + 1) + 1, COUNT).incoming[index]).toBe("busy")
+    })
+  })
+
+  it("moves smoothly: no jump between two nearby moments", () => {
+    const points = waypoints(INCOMING, "phone")
+    for (let step = 0; step < 1000; step += 1) {
+      const a = pointOnPath(points, step / 1000)
+      const b = pointOnPath(points, (step + 1) / 1000)
+      expect(Math.hypot(b.x - a.x, b.row - a.row, (b.y - a.y) / 8)).toBeLessThan(0.05)
+    }
+  })
+
+  it("puts Monday to Wednesday on the phone's first row, Thursday and Friday on its second", () => {
+    expect([0, 1, 2, 3, 4].map(phoneCell)).toEqual([
+      { col: 0, row: 0 },
+      { col: 1, row: 0 },
+      { col: 2, row: 0 },
+      { col: 0, row: 1 },
+      { col: 1, row: 1 },
+    ])
   })
 })

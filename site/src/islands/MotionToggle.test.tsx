@@ -22,6 +22,14 @@ describe("MotionToggle", () => {
     expect(html).toContain(`<span class="sr-only">${en.motion.pause}</span>`)
   })
 
+  it("with short words, shows them and keeps the full words as its name", () => {
+    const html = renderToString(<MotionToggle paused={false} onToggle={() => {}} m={en.motion} short />)
+    expect(html).toContain(`aria-label="${en.motion.pause}"`)
+    expect(html).toContain(`</svg>${en.motion.pauseShort}</button>`)
+    expect(en.motion.pause).toContain(en.motion.pauseShort)
+    expect(en.motion.play).toContain(en.motion.playShort)
+  })
+
   it("pauses, then plays", async () => {
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     const container = document.createElement("div")

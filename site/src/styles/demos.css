@@ -151,33 +151,184 @@
 }
 @media (prefers-reduced-motion: reduce) { .reveal-handle-hint { transition: none; } }
 
-/* The Haunted Week. */
+/* The Haunted Week (HauntedWeek.tsx, demo/haunted.ts): Sam's Work calendar as a calm week. A
+   title bar names the calendar and holds the loop's control; quiet hour labels sit in the gutter
+   over hairline hours. Work's own meetings are in Work's brick red (hero E4's), the plans from
+   Personal and Family arrive in transit (translucent, a dashed outline in their calendar's colour,
+   their calendar's portrait), and the ghost, brushing each one with its hem, turns it into Busy:
+   Lantern Indigo, the ghost glyph, and a dot in the calendar's colour it came from.
+   Wide, one row of five days; below 720px, two rows (Monday to Wednesday, then Thursday and
+   Friday), so every day shows. Each event carries its day and hours, and its phone column and
+   row, as custom properties; the geometry below turns them into places. */
 .haunt { margin: 2rem 0 0; }
 .haunt-frame {
-  position: relative; height: 396px; overflow: hidden;
+  --hw-work: light-dark(oklch(0.55 0.14 27), oklch(0.72 0.12 27));
+  --hw-busy: var(--primary);
+  --hw-busy-fill: light-dark(color-mix(in oklab, var(--hw-busy) 11%, var(--background)), color-mix(in oklab, var(--hw-busy) 20%, var(--background)));
+  --hw-line: color-mix(in oklab, var(--border) 60%, var(--surface));
+  --hw-gutter: 3.75rem;
+  --hw-head: 2.25rem;
+  --hw-hour: 54px;
+  --hw-cols: 5;
+  --hw-rows: 1;
+  --hw-ghost: 76px;
+  --hw-row-h: calc(var(--hw-head) + var(--hours, 8) * var(--hw-hour));
+  overflow: hidden;
   border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
 }
-.haunt-frame .week { height: 360px; }
-.haunt .cal-event.is-arriving { opacity: 0; transform: translateX(-14px); }
-.haunt .cal-event.is-fading { opacity: 0; }
-/* The track is the frame's size, so a translate of (x%, y%) is that share of the frame. */
+@media (max-width: 719px) {
+  .haunt-frame { --hw-gutter: 1.75rem; --hw-head: 2rem; --hw-hour: 34px; --hw-cols: 3; --hw-rows: 2; --hw-ghost: 64px; }
+}
+
+/* The title bar: whose calendar this is, and the loop's Pause/Play. */
+.haunt-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  min-height: 3rem; padding: 0 0.35rem 0 0.9rem; border-bottom: 1px solid var(--border);
+}
+.haunt-label {
+  display: flex; align-items: center; gap: 0.55rem; min-width: 0;
+  font-size: 0.8125rem; font-weight: 600; color: var(--foreground);
+}
+.haunt-label > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.haunt-label .avatar { width: 1.5rem; height: 1.5rem; flex: none; }
+.haunt-bar .motion-toggle { flex: none; padding: 0 0.75rem; }
+
+.haunt-week { position: relative; height: calc(var(--hw-rows) * var(--hw-row-h)); }
+
+/* A row of days: the gutter with its hour labels, a header of day names, and one column per day
+   ruled with hairline hours. */
+.hw-row {
+  position: absolute; inset: calc(var(--row) * var(--hw-row-h)) 0 auto 0; height: var(--hw-row-h);
+  display: grid; grid-template-columns: var(--hw-gutter) repeat(var(--hw-cols), minmax(0, 1fr));
+  grid-template-rows: var(--hw-head) minmax(0, 1fr);
+}
+.hw-row.is-phone { display: none; }
+@media (max-width: 719px) {
+  .hw-row.is-wide { display: none; }
+  .hw-row.is-phone { display: grid; }
+  .hw-row.is-phone + .hw-row.is-phone { border-top: 1px solid var(--border); }
+}
+.hw-corner, .hw-day { grid-row: 1; border-bottom: 1px solid var(--border); }
+.hw-corner { grid-column: 1; }
+.hw-day {
+  display: flex; align-items: center; padding: 0 0.75rem; min-width: 0;
+  font-size: 0.8125rem; font-weight: 600; color: var(--muted-foreground);
+}
+.hw-day.is-empty { border-bottom-color: transparent; }
+.hw-hours { grid-row: 2; grid-column: 1; position: relative; }
+.hw-hours > span {
+  position: absolute; right: 0.6rem; top: calc(var(--hour-i) * var(--hw-hour) + 0.3rem);
+  font-size: 0.6875rem; font-weight: 500; line-height: 1; color: var(--muted-foreground); font-variant-numeric: tabular-nums;
+}
+.hw-col {
+  grid-row: 2; border-left: 1px solid var(--hw-line);
+  background-image: repeating-linear-gradient(to bottom, var(--hw-line) 0 1px, transparent 1px var(--hw-hour));
+  background-position: 0 var(--hw-hour);
+}
+@media (max-width: 719px) {
+  .hw-hours > span { right: 0.4rem; }
+  .hw-day { padding: 0 0.5rem; }
+  /* On a phone the calendar's name may take two lines rather than lose its address. */
+  .haunt-bar { padding: 0.35rem 0.2rem 0.35rem 0.7rem; }
+  .haunt-label > span { white-space: normal; line-height: 1.25; }
+  .haunt-bar .motion-toggle { padding: 0 0.6rem; }
+}
+
+/* An event, placed from its custom properties. */
+.hw-event {
+  --col: var(--day); --in-row: 0;
+  --hw-col-w: calc((100% - var(--hw-gutter)) / var(--hw-cols));
+  position: absolute; z-index: 1;
+  left: calc(var(--hw-gutter) + var(--col) * var(--hw-col-w) + 4px);
+  width: calc(var(--hw-col-w) - 8px);
+  top: calc(var(--in-row) * var(--hw-row-h) + var(--hw-head) + var(--start) * var(--hw-hour) + 2px);
+  height: calc(var(--len) * var(--hw-hour) - 4px);
+  border-radius: 0.5rem;
+  font-size: 0.8125rem; line-height: 1.3; color: var(--foreground);
+}
+@media (max-width: 719px) {
+  .hw-event { --col: var(--col-p); --in-row: var(--row-p); }
+  .hw-event[data-short-phone] .hw-detail { display: none; }
+}
+.hw-face {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 0.1rem; overflow: hidden;
+  padding: 0.4rem 0.65rem;
+}
+.hw-title, .hw-detail { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hw-title { font-weight: 650; }
+.hw-detail { font-weight: 500; color: var(--muted-foreground); }
+@media (max-width: 719px) {
+  .hw-face { padding: 0.3rem 0.45rem; }
+}
+
+/* Work's own meetings, in Work's red. */
+.hw-event.is-work {
+  background: light-dark(color-mix(in oklab, var(--hw-work) 9%, var(--background)), color-mix(in oklab, var(--hw-work) 17%, var(--background)));
+  box-shadow: inset 0 0 0 1px light-dark(color-mix(in oklab, var(--hw-work) 42%, var(--background)), color-mix(in oklab, var(--hw-work) 50%, var(--background)));
+}
+
+/* A plan from Personal or Family: away, then in transit, then Busy. It rises in softly; in transit
+   it is a little translucent with a dashed outline in its calendar's colour, so Work never seems
+   to keep its title; touched by the ghost, the title fades out and Busy fades in, with a small
+   settle. Only opacity and transform move: each look is its own layer. */
+.hw-event[data-source="personal"] { --hw-source: var(--event-personal-edge); }
+.hw-event[data-source="family"] { --hw-source: var(--event-family-edge); }
+.hw-event.is-incoming {
+  opacity: 0; transform: translateY(10px);
+  transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out);
+}
+.hw-event.is-incoming[data-state="transit"] { opacity: 0.88; transform: none; }
+.hw-event.is-incoming[data-state="busy"] { opacity: 1; transform: none; }
+.hw-event.is-incoming[data-fading] { opacity: 0; transition-duration: 450ms; }
+.hw-skin { position: absolute; inset: 0; border-radius: inherit; transition: opacity 380ms var(--ease-out); }
+.hw-skin.is-transit {
+  background: color-mix(in oklab, var(--hw-source) 9%, var(--surface));
+  border: 1.5px dashed var(--hw-source);
+}
+.hw-skin.is-busy {
+  opacity: 0;
+  background: var(--hw-busy-fill);
+  box-shadow: inset 0 0 0 1px light-dark(color-mix(in oklab, var(--hw-busy) 48%, var(--background)), color-mix(in oklab, var(--hw-busy) 58%, var(--background)));
+}
+.hw-face.is-transit, .hw-face.is-busy { flex-direction: row; align-items: flex-start; gap: 0.35rem; }
+.hw-face.is-transit { transition: opacity 260ms var(--ease-out); }
+.hw-face.is-busy { opacity: 0; transform: translateY(3px); transition: opacity 380ms var(--ease-out) 120ms, transform 380ms var(--ease-out) 120ms; }
+.hw-avatar { width: 1.125rem; height: 1.125rem; flex: none; margin-top: 0.03rem; }
+.hw-face.is-busy .hw-title { flex: 1; min-width: 0; padding-right: 0.55rem; color: var(--hw-busy); }
+.hw-glyph { width: 0.95rem; height: 1rem; flex: none; margin-top: 0.06rem; fill: var(--hw-busy); }
+.hw-glyph-tab { fill: none; stroke: var(--hw-busy); stroke-width: 2.4; stroke-linecap: round; }
+.hw-glyph-eye { fill: var(--hw-busy-fill); }
+/* The dot sits in the corner, so even a narrow day keeps the whole word Busy. */
+.hw-dot { position: absolute; top: 0.45rem; right: 0.45rem; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--hw-source); }
+.hw-event[data-state="busy"] :is(.hw-skin.is-transit, .hw-face.is-transit) { opacity: 0; }
+.hw-event[data-state="busy"] .hw-skin.is-busy { opacity: 1; }
+.hw-event[data-state="busy"] .hw-face.is-busy { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .hw-event.is-incoming[data-state="busy"]:not([data-fading]) { animation: hw-settle 520ms var(--ease-out-quart); }
+}
+@keyframes hw-settle { from { transform: scale(0.95); } to { transform: none; } }
+
+/* The ghost. The track is the week's size, so a translate of x% is that share of its width; the
+   point it moves is the ghost's hem, so its body floats just above the event it touches. */
 .haunt-track {
+  --gx: var(--gx-w); --grow: 0; --gy: var(--gy-w);
   position: absolute; inset: 0; z-index: 3; pointer-events: none;
-  transform: translate(var(--haunt-x, 0%), var(--haunt-y, 50%));
+  transform: translate(
+    calc(var(--hw-gutter) + (100% - var(--hw-gutter)) * var(--gx) / var(--hw-cols)),
+    calc(var(--grow) * var(--hw-row-h) + var(--hw-head) + var(--gy) * var(--hw-hour))
+  );
+}
+@media (max-width: 719px) {
+  .haunt-track { --gx: var(--gx-p); --grow: var(--grow-p); --gy: var(--gy-p); }
 }
 .haunt-ghost {
-  position: absolute; left: 0; top: 0; width: 84px; height: 84px; margin: -46px 0 0 -42px;
+  position: absolute; left: 0; top: 0; width: var(--hw-ghost); height: var(--hw-ghost);
+  margin: calc(var(--hw-ghost) * -0.86) 0 0 calc(var(--hw-ghost) * -0.5);
   transition: opacity 300ms var(--ease-out);
 }
-.haunt-ghost .ghost { --ghost-cutout: var(--surface); }
-.haunt-label {
-  position: absolute; right: 0.7rem; bottom: 0.45rem; display: flex; align-items: center; gap: 0.4rem;
-  font-size: 0.75rem; color: var(--muted-foreground);
-}
-.haunt-label .avatar { width: 1.25rem; height: 1.25rem; }
-@media (max-width: 639px) { .haunt-frame .week { width: calc(100% * 5 / 3); } }
+.haunt-ghost .ghost { --ghost-size: var(--hw-ghost) !important; --ghost-cutout: var(--surface); }
 @media (prefers-reduced-motion: reduce) {
-  .haunt-ghost { transition: none; }
+  .hw-event.is-incoming, .hw-skin, .hw-face.is-transit, .hw-face.is-busy, .haunt-ghost { transition: none; }
 }
 
 /* The Crossing: Sam's Dentist on Personal, with every part of it, beside Work's afternoon. One

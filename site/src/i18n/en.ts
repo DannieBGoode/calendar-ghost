@@ -55,6 +55,9 @@ export const en = {
   motion: {
     pause: "Pause animation",
     play: "Play animation",
+    /** The same, in short, where a demo shows short words on its control (the Haunted Week). */
+    pauseShort: "Pause",
+    playShort: "Play",
     /** The footer's site-wide control (components/MotionPreference.astro): its words say what a
      * press does. Pressed, every loop on the page stops; pressed again, they play. */
     pauseAll: "Pause animations",
@@ -96,7 +99,6 @@ export const en = {
       "Sam's work week, twice. On the left, Sam sees work meetings and personal plans with their details. On the right, work sees the same meetings, and each personal plan only as “Busy”.",
     workCalendar: "Work calendar · sam@work.example",
     calendars: { personal: "Personal", family: "Family", work: "Work" },
-    from: { personal: "from Personal", family: "from Family" },
     events: {
       standup: { title: "Standup", detail: "Team" },
       clientCall: { title: "Client call", detail: "Acme" },
