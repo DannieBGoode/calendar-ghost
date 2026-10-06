@@ -24,6 +24,11 @@ function Mark({ name, className }: { name: IconName; className: string }) {
  * Where the run takes the ghost and the copy, measured from the page as it is laid out, so the
  * same keyframes work side by side (wide) and stacked (narrow).
  * - `--crossing-copy-x/y`: from the landed slot back to the source card (the copy starts there).
+ * - `--crossing-copy-sx/sy`: how much larger the source card is than the slot, each way. The
+ *   copy's card starts at the source card's exact size and shrinks to the slot's on the way over
+ *   (a FLIP: only `transform` moves); `--crossing-copy-s`, the smaller of the two, scales its
+ *   words evenly, so they never stretch.
+ * - `--crossing-source-w`: the source card's width, for the look-alike the copy starts as.
  * - `--crossing-fetch-x/y`: from the ghost's resting place to where it takes the copy.
  * - `--crossing-set-x/y`: from the ghost's resting place to where it sets the copy down.
  */
@@ -36,17 +41,24 @@ function measureRun(stage: HTMLElement): CSSProperties {
     const shift = new DOMMatrixReadOnly(getComputedStyle(element).transform)
     return new DOMRect(rect.x - shift.m41, rect.y - shift.m42, rect.width, rect.height)
   }
-  const source = box(".crossing-source")
+  const source = box(".crossing-personal .crossing-source")
   const landed = box(".crossing-landed")
   const ghost = box(".crossing-ghost")
   // The ghost holds the copy by its top right corner, its hem over the copy's edge.
   const holdX = (right: number) => right - ghost.width * 0.72 - ghost.left
   const holdY = (top: number) => top - ghost.height * 0.62 - ghost.top
   const px = (value: number) => `${Math.round(value)}px`
+  const ratio = (value: number) => (Number.isFinite(value) && value > 0 ? value.toFixed(4) : "1")
+  const sx = source.width / landed.width
+  const sy = source.height / landed.height
   return {
     "--crossing-copy-x": px(source.left - landed.left),
     "--crossing-copy-y": px(source.top - landed.top),
-    "--crossing-fetch-x": px(holdX(source.left + landed.width)),
+    "--crossing-copy-sx": ratio(sx),
+    "--crossing-copy-sy": ratio(sy),
+    "--crossing-copy-s": ratio(Math.min(sx, sy)),
+    "--crossing-source-w": `${source.width.toFixed(2)}px`,
+    "--crossing-fetch-x": px(holdX(source.right)),
     "--crossing-fetch-y": px(holdY(source.top)),
     "--crossing-set-x": px(holdX(landed.right)),
     "--crossing-set-y": px(holdY(landed.top)),
@@ -86,6 +98,22 @@ export function Crossing({
   const fields = crossingFields(mode)
   const dentist = m.demo.events.dentist
   const started = useRef(false)
+  // The Dentist as Personal shows it, every part of it; the copy starts out looking the same.
+  const sourceParts = (
+    <>
+      <span className="crossing-source-title" data-crosses={fields.title}>
+        {dentist.title}
+      </span>
+      <span className="crossing-source-row" data-crosses="true">
+        <Mark name="clock" className="crossing-icon" />
+        {m.demo.days[0]} {DENTIST_TIME}
+      </span>
+      <span className="crossing-source-row" data-crosses={fields.location}>
+        <Mark name="mapPin" className="crossing-icon" />
+        {dentist.detail}
+      </span>
+    </>
+  )
 
   const start = useCallback(() => {
     if (!stage.current) return
@@ -154,17 +182,7 @@ export function Crossing({
           </p>
           <div className="crossing-event">
             <div className="crossing-source" aria-hidden="true">
-              <span className="crossing-source-title" data-crosses={fields.title}>
-                {dentist.title}
-              </span>
-              <span className="crossing-source-row" data-crosses="true">
-                <Mark name="clock" className="crossing-icon" />
-                {m.demo.days[0]} {DENTIST_TIME}
-              </span>
-              <span className="crossing-source-row" data-crosses={fields.location}>
-                <Mark name="mapPin" className="crossing-icon" />
-                {dentist.detail}
-              </span>
+              {sourceParts}
             </div>
             <div className="crossing-stays">
               <h3>{m.crossing.alwaysStaysTitle}</h3>
@@ -190,19 +208,26 @@ export function Crossing({
                 {hour}
               </span>
             ))}
-            {/* The landed copy. During a run it starts on the Personal card as a full copy and
-                drops what the choice leaves out on its way over. */}
+            {/* The landed copy. During a run it starts on the Personal card, the same size and
+                look as the Dentist there, then shrinks to this slot and drops what the choice
+                leaves out on its way over. Its card (`-box`), its words (`-body`), and the
+                look-alike it starts as (`-lookalike`, only in flight) each scale on their own,
+                so the card fits both ends while the words keep their shape. */}
             <div key={`copy-${runId}`} className="crossing-landed">
-              <span className="crossing-landed-title" data-crosses={fields.title}>
-                {dentist.title}
-              </span>
-              <span className="crossing-landed-busy" data-crosses={!fields.title}>
-                {m.demo.busy}
-              </span>
-              <span className="crossing-landed-row crossing-landed-time">{DENTIST_TIME}</span>
-              <span className="crossing-landed-row crossing-landed-place" data-crosses={fields.location}>
-                {dentist.detail}
-              </span>
+              <span className="crossing-landed-box" />
+              <div className="crossing-landed-body">
+                <span className="crossing-landed-title" data-crosses={fields.title}>
+                  {dentist.title}
+                </span>
+                <span className="crossing-landed-busy" data-crosses={!fields.title}>
+                  {m.demo.busy}
+                </span>
+                <span className="crossing-landed-row crossing-landed-time">{DENTIST_TIME}</span>
+                <span className="crossing-landed-row crossing-landed-place" data-crosses={fields.location}>
+                  {dentist.detail}
+                </span>
+              </div>
+              {run === "running" ? <div className="crossing-source crossing-landed-lookalike">{sourceParts}</div> : null}
             </div>
           </div>
         </div>

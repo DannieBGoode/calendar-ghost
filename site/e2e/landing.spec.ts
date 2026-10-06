@@ -343,8 +343,8 @@ for (const path of ["/", "/bold"]) {
     await expect(landed.getByText(en.demo.busy)).toBeVisible()
     expect(await landed.evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
     expect(await landed.evaluate((element) => getComputedStyle(element).transform)).toBe("none")
-    // A real fill and a solid edge, not a faint outline.
-    const look = await landed.evaluate((element) => {
+    // A real fill and a solid edge, not a faint outline (drawn by the copy's card layer).
+    const look = await landed.locator(".crossing-landed-box").evaluate((element) => {
       const style = getComputedStyle(element)
       return { edge: style.borderTopStyle, fill: style.backgroundColor }
     })
@@ -363,6 +363,44 @@ for (const path of ["/", "/bold"]) {
   })
 
   for (const width of [1440, 1024, 390]) {
+    test(`${path} at ${width}px: the carried card starts at the Dentist card's size and lands at the slot's, without a jump`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 1000 })
+      await page.goto(path)
+      const crossing = page.locator(".crossing")
+      await crossing.scrollIntoViewIfNeeded()
+      await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
+      /** The carried card's box and the box it should match, with every animation held at `at`. */
+      const boxesAt = (at: number, target: string) =>
+        crossing.evaluate(
+          (element, [at, target]) => {
+            for (const animation of element.getAnimations({ subtree: true })) {
+              animation.pause()
+              animation.currentTime = at as number
+            }
+            const box = (selector: string) => {
+              const rect = element.querySelector(selector)!.getBoundingClientRect()
+              return [rect.x, rect.y, rect.width, rect.height]
+            }
+            return { card: box(".crossing-landed-box"), target: box(target as string) }
+          },
+          [at, target] as const,
+        )
+      const expectSame = ({ card, target }: { card: number[]; target: number[] }) => {
+        for (const [index, value] of card.entries()) expect(Math.abs(value - target[index]!)).toBeLessThan(1.5)
+      }
+      // 4.8s runs: the copy appears over the Dentist at 28% and is set down by 84%.
+      expectSame(await boxesAt(4800 * 0.29, ".crossing-personal .crossing-source"))
+      const landed = await boxesAt(4800 * 0.9, ".crossing-landed")
+      expectSame(landed)
+      // And on the way it is somewhere in between: never smaller than the slot, never larger
+      // than the Dentist card.
+      const midway = await boxesAt(4800 * 0.56, ".crossing-personal .crossing-source")
+      expect(midway.card[2]!).toBeLessThan(midway.target[2]!)
+      expect(midway.card[2]!).toBeGreaterThan(landed.target[2]!)
+    })
+
     for (const colorScheme of ["light", "dark"] as const) {
       test(`${path} at ${width}px ${colorScheme}: the crossing explains itself, with what stays behind on the Personal card`, async ({
         browser,
