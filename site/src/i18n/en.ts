@@ -263,6 +263,8 @@ export const en = {
     },
     agent: {
       label: "AI agent",
+      /** Under the assistant's name in the chat's header: how it reaches Calendar Ghost. */
+      via: "via MCP",
       question: "Is my calendar sync working?",
       answer: "Calendar Ghost is healthy: 3 rules running, last synced 2 minutes ago. Nothing needs your attention.",
     },

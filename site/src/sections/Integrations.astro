@@ -25,6 +25,8 @@ const ALERT_AT = 9
 const beats = Array.from({ length: BEATS }, (_, index) => index === ALERT_AT)
 /** The AI assistant answering in the agent mockup: a product name, so not translated. */
 const AGENT = "Claude"
+/** When the question was asked and answered, as the chat shows it: a clock time, not copy. */
+const ASKED_AT = "09:41"
 // Claude's mark, bundled from src/marks (nothing loads from another host), names a compatible
 // client; it does not suggest that Anthropic endorses Calendar Ghost.
 const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria-hidden="true" focusable="false" ')
@@ -82,16 +84,24 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
       </li>
       <li class="int-reader">
         <h3>{copy.agent.label}</h3>
+        <!-- A chat, in the shape everyone knows from messaging apps, in the site's own colours:
+             the contact up top, the question on the right, the tool call as a small system
+             note, and the answer on the left, in the assistant's own words. -->
         <div class="int-mock int-chat" aria-hidden="true" data-wake>
-          <span class="int-msg int-msg-you">{copy.agent.question}</span>
-          <span class="int-tool"><Icon name="check" class="int-tool-icon" />calendar-ghost · get_status</span>
-          <!-- The answer is the assistant's own, in its words; the ghost is what it asked. -->
-          <span class="int-reply">
+          <span class="int-chat-head">
             <span class="int-agent-avatar" set:html={AGENT_MARK} />
-            <span class="int-agent">
-              <b class="int-agent-name">{AGENT}</b>
-              <span class="int-msg int-msg-agent">{copy.agent.answer}</span>
-            </span>
+            <span class="int-chat-who"><b class="int-agent-name">{AGENT}</b><small>{copy.agent.via}</small></span>
+          </span>
+          <span class="int-chat-body">
+            <span class="int-msg int-msg-you"
+              ><span class="int-msg-text">{copy.agent.question}</span><span class="int-msg-meta"
+                >{ASKED_AT}<svg class="int-read" viewBox="0 0 18 11" focusable="false"><path d="M1 6l3.2 3.2L11 2.2M7.5 8.6l.6.6L15 2.2" /></svg></span
+              ></span
+            >
+            <span class="int-tool"><Icon name="check" class="int-tool-icon" />calendar-ghost · get_status</span>
+            <span class="int-msg int-msg-agent"
+              ><span class="int-msg-text">{copy.agent.answer}</span><span class="int-msg-meta">{ASKED_AT}</span></span
+            >
           </span>
         </div>
       </li>
@@ -112,8 +122,11 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
   }
 
   /* The heading and one sentence, the whole idea in a few seconds, beside the ghost on its round. */
-  .int-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1.5rem 2rem; }
-  .int-intro { flex: 1 1 22rem; min-width: 0; }
+  .int-head { display: grid; gap: 1.5rem 2.5rem; align-items: start; }
+  .int-intro { min-width: 0; }
+  @media (min-width: 640px) {
+    .int-head { grid-template-columns: minmax(0, 1fr) auto; }
+  }
   .int-head h2 { max-width: 16ch; }
   .int-lead { max-width: 44ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
 
@@ -172,25 +185,57 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
   }
   .int-mock :global(.int-alert-icon) { width: 0.95rem; height: 0.95rem; flex: none; }
 
-  /* An AI agent: the question, the tool it calls, and the ghost's answer. */
-  .int-chat { display: grid; align-content: center; gap: 0.6rem; }
-  .int-msg { display: block; padding: 0.55rem 0.8rem; border-radius: 0.9rem; line-height: 1.4; font-size: 0.875rem; }
-  .int-msg-you {
-    justify-self: end; max-width: 85%; border-bottom-right-radius: 0.25rem;
-    background: var(--primary); color: var(--primary-foreground); font-weight: 600;
+  /* An AI agent, as a chat: a slim header with the contact, a faintly patterned wall, bubbles
+     with tails (the question on the right, the answer on the left), each with its time in the
+     corner, and the tool call as a centred system note between them. */
+  .int-chat {
+    --chat-wall: color-mix(in oklch, var(--muted) 70%, var(--surface));
+    --chat-dot: color-mix(in oklch, var(--muted-foreground), transparent 86%);
+    --chat-you: var(--primary-soft);
+    --chat-them: var(--background);
+    display: grid; grid-template-rows: auto 1fr; padding: 0; background: var(--chat-wall);
   }
-  .int-tool { display: inline-flex; align-items: center; gap: 0.4rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; color: var(--muted-foreground); }
-  .int-mock :global(.int-tool-icon) { width: 0.95rem; height: 0.95rem; color: var(--success-foreground); }
-  .int-reply { display: flex; align-items: flex-end; gap: 0.5rem; }
-  /* The assistant's avatar: its own mark, on a quiet disc. */
+  .int-chat-head {
+    display: flex; align-items: center; gap: 0.55rem; padding: 0.55rem 0.85rem;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+  }
   .int-agent-avatar {
-    display: grid; place-items: center; flex: none; width: 2rem; height: 2rem; border-radius: 50%;
-    border: 1px solid var(--border); background: var(--muted); color: var(--foreground);
+    display: grid; place-items: center; flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%;
+    border: 1px solid var(--border); background: var(--background);
   }
-  .int-mock :global(.int-agent-mark) { width: 1.15rem; height: 1.15rem; }
-  .int-agent { display: grid; gap: 0.25rem; max-width: 85%; min-width: 0; }
-  .int-agent-name { font-size: 0.75rem; font-weight: 700; color: var(--muted-foreground); }
-  .int-msg-agent { border: 1px solid var(--border); border-bottom-left-radius: 0.25rem; background: var(--background); color: var(--foreground); }
+  .int-mock :global(.int-agent-mark) { width: 1.1rem; height: 1.1rem; }
+  .int-chat-who { display: grid; line-height: 1.2; }
+  .int-agent-name { font-size: 0.875rem; font-weight: 700; color: var(--foreground); }
+  .int-chat-who small { font-size: 0.6875rem; color: var(--muted-foreground); }
+  .int-chat-body {
+    display: grid; align-content: center; gap: 0.5rem; padding: 0.85rem 0.85rem 1rem;
+    background-image: radial-gradient(var(--chat-dot) 1px, transparent 1.4px); background-size: 14px 14px;
+  }
+  .int-msg {
+    position: relative; display: block; max-width: 86%; padding: 0.45rem 0.65rem 0.4rem;
+    border-radius: 0.6rem; font-size: 0.8125rem; line-height: 1.4; color: var(--foreground);
+    box-shadow: 0 1px 1px color-mix(in oklch, var(--foreground), transparent 90%);
+  }
+  /* The tail: a small corner folded out of the bubble's top, toward its sender's side. */
+  .int-msg::before {
+    content: ""; position: absolute; top: 0; width: 0.55rem; height: 0.6rem; background: inherit;
+  }
+  .int-msg-you { justify-self: end; border-top-right-radius: 0; background: var(--chat-you); }
+  .int-msg-you::before { right: -0.5rem; clip-path: polygon(0 0, 100% 0, 0 100%); }
+  .int-msg-agent { justify-self: start; border-top-left-radius: 0; background: var(--chat-them); }
+  .int-msg-agent::before { left: -0.5rem; clip-path: polygon(0 0, 100% 0, 100% 100%); }
+  /* The time sits in the bubble's bottom-right corner, after the last line. */
+  .int-msg-meta {
+    float: right; display: inline-flex; align-items: center; gap: 0.2rem; margin: 0.35rem -0.1rem -0.1rem 0.6rem;
+    font-size: 0.625rem; line-height: 1; color: var(--muted-foreground); font-variant-numeric: tabular-nums;
+  }
+  .int-read { width: 0.95rem; height: 0.6rem; fill: none; stroke: var(--primary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .int-tool {
+    justify-self: center; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.6rem; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--border);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.6875rem; color: var(--muted-foreground);
+  }
+  .int-mock :global(.int-tool-icon) { width: 0.85rem; height: 0.85rem; color: var(--success-foreground); }
 
   /* The way to the setup: one quiet link, not another call to action. */
   .int-guide {
@@ -211,13 +256,13 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
   @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
     .int-mon:not([data-awake]) .int-beats i,
     .int-mon:not([data-awake]) .int-alert,
-    .int-chat:not([data-awake]) > *,
+    .int-chat:not([data-awake]) .int-chat-body > *,
     .int-dash:not([data-awake]) .int-field-status { opacity: 0; }
     .int-mon[data-awake] .int-beats i { animation: int-beat 360ms var(--ease-out) both; animation-delay: calc(var(--i) * 55ms); }
     .int-mon[data-awake] .int-alert { animation: int-rise 420ms var(--ease-out) both; animation-delay: calc(var(--at) * 55ms + 200ms); }
-    .int-chat[data-awake] > * { animation: int-rise 420ms var(--ease-out) both; }
-    .int-chat[data-awake] > .int-tool { animation-delay: 700ms; }
-    .int-chat[data-awake] > .int-reply { animation-delay: 1400ms; }
+    .int-chat[data-awake] .int-chat-body > * { animation: int-rise 420ms var(--ease-out) both; }
+    .int-chat[data-awake] .int-tool { animation-delay: 700ms; }
+    .int-chat[data-awake] .int-msg-agent { animation-delay: 1400ms; }
     .int-dash[data-awake] .int-field-status { animation: int-pop 420ms var(--ease-out) 500ms both; }
   }
   @keyframes int-beat { from { opacity: 0; transform: scaleY(0.2); } to { opacity: 1; transform: none; } }
