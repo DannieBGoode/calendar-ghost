@@ -67,3 +67,13 @@ describe("the versions index", () => {
     expect(VERSIONS[0]!.iterations[0]!.path).toBe("/")
   })
 })
+
+describe("the display fonts to compare", () => {
+  it("start with the page's own face and name each candidate once", async () => {
+    const { DISPLAY_FONTS, DISPLAY_FONT_LABEL } = await import("./versions")
+    expect(DISPLAY_FONTS[0]).toEqual({ key: "fraunces", name: "Fraunces", stack: null })
+    expect(new Set(DISPLAY_FONTS.map((font) => font.key)).size).toBe(DISPLAY_FONTS.length)
+    for (const font of DISPLAY_FONTS.slice(1)) expect(font.stack).toMatch(/^"[^"]+"/)
+    expect(DISPLAY_FONT_LABEL).toContain("{font}")
+  })
+})

@@ -196,3 +196,19 @@ export function worktreeCommand(commit: string): string {
 
 /** The "Versions" link's words. */
 export const VERSIONS_LINK_LABEL = "Versions"
+
+/**
+ * Display faces to compare on iteration pages (components/DisplayFontPicker.astro), never on
+ * production. Fraunces is the page's own; Young Serif is /journey's; Besley (a Clarendon: sturdy,
+ * honest, a little playful) and Bricolage Grotesque (a lively grotesque with ink traps) are
+ * candidates for "playful, honest, capable". `stack` is null for the page's own face.
+ */
+export const DISPLAY_FONTS: readonly { key: string; name: string; stack: string | null }[] = [
+  { key: "fraunces", name: "Fraunces", stack: null },
+  { key: "young-serif", name: "Young Serif", stack: '"Young Serif", ui-serif, Georgia, serif' },
+  { key: "besley", name: "Besley", stack: '"Besley Variable", ui-serif, Georgia, serif' },
+  { key: "bricolage", name: "Bricolage Grotesque", stack: '"Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif' },
+]
+
+/** The display font picker's name, with `{font}` for the face in use. */
+export const DISPLAY_FONT_LABEL = "Display font: {font}"

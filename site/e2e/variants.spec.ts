@@ -1,7 +1,17 @@
 import { expect, test, type Page } from "@playwright/test"
 import { en } from "../src/i18n/en"
 import { TRUST_DOCS } from "../src/links"
-import { NON_PRODUCTION_PATHS, STATUS_LABELS, VERSIONS, VERSIONS_LINK_LABEL, VERSIONS_PATH, VIEW_WITH_GIT } from "../src/versions"
+import { format } from "../src/i18n/format"
+import {
+  DISPLAY_FONT_LABEL,
+  DISPLAY_FONTS,
+  NON_PRODUCTION_PATHS,
+  STATUS_LABELS,
+  VERSIONS,
+  VERSIONS_LINK_LABEL,
+  VERSIONS_PATH,
+  VIEW_WITH_GIT,
+} from "../src/versions"
 
 /** The home page's sections, whose headings every home hero iteration keeps. */
 const HOME_HEADINGS = [
@@ -1610,6 +1620,49 @@ test.describe("/home/hero-e4", () => {
   }
 })
 
+test.describe("the display font picker", () => {
+  const families = (page: Page) => page.evaluate(() => [...document.fonts].map((font) => font.family.replaceAll('"', "")))
+
+  test("sits beside the Versions link on iteration routes only, and its faces load only there", async ({ page }) => {
+    await page.goto("/")
+    await expect(page.locator("[data-display-font-picker]")).toHaveCount(0)
+    expect((await families(page)).some((family) => family.startsWith("Besley") || family.startsWith("Bricolage"))).toBe(false)
+
+    await page.goto("/home/hero-e4")
+    const picker = page.locator("[data-display-font-picker]")
+    await expect(picker).toBeVisible()
+    expect((await picker.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    const versions = (await page.getByRole("link", { name: VERSIONS_LINK_LABEL }).boundingBox())!
+    const box = (await picker.boundingBox())!
+    expect(box.x).toBeGreaterThan(versions.x + versions.width)
+    expect(Math.abs(box.y - versions.y)).toBeLessThan(2)
+    expect(await families(page)).toEqual(expect.arrayContaining(["Besley Variable", "Bricolage Grotesque Variable", "Young Serif"]))
+  })
+
+  test("cycles every heading's display face, names it, and keeps the choice across iteration routes", async ({ page }) => {
+    await page.goto("/home/hero-e4")
+    const picker = page.locator("[data-display-font-picker]")
+    const h1 = () => page.locator("h1").evaluate((element) => getComputedStyle(element).fontFamily)
+    await expect(picker).toHaveAttribute("aria-label", format(DISPLAY_FONT_LABEL, { font: DISPLAY_FONTS[0]!.name }))
+    expect(await h1()).toContain("Fraunces")
+    for (const font of DISPLAY_FONTS.slice(1)) {
+      await picker.click()
+      await expect(picker).toHaveAttribute("aria-label", format(DISPLAY_FONT_LABEL, { font: font.name }))
+      await expect(picker).toContainText(font.name)
+      await expect(page.locator("html")).toHaveAttribute("data-display-font", font.key)
+      expect(await h1()).toContain(font.stack!.split(",")[0]!.replaceAll('"', ""))
+      expect(await page.locator("h2").first().evaluate((element) => getComputedStyle(element).fontFamily)).toContain(font.stack!.split(",")[0]!.replaceAll('"', ""))
+    }
+    // The last choice holds on another iteration route.
+    await page.goto("/bold")
+    await expect(page.locator("html")).toHaveAttribute("data-display-font", DISPLAY_FONTS.at(-1)!.key)
+    // Round again to the page's own face.
+    await page.locator("[data-display-font-picker]").click()
+    await expect(page.locator("html")).not.toHaveAttribute("data-display-font")
+    expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).fontFamily)).toContain("Fraunces")
+  })
+})
+
 test.describe("the versions index", () => {
   const listed = VERSIONS.flatMap((version) => version.iterations)
 
@@ -1660,7 +1713,8 @@ test.describe("the versions index", () => {
       await page.goto(path)
       const link = page.getByRole("link", { name: VERSIONS_LINK_LABEL, exact: true })
       await expect(link, path).toHaveAttribute("href", VERSIONS_PATH)
-      expect(await link.evaluate((element) => getComputedStyle(element).position)).toBe("fixed")
+      // The link sits in the iteration tools' fixed corner, beside the display font picker.
+      expect(await link.evaluate((element) => getComputedStyle(element.closest(".iteration-tools") ?? element).position)).toBe("fixed")
       expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44)
     }
     await page.goto("/")

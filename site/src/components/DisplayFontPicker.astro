@@ -1,0 +1,85 @@
+---
+// A calibration tool for iteration pages only (rendered beside the "Versions" link, never on
+// production): one small button that cycles the display face of every heading between the
+// candidates in versions.ts. The choice sets `--font-display` and a `data-display-font` attribute
+// on `<html>`, and persists in localStorage, so it holds across iteration routes. The candidate
+// faces are bundled here, so they load only on pages that render this tool, and only once a
+// heading uses them.
+import "@fontsource/young-serif/400.css"
+import "@fontsource-variable/besley/wght.css"
+import "@fontsource-variable/bricolage-grotesque/wght.css"
+import { format } from "../i18n/format"
+import { DISPLAY_FONT_LABEL, DISPLAY_FONTS } from "../versions"
+
+const first = DISPLAY_FONTS[0]!
+---
+
+<button
+  type="button"
+  class="display-font-picker"
+  data-display-font-picker
+  data-fonts={JSON.stringify(DISPLAY_FONTS)}
+  data-label={DISPLAY_FONT_LABEL}
+  aria-label={format(DISPLAY_FONT_LABEL, { font: first.name })}
+>
+  <span aria-hidden="true">Aa</span>
+  <span data-display-font-name>{first.name}</span>
+</button>
+
+<script>
+  import { format } from "../i18n/format"
+
+  type Font = { key: string; name: string; stack: string | null }
+  const STORAGE_KEY = "calendar-ghost-site-display-font"
+
+  const read = () => {
+    try {
+      return localStorage.getItem(STORAGE_KEY)
+    } catch {
+      return null
+    }
+  }
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-display-font-picker]")) {
+    const fonts = JSON.parse(button.dataset.fonts ?? "[]") as Font[]
+    const name = button.querySelector<HTMLElement>("[data-display-font-name]")
+    const apply = (font: Font) => {
+      const root = document.documentElement
+      if (font.stack) {
+        root.dataset.displayFont = font.key
+        root.style.setProperty("--display-font-pick", font.stack)
+      } else {
+        delete root.dataset.displayFont
+        root.style.removeProperty("--display-font-pick")
+      }
+      if (name) name.textContent = font.name
+      button.setAttribute("aria-label", format(button.dataset.label ?? "{font}", { font: font.name }))
+    }
+    let index = Math.max(0, fonts.findIndex((font) => font.key === read()))
+    apply(fonts[index]!)
+    button.addEventListener("click", () => {
+      index = (index + 1) % fonts.length
+      try {
+        localStorage.setItem(STORAGE_KEY, fonts[index]!.key)
+      } catch {
+        // Storage can be unavailable; the choice then lasts for this page only.
+      }
+      apply(fonts[index]!)
+    })
+  }
+</script>
+
+<style>
+  .display-font-picker {
+    display: inline-flex; align-items: center; gap: 0.45rem; min-height: 2.75rem; padding: 0 0.9rem;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--background); color: var(--foreground);
+    font: 650 0.8125rem/1 var(--font-sans); cursor: pointer;
+    box-shadow: 0 8px 20px -12px color-mix(in oklch, var(--foreground), transparent 50%);
+  }
+  .display-font-picker:hover { background: var(--muted); }
+  .display-font-picker > span:first-child { font: 400 1rem/1 var(--display-font-pick, var(--font-display)); }
+  /* The picked face replaces the display face everywhere, headings first; it is shown at its own
+     weights, never a synthesized bold. */
+  :global(:root[data-display-font]) { --font-display: var(--display-font-pick); }
+  :global(:root[data-display-font] :is(h1, h2, h3)) { font-family: var(--display-font-pick) !important; font-synthesis-weight: none; }
+</style>
