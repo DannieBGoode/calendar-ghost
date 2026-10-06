@@ -1002,6 +1002,60 @@ test.describe("the Haunted Week", () => {
   })
 })
 
+test("the night watch perches on the cards it reports to, and ticks in time with the monitor's newest check", async ({ browser }) => {
+  for (const width of [1440, 1024, 390]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 } })
+    const page = await context.newPage()
+    await page.goto("/")
+    const watch = page.locator("#integrations .watch")
+    await watch.scrollIntoViewIfNeeded()
+    // Not beside the heading: the heading block is a plain column.
+    await expect(page.locator("#integrations .int-head .watch")).toHaveCount(0)
+    // Wide, on the uptime monitor's card (the middle one); on a phone, on the first card.
+    const card = page.locator("#integrations .int-mock").nth(width >= 900 ? 1 : 0)
+    const cardBox = (await card.boundingBox())!
+    const rack = (await watch.locator(".watch-rack").boundingBox())!
+    const ghost = (await watch.locator(".ghost").boundingBox())!
+    expect(Math.abs(rack.y + rack.height - cardBox.y), `${width}px: the rack stands on the card`).toBeLessThan(4)
+    expect(ghost.y + ghost.height).toBeGreaterThan(cardBox.y - 16)
+    expect(ghost.x).toBeGreaterThanOrEqual(cardBox.x)
+    expect(rack.x + rack.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+    // Clear of the heading block and of the card's label.
+    const head = (await page.locator("#integrations .int-head").boundingBox())!
+    expect(ghost.y).toBeGreaterThan(head.y + head.height)
+    // The label's words (its box spans the card), measured as text.
+    const labelEnd = await page.locator("#integrations .int-reader h3").nth(width >= 900 ? 1 : 0).evaluate((heading) => {
+      const range = document.createRange()
+      range.selectNodeContents(heading)
+      return range.getBoundingClientRect().right
+    })
+    expect(ghost.x, `${width}px: clear of the card's label`).toBeGreaterThan(labelEnd)
+    await context.close()
+  }
+
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await page.goto("/")
+  await page.locator("#integrations .int-mon").scrollIntoViewIfNeeded()
+  const timing = await page.evaluate(() => {
+    const all = document.getAnimations() as CSSAnimation[]
+    const pick = (name: string) => all.filter((animation) => animation.animationName.includes(name))
+    const ticks = pick("watch-tick")
+    const newest = pick("int-newest")
+    const start = (animation: Animation) => Number(animation.startTime) + Number(animation.effect?.getTiming().delay ?? 0)
+    return {
+      ticks: ticks.map((animation) => ({ start: start(animation), duration: animation.effect?.getTiming().duration })),
+      newest: newest.map((animation) => ({ start: start(animation), duration: animation.effect?.getTiming().duration })),
+    }
+  })
+  expect(timing.ticks).toHaveLength(3)
+  expect(timing.newest).toHaveLength(1)
+  expect(timing.newest[0]!.duration).toBe(timing.ticks[0]!.duration)
+  // The first tick and the newest check start their round together; the others follow 0.9s apart.
+  expect(Math.abs(timing.newest[0]!.start - timing.ticks[0]!.start)).toBeLessThan(20)
+  await context.close()
+})
+
 test("the homelab's night watch: one ghost by a rack, its checklist ticked when nothing moves", async ({ browser }) => {
   for (const options of [{ reducedMotion: "reduce" as const }, { javaScriptEnabled: false }]) {
     const context = await browser.newContext(options)

@@ -35,15 +35,16 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
 <section id="integrations" class:list={[sectionClass, "int"]} aria-labelledby="integrations-title">
   <div class="container">
     <div class="int-head">
-      <div class="int-intro">
-        <slot name="eyebrow" />
-        <h2 id="integrations-title">{copy.title}</h2>
-        <p class="int-lead">{copy.body}</p>
-      </div>
-      <HomelabWatch />
+      <slot name="eyebrow" />
+      <h2 id="integrations-title">{copy.title}</h2>
+      <p class="int-lead">{copy.body}</p>
     </div>
 
     <p class="sr-only">{copy.summary}</p>
+    <!-- The night watch perches on the cards it reports to: on the uptime monitor's top edge on
+         wide screens, on the first card's on phones. -->
+    <div class="int-board">
+    <HomelabWatch />
     <ul class="int-readers">
       <li class="int-reader">
         <h3>{copy.dashboard.label}</h3>
@@ -106,6 +107,7 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
         </div>
       </li>
     </ul>
+    </div>
 
     <a class="int-guide" href={INTEGRATIONS_URL}>{copy.guide}<Icon name="arrowRight" class="int-guide-icon" /></a>
   </div>
@@ -121,18 +123,28 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
     :root:not([data-theme="light"]) .int { --int-ok: oklch(0.74 0.14 155); }
   }
 
-  /* The heading and one sentence, the whole idea in a few seconds, beside the ghost on its round. */
-  .int-head { display: grid; gap: 1.5rem 2.5rem; align-items: start; }
-  .int-intro { min-width: 0; }
-  @media (min-width: 640px) {
-    .int-head { grid-template-columns: minmax(0, 1fr) auto; }
-  }
+  /* The heading and one sentence, the whole idea in a few seconds: a plain column. */
   .int-head h2 { max-width: 16ch; }
   .int-lead { max-width: 44ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
 
-  .int-readers { list-style: none; margin: clamp(2rem, 4vw, 3rem) 0 0; padding: 0; display: grid; gap: 1.75rem; }
-  .int-reader { display: grid; align-content: start; gap: 0.6rem; min-width: 0; }
-  .int-reader h3 { margin: 0; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+  /* The cards, and the night watch standing on them. The watch's foot line sits on the top edge
+     of the uptime monitor's card (the middle one, its right end), whose newest check beats in time
+     with each tick on the watch's clipboard; on phones, where the cards stack, on the first card's.
+     The space above the cards is the watch's perch. */
+  .int-board {
+    --int-label-h: 1.25rem;
+    --int-label-gap: 0.6rem;
+    --int-gap: 1.75rem;
+    position: relative; margin-top: 6.5rem;
+  }
+  .int-board > :global(.watch) {
+    position: absolute; z-index: 1; right: 0.85rem;
+    top: calc(var(--int-label-h) + var(--int-label-gap) + 1px);
+    transform: translateY(-100%);
+  }
+  .int-readers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--int-gap); }
+  .int-reader { display: grid; align-content: start; gap: var(--int-label-gap); min-width: 0; }
+  .int-reader h3 { margin: 0; font-size: 0.8125rem; line-height: var(--int-label-h); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
   .int-mock {
     position: relative; min-height: 13.5rem; padding: 1rem; overflow: hidden;
     border: 1px solid var(--border); border-radius: calc(var(--panel-radius) + 0.25rem); background: var(--int-mock-bg);
@@ -247,7 +259,14 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
   .int-guide:hover :global(.int-guide-icon) { transform: translateX(3px); }
 
   @media (min-width: 900px) {
-    .int-readers { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.25rem, 2.5vw, 2rem); }
+    .int-board { --int-gap: clamp(1.25rem, 2.5vw, 2rem); margin-top: 5.25rem; }
+    .int-readers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    /* The middle card's right end: one card and one gap in from the board's right edge. */
+    .int-board > :global(.watch) { right: calc((100% - 2 * var(--int-gap)) / 3 + var(--int-gap) + 0.85rem); }
+  }
+  /* Where the middle card is narrow, the watch stands a little smaller, clear of the card's label. */
+  @media (min-width: 900px) and (max-width: 1199px) {
+    .int-board > :global(.watch) { transform: translateY(-100%) scale(0.8); transform-origin: 100% 100%; }
   }
 
   /* Once, when each tool first comes into view: the checks come in one by one, the answer
@@ -264,6 +283,21 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
     .int-chat[data-awake] .int-tool { animation-delay: 700ms; }
     .int-chat[data-awake] .int-msg-agent { animation-delay: 1400ms; }
     .int-dash[data-awake] .int-field-status { animation: int-pop 420ms var(--ease-out) 500ms both; }
+  }
+  /* The monitor's newest check beats in time with the night watch's ticks (HomelabWatch.astro:
+     a 6s round, boxes ticked from 8% to 18%, 23% to 33%, and 38% to 48% of it). Both loops start
+     with the page's first style, so they keep step; the newest bar draws itself on a layer of its
+     own, so the bars' arrival above still applies to it. Stopped, it simply stands, like the rest. */
+  .int-beats i:last-child { position: relative; background: transparent; }
+  .int-beats i:last-child::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--int-ok); transform-origin: 50% 100%;
+  }
+  @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+    :global(:root:not([data-motion="paused"])) .int-beats i:last-child::before { animation: int-newest 6s var(--ease-out) infinite; }
+  }
+  @keyframes int-newest {
+    0%, 6%, 18%, 21%, 33%, 36%, 48%, 100% { opacity: 1; transform: none; }
+    8%, 23%, 38% { opacity: 0.2; transform: scaleY(0.2); }
   }
   @keyframes int-beat { from { opacity: 0; transform: scaleY(0.2); } to { opacity: 1; transform: none; } }
   @keyframes int-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

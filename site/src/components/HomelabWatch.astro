@@ -1,5 +1,6 @@
 ---
-// The homelab's night watch, beside "It reports to your homelab.": the ghost stands by a small
+// The homelab's night watch, perched on the cards of "It reports to your homelab." (Integrations.astro
+// places it, and keeps the monitor's newest check in time with its ticks): the ghost stands by a small
 // server rack whose status lights blink softly, and ticks its checklist, one box at a time, then
 // starts its round again. Flat like Ghost.tsx (one fill, an outline, no gloss); the ghost is the
 // default mist tone, Lantern Indigo on light pages and the white glowing ghost on dark ones.
@@ -65,7 +66,9 @@ const ROWS = [12, 24, 36]
   .watch-light-lantern { fill: var(--watch-lantern); }
   .watch-light { transform-box: fill-box; transform-origin: 50% 50%; }
 
-  .watch-ghost { position: absolute; left: 0; bottom: 0; line-height: 0; }
+  /* The ghost's hem stands on the watch's foot line, like the rack's feet (its drawing keeps a
+     margin under the hem). */
+  .watch-ghost { position: absolute; left: 0; bottom: -0.75rem; line-height: 0; }
   .watch-ghost :global(.ghost) { --ghost-cutout: var(--background); }
   /* The clipboard, held against the ghost's front, a little turned toward the rack. */
   .watch-clipboard { left: 3.4rem; bottom: 0.2rem; width: 2.3rem; height: 2.9rem; transform: rotate(8deg); }
