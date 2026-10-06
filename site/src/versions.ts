@@ -97,7 +97,7 @@ export const VERSIONS: readonly Version[] = [
         path: "/home/hero-e",
         tries: "After littleplains' diagram: an event's parts in outlined pills, hairlines through one outlined ghost to Sam's calendars, and small coloured segments that show what crosses over and what stops.",
         date: "2026-10-06",
-        commit: "0000000",
+        commit: "07ccbf1",
       },
     ],
   },
