@@ -64,7 +64,7 @@ const facts = [
 /** Each layout's sizes, in diagram units (the pills' are hero E2's). */
 const TYPE = {
   wide: { label: 13.5, name: 16.5, event: 13, avatar: 26, pad: 14, dayAvatar: 28, dayName: 16.5, account: 12.5, block: 12.5, hour: 10.5, chip: 11.5, kept: 11 },
-  tall: { label: 12, name: 13.5, event: 11.5, avatar: 18, pad: 9, dayAvatar: 22, dayName: 14, account: 11.5, block: 11.5, hour: 9.5, chip: 10.5, kept: 10 },
+  tall: { label: 12, name: 12.5, event: 10.5, avatar: 20, pad: 9, dayAvatar: 22, dayName: 14, account: 11.5, block: 11.5, hour: 9.5, chip: 10.5, kept: 10 },
 } as const
 
 /** A chip's size for its label: about half an em per letter, plus its padding. */
@@ -141,7 +141,11 @@ const motionCss = motion.map((item) => item.css).join("")
                 <defs>
                   {hub.pills.map((pill) => (
                     <clipPath id={id(pill.key)}>
-                      <circle cx={pill.x + type.pad + type.avatar / 2} cy={pill.y + pill.height / 2} r={type.avatar / 2} />
+                      {wide ? (
+                        <circle cx={pill.x + type.pad + type.avatar / 2} cy={pill.y + pill.height / 2} r={type.avatar / 2} />
+                      ) : (
+                        <circle cx={pill.x + pill.width / 2} cy={pill.y + 8 + type.avatar / 2} r={type.avatar / 2} />
+                      )}
                     </clipPath>
                   ))}
                   <clipPath id={id("day")}>
@@ -171,11 +175,30 @@ const motionCss = motion.map((item) => item.css).join("")
                 </g>
 
                 {hub.pills.map((pill) => {
-                  const middle = pill.y + pill.height / 2
-                  const textX = pill.x + type.pad + type.avatar + (wide ? 11 : 7)
-                  const line = wide ? 9 : 7.5
                   const title = eventTitle(pill.event.key)
-                  const event = wide ? format(hc.eventLine, { event: title, time: clock(pill.event.start) }) : title
+                  if (!wide) {
+                    // On a phone, a compact pill: the avatar over the calendar's name over its event.
+                    const cx = pill.x + pill.width / 2
+                    const avatarY = pill.y + 8
+                    const nameY = avatarY + type.avatar + 12
+                    return (
+                      <g class="hc-pill" data-calendar={pill.key}>
+                        <rect x={pill.x} y={pill.y} width={pill.width} height={pill.height} rx="6" />
+                        <circle class="hc-ring" cx={cx} cy={avatarY + type.avatar / 2} r={type.avatar / 2 + 2} />
+                        <image href={avatars[pill.key]} x={cx - type.avatar / 2} y={avatarY} width={type.avatar} height={type.avatar} clip-path={`url(#${id(pill.key)})`} />
+                        <text x={cx} y={nameY} text-anchor="middle" style={`font-size: ${type.name}px`}>
+                          <tspan x={cx}>{calendarName(pill.key)}</tspan>
+                          <tspan class="hc-muted" x={cx} dy={type.name * 1.15} style={`font-size: ${type.event}px`}>
+                            {title}
+                          </tspan>
+                        </text>
+                      </g>
+                    )
+                  }
+                  const middle = pill.y + pill.height / 2
+                  const textX = pill.x + type.pad + type.avatar + 11
+                  const line = 9
+                  const event = format(hc.eventLine, { event: title, time: clock(pill.event.start) })
                   return (
                     <g class="hc-pill" data-calendar={pill.key}>
                       <rect x={pill.x} y={pill.y} width={pill.width} height={pill.height} rx="6" />
@@ -247,13 +270,13 @@ const motionCss = motion.map((item) => item.css).join("")
                 </g>
 
                 <g class="hc-kept" style={`font-size: ${type.kept}px`}>
-                  <text class="hc-kept-caption" x={hub.kept.caption.x} y={hub.kept.caption.y} text-anchor={wide ? "middle" : "end"} style={`--hc-anim: ${timing.caption}`}>
+                  <text class="hc-kept-caption" x={hub.kept.caption.x} y={hub.kept.caption.y} text-anchor="middle" style={`--hc-anim: ${timing.caption}`}>
                     {hc.kept}
                   </text>
                   {hub.kept.titles.map((kept, index) => {
                     const title = eventTitle(kept.event)
                     const chip = keptChip(title)
-                    const left = wide ? kept.x - chip.width / 2 : kept.x - chip.width
+                    const left = kept.x - chip.width / 2
                     const icon = type.kept * 1.05
                     return (
                       <g class="hc-kept-title" data-source={kept.source} style={`--hc-anim: ${timing.kept[index]}`}>

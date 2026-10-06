@@ -258,9 +258,8 @@ for (const variant of VARIANTS) {
       const endless = (await animations(page)).filter((animation) => animation.endTime === Infinity)
       expect(endless.length).toBeGreaterThan(0)
       for (const animation of endless.filter((animation) => animation.governed)) expect(animation.state, animation.name).toBe("paused")
-      // Motion outside every demo either stops by itself within five seconds, or is a decorative
-      // loop the footer's site-wide Pause animations stops (WCAG 2.2.2).
-      await page.getByRole("button", { name: en.motion.pauseAll, exact: true }).click()
+      // Motion outside every demo stops by itself within five seconds of coming into view (WCAG
+      // 2.2.2): there is no site-wide control, so no decorative loop runs on.
       for (const animation of await animations(page)) {
         if (animation.governed || animation.state !== "running") continue
         expect(animation.endTime, animation.name).toBeLessThanOrEqual(5000)
@@ -1615,6 +1614,17 @@ test.describe("/home/hero-e4", () => {
       expect(views.y + views.height).toBeLessThanOrEqual(Math.min(...pills.map((pill) => pill.y)))
       expect(Math.max(...pills.map((pill) => pill.y + pill.height))).toBeLessThan(ghost.y)
       expect(ghost.y + ghost.height).toBeLessThan(day.y)
+      // The pills in one tidy row, the same height, side by side and apart.
+      for (const pill of pills) expect(Math.abs(pill.y - pills[0]!.y)).toBeLessThan(1)
+      for (const [index, pill] of pills.slice(1).entries()) expect(pill.x).toBeGreaterThan(pills[index]!.x + pills[index]!.width)
+      // What the ghost keeps back, centred under it, above the day, touching nothing else.
+      const kept = await Promise.all((await tall.locator(".hc-kept-title rect").all()).map(async (item) => (await item.boundingBox())!))
+      const ghostMiddle = ghost.x + ghost.width / 2
+      for (const chip of kept) {
+        expect(Math.abs(chip.x + chip.width / 2 - ghostMiddle)).toBeLessThan(2)
+        expect(chip.y).toBeGreaterThan(ghost.y + ghost.height * 0.8)
+        expect(chip.y + chip.height).toBeLessThan(day.y)
+      }
       await expectWorkSees(page, "tall")
       await context.close()
     })

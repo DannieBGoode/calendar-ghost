@@ -13,11 +13,12 @@
 //
 // Everything here is plain data and geometry, worked out at build time, so the page draws the
 // diagram, and starts its motion, without JavaScript. Two layouts share it: `wide` (pills on the
-// left, the day on the right) and `tall` for phones (pills on top, the ghost, then the day).
+// left, the day on the right) and `tall` for phones (a row of pills on top, the ghost and what it
+// keeps back, then the day).
 
 import type { Calendar } from "../../avatars"
 import { DAY_END, DAY_START, SAM_WEEK } from "../../demo/week"
-import { arcLength, cubicPath, link, turnDown, type Box, type Cubic, type Point } from "./node-diagram"
+import { arcLength, cubicPath, link, type Box, type Cubic, type Point } from "./node-diagram"
 
 export type CalendarKey = Calendar
 export type EventKey = "gym" | "clientCall" | "familyDinner"
@@ -215,31 +216,31 @@ function wideFrame(): Frame {
   }
 }
 
-/** Where each calendar sits on a phone: two columns, the right one half a row lower, so their
- * hairlines into the ghost never meet. */
-const TALL_PLACES: Record<CalendarKey, { column: 0 | 1; row: number }> = {
-  personal: { column: 0, row: 0 },
-  work: { column: 1, row: 0.5 },
-  family: { column: 0, row: 1 },
-}
+/**
+ * The phone layout, one tidy column down the screen: Sam's three calendars as a row of compact
+ * pills (avatar over name over event), each hairline dropping straight down into the ghost's head;
+ * under the ghost, centred, the titles it keeps back from Work; then the day. Chips leave the
+ * ghost by its right side and go down a lane of their own, beside the kept titles, into the day,
+ * so nothing they carry crosses anything else.
+ */
+export const TALL = { width: 300, pillGap: 8, pillHeight: 66, ghost: 64, keptPitch: 24, lane: 254 } as const
 
 function tallFrame(): Frame {
-  const width = 300
+  const { width } = TALL
   const center = width / 2
-  const pill = { width: 138, height: 40, pitch: 48 }
+  const pillWidth = (width - 1 - 2 * TALL.pillGap) / 3
   const top = 22
-  const pills = SOURCES.map((source) => {
-    const place = TALL_PLACES[source.key]
-    return { ...source, x: place.column === 0 ? 0.5 : width - pill.width - 0.5, y: top + place.row * pill.pitch, width: pill.width, height: pill.height }
-  })
-  const bottom = Math.max(...pills.map((item) => item.y + item.height))
-  const size = 64
-  const ghost = { x: center - size / 2, y: bottom + 30, width: size, height: size }
+  const pills = SOURCES.map((source, index) => ({ ...source, x: 0.5 + index * (pillWidth + TALL.pillGap), y: top, width: pillWidth, height: TALL.pillHeight }))
+  const size = TALL.ghost
+  const ghost = { x: center - size / 2, y: top + TALL.pillHeight + 40, width: size, height: size }
   const edges = ghostEdges(ghost)
   const hubIn = { x: center, y: edges.top.y - 3 }
-  const hubOut = { x: center, y: edges.bottom.y + 4 }
+  const hubOut = { x: edges.right.x + 2, y: edges.left.y + 6 }
+  const caption = { x: center, y: edges.bottom.y + 18 }
+  const title = (index: number) => ({ x: center, y: caption.y + 22 + index * TALL.keptPitch })
+  const keptBottom = title(1).y + 12
   const labelRow = 30
-  const day = dayBox({ x: 0.5, y: ghost.y + ghost.height + labelRow, width: width - 1 }, 42, 24, 40)
+  const day = dayBox({ x: 0.5, y: keptBottom + labelRow, width: width - 1 }, 42, 24, 40)
   return {
     width,
     height: Math.ceil(day.y + day.height + 1),
@@ -248,10 +249,12 @@ function tallFrame(): Frame {
     ghost,
     day,
     inset: 7,
-    into: (item) => turnDown({ x: item.x < center ? item.x + item.width : item.x, y: item.y + item.height / 2 }, hubIn),
-    out: () => link(hubOut, { x: center, y: day.y }, "y"),
+    into: (item) => link({ x: item.x + item.width / 2, y: item.y + item.height }, hubIn, "y"),
+    // Out to the right at once, then straight down the lane, so a chip is clear of the kept
+    // titles before it reaches their row.
+    out: () => ({ p0: hubOut, p1: { x: TALL.lane, y: hubOut.y }, p2: { x: TALL.lane, y: hubOut.y + 24 }, p3: { x: TALL.lane, y: day.y } }),
     shared: true,
-    kept: { caption: { x: ghost.x - 8, y: edges.left.y - 22 }, title: (index) => ({ x: ghost.x - 8, y: edges.left.y + index * 22 }) },
+    kept: { caption, title },
   }
 }
 
