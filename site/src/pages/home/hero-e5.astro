@@ -1,0 +1,13 @@
+---
+// Home page, hero iteration E5: hero E4 with an emoji before every event title it shows, and the
+// ghost glyph wherever a title is hidden from Work. See src/versions.ts.
+import { messagesFor } from "../../i18n"
+import HeroE5 from "../../variants/home-heroes/HeroE5.astro"
+import HomeHeroPage from "../../variants/home-heroes/HomeHeroPage.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<HomeHeroPage path="/home/hero-e5">
+  <HeroE5 m={m} />
+</HomeHeroPage>

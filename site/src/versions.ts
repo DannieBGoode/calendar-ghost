@@ -128,6 +128,14 @@ export const VERSIONS: readonly Version[] = [
         date: "2026-10-06",
         commit: "35e7017",
       },
+      {
+        name: "Hero E5: E4 with emoji",
+        status: "candidate",
+        path: "/home/hero-e5",
+        tries: "Hero E4 with a mark before each event: an emoji before every title it shows (the pills, the chips on their way in, the Personal calendar, Work's own meeting), and the ghost glyph wherever a title is hidden from Work (the Busy chips and blocks, the titles the ghost keeps back).",
+        date: "2026-10-07",
+        commit: "f41dcc7",
+      },
     ],
   },
   {

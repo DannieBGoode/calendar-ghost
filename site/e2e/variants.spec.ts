@@ -151,6 +151,15 @@ const VARIANTS = [
     loops: 3,
     controls: [".hc-view", ".hc-pause", ".hc-replay", ...HOME_CONTROLS],
   },
+  {
+    path: "/home/hero-e5",
+    title: en.hero.title,
+    rest: null,
+    headings: HOME_HEADINGS,
+    /** Hero E4's loop, the week, the home page's crossing. */
+    loops: 3,
+    controls: [".hc-view", ".hc-pause", ".hc-replay", ...HOME_CONTROLS],
+  },
 ]
 
 /** Scrolls through the whole page so every island hydrates and every once-only scene wakes. */
@@ -532,6 +541,11 @@ const HOME_HEROES = [
     path: "/home/hero-e4",
     /** The diagram starts above the fold: its switch and the column labels under it. Hero E4 has
      * its own line and no meta line. */
+    point: ".hc-views",
+    line: en.variants.homeHeroes.hubE4.line,
+    meta: false,
+  },  {
+    path: "/home/hero-e5",
     point: ".hc-views",
     line: en.variants.homeHeroes.hubE4.line,
     meta: false,
@@ -1714,4 +1728,33 @@ test.describe("the versions index", () => {
     await page.goto("/")
     await expect(page.getByRole("link", { name: VERSIONS_LINK_LABEL, exact: true })).toHaveCount(0)
   })
+})
+
+test.describe("/home/hero-e5", () => {
+  const emoji = en.variants.homeHeroes.hubE5.emoji
+  for (const [layout, width] of [["wide", 1440], ["tall", 390]] as const) {
+    test(`${layout}: an emoji before every title it shows, the ghost glyph wherever a title is hidden`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e5")
+      const diagram = page.locator(`.hc-${layout}`)
+      // The drawing, emoji and all, is hidden from screen readers; the facts list reads the titles.
+      await expect(diagram.locator("svg.hc-svg")).toHaveAttribute("aria-hidden", "true")
+      await expect(page.locator(".hc ul.sr-only li").first()).not.toContainText(emoji.gym)
+      const pills = diagram.locator(".hc-pill text")
+      await expect(pills.nth(0)).toContainText(`${emoji.gym}\u00a0${en.demo.events.gym.title}`)
+      await expect(pills.nth(1)).toContainText(`${emoji.clientCall}\u00a0${en.demo.events.clientCall.title}`)
+      await expect(pills.nth(2)).toContainText(`${emoji.familyDinner}\u00a0${en.variants.homeHeroes.hubE4.events.familyDinner}`)
+      // Work's own meeting keeps its emoji; each Busy block and each kept title carries the glyph.
+      await expect(diagram.locator('.hc-block[data-shows="own"]')).toContainText(emoji.clientCall)
+      for (const block of await diagram.locator('.hc-block[data-shows="busy"]').all()) await expect(block.locator(".hc-glyph")).toHaveCount(1)
+      for (const kept of await diagram.locator(".hc-kept-title").all()) {
+        await expect(kept.locator(".hc-glyph")).toHaveCount(1)
+        await expect(kept.locator(".hc-eye")).toHaveCount(0)
+      }
+      // The Busy chips after the ghost carry the glyph too.
+      for (const chip of await diagram.locator('.hc-chip[data-side="out"][data-shows="busy"]').all()) await expect(chip.locator(".hc-glyph")).toHaveCount(1)
+      await context.close()
+    })
+  }
 })

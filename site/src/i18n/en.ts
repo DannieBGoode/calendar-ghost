@@ -579,6 +579,12 @@ export const en = {
          * `motion.play`, which contain these. */
         controls: { pause: "Pause", play: "Play", replay: "Replay" },
       },
+      /** Hero E5 (/home/hero-e5): hero E4 with a mark before each event. An emoji stands before
+       * every title the drawing shows; where a title is hidden from Work, the ghost glyph does.
+       * The drawing is hidden from screen readers, which read hero E4's facts instead. */
+      hubE5: {
+        emoji: { gym: "🏋️", clientCall: "💼", familyDinner: "🍝", dentist: "🦷" },
+      },
     },
   },
 }
