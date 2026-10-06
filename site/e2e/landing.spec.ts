@@ -128,12 +128,26 @@ test("small controls are at least 44px tall", async ({ browser }) => {
   await context.close()
 })
 
-test("the footer's dozing ghost says nothing; the five-minute line is plain text", async ({ page }) => {
-  await page.goto("/")
-  const watch = page.locator(".footer-watch")
-  await expect(watch.locator(".speech-bubble")).toHaveCount(0)
-  await expect(watch.locator('.ghost[data-face="sleepy"]')).toHaveCount(1)
-  await expect(watch.locator("p")).toHaveText(en.footer.watch)
+test("the footer's dozing ghost mumbles in its sleep, over its head, and the five-minute line is plain text", async ({ browser }) => {
+  for (const options of [{}, { reducedMotion: "reduce" as const }, { javaScriptEnabled: false }, { viewport: { width: 390, height: 844 } }]) {
+    const context = await browser.newContext(options)
+    const page = await context.newPage()
+    await page.goto("/")
+    const watch = page.locator(".footer-watch")
+    await expect(watch.locator('.ghost[data-face="sleepy"]')).toHaveCount(1)
+    await expect(watch.locator("p.footer-watch-note")).toHaveText(en.footer.watch)
+    const bubble = watch.locator(".speech-bubble")
+    await expect(bubble).toHaveText(en.footer.sleepTalk)
+    await bubble.scrollIntoViewIfNeeded()
+    // It comes once the ghost has dozed off (at once, still, without motion or JavaScript).
+    await expect(bubble).toHaveCSS("opacity", "1", { timeout: 6000 })
+    const box = (await bubble.boundingBox())!
+    const ghost = (await watch.locator(".ghost").boundingBox())!
+    expect(box.y + box.height).toBeLessThanOrEqual(ghost.y + ghost.height * 0.3)
+    expect(box.x).toBeGreaterThanOrEqual(0)
+    expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+    await context.close()
+  }
 })
 
 for (const path of ["/", "/bold"]) {
@@ -447,8 +461,9 @@ for (const path of ["/", "/bold", "/journey"]) {
       await expect(footer.getByText(en.footer.noTrackers, { exact: true })).toBeVisible()
       await expect(footer.getByText(en.footer.noTrackersBody, { exact: true })).toBeVisible()
       await expect(footer).not.toContainText("network tab")
-      // A sleeping ghost does not talk.
-      await expect(footer.locator(".speech-bubble")).toHaveCount(0)
+      // The home page's sleeping ghost only mumbles its five more minutes; the other endings stay quiet.
+      if (path === "/") await expect(footer.locator(".speech-bubble")).toHaveText([en.footer.sleepTalk])
+      else await expect(footer.locator(".speech-bubble")).toHaveCount(0)
     })
 
     for (const width of [1440, 390]) {

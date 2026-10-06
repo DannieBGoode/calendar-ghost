@@ -335,6 +335,9 @@ export const en = {
     noTrackersBody: "No analytics, no cookies, nothing loaded from another site.",
     /** Under the dozing ghost on the home page's footer: narration, not speech. */
     watch: "Sync runs every five minutes. In between, the ghost naps.",
+    /** What the dozing ghost mumbles in its sleep, like a child in bed: sync runs every five
+     * minutes, so five more minutes is exactly its nap. */
+    sleepTalk: "Five more minutes, please.",
   },
   notFound: {
     title: "Nothing here but a ghost.",
