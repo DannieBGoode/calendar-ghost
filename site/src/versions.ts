@@ -89,7 +89,7 @@ export const VERSIONS: readonly Version[] = [
         path: "/home/hero-d",
         tries: "After littleplains: Sam's Dentist as work sees it without Calendar Ghost (every detail) and with it, where the rule's lines tick in until only Busy is left.",
         date: "2026-10-06",
-        commit: "0000000",
+        commit: "4341630",
       },
     ],
   },
