@@ -1364,7 +1364,8 @@ test.describe("/home/hero-e3", () => {
     expect(line.y).toBeGreaterThan(title.y + title.height - 1)
     expect(ctas.y).toBeGreaterThan(line.y + line.height - 1)
     expect(meta.y + meta.height).toBeLessThan(figure.y)
-    expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).letterSpacing)).toMatch(/^-0\.\d+px$/)
+    // Besley at its natural spacing: never tightened (the display face changed after this hero).
+    expect(parseFloat(await page.locator("h1").evaluate((element) => getComputedStyle(element).letterSpacing))).toBeGreaterThanOrEqual(0)
   })
 
   for (const [width, height] of [

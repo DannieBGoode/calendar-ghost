@@ -173,7 +173,9 @@ const TYPE = {
   /* From 1000px the headline and the pitch share one band over the diagram, so the whole diagram
      fits the first screen of a laptop. */
   @media (min-width: 1000px) {
-    .hh-e { padding-top: clamp(1.5rem, 4vh, 3rem); }
+    /* Besley's two lines stand a little taller than the face this hero was drawn with, so the
+       band starts a little higher on short screens. */
+    .hh-e { padding-top: clamp(1rem, 2.5vh, 3rem); }
     .hh-e-copy {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 27rem);
