@@ -31,6 +31,12 @@ function Mark({ name, className }: { name: IconName; className: string }) {
  * - `--crossing-source-w`: the source card's width, for the look-alike the copy starts as.
  * - `--crossing-fetch-x/y`: from the ghost's resting place to where it takes the copy.
  * - `--crossing-set-x/y`: from the ghost's resting place to where it sets the copy down.
+ *
+ * Stacked (phones), the Dentist card is wider and taller than the lane between the calendars, so
+ * the copy does not start over it: it comes out under the Personal card already at the slot's
+ * size, in the lane, the ghost above it holding it up, and goes straight down the lane into the
+ * 15:00 slot, covering nothing on the way (`--crossing-lane` turns the look-alike off and shows the
+ * copy's own words from the start; the lift is off).
  */
 function measureRun(stage: HTMLElement): CSSProperties {
   // Where each part sits without the run's own transform, so a run restarted midway (a new
@@ -44,13 +50,38 @@ function measureRun(stage: HTMLElement): CSSProperties {
   const source = box(".crossing-personal .crossing-source")
   const landed = box(".crossing-landed")
   const ghost = box(".crossing-ghost")
-  // The ghost holds the copy by its top right corner, its hem over the copy's edge; never so far
-  // right that the ghost would leave the demo (on a phone the cards reach the demo's edge).
+  const personal = box(".crossing-personal")
+  const work = box(".crossing-work")
+  const px = (value: number) => `${Math.round(value)}px`
+  const ratio = (value: number) => (Number.isFinite(value) && value > 0 ? value.toFixed(4) : "1")
+
+  if (work.top >= personal.bottom) {
+    // Stacked: the ghost stands on the copy's top edge, at its right end, and both go down the
+    // lane together.
+    const holdX = landed.right - ghost.width - 6 - ghost.left
+    const holdY = (top: number) => top - ghost.height * 0.86 - ghost.top
+    const copyTop = personal.bottom + 8 + ghost.height * 0.86
+    return {
+      "--crossing-lane": "1",
+      "--crossing-lift": "0px",
+      "--crossing-copy-x": "0px",
+      "--crossing-copy-y": px(copyTop - landed.top),
+      "--crossing-copy-sx": "1",
+      "--crossing-copy-sy": "1",
+      "--crossing-copy-s": "1",
+      "--crossing-source-w": `${landed.width.toFixed(2)}px`,
+      "--crossing-fetch-x": px(holdX),
+      "--crossing-fetch-y": px(holdY(copyTop)),
+      "--crossing-set-x": px(holdX),
+      "--crossing-set-y": px(holdY(landed.top)),
+    } as CSSProperties
+  }
+
+  // Side by side: the ghost holds the copy by its top right corner, its hem over the copy's edge;
+  // never so far right that the ghost would leave the demo.
   const edge = stage.getBoundingClientRect().right - ghost.width * 0.28
   const holdX = (right: number) => Math.min(right, edge) - ghost.width * 0.72 - ghost.left
   const holdY = (top: number) => top - ghost.height * 0.62 - ghost.top
-  const px = (value: number) => `${Math.round(value)}px`
-  const ratio = (value: number) => (Number.isFinite(value) && value > 0 ? value.toFixed(4) : "1")
   const sx = source.width / landed.width
   const sy = source.height / landed.height
   return {

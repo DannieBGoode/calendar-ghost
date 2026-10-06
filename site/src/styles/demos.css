@@ -355,8 +355,9 @@
 .crossing-explain { flex: 1 1 16rem; margin: 0; font-size: 1.0625rem; line-height: 1.45; color: var(--foreground); }
 .crossing-bar .motion-toggle { margin-left: auto; color: var(--muted-foreground); }
 
-/* Stacked on narrow screens: Personal, the ghost's lane, then Work. */
-.crossing-stage { position: relative; display: grid; grid-template-rows: auto 6.5rem auto; }
+/* Stacked on narrow screens: Personal, the ghost's lane, then Work. The lane is tall enough for
+   the copy and the ghost holding it, so in flight they cover neither calendar. */
+.crossing-stage { position: relative; display: grid; grid-template-rows: auto 11.5rem auto; }
 .crossing-personal { grid-row: 1; }
 .crossing-work { grid-row: 3; }
 .crossing-side { min-width: 0; }
@@ -554,19 +555,20 @@
   76%, 100% { transform: none; }
 }
 @keyframes crossing-words {
-  0%, 36% { transform: scale(var(--crossing-copy-s, 1)); opacity: 0; }
-  39% { opacity: 0; }
+  0%, 36% { transform: scale(var(--crossing-copy-s, 1)); opacity: var(--crossing-lane, 0); }
+  39% { opacity: var(--crossing-lane, 0); }
   44% { opacity: 1; }
   76%, 100% { transform: none; opacity: 1; }
 }
 @keyframes crossing-lookalike {
-  0%, 36% { transform: none; opacity: 1; }
+  0%, 36% { transform: none; opacity: calc(1 - var(--crossing-lane, 0)); }
   39% { opacity: 0; }
   76%, 100% { transform: scale(calc(1 / var(--crossing-copy-sx, 1))); opacity: 0; }
 }
 @keyframes crossing-up { 0%, 30% { opacity: 0; } 36%, 76% { opacity: 1; } 84%, 100% { opacity: 0; } }
 @keyframes crossing-tint { 0%, 40% { opacity: 1; } 62%, 100% { opacity: 0; } }
-@keyframes crossing-drop { 0%, 38% { opacity: 1; } 52%, 100% { opacity: 0; } }
-@keyframes crossing-busy { 0%, 48% { opacity: 0; } 60%, 100% { opacity: 1; } }
+/* One label at a time: what the choice leaves out is gone before Busy comes in. */
+@keyframes crossing-drop { 0%, 38% { opacity: 1; } 46%, 100% { opacity: 0; } }
+@keyframes crossing-busy { 0%, 48% { opacity: 0; } 56%, 100% { opacity: 1; } }
 @keyframes crossing-face-first { 0%, 84% { opacity: 1; } 88%, 100% { opacity: 0; } }
 @keyframes crossing-face-then { 0%, 84% { opacity: 0; } 88%, 100% { opacity: 1; } }

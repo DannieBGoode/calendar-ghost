@@ -64,9 +64,8 @@ test("without JavaScript, the content and the hero's resting state are there", a
   // No CSS state gates the bubble without JavaScript: the ghost just says the resting line.
   await expect(page.locator(".crossing-says")).toHaveText(en.ghost.crossingBusy)
   await expect(page.locator("#how-it-works .how-preview-row").first()).toContainText(en.demo.busy)
-  // Nothing loops without JavaScript, so there is nothing to pause, not even site-wide.
+  // Nothing loops without JavaScript, so there is nothing to pause.
   await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
-  await expect(page.locator("[data-motion-toggle]")).toBeHidden()
   await context.close()
 })
 
@@ -92,92 +91,65 @@ test("every self-running demo has a pause control a finger can hit", async ({ pa
   }
 })
 
-test("with reduced motion, there is nothing to pause, and the site-wide control says animations are off", async ({ page }) => {
+test("with reduced motion, there is nothing to pause", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   await page.goto("/")
   await expect(page.locator(".reveal-frame")).toBeVisible()
   await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
-  const all = page.getByRole("button", { name: en.motion.pausedByDevice, exact: true })
-  await expect(all).toBeVisible()
-  await expect(all).toHaveAttribute("aria-disabled", "true")
-  await expect(page.getByRole("button", { name: en.motion.pauseAll, exact: true })).toHaveCount(0)
 })
 
-/** The animations running under `selector` (the ghost's loops), counted in the page. */
+/** The animations running under `selector` (its own and its pseudo-elements'), counted. */
 const running = (page: Page, selector: string) =>
-  page
-    .locator(selector)
-    .evaluate((element) => element.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length)
+  page.locator(selector).evaluate((element) =>
+    document
+      .getAnimations()
+      .filter((animation) => {
+        const target = (animation.effect as KeyframeEffect | null)?.target
+        return animation.playState === "running" && target instanceof Element && (target === element || element.contains(target))
+      }).length,
+  )
 
-test("the footer's sleeping ghost, the health ghost, and the homelab's night watch keep looping, past five seconds", async ({ page }) => {
+/** The longest any animation under `selector` runs, from its start, in milliseconds. */
+const longest = (page: Page, selector: string) =>
+  page.locator(selector).evaluate((element) =>
+    Math.max(
+      0,
+      ...document
+        .getAnimations()
+        .filter((animation) => {
+          const target = (animation.effect as KeyframeEffect | null)?.target
+          return target instanceof Element && (target === element || element.contains(target))
+        })
+        .map((animation) => Number(animation.effect?.getComputedTiming().endTime ?? 0)),
+    ),
+  )
+
+test("the decorative loops play for at most five seconds each time they come into view, then again on the next visit", async ({ page }) => {
   await page.goto("/")
-  for (const selector of [".footer-watch .ghost", ".mock-health .ghost", "#integrations .watch"]) {
+  for (const selector of [".footer-watch .ghost", ".mock-health .ghost", "#integrations .watch", "#integrations .int-mon"]) {
     await page.locator(selector).scrollIntoViewIfNeeded()
-    expect(await running(page, selector), selector).toBeGreaterThan(0)
+    await expect.poll(() => running(page, selector), { message: selector }).toBeGreaterThan(0)
+    expect(await longest(page, selector), selector).toBeLessThanOrEqual(5000)
   }
-  // Still afloat after the old five-second idle would have ended.
-  await page.locator(".footer-watch .ghost").scrollIntoViewIfNeeded()
-  await page.waitForTimeout(5600)
-  expect(await running(page, ".footer-watch .ghost")).toBeGreaterThan(0)
-  const float = await page.locator(".footer-watch .ghost-float").evaluate((element) => getComputedStyle(element).animationIterationCount)
-  expect(float).toBe("infinite")
+  // The footer's sleeper settles, then wakes again when it comes back into view.
+  const sleeper = ".footer-watch .ghost"
+  await page.locator(sleeper).scrollIntoViewIfNeeded()
+  await expect.poll(() => running(page, sleeper), { timeout: 7000 }).toBe(0)
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await expect(page.locator(".footer-watch .ghost")).not.toHaveAttribute("data-awake")
+  await page.locator(sleeper).scrollIntoViewIfNeeded()
+  await expect.poll(() => running(page, sleeper)).toBeGreaterThan(0)
 })
 
-test("the footer's Pause animations stops every loop, is remembered, and applies before first paint", async ({ page }) => {
-  await page.goto("/")
-  const all = page.locator("footer").getByRole("button", { name: en.motion.pauseAll, exact: true })
-  const play = page.locator("footer").getByRole("button", { name: en.motion.playAll, exact: true })
-  await all.scrollIntoViewIfNeeded()
-  await expect(all).toBeVisible()
-  expect((await all.boundingBox())!.height).toBeGreaterThanOrEqual(44)
-  // Its words say what it does; it is not a pressed-state toggle whose name would then mislead.
-  await expect(all).not.toHaveAttribute("aria-pressed")
-  await page.locator(".footer-watch .ghost").scrollIntoViewIfNeeded()
-  expect(await running(page, ".footer-watch .ghost")).toBeGreaterThan(0)
-
-  await all.click()
-  await expect(play).toBeVisible()
-  await expect(all).toHaveCount(0)
-  await expect(page.locator("html")).toHaveAttribute("data-motion", "paused")
-  expect(await running(page, ".footer-watch .ghost")).toBe(0)
-  expect(await running(page, ".mock-health .ghost")).toBe(0)
-  expect(await running(page, "#integrations .watch")).toBe(0)
-  expect(await running(page, ".int-mon")).toBe(0)
-  // The footer's sleep talk is simply there.
-  await expect(page.locator(".footer-sleep-talk")).toHaveCSS("opacity", "1")
-  // The demos rest too, so their own pause controls go.
-  await page.locator(".haunt").scrollIntoViewIfNeeded()
-  await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
-  const split = () => page.locator(".reveal-frame").evaluate((frame) => getComputedStyle(frame).getPropertyValue("--split").trim())
-  const still = await split()
-  await page.waitForTimeout(800)
-  expect(await split()).toBe(still)
-
-  // Remembered, and on <html> before any module script runs.
-  await page.reload({ waitUntil: "commit" })
-  await page.waitForSelector("html[data-motion='paused']", { state: "attached" })
-  await expect(play).toBeAttached()
-  expect(await page.evaluate(() => localStorage.getItem("calendar-ghost-site-motion"))).toBe("paused")
-
-  // Pressed again, everything moves again.
-  await play.scrollIntoViewIfNeeded()
-  await play.click()
-  await expect(all).toBeVisible()
-  await expect(page.locator("html")).not.toHaveAttribute("data-motion")
-  await page.locator(".footer-watch .ghost").scrollIntoViewIfNeeded()
-  expect(await running(page, ".footer-watch .ghost")).toBeGreaterThan(0)
-})
-
-for (const path of ["/", "/bold", "/journey", "/home/hero-e4", "/docs/self-hosting"]) {
-  test(`${path}: the site-wide Pause animations sits in the footer's small print, not in the nav`, async ({ page }) => {
+test("there is no site-wide animations control, and the footer keeps only the license link", async ({ page }) => {
+  for (const path of ["/", "/bold", "/journey", "/docs/self-hosting"]) {
     await page.goto(path)
-    await expect(page.locator("header.nav button[data-motion-toggle]")).toHaveCount(0)
-    const all = page.locator(".flinks-base").getByRole("button", { name: en.motion.pauseAll, exact: true })
-    await all.scrollIntoViewIfNeeded()
-    await expect(all).toBeVisible()
-    expect((await all.boundingBox())!.height).toBeGreaterThanOrEqual(44)
-  })
-}
+    await expect(page.getByRole("button", { name: /animations/i })).toHaveCount(0)
+    await expect(page.locator(".flinks")).not.toContainText("GNU AGPL, version 3")
+    await expect(page.locator(".flinks").getByRole("link", { name: en.footer.licenseLink })).toHaveCount(1)
+  }
+  expect(await page.evaluate(() => localStorage.getItem("calendar-ghost-site-motion"))).toBeNull()
+})
 
 test("at 320px the nav fits the name, the menu, and the theme toggle", async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 320, height: 640 } })
@@ -463,7 +435,65 @@ for (const path of ["/", "/bold"]) {
     await expect(bubble).toHaveText(en.ghost.crossingDetails)
   })
 
-  for (const width of [1440, 1024, 390]) {
+  for (const width of [390, 320]) {
+    test(`${path} at ${width}px: the carried card goes down the lane, covering nothing, one label at a time, into the 15:00 slot`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 1000 })
+      await page.goto(path)
+      const crossing = page.locator(".crossing")
+      for (const mode of [en.crossing.busyOnly, en.crossing.withDetails]) {
+        await crossing.scrollIntoViewIfNeeded()
+        if (mode === en.crossing.withDetails) await crossing.getByRole("button", { name: mode }).click()
+        await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
+        const at = (time: number) =>
+          crossing.evaluate((element, time) => {
+            for (const animation of element.getAnimations({ subtree: true })) {
+              animation.pause()
+              animation.currentTime = time
+            }
+            const box = (selector: string) => element.querySelector(selector)!.getBoundingClientRect().toJSON() as DOMRect
+            const shown = (selector: string) => {
+              const style = getComputedStyle(element.querySelector(selector)!)
+              return style.visibility === "hidden" ? 0 : Number(style.opacity)
+            }
+            return {
+              card: box(".crossing-landed-box"),
+              ghost: box(".crossing-ghost .ghost"),
+              personal: box(".crossing-personal .crossing-event"),
+              slot: box(".crossing-landed"),
+              hour: box(".crossing-hour:nth-child(2)"),
+              title: shown(".crossing-landed-title"),
+              busy: shown(".crossing-landed-busy"),
+            }
+          }, time)
+        // Out of the Personal card, in the lane: below the card and its chips, at the slot's size.
+        for (const time of [0.3, 0.45, 0.55]) {
+          const frame = await at(4800 * time)
+          expect(frame.card.y, `${time}`).toBeGreaterThanOrEqual(frame.personal.y + frame.personal.height)
+          expect(frame.ghost.y + frame.ghost.height * 0.5).toBeGreaterThanOrEqual(frame.personal.y + frame.personal.height)
+          expect(Math.abs(frame.card.width - frame.slot.width)).toBeLessThan(1.5)
+          // The ghost holds it from above, clear of the card's words.
+          expect(frame.ghost.y + frame.ghost.height * 0.75).toBeLessThanOrEqual(frame.card.y + 2)
+          // One label at a time.
+          expect(Math.min(frame.title, frame.busy), `${time}: one label`).toBeLessThan(0.05)
+        }
+        const landed = await at(4800 * 0.9)
+        expect(Math.abs(landed.card.y - landed.slot.y)).toBeLessThan(1.5)
+        expect(Math.abs(landed.card.y - landed.hour.y)).toBeLessThan(landed.hour.height / 2)
+        await expect(crossing.locator(".crossing-landed-box")).toBeVisible()
+        await crossing.evaluate((element) =>
+          element
+            .getAnimations({ subtree: true })
+            .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+            .forEach((animation) => animation.finish()),
+        )
+        await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
+      }
+    })
+  }
+
+  for (const width of [1440, 1024]) {
     test(`${path} at ${width}px: the carried card starts at the Dentist card's size and lands at the slot's, without a jump`, async ({
       page,
     }) => {
@@ -1002,57 +1032,61 @@ test.describe("the Haunted Week", () => {
   })
 })
 
-test("the night watch perches on the cards it reports to, and ticks in time with the monitor's newest check", async ({ browser }) => {
-  for (const width of [1440, 1024, 390]) {
+test("the night watch stands just above the cards, clear of them, and ticks in time with the monitor's newest check", async ({ browser }) => {
+  for (const width of [1440, 1024, 390, 320]) {
     const context = await browser.newContext({ viewport: { width, height: 900 } })
     const page = await context.newPage()
     await page.goto("/")
     const watch = page.locator("#integrations .watch")
     await watch.scrollIntoViewIfNeeded()
-    // Not beside the heading: the heading block is a plain column.
-    await expect(page.locator("#integrations .int-head .watch")).toHaveCount(0)
-    // Wide, on the uptime monitor's card (the middle one); on a phone, on the first card.
-    const card = page.locator("#integrations .int-mock").nth(width >= 900 ? 1 : 0)
-    const cardBox = (await card.boundingBox())!
-    const rack = (await watch.locator(".watch-rack").boundingBox())!
-    const ghost = (await watch.locator(".ghost").boundingBox())!
-    expect(Math.abs(rack.y + rack.height - cardBox.y), `${width}px: the rack stands on the card`).toBeLessThan(4)
-    expect(ghost.y + ghost.height).toBeGreaterThan(cardBox.y - 16)
-    expect(ghost.x).toBeGreaterThanOrEqual(cardBox.x)
-    expect(rack.x + rack.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
-    // Clear of the heading block and of the card's label.
-    const head = (await page.locator("#integrations .int-head").boundingBox())!
-    expect(ghost.y).toBeGreaterThan(head.y + head.height)
-    // The label's words (its box spans the card), measured as text.
-    const labelEnd = await page.locator("#integrations .int-reader h3").nth(width >= 900 ? 1 : 0).evaluate((heading) => {
-      const range = document.createRange()
-      range.selectNodeContents(heading)
-      return range.getBoundingClientRect().right
-    })
-    expect(ghost.x, `${width}px: clear of the card's label`).toBeGreaterThan(labelEnd)
+    const box = (await watch.boundingBox())!
+    const labels = page.locator("#integrations .int-reader h3")
+    const firstLabel = (await labels.first().boundingBox())!
+    // 24 to 32px above the cards' labels, overlapping no card and no label.
+    const gap = firstLabel.y - (box.y + box.height)
+    expect(gap, `${width}px: gap above the labels`).toBeGreaterThanOrEqual(24)
+    expect(gap, `${width}px: gap above the labels`).toBeLessThanOrEqual(32)
+    for (const item of await page.locator("#integrations .int-reader").all()) {
+      const card = (await item.boundingBox())!
+      expect(box.y + box.height <= card.y || box.x + box.width <= card.x || box.x >= card.x + card.width, `${width}px: clear of a card`).toBe(true)
+    }
+    const lead = (await page.locator("#integrations .int-lead").boundingBox())!
+    if (width >= 900) {
+      // In the heading row's right half, its feet on the line of the sentence's last line, over
+      // the right two cards, clear of the sentence.
+      expect(Math.abs(box.y + box.height - (lead.y + lead.height)), `${width}px: on the sentence's line`).toBeLessThan(4)
+      const middle = (await page.locator("#integrations .int-mock").nth(1).boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(middle.x)
+      const leadEnd = await page.locator("#integrations .int-lead").evaluate((lead) => {
+        const range = document.createRange()
+        range.selectNodeContents(lead)
+        return Math.max(...[...range.getClientRects()].map((rect) => rect.right))
+      })
+      expect(box.x, `${width}px: clear of the sentence`).toBeGreaterThan(leadEnd)
+    } else {
+      // On a phone, its own row under the sentence, at the right.
+      expect(box.y).toBeGreaterThanOrEqual(lead.y + lead.height)
+      expect(box.x + box.width).toBeLessThanOrEqual(width)
+    }
     await context.close()
   }
 
   const context = await browser.newContext()
   const page = await context.newPage()
   await page.goto("/")
-  await page.locator("#integrations .int-mon").scrollIntoViewIfNeeded()
+  await page.locator("#integrations .watch").scrollIntoViewIfNeeded()
+  await expect(page.locator("#integrations .watch")).toHaveAttribute("data-awake", "")
   const timing = await page.evaluate(() => {
     const all = document.getAnimations() as CSSAnimation[]
     const pick = (name: string) => all.filter((animation) => animation.animationName.includes(name))
-    const ticks = pick("watch-tick")
-    const newest = pick("int-newest")
-    const start = (animation: Animation) => Number(animation.startTime) + Number(animation.effect?.getTiming().delay ?? 0)
-    return {
-      ticks: ticks.map((animation) => ({ start: start(animation), duration: animation.effect?.getTiming().duration })),
-      newest: newest.map((animation) => ({ start: start(animation), duration: animation.effect?.getTiming().duration })),
-    }
+    const describe = (animation: Animation) => ({ start: Number(animation.startTime), end: Number(animation.effect?.getComputedTiming().endTime) })
+    return { ticks: pick("watch-tick").map(describe), newest: pick("int-newest").map(describe) }
   })
   expect(timing.ticks).toHaveLength(3)
   expect(timing.newest).toHaveLength(1)
-  expect(timing.newest[0]!.duration).toBe(timing.ticks[0]!.duration)
-  // The first tick and the newest check start their round together; the others follow 0.9s apart.
-  expect(Math.abs(timing.newest[0]!.start - timing.ticks[0]!.start)).toBeLessThan(20)
+  // They start from the same change, and the newest check's last beat lands with the last tick.
+  for (const tick of timing.ticks) expect(Math.abs(tick.start - timing.newest[0]!.start)).toBeLessThan(20)
+  expect(timing.newest[0]!.end).toBe(Math.max(...timing.ticks.map((tick) => tick.end)))
   await context.close()
 })
 
