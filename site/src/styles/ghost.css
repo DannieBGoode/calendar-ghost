@@ -1,8 +1,9 @@
 /* The ghost character (src/islands/Ghost.tsx) and its speech bubble. The art is flat, like the
    app's ghost: one fill, an outline a shade deeper in the same hue, a deeper shade for the binder
    tabs, and the face. No cheeks, no shine, no gradients in the drawing.
-   Tones: mist is the default character, the white ghost; lantern is the indigo brand, for a few
-   accents; moss is the Overview's healthy green, only where it means "healthy". Each tone sets the
+   Tones: mist is the default character, the white ghost on dark pages and filled Lantern Indigo
+   on light ones; lantern is the indigo brand, for a few accents; moss is the Overview's healthy
+   green, only where it means "healthy". Each tone sets the
    body, its outline, the tabs, the ink of the face, the small props around it, and its glow.
    Every color is a light-dark() pair, so a ghost follows the device's appearance and also any
    band that declares `color-scheme: dark` (the night bands draw it as in dark appearance). */
@@ -35,14 +36,15 @@
   --ghost-ink: light-dark(oklch(0.22 0.07 280), oklch(0.2 0.045 280));
   --ghost-glow: light-dark(oklch(0.72 0.12 278 / 0.3), oklch(0.7 0.13 278 / 0.38));
 }
-/* The white ghost. On light surfaces it keeps a visible indigo-grey outline and a faint glow, so
-   it never disappears into the page; on dark ones it is the lantern itself. */
+/* The default ghost. On dark surfaces it is the white ghost, the lantern itself, glowing softly.
+   On light ones a white ghost reads as hollow on the near-white canvas, so it takes the lantern
+   tone's filled indigo (its body, outline, tabs, face, and glow). */
 .ghost[data-tone="mist"] {
-  --ghost-body: light-dark(oklch(0.988 0.006 285), oklch(0.965 0.016 285));
-  --ghost-edge: light-dark(oklch(0.68 0.075 280), oklch(0.9 0.035 285));
-  --ghost-tab: light-dark(oklch(0.8 0.06 281), oklch(0.84 0.045 285));
-  --ghost-ink: light-dark(oklch(0.3 0.1 278), oklch(0.22 0.05 280));
-  --ghost-glow: light-dark(oklch(0.8 0.09 282 / 0.42), oklch(0.9 0.07 285 / 0.4));
+  --ghost-body: light-dark(oklch(0.71 0.125 278), oklch(0.965 0.016 285));
+  --ghost-edge: light-dark(oklch(0.62 0.13 278), oklch(0.9 0.035 285));
+  --ghost-tab: light-dark(oklch(0.62 0.13 278), oklch(0.84 0.045 285));
+  --ghost-ink: light-dark(oklch(0.22 0.07 280), oklch(0.22 0.05 280));
+  --ghost-glow: light-dark(oklch(0.72 0.12 278 / 0.3), oklch(0.9 0.07 285 / 0.4));
 }
 
 /* The glow: a soft radial lantern light behind the ghost, never on cards or text. It is part of
@@ -59,8 +61,13 @@
 
 .ghost-body { fill: var(--ghost-body); stroke: var(--ghost-edge); stroke-width: 1.4; stroke-linejoin: round; }
 .ghost-tab { fill: var(--ghost-tab); }
-/* A ring of the surface around the silhouette, so the ghost reads on top of busy demos. */
-.ghost-cutout { fill: var(--ghost-cutout); stroke: var(--ghost-cutout); stroke-width: 5; stroke-linejoin: round; }
+/* A ring of the surface around the silhouette, so the ghost reads on top of busy demos. Dark
+   pages only: on light ones the filled ghost's own outline is enough, and a ring of the page's
+   colour reads as a sticker's white border wherever the ghost overlaps another surface. */
+.ghost-cutout {
+  fill: light-dark(transparent, var(--ghost-cutout)); stroke: light-dark(transparent, var(--ghost-cutout));
+  stroke-width: 5; stroke-linejoin: round;
+}
 .ghost-shadow { fill: var(--ghost-shadow); }
 
 /* Every moving part turns around its own middle. */

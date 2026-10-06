@@ -11,7 +11,8 @@ import type { CSSProperties, ReactNode } from "react"
  */
 export type GhostFace = "neutral" | "happy" | "proud" | "surprised" | "concerned" | "sleepy" | "wink"
 /**
- * - `mist`: the default character, the white ghost with a soft lantern glow around it.
+ * - `mist`: the default character: on dark pages the white ghost with a soft lantern glow around
+ *   it; on light ones filled Lantern Indigo, since white reads as hollow on the light canvas.
  * - `lantern`: Lantern Indigo, for a few accents (How it works, the 404, the Why signature).
  * - `moss`: green, only where it means "healthy", as in the app (the Overview, a dashboard tile).
  */
