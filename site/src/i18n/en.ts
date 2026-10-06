@@ -473,6 +473,31 @@ export const en = {
           "Guests, organizer, meeting link, attachments, and invitations never cross over.",
         ] as [string, string, string],
       },
+      /** Hero E2 (/home/hero-e2): Sam's calendars, through the ghost, into one Work calendar as
+       * Busy. Busy-Only Projection: only the time crosses over, titled “Busy”. The label over
+       * Work is `demo.workSees`; Personal, Family, and Work are `demo.calendars`. */
+      consolidation: {
+        /** The quiet label over Sam's calendars. */
+        calendarsLabel: "Your calendars",
+        /** Sam's other calendars. */
+        calendars: { kidsSchool: "Kids' school", runningClub: "Running club", sideProject: "Side project" },
+        /** Their events on Sam's Monday, outside the hours the week shows (the Dentist and the
+         * Standup are `demo.events`). */
+        events: {
+          familyDinner: "Family dinner",
+          schoolPlay: "School play",
+          morningRun: "Morning run",
+          launchCall: "Launch call",
+        },
+        /** A calendar's event under its name: "Dentist 15:00". */
+        eventLine: "{event} {time}",
+        /** The name inside the ghost, one line each. */
+        name: ["Calendar", "Ghost"] as [string, string],
+        /** The diagram's name and its one fact, for screen readers; the drawing is hidden from them. */
+        summary: "Sam's calendars, all on one Work calendar",
+        fact: "Personal, Family, Kids' school, Running club, and Side project all appear on Sam's Work calendar as Busy, beside Work's own Standup; no titles, guests, or links cross over.",
+        replay: "Replay",
+      },
     },
   },
 }

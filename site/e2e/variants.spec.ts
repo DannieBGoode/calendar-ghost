@@ -117,6 +117,15 @@ const VARIANTS = [
     loops: 3,
     controls: HOME_CONTROLS,
   },
+  {
+    path: "/home/hero-e2",
+    title: en.hero.title,
+    rest: null,
+    headings: HOME_HEADINGS,
+    /** The hero's run (it plays once, then its control replays it), the week, the home page's crossing. */
+    loops: 3,
+    controls: HOME_CONTROLS,
+  },
 ]
 
 /** Scrolls through the whole page so every island hydrates and every once-only scene wakes. */
@@ -479,6 +488,12 @@ const HOME_HEROES = [
     /** The whole diagram: every part, the ghost, and every calendar. */
     point: ".nd-wide",
     /** Its ghost is an outline drawn in Lantern Indigo, not the character (checked below). */
+    character: false,
+  },
+  {
+    path: "/home/hero-e2",
+    /** The whole diagram: every calendar, the ghost, and Work's full column. */
+    point: ".cn-wide",
     character: false,
   },
 ]
@@ -942,6 +957,148 @@ test.describe("/home/hero-e", () => {
       expect(new Set(calendars.map((calendar) => Math.round(calendar.y))).size).toBe(1)
       for (const calendar of CALENDARS) expect(await offset(page, `.nd-tall .nd-leg[data-part="time"][data-to="${calendar}"]`)).toBeLessThan(0)
       for (const part of NEVER) await expect(tall.locator(`.nd-stop[data-part="${part}"]`)).toBeVisible()
+      await context.close()
+    })
+  }
+})
+
+test.describe("/home/hero-e2", () => {
+  const cn = en.variants.homeHeroes.consolidation
+  const SOURCES = ["personal", "family", "kidsSchool", "runningClub", "sideProject"]
+
+  /** The diagram's own animations' states (not the rest of the page's). */
+  const run = (page: Page) =>
+    page.locator(".cn").evaluate((figure) => figure.getAnimations({ subtree: true }).map((animation) => animation.playState))
+  const opacity = (page: Page, selector: string) =>
+    page.locator(selector).evaluate((element) => Number(getComputedStyle(element).opacity))
+
+  /** The final state: every calendar has one Busy block on Work, beside Work's own Standup. */
+  async function expectFullColumn(page: Page, layout: "wide" | "tall") {
+    const pills = page.locator(`.cn-${layout} .cn-pill`)
+    await expect(pills).toHaveCount(SOURCES.length)
+    const busy = page.locator(`.cn-${layout} .cn-busy`)
+    await expect(busy).toHaveCount(await pills.count())
+    for (const source of SOURCES) {
+      const block = page.locator(`.cn-${layout} .cn-busy[data-source="${source}"]`)
+      await expect(block, source).toBeVisible()
+      await expect(block, source).toHaveCSS("opacity", "1")
+      await expect(block.locator(".cn-slot-title"), source).toHaveText(en.demo.busy)
+    }
+    await expect(page.locator(`.cn-${layout} .cn-meeting .cn-slot-title`)).toHaveText(en.demo.events.standup.title)
+    // Nothing but Busy reaches Work: no event of Sam's own calendars is named there.
+    const work = page.locator(`.cn-${layout} .cn-work`)
+    for (const title of [en.demo.events.dentist.title, ...Object.values(cn.events)]) await expect(work).not.toContainText(title)
+  }
+
+  test("without JavaScript or with reduced motion, the Work column shows one Busy block per calendar, and nothing travels", async ({ browser }) => {
+    for (const options of [{ javaScriptEnabled: false }, { reducedMotion: "reduce" as const }]) {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...options })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e2")
+      await expect(page.locator(".cn-wide")).toBeVisible()
+      await expect(page.locator(".cn-tall")).toBeHidden()
+      expect(await run(page)).toEqual([])
+      await expectFullColumn(page, "wide")
+      // Every hairline is drawn; every segment rests out of sight, before its path.
+      await expect(page.locator(".cn-wide .cn-curves path")).toHaveCount(SOURCES.length * 2)
+      for (const leg of await page.locator(".cn-wide .cn-leg").all()) {
+        expect(await leg.evaluate((element) => Number.parseFloat(getComputedStyle(element).strokeDashoffset))).toBeGreaterThan(0)
+      }
+      await expect(page.locator(".cn button")).toBeHidden()
+      await context.close()
+    }
+  })
+
+  test("plays once: the Busy blocks land one by one, the column rests full, and the control turns into Replay", async ({ page }) => {
+    await page.goto("/home/hero-e2")
+    // At first only some have landed; the Dentist's shows within three seconds.
+    expect(await opacity(page, '.cn-wide .cn-busy[data-source="sideProject"]')).toBeLessThan(1)
+    await expect.poll(() => opacity(page, '.cn-wide .cn-busy[data-source="personal"]'), { timeout: 3000 }).toBeGreaterThan(0.5)
+    await expect(page.locator(".cn").getByRole("button", { name: cn.replay })).toBeVisible({ timeout: 12_000 })
+    expect(new Set(await run(page))).toEqual(new Set(["finished"]))
+    await expectFullColumn(page, "wide")
+    // Replay starts it over: the column empties of Busy and fills again.
+    await page.locator(".cn").getByRole("button", { name: cn.replay }).click()
+    expect(await opacity(page, '.cn-wide .cn-busy[data-source="sideProject"]')).toBe(0)
+    await expect(page.locator(".cn").getByRole("button", { name: en.motion.pause })).toBeVisible()
+    await expect(page.locator(".cn").getByRole("button", { name: cn.replay })).toBeVisible({ timeout: 12_000 })
+    await expectFullColumn(page, "wide")
+  })
+
+  test("the pause control holds the run where it is, and Play lets it go on", async ({ page }) => {
+    await page.goto("/home/hero-e2")
+    await page.locator(".cn").getByRole("button", { name: en.motion.pause }).click()
+    await expect(page.locator(".cn")).toHaveAttribute("data-playing", "false")
+    await expect.poll(async () => (await run(page)).includes("running")).toBe(false)
+    const held = await opacity(page, '.cn-wide .cn-busy[data-source="sideProject"]')
+    expect(held).toBe(0)
+    await page.waitForTimeout(8000)
+    expect(await opacity(page, '.cn-wide .cn-busy[data-source="sideProject"]')).toBe(held)
+    await page.locator(".cn").getByRole("button", { name: en.motion.play }).click()
+    await expect(page.locator(".cn")).toHaveAttribute("data-playing", "true")
+    await expect(page.locator(".cn").getByRole("button", { name: cn.replay })).toBeVisible({ timeout: 12_000 })
+    await expectFullColumn(page, "wide")
+  })
+
+  test("off screen, the run holds", async ({ page }) => {
+    await page.goto("/home/hero-e2")
+    await expect.poll(() => run(page)).toContain("running")
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    await expect(page.locator(".cn")).toHaveAttribute("data-offscreen", "")
+    await expect.poll(async () => (await run(page)).includes("running")).toBe(false)
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect(page.locator(".cn")).not.toHaveAttribute("data-offscreen", "")
+    await expect.poll(() => run(page)).toContain("running")
+  })
+
+  test("tells screen readers what it shows, and hides the drawing from them", async ({ page }) => {
+    await page.goto("/home/hero-e2")
+    const figure = page.getByRole("figure", { name: cn.summary })
+    await expect(figure).toBeAttached()
+    await expect(figure.locator("p.sr-only")).toHaveText(cn.fact)
+    for (const svg of await page.locator(".cn svg").all()) await expect(svg).toHaveAttribute("aria-hidden", "true")
+  })
+
+  for (const scheme of ["light", "dark"] as const) {
+    test(`in ${scheme}: hairlines and outlines only, the ghost and every Busy in Lantern Indigo`, async ({ browser }) => {
+      const context = await browser.newContext({ colorScheme: scheme, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e2")
+      const primary = await page.locator(".hh-accent").evaluate((element) => getComputedStyle(element).color)
+      await expect(page.locator(".cn-wide .cn-ghost")).toHaveCSS("stroke", primary)
+      for (const title of await page.locator(".cn-wide .cn-busy .cn-slot-title").all()) await expect(title).toHaveCSS("fill", primary)
+      const decorated = await page.locator(".cn").evaluate((figure) =>
+        [figure, ...figure.querySelectorAll("*")].filter((element) => {
+          const style = getComputedStyle(element)
+          return style.boxShadow !== "none" || style.filter !== "none" || style.backgroundImage !== "none"
+        }).length,
+      )
+      expect(decorated).toBe(0)
+      await context.close()
+    })
+  }
+
+  for (const [width, height] of [
+    [390, 844],
+    [320, 740],
+  ] as const) {
+    test(`at ${width}px the diagram runs down: the calendars in two columns, the ghost, then Work's full column`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e2")
+      await expect(page.locator(".cn-wide")).toBeHidden()
+      const tall = page.locator(".cn-tall")
+      await expect(tall).toBeVisible()
+      const box = (await tall.boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(width)
+      const pills = await Promise.all((await tall.locator(".cn-pill").all()).map(async (item) => (await item.boundingBox())!))
+      const ghost = (await tall.locator(".cn-ghost").boundingBox())!
+      const work = (await tall.locator(".cn-work-box").boundingBox())!
+      expect(new Set(pills.map((pill) => Math.round(pill.x))).size).toBe(2)
+      expect(Math.max(...pills.map((pill) => pill.y + pill.height))).toBeLessThan(ghost.y)
+      expect(ghost.y + ghost.height).toBeLessThan(work.y)
+      await expectFullColumn(page, "tall")
       await context.close()
     })
   }

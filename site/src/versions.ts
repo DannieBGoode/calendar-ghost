@@ -99,6 +99,14 @@ export const VERSIONS: readonly Version[] = [
         date: "2026-10-06",
         commit: "07ccbf1",
       },
+      {
+        name: "Hero E2: many calendars into one",
+        status: "candidate",
+        path: "/home/hero-e2",
+        tries: "Hero E's diagram telling the real story: Sam's calendars in their own colours flow through the ghost and land on one Work day as indigo Busy blocks.",
+        date: "2026-10-06",
+        commit: "0000000",
+      },
     ],
   },
   {

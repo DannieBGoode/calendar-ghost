@@ -1,0 +1,13 @@
+---
+// Home page, hero iteration E2: hero E's node diagram telling the real story, Sam's calendars
+// consolidating into one Work calendar as Busy. See src/versions.ts.
+import { messagesFor } from "../../i18n"
+import HeroE2 from "../../variants/home-heroes/HeroE2.astro"
+import HomeHeroPage from "../../variants/home-heroes/HomeHeroPage.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<HomeHeroPage path="/home/hero-e2">
+  <HeroE2 m={m} />
+</HomeHeroPage>

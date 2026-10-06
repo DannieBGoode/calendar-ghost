@@ -1,0 +1,113 @@
+/* Hero E2's diagram (HeroE2.astro, consolidation.ts), in hero E's style: hairlines, outlined pills,
+   one outlined ghost, plain text, and a few short coloured segments. Each calendar has its own
+   colour; everything that leaves the ghost is Lantern Indigo. */
+
+.cn {
+  --cn-busy: var(--primary);
+  --cn-line: color-mix(in oklab, var(--border), var(--foreground) 6%);
+  --cn-personal: var(--event-personal-edge);
+  --cn-family: var(--event-family-edge);
+  --cn-kidsSchool: oklch(0.6 0.15 32);
+  --cn-runningClub: oklch(0.58 0.1 215);
+  --cn-sideProject: oklch(0.58 0.15 345);
+  position: relative;
+  margin: clamp(1.75rem, 5vh, 3rem) auto 0;
+}
+:root[data-theme="dark"] .cn { --cn-kidsSchool: oklch(0.74 0.13 35); --cn-runningClub: oklch(0.76 0.1 215); --cn-sideProject: oklch(0.76 0.13 345); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .cn { --cn-kidsSchool: oklch(0.74 0.13 35); --cn-runningClub: oklch(0.76 0.1 215); --cn-sideProject: oklch(0.76 0.13 345); }
+}
+
+/* Each calendar's colour, for its pill's mark, its tint, and its segment into the ghost. */
+.cn [data-source="personal"] { --cn-tone: var(--cn-personal); }
+.cn [data-source="family"] { --cn-tone: var(--cn-family); }
+.cn [data-source="kidsSchool"] { --cn-tone: var(--cn-kidsSchool); }
+.cn [data-source="runningClub"] { --cn-tone: var(--cn-runningClub); }
+.cn [data-source="sideProject"] { --cn-tone: var(--cn-sideProject); }
+
+/* One layout at a time: calendars beside the ghost on wide screens, above it on narrow ones. */
+.cn-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.cn-tall { display: none; }
+@media (max-width: 899.98px) {
+  .cn { max-width: 24rem; }
+  .cn-wide { display: none; }
+  .cn-tall { display: block; }
+}
+
+.cn-svg text { font-family: var(--font-sans); fill: var(--foreground); dominant-baseline: central; }
+.cn-svg .cn-label { fill: var(--muted-foreground); font-weight: 500; }
+.cn-svg :is(.cn-event, .cn-slot-time) { fill: var(--muted-foreground); }
+
+/* The hairlines. */
+.cn-hour { fill: none; stroke: color-mix(in oklab, var(--border) 55%, var(--background)); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cn-curves path, .cn-rule { fill: none; stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+/* Sam's calendars: a hairline outline on the page's own colour, with the calendar's colour in its
+   mark: a thin ring around the portrait, or a small dot. */
+.cn-pill rect { fill: var(--background); stroke: var(--cn-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cn-pill .cn-tint {
+  fill: color-mix(in oklab, var(--cn-tone) 7%, var(--background));
+  stroke: color-mix(in oklab, var(--cn-tone) 60%, var(--background));
+  opacity: 0;
+}
+.cn-ring { fill: none; stroke: var(--cn-tone); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.cn-dot { fill: var(--cn-tone); }
+
+/* The ghost: the mark's outline drawn thin in Lantern Indigo, its name in plain ink. */
+.cn-ghost, .cn-tabs, .cn-hub {
+  fill: none; stroke: var(--primary); stroke-width: 1.5; vector-effect: non-scaling-stroke;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.cn-ghost { fill: var(--background); }
+.cn-eye { fill: var(--primary); }
+.cn-name { text-anchor: middle; font-weight: 500; letter-spacing: -0.01em; }
+
+/* Work: one outlined calendar, a day column with its own meeting and every Busy block. */
+.cn-work-box { fill: var(--background); stroke: var(--cn-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cn-work-name { font-weight: 600; }
+.cn-slot rect { stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cn-meeting rect { fill: var(--background); stroke: var(--cn-line); }
+.cn-busy rect {
+  fill: color-mix(in oklab, var(--cn-busy) 9%, var(--background));
+  stroke: color-mix(in oklab, var(--cn-busy) 45%, var(--background));
+}
+.cn-slot-title { font-weight: 550; }
+.cn-svg .cn-busy .cn-slot-title { fill: var(--cn-busy); font-weight: 600; }
+
+/* The travelling segments: out of sight when still. In the calendar's colour into the ghost, and
+   Lantern Indigo out of it. */
+.cn-leg {
+  fill: none; stroke: var(--cn-tone); stroke-width: 2; stroke-linecap: butt;
+  stroke-dasharray: var(--dash); stroke-dashoffset: var(--from);
+}
+.cn-leg[data-side="out"] { --cn-tone: var(--cn-busy); }
+
+/* The one control, small and quiet in the diagram's top corner, beside "What work sees". */
+.cn-controls { position: absolute; right: -0.75rem; top: -0.875rem; }
+.cn-controls .motion-toggle { background: transparent; box-shadow: none; color: var(--muted-foreground); }
+.cn-controls .motion-toggle:hover { background: var(--muted); color: var(--foreground); }
+
+/* The one run: each segment runs its path once, from its own moment; each pill is tinted while
+   its segment sets off; each Busy block appears as its segment lands, and stays. Every animation
+   fills both ways, so a finished one stays in effect and Replay can find it. This hero (like
+   hero E) animates `stroke-dashoffset`, on thin paths, and only while the diagram is on screen. */
+@media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+  .cn-leg { animation: cn-travel var(--run) linear var(--delay) both; }
+  .cn-pill .cn-tint { animation: cn-tint var(--run) ease-out var(--delay) both; }
+  .cn-busy { animation: cn-appear var(--run) var(--ease-out-quart) var(--delay) both; }
+  .cn:is([data-playing="false"], [data-offscreen]) :is(.cn-leg, .cn-tint, .cn-busy) { animation-play-state: paused; }
+}
+@keyframes cn-travel {
+  from { stroke-dashoffset: var(--from); }
+  to { stroke-dashoffset: var(--to); }
+}
+@keyframes cn-tint {
+  0% { opacity: 0; }
+  15%, 55% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes cn-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.cn-controls .cn-replay-icon { fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }

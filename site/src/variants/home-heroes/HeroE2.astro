@@ -1,0 +1,235 @@
+---
+// Hero E2, hero E's node-diagram style telling the product's real story: Sam's calendars on one
+// side, hairlines into one outlined ghost, and Sam's one Work calendar on the other side as a day
+// column. A short segment leaves each calendar in its own colour, enters the ghost, and leaves it
+// in Lantern Indigo; where it lands, a Busy block appears at its time beside Work's own meeting.
+// It plays once and rests on the full column. Geometry and timing come from consolidation.ts; the
+// motion is CSS (consolidation.css). Without JavaScript or with reduced motion the diagram stands
+// still on its final state: every hairline drawn, and the Work column full of Busy blocks.
+import "./consolidation.css"
+import { avatarUrls } from "../../avatars"
+import type { Messages } from "../../i18n"
+import { format } from "../../i18n/format"
+import HeroPitch from "./HeroPitch.astro"
+import { APPEAR_S, TINT_S, buildDiagram, clock, dashFor, DEPARTS, type Diagram, type SourceKey, type TimedEvent } from "./consolidation"
+import { ConsolidationControls } from "./ConsolidationControls"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const [firstLine, secondLine] = m.variants.bold.hero.titleLines
+const cn = m.variants.homeHeroes.consolidation
+const avatars = await avatarUrls()
+const diagrams: Diagram[] = [buildDiagram("wide"), buildDiagram("tall")]
+
+const calendarName = (key: SourceKey) =>
+  key === "personal" || key === "family" ? m.demo.calendars[key] : cn.calendars[key]
+const eventTitle = (event: TimedEvent) =>
+  event.key === "dentist" || event.key === "standup" ? m.demo.events[event.key].title : cn.events[event.key]
+
+/** Each layout's sizes, in diagram units. */
+const TYPE = {
+  wide: { label: 13.5, name: 16.5, event: 13, ghost: 20, avatar: 26, pad: 14, workAvatar: 28, workName: 16.5, account: 12.5, block: 12.5 },
+  tall: { label: 12, name: 13.5, event: 11.5, ghost: 15, avatar: 18, pad: 9, workAvatar: 22, workName: 14, account: 11.5, block: 11.5 },
+} as const
+---
+
+<section class="hh hh-e2" aria-labelledby="hero-title">
+  <div class="hh-e2-wrap">
+    <div class="hh-e2-copy">
+      <h1 id="hero-title"><span>{firstLine}</span> <span class="hh-accent">{secondLine}</span></h1>
+      <div class="hh-e2-pitch"><HeroPitch m={m} /></div>
+    </div>
+
+    <figure class="cn" data-playing="true" aria-labelledby="cn-summary">
+      <figcaption id="cn-summary" class="sr-only">{cn.summary}</figcaption>
+      <p class="sr-only">{cn.fact}</p>
+
+      {
+        diagrams.map((diagram) => {
+          const type = TYPE[diagram.kind]
+          const id = (name: string) => `cn-${diagram.kind}-${name}`
+          const { work } = diagram
+          const workMiddle = work.y + work.header / 2
+          return (
+            <svg
+              class={`cn-svg cn-${diagram.kind}`}
+              viewBox={`0 0 ${diagram.width} ${diagram.height}`}
+              aria-hidden="true"
+              focusable="false"
+            >
+              <defs>
+                {diagram.sources
+                  .filter((pill) => pill.avatar)
+                  .map((pill) => (
+                    <clipPath id={id(pill.key)}>
+                      <circle cx={pill.x + type.pad + type.avatar / 2} cy={pill.y + pill.height / 2} r={type.avatar / 2} />
+                    </clipPath>
+                  ))}
+                <clipPath id={id("work")}>
+                  <circle cx={work.x + type.pad + type.workAvatar / 2} cy={workMiddle} r={type.workAvatar / 2} />
+                </clipPath>
+              </defs>
+
+              <text class="cn-label" x={diagram.labels.calendars.x} y={diagram.labels.calendars.y} style={`font-size: ${type.label}px`}>
+                {cn.calendarsLabel}
+              </text>
+              <text class="cn-label" x={diagram.labels.work.x} y={diagram.labels.work.y} style={`font-size: ${type.label}px`}>
+                {m.demo.workSees}
+              </text>
+
+              <g class="cn-curves">
+                {diagram.curves.map((curve) => (
+                  <path d={curve.d} data-curve={curve.id} />
+                ))}
+              </g>
+              <path class="cn-hub" d={diagram.stubs} />
+
+              <g class="cn-legs">
+                {diagram.legs.map((leg) => {
+                  const dash = dashFor(leg)
+                  return (
+                    <path
+                      class="cn-leg"
+                      d={leg.d}
+                      data-source={leg.source}
+                      data-side={leg.side}
+                      style={`--dash: ${dash.dasharray}; --from: ${dash.from}; --to: ${dash.to}; --delay: ${leg.delay}s; --run: ${Math.round(leg.duration * 1000) / 1000}s`}
+                    />
+                  )
+                })}
+              </g>
+
+              <g class="cn-node">
+                <path class="cn-ghost" d={diagram.node.body} />
+                <path class="cn-tabs" d={diagram.node.tabs} />
+                {diagram.node.eyes.map((eye) => (
+                  <circle class="cn-eye" cx={eye.x} cy={eye.y} r={diagram.kind === "wide" ? 3 : 2.25} />
+                ))}
+                <text class="cn-name" x={diagram.node.center.x} y={diagram.node.center.y + type.ghost * 0.55} style={`font-size: ${type.ghost}px`}>
+                  <tspan x={diagram.node.center.x} dy="-0.55em">
+                    {cn.name[0]}
+                  </tspan>
+                  <tspan x={diagram.node.center.x} dy="1.2em">
+                    {cn.name[1]}
+                  </tspan>
+                </text>
+              </g>
+
+              {diagram.sources.map((pill) => {
+                const middle = pill.y + pill.height / 2
+                const markX = pill.x + type.pad + type.avatar / 2
+                const textX = pill.x + type.pad + type.avatar + (diagram.kind === "wide" ? 11 : 7)
+                const line = diagram.kind === "wide" ? 9 : 7.5
+                const event = diagram.kind === "wide" ? format(cn.eventLine, { event: eventTitle(pill.event), time: clock(pill.event.start) }) : eventTitle(pill.event)
+                return (
+                  <g class="cn-pill" data-source={pill.key}>
+                    <rect x={pill.x} y={pill.y} width={pill.width} height={pill.height} rx="6" />
+                    <rect
+                      class="cn-tint"
+                      x={pill.x}
+                      y={pill.y}
+                      width={pill.width}
+                      height={pill.height}
+                      rx="6"
+                      style={`--delay: ${Math.round((DEPARTS[pill.key] - 0.25) * 100) / 100}s; --run: ${TINT_S}s`}
+                    />
+                    {pill.avatar ? (
+                      <>
+                        <circle class="cn-ring" cx={markX} cy={middle} r={type.avatar / 2 + 2} />
+                        <image
+                          href={avatars[pill.avatar]}
+                          x={pill.x + type.pad}
+                          y={middle - type.avatar / 2}
+                          width={type.avatar}
+                          height={type.avatar}
+                          clip-path={`url(#${id(pill.key)})`}
+                        />
+                      </>
+                    ) : (
+                      <circle class="cn-dot" cx={markX} cy={middle} r={diagram.kind === "wide" ? 5 : 4} />
+                    )}
+                    <text x={textX} y={middle} style={`font-size: ${type.name}px`}>
+                      <tspan x={textX} dy={-line}>
+                        {calendarName(pill.key)}
+                      </tspan>
+                      <tspan class="cn-event" x={textX} dy={line * 2} style={`font-size: ${type.event}px`}>
+                        {event}
+                      </tspan>
+                    </text>
+                  </g>
+                )
+              })}
+
+              <g class="cn-work">
+                <rect class="cn-work-box" x={work.x} y={work.y} width={work.width} height={work.height} rx="8" />
+                <image
+                  href={avatars.work}
+                  x={work.x + type.pad}
+                  y={workMiddle - type.workAvatar / 2}
+                  width={type.workAvatar}
+                  height={type.workAvatar}
+                  clip-path={`url(#${id("work")})`}
+                />
+                <text x={work.x + type.pad + type.workAvatar + 10} y={workMiddle} style={`font-size: ${type.workName}px`}>
+                  <tspan class="cn-work-name" x={work.x + type.pad + type.workAvatar + 10} dy={-type.workName * 0.5}>
+                    {m.demo.calendars.work}
+                  </tspan>
+                  <tspan class="cn-event" x={work.x + type.pad + type.workAvatar + 10} dy={type.workName * 1.05} style={`font-size: ${type.account}px`}>
+                    {m.app.rules.accounts.work}
+                  </tspan>
+                </text>
+                <path class="cn-rule" d={`M${work.x} ${work.y + work.header}h${work.width}`} />
+                {diagram.hourLines.map((y) => (
+                  <path class="cn-hour" d={`M${work.x + 1} ${y}h${work.width - 2}`} />
+                ))}
+                {diagram.slots.map((slot) => {
+                  const busy = slot.source !== undefined
+                  const textX = slot.x + 9
+                  const middle = slot.y + slot.height / 2
+                  return (
+                    <g
+                      class={busy ? "cn-slot cn-busy" : "cn-slot cn-meeting"}
+                      data-source={slot.source}
+                      style={busy ? `--delay: ${slot.appears}s; --run: ${APPEAR_S}s` : undefined}
+                    >
+                      <rect x={slot.x} y={slot.y} width={slot.width} height={slot.height} rx="4" />
+                      <text x={textX} y={middle} style={`font-size: ${type.block}px`}>
+                        <tspan class="cn-slot-title">{busy ? m.demo.busy : eventTitle(slot.event)}</tspan>
+                        <tspan class="cn-slot-time" dx="0.6em">
+                          {clock(slot.event.start)}–{clock(slot.event.end)}
+                        </tspan>
+                      </text>
+                    </g>
+                  )
+                })}
+              </g>
+            </svg>
+          )
+        })
+      }
+
+      <ConsolidationControls client:load m={{ replay: cn.replay, motion: m.motion }} />
+    </figure>
+  </div>
+</section>
+
+<style>
+  .hh-e2 { padding-block: clamp(1.5rem, 4vh, 3rem) 0; }
+  .hh-e2-wrap { width: min(68rem, 100% - 2 * var(--hh-gutter)); margin-inline: auto; }
+  .hh-e2-copy h1 { margin: 0 0 1.25rem; font-size: clamp(2.5rem, 1.6rem + 3.4vw, 3.5rem); }
+
+  /* From 1000px the headline and the pitch share one band over the diagram, so the whole diagram
+     fits the first screen of a laptop. */
+  @media (min-width: 1000px) {
+    .hh-e2-copy {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 27rem);
+      column-gap: clamp(2rem, 5vw, 4rem);
+      align-items: center;
+    }
+    .hh-e2-copy h1 { margin: 0; }
+  }
+</style>

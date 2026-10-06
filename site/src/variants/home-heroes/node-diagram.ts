@@ -153,7 +153,7 @@ export function splitAt({ p0, p1, p2, p3 }: Cubic, t: number): [Cubic, Cubic] {
 }
 
 /** A curve that leaves `from` and arrives at `to` both along the x axis (wide) or the y axis. */
-function link(from: Point, to: Point, axis: "x" | "y", bend = 0.5): Cubic {
+export function link(from: Point, to: Point, axis: "x" | "y", bend = 0.5): Cubic {
   if (axis === "x") {
     const reach = (to.x - from.x) * bend
     return { p0: from, p1: { x: from.x + reach, y: from.y }, p2: { x: to.x - reach, y: to.y }, p3: to }
@@ -163,7 +163,7 @@ function link(from: Point, to: Point, axis: "x" | "y", bend = 0.5): Cubic {
 }
 
 /** A curve that leaves `from` sideways and turns to arrive at `to` going down. */
-function turnDown(from: Point, to: Point): Cubic {
+export function turnDown(from: Point, to: Point): Cubic {
   return {
     p0: from,
     p1: { x: from.x + (to.x - from.x) * 0.65, y: from.y },
