@@ -129,8 +129,8 @@ export const en = {
     startSyncing: "Start syncing",
   },
   week: {
-    title: "One week, every calendar.",
-    body: "Make one rule per calendar: Personal to Work, Family to Work. Calendar Ghost keeps them all in step.",
+    title: "All your calendars. One week at work.",
+    body: "Personal and Family plans land on your Work calendar as Busy, and stay in step when they change.",
     summary:
       "Events from the Personal and Family calendars arrive on the Work calendar as “Busy”. Work's own meetings stay as they are.",
   },

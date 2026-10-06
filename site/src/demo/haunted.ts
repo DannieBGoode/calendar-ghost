@@ -1,4 +1,4 @@
-// The Haunted Week ("One week, every calendar."): Sam's Work week, where the plans from Personal
+// The Haunted Week ("All your calendars. One week at work."): Sam's Work week, where the plans from Personal
 // and Family arrive in transit, the ghost passes over each one, and each becomes Busy; Work's own
 // meetings stay. This module is the loop's clock and the ghost's path, in calendar units (days or
 // columns, and hours since the week's first hour); HauntedWeek.tsx and demos.css turn them into
