@@ -107,6 +107,14 @@ export const VERSIONS: readonly Version[] = [
         date: "2026-10-06",
         commit: "88cb76c",
       },
+      {
+        name: "Hero E3: the diagram, semantically right",
+        status: "candidate",
+        path: "/home/hero-e3",
+        tries: "Left to right: Sam's calendars as pills, the ghost character at the hub, and a day on the right. Event chips go through the ghost; bound for Work, titles drop there (kept by the ghost, struck through) and land as Busy at their time; a switch shows Sam's Personal calendar instead, every title kept.",
+        date: "2026-10-06",
+        commit: "0000000",
+      },
     ],
   },
   {

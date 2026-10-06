@@ -126,6 +126,15 @@ const VARIANTS = [
     loops: 3,
     controls: HOME_CONTROLS,
   },
+  {
+    path: "/home/hero-e3",
+    title: en.hero.title,
+    rest: null,
+    headings: HOME_HEADINGS,
+    /** The hero's run (it plays once; Replay sits beside Pause), the week, the home page's crossing. */
+    loops: 3,
+    controls: [".hb-view", ...HOME_CONTROLS],
+  },
 ]
 
 /** Scrolls through the whole page so every island hydrates and every once-only scene wakes. */
@@ -495,6 +504,11 @@ const HOME_HEROES = [
     /** The whole diagram: every calendar, the ghost, and Work's full column. */
     point: ".cn-wide",
     character: false,
+  },
+  {
+    path: "/home/hero-e3",
+    /** The whole diagram: Sam's calendars, the ghost, and the day with every event landed. */
+    point: ".hb-wide",
   },
 ]
 
@@ -1099,6 +1113,256 @@ test.describe("/home/hero-e2", () => {
       expect(Math.max(...pills.map((pill) => pill.y + pill.height))).toBeLessThan(ghost.y)
       expect(ghost.y + ghost.height).toBeLessThan(work.y)
       await expectFullColumn(page, "tall")
+      await context.close()
+    })
+  }
+})
+
+test.describe("/home/hero-e3", () => {
+  const hb = en.variants.homeHeroes.hub
+  const dentist = en.demo.events.dentist.title
+  const standup = en.demo.events.standup.title
+  const dinner = hb.events.familyDinner
+
+  /** The diagram's own animations' states (not the rest of the page's). */
+  const run = (page: Page) =>
+    page.locator(".hb").evaluate((figure) => figure.getAnimations({ subtree: true }).map((animation) => animation.playState))
+  const opacity = (page: Page, selector: string) => page.locator(selector).first().evaluate((element) => Number(getComputedStyle(element).opacity))
+  const block = (layout: "wide" | "tall", source: string) => `.hb-${layout} .hb-block[data-source="${source}"]`
+
+  /** The final state, as work sees it: Work's own Standup with its title, the Dentist and the
+   * family dinner as Busy at their times, and their titles kept by the ghost, struck through. */
+  async function expectWorkSees(page: Page, layout: "wide" | "tall") {
+    await expect(page.locator(`.hb-${layout} .hb-block`)).toHaveCount(3)
+    for (const item of await page.locator(`.hb-${layout} .hb-block`).all()) await expect(item).toHaveCSS("opacity", "1")
+    await expect(page.locator(`${block(layout, "work")} text`)).toHaveText(new RegExp(`^${standup}\\s*10:00–11:00$`))
+    await expect(page.locator(`${block(layout, "personal")} .hb-as-work`)).toHaveText(new RegExp(`^${en.demo.busy}\\s*15:00–16:30$`))
+    await expect(page.locator(`${block(layout, "family")} .hb-as-work`)).toHaveText(new RegExp(`^${en.demo.busy}\\s*18:30–19:30$`))
+    for (const source of ["personal", "family"]) {
+      expect(await opacity(page, `${block(layout, source)} .hb-as-work`), source).toBe(1)
+      expect(await opacity(page, `${block(layout, source)} .hb-as-you`), source).toBe(0)
+    }
+    expect(await opacity(page, `.hb-${layout} .hb-work .hb-head.hb-as-work`)).toBe(1)
+    await expect(page.locator(`.hb-${layout} .hb-work .hb-head.hb-as-work`)).toContainText(en.app.rules.accounts.work)
+    await expect(page.locator(`.hb-${layout} .hb-trace`)).toHaveText([dentist, dinner])
+    for (const trace of await page.locator(`.hb-${layout} .hb-trace`).all()) {
+      await expect(trace).toHaveCSS("opacity", "1")
+      await expect(trace).toHaveCSS("text-decoration-line", "line-through")
+    }
+    expect(await opacity(page, `.hb-${layout} .hb-traces`)).toBe(1)
+  }
+
+  test("without JavaScript or with reduced motion: what work sees, with the Dentist as Busy 15:00–16:30 and the Standup with its title; nothing travels", async ({ browser }) => {
+    for (const options of [{ javaScriptEnabled: false }, { reducedMotion: "reduce" as const }]) {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...options })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e3")
+      await expect(page.locator(".hb-wide")).toBeVisible()
+      await expect(page.locator(".hb-tall")).toBeHidden()
+      expect(await run(page)).toEqual([])
+      await expect(page.locator(".hb-wide .hb-pill")).toHaveText([
+        new RegExp(`${en.demo.calendars.work}\\s*${standup} 10:00`),
+        new RegExp(`${en.demo.calendars.personal}\\s*${dentist} 15:00`),
+        new RegExp(`${en.demo.calendars.family}\\s*${dinner} 18:30`),
+      ])
+      await expectWorkSees(page, "wide")
+      await expect(page.locator(".hb-wide .hb-curves path")).toHaveCount(6)
+      for (const chip of await page.locator(".hb-wide .hb-chip").all()) await expect(chip).toHaveCSS("opacity", "0")
+      expect(await opacity(page, ".hb-wide .hb-ghost .ghost-face-then")).toBe(1)
+      if (options.javaScriptEnabled === false) {
+        // The drawing's own label stands in for the switch.
+        await expect(page.locator(".hb-wide .hb-label-work")).toHaveText(en.demo.workSees)
+        await expect(page.locator(".hb-controls")).toBeHidden()
+      } else {
+        await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
+        await expect(page.locator(".hb").getByRole("button", { name: hb.replay })).toBeHidden()
+      }
+      await context.close()
+    }
+  })
+
+  test("plays once, left to right: every chip goes through the ghost; the Dentist's title drops there and it comes out Busy, the Standup keeps its own; then it rests", async ({ page }) => {
+    await page.goto("/home/hero-e3")
+    expect(await opacity(page, block("wide", "family"))).toBeLessThan(1)
+    const into = page.locator('.hb-wide .hb-chip[data-source="personal"][data-side="in"]')
+    await expect(into).toHaveText(dentist)
+    await expect(into).toHaveAttribute("data-drops", "")
+    await expect(page.locator('.hb-wide .hb-chip[data-source="personal"][data-side="out"] .hb-as-work')).toHaveText(en.demo.busy)
+    await expect(page.locator('.hb-wide .hb-chip[data-source="work"][data-side="in"]')).not.toHaveAttribute("data-drops", "")
+    await expect(page.locator('.hb-wide .hb-chip[data-source="work"][data-side="out"]')).toHaveText(standup)
+    await expect.poll(() => opacity(page, '.hb-wide .hb-chip[data-source="personal"][data-side="out"]'), { timeout: 4000 }).toBeGreaterThan(0.5)
+    await expect.poll(() => opacity(page, block("wide", "personal")), { timeout: 4000 }).toBeGreaterThan(0.5)
+    await expect(page.locator(".hb").getByRole("button", { name: en.motion.pause })).toBeDisabled({ timeout: 14_000 })
+    expect(new Set(await run(page))).toEqual(new Set(["finished"]))
+    await expectWorkSees(page, "wide")
+    // Replay, beside Pause, starts it over: the blocks go, and land again.
+    await page.locator(".hb").getByRole("button", { name: hb.replay }).click()
+    expect(await opacity(page, block("wide", "family"))).toBe(0)
+    await expect(page.locator(".hb").getByRole("button", { name: en.motion.pause })).toBeEnabled()
+    await expect(page.locator(".hb").getByRole("button", { name: en.motion.pause })).toBeDisabled({ timeout: 14_000 })
+    await expectWorkSees(page, "wide")
+  })
+
+  test("the ghost is pleased as a chip passes, and neutral between chips", async ({ page }) => {
+    await page.goto("/home/hero-e3")
+    const seen = await page.locator(".hb-wide .hb-ghost .ghost-face-then").evaluate(
+      (face) =>
+        new Promise<number[]>((resolve) => {
+          const samples: number[] = []
+          const timer = setInterval(() => samples.push(Math.round(Number(getComputedStyle(face).opacity))), 40)
+          setTimeout(() => {
+            clearInterval(timer)
+            resolve(samples)
+          }, 3500)
+        }),
+    )
+    const changes = seen.filter((value, index) => index === 0 || value !== seen[index - 1])
+    expect(changes.slice(0, 4)).toEqual([0, 1, 0, 1])
+  })
+
+  test("the pause control holds the run where it is, and Play lets it go on", async ({ page }) => {
+    await page.goto("/home/hero-e3")
+    await page.locator(".hb").getByRole("button", { name: en.motion.pause }).click()
+    await expect(page.locator(".hb")).toHaveAttribute("data-playing", "false")
+    await expect.poll(async () => (await run(page)).includes("running")).toBe(false)
+    expect(await opacity(page, block("wide", "family"))).toBe(0)
+    await page.waitForTimeout(8000)
+    expect(await opacity(page, block("wide", "family"))).toBe(0)
+    await page.locator(".hb").getByRole("button", { name: en.motion.play }).click()
+    await expect(page.locator(".hb")).toHaveAttribute("data-playing", "true")
+    await expect(page.locator(".hb").getByRole("button", { name: en.motion.pause })).toBeDisabled({ timeout: 14_000 })
+    await expectWorkSees(page, "wide")
+  })
+
+  test("off screen, the run holds", async ({ page }) => {
+    await page.goto("/home/hero-e3")
+    await expect.poll(() => run(page)).toContain("running")
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    await expect(page.locator(".hb")).toHaveAttribute("data-offscreen", "")
+    await expect.poll(async () => (await run(page)).includes("running")).toBe(false)
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect(page.locator(".hb")).not.toHaveAttribute("data-offscreen", "")
+    await expect.poll(() => run(page)).toContain("running")
+  })
+
+  test("the switch turns the day on the right into Sam's Personal calendar, every title kept, and back", async ({ browser }) => {
+    const context = await browser.newContext({ reducedMotion: "reduce" })
+    const page = await context.newPage()
+    await page.goto("/home/hero-e3")
+    const views = page.getByRole("group", { name: hb.viewLabel })
+    const work = views.getByRole("button", { name: en.demo.workSees })
+    const you = views.getByRole("button", { name: en.demo.youSee })
+    await expect(work).toHaveAttribute("aria-pressed", "true")
+    await expect(you).toHaveAttribute("aria-pressed", "false")
+    for (const button of [work, you]) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    // The drawing's own label gives way to the switch.
+    await expect(page.locator(".hb-wide .hb-label-work")).toBeHidden()
+    await expectWorkSees(page, "wide")
+
+    // Under reduced motion it switches at once.
+    await you.click()
+    await expect(you).toHaveAttribute("aria-pressed", "true")
+    await expect(page.locator(".hb")).toHaveAttribute("data-view", "you")
+    expect(await opacity(page, ".hb-wide .hb-work .hb-head.hb-as-you")).toBe(1)
+    expect(await opacity(page, ".hb-wide .hb-work .hb-head.hb-as-work")).toBe(0)
+    await expect(page.locator(".hb-wide .hb-work .hb-head.hb-as-you")).toContainText(en.demo.calendars.personal)
+    await expect(page.locator(".hb-wide .hb-work .hb-head.hb-as-you")).toContainText(en.app.rules.accounts.personal)
+    await expect(page.locator(`${block("wide", "personal")} .hb-as-you`)).toHaveText(new RegExp(`^${dentist}\\s*15:00–16:30$`))
+    await expect(page.locator(`${block("wide", "family")} .hb-as-you`)).toHaveText(new RegExp(`^${dinner}\\s*18:30–19:30$`))
+    for (const source of ["personal", "family"]) {
+      expect(await opacity(page, `${block("wide", source)} .hb-as-you`), source).toBe(1)
+      expect(await opacity(page, `${block("wide", source)} .hb-as-work`), source).toBe(0)
+    }
+    await expect(page.locator(`${block("wide", "work")} text`)).toHaveText(new RegExp(`^${standup}`))
+    // Nothing is held back on the way to Personal, so no title rests by the ghost.
+    expect(await opacity(page, ".hb-wide .hb-traces")).toBe(0)
+
+    await work.click()
+    await expect(page.locator(".hb")).toHaveAttribute("data-view", "work")
+    await expectWorkSees(page, "wide")
+    await context.close()
+  })
+
+  test("tells screen readers what work sees of each event, and what Sam sees instead, and hides the drawing from them", async ({ page }) => {
+    await page.goto("/home/hero-e3")
+    const figure = page.getByRole("figure", { name: hb.summary })
+    await expect(figure).toBeAttached()
+    await expect(figure.locator("ul.sr-only li")).toHaveText([
+      "Standup, Work's own meeting, shows with its title, from 10:00 to 11:00.",
+      "Dentist from Personal appears on Work as Busy, from 15:00 to 16:30.",
+      "Family dinner from Family appears on Work as Busy, from 18:30 to 19:30.",
+      hb.never,
+      hb.youFact,
+    ])
+    for (const svg of await page.locator(".hb .hb-svg").all()) await expect(svg).toHaveAttribute("aria-hidden", "true")
+    for (const ghost of await page.locator(".hb .ghost").all()) await expect(ghost).toHaveAttribute("aria-hidden", "true")
+  })
+
+  for (const scheme of ["light", "dark"] as const) {
+    test(`in ${scheme}: hairlines and outlines only, Busy in Lantern Indigo with its calendar's dot, and the white ghost 88 to 104px wide, ${scheme === "light" ? "with no halo" : "glowing"}`, async ({ browser }) => {
+      const context = await browser.newContext({ colorScheme: scheme, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e3")
+      const primary = await page.locator(".hh-accent").evaluate((element) => getComputedStyle(element).color)
+      for (const title of await page.locator('.hb-wide .hb-block[data-shows="busy"] .hb-as-work .hb-block-title').all()) await expect(title).toHaveCSS("fill", primary)
+      for (const source of ["personal", "family"]) {
+        const ring = await page.locator(`.hb-wide .hb-pill[data-calendar="${source}"] .hb-ring`).evaluate((element) => getComputedStyle(element).stroke)
+        await expect(page.locator(`${block("wide", source)} .hb-source-dot`)).toHaveCSS("fill", ring)
+      }
+      const ghost = page.locator(".hb-wide .hb-ghost .ghost")
+      await expect(ghost).toHaveAttribute("data-tone", "mist")
+      const box = (await ghost.boundingBox())!
+      expect(box.width).toBeGreaterThanOrEqual(88)
+      expect(box.width).toBeLessThanOrEqual(104)
+      const glow = await ghost.evaluate((element) => getComputedStyle(element, "::before").backgroundColor)
+      if (scheme === "light") expect(glow).toBe("rgba(0, 0, 0, 0)")
+      else expect(glow).not.toBe("rgba(0, 0, 0, 0)")
+      const decorated = await page.locator(".hb").evaluate((figure) =>
+        [figure, ...figure.querySelectorAll("*")].filter((element) => {
+          const style = getComputedStyle(element)
+          return style.boxShadow !== "none" || style.filter !== "none" || style.backgroundImage !== "none"
+        }).length,
+      )
+      expect(decorated).toBe(0)
+      await context.close()
+    })
+  }
+
+  test("keeps the headline, the line, the calls to action, and the facts together in one block above the diagram", async ({ page }) => {
+    await page.goto("/home/hero-e3")
+    const boxes = await Promise.all(["h1", ".hh-line", ".hh-ctas", ".hh-meta", ".hb"].map(async (selector) => (await page.locator(selector).first().boundingBox())!))
+    const [title, line, ctas, meta, figure] = boxes as [DOMRect, DOMRect, DOMRect, DOMRect, DOMRect]
+    for (const box of [line, ctas]) expect(Math.abs(box.x - title.x)).toBeLessThan(2)
+    expect(line.y).toBeGreaterThan(title.y + title.height - 1)
+    expect(ctas.y).toBeGreaterThan(line.y + line.height - 1)
+    expect(meta.y + meta.height).toBeLessThan(figure.y)
+    expect(await page.locator("h1").evaluate((element) => getComputedStyle(element).letterSpacing)).toMatch(/^-0\.\d+px$/)
+  })
+
+  for (const [width, height] of [
+    [390, 844],
+    [320, 740],
+  ] as const) {
+    test(`at ${width}px the diagram runs down: the calendars in two columns, the ghost, then the day, all inside the page`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e3")
+      await expect(page.locator(".hb-wide")).toBeHidden()
+      const tall = page.locator(".hb-tall")
+      await expect(tall).toBeVisible()
+      const box = (await tall.boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(width)
+      const pills = await Promise.all((await tall.locator(".hb-pill").all()).map(async (item) => (await item.boundingBox())!))
+      const ghost = (await tall.locator(".hb-ghost").boundingBox())!
+      const work = (await tall.locator(".hb-work .hb-box").boundingBox())!
+      const views = (await page.getByRole("group", { name: hb.viewLabel }).boundingBox())!
+      expect(new Set(pills.map((pill) => Math.round(pill.x))).size).toBe(2)
+      expect(Math.max(...pills.map((pill) => pill.y + pill.height))).toBeLessThan(ghost.y)
+      expect(ghost.y + ghost.height).toBeLessThan(work.y)
+      expect(views.y + views.height).toBeLessThanOrEqual(work.y + 2)
+      expect(views.x + views.width).toBeLessThanOrEqual(width)
+      await expectWorkSees(page, "tall")
       await context.close()
     })
   }

@@ -1,0 +1,14 @@
+---
+// Home page, hero iteration E3: the node diagram, semantically right. Sam's four calendars around
+// the real ghost; events travel between them, as Busy into Work and with their title from Work
+// into Personal. See src/versions.ts.
+import { messagesFor } from "../../i18n"
+import HeroE3 from "../../variants/home-heroes/HeroE3.astro"
+import HomeHeroPage from "../../variants/home-heroes/HomeHeroPage.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<HomeHeroPage path="/home/hero-e3">
+  <HeroE3 m={m} />
+</HomeHeroPage>
