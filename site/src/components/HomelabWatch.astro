@@ -1,0 +1,98 @@
+---
+// The homelab's night watch, beside "It reports to your homelab.": the ghost stands by a small
+// server rack whose status lights blink softly, and ticks its checklist, one box at a time, then
+// starts its round again. Flat like Ghost.tsx (one fill, an outline, no gloss); the ghost is the
+// default mist tone, Lantern Indigo on light pages and the white glowing ghost on dark ones.
+// Decorative only (the section's sentence says what matters). It loops, so the nav's "Pause
+// animations" and reduced motion stop it on its finished state: every box ticked, every light on.
+import { Ghost } from "../islands/Ghost"
+
+/** The rack's units, top to bottom, and the colour of each unit's second light. */
+const UNITS = [
+  { y: 14, second: "ok" },
+  { y: 38, second: "lantern" },
+  { y: 62, second: "ok" },
+] as const
+/** The checklist's rows, top to bottom. */
+const ROWS = [12, 24, 36]
+---
+
+<div class="watch" aria-hidden="true">
+  <svg class="watch-rack" viewBox="0 0 64 92" focusable="false">
+    <rect class="watch-rack-body" x="2" y="4" width="60" height="84" rx="7" />
+    {
+      UNITS.map((unit, index) => (
+        <g>
+          <rect class="watch-unit" x="9" y={unit.y} width="46" height="18" rx="3.5" />
+          <circle class="watch-light watch-light-ok" cx="17" cy={unit.y + 9} r="2.6" style={`--watch-i: ${index * 2}`} />
+          <circle class:list={["watch-light", `watch-light-${unit.second}`]} cx="25" cy={unit.y + 9} r="2.6" style={`--watch-i: ${index * 2 + 1}`} />
+          <path class="watch-slot" d={`M33 ${unit.y + 7}H48M33 ${unit.y + 11}H44`} />
+        </g>
+      ))
+    }
+    <path class="watch-rack-feet" d="M12 88V91M52 88V91" />
+  </svg>
+  <span class="watch-ghost"><Ghost face="neutral" look={{ x: 0.9, y: 0.7 }} alive="loop" size={84} /></span>
+  <svg class="watch-clipboard" viewBox="0 0 40 50" focusable="false">
+    <rect class="watch-board" x="2" y="5" width="36" height="43" rx="4" />
+    <rect class="watch-clip" x="13" y="1.5" width="14" height="7" rx="2.5" />
+    {
+      ROWS.map((y, index) => (
+        <g>
+          <rect class="watch-box" x="8" y={y + 2} width="7" height="7" rx="1.5" />
+          <path class="watch-tick" d={`M9.3 ${y + 5.6}L11.2 ${y + 7.5}L14.6 ${y + 3.4}`} style={`--watch-i: ${index}`} />
+          <path class="watch-line" d={`M19 ${y + 5.5}H${index === 1 ? 28 : 32}`} />
+        </g>
+      ))
+    }
+  </svg>
+</div>
+
+<style>
+  .watch {
+    --watch-ok: light-dark(oklch(0.62 0.15 155), oklch(0.78 0.14 155));
+    --watch-lantern: light-dark(oklch(0.55 0.15 278), oklch(0.8 0.11 278));
+    --watch-ink: light-dark(oklch(0.62 0.13 278), oklch(0.9 0.035 285));
+    --watch-line: color-mix(in oklch, var(--muted-foreground), transparent 45%);
+    position: relative; width: 10rem; height: 7rem; flex: none;
+  }
+  .watch svg { position: absolute; overflow: visible; }
+  .watch-rack { right: 0; bottom: 0; width: 4rem; height: 5.75rem; }
+  .watch-rack-body { fill: var(--surface); stroke: var(--watch-line); stroke-width: 1.5; }
+  .watch-unit { fill: var(--muted); stroke: var(--watch-line); stroke-width: 1; }
+  .watch-slot, .watch-rack-feet { fill: none; stroke: var(--watch-line); stroke-width: 1.6; stroke-linecap: round; }
+  .watch-light-ok { fill: var(--watch-ok); }
+  .watch-light-lantern { fill: var(--watch-lantern); }
+  .watch-light { transform-box: fill-box; transform-origin: 50% 50%; }
+
+  .watch-ghost { position: absolute; left: 0; bottom: 0; line-height: 0; }
+  .watch-ghost :global(.ghost) { --ghost-cutout: var(--background); }
+  /* The clipboard, held against the ghost's front, a little turned toward the rack. */
+  .watch-clipboard { left: 3.4rem; bottom: 0.2rem; width: 2.3rem; height: 2.9rem; transform: rotate(8deg); }
+  .watch-board { fill: var(--surface); stroke: var(--watch-ink); stroke-width: 1.6; }
+  .watch-clip { fill: var(--watch-ink); }
+  .watch-box { fill: var(--background); stroke: var(--watch-line); stroke-width: 1.2; }
+  .watch-line { fill: none; stroke: var(--border); stroke-width: 2; stroke-linecap: round; }
+  .watch-tick {
+    fill: none; stroke: var(--watch-ok); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    transform-box: fill-box; transform-origin: 50% 60%;
+  }
+
+  /* The round, about 6s: each light dips now and then on its own beat; the boxes are ticked one
+     by one, held, and cleared for the next round. Only opacity and transform move. Still (every
+     box ticked, every light on) under reduced motion, without JavaScript, and when the nav's
+     "Pause animations" is pressed. */
+  @media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+    :global(:root:not([data-motion="paused"])) .watch-light { animation: watch-blink 2.4s ease-in-out infinite; animation-delay: calc(var(--watch-i) * -0.7s); }
+    :global(:root:not([data-motion="paused"])) .watch-tick { animation: watch-tick 6s var(--ease-out) infinite both; animation-delay: calc(var(--watch-i) * 0.9s); }
+  }
+  @keyframes watch-blink {
+    0%, 70%, 100% { opacity: 1; }
+    80% { opacity: 0.35; }
+  }
+  @keyframes watch-tick {
+    0%, 8% { opacity: 0; transform: scale(0.4); }
+    18%, 74% { opacity: 1; transform: scale(1); }
+    84%, 100% { opacity: 0; transform: scale(1); }
+  }
+</style>

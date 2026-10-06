@@ -138,7 +138,7 @@ const editUrl = `${REPO_URL}/edit/main/${source}`
   /* The document: a readable column, the site's type, and code that scrolls inside its own box. */
   .doc { max-width: 70ch; font-size: 1.0625rem; line-height: 1.7; }
   .doc :global(:is(h1, h2, h3)) { scroll-margin-top: 5.5rem; text-wrap: balance; }
-  .doc :global(h1) { font-size: clamp(2.25rem, 3vw + 1.25rem, 3.25rem); margin-bottom: 1.25rem; }
+  .doc :global(h1) { font-size: clamp(1.875rem, 3vw + 1.25rem, 3.25rem); margin-bottom: 1.25rem; overflow-wrap: break-word; hyphens: auto; }
   .doc :global(h2) { font-size: clamp(1.5rem, 1.2vw + 1.1rem, 2rem); margin: 3rem 0 1rem; }
   .doc :global(h3) { font-size: 1.1875rem; margin: 2.25rem 0 0.75rem; }
   .doc :global(:is(p, ul, ol, table)) { margin: 0 0 1.15rem; }

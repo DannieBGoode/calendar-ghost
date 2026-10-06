@@ -130,7 +130,8 @@
   0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
   50% { transform: scale(0.6) rotate(20deg); opacity: 0.7; }
 }
-@media (prefers-reduced-motion: no-preference) {
+/* Without JavaScript there is no Pause animations control to stop a loop, so nothing idles. */
+@media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
   .ghost[data-alive="loop"] .ghost-eyes { animation: ghost-blink 5.2s ease-in-out infinite; animation-delay: var(--ghost-blink-delay, 1.4s); }
   .ghost[data-alive="loop"][data-float] .ghost-float { animation: ghost-float 3.6s ease-in-out infinite; }
   .ghost[data-alive="loop"][data-float] .ghost-shadow { animation: ghost-shadow 3.6s ease-in-out infinite; }

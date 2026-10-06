@@ -108,9 +108,9 @@ const running = (page: Page, selector: string) =>
     .locator(selector)
     .evaluate((element) => element.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length)
 
-test("the footer's sleeping ghost and the health ghost keep looping, past five seconds", async ({ page }) => {
+test("the footer's sleeping ghost, the health ghost, and the homelab's night watch keep looping, past five seconds", async ({ page }) => {
   await page.goto("/")
-  for (const selector of [".footer-watch .ghost", ".mock-health .ghost"]) {
+  for (const selector of [".footer-watch .ghost", ".mock-health .ghost", "#integrations .watch"]) {
     await page.locator(selector).scrollIntoViewIfNeeded()
     expect(await running(page, selector), selector).toBeGreaterThan(0)
   }
@@ -137,6 +137,7 @@ test("the nav's Pause animations stops every loop, is remembered, and applies be
   await expect(page.locator("html")).toHaveAttribute("data-motion", "paused")
   expect(await running(page, ".footer-watch .ghost")).toBe(0)
   expect(await running(page, ".mock-health .ghost")).toBe(0)
+  expect(await running(page, "#integrations .watch")).toBe(0)
   // The footer's sleep talk is simply there.
   await expect(page.locator(".footer-sleep-talk")).toHaveCSS("opacity", "1")
   // The demos rest too, so their own pause controls go.
@@ -670,7 +671,11 @@ for (const path of ["/", "/bold", "/journey"]) {
       await page.goto(path)
       const chat = page.locator(".int-chat")
       await expect(chat.locator(".ghost")).toHaveCount(0)
-      await expect(chat.locator(".int-agent-name")).toHaveText("Claude Code")
+      await expect(chat.locator(".int-agent-name")).toHaveText("Claude")
+      // Claude's own mark, bundled inline in its orange.
+      const mark = chat.locator(".int-agent-avatar svg.int-agent-mark")
+      await expect(mark).toHaveCount(1)
+      await expect(mark.locator("path")).toHaveAttribute("fill", "#D97757")
       await expect(chat).toContainText("calendar-ghost · get_status")
     })
   })
@@ -892,4 +897,19 @@ test("every link to the self-hosting guide on the home page opens the page rende
   expect(hrefs.filter((href) => href.includes("self-hosting.md"))).toEqual([])
   expect(hrefs).toContain(GUIDE_URL)
   expect(hrefs).toContain(INTEGRATIONS_URL)
+})
+
+test("the homelab's night watch: one ghost by a rack, its checklist ticked when nothing moves", async ({ browser }) => {
+  for (const options of [{ reducedMotion: "reduce" as const }, { javaScriptEnabled: false }]) {
+    const context = await browser.newContext(options)
+    const page = await context.newPage()
+    await page.goto("/")
+    const watch = page.locator("#integrations .watch")
+    await expect(watch).toHaveAttribute("aria-hidden", "true")
+    await expect(watch.locator(".ghost")).toHaveCount(1)
+    await expect(page.locator("#integrations .ghost")).toHaveCount(2) // the night watch, and the dashboard tile's healthy ghost
+    for (const tick of await watch.locator(".watch-tick").all()) await expect(tick).toHaveCSS("opacity", "1")
+    expect(await watch.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0)
+    await context.close()
+  }
 })

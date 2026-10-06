@@ -5,8 +5,10 @@
 // self-hosting guide's page, section 6. Facts from docs/self-hosting.md and ADR 0024.
 // A page can pass its own section class for spacing, and put something above the heading through
 // the `eyebrow` slot; the section itself needs only the shared tokens.
+import HomelabWatch from "../components/HomelabWatch.astro"
 import Icon from "../components/Icon.astro"
 import type { Messages } from "../i18n"
+import claudeMark from "../marks/claude.svg?raw"
 import { Ghost } from "../islands/Ghost"
 import { INTEGRATIONS_URL } from "../links"
 
@@ -22,15 +24,21 @@ const BEATS = 24
 const ALERT_AT = 9
 const beats = Array.from({ length: BEATS }, (_, index) => index === ALERT_AT)
 /** The AI assistant answering in the agent mockup: a product name, so not translated. */
-const AGENT = "Claude Code"
+const AGENT = "Claude"
+// Claude's mark, bundled from src/marks (nothing loads from another host), names a compatible
+// client; it does not suggest that Anthropic endorses Calendar Ghost.
+const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria-hidden="true" focusable="false" ')
 ---
 
 <section id="integrations" class:list={[sectionClass, "int"]} aria-labelledby="integrations-title">
   <div class="container">
     <div class="int-head">
-      <slot name="eyebrow" />
-      <h2 id="integrations-title">{copy.title}</h2>
-      <p class="int-lead">{copy.body}</p>
+      <div class="int-intro">
+        <slot name="eyebrow" />
+        <h2 id="integrations-title">{copy.title}</h2>
+        <p class="int-lead">{copy.body}</p>
+      </div>
+      <HomelabWatch />
     </div>
 
     <p class="sr-only">{copy.summary}</p>
@@ -79,7 +87,7 @@ const AGENT = "Claude Code"
           <span class="int-tool"><Icon name="check" class="int-tool-icon" />calendar-ghost · get_status</span>
           <!-- The answer is the assistant's own, in its words; the ghost is what it asked. -->
           <span class="int-reply">
-            <span class="int-agent-avatar"><Icon name="squareTerminal" class="int-agent-icon" /></span>
+            <span class="int-agent-avatar" set:html={AGENT_MARK} />
             <span class="int-agent">
               <b class="int-agent-name">{AGENT}</b>
               <span class="int-msg int-msg-agent">{copy.agent.answer}</span>
@@ -103,7 +111,9 @@ const AGENT = "Claude Code"
     :root:not([data-theme="light"]) .int { --int-ok: oklch(0.74 0.14 155); }
   }
 
-  /* The heading and one sentence: the whole idea, read in a few seconds. */
+  /* The heading and one sentence, the whole idea in a few seconds, beside the ghost on its round. */
+  .int-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1.5rem 2rem; }
+  .int-intro { flex: 1 1 22rem; min-width: 0; }
   .int-head h2 { max-width: 16ch; }
   .int-lead { max-width: 44ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
 
@@ -172,12 +182,12 @@ const AGENT = "Claude Code"
   .int-tool { display: inline-flex; align-items: center; gap: 0.4rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; color: var(--muted-foreground); }
   .int-mock :global(.int-tool-icon) { width: 0.95rem; height: 0.95rem; color: var(--success-foreground); }
   .int-reply { display: flex; align-items: flex-end; gap: 0.5rem; }
-  /* A neutral assistant avatar: a small terminal, no product logo. */
+  /* The assistant's avatar: its own mark, on a quiet disc. */
   .int-agent-avatar {
     display: grid; place-items: center; flex: none; width: 2rem; height: 2rem; border-radius: 50%;
     border: 1px solid var(--border); background: var(--muted); color: var(--foreground);
   }
-  .int-mock :global(.int-agent-icon) { width: 1.05rem; height: 1.05rem; }
+  .int-mock :global(.int-agent-mark) { width: 1.15rem; height: 1.15rem; }
   .int-agent { display: grid; gap: 0.25rem; max-width: 85%; min-width: 0; }
   .int-agent-name { font-size: 0.75rem; font-weight: 700; color: var(--muted-foreground); }
   .int-msg-agent { border: 1px solid var(--border); border-bottom-left-radius: 0.25rem; background: var(--background); color: var(--foreground); }
