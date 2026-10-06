@@ -191,8 +191,9 @@ function wideFrame(): Frame {
   const pill = { width: 214, height: 54, pitch: 70 }
   const stack = SOURCES.length * pill.pitch - (pill.pitch - pill.height)
   const pills = SOURCES.map((source, index) => ({ ...source, x: 0.5, y: middle - stack / 2 + index * pill.pitch, width: pill.width, height: pill.height }))
+  // The ghost sits on the figure's centre line, the same axis as the view switch over it.
   const size = 92
-  const center = (pill.width + day.x) / 2
+  const center = width / 2
   const edges = ghostEdges({ x: 0, y: 0, width: size, height: size })
   const ghost = { x: center - size / 2, y: middle - edges.left.y, width: size, height: size }
   const placed = ghostEdges(ghost)

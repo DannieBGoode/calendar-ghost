@@ -550,6 +550,9 @@ export const en = {
         ownFact: "{event}, Work's own meeting, shows with its title, from {start} to {end}.",
         never: "No titles, guests, meeting links, or invitations from Sam's other calendars reach Work.",
         youFact: "In what you see, Sam's Personal calendar, the gym session, the client call, and the family dinner all keep their titles.",
+        /** The short words on the loop's two controls; their full names are `motion.pause` and
+         * `motion.play`, which contain these. */
+        controls: { pause: "Pause", play: "Play", replay: "Replay" },
       },
     },
   },

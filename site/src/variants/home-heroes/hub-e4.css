@@ -5,9 +5,11 @@
    apart from Sam's own calendars; Busy is Lantern Indigo. */
 
 .hc {
-  --hc-line: color-mix(in oklab, var(--border), var(--foreground) 6%);
-  /* The hairlines, a little stronger on dark pages, where the border colour sinks into the night. */
-  --hc-curve: light-dark(var(--border), color-mix(in oklab, var(--border), var(--foreground) 20%));
+  /* Outlines and hairlines: quiet, but clearly there on both canvases (the plain border colour
+     all but vanishes on the near-white page, and sinks into the night on the dark one). */
+  --hc-line: light-dark(color-mix(in oklab, var(--border), var(--foreground) 18%), color-mix(in oklab, var(--border), var(--foreground) 8%));
+  --hc-curve: light-dark(color-mix(in oklab, var(--border), var(--foreground) 16%), color-mix(in oklab, var(--border), var(--foreground) 20%));
+  --hc-hour: light-dark(color-mix(in oklab, var(--border), var(--background) 10%), color-mix(in oklab, var(--border), var(--background) 50%));
   --hc-personal: var(--event-personal-edge);
   --hc-family: var(--event-family-edge);
   /* The destructive hue, calmed: a brick red, never the alarm red of a stopped rule. */
@@ -51,7 +53,7 @@
 /* The day: its header, its hours (labelled in the gutter, one even height each), Work's own
    meeting in Work's red, and Busy in indigo. Every block carries a dot in its calendar's colour. */
 .hc-rule { fill: none; stroke: var(--hc-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.hc-hour { fill: none; stroke: color-mix(in oklab, var(--border) 50%, var(--background)); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hc-hour { fill: none; stroke: var(--hc-hour); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .hc-svg .hc-hour-label { fill: var(--muted-foreground); text-anchor: end; font-variant-numeric: tabular-nums; }
 .hc-paint {
   fill: color-mix(in oklab, var(--hc-tone) 10%, var(--background));
@@ -119,8 +121,8 @@
 }
 .hc[data-enhanced] .hc-static-view { display: none; }
 
-/* The controls: the switch centred over the whole diagram, and one quiet Pause in its
-   bottom-right corner. */
+/* The controls: the switch centred over the whole diagram, and a small labelled pair, Pause and
+   Replay, in its bottom-right corner. */
 .hc-controls { display: contents; }
 .hc-views {
   position: absolute; z-index: 2; top: 0; left: 50%; transform: translateX(-50%);
@@ -132,9 +134,10 @@
 }
 .hc-view[aria-pressed="true"] { background: var(--muted); color: var(--foreground); }
 .hc-view:hover { color: var(--foreground); }
-.hc-pause { position: absolute; z-index: 2; right: -0.5rem; bottom: 0; }
-.hc .hc-pause { background: transparent; box-shadow: none; color: var(--muted-foreground); }
-.hc .hc-pause:hover { background: var(--muted); color: var(--foreground); }
+.hc-motion { position: absolute; z-index: 2; right: -0.5rem; bottom: 0; display: flex; gap: 0.25rem; }
+.hc-motion .motion-toggle { padding: 0 0.7rem; background: transparent; box-shadow: none; color: var(--muted-foreground); }
+.hc-motion .motion-toggle:hover { background: var(--muted); color: var(--foreground); }
+.hc-replay-icon { fill: none !important; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
 
 /* The loop. Every moving element has its own keyframes for one whole cycle (HeroE4.astro makes
    them, named in `--hc-anim`), so all of them share one duration and start together: chips run

@@ -142,7 +142,7 @@ const VARIANTS = [
     headings: HOME_HEADINGS,
     /** The hero's loop, the week, the home page's crossing. */
     loops: 3,
-    controls: [".hc-view", ".hc-pause", ...HOME_CONTROLS],
+    controls: [".hc-view", ".hc-pause", ".hc-replay", ...HOME_CONTROLS],
   },
 ]
 
@@ -1458,28 +1458,45 @@ test.describe("/home/hero-e4", () => {
     await expect(page.locator(".hh-meta")).toHaveCount(0)
   })
 
-  test("loops calmly with one quiet Pause in the diagram's bottom-right corner, and no Replay", async ({ page }) => {
+  test("loops calmly, with a small labelled Pause and Replay in the diagram's bottom-right corner", async ({ page }) => {
     await page.goto("/home/hero-e4")
     const animations = await run(page)
     expect(animations.length).toBeGreaterThan(10)
     for (const animation of animations) expect(animation.iterations, animation.name).toBe(Infinity)
     const pause = page.locator(".hc").getByRole("button", { name: en.motion.pause })
+    const replay = page.locator(".hc").getByRole("button", { name: hc.controls.replay })
     await expect(pause).toHaveCount(1)
-    await expect(page.locator(".hc").getByRole("button")).toHaveCount(3)
+    await expect(pause).toHaveText(hc.controls.pause)
+    await expect(replay).toBeVisible()
     const figure = (await page.locator(".hc").boundingBox())!
-    const button = (await pause.boundingBox())!
-    expect(button.height).toBeGreaterThanOrEqual(44)
-    expect(figure.x + figure.width - (button.x + button.width)).toBeLessThan(16)
-    expect(figure.y + figure.height - (button.y + button.height)).toBeLessThan(4)
-    // A hairline brightens while its chip runs, and the family dinner lands, then the day clears for the next cycle.
-    await expect.poll(() => opacity(page, '.hc-wide .hc-lit path[data-source="personal"]'), { timeout: 3000 }).toBeGreaterThan(0.5)
+    for (const button of [pause, replay]) {
+      const box = (await button.boundingBox())!
+      expect(box.height).toBeGreaterThanOrEqual(44)
+      expect(box.y + box.height).toBeGreaterThan(figure.y + figure.height - 50)
+      expect(box.x).toBeGreaterThan(figure.x + figure.width / 2)
+    }
+    // A hairline brightens while its chip runs, and the family dinner lands.
+    await expect.poll(() => opacity(page, '.hc-wide .hc-lit path[data-source="personal"]'), { timeout: 4000 }).toBeGreaterThan(0.5)
     await expect.poll(() => opacity(page, block("wide", "family")), { timeout: 9000 }).toBe(1)
-    await expect.poll(() => opacity(page, block("wide", "family")), { timeout: 9000 }).toBe(0)
+    // Replay starts the cycle over: the day is empty again at once.
+    await replay.click()
+    expect(await opacity(page, block("wide", "family"))).toBe(0)
     await pause.click()
     await expect(page.locator(".hc")).toHaveAttribute("data-playing", "false")
+    await expect(page.locator(".hc").getByRole("button", { name: en.motion.play })).toHaveText(hc.controls.play)
     await expect.poll(async () => (await run(page)).filter((animation) => animation.state === "running").length).toBe(0)
     await page.locator(".hc").getByRole("button", { name: en.motion.play }).click()
     await expect.poll(async () => (await run(page)).filter((animation) => animation.state === "running").length).toBeGreaterThan(0)
+  })
+
+  test("centres the switch, the ghost, and the page on one axis", async ({ page }) => {
+    await page.goto("/home/hero-e4")
+    const views = (await page.getByRole("group", { name: hc.viewLabel }).boundingBox())!
+    const ghost = (await page.locator(".hc-wide .hc-ghost").boundingBox())!
+    const figure = (await page.locator(".hc").boundingBox())!
+    const axis = figure.x + figure.width / 2
+    expect(Math.abs(views.x + views.width / 2 - axis)).toBeLessThan(2)
+    expect(Math.abs(ghost.x + ghost.width / 2 - axis)).toBeLessThan(2)
   })
 
   test("off screen, the loop holds", async ({ page }) => {
