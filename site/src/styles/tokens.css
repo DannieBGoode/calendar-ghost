@@ -5,7 +5,13 @@
 :root {
   color-scheme: light dark;
   --font-sans: "Figtree Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  /* Besley, a sturdy Clarendon: the display face on every page (the /journey iteration keeps its
+     own). Its letters are wide and its serifs reach, so headings set it at its natural spacing,
+     never tightened, with room between lines for its tall ascenders. */
+  --font-display: "Besley Variable", ui-serif, Georgia, serif;
+  --display-weight: 600;
+  --display-tracking: 0.003em;
+  --display-leading: 1.12;
   --background: oklch(0.99 0.004 285);
   --foreground: oklch(0.22 0.045 280);
   --surface: oklch(0.972 0.008 285);

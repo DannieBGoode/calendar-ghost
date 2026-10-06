@@ -36,8 +36,8 @@ const [opening, ...rest] = m.why.body
   .b-why-ghost .b-says { flex-direction: column-reverse; align-items: center; }
   .b-why-ghost :global(.speech-bubble)::before { left: calc(50% - 0.325rem) !important; }
   .b-why-opening {
-    font: 420 clamp(1.5rem, 1.3rem + 0.7vw, 1.875rem)/1.35 var(--font-display); letter-spacing: -0.01em; color: var(--foreground);
-    font-variation-settings: "SOFT" 100; max-width: 34ch;
+    font: 420 clamp(1.5rem, 1.3rem + 0.7vw, 1.875rem)/1.35 var(--font-display); letter-spacing: var(--display-tracking); color: var(--foreground);
+    max-width: 34ch;
   }
   .b-why p:not(.b-why-opening):not(.b-signature) { color: var(--muted-foreground); }
   .b-signature { font: italic 600 var(--step-1)/1.3 var(--font-display); color: var(--primary); margin-top: var(--space-md); }

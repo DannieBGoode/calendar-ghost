@@ -88,8 +88,8 @@ const hasHealthExtra = Astro.slots.has("health")
     color: var(--primary);
   }
   .feats .feat h3 {
-    margin: 0 0 0.7rem; font-family: var(--font-display); font-weight: var(--feat-title-weight, 560);
-    font-size: var(--feat-title, clamp(1.625rem, 1.25rem + 1.3vw, 2.25rem)); line-height: 1.1; letter-spacing: -0.015em;
+    margin: 0 0 0.7rem; font-family: var(--font-display); font-weight: var(--feat-title-weight, var(--display-weight));
+    font-size: var(--feat-title, clamp(1.625rem, 1.25rem + 1.3vw, 2.25rem)); line-height: var(--display-leading); letter-spacing: var(--display-tracking);
     text-wrap: balance;
   }
   .feat-body { margin: 0; max-width: 38ch; font-size: 1.0625rem; line-height: 1.55; color: var(--muted-foreground); text-wrap: pretty; }

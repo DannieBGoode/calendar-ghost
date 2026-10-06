@@ -43,7 +43,7 @@ const { m } = Astro.props
   details:last-child { border-bottom: 1px solid var(--border); }
   summary {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 4rem; padding-block: 0.75rem;
-    cursor: pointer; list-style: none; font: 560 var(--step-1)/1.25 var(--font-display); letter-spacing: -0.01em;
+    cursor: pointer; list-style: none; font: var(--display-weight) var(--step-1)/1.25 var(--font-display); letter-spacing: var(--display-tracking);
   }
   summary::-webkit-details-marker { display: none; }
   /* A plus that turns into a cross when the answer opens. */

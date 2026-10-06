@@ -12,10 +12,9 @@ body {
 }
 h1, h2 {
   font-family: var(--font-display);
-  font-weight: 560;
-  font-variation-settings: "SOFT" 100;
-  letter-spacing: -0.015em;
-  line-height: 1.1;
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: var(--display-leading);
   margin: 0 0 0.75rem;
 }
 h1 { font-size: clamp(2.25rem, 5vw + 1rem, 4rem); }

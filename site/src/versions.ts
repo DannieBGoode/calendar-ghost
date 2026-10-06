@@ -5,6 +5,11 @@
 // This index, the /versions page, and the small "Versions" link on iteration pages are internal
 // tools, not public copy, so their words live here instead of in i18n/en.ts (AGENTS.md, "Landing
 // page"). None of it is indexed or in the sitemap.
+//
+// Typography: after comparing faces with a picker on these routes (Fraunces, Young Serif, Besley,
+// Bricolage Grotesque; added in 6a19394), Besley became the display face of every route on
+// 2026-10-06, production included, and the picker was removed. /journey keeps Young Serif as its
+// own choice. Older iterations therefore show Besley now, not the face they were made with.
 
 /**
  * Where an iteration stands: `current` is the live page, a `candidate` is still in the running,
@@ -197,18 +202,3 @@ export function worktreeCommand(commit: string): string {
 /** The "Versions" link's words. */
 export const VERSIONS_LINK_LABEL = "Versions"
 
-/**
- * Display faces to compare on iteration pages (components/DisplayFontPicker.astro), never on
- * production. Fraunces is the page's own; Young Serif is /journey's; Besley (a Clarendon: sturdy,
- * honest, a little playful) and Bricolage Grotesque (a lively grotesque with ink traps) are
- * candidates for "playful, honest, capable". `stack` is null for the page's own face.
- */
-export const DISPLAY_FONTS: readonly { key: string; name: string; stack: string | null }[] = [
-  { key: "fraunces", name: "Fraunces", stack: null },
-  { key: "young-serif", name: "Young Serif", stack: '"Young Serif", ui-serif, Georgia, serif' },
-  { key: "besley", name: "Besley", stack: '"Besley Variable", ui-serif, Georgia, serif' },
-  { key: "bricolage", name: "Bricolage Grotesque", stack: '"Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif' },
-]
-
-/** The display font picker's name, with `{font}` for the face in use. */
-export const DISPLAY_FONT_LABEL = "Display font: {font}"

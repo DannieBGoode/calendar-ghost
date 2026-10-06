@@ -3,7 +3,6 @@
 // the ghost flies along (once, when the strip comes into view) to the last step, where it stays.
 // A page can pass its own section class for spacing; the strip itself needs only the shared
 // tokens.
-import "@fontsource-variable/fraunces/full-italic.css"
 import { avatarUrls } from "../avatars"
 import Avatar from "../components/Avatar.astro"
 import Icon from "../components/Icon.astro"
@@ -87,7 +86,6 @@ const avatars = await avatarUrls()
   .how-steps p:not(.how-step-n) { color: var(--muted-foreground); margin: 0; }
   .how-step-n {
     grid-column: 1; margin: 0; min-width: 1.1ch; font: italic 600 var(--step-2, 2rem)/1 var(--font-display); color: var(--primary);
-    font-variation-settings: "SOFT" 100, "WONK" 1;
   }
 
   /* The pieces of the app: small, crisp, made of the app's own parts. */

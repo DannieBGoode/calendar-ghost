@@ -53,12 +53,13 @@ const [firstLine, secondLine] = m.variants.bold.hero.titleLines
     grid-template-columns: minmax(1.25rem, 1fr) minmax(0, 72rem) minmax(1.25rem, 1fr);
   }
   .b-hero-copy, .b-hero-demo { grid-column: 2; min-width: 0; }
-  .b-hero-copy h1 { margin: 0.25rem 0 1.5rem; line-height: 0.9; }
+  /* Besley is wider than the face this hero was drawn with: the longest word must clear the week. */
+  .b-hero-copy h1 { margin: 0.25rem 0 1.5rem; line-height: 1.04; font-size: min(var(--step-5), max(6vw, 3rem)); }
   .b-hero-copy .b-lead { font-size: clamp(1.125rem, 1.05rem + 0.25vw, 1.25rem); max-width: 40ch; }
   /* The margin note below replaces the demo's own small hint. */
   .b-hero-demo :global(.reveal-hint) { visibility: hidden; }
   .b-hero-copy h1 span, .b-hero-copy h1 em { display: block; }
-  .b-hero-copy h1 em { font-style: italic; color: var(--primary); font-variation-settings: "SOFT" 100, "WONK" 1; }
+  .b-hero-copy h1 em { font-style: italic; color: var(--primary); }
   .b-hero-copy .ctas { margin-top: 1.5rem; }
   .b-btn-big { min-height: 3.25rem; padding-inline: 1.4rem; font-size: 1rem; }
 

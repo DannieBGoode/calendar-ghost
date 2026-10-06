@@ -41,10 +41,10 @@
   }
 }
 
-.bold h1, .bold h2 { letter-spacing: -0.025em; }
-.bold h1 { font-size: var(--step-5); line-height: 0.95; font-weight: 600; letter-spacing: -0.035em; }
-.bold h2 { font-size: var(--step-3); line-height: 1; margin-bottom: var(--space-md); }
-.bold h3 { font-size: var(--step-1); line-height: 1.2; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 0.4rem; }
+.bold h1, .bold h2 { letter-spacing: var(--display-tracking); }
+.bold h1 { font-size: var(--step-5); line-height: 1.04; font-weight: var(--display-weight); letter-spacing: var(--display-tracking); }
+.bold h2 { font-size: var(--step-3); line-height: 1.08; margin-bottom: var(--space-md); }
+.bold h3 { font-size: var(--step-1); line-height: 1.2; font-weight: 700; letter-spacing: var(--display-tracking); margin-bottom: 0.4rem; }
 .bold p, .bold li { max-width: 65ch; }
 .bold .b-lead { font-size: var(--step-1); line-height: 1.45; color: var(--muted-foreground); max-width: 34ch; }
 

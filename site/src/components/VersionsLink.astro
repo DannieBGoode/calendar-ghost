@@ -1,14 +1,12 @@
 ---
 // The iteration tools, fixed in a corner of every iteration page that is not production
-// (src/versions.ts): a small link back to the versions index, and the display font picker for
-// comparing faces. Internal tooling, so their words live in versions.ts.
+// (src/versions.ts): a small link back to the versions index. Internal tooling, so its words
+// live in versions.ts.
 import { VERSIONS_LINK_LABEL, VERSIONS_PATH } from "../versions"
-import DisplayFontPicker from "./DisplayFontPicker.astro"
 ---
 
 <div class="iteration-tools">
   <a class="versions-link" href={VERSIONS_PATH}>{VERSIONS_LINK_LABEL}</a>
-  <DisplayFontPicker />
 </div>
 
 <style>

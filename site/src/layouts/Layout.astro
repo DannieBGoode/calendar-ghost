@@ -1,6 +1,7 @@
 ---
 import "@fontsource-variable/figtree"
-import "@fontsource-variable/fraunces/full.css"
+import "@fontsource-variable/besley/wght.css"
+import "@fontsource-variable/besley/wght-italic.css"
 import "../styles/tokens.css"
 import "../styles/global.css"
 import "../styles/demos.css"
@@ -9,18 +10,18 @@ import "../styles/mockups.css"
 // Preloaded so the Latin glyphs for the headline and body text are ready before first paint,
 // instead of swapping in after layout and shifting the page (the lowest-risk fix for CLS).
 import figtreeLatinWoff2 from "@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2?url"
-import frauncesLatinWoff2 from "@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2?url"
+import besleyLatinWoff2 from "@fontsource-variable/besley/files/besley-latin-wght-normal.woff2?url"
 import { LOCALES, hasLanguagePicker, localePath, messagesFor, stripLocale, type Locale } from "../i18n"
 
 interface Props {
   title: string
   description: string
   noindex?: boolean
-  /** Font files to preload. A page with its own typeface passes its own (default: Figtree and Fraunces). */
+  /** Font files to preload. A page with its own typeface passes its own (default: Figtree and Besley). */
   preloadFonts?: readonly string[]
 }
 
-const { title, description, noindex = false, preloadFonts = [figtreeLatinWoff2, frauncesLatinWoff2] } = Astro.props
+const { title, description, noindex = false, preloadFonts = [figtreeLatinWoff2, besleyLatinWoff2] } = Astro.props
 const site = Astro.site ?? new URL("https://calendarghost.com")
 const canonical = new URL(Astro.url.pathname, site)
 const ogImage = new URL("/og.png", site)

@@ -223,7 +223,7 @@
   background: var(--surface); overflow: hidden;
 }
 .crossing-source { display: grid; gap: 0.35rem; padding: 1rem 1.15rem 1.1rem; background: var(--event-personal); }
-.crossing-source-title { font: 600 clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem)/1.15 var(--font-display); letter-spacing: -0.01em; }
+.crossing-source-title { font: 600 clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem)/1.15 var(--font-display); letter-spacing: var(--display-tracking); }
 .crossing-source-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9375rem; font-weight: 550; }
 .crossing-source > * { display: flex; align-items: center; gap: 0.5rem; }
 /* What the choice sends is marked on the card too: an arrow toward Work. */

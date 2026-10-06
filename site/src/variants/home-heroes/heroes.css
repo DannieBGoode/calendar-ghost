@@ -15,8 +15,7 @@
 }
 
 .hh h1 {
-  font-weight: 600; letter-spacing: -0.03em; line-height: 1; text-wrap: balance;
-  font-variation-settings: "SOFT" 100, "opsz" 144;
+  font-weight: var(--display-weight); letter-spacing: var(--display-tracking); line-height: 1.12; text-wrap: balance;
 }
 .hh h1 > span { display: block; }
 .hh .hh-accent { color: var(--primary); }
