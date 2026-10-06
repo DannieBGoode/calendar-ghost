@@ -105,7 +105,7 @@ export const VERSIONS: readonly Version[] = [
         path: "/home/hero-e2",
         tries: "Hero E's diagram telling the real story: Sam's calendars in their own colours flow through the ghost and land on one Work day as indigo Busy blocks.",
         date: "2026-10-06",
-        commit: "0000000",
+        commit: "88cb76c",
       },
     ],
   },
