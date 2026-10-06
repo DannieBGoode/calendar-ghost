@@ -99,6 +99,15 @@ const VARIANTS = [
     loops: 3,
     controls: [".jc-option", ...HOME_CONTROLS],
   },
+  {
+    path: "/home/hero-d",
+    title: en.hero.title,
+    rest: null,
+    headings: HOME_HEADINGS,
+    /** The hero (its sequence plays once; its ghost blinks), the week, the home page's crossing. */
+    loops: 3,
+    controls: [".se-replay", ...HOME_CONTROLS],
+  },
 ]
 
 /** Scrolls through the whole page so every island hydrates and every once-only scene wakes. */
@@ -451,6 +460,11 @@ const HOME_HEROES = [
     /** Where the Dentist lands on Work: Busy, 15:00 to 16:30. */
     point: '.jc-landed [data-mode="busy"]',
   },
+  {
+    path: "/home/hero-d",
+    /** The two outputs side by side: every detail without Calendar Ghost, Busy with it. */
+    point: ".se-split",
+  },
 ]
 
 test.describe("home hero iterations", () => {
@@ -657,6 +671,128 @@ test.describe("home hero iterations", () => {
     await expect(page.getByRole("link", { name: en.hero.primary }).first()).toBeInViewport()
     await context.close()
   })
+})
+
+test.describe("/home/hero-d", () => {
+  const se = en.variants.homeHeroes.sameEvent
+  const dentist = en.demo.events.dentist
+  const details = [dentist.title, dentist.detail, en.crossing.guests, en.crossing.link, en.variants.journey.crossing.description]
+
+  /** Whether every animation of the sequence has finished. */
+  const rested = (page: Page) =>
+    page
+      .locator(".se")
+      .evaluate((figure) =>
+        figure
+          .getAnimations({ subtree: true })
+          .filter((animation) => (animation as CSSAnimation).animationName.startsWith("se-"))
+          .every((animation) => animation.playState === "finished"),
+      )
+
+  /** The final state: work sees every detail without Calendar Ghost, and only Busy and the time with it. */
+  async function expectFinalState(page: Page) {
+    const exposed = page.locator(".se-without .se-exposed")
+    for (const detail of details) await expect(exposed.getByText(detail, { exact: true })).toBeVisible()
+    await expect(exposed.locator("li")).toHaveCount(5)
+    for (const item of await exposed.locator("li").all()) await expect(item).toHaveCSS("opacity", "1")
+
+    const busy = page.locator(".se-with .se-busy-event")
+    await expect(busy.locator(".se-busy")).toHaveText(en.demo.busy)
+    await expect(busy.locator(".se-busy")).toHaveCSS("opacity", "1")
+    await expect(busy.locator('[data-fact="time"]')).toHaveCSS("opacity", "1")
+    await expect(busy.locator('[data-fact="time"]')).toContainText("15:00–16:30")
+    // Everything else on Work has faded and is hidden from assistive technology.
+    const gone = busy.locator(".se-gone")
+    await expect(gone).toHaveCount(5)
+    for (const part of await gone.all()) {
+      await expect(part).toHaveCSS("opacity", "0")
+      await expect(part).toHaveAttribute("aria-hidden", "true")
+    }
+    expect(await busy.evaluate((element) => getComputedStyle(element, "::before").opacity)).toBe("0")
+    // The rule's lines, in order, each ticked.
+    await expect(page.locator(".se-with .se-cite")).toHaveText(se.rule.map((line) => `${line.key}: ${line.value}`))
+    for (const tick of await page.locator(".se-with .se-tick .se-icon").all()) await expect(tick).toHaveCSS("opacity", "1")
+    await expect(page.locator(".se-without .se-cite")).toHaveText(se.shared.map((line) => `${line.key}: ${line.value}`))
+  }
+
+  test("plays once: the rule ticks in, Busy is left on the with side, every detail stays on the without side", async ({ page }) => {
+    await page.goto("/home/hero-d")
+    // Partway through, the with side still shows the Dentist's title.
+    await page.waitForTimeout(800)
+    expect(Number(await page.locator(".se-with .se-busy").evaluate((element) => getComputedStyle(element).opacity))).toBeLessThan(1)
+    await expect.poll(() => rested(page), { timeout: 6000 }).toBe(true)
+    await expectFinalState(page)
+  })
+
+  test("without JavaScript or with reduced motion, it shows the final state at once", async ({ browser }) => {
+    for (const options of [{ javaScriptEnabled: false }, { reducedMotion: "reduce" as const }]) {
+      const context = await browser.newContext(options)
+      const page = await context.newPage()
+      await page.goto("/home/hero-d")
+      await expectFinalState(page)
+      await expect(page.locator(".se-replay")).toBeHidden()
+      await context.close()
+    }
+  })
+
+  test("Replay runs the sequence again; Pause holds it", async ({ page }) => {
+    await page.goto("/home/hero-d")
+    await expect.poll(() => rested(page), { timeout: 6000 }).toBe(true)
+    const busyOpacity = () => page.locator(".se-with .se-busy").evaluate((element) => Number(getComputedStyle(element).opacity))
+    await page.getByRole("button", { name: se.replay }).click()
+    expect(await rested(page)).toBe(false)
+    expect(await busyOpacity()).toBeLessThan(1)
+    await page.locator(".se").getByRole("button", { name: en.motion.pause }).click()
+    await expect(page.locator(".se")).toHaveAttribute("data-playing", "false")
+    const held = await busyOpacity()
+    await page.waitForTimeout(4500)
+    expect(await busyOpacity()).toBe(held)
+    expect(await rested(page)).toBe(false)
+    await page.locator(".se").getByRole("button", { name: en.motion.play }).click()
+    await expect.poll(() => rested(page), { timeout: 6000 }).toBe(true)
+    await expectFinalState(page)
+  })
+
+  for (const scheme of ["light", "dark"] as const) {
+    test(`in ${scheme}: a small ghost, ${scheme === "light" ? "outlined, with no halo" : "white and glowing"}`, async ({ browser }) => {
+      const context = await browser.newContext({ colorScheme: scheme, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-d")
+      const ghost = page.locator(".se-ghost .ghost")
+      await expect(ghost).toHaveAttribute("data-tone", "mist")
+      expect((await ghost.boundingBox())!.width).toBeLessThanOrEqual(32)
+      const glow = await ghost.evaluate((element) => getComputedStyle(element, "::before").backgroundColor)
+      if (scheme === "light") expect(glow).toBe("rgba(0, 0, 0, 0)")
+      else expect(glow).not.toBe("rgba(0, 0, 0, 0)")
+      // The ghost rests beside the last line it applied.
+      const last = (await page.locator(".se-with .se-cite").last().boundingBox())!
+      const box = (await ghost.boundingBox())!
+      expect(Math.abs(box.y + box.height / 2 - (last.y + last.height / 2))).toBeLessThan(3)
+      await context.close()
+    })
+  }
+
+  for (const [width, height] of [
+    [390, 844],
+    [320, 740],
+  ] as const) {
+    test(`at ${width}px the two outputs stay side by side, inside the page`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-d")
+      const without = (await page.locator(".se-exposed").boundingBox())!
+      const busy = (await page.locator(".se-busy-event").boundingBox())!
+      expect(Math.abs(without.y - busy.y)).toBeLessThan(1)
+      expect(Math.abs(without.height - busy.height)).toBeLessThan(1)
+      expect(busy.x).toBeGreaterThan(without.x + without.width)
+      expect(busy.x + busy.width).toBeLessThanOrEqual(width)
+      // Every rule line keeps to its own row: none overlaps the next.
+      const lines = await page.locator(".se-with .se-cite-text").evaluateAll((all) => all.map((line) => line.getBoundingClientRect().bottom))
+      const tops = await page.locator(".se-with .se-cite").evaluateAll((all) => all.map((line) => line.getBoundingClientRect().top))
+      for (let index = 1; index < tops.length; index += 1) expect(lines[index - 1]).toBeLessThanOrEqual(tops[index] + 0.5)
+      await context.close()
+    })
+  }
 })
 
 test.describe("the versions index", () => {

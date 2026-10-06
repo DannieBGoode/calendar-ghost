@@ -83,6 +83,14 @@ export const VERSIONS: readonly Version[] = [
         date: "2026-10-05",
         commit: "9d55fab",
       },
+      {
+        name: "Hero D: the same event, with and without",
+        status: "candidate",
+        path: "/home/hero-d",
+        tries: "After littleplains: Sam's Dentist as work sees it without Calendar Ghost (every detail) and with it, where the rule's lines tick in until only Busy is left.",
+        date: "2026-10-06",
+        commit: "0000000",
+      },
     ],
   },
   {

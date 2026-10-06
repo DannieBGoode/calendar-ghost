@@ -1,0 +1,191 @@
+/* Hero D's figure (HeroD.astro): the same event, with and without Calendar Ghost. Editorial and
+   flat: no box around the figure, thin rules between its parts, and the events as the only filled
+   shapes. Everything is scoped to `.se`. */
+
+.se {
+  /* One rule line's height: the ghost steps down the lines by it. */
+  --se-line: 1.875rem;
+  --se-ghost: 30px;
+  --se-rule: color-mix(in oklch, var(--border), transparent 15%);
+  --se-step: 0.6s;
+  --se-first: 1.2s;
+  margin: 0; min-width: 0;
+  font-size: 0.875rem; line-height: 1.4;
+}
+
+/* The caption and the two controls, over a thin rule. */
+.se-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  min-height: 2.75rem; padding-bottom: 0.375rem; margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--se-rule);
+}
+.se-caption { font-size: 0.8125rem; font-weight: 600; color: var(--muted-foreground); letter-spacing: 0.01em; }
+.se-controls { display: flex; align-items: center; gap: 0.125rem; margin-right: -0.5rem; }
+.se-controls .motion-toggle { background: transparent; box-shadow: none; color: var(--muted-foreground); }
+.se-controls .motion-toggle:hover { background: var(--muted); color: var(--foreground); }
+.se-replay {
+  display: inline-flex; align-items: center; gap: 0.375rem; min-height: 2.75rem; padding: 0 0.625rem;
+  border: 0; border-radius: 999px; background: none; color: var(--muted-foreground);
+  font: inherit; font-size: 0.8125rem; font-weight: 600; cursor: pointer;
+}
+.se-replay:hover { background: var(--muted); color: var(--foreground); }
+.se-replay[hidden] { display: none; }
+.se-replay svg { width: 0.875rem; height: 0.875rem; fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+
+/* A calendar's name with Sam's portrait. */
+.se-cal { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; font-size: 0.8125rem; font-weight: 650; }
+.se-cal .avatar { width: 1.5rem; height: 1.5rem; border-radius: 50%; }
+
+/* An event as a calendar shows it: tinted with its calendar's color and outlined in a deeper
+   shade, all the way round. */
+.se-event {
+  position: relative; isolation: isolate; display: grid; align-content: start; gap: 0.3rem;
+  padding: 0.75rem 0.875rem 0.875rem; border-radius: 0.625rem;
+  border: 1px solid var(--event-personal-edge); background: var(--event-personal);
+}
+.se-title { font-size: 1rem; font-weight: 700; line-height: 1.25; }
+.se-facts { display: grid; gap: 0.2rem; margin: 0; padding: 0; list-style: none; font-weight: 550; }
+.se-facts li { display: flex; align-items: center; gap: 0.45rem; min-width: 0; white-space: nowrap; }
+/* A part too long for its column ends in an ellipsis rather than breaking at a hyphen. */
+.se-facts .se-fact { overflow: hidden; text-overflow: ellipsis; }
+.se-icon { flex: none; width: 0.875rem; height: 0.875rem; }
+.se-facts .se-icon { opacity: 0.75; }
+
+/* The input: Sam's Dentist on Personal, its parts in one flowing line. */
+.se-input { margin-bottom: 1.5rem; }
+.se-source { gap: 0.35rem; }
+.se-source .se-facts { display: flex; flex-wrap: wrap; column-gap: 1rem; row-gap: 0.2rem; }
+
+/* The two outputs, each a column of four rows (label, why, the calendar's name, the event), so
+   the two events line up side by side. */
+.se-split {
+  --se-gap: 2.5rem;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: repeat(4, auto);
+  column-gap: var(--se-gap);
+}
+.se-side { grid-row: 1 / span 4; display: grid; grid-template-rows: subgrid; min-width: 0; }
+/* A thin rule between the two. */
+.se-with { position: relative; }
+.se-with::before { content: ""; position: absolute; inset: 0 auto 0 calc(var(--se-gap) / -2); width: 1px; background: var(--se-rule); }
+.se-label {
+  margin: 0 0 0.75rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.se-with .se-label { color: var(--primary); }
+
+/* A cited line: a sign, then "key: value". */
+.se-cite { display: flex; align-items: center; gap: 0.55rem; margin: 0; min-height: var(--se-line); white-space: nowrap; }
+.se-cite b { font-weight: 650; }
+/* Without it, the same lines say what shows: plain, an open eye in a ring, nothing ticked. */
+.se-shared { margin-bottom: 1rem; color: var(--muted-foreground); }
+.se-shared b { color: var(--foreground); }
+.se-shared .se-tick { color: var(--muted-foreground); }
+.se-shared .se-tick .se-icon { width: 0.7rem; height: 0.7rem; stroke-width: 2.5; }
+
+/* The rule at work: five lines, each ticked, and the ghost beside the last one it applied. */
+.se-rule-wrap { position: relative; display: grid; grid-template-columns: minmax(0, max-content) auto; justify-content: start; column-gap: 1rem; margin-bottom: 1rem; }
+.se-rule { margin: 0; padding: 0; list-style: none; min-width: 0; }
+.se-rule .se-cite { height: var(--se-line); }
+.se-tick {
+  position: relative; display: grid; place-items: center; flex: none; width: 1.125rem; height: 1.125rem;
+  border-radius: 50%; color: var(--primary-foreground);
+  box-shadow: inset 0 0 0 1.5px var(--border);
+}
+.se-with .se-tick::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--primary);
+}
+.se-tick .se-icon { position: relative; width: 0.75rem; height: 0.75rem; stroke-width: 3; }
+.se-ghost {
+  display: block; align-self: start; line-height: 0;
+  transform: translateY(calc((var(--se-line) - var(--se-ghost)) / 2 + 4 * var(--se-line)));
+}
+.se-ghost .ghost { --ghost-size: var(--se-ghost); --ghost-glow-r: 7px; --ghost-cutout: var(--background); }
+.se-ghost .ghost[data-tone="mist"] {
+  /* White on dark with its glow; on light, outlined and without a halo. */
+  --ghost-edge: light-dark(oklch(0.6 0.08 280), oklch(0.9 0.035 285));
+  --ghost-glow: light-dark(transparent, oklch(0.9 0.07 285 / 0.4));
+}
+/* The ghost ends pleased; without the sequence, it simply is (ghost.css's own timing is off here). */
+.se .se-ghost .ghost[data-sequence] :is(.ghost-face-first, .ghost-face-then) { animation: none; }
+
+/* Busy: a plain fill in Lantern Indigo's tint, a solid edge, and the ghost glyph before the word
+   (heroes.css). The Dentist's own colors sit on a layer above it that fades as the rule applies. */
+.se-busy-event { border-color: color-mix(in oklch, var(--primary), transparent 55%); background: var(--event-busy); }
+.se-busy-event::before {
+  content: ""; position: absolute; inset: -1px; z-index: -1; border-radius: inherit;
+  background: var(--event-personal); box-shadow: inset 0 0 0 1px var(--event-personal-edge); opacity: 0;
+}
+.se-head-swap { display: grid; }
+.se-head-swap > * { grid-area: 1 / 1; }
+.se-busy { display: flex; align-items: center; gap: 0.35em; }
+.se-gone { opacity: 0; }
+
+/* Phones: the same two columns, smaller. Each line puts its value under its key, so every line
+   is two rows tall and the ghost still steps by one line's height. */
+@media (max-width: 559px) {
+  .se { --se-line: 2.5rem; font-size: 0.75rem; }
+  .se-split { --se-gap: 1.5rem; }
+  .se-head { margin-bottom: 1rem; }
+  .se-input { margin-bottom: 1.25rem; }
+  .se-label { margin-bottom: 0.5rem; font-size: 0.6875rem; letter-spacing: 0.06em; }
+  .se-cite { align-items: start; gap: 0.45rem; white-space: normal; line-height: 1.25; }
+  .se-cite b { display: block; }
+  .se-tick { width: 1rem; height: 1rem; }
+  .se-rule-wrap, .se-shared { margin-bottom: 0.5rem; }
+  .se-rule-wrap { column-gap: 0.5rem; }
+  .se-cal { gap: 0.4rem; font-size: 0.75rem; }
+  .se-cal .avatar { width: 1.25rem; height: 1.25rem; }
+  .se-event { gap: 0.2rem; padding: 0.6rem 0.65rem 0.7rem; }
+  .se-title { font-size: 0.875rem; }
+  .se-facts { gap: 0.15rem; }
+  .se-facts li { gap: 0.35rem; }
+  .se-icon { width: 0.75rem; height: 0.75rem; }
+}
+
+/* The smallest phones: the ghost floats at the column's edge instead of taking a column of its
+   own, and the events drop their icons, so every line keeps to its two rows. */
+@media (max-width: 379px) {
+  .se { --se-ghost: 24px; }
+  .se-rule-wrap { display: block; }
+  .se-ghost { position: absolute; top: 0; right: -0.25rem; }
+  .se-event .se-facts .se-icon { display: none; }
+}
+
+/* The sequence, once from the first paint: the input appears, then the two outputs, both still the
+   whole Dentist. The rule's lines tick in one after another, the ghost beside each, and each takes
+   from the event on Work what it keeps home. Last, the title gives way to Busy and the ghost is
+   pleased. Only opacity and transform move. */
+@media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+  .se-input { animation: se-in 500ms var(--ease-out) both; }
+  .se-side > :is(.se-label, .se-cal, .se-event, .se-shared) { animation: se-in 500ms var(--ease-out) 350ms both; }
+  .se-with .se-cite { animation: se-pending 400ms var(--ease-out) 350ms both; }
+  .se-with .se-cite-text { animation: se-cite 300ms var(--ease-out) both; animation-delay: calc(var(--se-first) + var(--i) * var(--se-step)); }
+  .se-with .se-tick::before, .se-with .se-tick .se-icon { animation: se-tick 300ms var(--ease-out) both; animation-delay: calc(var(--se-first) + var(--i) * var(--se-step)); }
+  .se-gone { animation: se-gone 450ms var(--ease-out) both; animation-delay: calc(var(--se-first) + var(--by) * var(--se-step) + 120ms); }
+  .se-busy { animation: se-busy 450ms var(--ease-out) both; animation-delay: calc(var(--se-first) + var(--by) * var(--se-step) + 220ms); }
+  .se-busy-event::before { animation: se-was 500ms var(--ease-out) both; animation-delay: calc(var(--se-first) + 3 * var(--se-step) + 120ms); }
+  .se-ghost { animation: se-ghost 4s var(--ease-out-quart) both; }
+  .se .se-ghost .ghost[data-sequence] .ghost-face-first { animation: se-face-first 4.4s linear both; }
+  .se .se-ghost .ghost[data-sequence] .ghost-face-then { animation: se-face-then 4.4s linear both; }
+}
+.se[data-playing="false"] *, .se[data-playing="false"] *::before { animation-play-state: paused !important; }
+
+@keyframes se-in { from { opacity: 0; transform: translateY(0.5rem); } }
+/* The lines wait, faint, until they apply. */
+@keyframes se-pending { from { opacity: 0; } }
+@keyframes se-cite { from { opacity: 0.4; } }
+@keyframes se-tick { from { opacity: 0; transform: scale(0.6); } }
+@keyframes se-gone { from { opacity: 1; } to { opacity: 0; } }
+@keyframes se-busy { from { opacity: 0; } to { opacity: 1; } }
+@keyframes se-was { from { opacity: 1; } to { opacity: 0; } }
+/* The ghost steps down beside each line as it applies (at 1.2s, then every 0.6s of the 4s). */
+@keyframes se-ghost {
+  0%, 22% { opacity: 0; transform: translateY(calc((var(--se-line) - var(--se-ghost)) / 2)); }
+  30%, 36% { opacity: 1; transform: translateY(calc((var(--se-line) - var(--se-ghost)) / 2)); }
+  44%, 51% { transform: translateY(calc((var(--se-line) - var(--se-ghost)) / 2 + var(--se-line))); }
+  59%, 66% { transform: translateY(calc((var(--se-line) - var(--se-ghost)) / 2 + 2 * var(--se-line))); }
+  74%, 81% { transform: translateY(calc((var(--se-line) - var(--se-ghost)) / 2 + 3 * var(--se-line))); }
+  89%, 100% { opacity: 1; transform: translateY(calc((var(--se-line) - var(--se-ghost)) / 2 + 4 * var(--se-line))); }
+}
+@keyframes se-face-first { 0%, 86% { opacity: 1; } 90%, 100% { opacity: 0; } }
+@keyframes se-face-then { 0%, 86% { opacity: 0; } 90%, 100% { opacity: 1; } }

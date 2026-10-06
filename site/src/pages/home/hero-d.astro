@@ -1,0 +1,12 @@
+---
+// Home page, hero iteration D: the same event, with and without Calendar Ghost. See src/versions.ts.
+import { messagesFor } from "../../i18n"
+import HeroD from "../../variants/home-heroes/HeroD.astro"
+import HomeHeroPage from "../../variants/home-heroes/HomeHeroPage.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<HomeHeroPage path="/home/hero-d">
+  <HeroD m={m} />
+</HomeHeroPage>

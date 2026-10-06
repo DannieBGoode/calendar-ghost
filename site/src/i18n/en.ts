@@ -18,6 +18,13 @@ interface ActivityRow {
   time: string
 }
 
+/** One line of a rule at work in hero D, as "key: value" ("Guests: stay home"). The hero shows
+ * exactly five, each tied to what it changes on the event, so a translation keeps the count. */
+interface RuleLine {
+  key: string
+  value: string
+}
+
 // Every user-visible word on the site. A new language copies this module and
 // `satisfies Messages`, so a missing key fails `astro check`. Fixed-length lists (the five
 // weekdays, the three self-host steps matched to `SELF_HOST_COMMANDS`, the five things that
@@ -402,7 +409,7 @@ export const en = {
       },
       ending: { says: "Delivered. Give me a server, and I'll carry the rest." },
     },
-    /** The home page's hero iterations (/home/hero-a, -b, -a2, -b2). Each tries
+    /** The home page's hero iterations (/home/hero-a, -b, -a2, -b2, -d). Each tries
      * another first screen above the home page's own sections. */
     homeHeroes: {
       /** One plain line under the headline. */
@@ -411,6 +418,31 @@ export const en = {
       meta: "Open source (AGPL) · Docker · Google Calendar",
       /** The hint under the ghost handle: for a mouse, then for touch. */
       handleHint: { mouse: "Move over the week", touch: "Drag the ghost" },
+      /** Hero D (/home/hero-d): Sam's Dentist as work sees it, without Calendar Ghost and with
+       * it, and the rule's lines that explain the difference. */
+      sameEvent: {
+        caption: "The same event, with and without Calendar Ghost",
+        without: "Without Calendar Ghost",
+        /** Why work sees every detail without it, line for line beside the rule: the whole
+         * calendar is shared, so the guest, the meeting link, and every detail show. */
+        shared: [
+          { key: "Shared", value: "the whole calendar" },
+          { key: "Guests", value: "shown" },
+          { key: "Meeting link", value: "shown" },
+          { key: "Shows", value: "every detail" },
+        ] as [RuleLine, RuleLine, RuleLine, RuleLine],
+        with: "With Calendar Ghost",
+        /** The rule at work, one line at a time, in the order they apply. Busy-Only Projection:
+         * guests, conferencing links, and invitations never cross over; the title is "Busy". */
+        rule: [
+          { key: "Rule", value: "Personal → Work" },
+          { key: "Guests", value: "stay home" },
+          { key: "Meeting link", value: "stays home" },
+          { key: "Shows", value: "Busy only" },
+          { key: "Invitations", value: "never sent" },
+        ] as [RuleLine, RuleLine, RuleLine, RuleLine, RuleLine],
+        replay: "Replay",
+      },
     },
   },
 }
