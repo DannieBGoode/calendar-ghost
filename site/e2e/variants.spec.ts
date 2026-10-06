@@ -108,6 +108,15 @@ const VARIANTS = [
     loops: 3,
     controls: [".se-replay", ...HOME_CONTROLS],
   },
+  {
+    path: "/home/hero-e",
+    title: en.hero.title,
+    rest: null,
+    headings: HOME_HEADINGS,
+    /** The hero's travelling segments, the week, the home page's crossing. */
+    loops: 3,
+    controls: HOME_CONTROLS,
+  },
 ]
 
 /** Scrolls through the whole page so every island hydrates and every once-only scene wakes. */
@@ -465,6 +474,13 @@ const HOME_HEROES = [
     /** The two outputs side by side: every detail without Calendar Ghost, Busy with it. */
     point: ".se-split",
   },
+  {
+    path: "/home/hero-e",
+    /** The whole diagram: every part, the ghost, and every calendar. */
+    point: ".nd-wide",
+    /** Its ghost is an outline drawn in Lantern Indigo, not the character (checked below). */
+    character: false,
+  },
 ]
 
 test.describe("home hero iterations", () => {
@@ -490,6 +506,7 @@ test.describe("home hero iterations", () => {
       })
     }
 
+    if (hero.character === false) continue
     test(`${hero.path}: the hero's ghost is never the green one`, async ({ page }) => {
       await page.goto(hero.path)
       await expect(page.locator(".hh .ghost").first()).toBeAttached()
@@ -790,6 +807,141 @@ test.describe("/home/hero-d", () => {
       const lines = await page.locator(".se-with .se-cite-text").evaluateAll((all) => all.map((line) => line.getBoundingClientRect().bottom))
       const tops = await page.locator(".se-with .se-cite").evaluateAll((all) => all.map((line) => line.getBoundingClientRect().top))
       for (let index = 1; index < tops.length; index += 1) expect(lines[index - 1]).toBeLessThanOrEqual(tops[index] + 0.5)
+      await context.close()
+    })
+  }
+})
+
+test.describe("/home/hero-e", () => {
+  const nd = en.variants.homeHeroes.nodeDiagram
+  const NEVER = ["guests", "organizer", "link", "attachments", "invitations"]
+  const DETAILS = ["title", "place", "description"]
+  const CALENDARS = ["work", "family", "personal"]
+
+  /** A segment's dash offset, in diagram units: on its path when negative or zero. */
+  const offset = (page: Page, selector: string) =>
+    page.locator(selector).evaluate((element) => Number.parseFloat(getComputedStyle(element).strokeDashoffset))
+
+  /** The diagram's own animations (not the rest of the page's). */
+  const loop = (page: Page) =>
+    page.locator(".nd").evaluate((figure) => figure.getAnimations({ subtree: true }).map((animation) => animation.playState))
+
+  test("without JavaScript or with reduced motion, the still diagram shows every route and every stop", async ({ browser }) => {
+    for (const options of [{ javaScriptEnabled: false }, { reducedMotion: "reduce" as const }]) {
+      const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...options })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e")
+      await expect(page.locator(".nd-wide")).toBeVisible()
+      await expect(page.locator(".nd-tall")).toBeHidden()
+      expect(await loop(page)).toEqual([])
+      const wide = ".nd-wide"
+      // The time runs into the ghost and out to every calendar.
+      expect(await offset(page, `${wide} .nd-leg[data-part="time"]:not([data-to])`)).toBeLessThan(0)
+      for (const calendar of CALENDARS) expect(await offset(page, `${wide} .nd-leg[data-part="time"][data-to="${calendar}"]`), calendar).toBeLessThan(0)
+      // The details run into the ghost and out only to Personal.
+      for (const part of DETAILS) {
+        expect(await offset(page, `${wide} .nd-leg[data-part="${part}"]:not([data-to])`), part).toBeLessThan(0)
+        await expect(page.locator(`${wide} .nd-leg[data-part="${part}"][data-to]`)).toHaveAttribute("data-to", "personal")
+      }
+      // The parts that never cross over show their stop and cap, and go nowhere.
+      for (const part of NEVER) {
+        const stop = page.locator(`${wide} .nd-stop[data-part="${part}"]`)
+        await expect(stop).toBeVisible()
+        await expect(stop).toHaveCSS("opacity", "1")
+        // The cap is a short line across the curve (no width, so measured by its height).
+        expect((await stop.locator(".nd-cap").boundingBox())!.height, part).toBeGreaterThan(6)
+        await expect(page.locator(`${wide} .nd-leg[data-part="${part}"][data-to]`)).toHaveCount(0)
+      }
+      await expect(page.locator(`${wide} .nd-stop`)).toHaveCount(NEVER.length)
+      await context.close()
+    }
+  })
+
+  test("its segments travel, its stops come and go, and the pause control holds them", async ({ page }) => {
+    await page.goto("/home/hero-e")
+    const time = '.nd-wide .nd-leg[data-part="time"]:not([data-to])'
+    // The time sets off first, within a second.
+    await expect.poll(() => offset(page, time), { timeout: 2000 }).toBeLessThan(0)
+    const before = await offset(page, time)
+    await page.waitForTimeout(300)
+    expect(await offset(page, time)).toBeLessThan(before)
+    // A stop is out of sight until its segment reaches it.
+    await expect(page.locator('.nd-wide .nd-stop[data-part="invitations"]')).toHaveCSS("opacity", "0")
+
+    await page.locator(".nd").getByRole("button", { name: en.motion.pause }).click()
+    await expect(page.locator(".nd")).toHaveAttribute("data-playing", "false")
+    await expect.poll(async () => new Set(await loop(page))).toEqual(new Set(["paused"]))
+    // A pause takes hold on the next frame.
+    await page.waitForTimeout(200)
+    const held = await offset(page, time)
+    await page.waitForTimeout(500)
+    expect(await offset(page, time)).toBe(held)
+    await page.locator(".nd").getByRole("button", { name: en.motion.play }).click()
+    await expect(page.locator(".nd")).toHaveAttribute("data-playing", "true")
+    await expect.poll(async () => new Set(await loop(page))).toEqual(new Set(["running"]))
+  })
+
+  test("off screen, the loop holds", async ({ page }) => {
+    await page.goto("/home/hero-e")
+    await expect.poll(() => loop(page)).toContain("running")
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+    await expect(page.locator(".nd")).toHaveAttribute("data-offscreen", "")
+    await expect.poll(async () => new Set(await loop(page))).toEqual(new Set(["paused"]))
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await expect(page.locator(".nd")).not.toHaveAttribute("data-offscreen", "")
+    await expect.poll(async () => new Set(await loop(page))).toEqual(new Set(["running"]))
+  })
+
+  test("tells screen readers the same facts, and hides the drawing from them", async ({ page }) => {
+    await page.goto("/home/hero-e")
+    await expect(page.getByRole("figure", { name: nd.summary })).toBeAttached()
+    await expect(page.locator(".nd li")).toHaveText(nd.facts)
+    for (const svg of await page.locator(".nd svg").all()) await expect(svg).toHaveAttribute("aria-hidden", "true")
+  })
+
+  for (const scheme of ["light", "dark"] as const) {
+    test(`in ${scheme}: hairlines and outlines only, the ghost in Lantern Indigo`, async ({ browser }) => {
+      const context = await browser.newContext({ colorScheme: scheme, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e")
+      const primary = await page.locator(".hh-accent").evaluate((element) => getComputedStyle(element).color)
+      await expect(page.locator(".nd-wide .nd-ghost")).toHaveCSS("stroke", primary)
+      const decorated = await page.locator(".nd").evaluate((figure) =>
+        [figure, ...figure.querySelectorAll("*")].filter((element) => {
+          const style = getComputedStyle(element)
+          return style.boxShadow !== "none" || style.filter !== "none" || style.backgroundImage !== "none"
+        }).length,
+      )
+      expect(decorated).toBe(0)
+      await context.close()
+    })
+  }
+
+  for (const [width, height] of [
+    [390, 844],
+    [320, 740],
+  ] as const) {
+    test(`at ${width}px the diagram turns: the parts on top, the ghost in the middle, the calendars below`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" })
+      const page = await context.newPage()
+      await page.goto("/home/hero-e")
+      await expect(page.locator(".nd-wide")).toBeHidden()
+      const tall = page.locator(".nd-tall")
+      await expect(tall).toBeVisible()
+      const box = (await tall.boundingBox())!
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(width)
+      const boxes = async (selector: string) => Promise.all((await tall.locator(selector).all()).map(async (item) => (await item.boundingBox())!))
+      const parts = await boxes(".nd-pill:not(.nd-destination)")
+      const calendars = await boxes(".nd-destination")
+      const ghost = (await tall.locator(".nd-ghost").boundingBox())!
+      expect(parts).toHaveLength(9)
+      expect(Math.max(...parts.map((part) => part.y + part.height))).toBeLessThan(ghost.y)
+      expect(ghost.y + ghost.height).toBeLessThan(Math.min(...calendars.map((calendar) => calendar.y)))
+      // Three calendars side by side, every stop and the time's route still drawn.
+      expect(new Set(calendars.map((calendar) => Math.round(calendar.y))).size).toBe(1)
+      for (const calendar of CALENDARS) expect(await offset(page, `.nd-tall .nd-leg[data-part="time"][data-to="${calendar}"]`)).toBeLessThan(0)
+      for (const part of NEVER) await expect(tall.locator(`.nd-stop[data-part="${part}"]`)).toBeVisible()
       await context.close()
     })
   }

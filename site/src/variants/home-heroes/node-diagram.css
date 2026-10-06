@@ -1,0 +1,81 @@
+/* Hero E's node diagram (HeroE.astro, node-diagram.ts). Hairlines, outlined pills, one outlined
+   ghost, plain text, and a few short coloured segments: nothing filled, shadowed, or glowing. */
+
+.nd {
+  --nd-time: var(--primary);
+  --nd-details: oklch(0.55 0.13 155);
+  --nd-stays: oklch(0.56 0.19 27);
+  --nd-pill-line: color-mix(in oklab, var(--border), var(--foreground) 6%);
+  position: relative;
+  margin: clamp(1.75rem, 5vh, 3rem) auto 0;
+}
+:root[data-theme="dark"] .nd { --nd-details: oklch(0.76 0.13 155); --nd-stays: oklch(0.72 0.16 25); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .nd { --nd-details: oklch(0.76 0.13 155); --nd-stays: oklch(0.72 0.16 25); }
+}
+
+/* One layout at a time: parts beside the ghost on wide screens, above it on narrow ones. */
+.nd-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.nd-tall { display: none; }
+@media (max-width: 899.98px) {
+  .nd { max-width: 26rem; }
+  .nd-wide { display: none; }
+  .nd-tall { display: block; }
+}
+
+.nd-svg text { font-family: var(--font-sans); fill: var(--foreground); dominant-baseline: central; }
+
+/* The hairlines. */
+.nd-curves path { fill: none; stroke: var(--border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+/* The pills: a hairline outline on the page's own colour; the few that tell the story are tinted. */
+.nd-pill rect { fill: var(--background); stroke: var(--nd-pill-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.nd-pill[data-tinted] { --nd-tone: var(--nd-time); }
+.nd-pill[data-tinted][data-role="details"] { --nd-tone: var(--nd-details); }
+.nd-pill[data-tinted][data-role="stays"] { --nd-tone: var(--nd-stays); }
+.nd-pill[data-tinted] rect {
+  fill: color-mix(in oklab, var(--nd-tone) 6%, var(--background));
+  stroke: color-mix(in oklab, var(--nd-tone) 55%, var(--background));
+}
+.nd-projection { fill: var(--muted-foreground); }
+
+/* The ghost: the mark's outline drawn thin in Lantern Indigo, its name in plain ink. */
+.nd-ghost, .nd-tabs, .nd-hub {
+  fill: none; stroke: var(--primary); stroke-width: 1.5; vector-effect: non-scaling-stroke;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.nd-ghost { fill: var(--background); }
+.nd-eye { fill: var(--primary); }
+.nd-name { text-anchor: middle; font-weight: 500; letter-spacing: -0.01em; }
+
+/* The travelling segments. Still, each rests where node-diagram.ts puts it (or out of sight). */
+.nd-leg {
+  fill: none; stroke: var(--nd-tone); stroke-width: 2; stroke-linecap: butt;
+  stroke-dasharray: var(--dash); stroke-dashoffset: var(--still);
+}
+.nd-leg[data-role="time"] { --nd-tone: var(--nd-time); }
+.nd-leg[data-role="details"] { --nd-tone: var(--nd-details); }
+.nd-leg[data-role="stays"], .nd-stop { --nd-tone: var(--nd-stays); }
+.nd-stop path { fill: none; stroke: var(--nd-tone); stroke-width: 2; stroke-linecap: round; }
+
+/* The pause control, small and quiet in the diagram's corner. */
+.nd-controls { position: absolute; right: -0.625rem; bottom: -0.625rem; }
+.nd-controls .motion-toggle { background: transparent; box-shadow: none; color: var(--muted-foreground); }
+.nd-controls .motion-toggle:hover { background: var(--muted); color: var(--foreground); }
+
+/* The loop: each segment runs its curve once per cycle, from its own moment; a part that stays
+   home is swallowed at its stop, where its last stretch and cap show for a moment. This hero
+   alone animates `stroke-dashoffset`, on thin paths, and only while the diagram is on screen. */
+@media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+  .nd-leg { animation: nd-travel var(--nd-cycle) linear var(--delay) infinite backwards; }
+  .nd-stop { opacity: 0; animation: nd-stop var(--nd-cycle) linear var(--delay) infinite; }
+  .nd:is([data-playing="false"], [data-offscreen]) :is(.nd-leg, .nd-stop) { animation-play-state: paused; }
+}
+@keyframes nd-travel {
+  from { stroke-dashoffset: var(--from); }
+  to { stroke-dashoffset: var(--to); }
+}
+@keyframes nd-stop {
+  0%, 9% { opacity: 1; }
+  14%, 100% { opacity: 0; }
+}

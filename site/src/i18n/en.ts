@@ -443,6 +443,36 @@ export const en = {
         ] as [RuleLine, RuleLine, RuleLine, RuleLine, RuleLine],
         replay: "Replay",
       },
+      /** Hero E (/home/hero-e): an event's parts flowing through the ghost to Sam's calendars, as
+       * a node diagram. Busy-Only Projection sends only the time, titled “Busy”; Details
+       * Projection adds the title, description, and place; the rest never crosses over. */
+      nodeDiagram: {
+        /** An event's parts, one pill each. */
+        parts: {
+          time: "Time",
+          title: "Title",
+          place: "Place",
+          description: "Description",
+          guests: "Guests",
+          organizer: "Organizer",
+          link: "Meeting link",
+          attachments: "Attachments",
+          invitations: "Invitations",
+        },
+        /** The name inside the ghost, one line each. */
+        name: ["Calendar", "Ghost"] as [string, string],
+        /** What a calendar's rule sends it, after the calendar's name. */
+        projections: { busy: "Busy", details: "Details" },
+        /** A calendar's pill on wide screens: "Work · Busy". */
+        destination: "{calendar} · {projection}",
+        /** The diagram's facts for screen readers; the drawing itself is hidden from them. */
+        summary: "What crosses over from an event to each of Sam's calendars",
+        facts: [
+          "The time crosses over to Work, Family, and Personal. Work and Family see it titled “Busy”.",
+          "The title, place, and description cross over only to Personal, whose rule copies details.",
+          "Guests, organizer, meeting link, attachments, and invitations never cross over.",
+        ] as [string, string, string],
+      },
     },
   },
 }
