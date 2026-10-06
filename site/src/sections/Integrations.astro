@@ -35,16 +35,17 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
 <section id="integrations" class:list={[sectionClass, "int"]} aria-labelledby="integrations-title">
   <div class="container">
     <div class="int-head">
-      <slot name="eyebrow" />
-      <h2 id="integrations-title">{copy.title}</h2>
-      <p class="int-lead">{copy.body}</p>
+      <div class="int-intro">
+        <slot name="eyebrow" />
+        <h2 id="integrations-title">{copy.title}</h2>
+        <p class="int-lead">{copy.body}</p>
+      </div>
+      <!-- The night watch keeps an eye on the cards from just above them: in the heading row's
+           empty right half on wide screens, above the first card on phones. -->
+      <HomelabWatch />
     </div>
 
     <p class="sr-only">{copy.summary}</p>
-    <!-- The night watch perches on the cards it reports to: on the uptime monitor's top edge on
-         wide screens, on the first card's on phones. -->
-    <div class="int-board">
-    <HomelabWatch />
     <ul class="int-readers">
       <li class="int-reader">
         <h3>{copy.dashboard.label}</h3>
@@ -107,7 +108,6 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
         </div>
       </li>
     </ul>
-    </div>
 
     <a class="int-guide" href={INTEGRATIONS_URL}>{copy.guide}<Icon name="arrowRight" class="int-guide-icon" /></a>
   </div>
@@ -123,26 +123,36 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
     :root:not([data-theme="light"]) .int { --int-ok: oklch(0.74 0.14 155); }
   }
 
-  /* The heading and one sentence, the whole idea in a few seconds: a plain column. */
-  .int-head h2 { max-width: 16ch; }
-  .int-lead { max-width: 44ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
-
-  /* The cards, and the night watch standing on them. The watch's foot line sits on the top edge
-     of the uptime monitor's card (the middle one, its right end), whose newest check beats in time
-     with each tick on the watch's clipboard; on phones, where the cards stack, on the first card's.
-     The space above the cards is the watch's perch. */
-  .int-board {
+  /* The heading and one sentence, the whole idea in a few seconds, in a plain column; the night
+     watch stands in the row's empty right half, its feet on the line of the sentence's last line,
+     over the right two cards and clear of them: about 28px above their labels. On phones it has a
+     row of its own, at the right, the same distance above the first card's label. */
+  .int {
+    --int-gap: 1.75rem;
     --int-label-h: 1.25rem;
     --int-label-gap: 0.6rem;
-    --int-gap: 1.75rem;
-    position: relative; margin-top: 6.5rem;
+    --int-perch: 1.75rem;
   }
-  .int-board > :global(.watch) {
-    position: absolute; z-index: 1; right: 0.85rem;
-    top: calc(var(--int-label-h) + var(--int-label-gap) + 1px);
-    transform: translateY(-100%);
+  .int-head { display: grid; gap: 1.25rem; }
+  .int-intro { min-width: 0; }
+  .int-head h2 { max-width: 16ch; }
+  .int-lead { max-width: 44ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
+  .int-head > :global(.watch) { justify-self: end; margin-right: 0.5rem; }
+  @media (min-width: 900px) {
+    .int { --int-gap: clamp(1.25rem, 2.5vw, 2rem); }
+    .int-head { position: relative; }
+    /* Centred over the right card while the cards are narrow, over the gap between the right two
+       once there is room beside the sentence. */
+    .int-head > :global(.watch) {
+      position: absolute; bottom: 0; margin: 0;
+      right: calc((100% - 2 * var(--int-gap)) / 6 - 5rem);
+    }
   }
-  .int-readers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--int-gap); }
+  @media (min-width: 1200px) {
+    .int-head > :global(.watch) { right: calc((100% - 2 * var(--int-gap)) / 3 + var(--int-gap) / 2 - 5rem); }
+  }
+
+  .int-readers { list-style: none; margin: var(--int-perch) 0 0; padding: 0; display: grid; gap: var(--int-gap); }
   .int-reader { display: grid; align-content: start; gap: var(--int-label-gap); min-width: 0; }
   .int-reader h3 { margin: 0; font-size: 0.8125rem; line-height: var(--int-label-h); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
   .int-mock {
@@ -197,57 +207,70 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
   }
   .int-mock :global(.int-alert-icon) { width: 0.95rem; height: 0.95rem; flex: none; }
 
-  /* An AI agent, as a chat: a slim header with the contact, a faintly patterned wall, bubbles
-     with tails (the question on the right, the answer on the left), each with its time in the
-     corner, and the tool call as a centred system note between them. */
+  /* An AI agent, as a chat in WhatsApp's colours (not its logo): the wallpaper with a very faint
+     doodle pattern, the contact's header, white (dark: slate) bubbles for Claude and green ones for
+     the person asking, blue read ticks, and the tool call as a system message. Timestamps are a
+     shade deeper (light) or lighter (dark) on the green bubble than WhatsApp's, so they keep
+     4.5:1. The doodles are drawn here, inline, as a mask. */
   .int-chat {
-    --chat-wall: color-mix(in oklch, var(--muted) 70%, var(--surface));
-    --chat-dot: color-mix(in oklch, var(--muted-foreground), transparent 86%);
-    --chat-you: var(--primary-soft);
-    --chat-them: var(--background);
-    display: grid; grid-template-rows: auto 1fr; padding: 0; background: var(--chat-wall);
+    --wa-wall: light-dark(#efeae2, #0b141a);
+    --wa-doodle: light-dark(rgb(17 27 33 / 0.06), rgb(233 237 239 / 0.045));
+    --wa-head: light-dark(#f0f2f5, #202c33);
+    --wa-text: light-dark(#111b21, #e9edef);
+    --wa-sub: light-dark(#54656f, #8696a0);
+    --wa-in: light-dark(#ffffff, #202c33);
+    --wa-out: light-dark(#d9fdd3, #005c4b);
+    --wa-time-in: light-dark(#667781, #8696a0);
+    --wa-time-out: light-dark(#5b6a72, #b3cdc6);
+    --wa-tick: #53bdeb;
+    --wa-system: light-dark(#ffffff, #182229);
+    --wa-system-text: light-dark(#54656f, #8696a0);
+    display: grid; grid-template-rows: auto 1fr; padding: 0; background: var(--wa-wall); color: var(--wa-text);
   }
   .int-chat-head {
     display: flex; align-items: center; gap: 0.55rem; padding: 0.55rem 0.85rem;
-    border-bottom: 1px solid var(--border); background: var(--surface);
+    background: var(--wa-head);
   }
   .int-agent-avatar {
     display: grid; place-items: center; flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%;
-    border: 1px solid var(--border); background: var(--background);
+    background: light-dark(#ffffff, #111b21);
   }
   .int-mock :global(.int-agent-mark) { width: 1.1rem; height: 1.1rem; }
   .int-chat-who { display: grid; line-height: 1.2; }
-  .int-agent-name { font-size: 0.875rem; font-weight: 700; color: var(--foreground); }
-  .int-chat-who small { font-size: 0.6875rem; color: var(--muted-foreground); }
-  .int-chat-body {
-    display: grid; align-content: center; gap: 0.5rem; padding: 0.85rem 0.85rem 1rem;
-    background-image: radial-gradient(var(--chat-dot) 1px, transparent 1.4px); background-size: 14px 14px;
+  .int-agent-name { font-size: 0.875rem; font-weight: 700; color: var(--wa-text); }
+  .int-chat-who small { font-size: 0.6875rem; color: var(--wa-sub); }
+  .int-chat-body { position: relative; display: grid; align-content: center; gap: 0.5rem; padding: 0.85rem 0.85rem 1rem; }
+  .int-chat-body::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--wa-doodle);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 30v-9a7 7 0 0 1 7-7h6a7 7 0 0 1 7 7v9q-2 3-4 0q-2-3-4 0q-2 3-4 0q-2-3-4 0q-2 3-4 0Z'/%3E%3Crect x='72' y='12' width='22' height='20' rx='3'/%3E%3Cpath d='M72 19h22M78 9v6M88 9v6'/%3E%3Cpath d='M54 58l2 5 5 .5-4 3.5 1.2 5L54 69l-4.2 3 1.2-5-4-3.5 5-.5Z'/%3E%3Ccircle cx='22' cy='84' r='7'/%3E%3Cpath d='M22 80v4l3 2'/%3E%3Cpath d='M88 70c4-6 12-6 14 0s-8 10-14 0Z'/%3E%3Cpath d='M72 100q6-8 12 0t12 0'/%3E%3Cpath d='M40 104l6-6M46 104l-6-6'/%3E%3C/svg%3E") 0 0 / 120px 120px repeat;
   }
+  .int-chat-body > * { position: relative; }
   .int-msg {
     position: relative; display: block; max-width: 86%; padding: 0.45rem 0.65rem 0.4rem;
-    border-radius: 0.6rem; font-size: 0.8125rem; line-height: 1.4; color: var(--foreground);
-    box-shadow: 0 1px 1px color-mix(in oklch, var(--foreground), transparent 90%);
+    border-radius: 0.5rem; font-size: 0.8125rem; line-height: 1.4; color: var(--wa-text);
+    box-shadow: 0 1px 0.5px rgb(11 20 26 / 0.13);
   }
   /* The tail: a small corner folded out of the bubble's top, toward its sender's side. */
   .int-msg::before {
     content: ""; position: absolute; top: 0; width: 0.55rem; height: 0.6rem; background: inherit;
   }
-  .int-msg-you { justify-self: end; border-top-right-radius: 0; background: var(--chat-you); }
+  .int-msg-you { --wa-time: var(--wa-time-out); justify-self: end; border-top-right-radius: 0; background: var(--wa-out); }
   .int-msg-you::before { right: -0.5rem; clip-path: polygon(0 0, 100% 0, 0 100%); }
-  .int-msg-agent { justify-self: start; border-top-left-radius: 0; background: var(--chat-them); }
+  .int-msg-agent { --wa-time: var(--wa-time-in); justify-self: start; border-top-left-radius: 0; background: var(--wa-in); }
   .int-msg-agent::before { left: -0.5rem; clip-path: polygon(0 0, 100% 0, 100% 100%); }
   /* The time sits in the bubble's bottom-right corner, after the last line. */
   .int-msg-meta {
     float: right; display: inline-flex; align-items: center; gap: 0.2rem; margin: 0.35rem -0.1rem -0.1rem 0.6rem;
-    font-size: 0.625rem; line-height: 1; color: var(--muted-foreground); font-variant-numeric: tabular-nums;
+    font-size: 0.6875rem; line-height: 1; color: var(--wa-time); font-variant-numeric: tabular-nums;
   }
-  .int-read { width: 0.95rem; height: 0.6rem; fill: none; stroke: var(--primary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .int-read { width: 0.95rem; height: 0.6rem; fill: none; stroke: var(--wa-tick); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  /* A system message, as WhatsApp centres them: a small rounded label on the wallpaper. */
   .int-tool {
-    justify-self: center; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.6rem; border-radius: 999px;
-    background: var(--surface); border: 1px solid var(--border);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.6875rem; color: var(--muted-foreground);
+    justify-self: center; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.7rem; border-radius: 0.5rem;
+    background: var(--wa-system); box-shadow: 0 1px 0.5px rgb(11 20 26 / 0.13);
+    font-size: 0.75rem; font-weight: 500; color: var(--wa-system-text);
   }
-  .int-mock :global(.int-tool-icon) { width: 0.85rem; height: 0.85rem; color: var(--success-foreground); }
+  .int-mock :global(.int-tool-icon) { width: 0.85rem; height: 0.85rem; color: currentColor; }
 
   /* The way to the setup: one quiet link, not another call to action. */
   .int-guide {
@@ -259,14 +282,7 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
   .int-guide:hover :global(.int-guide-icon) { transform: translateX(3px); }
 
   @media (min-width: 900px) {
-    .int-board { --int-gap: clamp(1.25rem, 2.5vw, 2rem); margin-top: 5.25rem; }
     .int-readers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    /* The middle card's right end: one card and one gap in from the board's right edge. */
-    .int-board > :global(.watch) { right: calc((100% - 2 * var(--int-gap)) / 3 + var(--int-gap) + 0.85rem); }
-  }
-  /* Where the middle card is narrow, the watch stands a little smaller, clear of the card's label. */
-  @media (min-width: 900px) and (max-width: 1199px) {
-    .int-board > :global(.watch) { transform: translateY(-100%) scale(0.8); transform-origin: 100% 100%; }
   }
 
   /* Once, when each tool first comes into view: the checks come in one by one, the answer
@@ -284,20 +300,20 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
     .int-chat[data-awake] .int-msg-agent { animation-delay: 1400ms; }
     .int-dash[data-awake] .int-field-status { animation: int-pop 420ms var(--ease-out) 500ms both; }
   }
-  /* The monitor's newest check beats in time with the night watch's ticks (HomelabWatch.astro:
-     a 6s round, boxes ticked from 8% to 18%, 23% to 33%, and 38% to 48% of it). Both loops start
-     with the page's first style, so they keep step; the newest bar draws itself on a layer of its
-     own, so the bars' arrival above still applies to it. Stopped, it simply stands, like the rest. */
+  /* The monitor's newest check beats in time with the night watch's ticks (HomelabWatch.astro: a
+     3.4s round each time the watch comes into view, boxes ticked at 1.6s, 2.5s, and 3.4s). Both
+     start from the same change (the watch waking), so they keep step; the newest bar draws itself
+     on a layer of its own, so the bars' arrival above still applies to it. */
   .int-beats i:last-child { position: relative; background: transparent; }
   .int-beats i:last-child::before {
     content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--int-ok); transform-origin: 50% 100%;
   }
   @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
-    :global(:root:not([data-motion="paused"])) .int-beats i:last-child::before { animation: int-newest 6s var(--ease-out) infinite; }
+    .int:has(:global(.watch[data-awake])) .int-beats i:last-child::before { animation: int-newest 3.4s var(--ease-out) both; }
   }
   @keyframes int-newest {
-    0%, 6%, 18%, 21%, 33%, 36%, 48%, 100% { opacity: 1; transform: none; }
-    8%, 23%, 38% { opacity: 0.2; transform: scaleY(0.2); }
+    0%, 25.7%, 47.1%, 52.2%, 73.5%, 78.7%, 100% { opacity: 1; transform: none; }
+    29.3%, 55.7%, 82.2% { opacity: 0.2; transform: scaleY(0.2); }
   }
   @keyframes int-beat { from { opacity: 0; transform: scaleY(0.2); } to { opacity: 1; transform: none; } }
   @keyframes int-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
