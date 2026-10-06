@@ -134,7 +134,7 @@ export const VERSIONS: readonly Version[] = [
         path: "/home/hero-e5",
         tries: "Hero E4 with a mark before each event: an emoji before every title it shows (the pills, the chips on their way in, the Personal calendar, Work's own meeting), and the ghost glyph wherever a title is hidden from Work (the Busy chips and blocks, the titles the ghost keeps back).",
         date: "2026-10-07",
-        commit: "f41dcc7",
+        commit: "39194d2",
       },
     ],
   },
