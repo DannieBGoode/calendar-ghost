@@ -57,7 +57,9 @@ const lines = command.split("\n").length
   }
   .command code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.875rem; padding-block: 0.35rem; }
   .command .btn { flex: none; }
-  /* Several commands: one per line, the button beside the first. */
-  .command-lines { align-items: flex-start; }
-  .command-lines code { white-space: pre; line-height: 1.9; }
+  /* Several commands: one per line, across the whole box (the first is the longest), and the
+     button in the bottom corner, beside the last and shortest. */
+  .command-lines { position: relative; display: block; padding: 0.75rem 0.9rem; }
+  .command-lines code { display: block; white-space: pre; line-height: 1.9; padding-block: 0; }
+  .command-lines .btn { position: absolute; right: 0.6rem; bottom: 0.6rem; }
 </style>

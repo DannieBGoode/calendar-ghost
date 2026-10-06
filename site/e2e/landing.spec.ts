@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { DOC_PAGES, docPagePath } from "../src/docs/pages"
 import { en } from "../src/i18n/en"
-import { STATUS_CHECK_COMMAND } from "../src/content/integrations"
+import { SELF_HOST_COMMANDS } from "../src/content/self-host"
 import {
   CHANGELOG_URL,
   DOCS_URL,
@@ -58,7 +58,7 @@ test("without JavaScript, the content and the hero's resting state are there", a
   await expect(page.getByText(en.faq.items[0]!.q)).toBeVisible()
   await expect(page.getByRole("img", { name: en.app.overview.alt })).toBeVisible()
   expect(await split(page)).toBe("55%")
-  await expect(page.locator('button[data-copy="self-host-command-0"]')).toBeHidden()
+  await expect(page.locator('button[data-copy="self-host-commands"]')).toBeHidden()
   await expect(page.locator(".crossing-stage .crossing-landed").getByText(en.demo.busy)).toBeVisible()
   await expect(page.locator(".crossing-stays").getByText(en.crossing.alwaysStays[0])).toBeVisible()
   // No CSS state gates the bubble without JavaScript: the ghost just says the resting line.
@@ -229,12 +229,17 @@ test("on a phone, the pitch fits the first screen and the week shows Monday to W
   await context.close()
 })
 
-test("a copy button selects the command when the clipboard is unavailable", async ({ page }) => {
+test("self-hosting shows the three commands in one block, and its one Copy button selects them all without a clipboard", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: undefined }))
   await page.goto("/#self-host")
-  await page.locator('button[data-copy="self-host-command-1"]').click()
-  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("cp .env.example .env")
-  await expect(page.locator('button[data-copy="self-host-command-1"]')).toHaveText(en.selfHost.selected)
+  const section = page.locator("#self-host")
+  await expect(section.locator("button[data-copy]")).toHaveCount(1)
+  await expect(section.locator("ol, ul, h3")).toHaveCount(0)
+  await expect(section.getByText(en.selfHost.requirements)).toBeVisible()
+  await expect(section.getByRole("link", { name: en.selfHost.guide })).toHaveAttribute("href", GUIDE_URL)
+  await section.locator('button[data-copy="self-host-commands"]').click()
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(SELF_HOST_COMMANDS.join("\n"))
+  await expect(section.locator('button[data-copy="self-host-commands"]')).toHaveText(en.selfHost.selected)
 })
 
 test("the app mockups follow the dark color scheme", async ({ browser }) => {
@@ -295,19 +300,19 @@ for (const path of ["/", "/bold", "/journey", "/home/hero-a"]) {
 }
 
 for (const path of ["/", "/bold"]) {
-  test(`${path}: monitors and agents come after the trust list, with a status check to copy`, async ({ page }) => {
-    await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: undefined }))
+  test(`${path}: monitors and agents come after the trust list: one sentence, three tools, one link`, async ({ page }) => {
     await page.goto(path)
     const ids = await page.locator("main > section").evaluateAll((sections) => sections.map((section) => section.id))
     expect(ids.indexOf("integrations")).toBe(ids.indexOf("trust") + 1)
     expect(ids.indexOf("self-host")).toBe(ids.indexOf("integrations") + 1)
     const section = page.locator("#integrations")
     await expect(section.getByRole("heading", { level: 2 })).toHaveText(en.integrations.title)
+    await expect(section.locator(".int-lead")).toHaveText(en.integrations.body)
+    await expect(section.locator(".int-reader")).toHaveCount(3)
+    // The setup's detail lives on the guide's page, not here.
+    await expect(section.locator("a")).toHaveCount(1)
     await expect(section.getByRole("link", { name: en.integrations.guide })).toHaveAttribute("href", INTEGRATIONS_URL)
-    const copy = section.locator('button[data-copy="integrations-status-check"]')
-    await copy.click()
-    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(STATUS_CHECK_COMMAND)
-    await expect(copy).toHaveText(en.selfHost.selected)
+    await expect(section.locator("button[data-copy], pre, .int-caption")).toHaveCount(0)
   })
 }
 

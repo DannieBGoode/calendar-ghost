@@ -242,38 +242,34 @@ export const en = {
    * shown as code (field names and paths stay as they are in every language). */
   integrations: {
     title: "It reports to your homelab.",
-    body: "One answer to “is my calendar sync working?”, from a status API and an MCP server. Your dashboard, your uptime monitor, and your AI agent can all ask.",
+    body: "Your dashboard, your uptime monitor, and your AI agent can all ask if sync is working.",
     summary:
-      "The status API answers healthy with the summary “3 rules running.” A dashboard tile shows Calendar Ghost as Healthy with 3 rules running. An uptime monitor shows it as Up, and once sent an alert when it needed a look. An AI agent asked “Is my calendar sync working?” and got the answer that all is well.",
-    apiSummary: "3 rules running.",
+      "A dashboard tile shows Calendar Ghost as Healthy with 3 rules running. An uptime monitor shows it as Up, and once sent an alert when it needed a look. An AI agent asked “Is my calendar sync working?” and got the answer that all is well.",
     dashboard: {
       label: "Dashboard",
       statusLabel: "Status",
       summaryLabel: "Summary",
       healthy: "Healthy",
-      caption: "`summary` is one line for a tile in Homepage, Homarr, or any dashboard.",
     },
     monitor: {
       label: "Uptime monitor",
       up: "Up",
-      check: "Alert when `needs_attention` is `true`",
       alerted: "Needs a look · alert sent",
-      caption: "Uptime Kuma, or any monitor that reads JSON, alerts on `needs_attention`.",
     },
     agent: {
       label: "AI agent",
       question: "Is my calendar sync working?",
       answer: "Calendar Ghost is healthy: 3 rules running, last synced 2 minutes ago. Nothing needs your attention.",
-      caption: "The MCP server at `/mcp` lets Claude Code or Codex answer, and say what to do when something is wrong.",
     },
-    checkTitle: "Check a token",
-    tokens:
-      "Issue one Integration Token per tool in Settings → Integrations. It only reads status, is shown once, and can be revoked. Send it only in the `Authorization` header.",
-    privacy: "The answer never contains event content, calendar IDs, account emails, or token data.",
+    /** A link to the self-hosting guide's section on tokens, the status API, and the MCP server. */
     guide: "Set up monitors and agents",
   },
   selfHost: {
     title: "Self-host it",
+    /** The home page's one line under the title (the alternative designs use `body`). */
+    line: "One Docker service and one SQLite file, on a server you own.",
+    /** What you need, in one quiet line under the commands. */
+    requirements: "Docker and a Google Cloud project. Runs on a Raspberry Pi.",
     body: "Calendar Ghost runs as one small Docker service with one SQLite file. You own the server, the data, and the keys.",
     needsTitle: "What you need",
     needs: [

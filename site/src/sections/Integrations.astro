@@ -1,14 +1,11 @@
 ---
 // Monitors, dashboards, and AI agents: one status answer (Installation Status), shown as what
-// three tools make of it. A dashboard tile shows the summary, an uptime monitor alerts on
-// `needs_attention`, and an agent answers through the MCP server. Facts from
-// docs/self-hosting.md section 6 and ADR 0024, nothing beyond them.
+// three tools make of it: a dashboard tile, an uptime monitor's checks, and an agent's answer.
+// One sentence says it; the setup (tokens, the status API, the MCP server) lives on the
+// self-hosting guide's page, section 6. Facts from docs/self-hosting.md and ADR 0024.
 // A page can pass its own section class for spacing, and put something above the heading through
 // the `eyebrow` slot; the section itself needs only the shared tokens.
-import Coded from "../components/Coded.astro"
-import CopyCommand from "../components/CopyCommand.astro"
 import Icon from "../components/Icon.astro"
-import { STATUS_CHECK_COMMAND } from "../content/integrations"
 import type { Messages } from "../i18n"
 import { Ghost } from "../islands/Ghost"
 import { INTEGRATIONS_URL } from "../links"
@@ -31,31 +28,10 @@ const AGENT = "Claude Code"
 <section id="integrations" class:list={[sectionClass, "int"]} aria-labelledby="integrations-title">
   <div class="container">
     <div class="int-head">
-      <div class="int-intro">
-        <slot name="eyebrow" />
-        <h2 id="integrations-title">{copy.title}</h2>
-        <p class="int-lead">{copy.body}</p>
-      </div>
-      <!-- The one answer every tool reads: the status API's verdict, and the MCP tool that gives it. -->
-      <div class="int-hub" aria-hidden="true">
-        <span class="int-hub-ghost"><Ghost face="happy" alive="brief" float /></span>
-        <div class="int-json">
-          <span class="int-route"><b>GET</b> /api/v1/status</span>
-          <pre><code><span class="int-p">{"{"}</span>
-  <span class="int-k">"status"</span>: <span class="int-v int-v-ok">"healthy"</span>,
-  <span class="int-k">"needs_attention"</span>: <span class="int-v">false</span>,
-  <span class="int-k">"summary"</span>: <span class="int-v">"{copy.apiSummary}"</span>
-<span class="int-p">{"}"}</span></code></pre>
-          <span class="int-route int-route-mcp"><b>MCP</b> /mcp · get_status</span>
-        </div>
-      </div>
+      <slot name="eyebrow" />
+      <h2 id="integrations-title">{copy.title}</h2>
+      <p class="int-lead">{copy.body}</p>
     </div>
-
-    <svg class="int-fan" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-      <path d="M750 0C750 55 167 45 167 100" />
-      <path d="M750 0C750 55 500 45 500 100" />
-      <path d="M750 0C750 55 833 45 833 100" />
-    </svg>
 
     <p class="sr-only">{copy.summary}</p>
     <ul class="int-readers">
@@ -78,7 +54,6 @@ const AGENT = "Claude Code"
           <span class="int-tile int-tile-blank"><i></i><b></b><b></b></span>
           <span class="int-tile int-tile-blank"><i></i><b></b><b></b></span>
         </div>
-        <p class="int-caption"><Coded text={copy.dashboard.caption} /></p>
       </li>
       <li class="int-reader">
         <h3>{copy.monitor.label}</h3>
@@ -95,9 +70,7 @@ const AGENT = "Claude Code"
             <Icon name="bell" class="int-alert-icon" />
             {copy.monitor.alerted}
           </span>
-          <span class="int-check"><Coded text={copy.monitor.check} /></span>
         </div>
-        <p class="int-caption"><Coded text={copy.monitor.caption} /></p>
       </li>
       <li class="int-reader">
         <h3>{copy.agent.label}</h3>
@@ -113,21 +86,10 @@ const AGENT = "Claude Code"
             </span>
           </span>
         </div>
-        <p class="int-caption"><Coded text={copy.agent.caption} /></p>
       </li>
     </ul>
 
-    <div class="int-foot">
-      <div class="int-try">
-        <h3>{copy.checkTitle}</h3>
-        <CopyCommand m={m} id="integrations-status-check" command={STATUS_CHECK_COMMAND} />
-        <p><Coded text={copy.tokens} /></p>
-      </div>
-      <div class="int-promise">
-        <p><Icon name="shieldCheck" class="int-promise-icon" />{copy.privacy}</p>
-        <a class="btn btn-primary" href={INTEGRATIONS_URL}>{copy.guide}</a>
-      </div>
-    </div>
+    <a class="int-guide" href={INTEGRATIONS_URL}>{copy.guide}<Icon name="arrowRight" class="int-guide-icon" /></a>
   </div>
 </section>
 
@@ -140,40 +102,14 @@ const AGENT = "Claude Code"
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .int { --int-ok: oklch(0.74 0.14 155); }
   }
-  .int code { font-size: 0.875em; }
 
-  /* The heading and the hub: the answer every tool reads. */
-  .int-head { display: grid; gap: var(--space-lg, 2.5rem); align-items: center; }
-  .int-head > * { min-width: 0; }
-  .int-intro h2 { max-width: 14ch; }
-  .int-lead { max-width: 40ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
-  .int-hub { position: relative; display: flex; align-items: flex-end; justify-content: center; gap: 0.25rem; }
-  .int-hub-ghost { position: relative; z-index: 1; margin-right: -1.5rem; margin-bottom: 1.25rem; }
-  .int-hub :global(.ghost) { --ghost-cutout: var(--background); --ghost-size: 96px; }
-  .int-json {
-    display: grid; gap: 0.5rem; min-width: 0; padding: 0.9rem 1.1rem 1rem;
-    border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
-    font-size: 0.8125rem;
-  }
-  .int-json pre { margin: 0; overflow-x: auto; font-size: 0.8125rem; line-height: 1.55; }
-  .int-json pre code { font-size: inherit; }
-  .int-route { display: flex; gap: 0.5rem; align-items: center; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.75rem; color: var(--muted-foreground); }
-  .int-route b {
-    padding: 0.05rem 0.4rem; border-radius: 0.3rem; font-family: var(--font-sans); font-size: 0.6875rem; letter-spacing: 0.02em;
-    background: var(--primary-soft); color: var(--foreground);
-  }
-  .int-route-mcp { padding-top: 0.5rem; border-top: 1px dashed var(--border); }
-  .int-k { color: var(--primary); }
-  .int-v-ok { color: var(--success-foreground); font-weight: 700; }
-  .int-p { color: var(--muted-foreground); }
+  /* The heading and one sentence: the whole idea, read in a few seconds. */
+  .int-head h2 { max-width: 16ch; }
+  .int-lead { max-width: 44ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
 
-  /* The fan: one answer, three readers. Only where the readers sit side by side. */
-  .int-fan { display: none; }
-
-  .int-readers { list-style: none; margin: var(--space-lg, 2.5rem) 0 0; padding: 0; display: grid; gap: var(--space-lg, 2.5rem); }
+  .int-readers { list-style: none; margin: clamp(2rem, 4vw, 3rem) 0 0; padding: 0; display: grid; gap: 1.75rem; }
   .int-reader { display: grid; align-content: start; gap: 0.6rem; min-width: 0; }
   .int-reader h3 { margin: 0; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
-  .int-caption { margin: 0.2rem 0 0; color: var(--muted-foreground); font-size: 0.9375rem; }
   .int-mock {
     position: relative; min-height: 13.5rem; padding: 1rem; overflow: hidden;
     border: 1px solid var(--border); border-radius: calc(var(--panel-radius) + 0.25rem); background: var(--int-mock-bg);
@@ -225,7 +161,6 @@ const AGENT = "Claude Code"
     background: inherit; transform: rotate(45deg);
   }
   .int-mock :global(.int-alert-icon) { width: 0.95rem; height: 0.95rem; flex: none; }
-  .int-check { padding-top: 0.7rem; border-top: 1px dashed var(--border); color: var(--muted-foreground); }
 
   /* An AI agent: the question, the tool it calls, and the ghost's answer. */
   .int-chat { display: grid; align-content: center; gap: 0.6rem; }
@@ -247,32 +182,17 @@ const AGENT = "Claude Code"
   .int-agent-name { font-size: 0.75rem; font-weight: 700; color: var(--muted-foreground); }
   .int-msg-agent { border: 1px solid var(--border); border-bottom-left-radius: 0.25rem; background: var(--background); color: var(--foreground); }
 
-  /* Try it, and what a token can and cannot do. */
-  .int-foot { display: grid; gap: var(--space-lg, 2.5rem); margin-top: var(--space-xl, 3.5rem); }
-  .int-foot > * { min-width: 0; }
-  .int-try h3 { margin-bottom: 0.6rem; }
-  .int-try p { margin: 0.75rem 0 0; color: var(--muted-foreground); font-size: 0.9375rem; max-width: 60ch; }
-  .int-promise { display: grid; justify-items: start; align-content: start; gap: 1.25rem; }
-  .int-promise p { display: flex; gap: 0.75rem; margin: 0; font-weight: 600; max-width: 36ch; }
-  .int-promise :global(.int-promise-icon) { width: 1.5rem; height: 1.5rem; flex: none; color: var(--success-foreground); }
-
-  /* On a phone the ghost is smaller, so the answer fits beside it without scrolling. */
-  @media (max-width: 599px) {
-    .int-hub-ghost { margin-right: -1.1rem; margin-bottom: 0.75rem; }
-    .int-hub-ghost :global(.ghost) { --ghost-size: 60px; }
-    .int-json { padding-inline: 0.85rem; }
-    .int-json pre { font-size: 0.75rem; }
+  /* The way to the setup: one quiet link, not another call to action. */
+  .int-guide {
+    display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.75rem; margin-top: 1.5rem;
+    font-weight: 650; text-decoration: none; text-underline-offset: 0.25em;
   }
+  .int-guide:hover { text-decoration: underline; text-decoration-thickness: 1px; }
+  .int-guide :global(.int-guide-icon) { width: 1.1rem; height: 1.1rem; transition: transform 200ms var(--ease-out); }
+  .int-guide:hover :global(.int-guide-icon) { transform: translateX(3px); }
 
   @media (min-width: 900px) {
-    .int-head { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    .int-fan {
-      display: block; width: 100%; height: 4.5rem; margin-top: 0.5rem;
-      fill: none; stroke: var(--primary); stroke-width: 2; stroke-dasharray: 2 8; stroke-linecap: round; opacity: 0.5;
-    }
-    .int-fan path { vector-effect: non-scaling-stroke; }
-    .int-readers { margin-top: 0.5rem; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.25rem, 2.5vw, 2rem); }
-    .int-foot { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: end; }
+    .int-readers { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(1.25rem, 2.5vw, 2rem); }
   }
 
   /* Once, when each tool first comes into view: the checks come in one by one, the answer
