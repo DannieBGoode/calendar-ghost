@@ -19,7 +19,6 @@ import Mail from "lucide-static/icons/mail.svg?raw"
 import MailX from "lucide-static/icons/mail-x.svg?raw"
 import MapPin from "lucide-static/icons/map-pin.svg?raw"
 import Minus from "lucide-static/icons/minus.svg?raw"
-import Monitor from "lucide-static/icons/monitor.svg?raw"
 import Moon from "lucide-static/icons/moon.svg?raw"
 import Paperclip from "lucide-static/icons/paperclip.svg?raw"
 import Plus from "lucide-static/icons/plus.svg?raw"
@@ -59,7 +58,6 @@ export const ICONS = {
   mailX: MailX,
   mapPin: MapPin,
   minus: Minus,
-  monitor: Monitor,
   moon: Moon,
   paperclip: Paperclip,
   plus: Plus,

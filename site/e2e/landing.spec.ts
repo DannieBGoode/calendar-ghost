@@ -569,54 +569,58 @@ for (const path of ["/", "/bold"]) {
 const bodyBackground = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
 
 for (const path of ["/", "/bold", "/journey", "/home/hero-a2", "/versions"]) {
-  test(`${path}: the theme toggle is there, 44px tall, and names its state`, async ({ page }) => {
-    await page.goto(path)
-    const toggle = page.locator("[data-theme-toggle]")
-    await expect(toggle).toBeVisible()
-    expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44)
-    expect((await toggle.boundingBox())!.width).toBeGreaterThanOrEqual(44)
-    await expect(toggle).toHaveAttribute("aria-label", `Theme: ${en.theme.device}`)
+  test(`${path}: the theme toggle is there, 44px tall, and names the theme on screen`, async ({ browser }) => {
+    for (const colorScheme of ["light", "dark"] as const) {
+      const context = await browser.newContext({ colorScheme })
+      const page = await context.newPage()
+      await page.goto(path)
+      const toggle = page.locator("[data-theme-toggle]")
+      await expect(toggle).toBeVisible()
+      expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+      expect((await toggle.boundingBox())!.width).toBeGreaterThanOrEqual(44)
+      // With nothing saved it follows the device, and says so.
+      await expect(toggle).toHaveAttribute("data-choice", colorScheme)
+      await expect(toggle).toHaveAttribute("aria-label", `Theme: ${en.theme[colorScheme]}`)
+      await context.close()
+    }
   })
 }
 
-test("cycling the toggle switches the page between light and dark tokens, whatever the device is set to", async ({
-  browser,
-}) => {
+test("the toggle switches between Light and Dark only: the first press saves the opposite of the device's theme", async ({ browser }) => {
   for (const colorScheme of ["light", "dark"] as const) {
     const context = await browser.newContext({ colorScheme })
     const page = await context.newPage()
     await page.goto("/")
     const toggle = page.locator("[data-theme-toggle]")
+    const opposite = colorScheme === "light" ? "dark" : "light"
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme")
     const device = await bodyBackground(page)
 
     await toggle.click()
-    await expect(toggle).toHaveAttribute("data-choice", "light")
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
-    const light = await bodyBackground(page)
+    await expect(toggle).toHaveAttribute("data-choice", opposite)
+    await expect(toggle).toHaveAttribute("aria-label", `Theme: ${en.theme[opposite]}`)
+    await expect(page.locator("html")).toHaveAttribute("data-theme", opposite)
+    const switched = await bodyBackground(page)
+    expect(switched).not.toBe(device)
+    expect(await page.evaluate(() => localStorage.getItem("calendar-ghost-site-theme"))).toBe(opposite)
 
     await toggle.click()
-    await expect(toggle).toHaveAttribute("data-choice", "dark")
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark")
-    const dark = await bodyBackground(page)
-
-    // Light and Dark always differ from each other, and each stays put under its own explicit
-    // choice no matter what the device (colorScheme) says.
-    expect(light).not.toBe(dark)
-    expect(await bodyBackground(page)).toBe(dark)
-
-    await toggle.click()
-    await expect(toggle).toHaveAttribute("data-choice", "device")
-    await expect(page.locator("html")).not.toHaveAttribute("data-theme")
+    await expect(toggle).toHaveAttribute("data-choice", colorScheme)
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme)
     expect(await bodyBackground(page)).toBe(device)
 
+    // Two states only: a third press is the opposite again, never a Device state.
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("data-choice", opposite)
     await context.close()
   }
 })
 
-test("the theme choice survives a reload", async ({ page }) => {
+test("the theme choice survives a reload", async ({ browser }) => {
+  const context = await browser.newContext({ colorScheme: "light" })
+  const page = await context.newPage()
   await page.goto("/")
   const toggle = page.locator("[data-theme-toggle]")
-  await toggle.click() // Light
   await toggle.click() // Dark
   const before = await bodyBackground(page)
   await expect(toggle).toHaveAttribute("aria-label", `Theme: ${en.theme.dark}`)
@@ -626,29 +630,21 @@ test("the theme choice survives a reload", async ({ page }) => {
   expect(await bodyBackground(page)).toBe(before)
   await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("data-choice", "dark")
   await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("aria-label", `Theme: ${en.theme.dark}`)
+  await context.close()
 })
 
-test("Device follows the emulated prefers-color-scheme, and keeps following it on reload", async ({ browser }) => {
-  const dark = await (async () => {
-    const context = await browser.newContext({ colorScheme: "dark" })
+test("with nothing saved, the page follows the emulated prefers-color-scheme, and an old Device choice counts as nothing saved", async ({ browser }) => {
+  const backgrounds: string[] = []
+  for (const colorScheme of ["dark", "light"] as const) {
+    const context = await browser.newContext({ colorScheme })
     const page = await context.newPage()
     await page.goto("/")
-    await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("data-choice", "device")
+    await page.evaluate(() => localStorage.setItem("calendar-ghost-site-theme", "device"))
+    await page.reload()
+    await expect(page.locator("[data-theme-toggle]")).toHaveAttribute("data-choice", colorScheme)
     await expect(page.locator("html")).not.toHaveAttribute("data-theme")
-    const background = await bodyBackground(page)
+    backgrounds.push(await bodyBackground(page))
     await context.close()
-    return background
-  })()
-
-  const light = await (async () => {
-    const context = await browser.newContext({ colorScheme: "light" })
-    const page = await context.newPage()
-    await page.goto("/")
-    await expect(page.locator("html")).not.toHaveAttribute("data-theme")
-    const background = await bodyBackground(page)
-    await context.close()
-    return background
-  })()
-
-  expect(dark).not.toBe(light)
+  }
+  expect(backgrounds[0]).not.toBe(backgrounds[1])
 })

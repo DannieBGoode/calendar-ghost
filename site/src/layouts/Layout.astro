@@ -42,7 +42,7 @@ const alternates = hasLanguagePicker()
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#fbfbfe" />
     <script is:inline>
-      // Applies a stored Device/Light/Dark choice (lib/theme.ts, same keys and logic, duplicated
+      // Applies a stored Light or Dark choice (lib/theme.ts, same keys and logic, duplicated
       // here in plain JS: this script must stay inline and same-origin, so it cannot import a
       // module) before first paint, so there is no flash of the wrong theme. Without JavaScript,
       // or with no choice stored, this never runs and the page simply follows the device, as it
