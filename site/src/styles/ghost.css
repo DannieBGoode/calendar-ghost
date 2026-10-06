@@ -96,9 +96,10 @@
 @keyframes ghost-face-first { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes ghost-face-then { 0%, 88% { opacity: 0; } 100% { opacity: 1; } }
 
-/* Idle life: blinking, floating, and drifting "z"s. A `loop` ghost lives inside a demo with a
-   pause control; a `brief` ghost wakes once when it is first seen (see Layout.astro) and is still
-   again within five seconds. Nothing idles under reduced motion. */
+/* Idle life: blinking, floating, and drifting "z"s. A `loop` ghost keeps living: inside a demo
+   with its own pause control, or on its own (the footer's sleeper, the Overview's healthy ghost),
+   where the nav's site-wide "Pause animations" stops it. A `brief` ghost wakes once when it is
+   first seen (see Layout.astro) and is still again within five seconds. */
 @keyframes ghost-blink {
   0%, 92%, 100% { transform: scaleY(1); }
   95% { transform: scaleY(0.12); }
@@ -150,9 +151,14 @@
 }
 /* A demo's pause control stops its ghost with it. */
 [data-playing="false"] .ghost *, [data-playing="false"] .ghost::before { animation-play-state: paused !important; }
+/* Nothing idles under reduced motion, or once the visitor pressed the nav's "Pause animations"
+   (lib/motion-preference.ts): every ghost shows where it ends. */
 @media (prefers-reduced-motion: reduce) {
   .ghost *, .ghost::before, .ghost-pose { animation: none !important; transition: none !important; }
 }
+:root[data-motion="paused"] .ghost *,
+:root[data-motion="paused"] .ghost::before,
+:root[data-motion="paused"] .ghost-pose { animation: none !important; transition: none !important; }
 
 /* A ghost with something to say. The stage is the ghost's box; the bubble sits beside it and its
    tail points at the ghost's head. */

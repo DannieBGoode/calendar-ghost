@@ -19,8 +19,8 @@ export type GhostFace = "neutral" | "happy" | "proud" | "surprised" | "concerned
 export type GhostTone = "moss" | "lantern" | "mist"
 /**
  * How the ghost idles by itself (blinking, floating, drifting "z"s).
- * - `loop`: for ghosts inside a demo that has its own pause control (`[data-playing="false"]` on
- *   an ancestor pauses them).
+ * - `loop`: keeps idling. Inside a demo, its pause control (`[data-playing="false"]` on an
+ *   ancestor) pauses it; anywhere, the nav's site-wide "Pause animations" stops it.
  * - `brief`: a few seconds after the ghost first scrolls into view, then still (no pause control
  *   is needed for motion that stops within five seconds).
  * - `still`: never moves by itself.

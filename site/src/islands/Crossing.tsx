@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import type { AvatarUrls } from "../avatars"
 import { crossingFields, type CrossingMode } from "../demo/crossing"
 import type { Messages } from "../i18n"
+import { deviceReducesMotion, pagePaused } from "../lib/motion-preference"
 import { iconMarkup, type IconName } from "../icons"
 import { Ghost, SpeechBubble } from "./Ghost"
 import { useOnScreen, usePageVisible, useReducedMotion } from "./hooks"
@@ -44,8 +45,10 @@ function measureRun(stage: HTMLElement): CSSProperties {
   const source = box(".crossing-personal .crossing-source")
   const landed = box(".crossing-landed")
   const ghost = box(".crossing-ghost")
-  // The ghost holds the copy by its top right corner, its hem over the copy's edge.
-  const holdX = (right: number) => right - ghost.width * 0.72 - ghost.left
+  // The ghost holds the copy by its top right corner, its hem over the copy's edge; never so far
+  // right that the ghost would leave the demo (on a phone the cards reach the demo's edge).
+  const edge = stage.getBoundingClientRect().right - ghost.width * 0.28
+  const holdX = (right: number) => Math.min(right, edge) - ghost.width * 0.72 - ghost.left
   const holdY = (top: number) => top - ghost.height * 0.62 - ghost.top
   const px = (value: number) => `${Math.round(value)}px`
   const ratio = (value: number) => (Number.isFinite(value) && value > 0 ? value.toFixed(4) : "1")
@@ -123,8 +126,9 @@ export function Crossing({
   }, [])
 
   useLayoutEffect(() => {
-    // The media query is read directly: the hook reports false until its own effect has run.
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) setRun("rested")
+    // Read directly (the device's setting, or the site-wide Pause animations): the hook reports
+    // false until its own effect has run.
+    if (deviceReducesMotion() || pagePaused()) setRun("rested")
     else setRun("ready")
   }, [])
   useEffect(() => {

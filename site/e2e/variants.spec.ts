@@ -228,7 +228,7 @@ for (const variant of VARIANTS) {
         await page.waitForTimeout(1000)
         expect(await split()).toBe(variant.rest)
       }
-      await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
+      await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
       await context.close()
     })
 
@@ -240,31 +240,34 @@ for (const variant of VARIANTS) {
       for (const heading of variant.headings) {
         await expect(page.getByRole("heading", { level: 2, name: heading })).toBeVisible()
       }
-      await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
+      await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
       await context.close()
     })
 
     test("every loop has a pause control a finger can hit, and pausing stops it", async ({ page }) => {
       await page.goto(variant.path)
       await visitEverything(page)
-      const buttons = page.getByRole("button", { name: en.motion.pause })
+      const buttons = page.getByRole("button", { name: en.motion.pause, exact: true })
       await expect(buttons).toHaveCount(variant.loops)
       for (const button of await buttons.all()) {
         expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
-      }
-      // Motion with no pause control must stop by itself within five seconds (WCAG 2.2.2).
-      for (const animation of await animations(page)) {
-        if (!animation.governed) expect(animation.endTime, animation.name).toBeLessThanOrEqual(5000)
       }
       // Each click turns a Pause button into Play, so the first Pause left is always the next one.
       for (let loop = 0; loop < variant.loops; loop += 1) {
         await buttons.first().scrollIntoViewIfNeeded()
         await buttons.first().click()
       }
-      await expect(page.getByRole("button", { name: en.motion.play })).toHaveCount(variant.loops)
+      await expect(page.getByRole("button", { name: en.motion.play, exact: true })).toHaveCount(variant.loops)
       const endless = (await animations(page)).filter((animation) => animation.endTime === Infinity)
       expect(endless.length).toBeGreaterThan(0)
-      for (const animation of endless) expect(animation.state, animation.name).toBe("paused")
+      for (const animation of endless.filter((animation) => animation.governed)) expect(animation.state, animation.name).toBe("paused")
+      // Motion outside every demo either stops by itself within five seconds, or is a decorative
+      // loop the nav's site-wide Pause animations stops (WCAG 2.2.2).
+      await page.getByRole("button", { name: en.motion.pauseAll, exact: true }).click()
+      for (const animation of await animations(page)) {
+        if (animation.governed || animation.state !== "running") continue
+        expect(animation.endTime, animation.name).toBeLessThanOrEqual(5000)
+      }
     })
 
     test("small controls are at least 44px tall", async ({ browser }) => {
@@ -1202,7 +1205,7 @@ test.describe("/home/hero-e3", () => {
         await expect(page.locator(".hb-wide .hb-label-work")).toHaveText(en.demo.workSees)
         await expect(page.locator(".hb-controls")).toBeHidden()
       } else {
-        await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
+        await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
         await expect(page.locator(".hb").getByRole("button", { name: hb.replay })).toBeHidden()
       }
       await context.close()

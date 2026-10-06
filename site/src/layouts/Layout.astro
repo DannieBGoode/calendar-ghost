@@ -70,6 +70,15 @@ const alternates = hasLanguagePicker()
         document
           .querySelector('meta[name="theme-color"]')
           ?.setAttribute("content", resolved === "dark" ? "#0d0e19" : "#fbfbfe")
+        // A saved "Pause animations" (lib/motion-preference.ts, same key and value) stops every
+        // loop from the first frame.
+        let motion = null
+        try {
+          motion = localStorage.getItem("calendar-ghost-site-motion")
+        } catch {
+          // As above.
+        }
+        if (motion === "paused") root.setAttribute("data-motion", "paused")
       })()
     </script>
     <title>{title}</title>

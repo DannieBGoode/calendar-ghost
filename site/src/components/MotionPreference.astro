@@ -1,0 +1,88 @@
+---
+// The nav's site-wide "Pause animations" toggle, beside the theme toggle and in its idiom: a
+// 44px icon button whose words are its name (lib/motion-preference.ts). Pressed, it stops every
+// loop on the page and remembers that; the demos' own pause controls stay for the demos. It is on,
+// and cannot be turned off, while the device asks for reduced motion. Without JavaScript nothing
+// loops, so it stays hidden.
+import Icon from "./Icon.astro"
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<button
+  type="button"
+  class="motion-preference"
+  data-motion-toggle
+  aria-pressed="false"
+  aria-label={m.motion.pauseAll}
+  title={m.motion.pauseAll}
+  data-label={m.motion.pauseAll}
+  data-label-device={m.motion.pausedByDevice}
+  hidden
+>
+  <span class="motion-preference-icon" data-motion-icon="running"><Icon name="pause" /></span>
+  <span class="motion-preference-icon" data-motion-icon="stopped"><Icon name="play" /></span>
+</button>
+
+<script>
+  import {
+    applyMotionPaused,
+    deviceReducesMotion,
+    motionStopped,
+    MOTION_STORAGE_KEY,
+    readMotionPaused,
+    REDUCED_MOTION_QUERY,
+    writeMotionPaused,
+  } from "../lib/motion-preference"
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-motion-toggle]")) {
+    const render = () => {
+      const device = deviceReducesMotion()
+      button.setAttribute("aria-pressed", String(motionStopped(readMotionPaused(), device)))
+      if (device) button.setAttribute("aria-disabled", "true")
+      else button.removeAttribute("aria-disabled")
+      button.title = (device ? button.dataset.labelDevice : button.dataset.label) ?? ""
+    }
+    button.hidden = false
+    render()
+
+    button.addEventListener("click", () => {
+      if (deviceReducesMotion()) return
+      const paused = !readMotionPaused()
+      writeMotionPaused(paused)
+      applyMotionPaused(paused)
+      render()
+    })
+
+    // Another tab changing the choice, or the device's setting changing, updates this one too.
+    window.addEventListener("storage", (event) => {
+      if (event.key !== MOTION_STORAGE_KEY && event.key !== null) return
+      applyMotionPaused(readMotionPaused())
+      render()
+    })
+    if (typeof matchMedia === "function") matchMedia(REDUCED_MOTION_QUERY).addEventListener("change", render)
+  }
+</script>
+
+<style>
+  .motion-preference {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 2.75rem; height: 2.75rem; padding: 0;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); color: var(--foreground); cursor: pointer;
+  }
+  .motion-preference:hover { background: var(--muted); }
+  .motion-preference[aria-pressed="true"] { background: var(--primary-soft); border-color: color-mix(in oklch, var(--primary), transparent 55%); color: var(--primary); }
+  .motion-preference[aria-disabled] { cursor: default; }
+  .motion-preference-icon { display: none; width: 1.125rem; height: 1.125rem; }
+  .motion-preference-icon :global(svg) { width: 100%; height: 100%; }
+  .motion-preference[aria-pressed="false"] [data-motion-icon="running"],
+  .motion-preference[aria-pressed="true"] [data-motion-icon="stopped"] {
+    display: inline-flex;
+  }
+</style>

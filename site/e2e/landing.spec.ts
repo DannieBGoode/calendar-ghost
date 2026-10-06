@@ -64,8 +64,9 @@ test("without JavaScript, the content and the hero's resting state are there", a
   // No CSS state gates the bubble without JavaScript: the ghost just says the resting line.
   await expect(page.locator(".crossing-says")).toHaveText(en.ghost.crossingBusy)
   await expect(page.locator("#how-it-works .how-preview-row").first()).toContainText(en.demo.busy)
-  // Nothing loops without JavaScript, so there is nothing to pause.
-  await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
+  // Nothing loops without JavaScript, so there is nothing to pause, not even site-wide.
+  await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
+  await expect(page.locator("[data-motion-toggle]")).toBeHidden()
   await context.close()
 })
 
@@ -84,19 +85,93 @@ test("every self-running demo has a pause control a finger can hit", async ({ pa
   await page.goto("/")
   // The Haunted Week and the Crossing hydrate when they scroll into view.
   for (const demo of [".reveal", ".haunt", ".crossing"]) await page.locator(demo).scrollIntoViewIfNeeded()
-  const buttons = page.getByRole("button", { name: en.motion.pause })
+  const buttons = page.getByRole("button", { name: en.motion.pause, exact: true })
   await expect(buttons).toHaveCount(3)
   for (const button of await buttons.all()) {
     expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
   }
 })
 
-test("with reduced motion, there is nothing to pause", async ({ page }) => {
+test("with reduced motion, there is nothing to pause, and the site-wide control shows as on", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   await page.goto("/")
   await expect(page.locator(".reveal-frame")).toBeVisible()
-  await expect(page.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
+  const all = page.getByRole("button", { name: en.motion.pauseAll, exact: true })
+  await expect(all).toHaveAttribute("aria-pressed", "true")
+  await expect(all).toHaveAttribute("aria-disabled", "true")
 })
+
+/** The animations running under `selector` (the ghost's loops), counted in the page. */
+const running = (page: Page, selector: string) =>
+  page
+    .locator(selector)
+    .evaluate((element) => element.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length)
+
+test("the footer's sleeping ghost and the health ghost keep looping, past five seconds", async ({ page }) => {
+  await page.goto("/")
+  for (const selector of [".footer-watch .ghost", ".mock-health .ghost"]) {
+    await page.locator(selector).scrollIntoViewIfNeeded()
+    expect(await running(page, selector), selector).toBeGreaterThan(0)
+  }
+  // Still afloat after the old five-second idle would have ended.
+  await page.locator(".footer-watch .ghost").scrollIntoViewIfNeeded()
+  await page.waitForTimeout(5600)
+  expect(await running(page, ".footer-watch .ghost")).toBeGreaterThan(0)
+  const float = await page.locator(".footer-watch .ghost-float").evaluate((element) => getComputedStyle(element).animationIterationCount)
+  expect(float).toBe("infinite")
+})
+
+test("the nav's Pause animations stops every loop, is remembered, and applies before first paint", async ({ page }) => {
+  await page.goto("/")
+  const all = page.locator("nav").getByRole("button", { name: en.motion.pauseAll, exact: true })
+  await expect(all).toBeVisible()
+  expect((await all.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+  expect((await all.boundingBox())!.width).toBeGreaterThanOrEqual(44)
+  await expect(all).toHaveAttribute("aria-pressed", "false")
+  await page.locator(".footer-watch .ghost").scrollIntoViewIfNeeded()
+  expect(await running(page, ".footer-watch .ghost")).toBeGreaterThan(0)
+
+  await all.click()
+  await expect(all).toHaveAttribute("aria-pressed", "true")
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "paused")
+  expect(await running(page, ".footer-watch .ghost")).toBe(0)
+  expect(await running(page, ".mock-health .ghost")).toBe(0)
+  // The footer's sleep talk is simply there.
+  await expect(page.locator(".footer-sleep-talk")).toHaveCSS("opacity", "1")
+  // The demos rest too, so their own pause controls go.
+  await page.locator(".haunt").scrollIntoViewIfNeeded()
+  await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
+  const split = () => page.locator(".reveal-frame").evaluate((frame) => getComputedStyle(frame).getPropertyValue("--split").trim())
+  const still = await split()
+  await page.waitForTimeout(800)
+  expect(await split()).toBe(still)
+
+  // Remembered, and on <html> before any module script runs.
+  await page.reload({ waitUntil: "commit" })
+  await page.waitForSelector("html[data-motion='paused']", { state: "attached" })
+  await expect(all).toHaveAttribute("aria-pressed", "true")
+  expect(await page.evaluate(() => localStorage.getItem("calendar-ghost-site-motion"))).toBe("paused")
+
+  // Pressed again, everything moves again.
+  await all.click()
+  await expect(all).toHaveAttribute("aria-pressed", "false")
+  await expect(page.locator("html")).not.toHaveAttribute("data-motion")
+  await page.locator(".footer-watch .ghost").scrollIntoViewIfNeeded()
+  expect(await running(page, ".footer-watch .ghost")).toBeGreaterThan(0)
+})
+
+for (const path of ["/", "/bold", "/journey", "/home/hero-e4", "/docs/self-hosting"]) {
+  test(`${path}: the nav has the site-wide Pause animations beside the theme toggle`, async ({ page }) => {
+    await page.goto(path)
+    const all = page.getByRole("button", { name: en.motion.pauseAll, exact: true })
+    await expect(all).toBeVisible()
+    const theme = (await page.locator("[data-theme-toggle]").boundingBox())!
+    const box = (await all.boundingBox())!
+    expect(Math.abs(box.y - theme.y)).toBeLessThan(2)
+    expect(theme.x - (box.x + box.width)).toBeLessThan(16)
+  })
+}
 
 for (const width of [320, 390]) {
   test(`nothing scrolls sideways on a ${width}px screen`, async ({ browser }) => {
@@ -198,7 +273,7 @@ test("without JavaScript or with reduced motion, the How it works ghost rests at
 
 test("a ghost that idles briefly wakes when it scrolls into view", async ({ page }) => {
   await page.goto("/")
-  const sleeper = page.locator('.footer .ghost[data-alive="brief"]')
+  const sleeper = page.locator('.signature .ghost[data-alive="brief"]')
   await expect(sleeper).not.toHaveAttribute("data-awake", "")
   await sleeper.scrollIntoViewIfNeeded()
   await expect(sleeper).toHaveAttribute("data-awake", "")

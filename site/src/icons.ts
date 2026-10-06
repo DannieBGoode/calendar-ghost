@@ -21,6 +21,8 @@ import MapPin from "lucide-static/icons/map-pin.svg?raw"
 import Minus from "lucide-static/icons/minus.svg?raw"
 import Moon from "lucide-static/icons/moon.svg?raw"
 import Paperclip from "lucide-static/icons/paperclip.svg?raw"
+import Pause from "lucide-static/icons/pause.svg?raw"
+import Play from "lucide-static/icons/play.svg?raw"
 import Plus from "lucide-static/icons/plus.svg?raw"
 import RefreshCwOff from "lucide-static/icons/refresh-cw-off.svg?raw"
 import Repeat from "lucide-static/icons/repeat.svg?raw"
@@ -60,6 +62,8 @@ export const ICONS = {
   minus: Minus,
   moon: Moon,
   paperclip: Paperclip,
+  pause: Pause,
+  play: Play,
   plus: Plus,
   refreshCwOff: RefreshCwOff,
   repeat: Repeat,
