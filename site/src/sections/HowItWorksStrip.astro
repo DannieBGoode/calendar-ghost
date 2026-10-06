@@ -91,8 +91,11 @@ const avatars = await avatarUrls()
   }
 
   /* The pieces of the app: small, crisp, made of the app's own parts. */
+  /* Each piece sits in the middle of its box, both ways: its rows share one column as wide as the
+     widest, centred, and step 2's rule and switch are centred in that column. */
   .how-frag {
-    display: grid; gap: 0.45rem; align-content: center; height: 11.25rem; padding: 0.9rem 1rem;
+    display: grid; grid-template-columns: minmax(0, max-content); justify-content: center;
+    gap: 0.45rem; align-content: center; height: 11.25rem; padding: 0.9rem 1rem;
     border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
     font-size: 0.8125rem; box-shadow: 0 18px 40px -28px color-mix(in oklch, var(--primary), transparent 40%);
   }
@@ -100,10 +103,10 @@ const avatars = await avatarUrls()
   .how-account { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
   .how-account-address { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .how-frag .how-account-ok { width: 1.05rem; height: 1.05rem; flex: none; color: var(--success-foreground); }
-  .how-route { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: 0.9375rem; }
+  .how-route { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.4rem; font-size: 0.9375rem; }
   .how-frag .how-route-arrow { width: 1rem; height: 1rem; color: var(--muted-foreground); }
   .how-segment {
-    justify-self: start; display: inline-flex; padding: 3px; margin-top: 0.4rem;
+    justify-self: center; display: inline-flex; padding: 3px; margin-top: 0.4rem;
     border: 1px solid var(--border); border-radius: 999px; background: var(--background);
   }
   /* The switch: a real control (same pattern as the Crossing switch), so its buttons keep a

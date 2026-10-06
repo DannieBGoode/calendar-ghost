@@ -98,11 +98,13 @@ const hasHealthExtra = Astro.slots.has("health")
   .feat-shot :global(.mock li) { max-width: none; }
   .feat-shot > :global(.mock) { position: relative; z-index: 1; }
 
-  /* Wide: the copy in a narrow column, the mockup in a wide one, sides alternating. */
+  /* Wide: the copy beside the mockup with clear air between them, sides alternating. The copy
+     starts level with the mockup's top third, where the eye lands, not its middle. */
   @media (min-width: 900px) {
     .feats-list { gap: clamp(4.5rem, 8vw, 7rem); }
-    .feat { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: clamp(2.5rem, 6vw, 6rem); }
-    .feat-flip { grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
+    .feats .feat { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(2rem, 5vw, 5rem); align-items: start; }
+    .feats .feat-flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
     .feat-flip .feat-copy { order: 2; }
+    .feat-copy { padding-top: clamp(1rem, 4vw, 3.5rem); }
   }
 </style>
