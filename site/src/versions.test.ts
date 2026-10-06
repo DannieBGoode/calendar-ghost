@@ -22,7 +22,9 @@ const iterations = VERSIONS.flatMap((version) => version.iterations)
 
 describe("the versions index", () => {
   it("lists every page route, so no iteration goes missing from it", () => {
-    const listed = new Set([...iterations.filter(isLive).map((iteration) => iteration.path), VERSIONS_PATH, "/404"])
+    // Besides the iterations: the index itself, the 404, and the documentation pages (docs/pages.ts),
+    // which are production content, not design iterations.
+    const listed = new Set([...iterations.filter(isLive).map((iteration) => iteration.path), VERSIONS_PATH, "/404", "/docs/[slug]"])
     expect(routes().filter((route) => !listed.has(route))).toEqual([])
   })
 

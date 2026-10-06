@@ -1,0 +1,183 @@
+---
+// A repository document as a page of this site (docs/pages.ts): the same text as on GitHub,
+// rendered at build time by Astro's own Markdown pipeline, with Shiki's highlighting and nothing
+// loaded from another host. Its headings keep GitHub's anchors, so a deep link such as
+// `#6-connect-monitors-and-agents` works on both. Beside it, a small table of contents; under
+// it, where it comes from and where to edit it.
+import { getCollection, render } from "astro:content"
+import Coded from "../../components/Coded.astro"
+import { DOC_PAGES, type DocSlug } from "../../docs/pages"
+import { messagesFor } from "../../i18n"
+import { format } from "../../i18n/format"
+import Layout from "../../layouts/Layout.astro"
+import { DOCS_URL, REPO_URL } from "../../links"
+import FooterLinks from "../../sections/FooterLinks.astro"
+import Nav from "../../sections/Nav.astro"
+
+export async function getStaticPaths() {
+  const entries = await getCollection("docs")
+  return DOC_PAGES.map((page) => {
+    const entry = entries.find((candidate) => `docs/${candidate.id}.md` === page.source)
+    if (!entry) throw new Error(`${page.source} is not in the docs collection`)
+    return { params: { slug: page.slug }, props: { entry, source: page.source } }
+  })
+}
+
+const { entry, source } = Astro.props
+const slug = Astro.params.slug as DocSlug
+const m = messagesFor(Astro.currentLocale)
+const { Content, headings } = await render(entry)
+const title = headings.find((heading) => heading.depth === 1)?.text ?? slug
+const contents = headings.filter((heading) => heading.depth === 2 || heading.depth === 3)
+const editUrl = `${REPO_URL}/edit/main/${source}`
+---
+
+<Layout title={format(m.meta.docTitle, { title })} description={m.docs.pages[slug].description}>
+  <Nav m={m} />
+  <main class="container doc-page">
+    <details class="doc-toc doc-toc-narrow">
+      <summary>{m.docs.contents}</summary>
+      <ol>
+        {contents.map((heading) => <li data-depth={heading.depth}><a href={`#${heading.slug}`}>{heading.text}</a></li>)}
+      </ol>
+    </details>
+    <nav class="doc-toc doc-toc-wide" aria-label={m.docs.contents}>
+      <p class="doc-toc-title">{m.docs.contents}</p>
+      <ol>
+        {contents.map((heading) => <li data-depth={heading.depth}><a href={`#${heading.slug}`}>{heading.text}</a></li>)}
+      </ol>
+      <a class="doc-toc-all" href={DOCS_URL}>{m.docs.allDocs}</a>
+    </nav>
+    <article class="doc">
+      <Content />
+      <p class="doc-source">
+        <Coded text={format(m.docs.builtFrom, { path: source })} />{" "}<a href={editUrl}>{m.docs.edit}</a>
+      </p>
+    </article>
+  </main>
+  <footer class="container doc-footer">
+    <FooterLinks m={m} />
+  </footer>
+  <!-- The Copy button each code block gets with JavaScript (lib/copy.ts). -->
+  <template id="doc-copy">
+    <button type="button" class="btn btn-small doc-copy" data-label={m.selfHost.copy} data-copied={m.selfHost.copied} data-selected={m.selfHost.selected}>
+      {m.selfHost.copy}
+    </button>
+  </template>
+</Layout>
+
+<script>
+  import { announceCopy, copyOrSelect } from "../../lib/copy"
+
+  // Each code block gets a small bar with its language and a Copy button. Without JavaScript the
+  // blocks are plain, selectable code.
+  const template = document.querySelector<HTMLTemplateElement>("#doc-copy")
+  for (const pre of document.querySelectorAll<HTMLPreElement>(".doc pre")) {
+    const code = pre.querySelector("code") ?? pre
+    const block = document.createElement("div")
+    block.className = "doc-code"
+    const bar = document.createElement("div")
+    bar.className = "doc-code-bar"
+    const language = document.createElement("span")
+    language.textContent = pre.dataset.language && pre.dataset.language !== "plaintext" ? pre.dataset.language : ""
+    const button = template?.content.firstElementChild?.cloneNode(true) as HTMLButtonElement | undefined
+    const status = document.createElement("span")
+    status.className = "sr-only"
+    status.setAttribute("role", "status")
+    pre.replaceWith(block)
+    bar.append(language)
+    if (button) {
+      button.addEventListener("click", async () => announceCopy(button, status, await copyOrSelect(code)))
+      bar.append(button, status)
+    }
+    block.append(bar, pre)
+  }
+</script>
+
+<style>
+  .doc-page {
+    display: grid; gap: 1.5rem 3.5rem; padding-block: clamp(2rem, 5vw, 4rem) clamp(3rem, 6vw, 5rem);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .doc-page > * { min-width: 0; }
+
+  /* The contents: a quiet list beside the text on wide screens, a disclosure above it on phones. */
+  .doc-toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
+  .doc-toc li[data-depth="3"] { padding-left: 0.9rem; }
+  .doc-toc a {
+    display: block; padding: 0.3rem 0; color: var(--muted-foreground); text-decoration: none;
+    font-size: 0.875rem; line-height: 1.35;
+  }
+  .doc-toc a:hover { color: var(--foreground); }
+  .doc-toc-title, .doc-toc summary { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground); }
+  .doc-toc-title { margin: 0 0 0.5rem; }
+  .doc-toc-wide { display: none; }
+  .doc-toc-narrow { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  .doc-toc-narrow summary { display: flex; align-items: center; justify-content: space-between; min-height: 2.75rem; padding: 0 1rem; cursor: pointer; list-style: none; }
+  .doc-toc-narrow summary::-webkit-details-marker { display: none; }
+  /* A small chevron that turns when the list is open. */
+  .doc-toc-narrow summary::after {
+    content: ""; width: 0.45rem; height: 0.45rem; margin-top: -0.2rem;
+    border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg);
+  }
+  .doc-toc-narrow[open] summary::after { margin-top: 0.2rem; transform: rotate(-135deg); }
+  .doc-toc-narrow ol { padding: 0 1rem 0.75rem; }
+  .doc-toc-narrow a { padding-block: 0.55rem; }
+  .doc-toc-all { margin-top: 1rem; padding-top: 0.75rem !important; border-top: 1px solid var(--border); font-weight: 600; }
+
+  @media (min-width: 960px) {
+    .doc-page { grid-template-columns: 14rem minmax(0, 1fr); align-items: start; }
+    .doc-toc-narrow { display: none; }
+    .doc-toc-wide {
+      display: block; position: sticky; top: 5.5rem; max-height: calc(100vh - 7rem); overflow-y: auto;
+      grid-column: 1; grid-row: 1;
+    }
+    .doc { grid-column: 2; }
+  }
+
+  /* The document: a readable column, the site's type, and code that scrolls inside its own box. */
+  .doc { max-width: 70ch; font-size: 1.0625rem; line-height: 1.7; }
+  .doc :global(:is(h1, h2, h3)) { scroll-margin-top: 5.5rem; text-wrap: balance; }
+  .doc :global(h1) { font-size: clamp(2.25rem, 3vw + 1.25rem, 3.25rem); margin-bottom: 1.25rem; }
+  .doc :global(h2) { font-size: clamp(1.5rem, 1.2vw + 1.1rem, 2rem); margin: 3rem 0 1rem; }
+  .doc :global(h3) { font-size: 1.1875rem; margin: 2.25rem 0 0.75rem; }
+  .doc :global(:is(p, ul, ol, table)) { margin: 0 0 1.15rem; }
+  .doc :global(:is(ul, ol)) { padding-left: 1.4rem; }
+  .doc :global(li) { margin-bottom: 0.4rem; }
+  .doc :global(li > :is(ul, ol, p)) { margin-top: 0.4rem; margin-bottom: 0.4rem; }
+  .doc :global(strong) { font-weight: 650; }
+  .doc :global(a) { text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
+  .doc :global(:not(pre) > code) {
+    padding: 0.1em 0.35em; border-radius: 0.35rem; background: var(--muted);
+    font-size: 0.875em; overflow-wrap: anywhere;
+  }
+  .doc :global(pre) {
+    margin: 0 0 1.25rem; padding: 0.9rem 1rem; overflow-x: auto;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    /* White in light mode: GitHub's light theme keeps its comments at 4.5:1 only on white. */
+    background: light-dark(oklch(1 0 0), var(--surface)) !important;
+    font-size: 0.8125rem; line-height: 1.65;
+  }
+  /* Shiki's two themes (astro.config.mjs) follow the page's light or dark appearance. */
+  .doc :global(.astro-code), .doc :global(.astro-code span) { color: light-dark(var(--shiki-light), var(--shiki-dark)); }
+  .doc :global(.doc-code) { margin: 0 0 1.25rem; }
+  .doc :global(.doc-code pre) { margin: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+  .doc :global(.doc-code-bar) {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.3rem 0.35rem 0.3rem 1rem;
+    border: 1px solid var(--border); border-bottom: 0; border-radius: var(--radius) var(--radius) 0 0; background: var(--muted);
+    font: 600 0.75rem/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted-foreground);
+  }
+  .doc :global(.doc-copy) { min-height: 2.75rem; background: var(--surface); }
+  /* A wide table scrolls inside its own box rather than widening the page. */
+  .doc :global(table) { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: 0.9375rem; line-height: 1.5; }
+  .doc :global(:is(th, td)) { padding: 0.55rem 0.8rem; border: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .doc :global(th) { background: var(--muted); font-weight: 650; }
+  .doc :global(td code) { white-space: nowrap; overflow-wrap: normal; }
+  .doc :global(blockquote) { margin: 0 0 1.15rem; padding: 0.75rem 1rem; border-radius: var(--radius); background: var(--muted); }
+
+  .doc-source {
+    margin-top: 3.5rem !important; padding-top: 1.25rem; border-top: 1px solid var(--border);
+    font-size: 0.9375rem; color: var(--muted-foreground);
+  }
+  .doc-footer { padding-bottom: 2rem; padding-top: 2.5rem; border-top: 1px solid var(--border); }
+</style>

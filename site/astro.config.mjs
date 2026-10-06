@@ -1,6 +1,9 @@
 import react from "@astrojs/react"
+import { satteri } from "@astrojs/markdown-satteri"
 import sitemap from "@astrojs/sitemap"
 import { defineConfig } from "astro/config"
+import { fileURLToPath } from "node:url"
+import { repoLinksPlugin } from "./src/docs/repo-links.ts"
 import { NON_PRODUCTION_PATHS } from "./src/versions.ts"
 
 export default defineConfig({
@@ -12,6 +15,18 @@ export default defineConfig({
     // and stay out of the sitemap.
     sitemap({ filter: (page) => !NON_PRODUCTION_PATHS.some((path) => new URL(page).pathname.replace(/\/$/, "") === path) }),
   ],
-  // Screenshots are imported from docs/assets so the page and the README never drift.
+  // The repository's documents render as /docs pages (src/docs): their links to each other stay
+  // on the site, every other repository link goes to GitHub. Code is highlighted at build time,
+  // in a light and a dark theme that follow the page's (styles in pages/docs/[slug].astro).
+  markdown: {
+    processor: satteri({
+      hastPlugins: [
+        repoLinksPlugin({ repoRoot: fileURLToPath(new URL("..", import.meta.url)), siteRoot: fileURLToPath(new URL(".", import.meta.url)) }),
+      ],
+    }),
+    shikiConfig: { themes: { light: "github-light-default", dark: "github-dark-default" }, defaultColor: false },
+  },
+  // Screenshots are imported from docs/assets so the page and the README never drift; the docs
+  // pages read the repository's docs/ folder.
   vite: { server: { fs: { allow: [".."] } } },
 })

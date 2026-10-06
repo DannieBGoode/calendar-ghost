@@ -87,7 +87,12 @@ npm --prefix site run build && npm --prefix site run audit:dist
 npm --prefix site run e2e          # Playwright; run `npx playwright install chromium` once
 ```
 
-Cloudflare Workers Builds deploys it from `main`; other branches get preview URLs.
+Cloudflare Workers Builds deploys it from `main`; other branches get preview URLs. The site also
+reads files outside `site/`: it renders `docs/self-hosting.md` and `docs/troubleshooting.md` as
+pages under `/docs`, imports screenshots from `docs/assets/`, and checks its commands against
+`README.md`. In the Workers Builds settings, set the build watch paths to `site/**`, `docs/**`, and
+`README.md`, so a documentation change also redeploys the site (the `Site` workflow uses the same
+paths).
 
 ## Quality checks
 

@@ -1,20 +1,23 @@
 ---
-// One shell command with a Copy button, shared by every place that offers a command to copy.
-// The button appears only with JavaScript; without the Clipboard API (plain HTTP on a LAN, older
-// browsers) it selects the command so the visitor can copy it by hand.
+// Shell commands with a Copy button, shared by every place that offers a command to copy: one
+// line, or several (one per line, copied together). The button appears only with JavaScript;
+// without the Clipboard API (plain HTTP on a LAN, older browsers) it selects the commands so the
+// visitor can copy them by hand (lib/copy.ts).
 import type { Messages } from "../i18n"
 
 interface Props {
   m: Messages
   /** Unique on the page: the button finds its command by this id. */
   id: string
+  /** One command, or several separated by newlines. */
   command: string
 }
 
 const { m, id, command } = Astro.props
+const lines = command.split("\n").length
 ---
 
-<div class="command">
+<div class:list={["command", { "command-lines": lines > 1 }]}>
   <code id={id}>{command}</code>
   <button
     type="button"
@@ -31,32 +34,16 @@ const { m, id, command } = Astro.props
 </div>
 
 <script>
+  import { announceCopy, copyOrSelect } from "../lib/copy"
+
   // The result also goes to a visually hidden live region beside the button, since a button's
   // own text change is not reliably announced by screen readers.
   for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
-    const status = button.parentElement?.querySelector<HTMLElement>("[data-copy-status]")
+    const status = button.parentElement?.querySelector<HTMLElement>("[data-copy-status]") ?? null
     button.hidden = false
     button.addEventListener("click", async () => {
       const code = document.getElementById(button.dataset.copy ?? "")
-      if (!code) return
-      let message: string
-      try {
-        await navigator.clipboard.writeText(code.textContent ?? "")
-        message = button.dataset.copied ?? ""
-      } catch {
-        const range = document.createRange()
-        range.selectNodeContents(code)
-        const selection = window.getSelection()
-        selection?.removeAllRanges()
-        selection?.addRange(range)
-        message = button.dataset.selected ?? ""
-      }
-      button.textContent = message
-      if (status) status.textContent = message
-      window.setTimeout(() => {
-        button.textContent = button.dataset.label ?? ""
-        if (status) status.textContent = ""
-      }, 2500)
+      if (code) announceCopy(button, status, await copyOrSelect(code))
     })
   }
 </script>
@@ -70,4 +57,7 @@ const { m, id, command } = Astro.props
   }
   .command code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.875rem; padding-block: 0.35rem; }
   .command .btn { flex: none; }
+  /* Several commands: one per line, the button beside the first. */
+  .command-lines { align-items: flex-start; }
+  .command-lines code { white-space: pre; line-height: 1.9; }
 </style>

@@ -116,6 +116,10 @@ the Docker build context, and has its own `Site` workflow.
 - The page contacts no host but its own: no analytics, trackers, CDNs, remote fonts, or live
   GitHub requests. `npm run audit:dist` and the Playwright tests enforce this.
 - Self-host commands must match the README's quick start; a unit test compares them.
+- `/docs/<slug>` pages render repository documents at build time (`site/src/docs/pages.ts`), with
+  Astro's own Markdown processor. Their headings keep GitHub's anchors; links between rendered
+  documents stay on the site, and every other repository link goes to GitHub
+  (`site/src/docs/repo-links.ts`). The site's links to the self-hosting guide point at these pages.
 - Design versions and iterations sit beside production, never on top of it: a new iteration is a
   new route (home hero iterations under `site/src/pages/home/`), never a change to an old one.
   Append each to `site/src/versions.ts` with the commit that added it and where it stands

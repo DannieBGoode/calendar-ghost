@@ -37,6 +37,8 @@ export const en = {
     description:
       "Sync your Google calendars on your own server. Share only “Busy”, or the event's details. Open source, self-hosted, no trackers.",
     notFoundTitle: "Page not found · Calendar Ghost",
+    /** A documentation page's title: `{title}` is its document's own first heading. */
+    docTitle: "{title} · Calendar Ghost",
     ogImageAlt: "Calendar Ghost: a work week where personal plans show only as Busy",
   },
   nav: {
@@ -338,6 +340,28 @@ export const en = {
     /** What the dozing ghost mumbles in its sleep, like a child in bed: sync runs every five
      * minutes, so five more minutes is exactly its nap. */
     sleepTalk: "Five more minutes, please.",
+  },
+  /** The pages built from the repository's documentation (pages/docs/[slug].astro). Each page's
+   * title is its document's own first heading; `pages` gives each a description for search
+   * results and link previews. */
+  docs: {
+    pages: {
+      "self-hosting": {
+        description:
+          "Run Calendar Ghost on your own machine: Docker, a Google Cloud project, the settings file, first-run setup, monitors and agents, and backups.",
+      },
+      troubleshooting: {
+        description: "What to check when Calendar Ghost cannot reach Google, a rule stops, or an event did not synchronize.",
+      },
+    },
+    /** The small table of contents beside the document. */
+    contents: "On this page",
+    /** The documentation home on GitHub, at the top of the contents. */
+    allDocs: "All documentation",
+    /** The note at the foot of each page: `{path}` is the document's path in the repository. */
+    builtFrom: "This page is built from `{path}`;",
+    edit: "edit it on GitHub.",
+    /** The code blocks' copy button reuses `selfHost.copy`, `copied`, and `selected`. */
   },
   notFound: {
     title: "Nothing here but a ghost.",

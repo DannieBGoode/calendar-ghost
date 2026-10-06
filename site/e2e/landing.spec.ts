@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { DOC_PAGES, docPagePath } from "../src/docs/pages"
 import { en } from "../src/i18n/en"
 import { STATUS_CHECK_COMMAND } from "../src/content/integrations"
 import {
@@ -700,4 +701,115 @@ test("with nothing saved, the page follows the emulated prefers-color-scheme, an
     await context.close()
   }
   expect(backgrounds[0]).not.toBe(backgrounds[1])
+})
+
+for (const page of DOC_PAGES) {
+  test.describe(`/docs/${page.slug}, built from ${page.source}`, () => {
+    test("renders the document with its contents, GitHub's anchors, and where to edit it", async ({ page: tab }) => {
+      await tab.goto(docPagePath(page.slug))
+      await expect(tab.locator(".doc h1")).toHaveCount(1)
+      await expect(tab).toHaveTitle(/· Calendar Ghost$/)
+      // Every contents entry lands on a heading of the document.
+      const contents = tab.getByRole("navigation", { name: en.docs.contents })
+      const targets = await contents.getByRole("link").evaluateAll((links) => links.map((link) => link.getAttribute("href")))
+      expect(targets.length).toBeGreaterThan(3)
+      for (const href of targets.filter((target) => target?.startsWith("#"))) {
+        await expect(tab.locator(`.doc :is(h2, h3)[id="${href!.slice(1)}"]`)).toHaveCount(1)
+      }
+      const note = tab.locator(".doc-source")
+      await expect(note).toContainText(page.source)
+      await expect(note.getByRole("link", { name: en.docs.edit })).toHaveAttribute("href", `${REPO_URL}/edit/main/${page.source}`)
+      // Links to the other rendered document stay here; links to any other repository file go to GitHub.
+      for (const href of await tab.locator(".doc a").evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""))) {
+        expect(href, href).toMatch(/^(https?:|#|\/docs\/|mailto:)/)
+        if (!href.startsWith("http")) expect(href, href).not.toMatch(/\.md(#|$)/)
+        if (href.startsWith("/docs/")) expect(DOC_PAGES.map((doc) => docPagePath(doc.slug))).toContain(href.split("#")[0])
+      }
+    })
+
+    test("each code block has a Copy button that copies exactly its code", async ({ page: tab }) => {
+      await tab.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: undefined }))
+      await tab.goto(docPagePath(page.slug))
+      const blocks = tab.locator(".doc .doc-code")
+      expect(await blocks.count()).toBeGreaterThan(0)
+      expect(await blocks.count()).toBe(await tab.locator(".doc pre").count())
+      const block = blocks.first()
+      const button = block.locator("button")
+      await expect(button).toHaveText(en.selfHost.copy)
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+      await button.click()
+      const code = await block.locator("pre code").textContent()
+      expect(await tab.evaluate(() => window.getSelection()?.toString())).toBe(code)
+      await expect(button).toHaveText(en.selfHost.selected)
+    })
+
+    for (const colorScheme of ["light", "dark"] as const) {
+      test(`in ${colorScheme}, highlighted code keeps 4.5:1 contrast`, async ({ browser }) => {
+        const context = await browser.newContext({ colorScheme })
+        const tab = await context.newPage()
+        await tab.goto(docPagePath(page.slug))
+        const worst = await tab.evaluate(() => {
+          const canvas = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!
+          const rgb = (color: string) => {
+            canvas.clearRect(0, 0, 1, 1)
+            canvas.fillStyle = color
+            canvas.fillRect(0, 0, 1, 1)
+            return Array.from(canvas.getImageData(0, 0, 1, 1).data.slice(0, 3))
+          }
+          const luminance = (channels: number[]) => {
+            const [r, g, b] = channels.map((value) => {
+              const c = value / 255
+              return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+            })
+            return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+          }
+          let lowest = Infinity
+          for (const pre of document.querySelectorAll(".doc pre")) {
+            const background = luminance(rgb(getComputedStyle(pre).backgroundColor))
+            for (const span of pre.querySelectorAll("span")) {
+              if (!span.textContent?.trim()) continue
+              const text = luminance(rgb(getComputedStyle(span).color))
+              const [light, dark] = [Math.max(text, background), Math.min(text, background)]
+              lowest = Math.min(lowest, (light + 0.05) / (dark + 0.05))
+            }
+          }
+          return lowest
+        })
+        expect(worst).toBeGreaterThanOrEqual(4.5)
+        await context.close()
+      })
+    }
+
+    test("nothing scrolls sideways on a 320px screen, and nothing loads from another host", async ({ browser, baseURL }) => {
+      const context = await browser.newContext({ viewport: { width: 320, height: 740 } })
+      const tab = await context.newPage()
+      const foreign: string[] = []
+      tab.on("request", (request) => {
+        if (new URL(request.url()).host !== new URL(baseURL!).host) foreign.push(request.url())
+      })
+      await tab.goto(docPagePath(page.slug))
+      await tab.waitForLoadState("networkidle")
+      expect(foreign).toEqual([])
+      expect(await tab.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      // On a phone the contents fold into one control above the text.
+      await expect(tab.locator(".doc-toc-narrow summary")).toBeVisible()
+      await expect(tab.locator(".doc-toc-wide")).toBeHidden()
+      await context.close()
+    })
+  })
+}
+
+test("the self-hosting guide keeps the deep link to monitors and agents, and links to troubleshooting on the site", async ({ page }) => {
+  await page.goto(INTEGRATIONS_URL)
+  await expect(page.locator('[id="6-connect-monitors-and-agents"]')).toBeInViewport()
+  await expect(page.locator(".doc a[href='/docs/troubleshooting#a-monitor-or-agent-cannot-read-status']")).toHaveCount(1)
+  await expect(page.locator(".doc a[href^='https://github.com/DannieBGoode/calendar-ghost/blob/main/docs/data-ownership.md']").first()).toBeAttached()
+})
+
+test("every link to the self-hosting guide on the home page opens the page rendered here", async ({ page }) => {
+  await page.goto("/")
+  const hrefs = await page.locator("a").evaluateAll((links) => links.map((link) => link.getAttribute("href") ?? ""))
+  expect(hrefs.filter((href) => href.includes("self-hosting.md"))).toEqual([])
+  expect(hrefs).toContain(GUIDE_URL)
+  expect(hrefs).toContain(INTEGRATIONS_URL)
 })
