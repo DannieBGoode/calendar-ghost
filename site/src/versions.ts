@@ -121,7 +121,7 @@ export const VERSIONS: readonly Version[] = [
         path: "/home/hero-e4",
         tries: "Hero E3 tightened: a short Tuesday on the right, the view switch over the whole diagram, Work in its own red, the ghost keeping titles back as small chips, hairlines lit as chips pass, and a calm loop with one Pause.",
         date: "2026-10-06",
-        commit: "0000000",
+        commit: "35e7017",
       },
     ],
   },
