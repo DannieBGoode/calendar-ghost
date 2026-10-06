@@ -409,7 +409,7 @@ export const en = {
       },
       ending: { says: "Delivered. Give me a server, and I'll carry the rest." },
     },
-    /** The home page's hero iterations (/home/hero-a, -b, -a2, -b2, -d, -e, -e2, -e3). Each tries
+    /** The home page's hero iterations (/home/hero-a, -b, -a2, -b2, -d, -e, -e2, -e3, -e4). Each tries
      * another first screen above the home page's own sections. */
     homeHeroes: {
       /** One plain line under the headline. */
@@ -523,6 +523,33 @@ export const en = {
         /** What “What you see” shows instead: Sam's own Personal calendar, which keeps every title. */
         youFact: "In what you see, Sam's Personal calendar, the Standup, the Dentist, and the family dinner all keep their titles.",
         replay: "Replay",
+      },
+      /** Hero E4 (/home/hero-e4): hero E3, compacted and looping, on Sam's Tuesday. Events travel
+       * through the ghost: onto Work, Personal's and Family's arrive as “Busy” (Busy-Only
+       * Projection) and Work's own client call keeps its title; onto Personal (“What you see”)
+       * every title stays. The view names are `demo.workSees` and `demo.youSee`; Personal,
+       * Family, and Work are `demo.calendars`; the gym session and the client call are
+       * `demo.events`; the accounts are `app.rules.accounts`. */
+      hubE4: {
+        /** The one line under the headline; it keeps the self-hosting fact in the hero. */
+        line: "You see everything. Work sees Busy. All on your own server.",
+        /** The column labels: over Sam's calendars, and over the day on the right in each view. */
+        calendarsLabel: "Your calendars",
+        dayLabels: { work: "Work calendar", you: "Personal calendar" },
+        /** The family's event on Sam's Tuesday, after the hours the week shows. */
+        events: { familyDinner: "Family dinner" },
+        /** A calendar's event under its name: "Gym 12:00". */
+        eventLine: "{event} {time}",
+        /** The caption over the titles the ghost keeps back from Work. */
+        kept: "Kept from Work",
+        /** The name of the switch over the whole diagram. */
+        viewLabel: "Calendar to show",
+        /** The diagram's name and its facts, for screen readers; the drawing is hidden from them. */
+        summary: "Sam's calendars, and what work sees of them",
+        busyFact: "{event} from {from} appears on Work as Busy, from {start} to {end}.",
+        ownFact: "{event}, Work's own meeting, shows with its title, from {start} to {end}.",
+        never: "No titles, guests, meeting links, or invitations from Sam's other calendars reach Work.",
+        youFact: "In what you see, Sam's Personal calendar, the gym session, the client call, and the family dinner all keep their titles.",
       },
     },
   },

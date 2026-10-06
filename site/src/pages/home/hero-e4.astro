@@ -1,0 +1,13 @@
+---
+// Home page, hero iteration E4: hero E3, compact and looping. Sam's calendars, the ghost, and a
+// short day that shows Busy for work, or every title for Sam. See src/versions.ts.
+import { messagesFor } from "../../i18n"
+import HeroE4 from "../../variants/home-heroes/HeroE4.astro"
+import HomeHeroPage from "../../variants/home-heroes/HomeHeroPage.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<HomeHeroPage path="/home/hero-e4">
+  <HeroE4 m={m} />
+</HomeHeroPage>
