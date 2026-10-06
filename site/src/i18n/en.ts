@@ -58,13 +58,6 @@ export const en = {
     /** The same, in short, where a demo shows short words on its control (the Haunted Week). */
     pauseShort: "Pause",
     playShort: "Play",
-    /** The footer's site-wide control (components/MotionPreference.astro): its words say what a
-     * press does. Pressed, every loop on the page stops; pressed again, they play. */
-    pauseAll: "Pause animations",
-    playAll: "Play animations",
-    /** What it says instead when the device already asks for reduced motion, so the animations
-     * are off and stay off. */
-    pausedByDevice: "Animations are off: your device asks for reduced motion",
   },
   /** The nav's Light/Dark toggle (components/ThemeToggle.astro, lib/theme.ts). `current` names the
    * theme on screen out loud for assistive technology; `{state}` is filled with one of the two
@@ -339,7 +332,6 @@ export const en = {
     changelog: "Changelog",
     licenseLink: "AGPL-3.0 license",
     trademarks: "Trademarks",
-    license: "Open source under the GNU AGPL, version 3 or later.",
     noTrackers: "This page has no trackers.",
     noTrackersBody: "No analytics, no cookies, nothing loaded from another site.",
     /** Under the dozing ghost on the home page's footer: narration, not speech. */

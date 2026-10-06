@@ -71,15 +71,6 @@ const alternates = hasLanguagePicker()
         document
           .querySelector('meta[name="theme-color"]')
           ?.setAttribute("content", resolved === "dark" ? "#0d0e19" : "#fbfbfe")
-        // A saved "Pause animations" (lib/motion-preference.ts, same key and value) stops every
-        // loop from the first frame.
-        let motion = null
-        try {
-          motion = localStorage.getItem("calendar-ghost-site-motion")
-        } catch {
-          // As above.
-        }
-        if (motion === "paused") root.setAttribute("data-motion", "paused")
       })()
     </script>
     <title>{title}</title>
@@ -101,18 +92,19 @@ const alternates = hasLanguagePicker()
   <body>
     <slot />
     <script>
-      // A ghost that idles briefly (Ghost.tsx, alive="brief"), or any scene marked `data-wake` that
-      // plays once, wakes when it is first well in view, so its few seconds of life happen where
-      // someone can see them. Without JavaScript it simply stays still.
+      // A ghost that idles briefly (Ghost.tsx, alive="brief"), or any scene marked `data-wake`,
+      // wakes when it is well in view, so its few seconds of life happen where someone can see
+      // them, and sleeps again once it has left the screen, so it plays again the next time it
+      // comes into view. Each run lasts five seconds at most, so none needs a pause control (WCAG
+      // 2.2.2). Without JavaScript it simply stays still.
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
-            if (!entry.isIntersecting) continue
-            entry.target.setAttribute("data-awake", "")
-            observer.unobserve(entry.target)
+            if (entry.intersectionRatio >= 0.6) entry.target.setAttribute("data-awake", "")
+            else if (!entry.isIntersecting) entry.target.removeAttribute("data-awake")
           }
         },
-        { threshold: 0.6 },
+        { threshold: [0, 0.6] },
       )
       for (const sleeper of document.querySelectorAll('.ghost[data-alive="brief"], [data-wake]')) observer.observe(sleeper)
     </script>

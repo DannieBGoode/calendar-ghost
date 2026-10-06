@@ -31,7 +31,7 @@ const { m } = Astro.props
     </div>
     <div class="footer-watch">
       <span class="footer-ghost ghost-stage" data-wake>
-        <Ghost face="sleepy" alive="loop" float size={168} />
+        <Ghost face="sleepy" alive="brief" float size={168} />
         <SpeechBubble side="top" className="footer-sleep-talk">{m.footer.sleepTalk}</SpeechBubble>
       </span>
       <p class="footer-watch-note">{m.footer.watch}</p>
@@ -76,8 +76,6 @@ const { m } = Astro.props
     .footer-ghost :global(.footer-sleep-talk) { opacity: 0; }
     .footer-ghost[data-awake] :global(.footer-sleep-talk) { animation: footer-sleep-talk 600ms var(--ease-out) 2.6s both; }
   }
-  /* With the site's animations paused it is simply there. */
-  :global(:root[data-motion="paused"]) .footer-ghost :global(.footer-sleep-talk) { opacity: 1; animation: none; }
   @keyframes footer-sleep-talk { from { opacity: 0; } to { opacity: 1; } }
 
   .footer-links { margin-top: clamp(3.5rem, 6vw, 5rem); padding-top: clamp(2rem, 4vw, 3rem); border-top: 1px solid var(--border); }

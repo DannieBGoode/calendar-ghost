@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type RefObject } from "react"
-import { MOTION_ATTRIBUTE, pagePaused, REDUCED_MOTION_QUERY } from "../lib/motion-preference"
 import { eyeOffset } from "./motion"
 
 function useMediaQuery(query: string): boolean {
@@ -21,30 +20,15 @@ export function useHydrated(): boolean {
   return hydrated
 }
 
-/** Whether the visitor pressed the site-wide "Pause animations" (lib/motion-preference.ts). */
-function usePagePaused(): boolean {
-  const [paused, setPaused] = useState(false)
-  useEffect(() => {
-    const root = document.documentElement
-    const update = () => setPaused(pagePaused())
-    update()
-    const observer = new MutationObserver(update)
-    observer.observe(root, { attributes: true, attributeFilter: [MOTION_ATTRIBUTE] })
-    return () => observer.disconnect()
-  }, [])
-  return paused
-}
+export const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)"
 
 /**
- * Whether nothing should move by itself: the device asks for reduced motion, or the visitor
- * pressed the site-wide "Pause animations". Either way a demo rests on its still state and hides
- * its own pause control, since there is nothing left to pause. False on the server and in the
- * first client render.
+ * Whether nothing should move by itself: the device asks for reduced motion. A demo then rests on
+ * its still state and hides its own pause control, since there is nothing left to pause. False on
+ * the server and in the first client render.
  */
 export function useReducedMotion(): boolean {
-  const reduced = useMediaQuery(REDUCED_MOTION_QUERY)
-  const paused = usePagePaused()
-  return reduced || paused
+  return useMediaQuery(REDUCED_MOTION_QUERY)
 }
 
 export function useOnScreen(ref: RefObject<Element | null>): boolean {

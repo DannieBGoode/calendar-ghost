@@ -2,10 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import type { AvatarUrls } from "../avatars"
 import { crossingFields, type CrossingMode } from "../demo/crossing"
 import type { Messages } from "../i18n"
-import { deviceReducesMotion, pagePaused } from "../lib/motion-preference"
 import { iconMarkup, type IconName } from "../icons"
 import { Ghost, SpeechBubble } from "./Ghost"
-import { useOnScreen, usePageVisible, useReducedMotion } from "./hooks"
+import { REDUCED_MOTION_QUERY, useOnScreen, usePageVisible, useReducedMotion } from "./hooks"
 import { MotionToggle } from "./MotionToggle"
 
 const MODES: readonly CrossingMode[] = ["busy", "details"]
@@ -126,9 +125,8 @@ export function Crossing({
   }, [])
 
   useLayoutEffect(() => {
-    // Read directly (the device's setting, or the site-wide Pause animations): the hook reports
-    // false until its own effect has run.
-    if (deviceReducesMotion() || pagePaused()) setRun("rested")
+    // Read directly: the hook reports false until its own effect has run.
+    if (typeof matchMedia === "function" && matchMedia(REDUCED_MOTION_QUERY).matches) setRun("rested")
     else setRun("ready")
   }, [])
   useEffect(() => {

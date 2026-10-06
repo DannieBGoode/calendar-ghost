@@ -96,10 +96,11 @@
 @keyframes ghost-face-first { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes ghost-face-then { 0%, 88% { opacity: 0; } 100% { opacity: 1; } }
 
-/* Idle life: blinking, floating, and drifting "z"s. A `loop` ghost keeps living: inside a demo
-   with its own pause control, or on its own (the footer's sleeper, the Overview's healthy ghost),
-   where the footer's site-wide "Pause animations" stops it. A `brief` ghost wakes once when it is
-   first seen (see Layout.astro) and is still again within five seconds. */
+/* Idle life: blinking, floating, and drifting "z"s. A `loop` ghost keeps living, only inside a demo
+   with its own pause control. A `brief` ghost (the footer's sleeper, the Overview's healthy ghost,
+   the night watch, every other ghost on its own) wakes each time it comes into view (see
+   Layout.astro) and is still again within five seconds, so it needs no pause control (WCAG
+   2.2.2). */
 @keyframes ghost-blink {
   0%, 92%, 100% { transform: scaleY(1); }
   95% { transform: scaleY(0.12); }
@@ -130,7 +131,7 @@
   0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
   50% { transform: scale(0.6) rotate(20deg); opacity: 0.7; }
 }
-/* Without JavaScript there is no Pause animations control to stop a loop, so nothing idles. */
+/* Without JavaScript nothing wakes a ghost, and a demo's loop has no pause control, so nothing idles. */
 @media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
   .ghost[data-alive="loop"] .ghost-eyes { animation: ghost-blink 5.2s ease-in-out infinite; animation-delay: var(--ghost-blink-delay, 1.4s); }
   .ghost[data-alive="loop"][data-float] .ghost-float { animation: ghost-float 3.6s ease-in-out infinite; }
@@ -152,14 +153,10 @@
 }
 /* A demo's pause control stops its ghost with it. */
 [data-playing="false"] .ghost *, [data-playing="false"] .ghost::before { animation-play-state: paused !important; }
-/* Nothing idles under reduced motion, or once the visitor pressed the footer's "Pause animations"
-   (lib/motion-preference.ts): every ghost shows where it ends. */
+/* Nothing idles under reduced motion: every ghost shows where it ends. */
 @media (prefers-reduced-motion: reduce) {
   .ghost *, .ghost::before, .ghost-pose { animation: none !important; transition: none !important; }
 }
-:root[data-motion="paused"] .ghost *,
-:root[data-motion="paused"] .ghost::before,
-:root[data-motion="paused"] .ghost-pose { animation: none !important; transition: none !important; }
 
 /* A ghost with something to say. The stage is the ghost's box; the bubble sits beside it and its
    tail points at the ghost's head. */
