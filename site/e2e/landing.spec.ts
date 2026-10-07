@@ -16,6 +16,7 @@ import {
 /** The home page's section headings, in order, which a visitor finds without JavaScript. */
 const HEADINGS = [
   en.how.title,
+  en.compatibleCalendars.title,
   en.week.title,
   en.crossing.title,
   en.app.title,
@@ -26,6 +27,85 @@ const HEADINGS = [
   en.faq.title,
   en.footer.cta,
 ]
+
+test("compatible calendars distinguish available and planned providers on desktop and mobile", async ({ browser }) => {
+  for (const width of [1280, 1024, 768, 390, 320]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, javaScriptEnabled: false })
+    const page = await context.newPage()
+    await page.goto("/")
+    const section = page.getByRole("region", { name: en.compatibleCalendars.title })
+    await section.scrollIntoViewIfNeeded()
+    await expect(section).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    const google = section.getByRole("listitem").filter({ hasText: en.compatibleCalendars.google.name })
+    const outlook = section.getByRole("listitem").filter({ hasText: en.compatibleCalendars.outlook.name })
+    const icloud = section.getByRole("listitem").filter({ hasText: en.compatibleCalendars.icloud.name })
+    await expect(google.getByText(en.compatibleCalendars.google.status, { exact: true })).toBeVisible()
+    await expect(outlook.getByText(en.compatibleCalendars.outlook.status, { exact: true })).toBeVisible()
+    await expect(icloud.getByText(en.compatibleCalendars.icloud.status, { exact: true })).toBeVisible()
+    expect(await section.getByRole("link").count()).toBe(0)
+    const first = (await google.boundingBox())!
+    const second = (await outlook.boundingBox())!
+    expect(Math.abs(first.y - second.y)).toBeLessThan(1)
+    for (const box of [first, second, (await icloud.boundingBox())!]) {
+      expect(box.x).toBeGreaterThanOrEqual(0)
+      expect(box.x + box.width).toBeLessThanOrEqual(width)
+    }
+    await context.close()
+  }
+})
+
+test("upcoming provider marks regain color on desktop hover and stay colored on touch devices", async ({ browser }) => {
+  for (const [width, hasTouch] of [[1280, false], [390, true], [1024, true]] as const) {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, hasTouch, reducedMotion: "reduce" })
+    const page = await context.newPage()
+    await page.goto("/")
+    const section = page.locator("#compatible-calendars")
+    await section.scrollIntoViewIfNeeded()
+    await expect(section.locator(".calendar-google")).toHaveCSS("filter", "none")
+    for (const mark of await section.locator(".calendar-float.is-unavailable, .calendar-provider.is-unavailable .calendar-mark").all()) {
+      await expect(mark).toHaveCSS("filter", hasTouch ? "none" : "grayscale(1)")
+      if (!hasTouch) {
+        await mark.hover()
+        await expect(mark).toHaveCSS("filter", "grayscale(0)")
+        await page.mouse.move(0, 0)
+        await expect(mark).toHaveCSS("filter", "grayscale(1)")
+      }
+    }
+    await context.close()
+  }
+})
+
+test("provider motion loops, pauses, and respects reduced motion", async ({ browser }) => {
+  for (const reducedMotion of ["no-preference", "reduce"] as const) {
+    const context = await browser.newContext({ reducedMotion })
+    const page = await context.newPage()
+    await page.goto("/")
+    const scene = page.locator("#compatible-calendars")
+    await scene.scrollIntoViewIfNeeded()
+    await expect(scene).toHaveAttribute("data-enhanced", "")
+    const running = () => scene.evaluate((element) => element.getAnimations({ subtree: true }).filter((animation) => animation.playState === "running").length)
+    if (reducedMotion === "reduce") {
+      expect(await running()).toBe(0)
+      await expect(scene.getByRole("button", { name: en.motion.pause })).toHaveCount(0)
+    }
+    else {
+      await expect.poll(running).toBe(3)
+      expect(await scene.evaluate((element) => element.getAnimations({ subtree: true }).every((animation) => animation.effect?.getTiming().iterations === Infinity))).toBe(true)
+      expect(await scene.locator(".calendars-list").evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0)
+      await scene.getByRole("button", { name: en.motion.pause }).click()
+      await expect.poll(running).toBe(0)
+      await scene.getByRole("button", { name: en.motion.play }).click()
+      await expect.poll(running).toBe(3)
+      await page.evaluate(() => scrollTo(0, 0))
+      await expect(scene).toHaveAttribute("data-offscreen", "")
+      await expect.poll(running).toBe(0)
+      await scene.scrollIntoViewIfNeeded()
+      await expect.poll(running).toBe(3)
+    }
+    await context.close()
+  }
+})
 
 /** Scrolls through the whole page so every island hydrates and every once-only scene wakes. */
 async function visitEverything(page: Page) {
@@ -425,16 +505,16 @@ test.describe("the hero", () => {
 test("every self-running demo has a pause control a finger can hit, and pausing stops it", async ({ page }) => {
   await page.goto("/")
   await visitEverything(page)
-  // The hero's diagram, the Haunted Week, and the Crossing.
+  // The hero's diagram, the provider cluster, the Haunted Week, and the Crossing.
   const buttons = page.getByRole("button", { name: en.motion.pause, exact: true })
-  await expect(buttons).toHaveCount(3)
+  await expect(buttons).toHaveCount(4)
   for (const button of await buttons.all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
   // Each click turns a Pause button into Play, so the first Pause left is always the next one.
-  for (let loop = 0; loop < 3; loop += 1) {
+  for (let loop = 0; loop < 4; loop += 1) {
     await buttons.first().scrollIntoViewIfNeeded()
     await buttons.first().click()
   }
-  await expect(page.getByRole("button", { name: en.motion.play, exact: true })).toHaveCount(3)
+  await expect(page.getByRole("button", { name: en.motion.play, exact: true })).toHaveCount(4)
   const endless = (await animations(page)).filter((animation) => animation.endTime === Infinity)
   expect(endless.length).toBeGreaterThan(0)
   for (const animation of endless.filter((animation) => animation.governed)) expect(animation.state, animation.name).toBe("paused")

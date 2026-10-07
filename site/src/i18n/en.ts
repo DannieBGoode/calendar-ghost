@@ -150,6 +150,13 @@ export const en = {
       },
     ] as [Step, Step, Step],
   },
+  compatibleCalendars: {
+    title: "Compatible calendars",
+    body: "Sync your Google calendars across personal and Google Workspace accounts.",
+    google: { name: "Google Calendar", status: "Compatible", detail: "Personal Google accounts and Google Workspace." },
+    outlook: { name: "Outlook", status: "Coming soon", detail: "Support for Microsoft calendars is on the way." },
+    icloud: { name: "iCloud", status: "Coming soon", detail: "Support for Apple calendars is on the way." },
+  },
   /** The "How it works" strip's small pieces of the app, and the ghost waiting at the last step. */
   howStrip: {
     ghost: "I'll take it from here.",
@@ -322,7 +329,7 @@ export const en = {
         q: "Can it sync both ways?",
         a: "Yes, with two rules, one in each direction. Calendar Ghost never syncs its own events back.",
       },
-      { q: "Outlook, iCloud, or CalDAV?", a: "Not yet. Google Calendar is the only provider today." },
+      { q: "Outlook, iCloud, or CalDAV?", a: "Google Calendar is the only provider today. Outlook and iCloud are coming soon; CalDAV is not supported yet." },
       {
         q: "Is it ready for my real calendars?",
         a: "Yes. Like any self-hosted software, you run it at your own risk, so keep backups.",

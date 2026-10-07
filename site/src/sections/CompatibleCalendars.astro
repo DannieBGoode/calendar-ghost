@@ -1,0 +1,112 @@
+---
+import Icon from "../components/Icon.astro"
+import type { Messages } from "../i18n"
+import { CalendarMotion } from "../islands/CalendarMotion"
+import googleMark from "../marks/google-calendar.svg?raw"
+import outlookMark from "../marks/outlook.svg?raw"
+import icloudMark from "../marks/icloud.svg?raw"
+
+interface Props { m: Messages }
+const { m } = Astro.props
+const copy = m.compatibleCalendars
+const providers = [
+  { key: "google", copy: copy.google, mark: googleMark, ready: true },
+  { key: "outlook", copy: copy.outlook, mark: outlookMark, ready: false },
+  { key: "icloud", copy: copy.icloud, mark: icloudMark, ready: false },
+]
+
+// The decorative scene and factual strip each inline the cloud mark. Its gradient IDs must
+// remain unique, so neither SVG resolves its fill against the other instance.
+function markFor(mark: string, context: string): string {
+  return mark.replaceAll('id="cloud"', `id="calendar-cloud-${context}"`).replaceAll('url(#cloud)', `url(#calendar-cloud-${context})`)
+}
+---
+
+<section id="compatible-calendars" class="section calendars" aria-labelledby="calendars-title" data-playing="false">
+  <div class="container">
+    <div class="calendars-layout">
+      <div class="calendars-intro">
+        <h2 id="calendars-title">{copy.title}</h2>
+        <p>{copy.body}</p>
+      </div>
+      <div class="calendar-cluster" aria-hidden="true">
+        {providers.map(({ key, mark, ready }) => <span class:list={["calendar-float", `calendar-${key}`, { "is-unavailable": !ready }]} set:html={markFor(mark, "cluster")} />)}
+        <span class="cluster-dot"></span>
+        <span class="cluster-dot cluster-dot-second"></span>
+      </div>
+    </div>
+    <ul class="calendars-list">
+      {providers.map(({ copy: provider, mark, ready }) => (
+        <li class:list={["calendar-provider", { "is-unavailable": !ready }]}>
+          <span class="calendar-mark" aria-hidden="true" set:html={markFor(mark, "strip")} />
+          <div class="calendar-info">
+            <h3>{provider.name}</h3>
+            <span class:list={["calendar-status", { "calendar-status-ready": ready }]}>
+              {ready && <Icon name="check" />}{provider.status}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+    <CalendarMotion client:visible m={m.motion} />
+  </div>
+</section>
+
+<style>
+  .calendars-layout { display: grid; gap: 1rem; }
+  .calendars-intro { max-width: 32rem; }
+  .calendars-intro h2 { text-wrap: balance; }
+  .calendars-intro p { margin: 0; max-width: 38ch; color: var(--muted-foreground); font-size: 1.0625rem; text-wrap: pretty; }
+  .calendar-cluster { height: 11rem; position: relative; isolation: isolate; }
+  .calendar-cluster::before { content: ""; position: absolute; inset: 15% 12% 5%; background: radial-gradient(ellipse, color-mix(in oklch, var(--primary), transparent 94%), transparent 70%); }
+  .calendar-float { position: absolute; width: 3.75rem; }
+  .calendar-float :global(svg), .calendar-mark :global(svg) { display: block; width: 100%; height: auto; }
+  .calendar-google { width: 5rem; left: 17%; top: 1rem; transform: rotate(-8deg); }
+  .calendar-outlook { right: 12%; top: 0; transform: rotate(8deg); }
+  .calendar-icloud { right: 22%; bottom: 0.65rem; width: 4rem; }
+  .cluster-dot { position: absolute; width: 0.3rem; height: 0.3rem; border-radius: 50%; background: var(--border); left: 8%; bottom: 3rem; }
+  .cluster-dot-second { left: auto; right: 4%; top: 6.5rem; }
+  .calendars-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; list-style: none; margin: 0.5rem 0 0; padding: 1rem 0 0; border-top: 1px solid var(--border); }
+  .calendar-provider { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 0.65rem; text-align: center; }
+  .calendar-mark { flex: none; width: 1.875rem; height: 1.875rem; display: grid; place-items: center; }
+  .calendar-info { min-width: 0; }
+  .calendar-info h3 { font-size: 0.8125rem; line-height: 1.35; min-height: 2.7em; display: flex; align-items: center; justify-content: center; margin: 0 0 0.45rem; }
+  .calendar-status { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.2rem 0.45rem; border-radius: 999px; background: var(--muted); color: var(--muted-foreground); font-size: 0.75rem; font-weight: 650; white-space: nowrap; }
+  .calendar-status-ready { background: var(--success-soft); color: var(--success-foreground); }
+  .calendar-status :global(svg) { width: 0.875rem; height: 0.875rem; }
+  .calendars :global(.calendar-motion) { display: flex; justify-content: flex-end; margin-top: 0.75rem; min-height: 2.75rem; }
+  .calendars :global(.motion-toggle) { color: var(--muted-foreground); }
+  /* Hover-capable desktop devices can preview the upcoming providers' identity colors.
+     Touch devices keep their colors visible without requiring a hover interaction. */
+  @media (min-width: 641px) and (hover: hover) and (pointer: fine) {
+    .calendar-float.is-unavailable, .calendar-provider.is-unavailable .calendar-mark { filter: grayscale(1); }
+    .calendar-float.is-unavailable:hover, .calendar-provider.is-unavailable:hover .calendar-mark { filter: grayscale(0); }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .calendar-float, .calendar-mark { transition: filter 180ms var(--ease-out); }
+  }
+  @media (min-width: 641px) {
+    .calendars-layout { grid-template-columns: 1fr 1fr; gap: 2rem; align-items: center; }
+    .calendar-cluster { height: 15rem; }
+    .calendar-google { width: 6.5rem; left: 12%; top: 2rem; }
+    .calendar-outlook { width: 5rem; right: 5%; top: 0.5rem; }
+    .calendar-icloud { width: 5.25rem; right: 14%; bottom: 1.5rem; }
+    .calendars-list { margin-top: 1.5rem; padding-top: 1.5rem; gap: 1.5rem; }
+    .calendar-provider { flex-direction: row; align-items: center; gap: 0.85rem; text-align: left; }
+    .calendar-mark { width: 2.25rem; height: 2.25rem; }
+    .calendar-info h3 { min-height: 0; justify-content: start; font-size: 1rem; }
+    .calendar-status { font-size: 0.8125rem; padding-inline: 0.6rem; }
+  }
+  /* Hydration enables loops only once a pause control is available. Labels and strip marks
+     stay still. Each logo has its own seamless cycle; reduced motion renders the full scene. */
+  @media (prefers-reduced-motion: no-preference) {
+    .calendars[data-enhanced] .calendar-google { animation: calendar-drift 9s ease-in-out infinite; }
+    .calendars[data-enhanced] .calendar-outlook { animation: calendar-drift-late 11s ease-in-out infinite; }
+    .calendars[data-enhanced] .calendar-icloud { animation: calendar-drift-cloud 10s ease-in-out infinite; }
+  }
+  .calendars[data-playing="false"] .calendar-float, .calendars[data-offscreen] .calendar-float { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) { .calendar-float { animation: none; } }
+  @keyframes calendar-drift { 0%, 100% { transform: translateY(0) rotate(-8deg); } 40% { transform: translateY(-14px) rotate(2deg); } 70% { transform: translateY(3px) rotate(-4deg); } }
+  @keyframes calendar-drift-late { 0%, 100% { transform: translateY(0) rotate(8deg); } 40% { transform: translateY(10px) rotate(-3deg); } 70% { transform: translateY(-8px) rotate(4deg); } }
+  @keyframes calendar-drift-cloud { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+</style>

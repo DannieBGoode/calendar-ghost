@@ -4,6 +4,9 @@ This glossary defines the shared language for describing provider-independent ca
 
 ## Product Boundary
 
+Google Calendar is the only supported calendar provider today. Outlook and iCloud support are planned and
+advertised as coming soon, with no release date promised. Other providers remain unsupported.
+
 **Community Edition**:
 The Calendar Ghost software in this repository, run on infrastructure the operator controls. Today
 one Installation Administrator operates one SQLite database, one scheduler, and one application
