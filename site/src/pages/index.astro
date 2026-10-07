@@ -3,6 +3,7 @@ import Layout from "../layouts/Layout.astro"
 import { messagesFor } from "../i18n"
 import { homeStructuredData, jsonLd } from "../lib/structured-data"
 import AppFeatures from "../sections/AppFeatures.astro"
+import CompatibleCalendars from "../sections/CompatibleCalendars.astro"
 import CrossingSection from "../sections/CrossingSection.astro"
 import Faq from "../sections/Faq.astro"
 import Footer from "../sections/Footer.astro"
@@ -25,6 +26,7 @@ const structuredData = jsonLd(homeStructuredData(m, Astro.site ?? new URL("https
   <main>
     <Hero m={m} />
     <HowItWorksStrip m={m} />
+    <CompatibleCalendars m={m} />
     <Week m={m} />
     <CrossingSection m={m} />
     <AppFeatures m={m} />
