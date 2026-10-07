@@ -81,6 +81,7 @@ const alternates = hasLanguagePicker()
     <link rel="preload" as="font" type="font/woff2" href={besleyLatinWoff2} crossorigin />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={messages.brand} />
+    <meta property="og:locale" content={messages.meta.ogLocale} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical.href} />
@@ -88,6 +89,7 @@ const alternates = hasLanguagePicker()
     <meta property="og:image:alt" content={ogImageAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     {noindex && <meta name="robots" content="noindex" />}
+    <slot name="head" />
   </head>
   <body>
     <slot />

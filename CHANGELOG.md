@@ -24,6 +24,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- The Web UI footer links to the troubleshooting guide ("Get help"), which ends with where to ask
+  questions (GitHub Discussions), report bugs (a new bug report form), or email
+  support@calendarghost.com.
 - Monitors, homelab dashboards, and AI agents can read Installation Status with an Integration
   Token: `GET /api/v1/status` for tools like Uptime Kuma and Homepage, and an MCP server at `/mcp`
   for Claude Code, Codex, and other agents. Settings → Integrations, collapsed until opened, issues

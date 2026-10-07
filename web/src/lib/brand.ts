@@ -6,6 +6,8 @@ export const APP_VERSION = __APP_VERSION__
 export const REPOSITORY_URL = "https://github.com/DannieBGoode/calendar-ghost"
 export const SOURCE_URL = __SOURCE_URL__
 export const LICENSE_URL = `${REPOSITORY_URL}/blob/main/LICENSE`
+/** The troubleshooting guide on the project site; it ends with where to ask for more help. */
+export const HELP_URL = "https://calendarghost.com/docs/troubleshooting"
 
 export function documentTitle(i18n: I18n, page: string): string {
   return i18n.t("app.documentTitle", { page })

@@ -457,8 +457,10 @@ and SQLite migrations are treated as compatibility surfaces, but releases before
 change behavior before the first stable release.
 
 - For setup and operational failures, start with [docs/troubleshooting.md](docs/troubleshooting.md).
-- For proposed changes, open a focused issue describing the observable problem and expected
-  behavior.
+- For questions and setup help, ask in
+  [GitHub Discussions](https://github.com/DannieBGoode/calendar-ghost/discussions).
+- For bugs and proposed changes, open a focused issue describing the observable problem and
+  expected behavior. The bug report form asks for the details needed to reproduce it.
 - For exploitable security issues, do **not** file a public issue; follow
   [SECURITY.md](SECURITY.md).
 

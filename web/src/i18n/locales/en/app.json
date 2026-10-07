@@ -22,6 +22,7 @@
     "version": "v{version}",
     "runsHere": "Runs on this device",
     "apiDocs": "API documentation",
+    "help": "Get help",
     "legal": "© 2026 Calendar Ghost contributors · No warranty · <license>AGPLv3+ license</license>",
     "source": "Source"
   }

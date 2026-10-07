@@ -6,6 +6,15 @@ export const GUIDE_URL = docPagePath("self-hosting")
 export const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`
 export const TRADEMARKS_URL = `${REPO_URL}/blob/main/TRADEMARKS.md`
 export const CHANGELOG_URL = `${REPO_URL}/blob/main/CHANGELOG.md`
+/** Where visitors ask questions: the repository's GitHub Discussions. */
+export const DISCUSSIONS_URL = `${REPO_URL}/discussions`
+/** GitHub's issue chooser: the bug report form, plus links to Discussions and private security
+ * reports (.github/ISSUE_TEMPLATE/). */
+export const ISSUES_URL = `${REPO_URL}/issues/new/choose`
+/** The support inbox, for people who cannot or prefer not to use GitHub. */
+export const SUPPORT_EMAIL_URL = "mailto:support@calendarghost.com"
+/** The troubleshooting guide, rendered on this site from docs/troubleshooting.md. */
+export const TROUBLESHOOTING_URL = docPagePath("troubleshooting")
 /** The documentation folder, as GitHub lists it. */
 export const DOCS_URL = `${REPO_URL}/tree/main/docs`
 

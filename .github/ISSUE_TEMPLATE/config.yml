@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/DannieBGoode/calendar-ghost/discussions
+    about: Setup help, how-to questions, and ideas. Search earlier answers first. No GitHub account? Email support@calendarghost.com.
+  - name: Troubleshooting guide
+    url: https://calendarghost.com/docs/troubleshooting
+    about: Fixes for common problems with Google access, rules, and synchronization.
+  - name: Report a security vulnerability
+    url: https://github.com/DannieBGoode/calendar-ghost/security/advisories/new
+    about: Report it privately. Do not open a public issue (see SECURITY.md).

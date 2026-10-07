@@ -34,6 +34,10 @@ export const en = {
     notFoundTitle: "Page not found · Calendar Ghost",
     /** A documentation page's title: `{title}` is its document's own first heading. */
     docTitle: "{title} · Calendar Ghost",
+    /** The page's language and region for link previews (Open Graph `og:locale`). */
+    ogLocale: "en_US",
+    /** Where the app runs, for the structured data search engines read (lib/structured-data.ts). */
+    operatingSystem: "Linux, macOS, Windows (Docker)",
     ogImageAlt: "Calendar Ghost: Sam's calendars pass through the ghost, and the Work calendar shows Personal and Family plans only as Busy",
   },
   nav: {
@@ -333,11 +337,16 @@ export const en = {
     /** The footer's links, as a screen reader names them. */
     label: "About Calendar Ghost",
     projectTitle: "Project",
+    helpTitle: "Help",
     legalTitle: "Legal",
     github: "GitHub",
     guide: "Self-hosting guide",
     docs: "Documentation",
     changelog: "Changelog",
+    troubleshooting: "Troubleshooting",
+    discussions: "Ask a question",
+    reportBug: "Report a bug",
+    email: "Email support",
     licenseLink: "AGPL-3.0 license",
     trademarks: "Trademarks",
     noTrackers: "This page has no trackers.",

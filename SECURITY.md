@@ -6,7 +6,7 @@ Security fixes go into the latest release. Until 1.0, only the most recent versi
 
 ## Reporting a vulnerability
 
-Do not file a public GitHub issue when details could enable exploitation or expose calendar data. Use the repository's private security advisory feature. If that is unavailable, contact the maintainers through the private address published in the repository metadata.
+Do not file a public GitHub issue when details could enable exploitation or expose calendar data. Use the repository's private security advisory feature. If that is unavailable, email support@calendarghost.com and ask for a private channel before you send details.
 
 Include affected versions, impact, reproduction steps, and any suggested mitigation. Expect an acknowledgement within seven days. We will coordinate disclosure and credit unless you request anonymity.
 
