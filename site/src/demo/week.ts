@@ -1,7 +1,7 @@
 import type { Messages } from "../i18n"
 
-export type EventKind = "work" | "personal" | "family"
-export type EventKey = keyof Messages["demo"]["events"]
+type EventKind = "work" | "personal" | "family"
+type EventKey = keyof Messages["demo"]["events"]
 
 /** One event in Sam's demo week. `day` 0 is Monday; times are hours, so 9.5 is 9:30. */
 export interface DemoEvent {

@@ -21,7 +21,7 @@ import { SAM_WEEK } from "./week"
 export type CalendarKey = Calendar
 export type EventKey = "gym" | "clientCall" | "familyDinner"
 
-export interface HubEvent {
+interface HubEvent {
   key: EventKey
   /** Hours, so 15.5 is 15:30. */
   start: number
@@ -140,10 +140,10 @@ function link(from: Point, to: Point, axis: "x" | "y"): Cubic {
 
 export type LayoutKind = "wide" | "tall"
 
-export interface Pill extends Box, Source {}
+interface Pill extends Box, Source {}
 
 /** A block in the day: Work's own meeting, or a copy shown as Busy. */
-export interface Block extends Box {
+interface Block extends Box {
   source: CalendarKey
   event: HubEvent
   shows: "own" | "busy"
@@ -169,7 +169,7 @@ export interface Leg {
 }
 
 /** A title the ghost keeps back from Work, shown by it as a small chip under a caption. */
-export interface Kept extends Point {
+interface Kept extends Point {
   source: CalendarKey
   event: EventKey
   /** When it appears: as its chip's title drops at the ghost. */

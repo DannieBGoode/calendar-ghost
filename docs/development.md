@@ -85,6 +85,7 @@ npm --prefix site run check        # astro check
 npm --prefix site test             # unit tests
 npm --prefix site run build && npm --prefix site run audit:dist
 npm --prefix site run e2e          # Playwright; run `npx playwright install chromium` once
+npm --prefix site run og-image     # regenerate public/og.png from a running `npm --prefix site run preview`
 ```
 
 Cloudflare Workers Builds deploys it from `main`; other branches get preview URLs. The site also

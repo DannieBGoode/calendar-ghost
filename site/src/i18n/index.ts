@@ -4,7 +4,7 @@ export type { Messages }
 
 export const LOCALES = { en } satisfies Record<string, Messages>
 export type Locale = keyof typeof LOCALES
-export const DEFAULT_LOCALE: Locale = "en"
+const DEFAULT_LOCALE: Locale = "en"
 
 export function messagesFor(locale: string | undefined): Messages {
   return locale && locale in LOCALES ? LOCALES[locale as Locale] : LOCALES[DEFAULT_LOCALE]

@@ -25,7 +25,7 @@ export type GhostTone = "moss" | "lantern" | "mist"
  *   is needed for motion that stops within five seconds).
  * - `still`: never moves by itself.
  */
-export type GhostAlive = "loop" | "brief" | "still"
+type GhostAlive = "loop" | "brief" | "still"
 
 export const GHOST_FACES: readonly GhostFace[] = ["neutral", "happy", "concerned", "sleepy", "wink"]
 
