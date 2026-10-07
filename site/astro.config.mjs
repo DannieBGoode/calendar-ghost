@@ -4,17 +4,11 @@ import sitemap from "@astrojs/sitemap"
 import { defineConfig } from "astro/config"
 import { fileURLToPath } from "node:url"
 import { repoLinksPlugin } from "./src/docs/repo-links.ts"
-import { NON_PRODUCTION_PATHS } from "./src/versions.ts"
 
 export default defineConfig({
   site: "https://calendarghost.com",
   i18n: { defaultLocale: "en", locales: ["en"], routing: { prefixDefaultLocale: false } },
-  integrations: [
-    react(),
-    // Versions and iterations kept for side-by-side comparison (src/versions.ts) carry `noindex`
-    // and stay out of the sitemap.
-    sitemap({ filter: (page) => !NON_PRODUCTION_PATHS.some((path) => new URL(page).pathname.replace(/\/$/, "") === path) }),
-  ],
+  integrations: [react(), sitemap()],
   // The repository's documents render as /docs pages (src/docs): their links to each other stay
   // on the site, every other repository link goes to GitHub. Code is highlighted at build time,
   // in a light and a dark theme that follow the page's (styles in pages/docs/[slug].astro).

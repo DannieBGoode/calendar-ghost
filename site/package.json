@@ -17,7 +17,6 @@
     "@astrojs/sitemap": "3.7.4",
     "@fontsource-variable/besley": "5.3.0",
     "@fontsource-variable/figtree": "5.3.0",
-    "@fontsource/young-serif": "5.3.0",
     "astro": "7.3.5",
     "lucide-static": "1.52.0",
     "oxc-transform-react": "0.145.0",

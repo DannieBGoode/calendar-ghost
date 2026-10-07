@@ -13,6 +13,45 @@ import {
   TRUST_DOCS,
 } from "../src/links"
 
+/** The home page's section headings, in order, which a visitor finds without JavaScript. */
+const HEADINGS = [
+  en.how.title,
+  en.week.title,
+  en.crossing.title,
+  en.app.title,
+  en.trust.title,
+  en.integrations.title,
+  en.selfHost.title,
+  en.why.title,
+  en.faq.title,
+  en.footer.cta,
+]
+
+/** Scrolls through the whole page so every island hydrates and every once-only scene wakes. */
+async function visitEverything(page: Page) {
+  const height = await page.evaluate(() => document.body.scrollHeight)
+  for (let top = 0; top < height; top += 400) {
+    await page.evaluate((y) => window.scrollTo(0, y), top)
+    await page.waitForTimeout(60)
+  }
+}
+
+/** Every CSS animation on the page, with whether a demo's pause control governs it. */
+function animations(page: Page) {
+  return page.evaluate(() =>
+    document.getAnimations().map((animation) => {
+      const effect = animation.effect as KeyframeEffect | null
+      const target = effect?.target as Element | null
+      return {
+        name: (animation as CSSAnimation).animationName ?? "transition",
+        state: animation.playState,
+        endTime: Number(effect?.getComputedTiming().endTime ?? 0),
+        governed: Boolean(target?.closest("[data-playing]")),
+      }
+    }),
+  )
+}
+
 test("loads nothing from another host", async ({ page, baseURL }) => {
   const foreign: string[] = []
   const host = new URL(baseURL!).host
@@ -20,9 +59,47 @@ test("loads nothing from another host", async ({ page, baseURL }) => {
     if (new URL(request.url()).host !== host) foreign.push(request.url())
   })
   await page.goto("/")
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+  await visitEverything(page)
   await page.waitForLoadState("networkidle")
   expect(foreign).toEqual([])
+})
+
+test("is indexed, and the sitemap lists the home page and the documentation pages, nothing else", async ({ page, request }) => {
+  await page.goto("/")
+  await expect(page.locator('meta[name="robots"]')).toHaveCount(0)
+  const sitemap = await (await request.get("/sitemap-0.xml")).text()
+  const listed = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
+  const expected = ["/", ...DOC_PAGES.map((doc) => `${docPagePath(doc.slug)}/`)].map((path) => `https://calendarghost.com${path}`)
+  expect(listed.sort()).toEqual(expected.sort())
+})
+
+test("an unknown address shows the ghost's own not-found page, not indexed", async ({ page }) => {
+  const response = await page.goto("/nothing-here")
+  expect(response!.status()).toBe(404)
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(en.notFound.title)
+  await expect(page.getByRole("link", { name: en.notFound.home })).toHaveAttribute("href", "/")
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex")
+})
+
+test("with reduced motion, nothing moves by itself", async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: "reduce" })
+  const page = await context.newPage()
+  await page.goto("/")
+  await visitEverything(page)
+  await page.waitForTimeout(400)
+  expect((await animations(page)).filter((animation) => animation.state === "running")).toEqual([])
+  await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
+  await context.close()
+})
+
+test("the nav's section links stay on the page and land on their sections", async ({ page }) => {
+  await page.goto("/")
+  const hrefs = await page.locator("nav .nav-wide a").evaluateAll((links) => links.map((link) => link.getAttribute("href")))
+  expect(hrefs.length).toBeGreaterThan(0)
+  for (const href of hrefs) {
+    expect(href).toMatch(/^\/#/)
+    await expect(page.locator(`#${href!.split("#")[1]}`)).toHaveCount(1)
+  }
 })
 
 test("without JavaScript, the content and the hero's resting state are there", async ({ browser }) => {
@@ -31,6 +108,7 @@ test("without JavaScript, the content and the hero's resting state are there", a
   await page.goto("/")
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(en.hero.titleLines.join(" "))
   await expect(page.locator(".hc-static-view")).toHaveText(en.demo.workSees)
+  for (const heading of HEADINGS) await expect(page.getByRole("heading", { level: 2, name: heading })).toBeVisible()
   await expect(page.getByText(en.faq.items[0]!.q)).toBeVisible()
   await expect(page.getByRole("img", { name: en.app.overview.alt })).toBeVisible()
   await expect(page.locator('button[data-copy="self-host-commands"]')).toBeHidden()
@@ -344,22 +422,28 @@ test.describe("the hero", () => {
   }
 })
 
-test("every self-running demo has a pause control a finger can hit", async ({ page }) => {
+test("every self-running demo has a pause control a finger can hit, and pausing stops it", async ({ page }) => {
   await page.goto("/")
-  // The Haunted Week and the Crossing hydrate when they scroll into view.
-  for (const demo of [".hc", ".haunt", ".crossing"]) await page.locator(demo).scrollIntoViewIfNeeded()
+  await visitEverything(page)
+  // The hero's diagram, the Haunted Week, and the Crossing.
   const buttons = page.getByRole("button", { name: en.motion.pause, exact: true })
   await expect(buttons).toHaveCount(3)
-  for (const button of await buttons.all()) {
-    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+  for (const button of await buttons.all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+  // Each click turns a Pause button into Play, so the first Pause left is always the next one.
+  for (let loop = 0; loop < 3; loop += 1) {
+    await buttons.first().scrollIntoViewIfNeeded()
+    await buttons.first().click()
   }
-})
-
-test("with reduced motion, there is nothing to pause", async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: "reduce" })
-  await page.goto("/")
-  await expect(page.locator(".hc")).toBeVisible()
-  await expect(page.getByRole("button", { name: en.motion.pause, exact: true })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: en.motion.play, exact: true })).toHaveCount(3)
+  const endless = (await animations(page)).filter((animation) => animation.endTime === Infinity)
+  expect(endless.length).toBeGreaterThan(0)
+  for (const animation of endless.filter((animation) => animation.governed)) expect(animation.state, animation.name).toBe("paused")
+  // Motion outside every demo stops by itself within five seconds of coming into view (WCAG
+  // 2.2.2): there is no site-wide control, so no decorative loop runs on.
+  for (const animation of await animations(page)) {
+    if (animation.governed || animation.state !== "running") continue
+    expect(animation.endTime, animation.name).toBeLessThanOrEqual(5000)
+  }
 })
 
 /** The animations running under `selector` (its own and its pseudo-elements'), counted. */
@@ -406,7 +490,7 @@ test("the decorative loops play for at most five seconds each time they come int
 })
 
 test("there is no site-wide animations control, and the footer keeps only the license link", async ({ page }) => {
-  for (const path of ["/", "/bold", "/journey", "/docs/self-hosting"]) {
+  for (const path of ["/", "/docs/self-hosting"]) {
     await page.goto(path)
     await expect(page.getByRole("button", { name: /animations/i })).toHaveCount(0)
     await expect(page.locator(".flinks")).not.toContainText("GNU AGPL, version 3")
@@ -484,38 +568,36 @@ test("the footer's dozing ghost mumbles in its sleep, over its head, and the fiv
   }
 })
 
-for (const path of ["/", "/bold"]) {
-  test(`${path}: the How it works ghost first appears where its flight starts, so nothing jumps`, async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto(path)
-    const strip = page.locator(".how-strip")
-    await expect(strip).not.toHaveAttribute("data-awake", "")
-    const at = () =>
-      strip.evaluate((element) => {
-        const box = element.querySelector(".how-ghost .ghost")!.getBoundingClientRect()
-        const track = element.querySelector(".how-track")!
-        return { x: box.x, y: box.y, opacity: getComputedStyle(track).opacity }
-      })
-    const waiting = await at()
-    // The flight's first frame: wake the strip, then hold every animation at time 0.
-    await strip.evaluate((element) => {
-      element.setAttribute("data-awake", "")
-      for (const animation of element.getAnimations({ subtree: true })) {
-        animation.pause()
-        animation.currentTime = 0
-      }
+test("the How it works ghost first appears where its flight starts, so nothing jumps", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto("/")
+  const strip = page.locator(".how-strip")
+  await expect(strip).not.toHaveAttribute("data-awake", "")
+  const at = () =>
+    strip.evaluate((element) => {
+      const box = element.querySelector(".how-ghost .ghost")!.getBoundingClientRect()
+      const track = element.querySelector(".how-track")!
+      return { x: box.x, y: box.y, opacity: getComputedStyle(track).opacity }
     })
-    const first = await at()
-    expect(Math.abs(first.x - waiting.x)).toBeLessThan(0.5)
-    expect(Math.abs(first.y - waiting.y)).toBeLessThan(0.5)
-    expect(first.opacity).toBe(waiting.opacity)
-    // And the flight goes somewhere: its last frame is to the right.
-    await strip.evaluate((element) => {
-      for (const animation of element.getAnimations({ subtree: true })) animation.finish()
-    })
-    expect((await at()).x).toBeGreaterThan(waiting.x + 200)
+  const waiting = await at()
+  // The flight's first frame: wake the strip, then hold every animation at time 0.
+  await strip.evaluate((element) => {
+    element.setAttribute("data-awake", "")
+    for (const animation of element.getAnimations({ subtree: true })) {
+      animation.pause()
+      animation.currentTime = 0
+    }
   })
-}
+  const first = await at()
+  expect(Math.abs(first.x - waiting.x)).toBeLessThan(0.5)
+  expect(Math.abs(first.y - waiting.y)).toBeLessThan(0.5)
+  expect(first.opacity).toBe(waiting.opacity)
+  // And the flight goes somewhere: its last frame is to the right.
+  await strip.evaluate((element) => {
+    for (const animation of element.getAnimations({ subtree: true })) animation.finish()
+  })
+  expect((await at()).x).toBeGreaterThan(waiting.x + 200)
+})
 
 test("without JavaScript or with reduced motion, the How it works ghost rests at the last step", async ({ browser }) => {
   for (const options of [{ javaScriptEnabled: false }, { reducedMotion: "reduce" as const }]) {
@@ -611,242 +693,234 @@ test("each trust claim links to the documentation that proves it", async ({ page
   }
 })
 
-for (const path of ["/", "/bold", "/journey", "/home/hero-a"]) {
-  test(`${path}: the nav's Features link lands on the app's features, and the trust list has its own anchor`, async ({ page }) => {
-    await page.goto(path)
-    const link = page.locator("nav .nav-wide").getByRole("link", { name: en.nav.features, exact: true })
-    await expect(link).toHaveAttribute("href", `${path}#features`)
-    await expect(page.locator("#features h2")).toHaveText(en.app.title)
-    await expect(page.locator("#features .feat")).toHaveCount(3)
-    await expect(page.locator("#trust h2")).toHaveText(en.trust.title)
+test("the nav's Features link lands on the app's features, and the trust list has its own anchor", async ({ page }) => {
+  await page.goto("/")
+  const link = page.locator("nav .nav-wide").getByRole("link", { name: en.nav.features, exact: true })
+  await expect(link).toHaveAttribute("href", "/#features")
+  await expect(page.locator("#features h2")).toHaveText(en.app.title)
+  await expect(page.locator("#features .feat")).toHaveCount(3)
+  await expect(page.locator("#trust h2")).toHaveText(en.trust.title)
+})
+
+test("monitors and agents come after the trust list: one sentence, three tools, one link", async ({ page }) => {
+  await page.goto("/")
+  const ids = await page.locator("main > section").evaluateAll((sections) => sections.map((section) => section.id))
+  expect(ids.indexOf("integrations")).toBe(ids.indexOf("trust") + 1)
+  expect(ids.indexOf("self-host")).toBe(ids.indexOf("integrations") + 1)
+  const section = page.locator("#integrations")
+  await expect(section.getByRole("heading", { level: 2 })).toHaveText(en.integrations.title)
+  await expect(section.locator(".int-lead")).toHaveText(en.integrations.body)
+  await expect(section.locator(".int-reader")).toHaveCount(3)
+  // The setup's detail lives on the guide's page, not here.
+  await expect(section.locator("a")).toHaveCount(1)
+  await expect(section.getByRole("link", { name: en.integrations.guide })).toHaveAttribute("href", INTEGRATIONS_URL)
+  await expect(section.locator("button[data-copy], pre, .int-caption")).toHaveCount(0)
+})
+
+test("the How it works switch changes what step 3's preview shows", async ({ page }) => {
+  await page.goto("/")
+  const strip = page.locator("#how-it-works")
+  await strip.scrollIntoViewIfNeeded()
+  const rows = strip.locator(".how-preview-row")
+  await expect(rows.first()).toContainText(en.demo.busy)
+  const details = strip.getByRole("button", { name: en.crossing.withDetails })
+  await details.click()
+  await expect(details).toHaveAttribute("aria-pressed", "true")
+  await expect(rows.nth(0)).toContainText(en.demo.events.dentist.title)
+  await expect(rows.nth(1)).toContainText(en.demo.events.gym.title)
+  await expect(rows.nth(2)).toContainText(en.demo.events.therapy.title)
+  await strip.getByRole("button", { name: en.crossing.busyOnly }).click()
+  await expect(rows.first()).toContainText(en.demo.busy)
+})
+
+test("the crossing runs once, then rests on a clearly visible Busy on Work", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto("/")
+  const crossing = page.locator(".crossing")
+  await crossing.scrollIntoViewIfNeeded()
+  await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
+  // Still in flight: the ghost has not said anything yet.
+  const bubble = crossing.locator(".crossing-says")
+  expect(await bubble.evaluate((element) => getComputedStyle(element).opacity)).toBe("0")
+  await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
+  const landed = crossing.locator(".crossing-work .crossing-landed")
+  await expect(landed.getByText(en.demo.busy)).toBeVisible()
+  expect(await landed.evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
+  expect(await landed.evaluate((element) => getComputedStyle(element).transform)).toBe("none")
+  // A real fill and a solid edge, not a faint outline (drawn by the copy's card layer).
+  const look = await landed.locator(".crossing-landed-box").evaluate((element) => {
+    const style = getComputedStyle(element)
+    return { edge: style.borderTopStyle, fill: style.backgroundColor }
+  })
+  expect(look.edge).toBe("solid")
+  expect(look.fill).not.toMatch(/rgba\(.*, 0\)|transparent/)
+  // Once it has landed, the ghost says so, tail pointing at it.
+  await expect(bubble).toHaveText(en.ghost.crossingBusy)
+  expect(await bubble.evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
+  // A new choice runs it again and lands the details.
+  await crossing.getByRole("button", { name: en.crossing.withDetails }).click()
+  await expect(crossing).toHaveAttribute("data-run", "running")
+  await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
+  await expect(landed.getByText(en.demo.events.dentist.title)).toBeVisible()
+  await expect(landed.getByText(en.demo.events.dentist.detail)).toBeVisible()
+  await expect(bubble).toHaveText(en.ghost.crossingDetails)
+})
+
+for (const width of [390, 320]) {
+  test(`at ${width}px: the carried card goes down the lane, covering nothing, one label at a time, into the 15:00 slot`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    await page.goto("/")
+    const crossing = page.locator(".crossing")
+    for (const mode of [en.crossing.busyOnly, en.crossing.withDetails]) {
+      await crossing.scrollIntoViewIfNeeded()
+      if (mode === en.crossing.withDetails) await crossing.getByRole("button", { name: mode }).click()
+      await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
+      const at = (time: number) =>
+        crossing.evaluate((element, time) => {
+          for (const animation of element.getAnimations({ subtree: true })) {
+            animation.pause()
+            animation.currentTime = time
+          }
+          const box = (selector: string) => element.querySelector(selector)!.getBoundingClientRect().toJSON() as DOMRect
+          const shown = (selector: string) => {
+            const style = getComputedStyle(element.querySelector(selector)!)
+            return style.visibility === "hidden" ? 0 : Number(style.opacity)
+          }
+          return {
+            card: box(".crossing-landed-box"),
+            ghost: box(".crossing-ghost .ghost"),
+            personal: box(".crossing-personal .crossing-event"),
+            slot: box(".crossing-landed"),
+            hour: box(".crossing-hour:nth-child(2)"),
+            title: shown(".crossing-landed-title"),
+            busy: shown(".crossing-landed-busy"),
+          }
+        }, time)
+      // Out of the Personal card, in the lane: below the card and its chips, at the slot's size.
+      for (const time of [0.3, 0.45, 0.55]) {
+        const frame = await at(4800 * time)
+        expect(frame.card.y, `${time}`).toBeGreaterThanOrEqual(frame.personal.y + frame.personal.height)
+        expect(frame.ghost.y + frame.ghost.height * 0.5).toBeGreaterThanOrEqual(frame.personal.y + frame.personal.height)
+        expect(Math.abs(frame.card.width - frame.slot.width)).toBeLessThan(1.5)
+        // The ghost holds it from above, clear of the card's words.
+        expect(frame.ghost.y + frame.ghost.height * 0.75).toBeLessThanOrEqual(frame.card.y + 2)
+        // One label at a time.
+        expect(Math.min(frame.title, frame.busy), `${time}: one label`).toBeLessThan(0.05)
+      }
+      const landed = await at(4800 * 0.9)
+      expect(Math.abs(landed.card.y - landed.slot.y)).toBeLessThan(1.5)
+      expect(Math.abs(landed.card.y - landed.hour.y)).toBeLessThan(landed.hour.height / 2)
+      await expect(crossing.locator(".crossing-landed-box")).toBeVisible()
+      await crossing.evaluate((element) =>
+        element
+          .getAnimations({ subtree: true })
+          .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+          .forEach((animation) => animation.finish()),
+      )
+      await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
+    }
   })
 }
 
-for (const path of ["/", "/bold"]) {
-  test(`${path}: monitors and agents come after the trust list: one sentence, three tools, one link`, async ({ page }) => {
-    await page.goto(path)
-    const ids = await page.locator("main > section").evaluateAll((sections) => sections.map((section) => section.id))
-    expect(ids.indexOf("integrations")).toBe(ids.indexOf("trust") + 1)
-    expect(ids.indexOf("self-host")).toBe(ids.indexOf("integrations") + 1)
-    const section = page.locator("#integrations")
-    await expect(section.getByRole("heading", { level: 2 })).toHaveText(en.integrations.title)
-    await expect(section.locator(".int-lead")).toHaveText(en.integrations.body)
-    await expect(section.locator(".int-reader")).toHaveCount(3)
-    // The setup's detail lives on the guide's page, not here.
-    await expect(section.locator("a")).toHaveCount(1)
-    await expect(section.getByRole("link", { name: en.integrations.guide })).toHaveAttribute("href", INTEGRATIONS_URL)
-    await expect(section.locator("button[data-copy], pre, .int-caption")).toHaveCount(0)
-  })
-}
-
-for (const path of ["/", "/bold"]) {
-  test(`${path}: the How it works switch changes what step 3's preview shows`, async ({ page }) => {
-    await page.goto(path)
-    const strip = page.locator("#how-it-works")
-    await strip.scrollIntoViewIfNeeded()
-    const rows = strip.locator(".how-preview-row")
-    await expect(rows.first()).toContainText(en.demo.busy)
-    const details = strip.getByRole("button", { name: en.crossing.withDetails })
-    await details.click()
-    await expect(details).toHaveAttribute("aria-pressed", "true")
-    await expect(rows.nth(0)).toContainText(en.demo.events.dentist.title)
-    await expect(rows.nth(1)).toContainText(en.demo.events.gym.title)
-    await expect(rows.nth(2)).toContainText(en.demo.events.therapy.title)
-    await strip.getByRole("button", { name: en.crossing.busyOnly }).click()
-    await expect(rows.first()).toContainText(en.demo.busy)
-  })
-}
-
-for (const path of ["/", "/bold"]) {
-  test(`${path}: the crossing runs once, then rests on a clearly visible Busy on Work`, async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto(path)
+for (const width of [1440, 1024]) {
+  test(`at ${width}px: the carried card starts at the Dentist card's size and lands at the slot's, without a jump`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 1000 })
+    await page.goto("/")
     const crossing = page.locator(".crossing")
     await crossing.scrollIntoViewIfNeeded()
     await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
-    // Still in flight: the ghost has not said anything yet.
-    const bubble = crossing.locator(".crossing-says")
-    expect(await bubble.evaluate((element) => getComputedStyle(element).opacity)).toBe("0")
-    await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
-    const landed = crossing.locator(".crossing-work .crossing-landed")
-    await expect(landed.getByText(en.demo.busy)).toBeVisible()
-    expect(await landed.evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
-    expect(await landed.evaluate((element) => getComputedStyle(element).transform)).toBe("none")
-    // A real fill and a solid edge, not a faint outline (drawn by the copy's card layer).
-    const look = await landed.locator(".crossing-landed-box").evaluate((element) => {
-      const style = getComputedStyle(element)
-      return { edge: style.borderTopStyle, fill: style.backgroundColor }
-    })
-    expect(look.edge).toBe("solid")
-    expect(look.fill).not.toMatch(/rgba\(.*, 0\)|transparent/)
-    // Once it has landed, the ghost says so, tail pointing at it.
-    await expect(bubble).toHaveText(en.ghost.crossingBusy)
-    expect(await bubble.evaluate((element) => getComputedStyle(element).opacity)).toBe("1")
-    // A new choice runs it again and lands the details.
-    await crossing.getByRole("button", { name: en.crossing.withDetails }).click()
-    await expect(crossing).toHaveAttribute("data-run", "running")
-    await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
-    await expect(landed.getByText(en.demo.events.dentist.title)).toBeVisible()
-    await expect(landed.getByText(en.demo.events.dentist.detail)).toBeVisible()
-    await expect(bubble).toHaveText(en.ghost.crossingDetails)
+    /** The carried card's box and the box it should match, with every animation held at `at`. */
+    const boxesAt = (at: number, target: string) =>
+      crossing.evaluate(
+        (element, [at, target]) => {
+          for (const animation of element.getAnimations({ subtree: true })) {
+            animation.pause()
+            animation.currentTime = at as number
+          }
+          const box = (selector: string) => {
+            const rect = element.querySelector(selector)!.getBoundingClientRect()
+            return [rect.x, rect.y, rect.width, rect.height]
+          }
+          return { card: box(".crossing-landed-box"), target: box(target as string) }
+        },
+        [at, target] as const,
+      )
+    const expectSame = ({ card, target }: { card: number[]; target: number[] }) => {
+      for (const [index, value] of card.entries()) expect(Math.abs(value - target[index]!)).toBeLessThan(1.5)
+    }
+    // 4.8s runs: the copy appears over the Dentist at 28% and is set down by 84%.
+    expectSame(await boxesAt(4800 * 0.29, ".crossing-personal .crossing-source"))
+    const landed = await boxesAt(4800 * 0.9, ".crossing-landed")
+    expectSame(landed)
+    // And on the way it is somewhere in between: never smaller than the slot, never larger
+    // than the Dentist card.
+    const midway = await boxesAt(4800 * 0.56, ".crossing-personal .crossing-source")
+    expect(midway.card[2]!).toBeLessThan(midway.target[2]!)
+    expect(midway.card[2]!).toBeGreaterThan(landed.target[2]!)
   })
 
-  for (const width of [390, 320]) {
-    test(`${path} at ${width}px: the carried card goes down the lane, covering nothing, one label at a time, into the 15:00 slot`, async ({
-      page,
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`at ${width}px ${colorScheme}: the crossing explains itself, with what stays behind on the Personal card`, async ({
+      browser,
     }) => {
-      await page.setViewportSize({ width, height: 1000 })
-      await page.goto(path)
-      const crossing = page.locator(".crossing")
-      for (const mode of [en.crossing.busyOnly, en.crossing.withDetails]) {
-        await crossing.scrollIntoViewIfNeeded()
-        if (mode === en.crossing.withDetails) await crossing.getByRole("button", { name: mode }).click()
-        await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
-        const at = (time: number) =>
-          crossing.evaluate((element, time) => {
-            for (const animation of element.getAnimations({ subtree: true })) {
-              animation.pause()
-              animation.currentTime = time
-            }
-            const box = (selector: string) => element.querySelector(selector)!.getBoundingClientRect().toJSON() as DOMRect
-            const shown = (selector: string) => {
-              const style = getComputedStyle(element.querySelector(selector)!)
-              return style.visibility === "hidden" ? 0 : Number(style.opacity)
-            }
-            return {
-              card: box(".crossing-landed-box"),
-              ghost: box(".crossing-ghost .ghost"),
-              personal: box(".crossing-personal .crossing-event"),
-              slot: box(".crossing-landed"),
-              hour: box(".crossing-hour:nth-child(2)"),
-              title: shown(".crossing-landed-title"),
-              busy: shown(".crossing-landed-busy"),
-            }
-          }, time)
-        // Out of the Personal card, in the lane: below the card and its chips, at the slot's size.
-        for (const time of [0.3, 0.45, 0.55]) {
-          const frame = await at(4800 * time)
-          expect(frame.card.y, `${time}`).toBeGreaterThanOrEqual(frame.personal.y + frame.personal.height)
-          expect(frame.ghost.y + frame.ghost.height * 0.5).toBeGreaterThanOrEqual(frame.personal.y + frame.personal.height)
-          expect(Math.abs(frame.card.width - frame.slot.width)).toBeLessThan(1.5)
-          // The ghost holds it from above, clear of the card's words.
-          expect(frame.ghost.y + frame.ghost.height * 0.75).toBeLessThanOrEqual(frame.card.y + 2)
-          // One label at a time.
-          expect(Math.min(frame.title, frame.busy), `${time}: one label`).toBeLessThan(0.05)
-        }
-        const landed = await at(4800 * 0.9)
-        expect(Math.abs(landed.card.y - landed.slot.y)).toBeLessThan(1.5)
-        expect(Math.abs(landed.card.y - landed.hour.y)).toBeLessThan(landed.hour.height / 2)
-        await expect(crossing.locator(".crossing-landed-box")).toBeVisible()
-        await crossing.evaluate((element) =>
-          element
-            .getAnimations({ subtree: true })
-            .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
-            .forEach((animation) => animation.finish()),
-        )
-        await expect(crossing).toHaveAttribute("data-run", "rested", { timeout: 7000 })
-      }
-    })
-  }
-
-  for (const width of [1440, 1024]) {
-    test(`${path} at ${width}px: the carried card starts at the Dentist card's size and lands at the slot's, without a jump`, async ({
-      page,
-    }) => {
-      await page.setViewportSize({ width, height: 1000 })
-      await page.goto(path)
+      const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce", colorScheme })
+      const page = await context.newPage()
+      await page.goto("/")
       const crossing = page.locator(".crossing")
       await crossing.scrollIntoViewIfNeeded()
-      await expect(crossing).toHaveAttribute("data-run", "running", { timeout: 3000 })
-      /** The carried card's box and the box it should match, with every animation held at `at`. */
-      const boxesAt = (at: number, target: string) =>
-        crossing.evaluate(
-          (element, [at, target]) => {
-            for (const animation of element.getAnimations({ subtree: true })) {
-              animation.pause()
-              animation.currentTime = at as number
-            }
-            const box = (selector: string) => {
-              const rect = element.querySelector(selector)!.getBoundingClientRect()
-              return [rect.x, rect.y, rect.width, rect.height]
-            }
-            return { card: box(".crossing-landed-box"), target: box(target as string) }
-          },
-          [at, target] as const,
-        )
-      const expectSame = ({ card, target }: { card: number[]; target: number[] }) => {
-        for (const [index, value] of card.entries()) expect(Math.abs(value - target[index]!)).toBeLessThan(1.5)
+      // The switch and its one line sit with the demo, on top of it.
+      const bar = (await crossing.locator(".crossing-bar").boundingBox())!
+      const personal = (await crossing.locator(".crossing-personal").boundingBox())!
+      const work = (await crossing.locator(".crossing-work").boundingBox())!
+      expect(bar.y + bar.height).toBeLessThanOrEqual(personal.y)
+      await expect(crossing.locator(".crossing-explain")).toHaveText(en.crossing.busyOnlyBody)
+      // Each part that never crosses over is a chip with its icon on the Personal card.
+      const stays = crossing.locator(".crossing-personal .crossing-stays")
+      await expect(stays.getByRole("heading", { name: en.crossing.alwaysStaysTitle })).toBeVisible()
+      for (const item of en.crossing.alwaysStays) {
+        const chip = stays.getByRole("listitem").filter({ hasText: item })
+        await expect(chip).toBeVisible()
+        await expect(chip.locator("svg")).toHaveCount(1)
       }
-      // 4.8s runs: the copy appears over the Dentist at 28% and is set down by 84%.
-      expectSame(await boxesAt(4800 * 0.29, ".crossing-personal .crossing-source"))
-      const landed = await boxesAt(4800 * 0.9, ".crossing-landed")
-      expectSame(landed)
-      // And on the way it is somewhere in between: never smaller than the slot, never larger
-      // than the Dentist card.
-      const midway = await boxesAt(4800 * 0.56, ".crossing-personal .crossing-source")
-      expect(midway.card[2]!).toBeLessThan(midway.target[2]!)
-      expect(midway.card[2]!).toBeGreaterThan(landed.target[2]!)
+      if (width >= 1000) {
+        // Side by side, close together, and large.
+        expect(Math.abs(work.y - personal.y)).toBeLessThan(2)
+        expect(work.x - (personal.x + personal.width)).toBeLessThan(160)
+        expect(personal.width).toBeGreaterThan(420)
+        expect(work.width).toBeGreaterThan(420)
+      } else {
+        // Stacked: Personal, then Work.
+        expect(work.y).toBeGreaterThan(personal.y + personal.height)
+      }
+      // Under reduced motion it has simply landed.
+      await expect(crossing).toHaveAttribute("data-run", "rested")
+      await expect(crossing.locator(".crossing-landed").getByText(en.demo.busy)).toBeVisible()
+
+      // The ghost's speech bubble rests beside it, tail pointing at it, saying the Busy-only
+      // line, and never over Work's landed Busy block or the switch.
+      const bubble = crossing.locator(".crossing-says")
+      await expect(bubble).toBeVisible()
+      await expect(bubble).toHaveAttribute("data-side", "top")
+      await expect(bubble).toHaveText(en.ghost.crossingBusy)
+      const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+        a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+      const landedBox = (await crossing.locator(".crossing-landed").boundingBox())!
+      const switchBox = (await crossing.locator(".crossing-switch").boundingBox())!
+      expect(overlaps((await bubble.boundingBox())!, landedBox)).toBe(false)
+      expect(overlaps((await bubble.boundingBox())!, switchBox)).toBe(false)
+
+      // A new choice changes what it says, and it still clears both.
+      await crossing.getByRole("button", { name: en.crossing.withDetails }).click()
+      await expect(bubble).toHaveText(en.ghost.crossingDetails)
+      expect(overlaps((await bubble.boundingBox())!, (await crossing.locator(".crossing-landed").boundingBox())!)).toBe(false)
+      expect(overlaps((await bubble.boundingBox())!, (await crossing.locator(".crossing-switch").boundingBox())!)).toBe(false)
+
+      await context.close()
     })
-
-    for (const colorScheme of ["light", "dark"] as const) {
-      test(`${path} at ${width}px ${colorScheme}: the crossing explains itself, with what stays behind on the Personal card`, async ({
-        browser,
-      }) => {
-        const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce", colorScheme })
-        const page = await context.newPage()
-        await page.goto(path)
-        const crossing = page.locator(".crossing")
-        await crossing.scrollIntoViewIfNeeded()
-        // The switch and its one line sit with the demo, on top of it.
-        const bar = (await crossing.locator(".crossing-bar").boundingBox())!
-        const personal = (await crossing.locator(".crossing-personal").boundingBox())!
-        const work = (await crossing.locator(".crossing-work").boundingBox())!
-        expect(bar.y + bar.height).toBeLessThanOrEqual(personal.y)
-        await expect(crossing.locator(".crossing-explain")).toHaveText(en.crossing.busyOnlyBody)
-        // Each part that never crosses over is a chip with its icon on the Personal card.
-        const stays = crossing.locator(".crossing-personal .crossing-stays")
-        await expect(stays.getByRole("heading", { name: en.crossing.alwaysStaysTitle })).toBeVisible()
-        for (const item of en.crossing.alwaysStays) {
-          const chip = stays.getByRole("listitem").filter({ hasText: item })
-          await expect(chip).toBeVisible()
-          await expect(chip.locator("svg")).toHaveCount(1)
-        }
-        if (width >= 1000) {
-          // Side by side, close together, and large.
-          expect(Math.abs(work.y - personal.y)).toBeLessThan(2)
-          expect(work.x - (personal.x + personal.width)).toBeLessThan(160)
-          expect(personal.width).toBeGreaterThan(420)
-          expect(work.width).toBeGreaterThan(420)
-        } else {
-          // Stacked: Personal, then Work.
-          expect(work.y).toBeGreaterThan(personal.y + personal.height)
-        }
-        // Under reduced motion it has simply landed.
-        await expect(crossing).toHaveAttribute("data-run", "rested")
-        await expect(crossing.locator(".crossing-landed").getByText(en.demo.busy)).toBeVisible()
-
-        // The ghost's speech bubble rests beside it, tail pointing at it, saying the Busy-only
-        // line, and never over Work's landed Busy block or the switch.
-        const bubble = crossing.locator(".crossing-says")
-        await expect(bubble).toBeVisible()
-        await expect(bubble).toHaveAttribute("data-side", "top")
-        await expect(bubble).toHaveText(en.ghost.crossingBusy)
-        const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
-          a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
-        const landedBox = (await crossing.locator(".crossing-landed").boundingBox())!
-        const switchBox = (await crossing.locator(".crossing-switch").boundingBox())!
-        expect(overlaps((await bubble.boundingBox())!, landedBox)).toBe(false)
-        expect(overlaps((await bubble.boundingBox())!, switchBox)).toBe(false)
-
-        // A new choice changes what it says, and it still clears both.
-        await crossing.getByRole("button", { name: en.crossing.withDetails }).click()
-        await expect(bubble).toHaveText(en.ghost.crossingDetails)
-        expect(overlaps((await bubble.boundingBox())!, (await crossing.locator(".crossing-landed").boundingBox())!)).toBe(false)
-        expect(overlaps((await bubble.boundingBox())!, (await crossing.locator(".crossing-switch").boundingBox())!)).toBe(false)
-
-        await context.close()
-      })
-    }
   }
 }
 
@@ -862,155 +936,148 @@ test("without JavaScript, the integrations mockups show their final state", asyn
   await context.close()
 })
 
-for (const path of ["/", "/bold", "/journey"]) {
-  test.describe(`${path}, shared promises`, () => {
-    test("the footer ends with a call to action and an organized set of links", async ({ page }) => {
-      await page.goto(path)
-      const footer = page.locator("footer")
-      await expect(footer.getByRole("link", { name: en.hero.primary })).toHaveAttribute("href", "#self-host")
-      const star = footer.getByRole("link", { name: new RegExp(en.hero.secondary) })
-      await expect(star).toHaveAttribute("href", REPO_URL)
-      await expect(star).toHaveAttribute("target", "_blank")
-      const links = footer.getByRole("navigation", { name: en.footer.label })
-      const expected: [string, string][] = [
-        [en.footer.github, REPO_URL],
-        [en.footer.guide, GUIDE_URL],
-        [en.footer.docs, DOCS_URL],
-        [en.footer.changelog, CHANGELOG_URL],
-        [en.footer.licenseLink, LICENSE_URL],
-        [en.footer.trademarks, TRADEMARKS_URL],
-      ]
-      for (const [name, href] of expected) await expect(links.getByRole("link", { name, exact: true })).toHaveAttribute("href", href)
-      await expect(links.getByRole("list", { name: en.footer.projectTitle }).getByRole("listitem")).toHaveCount(4)
-      await expect(links.getByRole("list", { name: en.footer.legalTitle }).getByRole("listitem")).toHaveCount(2)
-      await expect(footer.getByText(en.footer.noTrackers, { exact: true })).toBeVisible()
-      await expect(footer.getByText(en.footer.noTrackersBody, { exact: true })).toBeVisible()
-      await expect(footer).not.toContainText("network tab")
-      // The home page's sleeping ghost only mumbles its five more minutes; the other endings stay quiet.
-      if (path === "/") await expect(footer.locator(".speech-bubble")).toHaveText([en.footer.sleepTalk])
-      else await expect(footer.locator(".speech-bubble")).toHaveCount(0)
+test("the footer ends with a call to action and an organized set of links", async ({ page }) => {
+  await page.goto("/")
+  const footer = page.locator("footer")
+  await expect(footer.getByRole("link", { name: en.hero.primary })).toHaveAttribute("href", "#self-host")
+  const star = footer.getByRole("link", { name: new RegExp(en.hero.secondary) })
+  await expect(star).toHaveAttribute("href", REPO_URL)
+  await expect(star).toHaveAttribute("target", "_blank")
+  const links = footer.getByRole("navigation", { name: en.footer.label })
+  const expected: [string, string][] = [
+    [en.footer.github, REPO_URL],
+    [en.footer.guide, GUIDE_URL],
+    [en.footer.docs, DOCS_URL],
+    [en.footer.changelog, CHANGELOG_URL],
+    [en.footer.licenseLink, LICENSE_URL],
+    [en.footer.trademarks, TRADEMARKS_URL],
+  ]
+  for (const [name, href] of expected) await expect(links.getByRole("link", { name, exact: true })).toHaveAttribute("href", href)
+  await expect(links.getByRole("list", { name: en.footer.projectTitle }).getByRole("listitem")).toHaveCount(4)
+  await expect(links.getByRole("list", { name: en.footer.legalTitle }).getByRole("listitem")).toHaveCount(2)
+  await expect(footer.getByText(en.footer.noTrackers, { exact: true })).toBeVisible()
+  await expect(footer.getByText(en.footer.noTrackersBody, { exact: true })).toBeVisible()
+  await expect(footer).not.toContainText("network tab")
+  // The sleeping ghost mumbles its five more minutes.
+  await expect(footer.locator(".speech-bubble")).toHaveText([en.footer.sleepTalk])
+})
+
+for (const width of [1440, 390]) {
+  test(`at ${width}px, the Overview's "All good!" bubble points at the ghost`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height: 900 } })
+    const page = await context.newPage()
+    await page.goto("/")
+    const health = page.locator(".mock-health")
+    await health.scrollIntoViewIfNeeded()
+    const ghost = (await health.locator(".mock-health-ghost").boundingBox())!
+    const bubble = (await health.locator(".mock-health-bubble").boundingBox())!
+    // Under the ghost, centered on it, with its tail on the top edge pointing up.
+    expect(bubble.y).toBeGreaterThanOrEqual(ghost.y + ghost.height - 1)
+    expect(Math.abs(bubble.x + bubble.width / 2 - (ghost.x + ghost.width / 2))).toBeLessThan(2)
+    const tail = await health.locator(".mock-health-bubble").evaluate((element) => {
+      const style = getComputedStyle(element, "::before")
+      return { top: parseFloat(style.top), transform: style.transform }
     })
-
-    for (const width of [1440, 390]) {
-      test(`at ${width}px, the Overview's "All good!" bubble points at the ghost`, async ({ browser }) => {
-        const context = await browser.newContext({ viewport: { width, height: 900 } })
-        const page = await context.newPage()
-        await page.goto(path)
-        const health = page.locator(".mock-health")
-        await health.scrollIntoViewIfNeeded()
-        const ghost = (await health.locator(".mock-health-ghost").boundingBox())!
-        const bubble = (await health.locator(".mock-health-bubble").boundingBox())!
-        // Under the ghost, centered on it, with its tail on the top edge pointing up.
-        expect(bubble.y).toBeGreaterThanOrEqual(ghost.y + ghost.height - 1)
-        expect(Math.abs(bubble.x + bubble.width / 2 - (ghost.x + ghost.width / 2))).toBeLessThan(2)
-        const tail = await health.locator(".mock-health-bubble").evaluate((element) => {
-          const style = getComputedStyle(element, "::before")
-          return { top: parseFloat(style.top), transform: style.transform }
-        })
-        expect(tail.top).toBeLessThan(0)
-        // rotate(135deg): the corner where its two borders meet points up.
-        expect(tail.transform).toMatch(/^matrix\(-0\.70710\d*, 0\.70710\d*, -0\.70710\d*, -0\.70710\d*/)
-        await context.close()
-      })
-    }
-
-    for (const width of [1440, 390]) {
-      test(`at ${width}px, the Activity mockup leads each event with its outcome and its sign, in Sam's week`, async ({ browser }) => {
-        const context = await browser.newContext({ viewport: { width, height: 900 } })
-        const page = await context.newPage()
-        await page.goto(path)
-        const mock = page.locator(".mock-activity")
-        await mock.scrollIntoViewIfNeeded()
-        const rows = mock.locator(".mock-act")
-        await expect(rows).toHaveCount(en.app.activity.rows.length)
-        const marks = await rows.evaluateAll((all) => all.map((row) => row.getAttribute("data-mark")))
-        expect(marks).toEqual(["added", "changed", "added", "removed", "skipped"])
-        await expect(rows.first()).toContainText("Dentist")
-        await expect(rows.first()).toContainText("Mon 15:00–16:30")
-        const box = (await mock.boundingBox())!
-        for (const [index, row] of (await rows.all()).entries()) {
-          const copy = en.app.activity.rows[index]!
-          await expect(row.locator(".mock-act-outcome")).toHaveText(copy.outcome)
-          await expect(row.locator(".mock-act-sign svg")).toHaveCount(1)
-          await expect(row.locator(".mock-act-rule img.avatar")).toHaveCount(2)
-          const outcome = (await row.locator(".mock-act-outcome").boundingBox())!
-          const event = (await row.locator(".mock-act-event").boundingBox())!
-          expect(outcome.y + outcome.height).toBeLessThanOrEqual(event.y + 1)
-          // Nothing spills out of the mockup, even on a phone.
-          for (const part of await row.locator(":scope > *").all()) {
-            const partBox = (await part.boundingBox())!
-            expect(partBox.x + partBox.width).toBeLessThanOrEqual(box.x + box.width + 0.5)
-          }
-        }
-        await context.close()
-      })
-    }
-
-    test("the app is shown feature by feature, each with its mockup, on alternating sides", async ({ page }) => {
-      await page.goto(path)
-      const features = page.locator(".feat")
-      const titles = [en.app.features.rules.title, en.app.features.activity.title, en.app.features.health.title]
-      await expect(features.getByRole("heading", { level: 3 })).toHaveText(titles)
-      const sides: boolean[] = []
-      for (const feature of await features.all()) {
-        await expect(feature.getByRole("img")).toHaveCount(1)
-        const copy = (await feature.locator(".feat-copy").boundingBox())!
-        const shot = (await feature.locator(".feat-shot").boundingBox())!
-        sides.push(shot.x > copy.x)
-      }
-      expect(sides).toEqual([true, false, true])
-    })
-
-    test("the green ghost appears only where it means healthy", async ({ page }) => {
-      await page.goto(path)
-      const outside = await page
-        .locator('.ghost[data-tone="moss"]')
-        .evaluateAll((ghosts) => ghosts.filter((ghost) => !ghost.closest(".mock-health, .int-tile")).length)
-      expect(outside).toBe(0)
-      await expect(page.locator('.ghost[data-tone="mist"][data-glow]').first()).toBeAttached()
-    })
-
-    test("in the agent mockup, the AI assistant answers, not the ghost", async ({ page }) => {
-      await page.goto(path)
-      const chat = page.locator(".int-chat")
-      await expect(chat.locator(".ghost")).toHaveCount(0)
-      await expect(chat.locator(".int-agent-name")).toHaveText("Claude")
-      // Claude's own mark, bundled inline in its orange.
-      const mark = chat.locator(".int-agent-avatar svg.int-agent-mark")
-      await expect(mark).toHaveCount(1)
-      await expect(mark.locator("path")).toHaveAttribute("fill", "#D97757")
-      await expect(chat).toContainText("calendar-ghost · get_status")
-    })
+    expect(tail.top).toBeLessThan(0)
+    // rotate(135deg): the corner where its two borders meet points up.
+    expect(tail.transform).toMatch(/^matrix\(-0\.70710\d*, 0\.70710\d*, -0\.70710\d*, -0\.70710\d*/)
+    await context.close()
   })
 }
 
-for (const path of ["/", "/bold"]) {
-  for (const width of [1440, 390]) {
-    test(`${path} at ${width}px: each How it works number sits on its title's line, the body under the title`, async ({ browser }) => {
-      const context = await browser.newContext({ viewport: { width, height: 900 } })
-      const page = await context.newPage()
-      await page.goto(path)
-      const steps = page.locator(".how-steps li")
-      await expect(steps).toHaveCount(3)
-      for (const step of await steps.all()) {
-        const number = (await step.locator(".how-step-n").boundingBox())!
-        const title = (await step.locator("h3").boundingBox())!
-        const body = (await step.locator("h3 + p").boundingBox())!
-        expect(number.x + number.width).toBeLessThanOrEqual(title.x)
-        // On the same line: the number overlaps the title's first line vertically.
-        expect(number.y).toBeLessThan(title.y + title.height)
-        expect(number.y + number.height).toBeGreaterThan(title.y)
-        expect(body.y).toBeGreaterThanOrEqual(title.y + title.height - 1)
-        expect(Math.abs(body.x - title.x)).toBeLessThanOrEqual(1)
+for (const width of [1440, 390]) {
+  test(`at ${width}px, the Activity mockup leads each event with its outcome and its sign, in Sam's week`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height: 900 } })
+    const page = await context.newPage()
+    await page.goto("/")
+    const mock = page.locator(".mock-activity")
+    await mock.scrollIntoViewIfNeeded()
+    const rows = mock.locator(".mock-act")
+    await expect(rows).toHaveCount(en.app.activity.rows.length)
+    const marks = await rows.evaluateAll((all) => all.map((row) => row.getAttribute("data-mark")))
+    expect(marks).toEqual(["added", "changed", "added", "removed", "skipped"])
+    await expect(rows.first()).toContainText("Dentist")
+    await expect(rows.first()).toContainText("Mon 15:00–16:30")
+    const box = (await mock.boundingBox())!
+    for (const [index, row] of (await rows.all()).entries()) {
+      const copy = en.app.activity.rows[index]!
+      await expect(row.locator(".mock-act-outcome")).toHaveText(copy.outcome)
+      await expect(row.locator(".mock-act-sign svg")).toHaveCount(1)
+      await expect(row.locator(".mock-act-rule img.avatar")).toHaveCount(2)
+      const outcome = (await row.locator(".mock-act-outcome").boundingBox())!
+      const event = (await row.locator(".mock-act-event").boundingBox())!
+      expect(outcome.y + outcome.height).toBeLessThanOrEqual(event.y + 1)
+      // Nothing spills out of the mockup, even on a phone.
+      for (const part of await row.locator(":scope > *").all()) {
+        const partBox = (await part.boundingBox())!
+        expect(partBox.x + partBox.width).toBeLessThanOrEqual(box.x + box.width + 0.5)
       }
-      await context.close()
-    })
+    }
+    await context.close()
+  })
+}
+
+test("the app is shown feature by feature, each with its mockup, on alternating sides", async ({ page }) => {
+  await page.goto("/")
+  const features = page.locator(".feat")
+  const titles = [en.app.features.rules.title, en.app.features.activity.title, en.app.features.health.title]
+  await expect(features.getByRole("heading", { level: 3 })).toHaveText(titles)
+  const sides: boolean[] = []
+  for (const feature of await features.all()) {
+    await expect(feature.getByRole("img")).toHaveCount(1)
+    const copy = (await feature.locator(".feat-copy").boundingBox())!
+    const shot = (await feature.locator(".feat-shot").boundingBox())!
+    sides.push(shot.x > copy.x)
   }
+  expect(sides).toEqual([true, false, true])
+})
+
+test("the green ghost appears only where it means healthy", async ({ page }) => {
+  await page.goto("/")
+  const outside = await page
+    .locator('.ghost[data-tone="moss"]')
+    .evaluateAll((ghosts) => ghosts.filter((ghost) => !ghost.closest(".mock-health, .int-tile")).length)
+  expect(outside).toBe(0)
+  await expect(page.locator('.ghost[data-tone="mist"][data-glow]').first()).toBeAttached()
+})
+
+test("in the agent mockup, the AI assistant answers, not the ghost", async ({ page }) => {
+  await page.goto("/")
+  const chat = page.locator(".int-chat")
+  await expect(chat.locator(".ghost")).toHaveCount(0)
+  await expect(chat.locator(".int-agent-name")).toHaveText("Claude")
+  // Claude's own mark, bundled inline in its orange.
+  const mark = chat.locator(".int-agent-avatar svg.int-agent-mark")
+  await expect(mark).toHaveCount(1)
+  await expect(mark.locator("path")).toHaveAttribute("fill", "#D97757")
+  await expect(chat).toContainText("calendar-ghost · get_status")
+})
+
+for (const width of [1440, 390]) {
+  test(`at ${width}px: each How it works number sits on its title's line, the body under the title`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height: 900 } })
+    const page = await context.newPage()
+    await page.goto("/")
+    const steps = page.locator(".how-steps li")
+    await expect(steps).toHaveCount(3)
+    for (const step of await steps.all()) {
+      const number = (await step.locator(".how-step-n").boundingBox())!
+      const title = (await step.locator("h3").boundingBox())!
+      const body = (await step.locator("h3 + p").boundingBox())!
+      expect(number.x + number.width).toBeLessThanOrEqual(title.x)
+      // On the same line: the number overlaps the title's first line vertically.
+      expect(number.y).toBeLessThan(title.y + title.height)
+      expect(number.y + number.height).toBeGreaterThan(title.y)
+      expect(body.y).toBeGreaterThanOrEqual(title.y + title.height - 1)
+      expect(Math.abs(body.x - title.x)).toBeLessThanOrEqual(1)
+    }
+    await context.close()
+  })
 }
 
 const bodyBackground = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
 
-for (const path of ["/", "/bold", "/journey", "/home/hero-a2", "/versions"]) {
+for (const path of ["/", "/docs/self-hosting", "/404"]) {
   test(`${path}: the theme toggle is there, 44px tall, and names the theme on screen`, async ({ browser }) => {
     for (const colorScheme of ["light", "dark"] as const) {
       const context = await browser.newContext({ colorScheme })
@@ -1025,6 +1092,28 @@ for (const path of ["/", "/bold", "/journey", "/home/hero-a2", "/versions"]) {
       await expect(toggle).toHaveAttribute("aria-label", `Theme: ${en.theme[colorScheme]}`)
       await context.close()
     }
+  })
+}
+
+for (const path of ["/", "/docs/self-hosting"]) {
+  test(`${path}: every heading is set in Besley, preloaded, at its natural spacing`, async ({ page }) => {
+    await page.goto(path)
+    const preloads = await page.locator('link[rel="preload"][as="font"]').evaluateAll((links) => links.map((link) => link.getAttribute("href")))
+    expect(preloads.some((href) => href?.includes("besley-latin-wght-normal"))).toBe(true)
+    for (const heading of [page.locator("h1").first(), page.locator("main h2").first()]) {
+      const style = await heading.evaluate((element) => {
+        const computed = getComputedStyle(element)
+        return { family: computed.fontFamily, tracking: computed.letterSpacing, size: parseFloat(computed.fontSize), leading: parseFloat(computed.lineHeight) }
+      })
+      expect(style.family).toMatch(/^"?Besley Variable/)
+      // Never tightened: Besley's letters touch at negative tracking.
+      expect(style.tracking === "normal" || parseFloat(style.tracking) >= 0, style.tracking).toBe(true)
+      // Room between lines for its tall ascenders.
+      expect(style.leading / style.size).toBeGreaterThanOrEqual(1.04)
+    }
+    // Only the page's own two faces load.
+    const families = await page.evaluate(() => [...document.fonts].map((font) => font.family.replaceAll('"', "")))
+    expect(new Set(families)).toEqual(new Set(["Figtree Variable", "Besley Variable"]))
   })
 }
 

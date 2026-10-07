@@ -7,15 +7,14 @@ import LanguagePicker from "./LanguagePicker.astro"
 
 interface Props {
   m: Messages
-  /** The page the section links jump within (default the home page). */
-  base?: string
 }
 
-const { m, base = "/" } = Astro.props
+const { m } = Astro.props
+// The home page's sections, so the links also work from the documentation and the 404 page.
 const links = [
-  { href: `${base}#how-it-works`, label: m.nav.howItWorks },
-  { href: `${base}#features`, label: m.nav.features },
-  { href: `${base}#self-host`, label: m.nav.selfHost },
+  { href: "/#how-it-works", label: m.nav.howItWorks },
+  { href: "/#features", label: m.nav.features },
+  { href: "/#self-host", label: m.nav.selfHost },
 ]
 ---
 

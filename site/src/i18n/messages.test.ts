@@ -23,23 +23,8 @@ describe("English copy", () => {
     expect(strings(en).filter(([, text]) => text.includes("—"))).toEqual([])
   })
 
-  it("states the approved headline and scope chip", () => {
-    expect(en.hero.title).toBe("Sync your calendars. Keep your privacy.")
-    expect(en.hero.chip).toBe("Open source (AGPL) · Self-hosted · Google Calendar")
-  })
-
-  it("splits the headline into lines without changing it", () => {
-    expect(en.variants.bold.hero.titleLines.join(" ")).toBe(en.hero.title)
-  })
-
-  it("lists the self-host facts /journey shows, true to docs/self-hosting.md", () => {
-    expect(en.variants.journey.selfHost.facts).toEqual([
-      "One container",
-      "One SQLite file",
-      "amd64 and arm64",
-      "No Calendar Ghost account",
-      "No trackers",
-    ])
+  it("states the approved headline, one sentence per line", () => {
+    expect(en.hero.titleLines).toEqual(["Sync your calendars.", "Keep your privacy."])
   })
 
   it("never calls the app pre-alpha", () => {
