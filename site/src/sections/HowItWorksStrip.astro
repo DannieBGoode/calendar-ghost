@@ -1,8 +1,6 @@
 ---
 // How it works as one strip: three steps, each with a small piece of the app, joined by the path
 // the ghost flies along (once, when the strip comes into view) to the last step, where it stays.
-// A page can pass its own section class for spacing; the strip itself needs only the shared
-// tokens.
 import { avatarUrls } from "../avatars"
 import Avatar from "../components/Avatar.astro"
 import Icon from "../components/Icon.astro"
@@ -12,10 +10,9 @@ import { HowSwitch } from "../islands/HowSwitch"
 
 interface Props {
   m: Messages
-  class?: string
 }
 
-const { m, class: sectionClass = "section" } = Astro.props
+const { m } = Astro.props
 const copy = m.howStrip
 const accounts = [
   { calendar: "personal", address: m.app.rules.accounts.personal },
@@ -25,7 +22,7 @@ const accounts = [
 const avatars = await avatarUrls()
 ---
 
-<section id="how-it-works" class:list={[sectionClass, "how"]} aria-labelledby="how-title">
+<section id="how-it-works" class="section how" aria-labelledby="how-title">
   <div class="container">
     <h2 id="how-title">{m.how.title}</h2>
     <div class="how-strip" data-wake>
@@ -70,8 +67,8 @@ const avatars = await avatarUrls()
   /* Global: steps 2 and 3 are an island (`islands/HowSwitch.tsx`), so their rules must reach
      elements this file does not render and Astro's per-component scoping cannot see. */
   .how h2 { max-width: 12ch; }
-  .how-strip { position: relative; margin-top: var(--space-lg, 2.5rem); }
-  .how-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-xl, 3.5rem); position: relative; z-index: 1; }
+  .how-strip { position: relative; margin-top: 2.5rem; }
+  .how-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 3.5rem; position: relative; z-index: 1; }
   /* Each step: its piece of the app, then the big italic number on the title's line (sharing its
      baseline), and the body under the title, so the number hangs in the margin like a list
      marker. The same on phones. */
@@ -81,11 +78,11 @@ const avatars = await avatarUrls()
   }
   .how-steps li > .how-frag { grid-column: 1 / -1; margin-bottom: 1.4rem; }
   .how-steps li > :not(.how-frag, .how-step-n) { grid-column: 2; }
-  /* The page's h3 size when it has a scale (/bold), otherwise a step up from body text. */
-  .how-steps h3 { margin: 0 0 0.3rem; font-size: var(--step-1, 1.25rem); line-height: 1.25; }
+  /* A step up from body text. */
+  .how-steps h3 { margin: 0 0 0.3rem; font-size: 1.25rem; line-height: 1.25; }
   .how-steps p:not(.how-step-n) { color: var(--muted-foreground); margin: 0; }
   .how-step-n {
-    grid-column: 1; margin: 0; min-width: 1.1ch; font: italic 600 var(--step-2, 2rem)/1 var(--font-display); color: var(--primary);
+    grid-column: 1; margin: 0; min-width: 1.1ch; font: italic 600 2rem/1 var(--font-display); color: var(--primary);
   }
 
   /* The pieces of the app: small, crisp, made of the app's own parts. */

@@ -66,8 +66,8 @@ describe("Ghost", () => {
 
 describe("SpeechBubble", () => {
   it("says its text from the side it is given", () => {
-    const html = renderToString(<SpeechBubble side="left">Boo</SpeechBubble>)
-    expect(html).toContain('data-side="left"')
+    const html = renderToString(<SpeechBubble side="top">Boo</SpeechBubble>)
+    expect(html).toContain('data-side="top"')
     expect(html).toContain(">Boo<")
   })
 })

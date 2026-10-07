@@ -7,9 +7,9 @@ import type { CSSProperties, ReactNode } from "react"
  * mouth: eyes, brows, and small props carry the feeling.
  *
  * Everything is drawn on a 64-unit grid. The body spans x 12 to 52 and y 8 to 54; the margin
- * around it holds what floats outside the body (sparkles, sweat, "z"s, startle rays).
+ * around it holds what floats outside the body (sweat, "z"s).
  */
-export type GhostFace = "neutral" | "happy" | "proud" | "surprised" | "concerned" | "sleepy" | "wink"
+export type GhostFace = "neutral" | "happy" | "concerned" | "sleepy" | "wink"
 /**
  * - `mist`: the default character: on dark pages the white ghost with a soft lantern glow around
  *   it; on light ones filled Lantern Indigo, since white reads as hollow on the light canvas.
@@ -19,15 +19,15 @@ export type GhostFace = "neutral" | "happy" | "proud" | "surprised" | "concerned
 export type GhostTone = "moss" | "lantern" | "mist"
 /**
  * How the ghost idles by itself (blinking, floating, drifting "z"s).
- * - `loop`: keeps idling. Inside a demo, its pause control (`[data-playing="false"]` on an
- *   ancestor) pauses it; anywhere, the footer's site-wide "Pause animations" stops it.
+ * - `loop`: keeps idling, only inside a demo, whose pause control (`[data-playing="false"]` on an
+ *   ancestor) pauses it.
  * - `brief`: a few seconds after the ghost first scrolls into view, then still (no pause control
  *   is needed for motion that stops within five seconds).
  * - `still`: never moves by itself.
  */
 export type GhostAlive = "loop" | "brief" | "still"
 
-export const GHOST_FACES: readonly GhostFace[] = ["neutral", "happy", "proud", "surprised", "concerned", "sleepy", "wink"]
+export const GHOST_FACES: readonly GhostFace[] = ["neutral", "happy", "concerned", "sleepy", "wink"]
 
 const BODY = [
   "M12 27A13 13 0 0 1 25 14H39A13 13 0 0 1 52 27V48",
@@ -68,35 +68,10 @@ function OpenEyes({ y = 32, rx, ry }: { y?: number; rx?: number; ry?: number }) 
 /** Closed, smiling eyes (∩), as on the Overview's healthy ghost. */
 const SMILE_EYES = "M21 33.5Q25 28 29 33.5M35 33.5Q39 28 43 33.5"
 
-/** A four-point sparkle centered on (x, y): four concave arcs that meet in sharp points. */
-function sparkle(x: number, y: number, r: number): string {
-  const c = `${x} ${y}`
-  return `M${x} ${y - r}Q${c} ${x + r} ${y}Q${c} ${x} ${y + r}Q${c} ${x - r} ${y}Q${c} ${x} ${y - r}Z`
-}
-
 function Face({ face, look }: { face: GhostFace; look: { x: number; y: number } }) {
   switch (face) {
     case "happy":
       return <path d={SMILE_EYES} {...FEATURE} />
-    case "proud":
-      // Chin up, eyes shut with satisfaction, a little sparkle: look what I carried.
-      return (
-        <>
-          <path d="M21 32.5Q25 28.2 29 32.5M35 32.5Q39 28.2 43 32.5" {...FEATURE} />
-          <g className="ghost-sparkles" fill="var(--ghost-spark)">
-            <path d={sparkle(53, 9, 5)} />
-            <path d={sparkle(10, 18, 3)} />
-          </g>
-        </>
-      )
-    case "surprised":
-      return (
-        <>
-          <path d="M20.5 23.6Q25 20 29.5 23.6M34.5 23.6Q39 20 43.5 23.6" {...FEATURE} strokeWidth={2.2} />
-          <OpenEyes y={32.5} rx={3.9} ry={4.7} />
-          <path className="ghost-rays" d="M14 11.5L10.5 8M50 11.5L53.5 8M32 10.5V5.5" {...FEATURE} stroke="var(--ghost-aside)" strokeWidth={2.2} />
-        </>
-      )
     case "concerned":
       return (
         <>
@@ -219,7 +194,7 @@ export function Ghost({
   )
 }
 
-export type BubbleSide = "right" | "left" | "top"
+export type BubbleSide = "right" | "top"
 
 /** A speech bubble whose tail points at the ghost it sits beside. Place both in `.ghost-stage`. */
 export function SpeechBubble({

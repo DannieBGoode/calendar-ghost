@@ -19,11 +19,11 @@ interface ActivityRow {
 }
 
 // Every user-visible word on the site. A new language copies this module and
-// `satisfies Messages`, so a missing key fails `astro check`. Fixed-length lists (the five
-// weekdays, the three self-host steps matched to `SELF_HOST_COMMANDS`, the five things that
-// always stay behind, and the three "how it works" steps) are typed as tuples, so a translation
-// with the wrong count also fails `astro check`. The tuples widen their elements back to `string`
-// (not literal English text), so a translation is free to use its own words.
+// `satisfies Messages`, so a missing key fails `astro check`. Fixed-length lists (the headline's
+// two lines, the five weekdays, the five things that always stay behind, and the three "how it
+// works" steps) are typed as tuples, so a translation with the wrong count also fails `astro
+// check`. The tuples widen their elements back to `string` (not literal English text), so a
+// translation is free to use its own words.
 export const en = {
   meta: {
     title: "Calendar Ghost: private calendar sync you host yourself",
@@ -68,9 +68,6 @@ export const en = {
     notFound: "This page never crossed over.",
   },
   hero: {
-    chip: "Open source (AGPL) · Self-hosted · Google Calendar",
-    title: "Sync your calendars. Keep your privacy.",
-    sub: "Calendar Ghost copies events from one Google calendar to another, on your own server. You choose what crosses over. Guests and meeting links always stay behind.",
     /** The headline, one sentence per line. */
     titleLines: ["Sync your calendars.", "Keep your privacy."] as [string, string],
     /** The one line under the headline; it keeps the self-hosting fact in the hero. */
@@ -115,11 +112,6 @@ export const en = {
     youSee: "What you see",
     workSees: "What work sees",
     busy: "Busy",
-    sliderLabel: "Compare your week with what work sees",
-    sliderValueText: "{percent}% of the week shows your view",
-    hint: "Drag the ghost.",
-    revealSummary:
-      "Sam's work week, twice. On the left, Sam sees work meetings and personal plans with their details. On the right, work sees the same meetings, and each personal plan only as “Busy”.",
     workCalendar: "Work calendar · sam@work.example",
     calendars: { personal: "Personal", family: "Family", work: "Work" },
     events: {
@@ -179,8 +171,6 @@ export const en = {
       string,
       string,
     ],
-    guests: "Dr. Ruiz",
-    link: "meet.google.com/abc-defg-hij",
     summary:
       "The Dentist event moves from the Personal calendar to the Work calendar. With Busy only, it arrives titled “Busy”. With details, it keeps its title and place. Guests and the meeting link never cross over.",
   },
@@ -300,27 +290,13 @@ export const en = {
   },
   selfHost: {
     title: "Self-host it",
-    /** The home page's one line under the title (the alternative designs use `body`). */
+    /** The one line under the title. */
     line: "One Docker service and one SQLite file, on a server you own.",
     /** What you need, in one quiet line under the commands. */
     requirements: "Docker and a Google Cloud project. Runs on a Raspberry Pi.",
-    body: "Calendar Ghost runs as one small Docker service with one SQLite file. You own the server, the data, and the keys.",
-    needsTitle: "What you need",
-    needs: [
-      "Docker with Compose",
-      "A Google Cloud project, for sign-in with Google",
-      "Any small machine: a home server, a VPS, or a Raspberry Pi (arm64)",
-    ],
-    stepsTitle: "Start it",
-    steps: [
-      "Get the code.",
-      "Create your settings file, then fill it in as the guide shows.",
-      "Start it, then open http://localhost:8000.",
-    ] as [string, string, string],
     copy: "Copy",
     copied: "Copied",
     selected: "Selected. Press Ctrl+C or ⌘C.",
-    oauthNote: "Creating the Google sign-in client is the longest step. The guide walks you through it.",
     guide: "Read the self-hosting guide",
   },
   why: {

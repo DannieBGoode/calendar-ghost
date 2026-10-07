@@ -3,8 +3,6 @@
 // three tools make of it: a dashboard tile, an uptime monitor's checks, and an agent's answer.
 // One sentence says it; the setup (tokens, the status API, the MCP server) lives on the
 // self-hosting guide's page, section 6. Facts from docs/self-hosting.md and ADR 0024.
-// A page can pass its own section class for spacing, and put something above the heading through
-// the `eyebrow` slot; the section itself needs only the shared tokens.
 import HomelabWatch from "../components/HomelabWatch.astro"
 import Icon from "../components/Icon.astro"
 import type { Messages } from "../i18n"
@@ -14,10 +12,9 @@ import { INTEGRATIONS_URL } from "../links"
 
 interface Props {
   m: Messages
-  class?: string
 }
 
-const { m, class: sectionClass = "section" } = Astro.props
+const { m } = Astro.props
 const copy = m.integrations
 // The monitor's recent checks, oldest first: all up but one, when the installation needed a look.
 const BEATS = 24
@@ -32,11 +29,10 @@ const ASKED_AT = "09:41"
 const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria-hidden="true" focusable="false" ')
 ---
 
-<section id="integrations" class:list={[sectionClass, "int"]} aria-labelledby="integrations-title">
+<section id="integrations" class="section int" aria-labelledby="integrations-title">
   <div class="container">
     <div class="int-head">
       <div class="int-intro">
-        <slot name="eyebrow" />
         <h2 id="integrations-title">{copy.title}</h2>
         <p class="int-lead">{copy.body}</p>
       </div>

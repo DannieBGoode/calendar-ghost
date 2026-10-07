@@ -1,10 +1,10 @@
 ---
 // The home page's ending: night falls, and the ghost keeps watch. A Twilight band with rounded
 // shoulders, like the top of the ghost's own head, holds the last call to action beside the white
-// ghost dozing in its lantern glow, floating and breathing out "z"s for as long as it is there
-// (the footer's "Pause animations" stops it). Once it has dozed off it mumbles in its sleep, like a child in
-// bed ("Five more minutes, please."), and the line under it is plain narration (sync really runs
-// every five minutes). Then the page's organized links.
+// ghost dozing in its lantern glow, floating and breathing out "z"s for a few seconds each time it
+// comes into view. Once it has dozed off it mumbles in its sleep, like a child in bed ("Five more
+// minutes, please."), and the line under it is plain narration (sync really runs every five
+// minutes). Then the page's organized links.
 import type { Messages } from "../i18n"
 import { Ghost, SpeechBubble } from "../islands/Ghost"
 import { REPO_URL } from "../links"
@@ -58,7 +58,7 @@ const { m } = Astro.props
       var(--night);
   }
 
-  .footer-close { display: grid; gap: var(--space-lg, 2.5rem); align-items: center; }
+  .footer-close { display: grid; gap: 2.5rem; align-items: center; }
   .footer-close > * { min-width: 0; }
   .footer-pitch h2 { margin: 0 0 1rem; max-width: 13ch; font-size: clamp(2.5rem, 1.6rem + 3.4vw, 4.5rem); line-height: 1.08; text-wrap: balance; }
   .footer-body { max-width: 40ch; margin: 0 0 1.75rem; font-size: 1.125rem; line-height: 1.6; color: var(--muted-foreground); }
