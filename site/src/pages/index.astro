@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro"
 import { messagesFor } from "../i18n"
+import { homeStructuredData, jsonLd } from "../lib/structured-data"
 import AppFeatures from "../sections/AppFeatures.astro"
 import CrossingSection from "../sections/CrossingSection.astro"
 import Faq from "../sections/Faq.astro"
@@ -15,9 +16,11 @@ import Week from "../sections/Week.astro"
 import Why from "../sections/Why.astro"
 
 const m = messagesFor(Astro.currentLocale)
+const structuredData = jsonLd(homeStructuredData(m, Astro.site ?? new URL("https://calendarghost.com")))
 ---
 
 <Layout title={m.meta.title} description={m.meta.description}>
+  <script slot="head" type="application/ld+json" is:inline set:html={structuredData} />
   <Nav m={m} />
   <main>
     <Hero m={m} />

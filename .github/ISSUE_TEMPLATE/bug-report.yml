@@ -1,0 +1,64 @@
+name: Bug report
+description: Calendar Ghost does something wrong, and you can describe how.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you start, read the [troubleshooting guide](https://calendarghost.com/docs/troubleshooting). For questions, use [Discussions](https://github.com/DannieBGoode/calendar-ghost/discussions).
+
+        **This issue is public.** Do not include event titles or details, calendar IDs, email addresses, OAuth credentials, tokens, database files, or unredacted logs.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown in the Web UI footer, for example v0.1.1.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options:
+        - Docker Compose
+        - Docker, without Compose
+        - From source
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw. Include any error or Incident code the Web UI shows.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Describe the Directional Sync Rule involved (Transformation Policy, all-day eligibility) without real calendar names or event content.
+      placeholder: |
+        1. Create a rule from a Personal calendar to a Work calendar with Busy-Only Projection.
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Optional. Redact account identifiers first. See "Reading the logs" in the troubleshooting guide.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: This report contains no credentials, account identifiers, or private event data.
+          required: true

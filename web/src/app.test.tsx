@@ -106,6 +106,13 @@ describe("App", () => {
     expect(untranslatedText(container)).toEqual([])
   })
 
+  it("links the footer to the troubleshooting guide in a new tab", async () => {
+    const { container } = await renderApp(testI18n())
+    const help = [...container.querySelectorAll("footer a")].find((link) => link.textContent === "Get help")
+    expect(help?.getAttribute("href")).toBe("https://calendarghost.com/docs/troubleshooting")
+    expect(help?.getAttribute("target")).toBe("_blank")
+  })
+
   it("titles the page in the active language", async () => {
     await renderApp(testI18n())
     expect(document.title).toBe("Overview – Calendar Ghost")

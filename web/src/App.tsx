@@ -11,7 +11,7 @@ import { rich } from "@/i18n/rich"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import { api } from "@/lib/api"
-import { APP_VERSION, LICENSE_URL, PRODUCT_NAME, SOURCE_URL, documentTitle } from "@/lib/brand"
+import { APP_VERSION, HELP_URL, LICENSE_URL, PRODUCT_NAME, SOURCE_URL, documentTitle } from "@/lib/brand"
 import {
   appLocationFromPathname,
   appPathForLocation,
@@ -174,6 +174,9 @@ function AuthenticatedApp() {
         <span>{t("app.footer.version", { version: APP_VERSION })}</span>
         <span>{t("app.footer.runsHere")}</span>
         <a href="/api/docs">{t("app.footer.apiDocs")}</a>
+        <a href={HELP_URL} target="_blank" rel="noreferrer">
+          {t("app.footer.help")}
+        </a>
         <span className="legal-notice">
           {rich(t("app.footer.legal"), {
             license: (text) => (

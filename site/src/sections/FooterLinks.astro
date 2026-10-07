@@ -1,11 +1,23 @@
 ---
-// The footer's link area, shared by every page: who this is, the project's links, the legal ones,
-// and this page's own proof that it tracks no one. Each page's footer gives it its own look by
-// re-declaring the color tokens around it and, where it needs to, styling the `.flinks-*` parts.
+// The footer's link area, shared by every page: who this is, the project's links, where to get
+// help, the legal ones, and this page's own proof that it tracks no one. Each page's footer gives
+// it its own look by re-declaring the color tokens around it and, where it needs to, styling the
+// `.flinks-*` parts.
 import Icon from "../components/Icon.astro"
 import { hasLanguagePicker, type Messages } from "../i18n"
 import { GhostMark } from "../islands/GhostMark"
-import { CHANGELOG_URL, DOCS_URL, GUIDE_URL, LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../links"
+import {
+  CHANGELOG_URL,
+  DISCUSSIONS_URL,
+  DOCS_URL,
+  GUIDE_URL,
+  ISSUES_URL,
+  LICENSE_URL,
+  REPO_URL,
+  SUPPORT_EMAIL_URL,
+  TRADEMARKS_URL,
+  TROUBLESHOOTING_URL,
+} from "../links"
 import LanguagePicker from "./LanguagePicker.astro"
 
 interface Props {
@@ -23,6 +35,16 @@ const groups = [
       { href: GUIDE_URL, label: copy.guide },
       { href: DOCS_URL, label: copy.docs },
       { href: CHANGELOG_URL, label: copy.changelog },
+    ],
+  },
+  {
+    id: "footer-help",
+    title: copy.helpTitle,
+    links: [
+      { href: TROUBLESHOOTING_URL, label: copy.troubleshooting },
+      { href: DISCUSSIONS_URL, label: copy.discussions },
+      { href: ISSUES_URL, label: copy.reportBug },
+      { href: SUPPORT_EMAIL_URL, label: copy.email },
     ],
   },
   {
@@ -90,7 +112,7 @@ const groups = [
   .flinks-home :global(.flinks-mark) { width: 30px; height: 30px; }
   .flinks-tagline { max-width: 24ch; }
 
-  .flinks-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+  .flinks-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 1.5rem; }
   .flinks-title {
     margin: 0 0 0.35rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
     color: var(--muted-foreground);

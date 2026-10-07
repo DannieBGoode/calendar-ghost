@@ -291,3 +291,13 @@ recreating the series and keeps it dormant until you accept one of its occurrenc
 ## Incremental cursor expired
 
 The Google adapter must discard the expired cursor, perform a safe initial-window scan, match managed projections through origin metadata, and establish a new cursor without duplicating events.
+
+## Getting more help
+
+If this guide does not solve the problem, ask in
+[GitHub Discussions](https://github.com/DannieBGoode/calendar-ghost/discussions). Search earlier
+answers first. To report a bug, open an issue with the
+[bug report form](https://github.com/DannieBGoode/calendar-ghost/issues/new/choose). Discussions
+and issues are public: do not include event content, calendar IDs, email addresses, credentials, or
+unredacted logs. If you cannot use GitHub, email support@calendarghost.com. Report security
+vulnerabilities privately, as [SECURITY.md](../SECURITY.md) describes.
