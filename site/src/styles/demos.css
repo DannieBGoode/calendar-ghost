@@ -265,9 +265,11 @@
 .crossing-hour:last-child { height: 2rem; }
 /* The landed copy, 15:00 to 16:30. Busy has its own look: Lantern Indigo, a solid edge, and the
    ghost's own small silhouette before the word. The slot itself draws nothing: its card (`-box`)
-   and its words (`-body`) are layers, so in flight each can scale on its own (below). */
+   and its words (`-body`) are layers, so in flight each can scale on its own (below).
+   Stacked, the copy comes straight down into the slot past Work's name (its portrait and
+   "Work"), so the slot starts clear of the name and the copy never covers it. */
 .crossing-landed {
-  position: absolute; left: 4rem; right: 0.75rem; top: calc(0.5rem + var(--crossing-hour)); height: calc(var(--crossing-hour) * 1.5);
+  position: absolute; left: 5.5rem; right: 0.75rem; top: calc(0.5rem + var(--crossing-hour)); height: calc(var(--crossing-hour) * 1.5);
   isolation: isolate; color: var(--foreground);
 }
 .crossing-landed-box {
@@ -348,6 +350,7 @@
 /* Side by side when there is room: the two calendars close, the ghost's lane between them. */
 @container (min-width: 46rem) {
   .crossing-stage { --crossing-hour: 4.25rem; grid-template-columns: minmax(0, 1fr) clamp(6.5rem, 12cqi, 9rem) minmax(0, 1fr); grid-template-rows: auto; }
+  .crossing-landed { left: 4rem; }
   .crossing-personal { grid-row: 1; grid-column: 1; }
   .crossing-work { grid-row: 1; grid-column: 3; }
   .crossing-path {

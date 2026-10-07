@@ -767,7 +767,7 @@ test("the crossing runs once, then rests on a clearly visible Busy on Work", asy
 })
 
 for (const width of [390, 320]) {
-  test(`at ${width}px: the carried card goes down the lane, covering nothing, one label at a time, into the 15:00 slot`, async ({
+  test(`at ${width}px: the carried card goes down the lane, covering nothing, not even Work's name, one label at a time, into the 15:00 slot`, async ({
     page,
   }) => {
     await page.setViewportSize({ width, height: 1000 })
@@ -788,8 +788,12 @@ for (const width of [390, 320]) {
             const style = getComputedStyle(element.querySelector(selector)!)
             return style.visibility === "hidden" ? 0 : Number(style.opacity)
           }
+          // What Work's name draws (its portrait and its word), not the whole row it sits in.
+          const name = document.createRange()
+          name.selectNodeContents(element.querySelector(".crossing-work .crossing-name")!)
           return {
             card: box(".crossing-landed-box"),
+            name: name.getBoundingClientRect().toJSON() as DOMRect,
             ghost: box(".crossing-ghost .ghost"),
             personal: box(".crossing-personal .crossing-event"),
             slot: box(".crossing-landed"),
@@ -808,6 +812,12 @@ for (const width of [390, 320]) {
         expect(frame.ghost.y + frame.ghost.height * 0.75).toBeLessThanOrEqual(frame.card.y + 2)
         // One label at a time.
         expect(Math.min(frame.title, frame.busy), `${time}: one label`).toBeLessThan(0.05)
+      }
+      // On its way down past Work's name, it never covers it.
+      for (let time = 0.3; time <= 0.9; time += 0.05) {
+        const { card, name } = await at(4800 * time)
+        const overlaps = card.x < name.x + name.width && card.x + card.width > name.x && card.y < name.y + name.height && card.y + card.height > name.y
+        expect(overlaps, `${time.toFixed(2)}: clear of Work's name`).toBe(false)
       }
       const landed = await at(4800 * 0.9)
       expect(Math.abs(landed.card.y - landed.slot.y)).toBeLessThan(1.5)
