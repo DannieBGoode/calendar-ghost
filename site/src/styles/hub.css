@@ -1,0 +1,168 @@
+/* The home hero's diagram (sections/Hero.astro, demo/hub.ts), every class prefixed `hc-`:
+   hairlines, outlined pills and an outlined day on the page's own colour, plain text, and a few
+   small colour accents. Each calendar has its own colour (its pill's ring, the chip that carries
+   its event in, the hairline it lights, the dot on its block in the day); Work's is a calm red, so
+   it stands apart from Sam's own calendars; Busy is Lantern Indigo. */
+
+.hc {
+  /* Outlines and hairlines: quiet, but clearly there on both canvases (the plain border colour
+     all but vanishes on the near-white page, and sinks into the night on the dark one). */
+  --hc-line: light-dark(color-mix(in oklab, var(--border), var(--foreground) 18%), color-mix(in oklab, var(--border), var(--foreground) 8%));
+  --hc-curve: light-dark(color-mix(in oklab, var(--border), var(--foreground) 16%), color-mix(in oklab, var(--border), var(--foreground) 20%));
+  --hc-hour: light-dark(color-mix(in oklab, var(--border), var(--background) 10%), color-mix(in oklab, var(--border), var(--background) 50%));
+  --hc-personal: var(--event-personal-edge);
+  --hc-family: var(--event-family-edge);
+  /* The destructive hue, calmed: a brick red, never the alarm red of a stopped rule. */
+  --hc-work: light-dark(oklch(0.55 0.14 27), oklch(0.72 0.12 27));
+  --hc-busy: var(--primary);
+  position: relative;
+  margin: clamp(1.5rem, 4vh, 2.5rem) auto 0;
+  padding-block: 3.25rem 3rem;
+}
+
+.hc [data-calendar="personal"], .hc [data-source="personal"] { --hc-source: var(--hc-personal); }
+.hc [data-calendar="family"], .hc [data-source="family"] { --hc-source: var(--hc-family); }
+.hc [data-calendar="work"], .hc [data-source="work"] { --hc-source: var(--hc-work); }
+.hc :is([data-calendar], [data-source]) { --hc-tone: var(--hc-source); }
+
+/* One layout at a time: the calendars beside the ghost on wide screens, above it on narrow ones. */
+.hc-layout { position: relative; }
+.hc-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.hc-tall { display: none; }
+@media (max-width: 899.98px) {
+  .hc { max-width: 24rem; }
+  .hc-wide { display: none; }
+  .hc-tall { display: block; }
+}
+
+.hc-svg text { font-family: var(--font-sans); fill: var(--foreground); dominant-baseline: central; }
+.hc-svg .hc-label { fill: var(--muted-foreground); font-weight: 500; }
+.hc-svg .hc-muted { fill: var(--muted-foreground); }
+.hc-svg .hc-name { font-weight: 600; }
+
+/* The hairlines, and the same hairlines lit in the travelling chip's colour while it runs. */
+.hc-curves path { fill: none; stroke: var(--hc-curve); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hc-lit path { fill: none; stroke: color-mix(in oklab, var(--hc-tone) 70%, var(--background)); stroke-width: 1.5; vector-effect: non-scaling-stroke; opacity: 0; }
+.hc-lit path[data-shows="busy"] { --hc-tone: var(--hc-busy); }
+.hc[data-view="you"] .hc-lit path[data-shows="busy"] { --hc-tone: var(--hc-source); }
+
+/* Sam's calendars, as pills with a thin ring in the calendar's colour. */
+.hc-pill rect, .hc-box { fill: var(--background); stroke: var(--hc-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hc-ring { fill: none; stroke: var(--hc-tone); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+
+/* The day: its header, its hours (labelled in the gutter, one even height each), Work's own
+   meeting in Work's red, and Busy in indigo. Every block carries a dot in its calendar's colour. */
+.hc-rule { fill: none; stroke: var(--hc-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hc-hour { fill: none; stroke: var(--hc-hour); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hc-svg .hc-hour-label { fill: var(--muted-foreground); text-anchor: end; font-variant-numeric: tabular-nums; }
+.hc-paint {
+  fill: color-mix(in oklab, var(--hc-tone) 10%, var(--background));
+  stroke: color-mix(in oklab, var(--hc-tone) 50%, var(--background));
+  stroke-width: 1; vector-effect: non-scaling-stroke;
+}
+.hc-block[data-shows="busy"] .hc-paint:not(.hc-paint-you) {
+  fill: color-mix(in oklab, var(--hc-busy) 9%, var(--background));
+  stroke: color-mix(in oklab, var(--hc-busy) 45%, var(--background));
+}
+.hc-source-dot { fill: var(--hc-tone); }
+.hc-svg .hc-block-title { font-weight: 600; }
+.hc-svg .hc-block[data-shows="busy"] .hc-as-work .hc-block-title { fill: var(--hc-busy); }
+
+/* "What you see": the day becomes Sam's own Personal calendar, which keeps every title: its label,
+   its header, every Busy block, and every chip bound for it change in place; nothing is kept back
+   at the ghost. */
+.hc-paint-you, .hc-as-you { opacity: 0; transition: opacity 450ms var(--ease-out); }
+.hc-as-work, .hc-kept { transition: opacity 450ms var(--ease-out); }
+.hc[data-view="you"] :is(.hc-paint-you, .hc-as-you) { opacity: 1; }
+.hc[data-view="you"] :is(.hc-as-work, .hc-kept) { opacity: 0; }
+
+/* The titles the ghost keeps back from Work: small muted chips under a caption. */
+.hc-svg .hc-kept-caption { fill: var(--muted-foreground); font-weight: 500; letter-spacing: 0.02em; }
+.hc-kept-title rect { fill: var(--background); stroke: var(--hc-line); stroke-width: 1; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+.hc-svg .hc-kept-title text { fill: var(--muted-foreground); font-weight: 550; }
+
+/* The ghost glyph, wherever a title is hidden from Work: Busy's indigo on the Busy chips and
+   blocks, the muted ink on the titles the ghost keeps back. */
+.hc-glyph { fill: var(--hc-busy); }
+.hc-glyph-tab { fill: none; stroke: var(--hc-busy); stroke-width: 2.4; stroke-linecap: round; }
+.hc-glyph-eye { fill: var(--background); }
+.hc-glyph-muted { fill: var(--muted-foreground); }
+.hc-glyph-muted .hc-glyph-tab { stroke: var(--muted-foreground); }
+
+/* A chip carrying an event along a hairline, in its calendar's colour going in and Busy coming
+   out. It is out of sight when still: the still diagram shows where each one landed. */
+.hc-chip { offset-rotate: 0deg; offset-distance: 0%; opacity: 0; }
+.hc-chip rect {
+  fill: color-mix(in oklab, var(--hc-tone) 14%, var(--background));
+  stroke: color-mix(in oklab, var(--hc-tone) 70%, var(--background));
+  stroke-width: 1; vector-effect: non-scaling-stroke;
+}
+.hc-chip[data-shows="busy"] { --hc-tone: var(--hc-busy); }
+.hc[data-view="you"] .hc-chip[data-shows="busy"] { --hc-tone: var(--hc-source); }
+.hc-svg .hc-chip text { text-anchor: middle; font-weight: 600; }
+.hc-svg .hc-chip[data-shows="busy"] .hc-as-work { fill: var(--hc-busy); }
+/* Bound for Personal, nothing drops at the ghost. */
+.hc[data-view="you"] .hc-chip-title { opacity: 1 !important; }
+
+/* The ghost, the character, over the hub, with a ring of the page's colour that stops the
+   hairlines short of its body. On light pages it is filled Lantern Indigo, since a white ghost
+   reads as hollow on the near-white canvas; on dark ones it is the white ghost, glowing softly. */
+.hc-ghost { position: absolute; z-index: 1; aspect-ratio: 1; line-height: 0; pointer-events: none; }
+.hc-ghost .ghost { width: 100%; height: 100%; --ghost-cutout: var(--background); --ghost-glow-r: 14px; }
+.hc-ghost .ghost[data-tone="mist"] {
+  --ghost-body: light-dark(oklch(0.71 0.125 278), oklch(0.965 0.016 285));
+  --ghost-edge: light-dark(oklch(0.62 0.13 278), oklch(0.9 0.035 285));
+  --ghost-tab: light-dark(oklch(0.62 0.13 278), oklch(0.84 0.045 285));
+  --ghost-ink: light-dark(oklch(0.22 0.07 280), oklch(0.22 0.05 280));
+  --ghost-glow: light-dark(transparent, oklch(0.9 0.07 285 / 0.35));
+}
+.hc .hc-ghost .ghost[data-sequence] :is(.ghost-face-first, .ghost-face-then) { animation: none; }
+
+/* The figure's own label for the view, where the switch goes: it stands in for it without
+   JavaScript, and gives way to it once the switch is there. */
+.hc-static-view {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%); margin: 0;
+  min-height: 2.75rem; display: flex; align-items: center;
+  font: 550 0.8125rem/1 var(--font-sans); color: var(--muted-foreground);
+}
+.hc[data-enhanced] .hc-static-view { display: none; }
+
+/* The controls (islands/HubControls.tsx): the switch centred over the whole diagram, and a small
+   labelled pair, Pause and Replay, in its bottom-right corner. */
+.hc-controls { display: contents; }
+.hc-views {
+  position: absolute; z-index: 2; top: 0; left: 50%; transform: translateX(-50%);
+  display: inline-flex; padding: 2px; border: 1px solid var(--hc-line); border-radius: 999px; background: var(--background);
+}
+.hc-view {
+  min-height: 2.75rem; padding: 0 0.9rem; border: 0; border-radius: 999px; background: transparent;
+  color: var(--muted-foreground); font: 550 0.8125rem/1 var(--font-sans); white-space: nowrap; cursor: pointer;
+}
+.hc-view[aria-pressed="true"] { background: var(--muted); color: var(--foreground); }
+.hc-view:hover { color: var(--foreground); }
+.hc-motion { position: absolute; z-index: 2; right: -0.5rem; bottom: 0; display: flex; gap: 0.25rem; }
+.hc-motion .motion-toggle { padding: 0 0.7rem; background: transparent; box-shadow: none; color: var(--muted-foreground); }
+.hc-motion .motion-toggle:hover { background: var(--muted); color: var(--foreground); }
+.hc-replay-icon { fill: none !important; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The loop. Every moving element has its own keyframes for one whole cycle (Hero.astro makes them,
+   named in `--hc-anim`), so all of them share one duration and start together: chips run their
+   hairlines, hairlines brighten under them, blocks and kept titles land and stay, then everything
+   clears at once and it starts again. It animates `offset-distance` (the motion-path form of a
+   transform) and opacity, only while the diagram is on screen. */
+@media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+  .hc :is(.hc-chip, .hc-lit path, .hc-block, .hc-kept-title, .hc-kept-caption) {
+    animation: var(--hc-anim) var(--hc-cycle) linear infinite both;
+  }
+  .hc .hc-chip-title { animation: var(--hc-drop, none) var(--hc-cycle) linear infinite both; }
+  .hc-wide .hc-ghost .ghost-face-then { animation: hc-wide-face-then var(--hc-cycle) linear infinite both !important; }
+  .hc-wide .hc-ghost .ghost-face-first { animation: hc-wide-face-first var(--hc-cycle) linear infinite both !important; }
+  .hc-tall .hc-ghost .ghost-face-then { animation: hc-tall-face-then var(--hc-cycle) linear infinite both !important; }
+  .hc-tall .hc-ghost .ghost-face-first { animation: hc-tall-face-first var(--hc-cycle) linear infinite both !important; }
+  .hc:is([data-playing="false"], [data-offscreen]) :is(.hc-chip, .hc-chip-title, .hc-lit path, .hc-block, .hc-kept-title, .hc-kept-caption, .ghost-face-first, .ghost-face-then) {
+    animation-play-state: paused !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hc-paint-you, .hc-as-you, .hc-as-work, .hc-kept { transition: none; }
+}

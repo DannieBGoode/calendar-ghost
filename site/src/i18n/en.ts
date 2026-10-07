@@ -55,7 +55,8 @@ export const en = {
   motion: {
     pause: "Pause animation",
     play: "Play animation",
-    /** The same, in short, where a demo shows short words on its control (the Haunted Week). */
+    /** The same, in short, where a demo shows short words on its control (the hero's diagram, the
+     * Haunted Week). */
     pauseShort: "Pause",
     playShort: "Play",
   },
@@ -77,8 +78,44 @@ export const en = {
     chip: "Open source (AGPL) · Self-hosted · Google Calendar",
     title: "Sync your calendars. Keep your privacy.",
     sub: "Calendar Ghost copies events from one Google calendar to another, on your own server. You choose what crosses over. Guests and meeting links always stay behind.",
+    /** The headline, one sentence per line. */
+    titleLines: ["Sync your calendars.", "Keep your privacy."] as [string, string],
+    /** The one line under the headline; it keeps the self-hosting fact in the hero. */
+    line: "You see everything. Work sees Busy. All on your own server.",
     primary: "Self-host it",
     secondary: "Star on GitHub",
+    /** The diagram under the hero's copy (sections/Hero.astro), on Sam's Tuesday. Events travel
+     * through the ghost: onto Work, Personal's and Family's arrive as “Busy” (Busy-Only
+     * Projection) and Work's own client call keeps its title; onto Personal (“What you see”)
+     * every title stays. The view names are `demo.workSees` and `demo.youSee`; Personal,
+     * Family, and Work are `demo.calendars`; the gym session and the client call are
+     * `demo.events`; the accounts are `app.rules.accounts`; the loop's Pause and Play are
+     * `motion`. */
+    diagram: {
+      /** The column labels: over Sam's calendars, and over the day on the right in each view. */
+      calendarsLabel: "Your calendars",
+      dayLabels: { work: "Work calendar", you: "Personal calendar" },
+      /** The family's event on Sam's Tuesday, after the hours the week shows. */
+      events: { familyDinner: "Family dinner" },
+      /** The mark before each event's title wherever the drawing shows it. A title hidden from
+       * Work shows the ghost glyph instead. The drawing is hidden from screen readers, which
+       * read the facts below without these. */
+      emoji: { gym: "🏋️", clientCall: "💼", familyDinner: "🍝" },
+      /** A calendar's event under its name: "Gym 12:00". */
+      eventLine: "{event} {time}",
+      /** The caption over the titles the ghost keeps back from Work. */
+      kept: "Kept from Work",
+      /** The name of the switch over the whole diagram. */
+      viewLabel: "Calendar to show",
+      /** The diagram's name and its facts, for screen readers; the drawing is hidden from them. */
+      summary: "Sam's calendars, and what work sees of them",
+      busyFact: "{event} from {from} appears on Work as Busy, from {start} to {end}.",
+      ownFact: "{event}, Work's own meeting, shows with its title, from {start} to {end}.",
+      never: "No titles, guests, meeting links, or invitations from Sam's other calendars reach Work.",
+      youFact: "In what you see, Sam's Personal calendar, the gym session, the client call, and the family dinner all keep their titles.",
+      /** The control that starts the loop over. */
+      replay: "Replay",
+    },
   },
   demo: {
     days: ["Mon", "Tue", "Wed", "Thu", "Fri"] as [string, string, string, string, string],

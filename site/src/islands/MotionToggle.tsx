@@ -18,8 +18,8 @@ export function MotionToggle({
   m: Messages["motion"]
   /** A 44px icon button: its words are still its name, for assistive technology and as a tooltip. */
   compact?: boolean
-  /** Short words on the button ("Pause", "Play"), as hero E4 shows them; its name stays the full
-   * words, which contain the short ones. */
+  /** Short words on the button ("Pause", "Play"); its name stays the full words, which contain
+   * the short ones. */
   short?: boolean
 }) {
   const hydrated = useHydrated()
