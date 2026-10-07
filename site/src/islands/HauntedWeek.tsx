@@ -12,7 +12,10 @@ const WORK = SAM_WEEK.filter((event) => event.kind === "work")
 /** What crosses over, in the order the ghost meets it (by day). */
 const INCOMING = SAM_WEEK.filter((event) => event.kind !== "work").sort((a, b) => a.day - b.day)
 const PHONE_INCOMING = INCOMING.filter((event) => event.day < PHONE_COLUMNS)
-const PATH = { wide: waypoints(INCOMING, "wide"), phone: waypoints(PHONE_INCOMING, "phone") }
+const PATH = {
+  wide: waypoints(INCOMING, "wide"),
+  phone: waypoints(PHONE_INCOMING, "phone", INCOMING.length),
+}
 const HOURS = Array.from({ length: DAY_END - DAY_START }, (_, index) => DAY_START + index)
 /** On phones an event shorter than this many hours has room for one line only (demos.css). */
 const PHONE_TWO_LINES_HOURS = 1.5

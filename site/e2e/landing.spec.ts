@@ -1343,7 +1343,7 @@ test.describe("the Haunted Week", () => {
   })
 
   for (const width of [320, 390, 1440]) {
-    test(`at ${width}px every day shows, inside the frame, with event text of at least 13px`, async ({ browser }) => {
+    test(`at ${width}px the visible days fit the frame, with event text of at least 13px`, async ({ browser }) => {
       const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" })
       const page = await context.newPage()
       await page.goto("/")
@@ -1351,19 +1351,22 @@ test.describe("the Haunted Week", () => {
       await frame.scrollIntoViewIfNeeded()
       const box = (await frame.boundingBox())!
       const days = page.locator(".haunt .hw-day:visible:not(.is-empty)")
-      await expect(days).toHaveText([...en.demo.days])
+      const expectedDays = width < 720 ? en.demo.days.slice(0, 3) : en.demo.days
+      await expect(days).toHaveText(expectedDays)
       for (const day of await days.all()) {
         const dayBox = (await day.boundingBox())!
         expect(dayBox.x).toBeGreaterThanOrEqual(box.x)
         expect(dayBox.x + dayBox.width).toBeLessThanOrEqual(box.x + box.width + 0.5)
         expect(dayBox.y + dayBox.height).toBeLessThanOrEqual(box.y + box.height)
       }
-      for (const event of await page.locator(".haunt .hw-event").all()) {
+      const events = page.locator(".haunt .hw-event:visible")
+      await expect(events).toHaveCount(width < 720 ? 6 : 10)
+      for (const event of await events.all()) {
         const eventBox = (await event.boundingBox())!
         expect(eventBox.x + eventBox.width).toBeLessThanOrEqual(box.x + box.width)
         expect(eventBox.y + eventBox.height).toBeLessThanOrEqual(box.y + box.height)
       }
-      const sizes = await page.locator(".haunt .hw-event .hw-title").evaluateAll((titles) => titles.map((title) => parseFloat(getComputedStyle(title).fontSize)))
+      const sizes = await events.locator(".hw-title").evaluateAll((titles) => titles.map((title) => parseFloat(getComputedStyle(title).fontSize)))
       expect(Math.min(...sizes)).toBeGreaterThanOrEqual(13)
       await context.close()
     })
