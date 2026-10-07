@@ -24,7 +24,8 @@ const site = Astro.site ?? new URL("https://calendarghost.com")
 const canonical = new URL(Astro.url.pathname, site)
 const ogImage = new URL("/og.png", site)
 const lang = Astro.currentLocale ?? "en"
-const ogImageAlt = messagesFor(Astro.currentLocale).meta.ogImageAlt
+const messages = messagesFor(Astro.currentLocale)
+const ogImageAlt = messages.meta.ogImageAlt
 const unprefixedPath = stripLocale(Astro.url.pathname)
 const alternates = hasLanguagePicker()
   ? (Object.keys(LOCALES) as Locale[]).map((locale) => ({
@@ -79,7 +80,7 @@ const alternates = hasLanguagePicker()
     <link rel="preload" as="font" type="font/woff2" href={figtreeLatinWoff2} crossorigin />
     <link rel="preload" as="font" type="font/woff2" href={besleyLatinWoff2} crossorigin />
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Calendar Ghost" />
+    <meta property="og:site_name" content={messages.brand} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical.href} />

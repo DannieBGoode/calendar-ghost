@@ -25,6 +25,8 @@ interface ActivityRow {
 // check`. The tuples widen their elements back to `string` (not literal English text), so a
 // translation is free to use its own words.
 export const en = {
+  /** The product name, shown in the nav, the footer, and the integration mockups. */
+  brand: "Calendar Ghost",
   meta: {
     title: "Calendar Ghost: private calendar sync you host yourself",
     description:
