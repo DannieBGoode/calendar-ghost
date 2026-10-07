@@ -104,8 +104,8 @@ machine and creates only the destination representation selected by each rule.
 | Appearance | Device-aware light and dark themes with a browser-local override |
 | Deployment | One Docker image and Compose service for `linux/amd64` and `linux/arm64` |
 
-Google Calendar is the only provider in the initial release. Outlook and CalDAV are architectural
-possibilities, not currently supported features.
+Google Calendar is the only provider available today. Outlook and iCloud support are planned and shown as
+coming soon on the landing page. CalDAV remains an architectural possibility, not a supported feature.
 
 ## Quick start with Docker
 
