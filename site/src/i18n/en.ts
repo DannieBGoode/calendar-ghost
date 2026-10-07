@@ -177,8 +177,8 @@ export const en = {
       "The Dentist event moves from the Personal calendar to the Work calendar. With Busy only, it arrives titled “Busy”. With details, it keeps its title and place. Guests and the meeting link never cross over.",
   },
   app: {
-    title: "Features",
-    body: "The app's own screens, redrawn with made-up data for Sam's calendars.",
+    title: "Everything in one place",
+    body: "Set rules, see changes, know it's all in sync.",
     /** The app, feature by feature: the screen it lives on, a short title, and one plain sentence. */
     features: {
       rules: {
