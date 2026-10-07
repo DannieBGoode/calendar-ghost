@@ -120,15 +120,9 @@ the Docker build context, and has its own `Site` workflow.
   Astro's own Markdown processor. Their headings keep GitHub's anchors; links between rendered
   documents stay on the site, and every other repository link goes to GitHub
   (`site/src/docs/repo-links.ts`). The site's links to the self-hosting guide point at these pages.
-- Design versions and iterations sit beside production, never on top of it: a new iteration is a
-  new route (home hero iterations under `site/src/pages/home/`), never a change to an old one.
-  Append each to `site/src/versions.ts` with the commit that added it and where it stands
-  (`current`, `candidate`, `rejected`, or `discarded`; a rejected route stays for comparison, and a
-  discarded one loses its route and code but keeps its entry and commit, so the index tells how to
-  see it with git). That list drives
-  the internal index at `/versions` and the sitemap exclusion, and each such page passes `noindex`
-  to its layout. The index and the small "Versions" link on iteration pages are internal tools, so
-  their words live in `versions.ts`, the one exception to the `en.ts` rule.
+- The site is one landing page at `/` (`site/src/pages/index.astro`, one component per section in
+  `site/src/sections/`), the `/docs/<slug>` pages, and the 404 page. Change the page in place; there
+  are no alternative designs or iteration routes. Earlier designs are in git history.
 - To add a language: add its code to `astro.config.mjs` `locales`, and add a module under
   `site/src/i18n/` that `satisfies Messages` and is registered in `LOCALES`. Then add its pages
   under `site/src/pages/<locale>/`.

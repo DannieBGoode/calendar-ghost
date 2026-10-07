@@ -1,6 +1,6 @@
 # Landing page for self-hosters
 
-Date: 2026-10-04. Status: proposed.
+Date: 2026-10-04. Status: built. Updated 2026-10-07 to describe the page as it is.
 
 ## Why
 
@@ -15,22 +15,22 @@ asks visitors to trust it. No one shows privacy happening. Calendar Ghost's ghos
 shape crosses over, the details stay behind," so the hero shows exactly that.
 
 **Success:** a visitor understands what Calendar Ghost does from the hero alone, sees that it is
-open source, self-hosted, pre-alpha, and Google-only, and knows the next step: self-host it or star
-it on GitHub. The page loads fast, works without JavaScript for its content, and contacts no third
-party.
+open source, self-hosted, and Google-only, and knows the next step: self-host it or star it on
+GitHub. The page loads fast, works without JavaScript for its content, and contacts no third party.
 
-## Decisions taken while designing
+## Decisions
 
 - **Same repository, `site/` folder.** The page and the code live together, so stars, issues, and
   links go to one place, and one pull request can update a feature and the page that describes it.
   ADR 0023 already keeps the future Hosted Service in this open codebase. Moving the folder out later
   is cheap, so this needs no ADR.
 - **Never part of the container image.** The `Dockerfile` copies only named folders, and `site` is
-  added to `.dockerignore` so it does not even enter the build context.
+  in `.dockerignore`, so it does not even enter the build context.
 - **Astro with React islands.** Astro builds plain static HTML with built-in i18n routing. Only the
-  three interactive demos load JavaScript, as React islands, the same React the Web UI uses.
+  interactive demos load JavaScript, as React islands, the same React the Web UI uses.
 - **Cloudflare builds from Git.** Workers with static assets, built by Cloudflare Workers Builds on
-  pushes that touch `site/`. Pull request branches get preview URLs. No deploy secrets in GitHub.
+  pushes that touch `site/`, `docs/`, or `README.md`. Pull request branches get preview URLs. No
+  deploy secrets in GitHub.
 - **No star count at launch.** The repository has one star, and a button showing "1" works against
   the page. A later change adds a cached `/api/stars` Worker route when the number helps.
 - **No analytics.** Traction is read from Cloudflare's server-side traffic numbers and GitHub's
@@ -42,6 +42,38 @@ party.
 - **New headline.** "Your busy time, everywhere it needs to be." is replaced on the page by "Sync
   your calendars. Keep your privacy." It names the action and the difference, and it translates
   cleanly. Whether the application adopts it is a separate decision.
+- **One page.** The site is one landing page plus the documentation pages and the 404 page. It is
+  changed in place.
+
+### What changed since the first design, and why
+
+The first design (this spec's first version) shipped a hero called the Wide Reveal: a full work
+week under a slider whose handle was the ghost, with a chip and a sub-line over it. Before launch,
+the page was redesigned by comparing alternatives side by side: two whole-page designs (`/bold`, a
+louder take, and `/journey`, one story down the page) and a series of home heroes (A to E5) at
+their own routes, listed on an internal index at `/versions`. Hero E5 won and became the hero at
+`/`; every other version and the index were then removed. The last commit that has them all is
+`ef81804`; check it out with `git worktree add ../calendar-ghost-ef81804 ef81804` to see them.
+
+What the comparison changed:
+
+- **The hero shows the mechanism, not a before-and-after.** The Wide Reveal asked the visitor to
+  drag, and read as two similar weeks. The diagram shows events travelling through the ghost and
+  what each calendar ends up with, without any input.
+- **The scope chip and the long sub-line went.** One line ("You see everything. Work sees Busy.
+  All on your own server.") keeps the self-hosting fact in the hero; the rest is shown, not said.
+- **"Pre-alpha" went.** The FAQ says plainly that it is ready to use, at your own risk, with
+  backups.
+- **Headings moved from Fraunces to Besley.** Besley, a sturdy Clarendon, reads with authority at
+  weight 600 and never needs tightening.
+- **The app is shown as redrawn mockups**, with Sam's made-up data, instead of screenshots, so the
+  page follows its own light or dark theme and shows each feature at its best.
+- **A light and dark toggle**, which follows the device until pressed.
+- **Decorative motion plays briefly each time it comes into view** (at most five seconds), so it
+  needs no pause control; only the demos loop, each with its own Pause. A site-wide "Pause
+  animations" control was tried and removed for this.
+- **The self-hosting guide and troubleshooting render as pages on the site**, so the page's links
+  stay on the site.
 
 ## Copy rules
 
@@ -50,126 +82,106 @@ party.
   Projection copies the title, description, and location; guests, organizer, conferencing links,
   attachments, and invitations never cross over under any rule. Plain words are fine ("Busy" for a
   Busy-Only Projection), avoided glossary terms are not.
-- Honest about scope: pre-alpha, Google Calendar only, one-way rules.
+- Honest about scope: Google Calendar only, one-way rules, run at your own risk. Never "pre-alpha".
 - Demo content follows the README screenshots' fictional person, Sam, with Personal, Family, and
-  Work calendars, so the animations and screenshots tell one story.
+  Work calendars, so the animations and mockups tell one story.
 - No em dashes.
 
-## Page outline
+## The page, in order
 
-1. **Navigation.** Ghost mark and wordmark, How it works, Features, Self-host, and a "★ Star on
-   GitHub" button with no count. The language picker exists but stays hidden while there is one
-   language. On mobile, the links collapse into a menu.
-2. **Hero ("The Wide Reveal").**
-   - Chip: "Pre-alpha · Open source (AGPL) · Google Calendar".
-   - Headline: "Sync your calendars. Keep your privacy."
-   - Sub-line: "Calendar Ghost copies events from one Google calendar to another, on your own
-     server. You choose what crosses over. Guests and meeting links always stay behind."
+1. **Navigation.** Ghost mark and wordmark, How it works, Features, Self-host, the Light/Dark toggle,
+   and a "★ Star on GitHub" button with no count. The language picker exists but stays hidden while
+   there is one language. On phones the links collapse into a menu.
+2. **Hero.**
+   - Headline: "Sync your calendars." and, in Lantern Indigo, "Keep your privacy."
+   - One line: "You see everything. Work sees Busy. All on your own server."
    - Buttons: "Self-host it" (primary, scrolls to Self-host) and "★ Star on GitHub".
-   - Demo: a full-width work week with a before-and-after slider whose handle is the ghost. See
-     Interactive demos.
-3. **How it works.** Three steps:
-   1. "Connect your Google accounts." Personal, family, and work can each be a different account.
-   2. "Make a rule." Pick one calendar to read from and one to write to, and choose what crosses
-      over.
-   3. "Preview, then sync." See exactly what will be written before anything changes. Then it runs
-      by itself every five minutes.
-4. **One week, every calendar ("The Haunted Week").** "Make one rule per calendar: Personal to
-   Work, Family to Work. Calendar Ghost keeps them all in step."
-5. **You choose what crosses over ("The Crossing").** A Busy only / With details switch beside the
-   demo, and a plain list of what always stays behind: guests, organizer, meeting links,
-   attachments, and invitations.
-6. **See the app.** The Overview, Rules, and Activity screenshots from `docs/assets`, one sentence
-   each, in the light or dark version that matches the page.
-7. **Built to be trusted.** A grid of short cards, each one true today:
-   - **Fixes itself.** Someone edits or deletes a synced event? The next sync puts it back the way
-     the source says.
-   - **Preview first.** A rule cannot start until you have seen what it will write.
-   - **Never emails your guests.** Synced events never send invitations or updates.
-   - **No loops.** Events Calendar Ghost creates are never synced again, even with rules in both
-     directions.
-   - **Recurring events stay recurring.** A weekly event arrives as a weekly event.
-   - **See what happened.** Activity shows what each rule did and why.
-   - **No telemetry.** It talks only to Google and to the notification targets you configure.
-   - **Monitors and AI agents.** A status API and an MCP server report health to Uptime Kuma,
-     homelab dashboards, or your AI agent.
-8. **Self-host it.** What you need (Docker with Compose, a Google Cloud project for sign-in, any
-   small machine including a Raspberry Pi on arm64), the three commands that are true today with a
-   Copy button each, and a link to the self-hosting guide. It says plainly that creating the Google
-   OAuth client is the longest step. See Launch dependency.
-9. **Why I built this.** A short signed note from the administrator. Draft below.
-10. **FAQ.**
-    - *Is it free?* Yes. It is open source under AGPL-3.0. You run it and pay only for your own
-      server.
-    - *Can it sync both ways?* Yes, with two rules, one in each direction. Calendar Ghost never
-      syncs its own events back.
-    - *Outlook, iCloud, or CalDAV?* Not yet. Google Calendar is the only provider today.
-    - *Is it ready for my real calendars?* Not yet. It is pre-alpha: use test calendars and keep
-      backups.
-    - *Is there a hosted version?* Not yet. If one comes, it will run this same open code.
-11. **Footer.** A last "Self-host it" call to action, the license, a link to `TRADEMARKS.md`,
-    GitHub, and "This page has no trackers."
-12. **404 page.** The sleeping ghost, a short joke, and a link home.
+   - The diagram under them. See The hero's diagram.
+3. **How it works.** Three steps, each with a small piece of the app, joined by the path the ghost
+   flies along once to the last step: "Connect your Google accounts.", "Make a rule.", and
+   "Preview, then sync." A Busy only / With details switch picks what step 3's preview shows.
+4. **"All your calendars. One week at work." (the Haunted Week).** Sam's Work calendar as a calm
+   week. Personal and Family plans arrive in transit, with their calendar's portrait, and turn
+   "Busy" as the ghost hops onto each one; Work's own meetings stay as they are.
+5. **"You choose what crosses over." (the Crossing).** Sam's Dentist on Personal, with every part
+   of it, beside Work's afternoon. A Busy only / With details switch; the ghost carries a copy over,
+   the parts the choice leaves out fall away, and it lands on Work. What always stays behind
+   (guests, organizer, meeting links, attachments, invitations) stays on the Personal card.
+6. **Features.** The app's Rules, Activity, and Overview screens, redrawn with made-up data for
+   Sam, one feature each with a short title and one sentence, on alternating sides.
+7. **Built to be trusted.** Eight short claims, each true today and each linking to the
+   documentation that proves it: fixes itself, preview first, never emails your guests, no loops,
+   recurring events stay recurring, see what happened, no telemetry, monitors and AI agents.
+8. **"It reports to your homelab."** One sentence, three small pictures (a dashboard tile, an
+   uptime monitor, and an AI agent's chat over MCP), the night watch (a ghost by a rack ticking its
+   checklist in time with the monitor), and one link to the guide's section on monitors and agents.
+9. **Self-host it.** One line, the three commands that are true today in one block with one Copy
+   button, what you need in one quiet line, and "Read the self-hosting guide".
+10. **Why I built this.** A short signed note from the administrator.
+11. **Questions.** Is it free; can it sync both ways; Outlook, iCloud, or CalDAV; is it ready for my
+    real calendars; is there a hosted version.
+12. **Footer.** A last call to action ("Ready when your server is."), the dozing ghost that
+    mumbles "Five more minutes, please.", links under Project and Legal (GitHub, the self-hosting
+    guide, documentation, changelog, the AGPL-3.0 license, trademarks), and "This page has no
+    trackers."
 
-### "Why I built this" draft
+Other pages:
 
-To be completed by the administrator with one or two concrete details (what was tried first, the
-moment that started the project). Claims marked ⟨confirm⟩ must be checked before launch.
+- **`/docs/<slug>`.** `docs/self-hosting.md` and `docs/troubleshooting.md`, rendered at build time
+  from the repository's `docs/` folder with Astro's own Markdown processor. Headings keep GitHub's
+  anchors; links between rendered documents stay on the site and every other repository link goes
+  to GitHub. Each page has a contents list, a Copy button on every code block, and a note saying
+  which file it is built from, with a link to edit it.
+- **404.** A worried ghost that gives up and naps, a short joke, and a link home.
 
-> I wanted my personal and family plans to block time on my work calendar, without my employer
-> seeing my dentist appointments, and without handing every calendar I own to yet another hosted
-> service. The self-hosted tools I found ⟨confirm: copied more than I wanted, or did not work the
-> way I needed⟩. So I built the one I wanted: one-way rules, Busy by default, a preview before
-> anything is written, and everything on my own machine. It is early, it is open source, and I
-> would love your feedback.
->
-> Daniel (@DannieBGoode)
+## The hero's diagram
 
-## Interactive demos
+Sam's Tuesday, read left to right (top to bottom on phones):
 
-All three share one demo data module: Sam's work week (Monday to Friday, 9:00 to 17:00) with work
-events (Standup, Client call, 1:1 with Lee, Design review, Retro) and personal and family events
-(Dentist, Gym, School drop-off, Therapy, Recital). Titles and labels come from the message file.
-Layout math (event position from day and time) is a pure function with unit tests.
+- **Your calendars.** Sam's Personal, Work, and Family calendars as pills with Sam's portraits, each
+  with its one event: Gym 12:00, Client call 14:30, Family dinner 18:00. Work has its own calm red.
+- **The ghost** at the hub, pleased as each event passes through.
+- **A short day** on the right: Sam's Work calendar.
 
-- **The Wide Reveal (hero).** Two layers of the same week. "What you see" shows work events and
-  personal events with their details. "What work sees" shows the same work events unchanged and each
-  personal event as a dashed "Busy" block. The top layer is clipped at the slider position, so the
-  work events never change as the ghost passes and only personal events turn into "Busy". The ghost
-  sweeps by itself and follows the pointer or a drag. Below 640px the week shows Monday to
-  Wednesday.
-- **The Haunted Week.** The work week alone. Personal and family events slide in, tagged with their
-  source calendar. The ghost flies across and each one becomes "Busy" as it passes. Work events stay.
-  Then the loop resets.
-- **The Crossing.** One event close up. The ghost lifts "Dentist" from Personal and carries it to
-  Work. With Busy only, the title, place, guests, and meeting link fade out together as it crosses,
-  and it lands as "Busy". With details, the title and place stay and only guests and the meeting link
-  fade out.
-- **The ghost's eyes** follow the pointer in every demo.
+A chip with the event's title leaves each calendar along a hairline, which brightens as it passes.
+Bound for Work, the gym session and the family dinner lose their titles at the ghost, which keeps
+them back (shown under it as "Kept from Work"), and leave as indigo "Busy" chips; Work's own client
+call keeps its title. Each lands in the day at its time, the day rests, and the cycle starts again
+(about ten seconds). An emoji stands before every title the drawing shows; the ghost's own glyph
+stands wherever a title is hidden from Work.
 
-### Motion and accessibility
+A switch over the diagram, "What work sees" / "What you see", turns the day into Sam's Personal
+calendar, where every title is kept and nothing is held back. A small labelled Pause and Replay sit
+in the diagram's corner.
 
-- CSS animations and `requestAnimationFrame`, as in the approved mockups. Motion (the library) is
-  added only if an interaction needs springs.
-- Loops run only while their demo is on screen and the tab is visible, and the auto sweep pauses on
-  hover, focus, or drag.
-- `prefers-reduced-motion` stops every loop: the hero rests with the slider at 55% and stays
-  draggable, The Haunted Week shows its finished state, and The Crossing shows its result for the
-  selected switch position.
-- The hero slider is a real range input ("Compare your week with what work sees") so it works with
-  a keyboard and screen readers. Each demo has a text summary for assistive technology, and every
-  section's content is readable without JavaScript.
-- WCAG 2.2 AA, like the application.
+The geometry and timing are worked out at build time and the motion is CSS, so the diagram moves
+without a script. Without JavaScript, or with reduced motion, it stands still with everything
+landed, as work sees it. Screen readers get the same facts as a list; the drawing is hidden from
+them.
+
+## Motion and accessibility
+
+- Only `transform` (including motion paths) and `opacity` animate. No bounce or elastic easing.
+- The demos that loop or run (the hero's diagram, the Haunted Week, the Crossing) each have a
+  visible Pause control (WCAG 2.2.2) and hold while off screen.
+- Every other moving thing (the idling ghosts, the How it works flight, the night watch) plays for
+  at most five seconds each time it comes into view, then settles, and plays again on the next
+  visit.
+- `prefers-reduced-motion` stops everything that moves by itself: each demo shows its final state.
+- Without JavaScript every section's text is there and each demo shows its final state.
+- WCAG 2.2 AA, like the application: 4.5:1 text contrast in both themes, 44px touch targets, no
+  sideways scrolling at 320px.
 
 ## Brand
 
-- The ghost mark, the Twilight tokens for light and dark, and Fraunces and Figtree self-hosted
-  through the same `@fontsource-variable` packages as `web/`. No Google Fonts request.
-- The page follows the device's light or dark setting. Every demo is designed for both.
+- The ghost mark and the Twilight tokens for light and dark. Headings in Besley, text in Figtree,
+  both self-hosted through `@fontsource-variable` packages. No Google Fonts request.
+- The page follows the device's light or dark setting until the visitor presses the toggle, which
+  remembers the choice. Every demo is designed for both.
 - The Quiet Indicator Rule is relaxed for the page, but Lantern Indigo still marks the primary action.
 - `site/src/styles/tokens.css` copies the subset of tokens the page needs, with a comment naming
-  `DESIGN.md` as the source of truth. Screenshots are imported from `docs/assets` so the page and
-  the README never drift.
+  `DESIGN.md` as the source of truth.
+- Calendars and accounts always show Sam's portraits, never letters in circles.
 
 ## Languages
 
@@ -184,36 +196,42 @@ second language exists.
   the build output, and serves the 404 page for unknown paths.
 - Workers Builds, configured once in the Cloudflare dashboard by the administrator: repository
   connected, root directory `site`, build command `npm ci && npm run build`, deploy command
-  `npx wrangler deploy`, build watch paths `site/*`. Non-production branches get preview URLs.
+  `npx wrangler deploy`, build watch paths `site/**`, `docs/**`, and `README.md`. Non-production
+  branches get preview URLs.
 - `calendarghost.com` is the custom domain. `www.calendarghost.com` redirects to it with a
   Cloudflare redirect rule. `app.calendarghost.com` stays free for the Hosted Service.
-- No server code at launch.
+- No server code.
 
 ## Search and sharing
 
-Title and description per page, canonical URL, an Open Graph image of the hero for Reddit and
-Hacker News previews, `sitemap.xml`, `robots.txt`, and the favicon.
+Title and description per page, canonical URL, an Open Graph image for Reddit and Hacker News
+previews, `sitemap.xml` (the home page and the documentation pages), `robots.txt`, and the favicon.
 
-## Repository changes
+## Repository layout
 
 ```text
 site/
   package.json, astro.config.mjs, tsconfig.json, wrangler.jsonc
   public/                 favicon, Open Graph image, robots.txt
-  src/pages/              index.astro, 404.astro
+  src/pages/              index.astro, 404.astro, docs/[slug].astro
   src/sections/           one Astro component per page section
-  src/islands/            WideReveal, HauntedWeek, Crossing (React)
-  src/demo/               Sam's week and the layout functions, with tests
+  src/islands/            the React islands: the hero's controls, the Haunted Week, the Crossing,
+                          How it works' switch, and the ghost
+  src/demo/               Sam's week and each demo's data and geometry, with tests
+  src/mockups/            the app's screens, redrawn
+  src/docs/               which repository documents render as pages, and their link rewriting
   src/i18n/               en.ts and the typed message contract
-  src/styles/             tokens.css, global.css
+  src/styles/             tokens, global styles, and the demos' and the ghost's styles
+  e2e/                    the Playwright tests for the built page
 ```
 
-- `.dockerignore` gains `site`.
-- `AGENTS.md` gains a short `site/` section: its register, its own toolchain, the no-tracker and
+- `.dockerignore` has `site`.
+- `AGENTS.md` has a short `site/` section: its register, its own toolchain, the no-tracker and
   no-third-party-request rule, copy in message files only, and glossary truth.
-- `tests/test_ubiquitous_language.py` also searches `site/src`, with `.astro` added to the suffixes.
-- A `.github/workflows/site.yml` workflow, limited to `site/**`, runs `npm ci`,
-  `npm audit --audit-level=high`, `astro check`, the unit tests, and the build.
+- `tests/test_ubiquitous_language.py` also searches `site/src`, with `.astro` among the suffixes.
+- `.github/workflows/site.yml`, limited to `site/**`, `docs/**`, and `README.md`, runs `npm ci`,
+  `npm audit --audit-level=high`, `astro check`, the unit tests, the build and its audit, and the
+  Playwright tests.
 
 ## Launch dependency: a published image
 
@@ -226,11 +244,12 @@ compose file that uses it.
 
 ## Acceptance
 
-- The hero explains the product without scrolling on a 1280×800 screen and on a 390×844 phone.
+- The hero's headline, line, calls to action, and the diagram's switch fit the first screen on a
+  1280×800 and a 1024×768 screen, and the headline and primary call to action on a 390×844 phone.
 - Lighthouse performance, accessibility, best practices, and SEO each score at least 95 on the
   production build.
 - The built page makes no request to any host other than `calendarghost.com`.
-- With JavaScript off, every section's text and the screenshots are present.
+- With JavaScript off, every section's text and the mockups are present.
 - With reduced motion on, nothing moves by itself.
 - A change under `site/` does not change the Docker build context or the image contents.
 
@@ -241,6 +260,5 @@ blog or comparison pages, and adopting the new headline inside the application.
 
 ## Open items for the administrator
 
-- Complete "Why I built this" and confirm its marked claim.
 - Configure Workers Builds, the custom domain, and the `www` redirect rule in Cloudflare.
 - Decide whether to publish the container image before sharing the page.
