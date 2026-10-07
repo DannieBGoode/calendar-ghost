@@ -1,6 +1,5 @@
 import { docPagePath } from "./docs/pages"
 
-export const SITE_URL = "https://calendarghost.com"
 export const REPO_URL = "https://github.com/DannieBGoode/calendar-ghost"
 /** The self-hosting guide, rendered on this site from docs/self-hosting.md (docs/pages.ts). */
 export const GUIDE_URL = docPagePath("self-hosting")

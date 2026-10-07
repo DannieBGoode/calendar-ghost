@@ -9,7 +9,9 @@
     "check": "astro check",
     "test": "vitest run",
     "audit:dist": "node scripts/audit-dist.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "og-image": "node scripts/og-image.mjs",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@astrojs/markdown-satteri": "0.4.2",
