@@ -385,4 +385,8 @@ const motionCss = motion.map((item) => item.css).join("")
     color: var(--muted-foreground); text-wrap: balance;
   }
   .hero-ctas { margin-top: 1.25rem; }
+  @media (max-width: 719px) {
+    .hero-copy { text-align: center; }
+    .hero-ctas { justify-content: center; }
+  }
 </style>

@@ -37,6 +37,11 @@ const { m } = Astro.props
   .self-host .lead { margin: 0; }
   .self-host-start { display: grid; justify-items: start; gap: 1rem; }
   .self-host-start :global(.command) { justify-self: stretch; }
+  @media (max-width: 719px) {
+    .self-host > div:first-child { text-align: center; }
+    .self-host .lead { margin-inline: auto; }
+    .self-host-start { justify-items: center; }
+  }
   .needs { margin: 0; color: var(--muted-foreground); font-size: 0.9375rem; }
   /* Side by side only where there is room: the commands' column takes the width of the longest
      command, so it never has to scroll, and the title takes the rest. */

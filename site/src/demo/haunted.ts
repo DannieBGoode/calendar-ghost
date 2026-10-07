@@ -2,8 +2,7 @@
 // and Family arrive in transit, the ghost passes over each one, and each becomes Busy; Work's own
 // meetings stay. This module is the loop's clock and the ghost's path, in calendar units (days or
 // columns, and hours since the week's first hour); HauntedWeek.tsx and demos.css turn them into
-// places on screen, for the wide week (one row of five days) and the phone week (two rows: Monday
-// to Wednesday, then Thursday and Friday).
+// places on screen, for the wide week (one row of five days) and the phone week (Monday to Wednesday).
 import { DAY_START, DAYS, type DemoEvent } from "./week"
 
 export const HAUNTED_PERIOD_MS = 9000
@@ -24,7 +23,7 @@ const FADE_MS = 8500
 const HOP_HOURS = 1.4
 const TOP_HOURS = -0.35
 
-/** The phone week shows this many days in a row (Monday to Wednesday, then Thursday and Friday). */
+/** The phone week shows Monday to Wednesday. */
 export const PHONE_COLUMNS = 3
 
 /** A point on the ghost's path: `x` in days (wide) or columns (phone), `row` in phone rows, `y` in

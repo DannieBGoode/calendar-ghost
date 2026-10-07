@@ -26,6 +26,10 @@ a { color: var(--primary); }
 .container { width: min(72rem, 100% - 2.5rem); margin-inline: auto; }
 .section { padding-block: clamp(4rem, 8vw, 7rem); }
 .lead { font-size: 1.125rem; color: var(--muted-foreground); max-width: 46ch; }
+@media (max-width: 719px) {
+  .section > .container > h2 { text-align: center; text-wrap: balance; }
+  .section > .container > .lead { margin-inline: auto; text-align: center; }
+}
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
