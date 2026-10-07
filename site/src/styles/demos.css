@@ -15,8 +15,8 @@
    Personal and Family arrive in transit (translucent, a dashed outline in their calendar's colour,
    their calendar's portrait), and the ghost, brushing each one with its hem, turns it into Busy:
    Lantern Indigo, the ghost glyph, and a dot in the calendar's colour it came from.
-   Wide, one row of five days; below 720px, two rows (Monday to Wednesday, then Thursday and
-   Friday), so every day shows. Each event carries its day and hours, and its phone column and
+   Wide, one row of five days; below 720px, Monday to Wednesday fit on one row. Each event carries
+   its day and hours, and its phone column and
    row, as custom properties; the geometry below turns them into places. */
 .haunt { margin: 2rem 0 0; }
 .haunt-frame {
@@ -35,7 +35,7 @@
   border: 1px solid var(--border); border-radius: var(--panel-radius); background: var(--surface);
 }
 @media (max-width: 719px) {
-  .haunt-frame { --hw-gutter: 1.75rem; --hw-head: 2rem; --hw-hour: 34px; --hw-cols: 3; --hw-rows: 2; --hw-ghost: 64px; }
+  .haunt-frame { --hw-gutter: 1.75rem; --hw-head: 2rem; --hw-hour: 34px; --hw-cols: 3; --hw-rows: 1; --hw-ghost: 64px; }
 }
 
 /* The title bar: whose calendar this is, and the loop's Pause/Play. */
@@ -64,7 +64,8 @@
 @media (max-width: 719px) {
   .hw-row.is-wide { display: none; }
   .hw-row.is-phone { display: grid; }
-  .hw-row.is-phone + .hw-row.is-phone { border-top: 1px solid var(--border); }
+  .hw-row.is-phone + .hw-row.is-phone { display: none; }
+  .hw-event[data-phone-hidden] { display: none; }
 }
 .hw-corner, .hw-day { grid-row: 1; border-bottom: 1px solid var(--border); }
 .hw-corner { grid-column: 1; }
@@ -212,6 +213,11 @@
 .crossing-switch button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .crossing-explain { flex: 1 1 16rem; margin: 0; font-size: 1.0625rem; line-height: 1.45; color: var(--foreground); }
 .crossing-bar .motion-toggle { margin-left: auto; color: var(--muted-foreground); }
+@media (max-width: 719px) {
+  .crossing-bar { justify-content: center; text-align: center; }
+  .crossing-explain { flex-basis: 100%; }
+  .crossing-bar .motion-toggle { margin-left: auto; }
+}
 
 /* Stacked on narrow screens: Personal, the ghost's lane, then Work. The lane is tall enough for
    the copy and the ghost holding it, so in flight they cover neither calendar. */

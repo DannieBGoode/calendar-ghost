@@ -2,8 +2,7 @@
 // and Family arrive in transit, the ghost passes over each one, and each becomes Busy; Work's own
 // meetings stay. This module is the loop's clock and the ghost's path, in calendar units (days or
 // columns, and hours since the week's first hour); HauntedWeek.tsx and demos.css turn them into
-// places on screen, for the wide week (one row of five days) and the phone week (two rows: Monday
-// to Wednesday, then Thursday and Friday).
+// places on screen, for the wide week (one row of five days) and the phone week (Monday to Wednesday).
 import { DAY_START, DAYS, type DemoEvent } from "./week"
 
 export const HAUNTED_PERIOD_MS = 9000
@@ -24,7 +23,7 @@ const FADE_MS = 8500
 const HOP_HOURS = 1.4
 const TOP_HOURS = -0.35
 
-/** The phone week shows this many days in a row (Monday to Wednesday, then Thursday and Friday). */
+/** The phone week shows Monday to Wednesday. */
 export const PHONE_COLUMNS = 3
 
 /** A point on the ghost's path: `x` in days (wide) or columns (phone), `row` in phone rows, `y` in
@@ -42,9 +41,11 @@ export function phoneCell(day: number): { col: number; row: number } {
 
 /**
  * The ghost's waypoints for one layout: in from beyond the left edge, then the middle of each
- * incoming event's top edge (where its hem brushes the event), then out beyond the right edge.
+ * visible incoming event's top edge (where its hem brushes the event), then out beyond the right
+ * edge. `runEventCount` keeps the phone path on the same timeline as the full event sequence by
+ * holding at the exit for events that are omitted from its layout.
  */
-export function waypoints(incoming: readonly DemoEvent[], layout: "wide" | "phone"): PathPoint[] {
+export function waypoints(incoming: readonly DemoEvent[], layout: "wide" | "phone", runEventCount = incoming.length): PathPoint[] {
   const touch = incoming.map((event) => {
     const cell = layout === "wide" ? { col: event.day, row: 0 } : phoneCell(event.day)
     return { x: cell.col + 0.5, row: cell.row, y: event.start - DAY_START }
@@ -52,11 +53,14 @@ export function waypoints(incoming: readonly DemoEvent[], layout: "wide" | "phon
   const first = touch[0] ?? { x: 0.5, row: 0, y: 3 }
   const last = touch[touch.length - 1] ?? { x: DAYS - 0.5, row: 0, y: 3 }
   const right = layout === "wide" ? DAYS : PHONE_COLUMNS
-  return [
+  const exit = { x: right + 0.9, row: last.row, y: Math.max(1, last.y - 1.5) }
+  const points = [
     { x: -0.9, row: first.row, y: Math.max(1, first.y - 2) },
     ...touch,
-    { x: right + 0.9, row: last.row, y: Math.max(1, last.y - 1.5) },
+    exit,
   ]
+  for (let index = incoming.length; index < runEventCount; index += 1) points.push(exit)
+  return points
 }
 
 /**

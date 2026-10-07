@@ -72,6 +72,14 @@ const features = m.app.features
   .feat-shot { position: relative; }
   .feat-shot > :global(.mock) { position: relative; z-index: 1; }
 
+  @media (max-width: 719px) {
+    .feats-head { justify-items: center; text-align: center; }
+    .feats-head h2 { text-wrap: balance; }
+    .feats-lead { text-align: center; }
+    .feat-copy { margin-inline: auto; text-align: center; }
+    .feat-body { margin-inline: auto; }
+  }
+
   /* Wide: the copy beside the mockup with clear air between them, sides alternating. The copy
      starts level with the mockup's top third, where the eye lands, not its middle. */
   @media (min-width: 900px) {

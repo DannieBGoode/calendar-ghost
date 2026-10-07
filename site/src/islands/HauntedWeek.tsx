@@ -11,7 +11,11 @@ import { MotionToggle } from "./MotionToggle"
 const WORK = SAM_WEEK.filter((event) => event.kind === "work")
 /** What crosses over, in the order the ghost meets it (by day). */
 const INCOMING = SAM_WEEK.filter((event) => event.kind !== "work").sort((a, b) => a.day - b.day)
-const PATH = { wide: waypoints(INCOMING, "wide"), phone: waypoints(INCOMING, "phone") }
+const PHONE_INCOMING = INCOMING.filter((event) => event.day < PHONE_COLUMNS)
+const PATH = {
+  wide: waypoints(INCOMING, "wide"),
+  phone: waypoints(PHONE_INCOMING, "phone", INCOMING.length),
+}
 const HOURS = Array.from({ length: DAY_END - DAY_START }, (_, index) => DAY_START + index)
 /** On phones an event shorter than this many hours has room for one line only (demos.css). */
 const PHONE_TWO_LINES_HOURS = 1.5
@@ -119,6 +123,7 @@ export function HauntedWeek({
             key={event.key}
             className="hw-event is-work"
             style={place(event)}
+            data-phone-hidden={event.day >= PHONE_COLUMNS ? "" : undefined}
             data-short-phone={event.end - event.start < PHONE_TWO_LINES_HOURS ? "" : undefined}
           >
             <span className="hw-face">
@@ -152,6 +157,7 @@ export function HauntedWeek({
                 key={event.key}
                 className="hw-event is-incoming"
                 style={place(event)}
+                data-phone-hidden={event.day >= PHONE_COLUMNS ? "" : undefined}
                 data-source={source}
                 data-state={state}
                 data-fading={frame.fading ? "" : undefined}

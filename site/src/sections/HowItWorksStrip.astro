@@ -131,6 +131,17 @@ const avatars = await avatarUrls()
     background: var(--primary); color: var(--primary-foreground); font-weight: 650;
   }
 
+  @media (max-width: 899px) {
+    .how-frag {
+      width: fit-content;
+      max-width: 100%;
+      justify-self: center;
+      height: auto; min-height: 9.25rem; padding: 0.8rem 0.75rem; gap: 0.35rem;
+      font-size: 0.875rem;
+    }
+    .how-frag .avatar { width: 1.9rem; height: 1.9rem; }
+  }
+
   /* The ghost, at rest on the last step's piece. */
   .how-track { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
   .how-ghost { position: absolute; right: -0.5rem; top: -4.5rem; }

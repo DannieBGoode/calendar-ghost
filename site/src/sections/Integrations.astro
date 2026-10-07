@@ -134,6 +134,11 @@ const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria
   .int-head h2 { max-width: 16ch; }
   .int-lead { max-width: 44ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
   .int-head > :global(.watch) { justify-self: end; margin-right: 0.5rem; }
+  @media (max-width: 899px) {
+    .int-intro { text-align: center; }
+    .int-head h2, .int-lead { margin-inline: auto; }
+    .int-head > :global(.watch) { justify-self: center; margin: 0; }
+  }
   @media (min-width: 900px) {
     .int { --int-gap: clamp(1.25rem, 2.5vw, 2rem); }
     .int-head { position: relative; }

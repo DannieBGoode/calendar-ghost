@@ -36,6 +36,9 @@
 }
 
 .hc-svg text { font-family: var(--font-sans); fill: var(--foreground); dominant-baseline: central; }
+/* WebKit does not consistently inherit dominant-baseline from <text> to <tspan> (WebKit 139258).
+   Set it on each run so mixed text and emoji stay vertically centred on iOS Safari too. */
+.hc-svg tspan { dominant-baseline: central; }
 .hc-svg .hc-label { fill: var(--muted-foreground); font-weight: 500; }
 .hc-svg .hc-muted { fill: var(--muted-foreground); }
 .hc-svg .hc-name { font-weight: 600; }

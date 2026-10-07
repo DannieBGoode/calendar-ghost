@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { HAUNTED_PERIOD_MS, HAUNTED_STILL_MS, hauntedFrame, phoneCell, pointOnPath, waypoints, type PathPoint } from "./haunted"
+import { HAUNTED_PERIOD_MS, HAUNTED_STILL_MS, hauntedFrame, phoneCell, PHONE_COLUMNS, pointOnPath, waypoints, type PathPoint } from "./haunted"
 import { SAM_WEEK } from "./week"
 
 const INCOMING = SAM_WEEK.filter((event) => event.kind !== "work")
+const PHONE_INCOMING = INCOMING.filter((event) => event.day < PHONE_COLUMNS)
 const COUNT = INCOMING.length
 
 /** The moment the ghost reaches waypoint `index` (0 is the way in, the last is the way out). */
@@ -57,20 +58,22 @@ describe("the ghost's path", () => {
     }
   })
 
-  it("passes over the middle of each incoming event's top edge, when that event turns Busy", () => {
+  it("reaches each visible event when its Busy state changes", () => {
     const wide = waypoints(INCOMING, "wide")
-    const phone = waypoints(INCOMING, "phone")
+    const phone = waypoints(PHONE_INCOMING, "phone", COUNT)
     INCOMING.forEach((event, index) => {
       const u = (index + 1) / (COUNT + 1)
       expectNear(pointOnPath(wide, u), { x: event.day + 0.5, row: 0, y: event.start - 9 })
-      const cell = phoneCell(event.day)
-      expectNear(pointOnPath(phone, u), { x: cell.col + 0.5, row: cell.row, y: event.start - 9 })
+      if (index < PHONE_INCOMING.length) {
+        const cell = phoneCell(event.day)
+        expectNear(pointOnPath(phone, u), { x: cell.col + 0.5, row: cell.row, y: event.start - 9 })
+      }
       expect(hauntedFrame(reachMs(index + 1) + 1, COUNT).incoming[index]).toBe("busy")
     })
   })
 
   it("moves smoothly: no jump between two nearby moments", () => {
-    const points = waypoints(INCOMING, "phone")
+    const points = waypoints(PHONE_INCOMING, "phone", COUNT)
     for (let step = 0; step < 1000; step += 1) {
       const a = pointOnPath(points, step / 1000)
       const b = pointOnPath(points, (step + 1) / 1000)
@@ -78,13 +81,12 @@ describe("the ghost's path", () => {
     }
   })
 
-  it("puts Monday to Wednesday on the phone's first row, Thursday and Friday on its second", () => {
-    expect([0, 1, 2, 3, 4].map(phoneCell)).toEqual([
+  it("maps the phone's visible Monday-to-Wednesday events onto one row", () => {
+    expect(PHONE_INCOMING.map((event) => event.day)).toEqual([0, 1, 2])
+    expect([0, 1, 2].map(phoneCell)).toEqual([
       { col: 0, row: 0 },
       { col: 1, row: 0 },
       { col: 2, row: 0 },
-      { col: 0, row: 1 },
-      { col: 1, row: 1 },
     ])
   })
 })

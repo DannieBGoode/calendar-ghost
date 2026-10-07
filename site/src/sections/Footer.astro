@@ -93,6 +93,11 @@ const { m } = Astro.props
     .footer .ctas { display: grid; }
     .footer-btn { justify-content: center; }
   }
+  @media (max-width: 719px) {
+    .footer-pitch { text-align: center; }
+    .footer-pitch h2, .footer-body { margin-inline: auto; }
+    .footer-pitch .ctas { justify-content: center; }
+  }
   @media (min-width: 900px) {
     .footer-close { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
   }
