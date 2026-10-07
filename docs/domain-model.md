@@ -84,7 +84,12 @@ policy, or enable; the rule is deleted once every mapping is deleted, detached, 
 because its ownership could not be verified, and a failed removal can be retried in either mode. Disconnecting an account moves affected Enabled and Previewed rules to Degraded,
 preventing a previously validated rule from being enabled without authorization. A Degraded Rule
 performs no writes until the account is reauthorized and the rule passes a new recovery preview;
-re-enabling starts with both preserved incremental positions.
+re-enabling starts with both preserved incremental positions. A rule degraded only by Lapsed
+Authorization, when Google refuses a connected account's credentials, records that cause. Once
+every account it uses is authorized again, by Reauthorization or a passing access check, it returns
+to Enabled without a preview and continues from the same preserved positions (ADR 0027). A Material
+Rule Change, a pause, a removal, or disconnecting one of its accounts while it is stopped clears
+that cause, so its recovery needs a preview again.
 
 Permanent deletion is available only after a Connected Account is disconnected. Deletion removes
 the account and every Directional Sync Rule that references it, including those rules' Event

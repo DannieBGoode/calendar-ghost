@@ -7,6 +7,10 @@ import { InvitationResponseFields } from "@/components/invitation-response-field
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
+import type { MessageKey } from "@/i18n/types"
 import {
   api,
   type ConnectedAccount,
@@ -39,6 +43,8 @@ export function RuleBuilder({
   accounts: ConnectedAccount[]
   onCreated: (rule: Rule) => void
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const queryClient = useQueryClient()
   const heading = useRef<HTMLHeadingElement>(null)
   const draft = useDraftEndpoints(accounts)
@@ -88,8 +94,8 @@ export function RuleBuilder({
     <section className="rule-builder page-card" id="rule-builder" aria-labelledby="builder-title">
       <div className="section-heading">
         <div>
-          <h2 id="builder-title" ref={heading} tabIndex={-1}>Choose the calendars</h2>
-          <p>Saving creates a draft. Nothing is written until you preview the rule and start syncing.</p>
+          <h2 id="builder-title" ref={heading} tabIndex={-1}>{t("rules.builder.heading")}</h2>
+          <p>{t("rules.builder.intro")}</p>
         </div>
       </div>
       <form className="rule-form" onSubmit={submit}>
@@ -112,23 +118,33 @@ export function RuleBuilder({
           onCalendarChange={draft.setDestinationCalendar}
         />
         <fieldset className="policy-fields">
-          <legend>What the destination shows</legend>
+          <legend>{t("rules.builder.policyLegend")}</legend>
           <div className="field-stack">
-            <Label htmlFor="privacy-policy">Event information</Label>
+            <Label htmlFor="privacy-policy">{t("rules.builder.privacyLabel")}</Label>
             <NativeSelect id="privacy-policy" value={privacy} onChange={(event) => setPrivacy(event.target.value as Privacy)}>
-              <option value="busy_only">Busy only (recommended)</option>
-              <option value="copy_details">Copy title, description, and location</option>
+              <option value="busy_only">{t("rules.builder.privacyOption.busyOnly")}</option>
+              <option value="copy_details">{t("rules.builder.privacyOption.copyDetails")}</option>
             </NativeSelect>
           </div>
-          <label className="checkbox-row"><input type="checkbox" checked={allDay} onChange={(event) => setAllDay(event.target.checked)} /><span><strong>Sync all-day events</strong><small>Turn this off to synchronize timed events only.</small></span></label>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={allDay} onChange={(event) => setAllDay(event.target.checked)} />
+            <span>
+              <strong>{t("rules.builder.allDay.label")}</strong>
+              <small>{t("rules.builder.allDay.hint")}</small>
+            </span>
+          </label>
           <InvitationResponseFields
             idPrefix=""
             policy={{ privacy_policy: privacy, ...responses }}
             onChange={setResponses}
           />
         </fieldset>
-        {create.error && <div className="inline-error" role="alert">{create.error.message}</div>}
-        <div className="form-actions"><Button type="submit" disabled={!canSubmit || create.isPending}>{create.isPending ? "Saving draft…" : "Save rule draft"}</Button></div>
+        {create.error && <div className="inline-error" role="alert">{apiErrorMessage(i18n, create.error)}</div>}
+        <div className="form-actions">
+          <Button type="submit" disabled={!canSubmit || create.isPending}>
+            {create.isPending ? t("rules.builder.saving") : t("rules.builder.submit")}
+          </Button>
+        </div>
       </form>
     </section>
   )
@@ -204,12 +220,14 @@ type FieldsetProps = {
 }
 
 function SourceFieldset({ accounts, account, calendar, calendars, onAccountChange, onCalendarChange }: FieldsetProps) {
-  const status = calendarStatus(calendars, calendars.data?.length ?? 0, "calendars")
+  const i18n = useI18n()
+  const { t } = i18n
+  const status = calendarStatus(i18n, calendars, calendars.data?.length ?? 0, "rules.builder.noCalendars")
   return (
     <fieldset>
-      <legend>Source calendar</legend>
+      <legend>{t("rules.builder.sourceLegend")}</legend>
       <div className="field-stack">
-        <Label id="source-account-label" htmlFor="source-account">Google account</Label>
+        <Label id="source-account-label" htmlFor="source-account">{t("rules.builder.googleAccount")}</Label>
         <AccountSelect
           id="source-account"
           labelId="source-account-label"
@@ -219,7 +237,7 @@ function SourceFieldset({ accounts, account, calendar, calendars, onAccountChang
         />
       </div>
       <div className="field-stack">
-        <Label htmlFor="source-calendar">Calendar</Label>
+        <Label htmlFor="source-calendar">{t("rules.builder.calendarLabel")}</Label>
         <NativeSelect
           id="source-calendar"
           value={calendar}
@@ -244,13 +262,15 @@ function DestinationFieldset({
   onAccountChange,
   onCalendarChange,
 }: FieldsetProps & { sameEndpoint: boolean }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const writable = writableCalendars(calendars.data)
-  const status = calendarStatus(calendars, writable.length, "writable calendars")
+  const status = calendarStatus(i18n, calendars, writable.length, "rules.builder.noWritableCalendars")
   return (
     <fieldset>
-      <legend>Destination calendar</legend>
+      <legend>{t("rules.builder.destinationLegend")}</legend>
       <div className="field-stack">
-        <Label id="destination-account-label" htmlFor="destination-account">Google account</Label>
+        <Label id="destination-account-label" htmlFor="destination-account">{t("rules.builder.googleAccount")}</Label>
         <AccountSelect
           id="destination-account"
           labelId="destination-account-label"
@@ -260,7 +280,7 @@ function DestinationFieldset({
         />
       </div>
       <div className="field-stack">
-        <Label htmlFor="destination-calendar">Calendar you can edit</Label>
+        <Label htmlFor="destination-calendar">{t("rules.builder.destinationCalendarLabel")}</Label>
         <NativeSelect
           id="destination-calendar"
           value={calendar}
@@ -275,7 +295,7 @@ function DestinationFieldset({
         </NativeSelect>
         {sameEndpoint ? (
           <p id="destination-calendar-error" className="field-error" role="alert">
-            Choose a destination different from the source calendar.
+            {t("rules.builder.sameEndpointError")}
           </p>
         ) : (
           status && <p id="destination-calendar-status" className="field-hint">{status}</p>
@@ -286,12 +306,13 @@ function DestinationFieldset({
 }
 
 function calendarStatus(
+  i18n: I18n,
   query: { isPending: boolean; isFetching: boolean; error: Error | null },
   available: number,
-  noun: string,
+  empty: MessageKey,
 ): string | null {
-  if (query.error) return `Calendars could not load: ${query.error.message}`
-  if (query.isPending && query.isFetching) return "Loading calendars…"
-  if (!query.isPending && available === 0) return `This account has no ${noun} to choose.`
+  if (query.error) return i18n.t("rules.builder.calendarsLoadError", { reason: apiErrorMessage(i18n, query.error) })
+  if (query.isPending && query.isFetching) return i18n.t("rules.builder.loadingCalendars")
+  if (!query.isPending && available === 0) return i18n.t(empty)
   return null
 }

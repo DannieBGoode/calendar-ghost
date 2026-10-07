@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.accounts import (
+    CheckAccountAccess,
     DeleteConnectedAccount,
     DisconnectConnectedAccount,
     DiscoverCalendars,
@@ -14,6 +15,7 @@ from calendar_sync.application.activity import (
     OperationsQueries,
 )
 from calendar_sync.application.health import RuleHealth
+from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AccountAuthorization,
@@ -132,6 +134,8 @@ class Container:
     list_connected_accounts: ListConnectedAccounts | None
     disconnect_connected_account: DisconnectConnectedAccount | None
     delete_connected_account: DeleteConnectedAccount | None
+    check_account_access: CheckAccountAccess | None
+    lapsed_authorizations: LapsedAuthorizations
     authorization: AccountAuthorization | None
     account_calendars: AccountCalendars | None
     discover_calendars: DiscoverCalendars | None
@@ -331,6 +335,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         delete_connected_account=(
             DeleteConnectedAccount(unit_of_work, locks) if accounts else None
         ),
+        check_account_access=(
+            CheckAccountAccess(adapters.account_calendars, accounts, rule_health.lapses)
+            if adapters.account_calendars and accounts
+            else None
+        ),
+        lapsed_authorizations=rule_health.lapses,
         authorization=adapters.authorization,
         account_calendars=adapters.account_calendars,
         discover_calendars=(

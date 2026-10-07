@@ -1,0 +1,185 @@
+{
+  "loading": "Loading overview",
+  "loadFailure": "Calendar Ghost could not load",
+  "ruleName": "{source} → {destination}",
+  "ruleSpoken": "{source} to {destination}",
+  "hero": {
+    "factsLabel": "Synchronization summary",
+    "also": "Also",
+    "callouts": {
+      "healthy": { "title": "All good!", "detail": "Your calendars are in sync." },
+      "review": { "title": "Almost all good" },
+      "stopped": {
+        "help": "Help!",
+        "hand": "I need a hand",
+        "anyone": "Anyone there?",
+        "over": "Over here!"
+      },
+      "waiting": { "title": "Hang tight…" },
+      "paused": { "title": "Taking a break" },
+      "setup": { "title": "Ready when you are!" }
+    }
+  },
+  "health": {
+    "action": {
+      "reauthorizeInSettings": "Reauthorize in Settings",
+      "reviewThisRule": "Review this rule",
+      "reviewRules": "Review rules",
+      "createRule": "Create a rule",
+      "openActivity": "Open Activity"
+    },
+    "setup": {
+      "title": "Set up your first synchronization",
+      "detail": "The service is running and waiting for a Google account."
+    },
+    "reauthorizeSetup": {
+      "title": "Reauthorize your Google account",
+      "detail": "Access was removed or expired. Renew it in Settings before creating or running rules."
+    },
+    "stoppedHeadline": { "one": "A rule stopped syncing", "other": "{count} rules stopped syncing" },
+    "disconnectedTitle": {
+      "one": "{count} Google account needs reauthorization",
+      "other": "{count} Google accounts need reauthorization"
+    },
+    "disconnectedDetail": "Access was removed or expired, so its rules write nothing until you reauthorize. Events already synced stay where they are.",
+    "stoppedNamedDetail": "{detail} It writes nothing until it is fixed. Events already synced stay where they are.",
+    "stoppedGenericDetail": "Stopped rules write nothing until they are fixed. Events already synced stay where they are.",
+    "ruleStoppedSyncing": "{name} stopped syncing",
+    "reviewHeadline": "A rule needs a look",
+    "reviewDetailWithOthers": {
+      "one": "{detail} {count} other problem also needs a look.",
+      "other": "{detail} {count} other problems also need a look."
+    },
+    "ruleNeedsLook": "{name} needs a look",
+    "blockedHeadline": { "one": "An event needs a look", "other": "Some events need a look" },
+    "blockedDetail": {
+      "one": "{count} event couldn't be synced and was left unchanged. Everything else is up to date.",
+      "other": "{count} events couldn't be synced and were left unchanged. Everything else is up to date."
+    },
+    "blockedAction": { "one": "See the blocked event", "other": "See blocked events" },
+    "blockedSummary": {
+      "one": "{count} event couldn't be synced",
+      "other": "{count} events couldn't be synced"
+    },
+    "waitingHeadline": "Waiting for Google",
+    "waitingDetailNamed": "{detail} Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard.",
+    "waitingDetailGeneric": {
+      "one": "Google Calendar is limiting or failing requests for {count} rule. Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard.",
+      "other": "Google Calendar is limiting or failing requests for {count} rules. Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard."
+    },
+    "ruleWaitingForGoogle": "{name} is waiting for Google",
+    "rulesWaitingForGoogle": {
+      "one": "{count} rule waiting for Google",
+      "other": "{count} rules waiting for Google"
+    },
+    "openIncidentsHeadline": "Something needs a look",
+    "openIncidentsDetail": {
+      "one": "{count} problem kept happening. Activity explains what happened and what to do.",
+      "other": "{count} problems kept happening. Activity explains what happened and what to do."
+    },
+    "openIncidentsSummary": {
+      "one": "{count} open problem in Activity",
+      "other": "{count} open problems in Activity"
+    },
+    "lastSync": "Last sync {relative}",
+    "rulesRunning": { "one": "{count} rule running", "other": "{count} rules running" },
+    "notSyncedYet": "Not synced yet",
+    "rulesStillRunning": { "one": "{count} rule still running", "other": "{count} rules still running" },
+    "noRulesRunning": "No rules running",
+    "waitingForRecovery": "Waiting for recovery",
+    "noRules": {
+      "title": "Create your first rule",
+      "detail": "Choose a source and a destination calendar, then preview what the rule will write."
+    },
+    "paused": {
+      "title": "Synchronization is paused",
+      "detail": "Nothing is written to your calendars until you start a rule again."
+    },
+    "rulesNotRunning": { "one": "{count} rule not running", "other": "{count} rules not running" },
+    "neverRun": {
+      "title": "No rule is synchronizing",
+      "detail": "Preview a rule, then enable it to start writing to its destination calendar."
+    },
+    "healthy": {
+      "title": "Synchronization is healthy",
+      "detail": "Calendar Ghost checks your calendars for changes every five minutes."
+    },
+    "stalled": {
+      "title": "Synchronization stopped running",
+      "detail": "Calendar Ghost has not checked your calendars recently. Restart the service to resume. Events already synced stay where they are."
+    },
+    "generic": {
+      "stopped": {
+        "title": "Synchronization needs attention",
+        "detail": "A rule stopped syncing. Rules shows which one and what to do. Events already synced stay where they are."
+      },
+      "review": {
+        "title": "Something needs a look",
+        "detail": "Activity explains what happened and what to do."
+      },
+      "waiting": {
+        "title": "Waiting for the calendar provider",
+        "detail": "Calendar Ghost retries by itself and catches up afterwards."
+      }
+    },
+    "problemFirstSeen": "{summary} First seen {relative}.",
+    "problemLastSync": "{summary} Last sync {relative}."
+  },
+  "accountSummary": {
+    "connectedOnly": { "one": "{count} account connected", "other": "{count} accounts connected" },
+    "reauthorizeOnly": {
+      "one": "{count} account needs reauthorization",
+      "other": "{count} accounts need reauthorization"
+    },
+    "mixed": {
+      "one": "{count} account connected, {reauthorize}",
+      "other": "{count} accounts connected, {reauthorize}"
+    },
+    "reauthorizeCount": { "one": "{count} needs reauthorization", "other": "{count} need reauthorization" }
+  },
+  "onboarding": {
+    "title": "Getting started",
+    "intro": "Nothing is written to Google until a rule passes preview and you start it.",
+    "stepProgress": "Step {current} of 3",
+    "doneSr": "Done: ",
+    "steps": {
+      "reauthorize": {
+        "title": "Reauthorize your Google account",
+        "body": "Its access was removed or expired. Renew it in Settings before creating a rule."
+      },
+      "connect": {
+        "title": "Connect a Google account",
+        "body": "Authorize calendar discovery and event access for one Google account.",
+        "action": "Connect Google account",
+        "configurationNote": "Add the master key and Google OAuth credentials in <code>.env</code>, then restart."
+      },
+      "createRule": {
+        "title": "Create a rule",
+        "body": "Choose one source calendar, one destination calendar, and what the destination may show."
+      },
+      "preview": {
+        "title": "Preview and start syncing",
+        "body": "Review exactly what will be written before the first event reaches the destination."
+      }
+    }
+  },
+  "rules": {
+    "heading": "Rules",
+    "activeCount": { "one": "{count} active rule", "other": "{count} active rules" },
+    "configuredCount": { "one": "{count} rule configured", "other": "{count} rules configured" },
+    "allRules": "All {count} rules",
+    "manageRules": "Manage rules",
+    "notRunning": "Not running"
+  },
+  "recentChanges": {
+    "heading": "Recent changes",
+    "subtitle": "Latest sync events and changes.",
+    "allActivity": "All activity",
+    "loadingLabel": "Loading recent changes",
+    "loadError": "Recent changes could not load. Activity still has the full history.",
+    "emptyWithCheck": "No events changed recently. Calendar Ghost last checked {relative}.",
+    "emptyNoCheck": "The first sync runs within five minutes. Changes will appear here.",
+    "removedRule": "Removed rule",
+    "repeatedSince": { "one": "{count} time since {since}", "other": "{count} times since {since}" }
+  }
+}

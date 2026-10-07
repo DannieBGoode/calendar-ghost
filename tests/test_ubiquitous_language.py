@@ -30,7 +30,7 @@ AVOIDED = (
 )
 
 SEARCHED = ("src/calendar_sync", "web/src", "site/src", "docs", "scripts", "tests")
-SUFFIXES = {".py", ".ts", ".tsx", ".astro", ".md", ".sql", ".html"}
+SUFFIXES = {".py", ".ts", ".tsx", ".astro", ".md", ".sql", ".html", ".json"}
 # The glossary and agent instructions name avoided terms in order to rule them out.
 EXEMPT = {GLOSSARY, REPOSITORY / "AGENTS.md", Path(__file__).resolve()}
 # Compiled assets, and implementation plans kept as a record of how past work was planned.

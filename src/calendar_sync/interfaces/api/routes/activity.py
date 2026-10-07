@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Protocol
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from calendar_sync.application.activity import (
     ActivityCategory,
@@ -25,6 +25,7 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.domain.model import CalendarEvent, EventStatus, TimedInterval
 from calendar_sync.interfaces.api.dependencies import app_services, require_admin
+from calendar_sync.interfaces.api.problems import ApiProblem, failure_params, problem
 from calendar_sync.interfaces.api.schemas import (
     ActivityEventResponse,
     AuditEntryResponse,
@@ -67,6 +68,7 @@ def dashboard(services: Services) -> DashboardResponse:
         problems=[problem_response(problem) for problem in verdict.problems],
         connected_accounts=summary.connected_accounts,
         disconnected_accounts=summary.disconnected_accounts,
+        lapsed_accounts=summary.lapsed_accounts,
         sync_rules=summary.sync_rules,
         enabled_rules=summary.enabled_rules,
         stopped_rules=summary.stopped_rules,
@@ -109,7 +111,9 @@ def list_activity(
 def get_activity_entry(entry_id: int, services: Services) -> AuditEntryResponse:
     entry = services.activity.entry(entry_id)
     if entry is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry not found")
+        raise problem(
+            status.HTTP_404_NOT_FOUND, "activity_entry_not_found", "activity entry not found"
+        )
     return _entry_response(entry)
 
 
@@ -140,7 +144,11 @@ def recent_changes(
 def get_activity_entry_changes(entry_id: int, services: Services) -> SourceChangeResponse:
     change = services.activity.entry_change(entry_id)
     if change is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "activity entry recorded no source change")
+        raise problem(
+            status.HTTP_404_NOT_FOUND,
+            "source_change_not_found",
+            "activity entry recorded no source change",
+        )
     return SourceChangeResponse(
         fields=list(change.fields),
         values_available=change.values_available,
@@ -169,24 +177,30 @@ async def inspect_activity_event(entry_id: int, services: Services) -> ActivityE
     try:
         inspected = await asyncio.to_thread(services.inspect_activity_event.execute, entry_id)
     except ActivityEventNotFound as error:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, "activity entry has no source event"
+        raise problem(
+            status.HTTP_404_NOT_FOUND,
+            "source_event_not_found",
+            "activity entry has no source event",
         ) from error
     except ActivityRuleRemoved as error:
-        raise HTTPException(
+        raise problem(
             status.HTTP_410_GONE,
+            "activity_rule_removed",
             "the rule for this activity entry was removed, so its events cannot be looked up",
         ) from error
     except EventInspectionUnavailable as error:
-        raise HTTPException(
+        raise problem(
             status.HTTP_503_SERVICE_UNAVAILABLE,
+            "event_inspection_unavailable",
             "configure a calendar provider and the installation master key before "
             "inspecting events",
         ) from error
     except ProviderFailure as error:
-        raise HTTPException(
+        raise ApiProblem(
             status.HTTP_424_FAILED_DEPENDENCY,
+            "provider_failed",
             f"Could not read this event from {error.provider_name}: {error.kind.value}",
+            failure_params(error),
         ) from error
     return ActivityEventResponse(
         source=_event_snapshot(inspected.source),

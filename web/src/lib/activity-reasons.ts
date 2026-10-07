@@ -1,250 +1,235 @@
+import type { MessageKey } from "@/i18n/types"
+
 /**
  * What Calendar Ghost observed (`trigger`) and what it did about it (`effect`), never who caused
- * it. `{source}` and `{destination}` name the rule's calendars. A block says what to do next.
+ * it. Messages name the rule's calendars with `{source}` and `{destination}`. A block says what
+ * to do next.
  */
 export type ReasonCopy = { trigger?: string; effect: string; explanation: string; next?: string }
+/** The catalog messages for one reason's copy. */
+export type CopyKeys = { trigger?: MessageKey; effect: MessageKey; explanation: MessageKey; next?: MessageKey }
 
 /** Blocks nobody can clear by hand: the daily check decides the event again and escalates. */
-const RECHECKED =
-  "Nothing to do now. Calendar Ghost decides this event again at the daily check, and opens an incident if it is still blocked then."
+const RECHECKED: MessageKey = "activity.reason.recheck"
 
 // Keep in sync with SyncReason in src/calendar_sync/domain/model.py.
-export const REASONS: Record<string, ReasonCopy> = {
+export const REASONS: Record<string, CopyKeys> = {
   source_created: {
-    trigger: "New in {source}",
-    effect: "added to {destination}",
-    explanation: "The event was new to Calendar Ghost, so it was added to {destination}.",
+    trigger: "activity.reason.sourceCreated.trigger",
+    effect: "activity.reason.sourceCreated.effect",
+    explanation: "activity.reason.sourceCreated.explanation",
   },
   projection_missing: {
-    trigger: "Missing from {destination}",
-    effect: "put back",
-    explanation:
-      "The event Calendar Ghost wrote to {destination} was no longer there, so it was written again from {source}.",
+    trigger: "activity.reason.projectionMissing.trigger",
+    effect: "activity.reason.projectionMissing.effect",
+    explanation: "activity.reason.projectionMissing.explanation",
   },
   source_changed: {
-    trigger: "Changed in {source}",
-    effect: "updated in {destination}",
-    explanation: "The event changed in {source}, so {destination} was updated to match.",
+    trigger: "activity.reason.sourceChanged.trigger",
+    effect: "activity.reason.sourceChanged.effect",
+    explanation: "activity.reason.sourceChanged.explanation",
   },
   destination_drift_repaired: {
-    trigger: "Edited in {destination}",
-    effect: "changed back to match {source}",
-    explanation:
-      "The event in {destination} no longer matched {source}. {source} decides what the event looks like, so the edit was replaced.",
+    trigger: "activity.reason.destinationDriftRepaired.trigger",
+    effect: "activity.reason.destinationDriftRepaired.effect",
+    explanation: "activity.reason.destinationDriftRepaired.explanation",
   },
   source_cancelled: {
-    trigger: "Cancelled in {source}",
-    effect: "removed from {destination}",
-    explanation: "The event was cancelled or deleted in {source}, so it was removed from {destination}.",
+    trigger: "activity.reason.sourceCancelled.trigger",
+    effect: "activity.reason.sourceCancelled.effect",
+    explanation: "activity.reason.sourceCancelled.explanation",
   },
   all_day_excluded_removed: {
-    trigger: "All-day, which this rule leaves out",
-    effect: "removed from {destination}",
-    explanation: "This rule syncs timed events only, so the all-day event it had written was removed.",
+    trigger: "activity.reason.allDayExcludedRemoved.trigger",
+    effect: "activity.reason.allDayExcludedRemoved.effect",
+    explanation: "activity.reason.allDayExcludedRemoved.explanation",
   },
   declined_removed: {
-    trigger: "Declined",
-    effect: "removed from {destination}",
-    explanation: "You declined this event in {source}, so the event Calendar Ghost had written was removed. Declined events are never synced.",
+    trigger: "activity.reason.declinedRemoved.trigger",
+    effect: "activity.reason.declinedRemoved.effect",
+    explanation: "activity.reason.declinedRemoved.explanation",
   },
   tentative_excluded_removed: {
-    trigger: "Answered Maybe, which this rule leaves out",
-    effect: "removed from {destination}",
-    explanation: "This rule doesn't sync events you answered Maybe to, so the event it had written was removed.",
+    trigger: "activity.reason.tentativeExcludedRemoved.trigger",
+    effect: "activity.reason.tentativeExcludedRemoved.effect",
+    explanation: "activity.reason.tentativeExcludedRemoved.explanation",
   },
   awaiting_response_removed: {
-    trigger: "Not answered yet",
-    effect: "removed from {destination}",
-    explanation:
-      "This rule waits for you to answer an invitation before syncing it, so the event it had written was removed. It is added again once you accept, or answer Maybe if this rule syncs those.",
+    trigger: "activity.reason.awaitingResponseRemoved.trigger",
+    effect: "activity.reason.awaitingResponseRemoved.effect",
+    explanation: "activity.reason.awaitingResponseRemoved.explanation",
   },
   policy_applied: {
-    trigger: "Rule settings changed",
-    effect: "rewritten in {destination}",
-    explanation: "The rule's settings changed, so the event it had written was rewritten to match them.",
+    trigger: "activity.reason.policyApplied.trigger",
+    effect: "activity.reason.policyApplied.effect",
+    explanation: "activity.reason.policyApplied.explanation",
   },
   projection_current: {
-    effect: "already up to date",
-    explanation: "The event in {destination} already matches {source}.",
+    effect: "activity.reason.projectionCurrent.effect",
+    explanation: "activity.reason.projectionCurrent.explanation",
   },
   outside_source_calendar: {
-    trigger: "From another calendar",
-    effect: "skipped",
-    explanation: "The event does not belong to {source}.",
+    trigger: "activity.reason.outsideSourceCalendar.trigger",
+    effect: "activity.reason.outsideSourceCalendar.effect",
+    explanation: "activity.reason.outsideSourceCalendar.explanation",
   },
   managed_projection_source: {
-    trigger: "Written by Calendar Ghost",
-    effect: "skipped",
-    explanation:
-      "Events Calendar Ghost wrote are never synced again. This prevents events from looping between calendars.",
+    trigger: "activity.reason.managedProjectionSource.trigger",
+    effect: "activity.reason.managedProjectionSource.effect",
+    explanation: "activity.reason.managedProjectionSource.explanation",
   },
   recurring_unsupported: {
-    trigger: "Recurring event",
-    effect: "skipped",
-    explanation: "Earlier versions did not sync recurring events. Nothing was written.",
+    trigger: "activity.reason.recurringUnsupported.trigger",
+    effect: "activity.reason.recurringUnsupported.effect",
+    explanation: "activity.reason.recurringUnsupported.explanation",
   },
   cancelled_without_projection: {
-    trigger: "Cancelled in {source}",
-    effect: "nothing to remove",
-    explanation: "The event was cancelled before it was ever added to {destination}.",
+    trigger: "activity.reason.cancelledWithoutProjection.trigger",
+    effect: "activity.reason.cancelledWithoutProjection.effect",
+    explanation: "activity.reason.cancelledWithoutProjection.explanation",
   },
   all_day_excluded: {
-    trigger: "All-day event",
-    effect: "skipped",
-    explanation: "This rule syncs timed events only. Edit the rule to include all-day events.",
+    trigger: "activity.reason.allDayExcluded.trigger",
+    effect: "activity.reason.allDayExcluded.effect",
+    explanation: "activity.reason.allDayExcluded.explanation",
   },
   declined: {
-    trigger: "Declined",
-    effect: "skipped",
-    explanation: "You declined this event in {source}. Declined events are never synced.",
+    trigger: "activity.reason.declined.trigger",
+    effect: "activity.reason.declined.effect",
+    explanation: "activity.reason.declined.explanation",
   },
   tentative_excluded: {
-    trigger: "Answered Maybe",
-    effect: "skipped",
-    explanation: "This rule doesn't sync events you answered Maybe to. Edit the rule to sync them.",
+    trigger: "activity.reason.tentativeExcluded.trigger",
+    effect: "activity.reason.tentativeExcluded.effect",
+    explanation: "activity.reason.tentativeExcluded.explanation",
   },
   awaiting_response: {
-    trigger: "Not answered yet",
-    effect: "skipped",
-    explanation:
-      "This rule waits for you to answer an invitation before syncing it. It is synced once you accept, or answer Maybe if this rule syncs those.",
+    trigger: "activity.reason.awaitingResponse.trigger",
+    effect: "activity.reason.awaitingResponse.effect",
+    explanation: "activity.reason.awaitingResponse.explanation",
   },
   before_sync_window: {
-    trigger: "Ended before the sync window",
-    effect: "skipped",
-    explanation:
-      "The event changed, but it ended before this rule's sync window and was never synced, so it was not added.",
+    trigger: "activity.reason.beforeSyncWindow.trigger",
+    effect: "activity.reason.beforeSyncWindow.effect",
+    explanation: "activity.reason.beforeSyncWindow.explanation",
   },
   mapping_inconsistent: {
-    trigger: "Calendar Ghost's link to this event doesn't match",
-    effect: "blocked, {destination} left unchanged",
-    explanation:
-      "Calendar Ghost keeps a record of which event in {destination} belongs to which event in {source}. For this event the record points somewhere unexpected, so nothing was written rather than risk changing the wrong event.",
+    trigger: "activity.reason.mappingInconsistent.trigger",
+    effect: "activity.reason.mappingInconsistent.effect",
+    explanation: "activity.reason.mappingInconsistent.explanation",
     next: RECHECKED,
   },
   destination_identity_inconsistent: {
-    trigger: "A different event is linked in {destination}",
-    effect: "blocked, {destination} left unchanged",
-    explanation:
-      "The event in {destination} is no longer the one Calendar Ghost wrote for this event, so nothing was written rather than risk changing the wrong event.",
+    trigger: "activity.reason.destinationIdentityInconsistent.trigger",
+    effect: "activity.reason.destinationIdentityInconsistent.effect",
+    explanation: "activity.reason.destinationIdentityInconsistent.explanation",
     next: RECHECKED,
   },
   destination_ownership_inconsistent: {
-    trigger: "Not marked as written by this rule in {destination}",
-    effect: "blocked, left alone",
-    explanation:
-      "The event in {destination} does not carry this rule's marker, so Calendar Ghost will not change or delete it.",
+    trigger: "activity.reason.destinationOwnershipInconsistent.trigger",
+    effect: "activity.reason.destinationOwnershipInconsistent.effect",
+    explanation: "activity.reason.destinationOwnershipInconsistent.explanation",
     next: RECHECKED,
   },
   source_unverifiable: {
-    trigger: "Couldn't be read in {source}",
-    effect: "blocked, {destination} left unchanged",
-    explanation:
-      "Its source event in {source} could not be read, so the event in {destination} was left as it is rather than risk deleting it.",
-    next: "If this repeats, check in Settings that the Google account for {source} is still connected.",
+    trigger: "activity.reason.sourceUnverifiable.trigger",
+    effect: "activity.reason.sourceUnverifiable.effect",
+    explanation: "activity.reason.sourceUnverifiable.explanation",
+    next: "activity.reason.sourceUnverifiable.next",
   },
   occurrence_changed: {
-    trigger: "Changed in {source}",
-    effect: "updated in {destination}",
-    explanation:
-      "This occurrence was moved or edited in {source}, so it was updated in {destination}. The rest of the series is unchanged.",
+    trigger: "activity.reason.occurrenceChanged.trigger",
+    effect: "activity.reason.occurrenceChanged.effect",
+    explanation: "activity.reason.occurrenceChanged.explanation",
   },
   occurrence_cancelled: {
-    trigger: "Cancelled in {source}",
-    effect: "removed from {destination}",
-    explanation:
-      "This occurrence was cancelled in {source}, so it was removed from {destination}. The rest of the series is unchanged.",
+    trigger: "activity.reason.occurrenceCancelled.trigger",
+    effect: "activity.reason.occurrenceCancelled.effect",
+    explanation: "activity.reason.occurrenceCancelled.explanation",
   },
   occurrence_removed_from_series: {
-    trigger: "No longer in the series in {source}",
-    effect: "removed from {destination}",
-    explanation: "The series in {source} no longer includes this occurrence, so it was removed from {destination}.",
+    trigger: "activity.reason.occurrenceRemovedFromSeries.trigger",
+    effect: "activity.reason.occurrenceRemovedFromSeries.effect",
+    explanation: "activity.reason.occurrenceRemovedFromSeries.explanation",
   },
   occurrence_drift_repaired: {
-    trigger: "Edited or deleted in {destination}",
-    effect: "put back to match {source}",
-    explanation:
-      "This occurrence in {destination} no longer matched {source}. {source} decides what the event looks like, so it was restored.",
+    trigger: "activity.reason.occurrenceDriftRepaired.trigger",
+    effect: "activity.reason.occurrenceDriftRepaired.effect",
+    explanation: "activity.reason.occurrenceDriftRepaired.explanation",
   },
   occurrence_current: {
-    effect: "already up to date",
-    explanation: "This occurrence in {destination} already matches {source}.",
+    effect: "activity.reason.occurrenceCurrent.effect",
+    explanation: "activity.reason.occurrenceCurrent.explanation",
   },
   occurrence_already_cancelled: {
-    effect: "already up to date",
-    explanation: "This occurrence is cancelled in both calendars.",
+    effect: "activity.reason.occurrenceAlreadyCancelled.effect",
+    explanation: "activity.reason.occurrenceAlreadyCancelled.explanation",
   },
   occurrence_retired: {
-    trigger: "Gone from both calendars",
-    effect: "cleaned up",
-    explanation: "The occurrence no longer exists in either calendar, so its record was removed. Nothing was written.",
+    trigger: "activity.reason.occurrenceRetired.trigger",
+    effect: "activity.reason.occurrenceRetired.effect",
+    explanation: "activity.reason.occurrenceRetired.explanation",
   },
   series_not_synchronized: {
-    trigger: "Its series isn't synced",
-    effect: "skipped",
-    explanation: "This occurrence belongs to a recurring event this rule does not sync.",
+    trigger: "activity.reason.seriesNotSynchronized.trigger",
+    effect: "activity.reason.seriesNotSynchronized.effect",
+    explanation: "activity.reason.seriesNotSynchronized.explanation",
   },
   destination_occurrence_missing: {
-    trigger: "Not found in the series in {destination}",
-    effect: "blocked, {destination} left unchanged",
-    explanation:
-      "The series in {destination} has no occurrence at this time, even after Calendar Ghost checked the series itself. Nothing was written, so this occurrence may be missing or out of date in {destination}. The rest of the series is unaffected.",
+    trigger: "activity.reason.destinationOccurrenceMissing.trigger",
+    effect: "activity.reason.destinationOccurrenceMissing.effect",
+    explanation: "activity.reason.destinationOccurrenceMissing.explanation",
     next: RECHECKED,
   },
   series_without_occurrences: {
-    trigger: "Every occurrence cancelled in {source}",
-    effect: "skipped",
-    explanation:
-      "Every occurrence of this recurring event is cancelled in {source}, or is an all-day occurrence this rule leaves out, so there is nothing to show in {destination}. It is synced again if an occurrence comes back.",
+    trigger: "activity.reason.seriesWithoutOccurrences.trigger",
+    effect: "activity.reason.seriesWithoutOccurrences.effect",
+    explanation: "activity.reason.seriesWithoutOccurrences.explanation",
   },
   series_without_occurrences_removed: {
-    trigger: "No occurrence left in {source}",
-    effect: "removed from {destination}",
-    explanation:
-      "Every occurrence of this recurring event is cancelled in {source}, or is an all-day occurrence this rule leaves out, so the series left from an interrupted run was removed.",
+    trigger: "activity.reason.seriesWithoutOccurrencesRemoved.trigger",
+    effect: "activity.reason.seriesWithoutOccurrencesRemoved.effect",
+    explanation: "activity.reason.seriesWithoutOccurrencesRemoved.explanation",
   },
   projection_unmapped: {
-    trigger: "Marked as written by this rule in {destination}, but not linked to an event in {source}",
-    effect: "blocked, left in {destination}",
-    explanation:
-      "The event in {destination} carries this rule's marker, but Calendar Ghost has no record of writing it, so it will not change or delete it. Reconcile now reports it again while it is there.",
-    next: "If you don't want it in {destination}, delete it there yourself.",
+    trigger: "activity.reason.projectionUnmapped.trigger",
+    effect: "activity.reason.projectionUnmapped.effect",
+    explanation: "activity.reason.projectionUnmapped.explanation",
+    next: "activity.reason.projectionUnmapped.next",
   },
 }
 
-export const ACTION_FALLBACK: Record<string, string> = {
-  create: "added to {destination}",
-  update: "updated in {destination}",
-  delete: "removed from {destination}",
-  ignore: "skipped",
-  conflict: "blocked",
+export const ACTION_FALLBACK: Record<string, MessageKey> = {
+  create: "activity.action.create",
+  update: "activity.action.update",
+  delete: "activity.action.delete",
+  ignore: "activity.action.ignore",
+  conflict: "activity.action.conflict",
 }
 
 // Rule management entries carry no SyncReason; keep in sync with application/rules.py and removal.py.
-export const RULE_ACTIONS: Record<string, ReasonCopy> = {
+export const RULE_ACTIONS: Record<string, CopyKeys> = {
   policy_changed: {
-    effect: "rule settings changed",
-    explanation:
-      "The rule needs a new preview, and the events it wrote are rewritten on the next run after it is enabled.",
+    effect: "activity.ruleAction.policyChanged.effect",
+    explanation: "activity.ruleAction.policyChanged.explanation",
   },
   remove_projection: {
-    trigger: "Rule removed",
-    effect: "removed from {destination}",
-    explanation: "The administrator chose to delete the events this rule wrote when removing it.",
+    trigger: "activity.ruleAction.removeProjection.trigger",
+    effect: "activity.ruleAction.removeProjection.effect",
+    explanation: "activity.ruleAction.removeProjection.explanation",
   },
   detach_projection: {
-    trigger: "Rule removed",
-    effect: "kept in {destination}, no longer synced",
-    explanation: "The event stays in {destination} and is no longer updated or deleted.",
+    trigger: "activity.ruleAction.detachProjection.trigger",
+    effect: "activity.ruleAction.detachProjection.effect",
+    explanation: "activity.ruleAction.detachProjection.explanation",
   },
   removal_conflict: {
-    trigger: "Not verifiably written by this rule",
-    effect: "left in {destination} during Rule Removal",
-    explanation:
-      "The event's ownership could not be verified, so it was not deleted. It stays in {destination} and is no longer managed.",
+    trigger: "activity.ruleAction.removalConflict.trigger",
+    effect: "activity.ruleAction.removalConflict.effect",
+    explanation: "activity.ruleAction.removalConflict.explanation",
   },
   rule_removed: {
-    effect: "rule removed",
-    explanation: "The rule and its records of which events it wrote were removed. Its activity history is kept.",
+    effect: "activity.ruleAction.ruleRemoved.effect",
+    explanation: "activity.ruleAction.ruleRemoved.explanation",
   },
 }

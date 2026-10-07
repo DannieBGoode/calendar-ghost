@@ -43,10 +43,10 @@ describe("rule picker keyboard", () => {
   it("finds options by the start of their name and cycles on a repeated letter", () => {
     const labels = ["All rules", "Family to Work", "Personal to Work", "Personal to Family"]
 
-    expect(typeaheadIndex(labels, "p", 0)).toBe(2)
-    expect(typeaheadIndex(labels, "pp", 2)).toBe(3)
-    expect(typeaheadIndex(labels, "pe", 3)).toBe(3)
-    expect(typeaheadIndex(labels, "fam", 0)).toBe(1)
-    expect(typeaheadIndex(labels, "z", 0)).toBe(-1)
+    expect(typeaheadIndex(labels, "p", 0, "en")).toBe(2)
+    expect(typeaheadIndex(labels, "pp", 2, "en")).toBe(3)
+    expect(typeaheadIndex(labels, "pe", 3, "en")).toBe(3)
+    expect(typeaheadIndex(labels, "fam", 0, "en")).toBe(1)
+    expect(typeaheadIndex(labels, "z", 0, "en")).toBe(-1)
   })
 })

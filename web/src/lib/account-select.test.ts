@@ -9,10 +9,16 @@ import { AccountSelect } from "../components/account-select"
 import accountSelectSource from "../components/account-select.tsx?raw"
 import ruleBuilderSource from "../features/rule-builder.tsx?raw"
 import rulesViewSource from "../features/rules.tsx?raw"
+import { StaticI18nProvider } from "@/i18n/provider"
+import { testI18n } from "@/i18n/testing"
 import type { ConnectedAccount } from "./api"
 
 // The rules page and the rule builder it opens.
 const rulesSource = `${rulesViewSource}\n${ruleBuilderSource}`
+
+function withI18n(node: ReturnType<typeof createElement>) {
+  return createElement(StaticI18nProvider, { i18n: testI18n(), children: node })
+}
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -26,6 +32,7 @@ const accounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
   {
     id: "work",
@@ -36,6 +43,7 @@ const accounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
 ]
 
@@ -49,6 +57,7 @@ const typeaheadAccounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
   {
     id: "project",
@@ -59,6 +68,7 @@ const typeaheadAccounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
   {
     id: "work",
@@ -69,18 +79,21 @@ const typeaheadAccounts: ConnectedAccount[] = [
     state: "connected",
     rule_count: 0,
     authorized_at: "2026-10-02T00:00:00Z",
+    authorization_lapsed_at: null,
   },
 ]
 
 function renderAccountSelect(value: string, accountList = accounts) {
   return renderToStaticMarkup(
-    createElement(AccountSelect, {
-      id: "account",
-      labelId: "account-label",
-      value,
-      accounts: accountList,
-      onChange: () => undefined,
-    }),
+    withI18n(
+      createElement(AccountSelect, {
+        id: "account",
+        labelId: "account-label",
+        value,
+        accounts: accountList,
+        onChange: () => undefined,
+      }),
+    ),
   )
 }
 
@@ -109,13 +122,15 @@ function mountInteractive(
   root = createRoot(container)
   act(() => {
     root?.render(
-      createElement(AccountSelect, {
-        id: "account",
-        labelId: "account-label",
-        value,
-        accounts: accountList,
-        onChange,
-      }),
+      withI18n(
+        createElement(AccountSelect, {
+          id: "account",
+          labelId: "account-label",
+          value,
+          accounts: accountList,
+          onChange,
+        }),
+      ),
     )
   })
   return {
@@ -279,13 +294,15 @@ describe("account select", () => {
 
     act(() => {
       root?.render(
-        createElement(AccountSelect, {
-          id: "account",
-          labelId: "account-label",
-          value: "personal",
-          accounts: typeaheadAccounts.slice(0, 2),
-          onChange: () => undefined,
-        }),
+        withI18n(
+          createElement(AccountSelect, {
+            id: "account",
+            labelId: "account-label",
+            value: "personal",
+            accounts: typeaheadAccounts.slice(0, 2),
+            onChange: () => undefined,
+          }),
+        ),
       )
     })
     expect(trigger.getAttribute("aria-activedescendant")).toContain("option-1")

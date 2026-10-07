@@ -10,6 +10,7 @@ import {
   type RuleDetail,
   type RuleSummary,
   type SyncResult,
+  UnreadableResponseError,
 } from "./api"
 
 function stubFetch(status = 200, body: unknown = {}) {
@@ -121,5 +122,68 @@ describe("errorDetail", () => {
     const error = await api.rules().catch((caught: unknown) => caught)
     expect(error).toBeInstanceOf(ApiError)
     expect((error as ApiError).message).toBe("Input should be 'busy_only' or 'copy_details'")
+    expect((error as ApiError).detail).toBe("Input should be 'busy_only' or 'copy_details'")
+  })
+})
+
+function respond(status: number, body: string, contentType = "application/json") {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => Promise.resolve(new Response(body, { status, headers: { "Content-Type": contentType } }))),
+  )
+}
+
+async function failure(): Promise<ApiError> {
+  try {
+    await api.session()
+  } catch (error) {
+    if (error instanceof ApiError) return error
+    throw error
+  }
+  throw new Error("expected a failure")
+}
+
+describe("request errors", () => {
+  it("keeps the status and detail", async () => {
+    respond(409, JSON.stringify({ detail: "storage is busy" }))
+    const error = await failure()
+    expect([error.status, error.detail, error.code, error.params]).toEqual([409, "storage is busy", null, {}])
+  })
+
+  it("keeps the server's code and params", async () => {
+    respond(424, JSON.stringify({ detail: "removal stopped", code: "removal_interrupted", params: { processed: 2, provider: "google", kind: null } }))
+    const error = await failure()
+    expect([error.code, error.params, error.detail]).toEqual([
+      "removal_interrupted",
+      { processed: 2, provider: "google", kind: null },
+      "removal stopped",
+    ])
+  })
+
+  it("drops params that are not text, numbers, or null", async () => {
+    respond(422, JSON.stringify({ detail: "x", code: "invalid_request", params: { field: "name", nested: { a: 1 }, flag: true } }))
+    expect((await failure()).params).toEqual({ field: "name" })
+    respond(422, JSON.stringify({ detail: "x", code: 7, params: ["field"] }))
+    const malformed = await failure()
+    expect([malformed.code, malformed.params]).toEqual([null, {}])
+  })
+
+  it("has no detail for a validation list without messages", async () => {
+    respond(422, JSON.stringify({ detail: [{ loc: ["body", "password"] }] }))
+    const error = await failure()
+    expect(error.detail).toBeNull()
+    expect(error.message).toBe("The request could not be completed.")
+  })
+
+  it("survives a body that is not JSON", async () => {
+    respond(502, "<html>Bad gateway</html>", "text/html")
+    const error = await failure()
+    expect([error.status, error.detail]).toEqual([502, null])
+  })
+
+  it("marks a successful response whose body is not JSON as unreadable", async () => {
+    respond(200, "<html>Fallback</html>", "text/html")
+    const error = await failure()
+    expect(error).toBeInstanceOf(UnreadableResponseError)
   })
 })

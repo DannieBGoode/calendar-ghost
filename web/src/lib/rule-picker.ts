@@ -53,17 +53,18 @@ export function movedIndex(key: string, active: number, count: number): number |
 
 /**
  * Typeahead: the next option after `from` whose label starts with the typed text. Repeating one
- * letter cycles through the options that start with it.
+ * letter cycles through the options that start with it. `locale` keeps the case-folding rules of
+ * the active language rather than the runtime's default locale.
  */
-export function typeaheadIndex(labels: readonly string[], typed: string, from: number): number {
-  const query = typed.toLocaleLowerCase()
+export function typeaheadIndex(labels: readonly string[], typed: string, from: number, locale: string): number {
+  const query = typed.toLocaleLowerCase(locale)
   if (!query) return -1
   const cycling = query.replaceAll(query.charAt(0), "") === ""
   const needle = cycling ? query.charAt(0) : query
   const start = cycling || query.length === 1 ? from + 1 : from
   for (let offset = 0; offset < labels.length; offset += 1) {
     const index = (start + offset) % labels.length
-    if (labels[index]?.toLocaleLowerCase().startsWith(needle)) return index
+    if (labels[index]?.toLocaleLowerCase(locale).startsWith(needle)) return index
   }
   return -1
 }

@@ -12,7 +12,12 @@ from calendar_sync.application.activity import (
     OperationsOverview,
 )
 from calendar_sync.application.locking import RuleWork, RuleWorkKind
-from calendar_sync.application.ports import RuleRunOutcome, RunKind, SchedulerProgress
+from calendar_sync.application.ports import (
+    IncidentMessage,
+    RuleRunOutcome,
+    RunKind,
+    SchedulerProgress,
+)
 from calendar_sync.application.rules import SyncRuleSummary
 from calendar_sync.application.status import (
     InstallationHealth,
@@ -219,6 +224,27 @@ def test_a_degraded_rule_is_stopped_and_names_its_incident() -> None:
     assert status.summary == "Personal → Work: Calendar provider authorization expired."
 
 
+def test_problems_from_an_incident_carry_its_message() -> None:
+    message = IncidentMessage("provider_failure", {"kind": "authentication", "provider": "google"})
+    stopped = replace(_incident("rule-1", "authentication"), message=message)
+    waiting = replace(_incident("rule-2", "rate_limit"), message=message)
+    status = _assess(
+        [_summary(_rule(state=SyncRuleState.DEGRADED)), _summary(_rule("rule-2"))],
+        incidents=(stopped, waiting),
+    )
+    assert [(problem.kind, problem.message) for problem in status.problems] == [
+        (ProblemKind.STOPPED, message),
+        (ProblemKind.WAITING, message),
+    ]
+
+
+def test_problems_without_an_incident_have_no_message() -> None:
+    status = assess_installation(
+        [_summary(_rule(state=SyncRuleState.REMOVING))], _overview(), (), TICKING, NOW
+    )
+    assert status.problems[0].message is None
+
+
 @pytest.mark.parametrize("side", ["personal-account", "work-account"])
 def test_an_enabled_rule_with_a_disconnected_account_is_stopped(side: str) -> None:
     accounts = tuple(
@@ -414,3 +440,48 @@ def test_a_review_worthy_incident_wins_over_a_waiting_one_regardless_of_order() 
         assert len(status.problems) == 1
         assert status.problems[0].kind is ProblemKind.REVIEW
         assert status.problems[0].rule_id == "rule-1"
+
+
+LAPSED = (
+    AccountStanding("personal-account", "connected", "google"),
+    AccountStanding("work-account", "connected", "google", lapsed=True),
+)
+
+
+def test_rules_a_lapsed_account_stops_need_reauthorization_and_name_no_account() -> None:
+    stopped = _rule("rule-1", SyncRuleState.DEGRADED)
+    running = _rule("rule-2")
+    account_incident = replace(
+        _incident(None, "authentication"), id="incident-account", account_id="work-account"
+    )
+
+    status = _assess(
+        [_summary(stopped), _summary(running)],
+        _overview(accounts=LAPSED, open_incidents=1),
+        (account_incident,),
+    )
+
+    assert status.health is InstallationHealth.STOPPED
+    # The account's Incident is covered by the rules it stopped, so it is not a problem itself.
+    assert [(p.kind, p.rule_id) for p in status.problems] == [
+        (ProblemKind.STOPPED, "rule-1"),
+        (ProblemKind.STOPPED, "rule-2"),
+    ]
+    assert [p.message for p in status.problems] == [
+        IncidentMessage("authorization_lapsed", {"provider": "google"})
+    ] * 2
+    assert "@" not in status.summary
+    assert status.overview.lapsed_accounts == 1
+
+
+def test_a_lapsed_account_no_rule_uses_is_still_a_problem_to_review() -> None:
+    account_incident = replace(
+        _incident(None, "authentication"), id="incident-account", account_id="work-account"
+    )
+    paused = _rule("rule-1", SyncRuleState.PAUSED)
+
+    status = _assess(
+        [_summary(paused)], _overview(accounts=LAPSED, open_incidents=1), (account_incident,)
+    )
+
+    assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.REVIEW, None)]

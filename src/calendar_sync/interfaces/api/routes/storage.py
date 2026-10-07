@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated, Protocol
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.responses import StreamingResponse
 
 from calendar_sync.application.errors import FileLoggingOff, InvalidActivityAge, StorageBusy
 from calendar_sync.application.ports import DatabaseUsage, LogUsage
 from calendar_sync.application.storage import ACTIVITY_AGES, StorageAdministration
 from calendar_sync.interfaces.api.dependencies import app_services, require_admin
+from calendar_sync.interfaces.api.problems import problem_from
 from calendar_sync.interfaces.api.schemas import (
     ClearableActivityResponse,
     ClearActivityRequest,
@@ -49,7 +50,7 @@ def clearable_activity(
     try:
         entries = services.storage.clearable_activity(older_than_days)
     except InvalidActivityAge as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     return ClearableActivityResponse(older_than_days=older_than_days, entries=entries)
 
 
@@ -62,9 +63,9 @@ def clear_activity(services: Services, payload: ClearActivityRequest) -> Cleared
     try:
         cleared = services.storage.clear_activity(payload.older_than_days)
     except InvalidActivityAge as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except StorageBusy as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
     return ClearedActivityResponse(removed=cleared.removed, database=_database(cleared.database))
 
 
@@ -73,7 +74,7 @@ def download_logs(services: Services) -> StreamingResponse:
     try:
         chunks = services.storage.log_chunks()
     except FileLoggingOff as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     name = f"calendar-sync-logs-{datetime.now(UTC):%Y-%m-%d}.txt"
     return StreamingResponse(
         chunks,
@@ -87,7 +88,7 @@ def purge_logs(services: Services) -> Response:
     try:
         services.storage.purge_logs()
     except FileLoggingOff as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

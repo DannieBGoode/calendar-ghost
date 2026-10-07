@@ -4,13 +4,14 @@ import asyncio
 from collections.abc import Callable, Mapping
 from typing import Annotated, Any, Protocol
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from calendar_sync.application.errors import (
     ApplicationError,
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
+    ProviderFailure,
     RemovalInterrupted,
     RemovalRequiresProvider,
     ReplacementInterrupted,
@@ -47,6 +48,7 @@ from calendar_sync.domain.model import (
     UnansweredInvitationPolicy,
 )
 from calendar_sync.interfaces.api.dependencies import app_services, available, require_admin
+from calendar_sync.interfaces.api.problems import ApiProblem, problem, problem_from
 from calendar_sync.interfaces.api.schemas import (
     CalendarEndpointPayload,
     CreateRuleRequest,
@@ -135,9 +137,9 @@ def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
             _endpoint(request.source), _endpoint(request.destination), transformation
         )
     except DomainValidationError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except (ConnectedAccountRequired, DuplicateDirectionalRelationship) as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
     return _rule_response(rule)
 
 
@@ -149,12 +151,13 @@ def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
 async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
     execute_sync_rule = available(
         services.execute_sync_rule,
+        "rule_execution_unavailable",
         "configure a calendar provider and the installation master key before synchronizing",
     )
     try:
         result = await asyncio.to_thread(execute_sync_rule.execute, SyncRuleId(rule_id))
     except RuleNotExecutable as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
     return SyncResultResponse(
         rule_id=result.rule_id.value,
         created=result.created,
@@ -173,12 +176,13 @@ async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
 async def reconcile_now(rule_id: str, services: Services) -> ReconcileResultResponse:
     reconcile = available(
         services.reconcile_now,
+        "rule_execution_unavailable",
         "configure a calendar provider and the installation master key before reconciling",
     )
     try:
         reconciled = await asyncio.to_thread(reconcile.execute, SyncRuleId(rule_id))
     except RuleNotExecutable as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
     result, report = reconciled.sync, reconciled.report
     return ReconcileResultResponse(
         rule_id=result.rule_id.value,
@@ -205,12 +209,16 @@ async def reconcile_now(rule_id: str, services: Services) -> ReconcileResultResp
 async def preview_rule(rule_id: str, services: Services) -> RulePreviewResponse:
     preview_sync_rule = available(
         services.preview_sync_rule,
+        "rule_execution_unavailable",
         "configure a calendar provider and the installation master key before previewing",
     )
     try:
         preview = await asyncio.to_thread(preview_sync_rule.execute, SyncRuleId(rule_id))
     except RuleNotExecutable as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except ProviderFailure as error:
+        # The provider refused to list the source; a lapsed authorization is already recorded.
+        raise problem_from(status.HTTP_424_FAILED_DEPENDENCY, error) from error
     return RulePreviewResponse(
         rule_id=preview.rule_id.value,
         eligible_events=preview.eligible_events,
@@ -257,7 +265,7 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
     try:
         details = services.get_sync_rule_details.execute(SyncRuleId(rule_id))
     except RuleNotFound as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     return RuleDetailResponse(
         **_named_rule_response(details.rule, details.names),
         initial_lookback_days=details.rule.initial_lookback_days,
@@ -288,9 +296,9 @@ def change_rule_policy(
             unanswered=UnansweredInvitationPolicy(request.unanswered_invitations),
         )
     except RuleNotFound as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, str(error)) from error
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except InvalidStateTransition as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
     return _rule_response(rule)
 
 
@@ -309,7 +317,7 @@ async def remove_rule(
             ProjectionHandling(projections),
         )
     except ApplicationError as error:
-        raise _rule_change_http_error(error) from error
+        raise _rule_change_problem(error) from error
     return RemovalResponse(
         deleted=result.deleted, detached=result.detached, conflicts=result.conflicts
     )
@@ -333,9 +341,9 @@ async def replace_rule_calendars(
             ProjectionHandling(request.projections),
         )
     except DomainValidationError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except ApplicationError as error:
-        raise _rule_change_http_error(error) from error
+        raise _rule_change_problem(error) from error
     return RuleReplacementResponse(
         rule=_rule_response(replacement.rule),
         deleted=replacement.removal.deleted,
@@ -348,9 +356,11 @@ def _lifecycle_change(change: Callable[[SyncRuleId], SyncRule], rule_id: str) ->
     try:
         return change(SyncRuleId(rule_id))
     except RuleNotFound as error:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "sync rule does not exist") from error
+        raise problem(
+            status.HTTP_404_NOT_FOUND, "rule_not_found", "sync rule does not exist"
+        ) from error
     except InvalidStateTransition as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
 
 
 def _preview_response(summary: RulePreviewSummary | None) -> PreviewSummaryResponse | None:
@@ -443,14 +453,14 @@ def _outcome_response(outcome: RuleRunOutcome | None) -> RunOutcomeResponse | No
     )
 
 
-def _rule_change_http_error(error: ApplicationError) -> HTTPException:
+def _rule_change_problem(error: ApplicationError) -> ApiProblem:
     """Map removal and replacement failures; the remaining ones need administrator action."""
     if isinstance(error, RuleNotFound):
-        return HTTPException(status.HTTP_404_NOT_FOUND, str(error))
+        return problem_from(status.HTTP_404_NOT_FOUND, error)
     if isinstance(error, RemovalRequiresProvider):
-        return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(error))
+        return problem_from(status.HTTP_503_SERVICE_UNAVAILABLE, error)
     if isinstance(error, RemovalInterrupted | ReplacementInterrupted):
-        return HTTPException(status.HTTP_424_FAILED_DEPENDENCY, str(error))
+        return problem_from(status.HTTP_424_FAILED_DEPENDENCY, error)
     if isinstance(error, NotACalendarChange):
-        return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error))
-    return HTTPException(status.HTTP_409_CONFLICT, str(error))
+        return problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error)
+    return problem_from(status.HTTP_409_CONFLICT, error, fallback="conflict")

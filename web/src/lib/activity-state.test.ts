@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
+
 import entryDetailsSource from "../features/activity-entry-details.tsx?raw"
 import tableSource from "../features/activity-table.tsx?raw"
 import viewSource from "../features/activity.tsx?raw"
@@ -10,8 +12,11 @@ const activitySource = [viewSource, tableSource, entryDetailsSource, historySour
 
 describe("Activity view states", () => {
   it("keeps successful empty activity distinct from a recoverable request failure", () => {
-    expect(activitySource).toContain("No activity yet")
-    expect(activitySource).toContain("Activity is temporarily unavailable")
+    expect(activitySource).toContain('t("activity.empty.none.title")')
+    expect(activitySource).toContain('t("activity.failure.title")')
+    const { t } = testI18n()
+    expect(t("activity.empty.none.title")).toBe("No activity yet")
+    expect(t("activity.failure.title")).toBe("Activity is temporarily unavailable")
     expect(activitySource).toContain("activity.refetch()")
     expect(activitySource).toContain("incidents.refetch()")
   })
@@ -28,7 +33,7 @@ describe("activity for removed rules", () => {
   it("explains why events of a removed rule cannot be looked up", () => {
     expect(activitySource).toContain("entryInspection(entry, exists)")
     expect(activitySource).toContain("REMOVED_RULE_LOOKUP")
-    expect(activitySource).toContain("eventLookupFailure(event.error)")
+    expect(activitySource).toContain("eventLookupFailure(i18n, event.error)")
   })
 })
 

@@ -1,6 +1,6 @@
 """Every calendar request reaches its account's adapter with its arguments unchanged (ADR 0022)."""
 
-# Regression: ISSUE-001 — a router method that swapped or dropped arguments passed every test
+# Regression: ISSUE-001: a router method that swapped or dropped arguments passed every test
 # Found by /qa on 2026-10-03
 # Report: .context/qa-reports/run-20261003T172929Z/qa-report-provider-routing-2026-10-03.md
 

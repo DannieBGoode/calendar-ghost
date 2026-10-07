@@ -1,16 +1,20 @@
 import { useQueries, useQuery } from "@tanstack/react-query"
 
+import { useI18n } from "@/i18n/provider"
 import { api, type ConnectedAccount, type DiscoveredCalendar, type Rule } from "@/lib/api"
+import { needsReauthorization } from "@/lib/account-summary"
 import { ruleEndpointLabel } from "@/lib/rule-endpoint"
 
 export type RuleEndpoints = {
   source: { account: ConnectedAccount | undefined; calendars: DiscoveredCalendar[] | undefined; name: string }
   destination: { account: ConnectedAccount | undefined; calendars: DiscoveredCalendar[] | undefined; name: string }
-  disconnected: ConnectedAccount[]
+  /** Accounts of the rule to reauthorize: disconnected, or no longer accepted by Google. */
+  unauthorized: ConnectedAccount[]
 }
 
 /** Accounts and calendar names for a set of rules, fetched once per account rather than per rule. */
 export function useRuleEndpoints(rules: Pick<Rule, "source" | "destination">[]) {
+  const i18n = useI18n()
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const accountsById = new Map((accounts.data ?? []).map((account) => [account.id, account]))
   const accountIds = [
@@ -33,15 +37,17 @@ export function useRuleEndpoints(rules: Pick<Rule, "source" | "destination">[]) 
     const side = (endpoint: Rule["source"]) => {
       const account = accountsById.get(endpoint.connected_account_id)
       const calendars = calendarsByAccount.get(endpoint.connected_account_id)
-      return { account, calendars, name: ruleEndpointLabel(endpoint, account, calendars).calendar }
+      return { account, calendars, name: ruleEndpointLabel(i18n, endpoint, account, calendars).calendar }
     }
     const source = side(rule.source)
     const destination = side(rule.destination)
-    const disconnected = [source.account, destination.account].filter(
+    const unauthorized = [source.account, destination.account].filter(
       (account, index, all): account is ConnectedAccount =>
-        account?.state === "disconnected" && all.findIndex((candidate) => candidate?.id === account.id) === index,
+        account !== undefined &&
+        needsReauthorization(account) &&
+        all.findIndex((candidate) => candidate?.id === account.id) === index,
     )
-    return { source, destination, disconnected }
+    return { source, destination, unauthorized }
   }
 
   return { accounts, endpoints }

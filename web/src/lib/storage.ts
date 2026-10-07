@@ -1,57 +1,20 @@
+import { apiErrorMessage } from "@/i18n/api-errors"
+import type { I18n } from "@/i18n/translator"
 import type { DatabaseUsage, LogUsage } from "@/lib/api"
 
-const UNITS = ["KB", "MB", "GB", "TB"]
-
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${Math.round(bytes)} B`
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < UNITS.length - 1) {
-    value /= 1024
-    unit += 1
+export function activitySummary({ t, format }: I18n, usage: DatabaseUsage): string {
+  const size = format.bytes(usage.bytes)
+  const reclaimable = usage.reclaimable_bytes > 0 ? format.bytes(usage.reclaimable_bytes) : null
+  if (usage.activity_entries === 0 || !usage.oldest_activity_at) {
+    return reclaimable
+      ? t("settings.storage.summary.emptyReclaimable", { size, reclaimable })
+      : t("settings.storage.summary.empty", { size })
   }
-  return `${value.toFixed(1)} ${UNITS[unit]}`
-}
-
-// A fixed 3-letter table, because some locales (e.g. en-GB) spell September "Sept" in CLDR's
-// short-month data; this keeps the abbreviation consistent regardless of locale.
-const SHORT_MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-]
-
-function day(value: string, locale?: string, withYear = true): string {
-  const date = new Date(value)
-  const parts = new Intl.DateTimeFormat(locale, {
-    day: "numeric",
-    month: "short",
-    ...(withYear ? { year: "numeric" } : {}),
-    timeZone: "UTC",
-  }).formatToParts(date)
-  return parts
-    .map((part) => (part.type === "month" ? SHORT_MONTHS[date.getUTCMonth()] : part.value))
-    .join("")
-}
-
-export function activitySummary(usage: DatabaseUsage, locale?: string): string {
-  const size = formatBytes(usage.bytes)
-  const reclaimable =
-    usage.reclaimable_bytes > 0 ? ` · ${formatBytes(usage.reclaimable_bytes)} can be reclaimed` : ""
-  if (usage.activity_entries === 0 || !usage.oldest_activity_at)
-    return `${size} · No Activity yet${reclaimable}`
-  const count = usage.activity_entries.toLocaleString(locale ?? "en-US")
-  const noun = usage.activity_entries === 1 ? "Activity entry" : "Activity entries"
-  return `${size} · ${count} ${noun} since ${day(usage.oldest_activity_at, locale)}${reclaimable}`
+  const count = usage.activity_entries
+  const day = format.shortDay(usage.oldest_activity_at)
+  return reclaimable
+    ? t("settings.storage.summary.entriesReclaimable", { size, count, day, reclaimable })
+    : t("settings.storage.summary.entries", { size, count, day })
 }
 
 // Clearing compacts the database even when nothing is old enough, so space left by an earlier
@@ -60,11 +23,15 @@ export function canClearActivity(usage: DatabaseUsage): boolean {
   return usage.activity_entries > 0 || usage.reclaimable_bytes > 0
 }
 
-export function logSummary(usage: LogUsage | null, locale?: string): string {
-  if (usage === null) return "File logging is off. Recent lines are still in the container logs, which rotate."
-  if (usage.files === 0 || !usage.oldest_at || !usage.newest_at) return "No log lines yet"
+export function logSummary({ t, format }: I18n, usage: LogUsage | null): string {
+  if (usage === null) return t("settings.storage.logs.off")
+  if (usage.files === 0 || !usage.oldest_at || !usage.newest_at) return t("settings.storage.logs.empty")
   const sameYear = usage.oldest_at.slice(0, 4) === usage.newest_at.slice(0, 4)
-  return `${formatBytes(usage.bytes)} · ${day(usage.oldest_at, locale, !sameYear)} – ${day(usage.newest_at, locale)}`
+  return t("settings.storage.logs.range", {
+    size: format.bytes(usage.bytes),
+    first: format.shortDay(usage.oldest_at, !sameYear),
+    last: format.shortDay(usage.newest_at),
+  })
 }
 
 export type ClearActivityConfirmation = {
@@ -75,46 +42,39 @@ export type ClearActivityConfirmation = {
 }
 
 export function clearActivityConfirmation(
+  { t, format }: I18n,
   entries: number,
   days: number,
   reclaimableBytes: number,
 ): ClearActivityConfirmation {
-  const clearing = { confirmLabel: "Clear Activity", pendingLabel: "Clearing…" }
+  const clearing = { confirmLabel: t("settings.storage.clear.action"), pendingLabel: t("settings.storage.clear.pending") }
   if (entries > 0) {
-    const count = entries.toLocaleString("en-US")
-    const noun = entries === 1 ? "Activity entry" : "Activity entries"
-    return {
-      ...clearing,
-      body: `${count} ${noun} older than ${days} days will be removed. Each event's latest entry is kept. This cannot be undone.`,
-      canConfirm: true,
-    }
+    return { ...clearing, body: t("settings.storage.clear.body", { count: entries, days }), canConfirm: true }
   }
   if (reclaimableBytes > 0) {
     return {
-      body: `Nothing is older than ${days} days. ${formatBytes(reclaimableBytes)} left by earlier clearing can still be reclaimed.`,
-      confirmLabel: "Reclaim space",
-      pendingLabel: "Reclaiming…",
+      body: t("settings.storage.clear.nothingOldReclaimable", { count: days, size: format.bytes(reclaimableBytes) }),
+      confirmLabel: t("settings.storage.clear.reclaim"),
+      pendingLabel: t("settings.storage.clear.reclaiming"),
       canConfirm: true,
     }
   }
-  return { ...clearing, body: `Nothing is older than ${days} days.`, canConfirm: false }
+  return { ...clearing, body: t("settings.storage.clear.nothingOld", { count: days }), canConfirm: false }
 }
 
-export function countFailedConfirmation(message: string): ClearActivityConfirmation {
+/** The count failed: say why, and offer to count again. */
+export function countFailedConfirmation(i18n: I18n, error: unknown): ClearActivityConfirmation {
   return {
-    body: `The entries to remove could not be counted: ${message}`,
-    confirmLabel: "Count again",
-    pendingLabel: "Counting…",
+    body: i18n.t("settings.storage.clear.countFailed", { reason: apiErrorMessage(i18n, error) }),
+    confirmLabel: i18n.t("settings.storage.clear.countAgain"),
+    pendingLabel: i18n.t("settings.storage.clear.countingAgain"),
     canConfirm: true,
   }
 }
 
-export function clearedActivityMessage(removed: number, reclaimableBefore: number): string {
+export function clearedActivityMessage({ t }: I18n, removed: number, reclaimableBefore: number): string {
   if (removed === 0) {
-    return reclaimableBefore > 0
-      ? "The space left by earlier clearing was reclaimed."
-      : "Nothing was old enough to clear."
+    return reclaimableBefore > 0 ? t("settings.storage.clear.reclaimed") : t("settings.storage.clear.nothingCleared")
   }
-  const noun = removed === 1 ? "Activity entry was" : "Activity entries were"
-  return `${removed.toLocaleString("en-US")} ${noun} cleared.`
+  return t("settings.storage.clear.cleared", { count: removed })
 }

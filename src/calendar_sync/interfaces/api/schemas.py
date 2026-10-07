@@ -196,11 +196,20 @@ class RuleReplacementResponse(ApiResponse):
     conflicts: int
 
 
+class IncidentMessageResponse(ApiResponse):
+    """What an Incident says as a stable code and parameters the Web UI translates (ADR 0026)."""
+
+    code: str
+    params: dict[str, str | int | None]
+
+
 class ProblemResponse(ApiResponse):
     kind: ProblemKindValue
     rule_id: str | None
     summary: str
     since: str | None
+    message: IncidentMessageResponse | None
+    """The message of the Incident behind the problem; None when no Incident names it."""
 
 
 class DashboardResponse(ApiResponse):
@@ -209,6 +218,8 @@ class DashboardResponse(ApiResponse):
     problems: list[ProblemResponse]
     connected_accounts: int
     disconnected_accounts: int
+    lapsed_accounts: int
+    """Connected accounts whose authorization lapsed and that need reauthorization."""
     sync_rules: int
     enabled_rules: int
     stopped_rules: int
@@ -234,6 +245,9 @@ class ConnectedAccountResponse(ApiResponse):
     state: str
     rule_count: int
     authorized_at: str | None
+    authorization_lapsed_at: str | None
+    """While the provider refuses the account, when the latest refused request began; null while
+    it accepts it (ADR 0027)."""
 
 
 class GoogleAccountAccessResponse(ApiResponse):
@@ -242,6 +256,8 @@ class GoogleAccountAccessResponse(ApiResponse):
     event_access: bool
     calendars_visible: int
     writable_calendars: int
+    rules_resumed: int
+    """Rules that Lapsed Authorization alone had stopped, resumed because the check passed."""
 
 
 class DiscoveredCalendarResponse(ApiResponse):
@@ -338,6 +354,8 @@ class IncidentResponse(ApiResponse):
     resolved_at: str | None
     resolution: IncidentResolutionValue | None
     account_id: str | None
+    message: IncidentMessageResponse | None
+    """None for an Incident recorded before messages, or one whose message is unreadable."""
 
 
 class DatabaseUsageResponse(ApiResponse):
@@ -399,6 +417,8 @@ class StatusCountsResponse(ApiResponse):
     open_incidents: int
     blocked_events: int
     disconnected_accounts: int
+    lapsed_accounts: int
+    """Connected accounts whose authorization lapsed and that need reauthorization."""
 
 
 class StatusCalendarResponse(ApiResponse):

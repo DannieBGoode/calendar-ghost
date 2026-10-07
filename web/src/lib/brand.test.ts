@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs"
 
 import { describe, expect, it } from "vitest"
 
-import { APP_VERSION, PRODUCT_NAME, SOURCE_URL, TAGLINE, documentTitle } from "./brand"
+import { APP_VERSION, PRODUCT_NAME, SOURCE_URL, documentTitle } from "./brand"
+import { testI18n } from "../i18n/testing"
 
 const stylesheet = readFileSync(new URL("../index.css", import.meta.url), "utf8")
 const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8")
@@ -12,8 +13,8 @@ const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.ur
 describe("brand", () => {
   it("names the product and its pages", () => {
     expect(PRODUCT_NAME).toBe("Calendar Ghost")
-    expect(TAGLINE).toBe("Your busy time, everywhere it needs to be.")
-    expect(documentTitle("Rules")).toBe("Rules – Calendar Ghost")
+    expect(testI18n().t("auth.tagline")).toBe("Your busy time, everywhere it needs to be.")
+    expect(documentTitle(testI18n(), "Rules")).toBe("Rules – Calendar Ghost")
   })
 
   it("shows the version the bundle was built from", () => {

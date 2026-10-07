@@ -77,7 +77,7 @@ def test_unknown_api_paths_return_not_found_instead_of_the_web_page(
     assert response.status_code == 404
     assert "allow" not in response.headers
     if method != "HEAD":
-        assert response.json() == {"detail": "Not Found"}
+        assert response.json() == {"detail": "Not Found", "code": "not_found", "params": {}}
 
 
 @pytest.mark.parametrize(
@@ -98,7 +98,11 @@ def test_known_api_routes_keep_their_method_errors(
         response = client.request(method, path)
 
     assert response.status_code == 405
-    assert response.json() == {"detail": "Method Not Allowed"}
+    assert response.json() == {
+        "detail": "Method Not Allowed",
+        "code": "method_not_allowed",
+        "params": {},
+    }
     assert response.headers["allow"] == allow
 
 

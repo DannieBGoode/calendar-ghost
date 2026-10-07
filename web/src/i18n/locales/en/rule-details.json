@@ -1,0 +1,392 @@
+{
+  "page": {
+    "back": "All rules",
+    "loading": "Loading rule",
+    "heading": "{source} to {destination}",
+    "removedTitle": "Rule removed",
+    "removedBody": "Its removal finished. Activity lists what happened to each of its events.",
+    "missingTitle": "This rule no longer exists",
+    "missingBody": "It may have been removed or replaced. Return to the rules list to continue.",
+    "loadFailedTitle": "Rule details could not load",
+    "loadFailedBody": "Check that the local service is running, then try again.",
+    "tryAgain": "Try again",
+    "reprojectionRequired": {
+      "one": "<strong>Preview required.</strong> The policy changed. Preview this rule, then start syncing; {count} existing projection will be rewritten on the next run.",
+      "other": "<strong>Preview required.</strong> The policy changed. Preview this rule, then start syncing; {count} existing projections will be rewritten on the next run."
+    }
+  },
+  "facts": {
+    "title": "What this rule does",
+    "eventInformation": "Event information",
+    "busyOnly": "Busy only: titles, descriptions, and locations stay private",
+    "copyDetails": "Title, description, and location are copied",
+    "allDay": "All-day events",
+    "allDayIncluded": "Included",
+    "allDayExcluded": "Excluded; timed events only",
+    "tentative": "Events you answered Maybe",
+    "unanswered": "Invitations you haven't answered",
+    "declined": "Declined events",
+    "declinedValue": "Not synced",
+    "startingPoint": "Starting point",
+    "startingPointValue": {
+      "one": "Includes events from the past {count} day onward",
+      "other": "Includes events from the past {count} days onward"
+    },
+    "projections": "Projections",
+    "projectionsValue": {
+      "one": "{count} projection this rule manages in {destination}",
+      "other": "{count} projections this rule manages in {destination}"
+    }
+  },
+  "runs": {
+    "title": "Latest runs",
+    "activityLink": "This rule's activity",
+    "lastSync": "Last sync",
+    "syncExplanation": "Applies changes made in {source} since the previous run. Runs every five minutes.",
+    "lastReconciliation": "Last reconciliation",
+    "reconciliationExplanation": {
+      "one": "Compares the events this rule wrote to {destination} from the past {count} day onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now.",
+      "other": "Compares the events this rule wrote to {destination} from the past {count} days onward with their sources and reports any that differ, without changing them. Runs when you choose Reconcile now."
+    }
+  },
+  "outcome": {
+    "notRun": "Not run yet",
+    "failed": "Failed: {reason}",
+    "succeeded": "Succeeded: {created} created, {updated} updated, {deleted} deleted",
+    "succeededWithConflicts": {
+      "one": "Succeeded: {created} created, {updated} updated, {deleted} deleted, {count} conflict",
+      "other": "Succeeded: {created} created, {updated} updated, {deleted} deleted, {count} conflicts"
+    },
+    "projectionCount": {
+      "one": "{count} projection",
+      "other": "{count} projections"
+    },
+    "conflictsBlocked": {
+      "one": "{count} conflict blocked",
+      "other": "{count} conflicts blocked"
+    },
+    "allMatched": {
+      "one": "All {count} projection matched their sources",
+      "other": "All {count} projections matched their sources"
+    },
+    "checkedBlocked": "Checked {projections}: {blocked}",
+    "drift": {
+      "one": "Checked {projections}: {count} difference found; it was not changed",
+      "other": "Checked {projections}: {count} differences found; none were changed"
+    },
+    "driftBlocked": {
+      "one": "Checked {projections}: {count} difference found; it was not changed. {blocked}",
+      "other": "Checked {projections}: {count} differences found; none were changed. {blocked}"
+    }
+  },
+  "failure": {
+    "authentication": "Google authorization expired",
+    "authorization": "Google calendar access was denied",
+    "rateLimit": "Google Calendar was limiting requests",
+    "temporary": "Google Calendar was temporarily unavailable",
+    "permanent": "Google Calendar rejected the request",
+    "unknown": "Local synchronization failed"
+  },
+  "state": {
+    "draft": "Draft",
+    "dryRunValidated": "Preview passed",
+    "enabled": "Enabled",
+    "paused": "Paused",
+    "degraded": "Stopped",
+    "disabled": "Removal incomplete",
+    "removing": "Removing"
+  },
+  "policy": {
+    "title": "What {destination} shows",
+    "intro": "A change stops the rule from writing until you preview it again.",
+    "change": "Change policy",
+    "eventInformation": "Event information",
+    "busyOnly": "Busy only (recommended)",
+    "copyDetails": "Copy title, description, and location",
+    "allDay": "Sync all-day events",
+    "allDayHint": "Turn this off to synchronize timed events only.",
+    "widensTitle": "Everyone who can see {destination} will see event details",
+    "consequencesTitle": "What happens when you save",
+    "saving": "Saving…",
+    "saveWidens": "Show event details in {destination}",
+    "save": "Save policy change",
+    "cancel": "Cancel",
+    "saved": "Policy saved. Preview the rule to start syncing with the new policy."
+  },
+  "change": {
+    "state": {
+      "enabled": "Synchronization pauses now. Preview the rule, then enable it again.",
+      "paused": "The rule stays paused. Preview it before enabling it again.",
+      "degraded": "The rule stays stopped until recovery. Its recovery preview also validates the new policy.",
+      "draft": "The rule returns to draft. Preview it before enabling it."
+    },
+    "exposeExisting": {
+      "one": "{count} existing projection in {destination} will show event titles, descriptions, and locations after the next run, to anyone who can see {destination}.",
+      "other": "{count} existing projections in {destination} will show event titles, descriptions, and locations after the next run, to anyone who can see {destination}."
+    },
+    "exposeNew": "New projections in {destination} will show event titles, descriptions, and locations to anyone who can see it.",
+    "redactExisting": {
+      "one": "{count} existing projection in {destination} will be rewritten as “{title}”, removing titles, descriptions, and locations.",
+      "other": "{count} existing projections in {destination} will be rewritten as “{title}”, removing titles, descriptions, and locations."
+    },
+    "allDayRemoved": "All-day projections in {destination} will be deleted on the next run.",
+    "allDayAdded": "All-day source events will be added to {destination} on the next run.",
+    "nothingChanges": "Nothing changes in Google Calendar until the rule is enabled again."
+  },
+  "projections": {
+    "legend": "Projections this rule wrote",
+    "delete": {
+      "one": "Delete {count} projection from {destination} (recommended)",
+      "other": "Delete {count} projections from {destination} (recommended)"
+    },
+    "deleteHint": "Only events this rule manages are deleted.",
+    "deleteUnavailable": "Reauthorize the destination account in Settings to delete projections.",
+    "keep": "Keep them as ordinary events",
+    "keepHint": "They stay in {destination} and are never updated or deleted again.",
+    "consequence": {
+      "delete": {
+        "one": "{count} projection this rule wrote will be deleted from {destination}. Source events are not changed. Any event whose ownership cannot be verified is left in place. This cannot be undone.",
+        "other": "{count} projections this rule wrote will be deleted from {destination}. Source events are not changed. Any event whose ownership cannot be verified is left in place. This cannot be undone."
+      },
+      "detach": {
+        "one": "{count} projection stay in {destination} as ordinary events that are no longer updated or deleted. This cannot be undone.",
+        "other": "{count} projections stay in {destination} as ordinary events that are no longer updated or deleted. This cannot be undone."
+      }
+    }
+  },
+  "endpointFields": {
+    "account": "Google account",
+    "accountOption": "{name} ({email})",
+    "calendar": "Calendar",
+    "writableCalendar": "Calendar you can edit",
+    "chooseCalendar": "Choose a calendar"
+  },
+  "replacement": {
+    "title": "Calendars",
+    "intro": "Changing a calendar removes this rule and creates a new draft with the same policy.",
+    "open": "Replace calendars…",
+    "sourceLegend": "Source calendar",
+    "destinationLegend": "Destination calendar",
+    "sameEndpoint": "Choose a destination different from the source calendar.",
+    "review": "Review replacement",
+    "cancel": "Cancel",
+    "confirmTitle": "Remove this rule and create a new draft?",
+    "confirmBody": "{consequence} The new draft keeps this rule's policy and needs a preview before it can be enabled.",
+    "keep": "Keep current rule",
+    "pending": "Replacing…",
+    "replaced": "Calendars replaced. This is the new draft rule; preview it before it starts syncing.",
+    "confirm": {
+      "replace": "Replace rule",
+      "delete": {
+        "one": "Replace rule and delete {count} projection",
+        "other": "Replace rule and delete {count} projections"
+      },
+      "keep": {
+        "one": "Replace rule and keep {count} event",
+        "other": "Replace rule and keep {count} events"
+      }
+    }
+  },
+  "removal": {
+    "activeTitle": "Removing rule",
+    "incompleteTitle": "Removal incomplete",
+    "title": "Remove rule",
+    "activeBody": "The rule no longer synchronizes. Source events are never changed. Removal continues if you leave this page.",
+    "incompleteBody": {
+      "one": "Removal stopped with {count} projection left. Retry to finish; the rule does not synchronize meanwhile.",
+      "other": "Removal stopped with {count} projections left. Retry to finish; the rule does not synchronize meanwhile."
+    },
+    "body": "Removing a rule is permanent. Source events are never changed.",
+    "open": "Remove rule…",
+    "retry": "Retry removal",
+    "keep": "Keep rule",
+    "connectionLost": "The connection closed before the removal finished. It may still be running, so wait a minute, then check this page before retrying.",
+    "confirm": {
+      "remove": "Remove rule",
+      "delete": {
+        "one": "Remove rule and delete {count} projection",
+        "other": "Remove rule and delete {count} projections"
+      },
+      "keep": {
+        "one": "Remove rule and keep {count} event",
+        "other": "Remove rule and keep {count} events"
+      }
+    },
+    "progress": {
+      "removing": "Removing the rule…",
+      "keeping": {
+        "one": "Keeping {count} event in {destination} as ordinary events…",
+        "other": "Keeping {count} events in {destination} as ordinary events…"
+      },
+      "handled": {
+        "one": "Handled {done} of {count} projection in {destination}",
+        "other": "Handled {done} of {count} projections in {destination}"
+      }
+    },
+    "outcome": {
+      "removed": "The rule was removed.",
+      "deleted": {
+        "one": "{count} projection was deleted from {destination}.",
+        "other": "{count} projections were deleted from {destination}."
+      },
+      "detached": {
+        "one": "{count} event stays in {destination} as a Detached Event.",
+        "other": "{count} events stay in {destination} as Detached Events."
+      },
+      "conflicts": {
+        "one": "{count} event was left in {destination} because its ownership could not be verified. Review it in Activity under Blocked.",
+        "other": "{count} events were left in {destination} because their ownership could not be verified. Review them in Activity under Blocked."
+      },
+      "unknown": "The rule was removed. Any events left in {destination} because their ownership could not be verified are listed in Activity under Blocked."
+    }
+  },
+  "elapsed": {
+    "seconds": "{seconds} s",
+    "minutes": "{minutes} min {seconds} s"
+  },
+  "run": {
+    "notSynced": "Not synced yet",
+    "lastSynced": "Last synced {when}",
+    "lastSyncFailed": "Last sync failed {when}: {reason}",
+    "created": {
+      "one": "{count} created",
+      "other": "{count} created"
+    },
+    "updated": {
+      "one": "{count} updated",
+      "other": "{count} updated"
+    },
+    "deleted": {
+      "one": "{count} deleted",
+      "other": "{count} deleted"
+    },
+    "synced": "Synced: {changes}.",
+    "upToDate": "Up to date. Nothing changed since the last run.",
+    "withBlocked": {
+      "one": "{result} {count} conflict blocked; see Activity.",
+      "other": "{result} {count} conflicts blocked; see Activity."
+    },
+    "checked": {
+      "one": "Checked {count} event this rule wrote to {destination}.",
+      "other": "Checked {count} events this rule wrote to {destination}."
+    },
+    "checkedAllMatch": {
+      "one": "Checked {count} event this rule wrote to {destination}: every one matches its source event.",
+      "other": "Checked {count} events this rule wrote to {destination}: every one matches its source event."
+    },
+    "checkedSeries": {
+      "one": "Checked {count} event this rule wrote to {destination} (a recurring series counts once).",
+      "other": "Checked {count} events this rule wrote to {destination} (a recurring series counts once)."
+    },
+    "differencesRemain": {
+      "one": "{count} difference remains after the sync: {differences}.",
+      "other": "{count} differences remain after the sync: {differences}."
+    },
+    "settleAgain": {
+      "one": "If Reconcile now finds it again, Calendar Ghost can't settle it on its own.",
+      "other": "If Reconcile now finds them again, Calendar Ghost can't settle them on its own."
+    },
+    "drift": {
+      "missing": {
+        "one": "{count} missing from {destination}",
+        "other": "{count} missing from {destination}"
+      },
+      "incorrectProjection": {
+        "one": "{count} different from its source event",
+        "other": "{count} different from their source events"
+      },
+      "unexpected": {
+        "one": "{count} still in {destination} though its source event was cancelled or excluded",
+        "other": "{count} still in {destination} though their source events were cancelled or excluded"
+      },
+      "unknown": {
+        "one": "{count} other",
+        "other": "{count} other"
+      }
+    },
+    "previewNone": "Start syncing to show events in {destination}.",
+    "previewed": {
+      "one": "Previewed {when}: {count} event will appear in {destination}.",
+      "other": "Previewed {when}: {count} events will appear in {destination}."
+    },
+    "previewedExcluded": {
+      "one": "Previewed {when}: {count} event will appear in {destination}, {excluded} excluded.",
+      "other": "Previewed {when}: {count} events will appear in {destination}, {excluded} excluded."
+    },
+    "enabled": "Enabled. The first sync to {destination} runs within five minutes, or choose Sync now.",
+    "paused": "Paused. Existing events stay in {destination}. Preview the rule again to resume.",
+    "recovery": {
+      "authentication": "Google authorization expired {when}, so Calendar Ghost stopped this rule to be safe.",
+      "authorization": "Google calendar access was denied {when}, so Calendar Ghost stopped this rule to be safe.",
+      "rateLimit": "Google Calendar was limiting requests {when}, so Calendar Ghost stopped this rule to be safe.",
+      "temporary": "Google Calendar was temporarily unavailable {when}, so Calendar Ghost stopped this rule to be safe.",
+      "permanent": "Google Calendar rejected a request {when}, so Calendar Ghost stopped this rule to be safe.",
+      "unknown": "A sync could not finish {when}, so Calendar Ghost stopped this rule to be safe.",
+      "noFailure": "Calendar Ghost stopped this rule to be safe.",
+      "next": "Nothing was lost. Preview it to check both calendars, then start syncing again."
+    }
+  },
+  "preview": {
+    "summary": "Preview found {eligible} eligible and {excluded} excluded events.",
+    "summaryIncluding": "Preview found {eligible} eligible and {excluded} excluded events, including {details}.",
+    "recurringSeries": {
+      "one": "{count} recurring series",
+      "other": "{count} recurring series"
+    },
+    "changedOccurrences": {
+      "one": "{count} changed occurrence",
+      "other": "{count} changed occurrences"
+    }
+  },
+  "work": {
+    "label": {
+      "preview": "Previewing",
+      "sync": "Syncing",
+      "reconciliation": "Reconciling",
+      "removal": "Removing"
+    },
+    "preview": "Reading {source} to show what {destination} would get. Nothing is written yet.",
+    "sync": "Applying changes from {source} to {destination}.",
+    "reconciliationSyncing": "Syncing every event from {source} to {destination}, then checking each one this rule wrote.",
+    "reconciliation": "Checking every event this rule wrote to {destination} against {source}.",
+    "removalProgress": {
+      "one": "Removing this rule: handled {done} of {count} projection in {destination}.",
+      "other": "Removing this rule: handled {done} of {count} projections in {destination}."
+    },
+    "removal": "Removing this rule from {destination}.",
+    "checked": "{done} of {total} checked",
+    "handled": {
+      "one": "{count} handled",
+      "other": "{count} handled"
+    },
+    "runningFor": "Running for {elapsed}",
+    "keepsRunning": "It keeps running if you leave this page."
+  },
+  "commands": {
+    "failed": {
+      "preview": "Preview did not complete.",
+      "enable": "The rule was not enabled.",
+      "sync": "Sync did not complete.",
+      "reconcile": "Reconciliation did not complete.",
+      "pause": "The rule was not paused."
+    },
+    "pending": {
+      "preview": "Previewing…",
+      "enable": "Enabling…",
+      "sync": "Syncing…",
+      "reconcile": "Reconciling…",
+      "pause": "Pausing…"
+    },
+    "reauthorize": "Reauthorize account",
+    "startSyncing": "Start syncing",
+    "previewToRestart": "Preview to restart",
+    "preview": "Preview rule",
+    "syncNow": "Sync now",
+    "syncNowDescription": "Apply changes made in {source} since the last run. Runs by itself every five minutes.",
+    "reconcileNow": "Reconcile now",
+    "reconcileNowDescription": "Sync in full, putting back events edited or deleted in {destination}, then check the events this rule wrote there from its starting point onward and report any that still differ.",
+    "pause": "Pause rule",
+    "pauseDescription": "Stop writing to {destination}. Existing events stay; resuming needs a new preview.",
+    "moreActions": "More actions for {source} to {destination}"
+  }
+}

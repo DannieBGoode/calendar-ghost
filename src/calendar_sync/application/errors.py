@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 from calendar_sync.application.providers import ProviderKind
@@ -52,6 +53,16 @@ AUTHORIZATION_FAILURES = frozenset(
 TRANSIENT_FAILURES = frozenset({ProviderFailureKind.RATE_LIMIT, ProviderFailureKind.TEMPORARY})
 
 
+_FAILURE_SUMMARIES = {
+    ProviderFailureKind.AUTHENTICATION: "Authorization for {calendar} expired",
+    ProviderFailureKind.AUTHORIZATION: "Access to {calendar} was denied",
+    ProviderFailureKind.RATE_LIMIT: "{Calendar} is limiting requests",
+    ProviderFailureKind.TEMPORARY: "{Calendar} is temporarily unavailable",
+    ProviderFailureKind.PERMANENT: "{Calendar} rejected synchronization",
+    ProviderFailureKind.INFRASTRUCTURE: "Local synchronization infrastructure failed",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderFailure(ApplicationError):
     kind: ProviderFailureKind
@@ -61,6 +72,9 @@ class ProviderFailure(ApplicationError):
     """The Connected Account whose request failed, when the provider knows it."""
     provider: ProviderKind | None = None
     """The provider that failed, when the adapter names it, so incidents can (ADR 0022)."""
+    attempted_at: datetime | None = None
+    """When the failed request read the account's credentials, when the adapter knows it, so a
+    refusal of credentials since replaced is told apart from one of the current ones (ADR 0027)."""
 
     @property
     def retryable(self) -> bool:
@@ -74,6 +88,14 @@ class ProviderFailure(ApplicationError):
     def provider_name(self) -> str:
         """How messages name the failed provider: "Google Calendar", or a neutral phrase."""
         return self.provider.calendar_name if self.provider else "the calendar provider"
+
+    @property
+    def summary(self) -> str:
+        """What failed, naming the provider when the failure says which one (ADR 0022)."""
+        calendar = self.provider_name
+        return _FAILURE_SUMMARIES[self.kind].format(
+            calendar=calendar, Calendar=calendar[0].upper() + calendar[1:]
+        )
 
     def __str__(self) -> str:
         return self.detail
@@ -163,6 +185,13 @@ class CalendarPermissionRequired(AuthorizationFailed):
 
 class AccountAccessCheckFailed(ApplicationError):
     """The provider did not confirm a Connected Account's calendar access."""
+
+    def __init__(
+        self, detail: str, kind: ProviderFailureKind = ProviderFailureKind.PERMANENT
+    ) -> None:
+        super().__init__(detail)
+        self.kind = kind
+        """How the provider refused, so an authorization refusal can lapse the account."""
 
 
 class ActivityEventNotFound(ApplicationError):

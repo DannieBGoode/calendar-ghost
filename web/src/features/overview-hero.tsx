@@ -2,6 +2,7 @@ import { ArrowRight, CheckCircle2 } from "lucide-react"
 
 import { GhostMark, type GhostExpression } from "@/components/ghost-mark"
 import { Button } from "@/components/ui/button"
+import { useI18n } from "@/i18n/provider"
 import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import type { HealthAction, OverviewHealth, OverviewTone } from "@/lib/overview-health"
 import { overviewHeroCallouts } from "@/lib/overview-hero"
@@ -31,7 +32,9 @@ export function HealthHero({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
-  const callouts = overviewHeroCallouts(health.tone)
+  const i18n = useI18n()
+  const { t } = i18n
+  const callouts = overviewHeroCallouts(i18n, health.tone)
   const followAction = (action: HealthAction) => (event: React.MouseEvent) => {
     if (!isPlainLeftClick(event)) return
     event.preventDefault()
@@ -46,7 +49,7 @@ export function HealthHero({
         {health.title && <p className="health-hero-context">{health.title}</p>}
         <p className="health-hero-detail">{health.detail}</p>
         {health.facts.length > 0 && (
-          <ul className="health-hero-facts" aria-label="Synchronization summary">
+          <ul className="health-hero-facts" aria-label={t("overview.hero.factsLabel")}>
             {health.facts.map((fact, index) => (
               <li key={fact}>
                 {index === 0 && health.tone === "healthy" && <CheckCircle2 aria-hidden="true" />}
@@ -64,7 +67,7 @@ export function HealthHero({
         )}
         {health.others.length > 0 && (
           <div className="health-hero-others">
-            <h2>Also</h2>
+            <h2>{t("overview.hero.also")}</h2>
             <ul>
               {health.others.map((other) => (
                 <li key={other.summary} data-tone={other.tone}>

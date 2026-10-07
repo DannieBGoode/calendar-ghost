@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
+
 import type { RunningWork } from "@/lib/api"
 import { busyCommand, ruleWork, workDescription, workMeta, workRefreshInterval, WORK_REFRESH_MS } from "@/lib/rule-work"
+
+const i18n = testI18n()
 
 const started = "2026-09-29T09:00:00Z"
 const running = (overrides: Partial<RunningWork>): RunningWork => ({
@@ -105,13 +109,13 @@ describe("ruleWork for a sync", () => {
         progress: { done: 4, total: 40 },
         syncing: true,
       })
-      expect(workDescription(work!, "Family", "Work")).toBe(
+      expect(workDescription(i18n, work!, "Family", "Work")).toBe(
         "Syncing every event from Family to Work, then checking each one this rule wrote.",
       )
     }
     const checking = ruleWork({ pending: undefined, running: running({ kind: "reconciliation", stage: "reconciliation" }) })
     expect(checking).toEqual({ kind: "reconciliation", startedAt: Date.parse(started), progress: null })
-    expect(workDescription(checking!, "Family", "Work")).toBe(
+    expect(workDescription(i18n, checking!, "Family", "Work")).toBe(
       "Checking every event this rule wrote to Work against Family.",
     )
   })
@@ -122,25 +126,25 @@ describe("workMeta", () => {
   const twelveMinutes = startedAt + 12 * 60_000
 
   it("leads with how many events a sync checked", () => {
-    expect(workMeta({ kind: "sync", startedAt, progress: { done: 412, total: 840 } }, twelveMinutes)).toBe(
+    expect(workMeta(i18n, { kind: "sync", startedAt, progress: { done: 412, total: 840 } }, twelveMinutes)).toBe(
       "412 of 840 checked · Running for 12 min 0 s · It keeps running if you leave this page.",
     )
-    expect(workMeta({ kind: "sync", startedAt, progress: null, handled: 5 }, twelveMinutes)).toBe(
+    expect(workMeta(i18n, { kind: "sync", startedAt, progress: null, handled: 5 }, twelveMinutes)).toBe(
       "5 handled · Running for 12 min 0 s · It keeps running if you leave this page.",
     )
   })
 
   it("says only how long work runs when it has no count", () => {
-    expect(workMeta({ kind: "sync", startedAt, progress: null }, twelveMinutes)).toBe(
+    expect(workMeta(i18n, { kind: "sync", startedAt, progress: null }, twelveMinutes)).toBe(
       "Running for 12 min 0 s · It keeps running if you leave this page.",
     )
-    expect(workMeta({ kind: "preview", startedAt: null, progress: null }, twelveMinutes)).toBe(
+    expect(workMeta(i18n, { kind: "preview", startedAt: null, progress: null }, twelveMinutes)).toBe(
       "It keeps running if you leave this page.",
     )
   })
 
   it("leaves a removal's count to its description", () => {
-    expect(workMeta({ kind: "removal", startedAt, progress: { done: 3, total: 10 } }, twelveMinutes)).toBe(
+    expect(workMeta(i18n, { kind: "removal", startedAt, progress: { done: 3, total: 10 } }, twelveMinutes)).toBe(
       "Running for 12 min 0 s · It keeps running if you leave this page.",
     )
   })
@@ -159,12 +163,12 @@ describe("busyCommand", () => {
 describe("workDescription", () => {
   it("says what each kind of work does in calendar language", () => {
     const work = (kind: RunningWork["kind"]) => ({ kind, startedAt: null, progress: null })
-    expect(workDescription(work("preview"), "Family", "Work")).toBe(
+    expect(workDescription(i18n, work("preview"), "Family", "Work")).toBe(
       "Reading Family to show what Work would get. Nothing is written yet.",
     )
-    expect(workDescription(work("sync"), "Family", "Work")).toBe("Applying changes from Family to Work.")
+    expect(workDescription(i18n, work("sync"), "Family", "Work")).toBe("Applying changes from Family to Work.")
     expect(
-      workDescription({ kind: "removal", startedAt: null, progress: { done: 3, total: 10 } }, "Family", "Work"),
+      workDescription(i18n, { kind: "removal", startedAt: null, progress: { done: 3, total: 10 } }, "Family", "Work"),
     ).toBe("Removing this rule: handled 3 of 10 projections in Work.")
   })
 })

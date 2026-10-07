@@ -17,6 +17,7 @@ import { ActivityDetail } from "@/features/activity-entry-details"
 import { ActivityFilters } from "@/features/activity-filters"
 import { OpenIncidents, ResolvedIncidents } from "@/features/activity-incidents"
 import { ActivityTable } from "@/features/activity-table"
+import { useI18n } from "@/i18n/provider"
 import { activityDayGroups, activityRows, groupRuns, showCategories } from "@/lib/activity"
 import {
   activityFailure,
@@ -29,7 +30,7 @@ import { activitySearch, activityStateFromSearch, type ActivityLocationState } f
 import type { RuleContext } from "@/lib/activity-rule-context"
 import { ACTIVITY_PAGE_SIZE, api, type AuditEntry, type Incident } from "@/lib/api"
 import { splitIncidents, type IncidentAction } from "@/lib/incidents"
-import type { OpenRule, ViewChange } from "@/lib/navigation"
+import { accountSearch, type OpenRule, type ViewChange } from "@/lib/navigation"
 
 type UpdateLocation = (next: Partial<ActivityLocationState>, history: "push" | "replace") => void
 type ActivityFeed = UseInfiniteQueryResult<InfiniteData<AuditEntry[]>>
@@ -54,6 +55,7 @@ function useActivityLocation() {
 
 /** The rules, accounts, and calendar names each entry needs to name its rule. */
 function useRuleContext(): RuleContext {
+  const i18n = useI18n()
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   // Shares the Rules view cache so calendars show their names rather than Google identifiers.
@@ -74,6 +76,7 @@ function useRuleContext(): RuleContext {
       connectedAccountIds.map((accountId, index) => [accountId, calendarQueries[index]?.data]),
     ),
     rulesLoaded: rules.data !== undefined,
+    i18n,
   }
 }
 
@@ -92,6 +95,7 @@ function useSelectedEntry(entryId: number | null, entries: AuditEntry[], feedPen
 }
 
 export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
+  const { t } = useI18n()
   const [state, update] = useActivityLocation()
   const { ruleId, show, entryId } = state
   const query = state.query ?? ""
@@ -114,7 +118,7 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const entries = activity.data?.pages.flat() ?? []
   const selection = useSelectedEntry(entryId, entries, activity.isPending)
 
-  if (activity.isPending || incidents.isPending) return <PageSkeleton label="Loading activity" />
+  if (activity.isPending || incidents.isPending) return <PageSkeleton label={t("activity.page.loading")} />
 
   if (activity.error || incidents.error) {
     return (
@@ -152,6 +156,7 @@ function ActivityUnavailable({
   refreshing: boolean
   onRetry: () => void
 }) {
+  const { t } = useI18n()
   const failure = activityFailure(errors)
   const reloadRequired = activityFailureRequiresReload(failure)
   const recover = () => {
@@ -167,11 +172,11 @@ function ActivityUnavailable({
       <ActivityHeading />
       <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
         <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
-        <h2 id="activity-error-title">Activity is temporarily unavailable</h2>
-        <p>{activityFailureMessages[failure]}</p>
+        <h2 id="activity-error-title">{t("activity.failure.title")}</h2>
+        <p>{t(activityFailureMessages[failure])}</p>
         <Button variant="outline" onClick={recover} disabled={refreshing && !reloadRequired}>
           <RefreshCw aria-hidden="true" />
-          {refreshing && !reloadRequired ? "Trying again…" : activityFailureActions[failure]}
+          {refreshing && !reloadRequired ? t("activity.failure.retrying") : t(activityFailureActions[failure])}
         </Button>
       </section>
     </div>
@@ -203,10 +208,12 @@ function ActivityPage({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const { ruleId, show, entryId } = state
   const { open: openIncidents, resolved: resolvedIncidents } = splitIncidents(incidents)
   const runs = groupRuns(entries)
-  const groups = activityRows(runs)
+  const groups = activityRows(i18n, runs)
   const days = activityDayGroups(groups)
   const visibleEntries = runs.flatMap((run) => run.entries)
   const { newer, older } = entrySteps(visibleEntries, selection.entry)
@@ -234,7 +241,9 @@ function ActivityPage({
   }
 
   function followIncident(action: IncidentAction) {
-    if (action.kind === "settings") onViewChange("settings")
+    if (action.kind === "settings") {
+      onViewChange("settings", action.accountId ? { search: accountSearch(action.accountId) } : undefined)
+    }
     else if (action.kind === "rule") onOpenRule(action.ruleId)
     else {
       update({ ruleId: action.ruleId, show: "blocked", query: "", entryId: null }, "push")
@@ -259,8 +268,8 @@ function ActivityPage({
       <section className="workflow activity-section page-card" aria-labelledby="activity-feed-title">
         <div className="section-heading activity-feed-heading">
           <div>
-            <h2 id="activity-feed-title">History</h2>
-            <p>Newest first. Select an entry to see what happened and why.</p>
+            <h2 id="activity-feed-title">{t("activity.history.title")}</h2>
+            <p>{t("activity.history.intro")}</p>
           </div>
         </div>
         <ActivityFilters
@@ -272,7 +281,7 @@ function ActivityPage({
           onChange={changeFilters}
         />
         <p className="sr-only" role="status">
-          {historyStatus({ updating, query, more: feed.hasNextPage, count: visibleEntries.length })}
+          {historyStatus(i18n, { updating, query, more: feed.hasNextPage, count: visibleEntries.length })}
         </p>
 
         {/* A linked entry the filters hide still opens beside an empty table. */}
@@ -298,7 +307,7 @@ function ActivityPage({
                 />
                 {feed.hasNextPage && (
                   <Button variant="outline" className="activity-more" onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>
-                    {feed.isFetchingNextPage ? "Loading older activity…" : "Load older activity"}
+                    {feed.isFetchingNextPage ? t("activity.history.loadingOlder") : t("activity.history.loadOlder")}
                   </Button>
                 )}
               </>
@@ -323,13 +332,11 @@ function ActivityPage({
 }
 
 function ActivityHeading() {
+  const { t } = useI18n()
   return (
     <div>
-      <h1>What your rules did</h1>
-      <p className="page-intro">
-        Every event a rule added, updated, removed, skipped, or blocked, and why. Events are named as
-        each run found them.
-      </p>
+      <h1>{t("activity.page.title")}</h1>
+      <p className="page-intro">{t("activity.page.intro")}</p>
     </div>
   )
 }
@@ -345,8 +352,10 @@ function EmptyActivity({
   onAllRules: () => void
   onClearSearch: () => void
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const { ruleId, show, query } = filters
-  const copy = emptyHistoryCopy(filters)
+  const copy = emptyHistoryCopy(i18n, filters)
   const filtered = Boolean(ruleId) || show !== "all" || Boolean(query)
   return (
     <div className="empty-panel">
@@ -355,9 +364,9 @@ function EmptyActivity({
       <p>{copy.body}</p>
       {filtered && (
         <div className="empty-actions">
-          {query && <Button variant="outline" onClick={onClearSearch}>Clear search</Button>}
-          {show !== "all" && <Button variant="outline" onClick={onShowAll}>Show all decisions</Button>}
-          {ruleId && <Button variant="outline" onClick={onAllRules}>Show all rules</Button>}
+          {query && <Button variant="outline" onClick={onClearSearch}>{t("activity.search.clear")}</Button>}
+          {show !== "all" && <Button variant="outline" onClick={onShowAll}>{t("activity.filters.showAll")}</Button>}
+          {ruleId && <Button variant="outline" onClick={onAllRules}>{t("activity.filters.showAllRules")}</Button>}
         </div>
       )}
     </div>

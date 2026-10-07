@@ -1,7 +1,8 @@
+import { incidentText } from "@/i18n/incident-text"
+import type { I18n } from "@/i18n/translator"
 import { activitySearch } from "@/lib/activity-location"
 import type { Dashboard, InstallationHealth, RunningWork, ServerProblem } from "@/lib/api"
 import type { AppView } from "@/lib/navigation"
-import { relativeTime } from "@/lib/relative-time"
 
 /**
  * The Overview's health, most urgent first:
@@ -72,6 +73,7 @@ export type RuleProblem = { ruleId: string; name: string; detail: string; kind: 
 
 /** The server's per-rule problems in the Overview's words. */
 export function ruleProblemsOf(
+  i18n: I18n,
   problems: ServerProblem[],
   ruleName: (ruleId: string) => string | null,
   now: number,
@@ -79,57 +81,66 @@ export function ruleProblemsOf(
   return problems.flatMap((problem): RuleProblem[] => {
     if (problem.rule_id === null || problem.kind === "blocked" || problem.kind === "stalled") return []
     const name = ruleName(problem.rule_id) ?? ""
-    const since = problem.since
-      ? problem.kind === "overdue"
-        ? ` Last sync ${relativeTime(problem.since, now)}.`
-        : ` First seen ${relativeTime(problem.since, now)}.`
-      : ""
     const kind = problem.kind === "overdue" ? "review" : problem.kind
-    return [{ ruleId: problem.rule_id, name, detail: `${sentence(problem.summary)}${since}`, kind }]
+    return [{ ruleId: problem.rule_id, name, detail: problemDetail(i18n, problem, now), kind }]
   })
+}
+
+/** What the problem says, then when it began or the rule last synced. */
+function problemDetail(i18n: I18n, problem: ServerProblem, now: number): string {
+  // A problem an Incident explains carries its message; the others keep the server's English.
+  const summary = sentence(incidentText(i18n, problem))
+  if (!problem.since) return summary
+  const key = problem.kind === "overdue" ? "overview.health.problemLastSync" : "overview.health.problemFirstSeen"
+  return i18n.t(key, { summary, relative: i18n.format.relative(problem.since, now) })
 }
 
 type Problem = Omit<OverviewHealth, "facts" | "others"> & { summary: string }
 
-function count(value: number, singular: string, plural = `${singular}s`): string {
-  return `${value} ${value === 1 ? singular : plural}`
+function reauthorizeInSettings(i18n: I18n): HealthAction {
+  return { label: i18n.t("overview.health.action.reauthorizeInSettings"), view: "settings" }
 }
 
-const ALREADY_SYNCED = "Events already synced stay where they are."
-const RETRYING =
-  "Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard."
+function reviewRulesAction(i18n: I18n): HealthAction {
+  return { label: i18n.t("overview.health.action.reviewRules"), view: "rules" }
+}
 
-function ruleAction(problem: RuleProblem): HealthAction {
-  return { label: "Review this rule", view: "rules", ruleId: problem.ruleId }
+function openActivityAction(i18n: I18n): HealthAction {
+  return { label: i18n.t("overview.health.action.openActivity"), view: "activity" }
+}
+
+function ruleAction(i18n: I18n, problem: RuleProblem): HealthAction {
+  return { label: i18n.t("overview.health.action.reviewThisRule"), view: "rules", ruleId: problem.ruleId }
 }
 
 type ProblemsByKind = (kind: RuleProblem["kind"]) => RuleProblem[]
 
-function stalledProblem(dashboard: Dashboard): Problem | null {
+function stalledProblem(i18n: I18n, dashboard: Dashboard): Problem | null {
   if (!dashboard.problems.some((problem) => problem.kind === "stalled")) return null
   return {
     tone: "stopped",
-    headline: "Synchronization stopped running",
+    headline: i18n.t("overview.health.stalled.title"),
     title: "",
-    detail:
-      "Calendar Ghost has not checked your calendars recently. Restart the service to resume. Events already synced stay where they are.",
+    detail: i18n.t("overview.health.stalled.detail"),
     action: null,
-    summary: "Synchronization stopped running",
+    summary: i18n.t("overview.health.stalled.title"),
   }
 }
 
-function stoppedProblem(dashboard: Dashboard, of: ProblemsByKind): Problem | null {
+function stoppedProblem(i18n: I18n, dashboard: Dashboard, of: ProblemsByKind): Problem | null {
   const stopped = of("stopped")
   if (stopped.length === 0) return null
-  const headline = stopped.length === 1 ? "A rule stopped syncing" : `${stopped.length} rules stopped syncing`
-  if (dashboard.disconnected_accounts > 0) {
-    const title = `${count(dashboard.disconnected_accounts, "Google account")} ${dashboard.disconnected_accounts === 1 ? "needs" : "need"} reauthorization`
+  const headline = i18n.t("overview.health.stoppedHeadline", { count: stopped.length })
+  // Disconnected, or no longer accepted by Google: either way the fix is to reauthorize.
+  const unauthorized = dashboard.disconnected_accounts + dashboard.lapsed_accounts
+  if (unauthorized > 0) {
+    const title = i18n.t("overview.health.disconnectedTitle", { count: unauthorized })
     return {
       tone: "stopped",
       headline,
       title,
-      detail: `Access was removed or expired, so its rules write nothing until you reauthorize. ${ALREADY_SYNCED}`,
-      action: { label: "Reauthorize in Settings", view: "settings" },
+      detail: i18n.t("overview.health.disconnectedDetail"),
+      action: reauthorizeInSettings(i18n),
       summary: title,
     }
   }
@@ -139,8 +150,8 @@ function stoppedProblem(dashboard: Dashboard, of: ProblemsByKind): Problem | nul
       tone: "stopped",
       headline,
       title: "",
-      detail: `Stopped rules write nothing until they are fixed. ${ALREADY_SYNCED}`,
-      action: { label: "Review rules", view: "rules" },
+      detail: i18n.t("overview.health.stoppedGenericDetail"),
+      action: reviewRulesAction(i18n),
       summary: headline,
     }
   }
@@ -148,38 +159,41 @@ function stoppedProblem(dashboard: Dashboard, of: ProblemsByKind): Problem | nul
     tone: "stopped",
     headline,
     title: named.name,
-    detail: `${named.detail} It writes nothing until it is fixed. ${ALREADY_SYNCED}`,
-    action: ruleAction(named),
-    summary: `${named.name} stopped syncing`,
+    detail: i18n.t("overview.health.stoppedNamedDetail", { detail: named.detail }),
+    action: ruleAction(i18n, named),
+    summary: i18n.t("overview.health.ruleStoppedSyncing", { name: named.name }),
   }
 }
 
-function reviewProblem(of: ProblemsByKind): Problem | null {
+function reviewProblem(i18n: I18n, of: ProblemsByKind): Problem | null {
   const review = of("review")
   const [named] = review
   if (!named) return null
   const others = review.length - 1
   return {
     tone: "review",
-    headline: "A rule needs a look",
+    headline: i18n.t("overview.health.reviewHeadline"),
     title: named.name,
-    detail: others > 0 ? `${named.detail} ${count(others, "other problem")} also ${others === 1 ? "needs" : "need"} a look.` : named.detail,
-    action: ruleAction(named),
-    summary: `${named.name} needs a look`,
+    detail:
+      others > 0
+        ? i18n.t("overview.health.reviewDetailWithOthers", { detail: named.detail, count: others })
+        : named.detail,
+    action: ruleAction(i18n, named),
+    summary: i18n.t("overview.health.ruleNeedsLook", { name: named.name }),
   }
 }
 
 // A block leaves the rule running; it becomes an incident only if the daily check still finds it.
-function blockedProblem(dashboard: Dashboard): Problem | null {
+function blockedProblem(i18n: I18n, dashboard: Dashboard): Problem | null {
   if (dashboard.blocked_events <= 0 || dashboard.blocked_entry_id === null) return null
-  const one = dashboard.blocked_events === 1
+  const count = dashboard.blocked_events
   return {
     tone: "review",
-    headline: one ? "An event needs a look" : "Some events need a look",
+    headline: i18n.t("overview.health.blockedHeadline", { count }),
     title: "",
-    detail: `${count(dashboard.blocked_events, "event")} couldn't be synced and ${one ? "was" : "were"} left unchanged. Everything else is up to date.`,
+    detail: i18n.t("overview.health.blockedDetail", { count }),
     action: {
-      label: one ? "See the blocked event" : "See blocked events",
+      label: i18n.t("overview.health.blockedAction", { count }),
       view: "activity",
       search: activitySearch({
         ruleId: dashboard.blocked_rule_id ?? "",
@@ -187,61 +201,70 @@ function blockedProblem(dashboard: Dashboard): Problem | null {
         entryId: dashboard.blocked_entry_id,
       }),
     },
-    summary: `${count(dashboard.blocked_events, "event")} couldn't be synced`,
+    summary: i18n.t("overview.health.blockedSummary", { count }),
   }
 }
 
-function waitingProblem(of: ProblemsByKind): Problem | null {
+function waitingProblem(i18n: I18n, of: ProblemsByKind): Problem | null {
   const waiting = of("waiting")
   if (waiting.length === 0) return null
   const named = waiting.length === 1 ? waiting[0] : null
   return {
     tone: "waiting",
-    headline: "Waiting for Google",
+    headline: i18n.t("overview.health.waitingHeadline"),
     title: named?.name ?? "",
     detail: named
-      ? `${named.detail} ${RETRYING}`
-      : `Google Calendar is limiting or failing requests for ${count(waiting.length, "rule")}. ${RETRYING}`,
+      ? i18n.t("overview.health.waitingDetailNamed", { detail: named.detail })
+      : i18n.t("overview.health.waitingDetailGeneric", { count: waiting.length }),
     action: null,
-    summary: named ? `${named.name} is waiting for Google` : `${count(waiting.length, "rule")} waiting for Google`,
+    summary: named
+      ? i18n.t("overview.health.ruleWaitingForGoogle", { name: named.name })
+      : i18n.t("overview.health.rulesWaitingForGoogle", { count: waiting.length }),
   }
 }
 
 // Never healthy with an open incident, even one not described yet, such as while it loads.
-function openIncidentsProblem(dashboard: Dashboard): Problem {
+function openIncidentsProblem(i18n: I18n, dashboard: Dashboard): Problem {
   return {
     tone: "review",
-    headline: "Something needs a look",
+    headline: i18n.t("overview.health.openIncidentsHeadline"),
     title: "",
-    detail: `${count(dashboard.open_incidents, "problem")} kept happening. Activity explains what happened and what to do.`,
-    action: { label: "Open Activity", view: "activity" },
-    summary: `${count(dashboard.open_incidents, "open problem")} in Activity`,
+    detail: i18n.t("overview.health.openIncidentsDetail", { count: dashboard.open_incidents }),
+    action: openActivityAction(i18n),
+    summary: i18n.t("overview.health.openIncidentsSummary", { count: dashboard.open_incidents }),
   }
 }
 
 /** Every current problem, most urgent first. */
-function problemsOf(dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[] {
+function problemsOf(i18n: I18n, dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[] {
   const of: ProblemsByKind = (kind) => ruleProblems.filter((problem) => problem.kind === kind)
   const problems = [
-    stalledProblem(dashboard),
-    stoppedProblem(dashboard, of),
-    reviewProblem(of),
-    blockedProblem(dashboard),
-    waitingProblem(of),
+    stalledProblem(i18n, dashboard),
+    stoppedProblem(i18n, dashboard, of),
+    reviewProblem(i18n, of),
+    blockedProblem(i18n, dashboard),
+    waitingProblem(i18n, of),
   ].filter((problem): problem is Problem => problem !== null)
-  if (problems.length === 0 && dashboard.open_incidents > 0) problems.push(openIncidentsProblem(dashboard))
+  if (problems.length === 0 && dashboard.open_incidents > 0) problems.push(openIncidentsProblem(i18n, dashboard))
   return problems
 }
 
 type HealthFacts = { running: string[]; stopped: string[]; lastSync: string | null }
 
-function healthFacts(dashboard: Dashboard, now: number): HealthFacts {
-  const lastSync = dashboard.last_synced_at ? `Last sync ${relativeTime(dashboard.last_synced_at, now)}` : null
+function healthFacts(i18n: I18n, dashboard: Dashboard, now: number): HealthFacts {
+  const lastSync = dashboard.last_synced_at
+    ? i18n.t("overview.health.lastSync", { relative: i18n.format.relative(dashboard.last_synced_at, now) })
+    : null
   return {
-    running: [`${count(dashboard.enabled_rules, "rule")} running`, lastSync ?? "Not synced yet"],
+    running: [
+      i18n.t("overview.health.rulesRunning", { count: dashboard.enabled_rules }),
+      lastSync ?? i18n.t("overview.health.notSyncedYet"),
+    ],
     stopped: [
-      dashboard.enabled_rules > 0 ? `${count(dashboard.enabled_rules, "rule")} still running` : "No rules running",
-      lastSync ?? "Waiting for recovery",
+      dashboard.enabled_rules > 0
+        ? i18n.t("overview.health.rulesStillRunning", { count: dashboard.enabled_rules })
+        : i18n.t("overview.health.noRulesRunning"),
+      lastSync ?? i18n.t("overview.health.waitingForRecovery"),
     ],
     lastSync,
   }
@@ -258,17 +281,15 @@ function onlyHealth(
 }
 
 /** Before any rule can run: no account connected yet, or every account lost access. */
-function accountSetupHealth(dashboard: Dashboard, tone: OverviewTone): OverviewHealth | null {
+function accountSetupHealth(i18n: I18n, dashboard: Dashboard, tone: OverviewTone): OverviewHealth | null {
+  const { t } = i18n
   if (dashboard.connected_accounts + dashboard.disconnected_accounts === 0) {
-    return onlyHealth(tone, "Set up your first synchronization", "The service is running and waiting for a Google account.")
+    return onlyHealth(tone, t("overview.health.setup.title"), t("overview.health.setup.detail"))
   }
   if (dashboard.connected_accounts === 0 && dashboard.stopped_rules === 0 && dashboard.open_incidents === 0) {
-    return onlyHealth(
-      tone,
-      "Reauthorize your Google account",
-      "Access was removed or expired. Renew it in Settings before creating or running rules.",
-      { action: { label: "Reauthorize in Settings", view: "settings" } },
-    )
+    return onlyHealth(tone, t("overview.health.reauthorizeSetup.title"), t("overview.health.reauthorizeSetup.detail"), {
+      action: reauthorizeInSettings(i18n),
+    })
   }
   return null
 }
@@ -278,23 +299,22 @@ function accountSetupHealth(dashboard: Dashboard, tone: OverviewTone): OverviewH
  * between the dashboard poll and the next one; a generic hero for that tone still tells the
  * truth instead of contradicting it with healthy, paused, or setup copy (ADR 0024).
  */
-function genericAttentionHealth(tone: OverviewTone, facts: HealthFacts): OverviewHealth | null {
+function genericAttentionHealth(i18n: I18n, tone: OverviewTone, facts: HealthFacts): OverviewHealth | null {
+  const { t } = i18n
   if (tone === "stopped") {
-    return onlyHealth(
-      tone,
-      "Synchronization needs attention",
-      "A rule stopped syncing. Rules shows which one and what to do. Events already synced stay where they are.",
-      { action: { label: "Review rules", view: "rules" }, facts: facts.stopped },
-    )
+    return onlyHealth(tone, t("overview.health.generic.stopped.title"), t("overview.health.generic.stopped.detail"), {
+      action: reviewRulesAction(i18n),
+      facts: facts.stopped,
+    })
   }
   if (tone === "review") {
-    return onlyHealth(tone, "Something needs a look", "Activity explains what happened and what to do.", {
-      action: { label: "Open Activity", view: "activity" },
+    return onlyHealth(tone, t("overview.health.generic.review.title"), t("overview.health.generic.review.detail"), {
+      action: openActivityAction(i18n),
       facts: facts.running,
     })
   }
   if (tone === "waiting") {
-    return onlyHealth(tone, "Waiting for the calendar provider", "Calendar Ghost retries by itself and catches up afterwards.", {
+    return onlyHealth(tone, t("overview.health.generic.waiting.title"), t("overview.health.generic.waiting.detail"), {
       facts: facts.running,
     })
   }
@@ -302,34 +322,27 @@ function genericAttentionHealth(tone: OverviewTone, facts: HealthFacts): Overvie
 }
 
 /** No problem: no rule yet, every rule paused or never started, or everything healthy. */
-function quietHealth(dashboard: Dashboard, tone: OverviewTone, facts: HealthFacts): OverviewHealth {
-  const review = { label: "Review rules", view: "rules" } as const
+function quietHealth(i18n: I18n, dashboard: Dashboard, tone: OverviewTone, facts: HealthFacts): OverviewHealth {
+  const { t } = i18n
+  const review = reviewRulesAction(i18n)
   if (dashboard.sync_rules === 0) {
-    return onlyHealth(
-      tone,
-      "Create your first rule",
-      "Choose a source and a destination calendar, then preview what the rule will write.",
-      { action: { label: "Create a rule", view: "rules" } },
-    )
+    return onlyHealth(tone, t("overview.health.noRules.title"), t("overview.health.noRules.detail"), {
+      action: { label: t("overview.health.action.createRule"), view: "rules" },
+    })
   }
   if (dashboard.enabled_rules > 0) {
-    return onlyHealth(tone, "Synchronization is healthy", "Calendar Ghost checks your calendars for changes every five minutes.", {
+    return onlyHealth(tone, t("overview.health.healthy.title"), t("overview.health.healthy.detail"), {
       facts: facts.running,
     })
   }
   // A rule that has synced before was paused on purpose; one that never has is still being set up.
   if (facts.lastSync) {
-    return onlyHealth(tone, "Synchronization is paused", "Nothing is written to your calendars until you start a rule again.", {
-      facts: [`${count(dashboard.sync_rules, "rule")} not running`, facts.lastSync],
+    return onlyHealth(tone, t("overview.health.paused.title"), t("overview.health.paused.detail"), {
+      facts: [t("overview.health.rulesNotRunning", { count: dashboard.sync_rules }), facts.lastSync],
       action: review,
     })
   }
-  return onlyHealth(
-    tone,
-    "No rule is synchronizing",
-    "Preview a rule, then enable it to start writing to its destination calendar.",
-    { action: review },
-  )
+  return onlyHealth(tone, t("overview.health.neverRun.title"), t("overview.health.neverRun.detail"), { action: review })
 }
 
 /**
@@ -338,15 +351,16 @@ function quietHealth(dashboard: Dashboard, tone: OverviewTone, facts: HealthFact
  * rest below it.
  */
 export function overviewHealth(
+  i18n: I18n,
   dashboard: Dashboard,
   now: number = Date.now(),
   ruleName: (ruleId: string) => string | null = () => null,
 ): OverviewHealth {
   const tone = TONE_OF[dashboard.status]
-  const setup = accountSetupHealth(dashboard, tone)
+  const setup = accountSetupHealth(i18n, dashboard, tone)
   if (setup) return setup
-  const facts = healthFacts(dashboard, now)
-  const [main, ...rest] = problemsOf(dashboard, ruleProblemsOf(dashboard.problems, ruleName, now))
+  const facts = healthFacts(i18n, dashboard, now)
+  const [main, ...rest] = problemsOf(i18n, dashboard, ruleProblemsOf(i18n, dashboard.problems, ruleName, now))
   if (main) {
     return {
       tone,
@@ -358,5 +372,5 @@ export function overviewHealth(
       others: rest.map(({ tone: otherTone, summary, action }) => ({ tone: otherTone, summary, action })),
     }
   }
-  return genericAttentionHealth(tone, facts) ?? quietHealth(dashboard, tone, facts)
+  return genericAttentionHealth(i18n, tone, facts) ?? quietHealth(i18n, dashboard, tone, facts)
 }

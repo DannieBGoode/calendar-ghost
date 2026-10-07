@@ -106,8 +106,8 @@ typed by ports.
 **Interfaces:**
 - Produces:
   - `BUSY_TIMEOUT_SECONDS: float = 5.0`
-  - `open_connection(database_path: Path, *, timeout: float = BUSY_TIMEOUT_SECONDS, isolation_level: Literal["DEFERRED", "IMMEDIATE", "EXCLUSIVE"] | None = "DEFERRED") -> sqlite3.Connection` — caller closes it.
-  - `transaction(database_path: Path) -> AbstractContextManager[sqlite3.Connection]` — commits on success, rolls back on exception, always closes.
+  - `open_connection(database_path: Path, *, timeout: float = BUSY_TIMEOUT_SECONDS, isolation_level: Literal["DEFERRED", "IMMEDIATE", "EXCLUSIVE"] | None = "DEFERRED") -> sqlite3.Connection`: the caller closes it.
+  - `transaction(database_path: Path) -> AbstractContextManager[sqlite3.Connection]`: commits on success, rolls back on exception, always closes.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1340,7 +1340,7 @@ adding its rule now fail: add the rule in the test's setup, since SQLite would r
 write. Do not relax the memory check.
 
 Import `DuplicateDirectionalRelationship` from `calendar_sync.application.errors`. Before changing
-`add`, run `grep -rn "KeyError" tests src | grep -i "rules.add\|add(rule"` — if a test expects
+`add`, run `grep -rn "KeyError" tests src | grep -i "rules.add\|add(rule"`. If a test expects
 `KeyError` from a duplicate rule ID, update it to `DuplicateDirectionalRelationship`, which is what
 SQLite raises.
 

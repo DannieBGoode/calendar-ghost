@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
+
 import calendarReplacementSource from "../features/calendar-replacement.tsx?raw"
 import projectionChoiceSource from "../features/projection-choice.tsx?raw"
 import factsSource from "../features/rule-details-facts.tsx?raw"
@@ -28,19 +30,21 @@ const detailsSource = [
   refreshSource,
 ].join("\n")
 
+const i18n = testI18n()
+
 describe("rule removal progress", () => {
   it("counts handled projections without claiming conflicted ones were deleted", () => {
-    expect(removalProgress({ handling: "delete", total: 312 }, 228, "Family")).toEqual({
+    expect(removalProgress(i18n, { handling: "delete", total: 312 }, 228, "Family")).toEqual({
       done: 84,
       label: "Handled 84 of 312 projections in Family",
     })
-    expect(removalProgress({ handling: "delete", total: 1 }, 1, "Family").label).toBe(
+    expect(removalProgress(i18n, { handling: "delete", total: 1 }, 1, "Family").label).toBe(
       "Handled 0 of 1 projection in Family",
     )
   })
 
   it("prefers the service's own count, which also covers a reload", () => {
-    expect(removalProgress({ handling: "delete", total: 10, done: 4 }, 10, "Family").done).toBe(4)
+    expect(removalProgress(i18n, { handling: "delete", total: 10, done: 4 }, 10, "Family").done).toBe(4)
     expect(
       reportedRemoval(
         { kind: "removal", started_at: "2026-09-29T09:00:00Z", handling: "delete", total: 10, done: 4, stage: null },
@@ -56,30 +60,30 @@ describe("rule removal progress", () => {
   })
 
   it("clamps counts from a stale or newer mapping count", () => {
-    expect(removalProgress({ handling: "delete", total: 5 }, 9, "Family").done).toBe(0)
-    expect(removalProgress({ handling: "delete", total: 5 }, -1, "Family").done).toBe(5)
+    expect(removalProgress(i18n, { handling: "delete", total: 5 }, 9, "Family").done).toBe(0)
+    expect(removalProgress(i18n, { handling: "delete", total: 5 }, -1, "Family").done).toBe(5)
   })
 
   it("has no countable progress when keeping events or when nothing is mapped", () => {
-    expect(removalProgress({ handling: "detach", total: 3 }, 3, "Family")).toEqual({
+    expect(removalProgress(i18n, { handling: "detach", total: 3 }, 3, "Family")).toEqual({
       done: null,
       label: "Keeping 3 events in Family as ordinary events…",
     })
-    expect(removalProgress({ handling: "delete", total: 0 }, 0, "Family")).toEqual({
+    expect(removalProgress(i18n, { handling: "delete", total: 0 }, 0, "Family")).toEqual({
       done: null,
       label: "Removing the rule…",
     })
   })
 
   it("labels elapsed time", () => {
-    expect(elapsedLabel(-5)).toBe("0 s")
-    expect(elapsedLabel(42_900)).toBe("42 s")
-    expect(elapsedLabel(125_000)).toBe("2 min 5 s")
+    expect(elapsedLabel(i18n, -5)).toBe("0 s")
+    expect(elapsedLabel(i18n, 42_900)).toBe("42 s")
+    expect(elapsedLabel(i18n, 125_000)).toBe("2 min 5 s")
   })
 
   it("labels a running removal separately from an interrupted one", () => {
-    expect(ruleStateLabel("removing")).toBe("Removing")
-    expect(ruleStateLabel("disabled")).toBe("Removal incomplete")
+    expect(ruleStateLabel(i18n, "removing")).toBe("Removing")
+    expect(ruleStateLabel(i18n, "disabled")).toBe("Removal incomplete")
   })
 })
 
@@ -88,15 +92,28 @@ describe("rule removal failures", () => {
     expect(removalConnectionLost(new TypeError("Failed to fetch"))).toBe(true)
     expect(removalConnectionLost(new ApiError("The request could not be completed.", 504))).toBe(true)
     expect(removalConnectionLost(new ApiError("The request could not be completed.", 502))).toBe(true)
-    expect(removalErrorMessage(new TypeError("Failed to fetch"))).toContain("may still be running")
+    expect(removalErrorMessage(i18n, new TypeError("Failed to fetch"))).toContain("may still be running")
   })
 
-  it("shows service explanations as they are", () => {
-    const interrupted = new ApiError("removal interrupted after 3 projections", 424)
+  it("shows the service's explanation as it is", () => {
+    const detail = "Removal stopped after 3 of 10 projections."
+    const interrupted = new ApiError(detail, 424, detail)
     expect(removalConnectionLost(interrupted)).toBe(false)
-    expect(removalErrorMessage(interrupted)).toBe("removal interrupted after 3 projections")
-    const unconfigured = new ApiError("configure Google OAuth", 503)
-    expect(removalErrorMessage(unconfigured)).toBe("configure Google OAuth")
+    expect(removalErrorMessage(i18n, interrupted)).toBe(detail)
+    // An unconfigured service answers 503 with its own English detail, which is not a lost connection.
+    const unconfiguredDetail = "Google OAuth is not configured."
+    const unconfigured = new ApiError(unconfiguredDetail, 503, unconfiguredDetail)
+    expect(removalConnectionLost(unconfigured)).toBe(false)
+    expect(removalErrorMessage(i18n, unconfigured)).toBe(unconfiguredDetail)
+  })
+
+  it("translates a coded interruption with how far the removal got", () => {
+    const params = { processed: 3, remaining: 7, total: 10, provider: "google", kind: "rate_limit" }
+    const interrupted = new ApiError("removal stopped", 424, "removal stopped", { code: "removal_interrupted", params })
+    expect(removalConnectionLost(interrupted)).toBe(false)
+    expect(removalErrorMessage(i18n, interrupted)).toBe(
+      "Removal stopped after 3 of 10 projections because Google Calendar reported a problem. Retry to continue.",
+    )
   })
 })
 
@@ -130,8 +147,8 @@ describe("rule removal presentation", () => {
 
   it("finishes a retry that finds the rule already removed without claiming no conflicts", () => {
     expect(detailsSource).toContain("error instanceof ApiError && error.status === 404")
-    expect(detailsSource).toContain("finish(removalOutcomeUnknown(destinationName))")
-    expect(removalOutcomeUnknown("Family")).toEqual({
+    expect(detailsSource).toContain("finish(removalOutcomeUnknown(i18n, destinationName))")
+    expect(removalOutcomeUnknown(i18n, "Family")).toEqual({
       attention: true,
       message:
         "The rule was removed. Any events left in Family because their ownership could not be verified are listed in Activity under Blocked.",

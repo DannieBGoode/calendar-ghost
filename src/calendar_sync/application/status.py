@@ -14,7 +14,12 @@ from calendar_sync.application.activity import (
 )
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.locking import RuleWorkKind
-from calendar_sync.application.ports import Clock, SchedulerHeartbeat, SchedulerProgress
+from calendar_sync.application.ports import (
+    Clock,
+    IncidentMessage,
+    SchedulerHeartbeat,
+    SchedulerProgress,
+)
 from calendar_sync.application.rules import ListSyncRules, SyncRuleSummary
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 
@@ -75,6 +80,8 @@ class Problem:
     summary: str
     """Operational wording only; never event content."""
     since: datetime | None = None
+    message: IncidentMessage | None = None
+    """The message of the Incident behind this problem, for the Web UI to translate (ADR 0026)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +152,7 @@ def assess_installation(
     visible = [summary for summary in rules if not _removal_running(summary)]
     enabled = [s for s in visible if s.rule.state is SyncRuleState.ENABLED]
     disconnected = {a.id for a in overview.accounts if a.state == "disconnected"}
+    lapsed = {a.id: a.provider for a in overview.accounts if a.lapsed}
     open_incidents = tuple(incident for incident in incidents if incident.state == "open")
     block_rule_ids = {block.rule_id for block in overview.open_blocks}
     stalled = bool(enabled) and _stalled(scheduler, now)
@@ -154,9 +162,17 @@ def assess_installation(
         problems.append(
             Problem(ProblemKind.STALLED, None, "Scheduled synchronization stopped running")
         )
-    problems.extend(_stopped(visible, open_incidents, disconnected, now))
+    stopped = _stopped(visible, open_incidents, disconnected, lapsed, now)
+    problems.extend(stopped)
     named: set[str | None] = {problem.rule_id for problem in problems if problem.rule_id}
-    reviews, waits = _incident_problems(open_incidents, named, block_rule_ids, now)
+    # A lapsed account's Incident is covered by the Stopped problems of the rules it stopped.
+    covered = _accounts_of(visible, named) & lapsed.keys()
+    reviews, waits = _incident_problems(
+        [i for i in open_incidents if i.rule_id is not None or i.account_id not in covered],
+        named,
+        block_rule_ids,
+        now,
+    )
     problems.extend(reviews)
     named |= {problem.rule_id for problem in reviews if problem.rule_id}
     # A rule already waiting on its own incident is not also overdue: the incident already
@@ -205,18 +221,36 @@ def _stalled(scheduler: SchedulerProgress | None, now: datetime) -> bool:
     return now - baseline > STALL_AFTER
 
 
+def _accounts_of(visible: Sequence[SyncRuleSummary], rule_ids: set[str | None]) -> set[str]:
+    return {
+        account
+        for summary in visible
+        if summary.rule.id.value in rule_ids
+        for account in _rule_accounts(summary)
+    }
+
+
+def _rule_accounts(summary: SyncRuleSummary) -> set[str]:
+    rule = summary.rule
+    return {rule.source.connected_account_id.value, rule.destination.connected_account_id.value}
+
+
 def _stopped(
     visible: Sequence[SyncRuleSummary],
     incidents: Sequence[IncidentSummary],
     disconnected: set[str],
+    lapsed: Mapping[str, str],
     now: datetime,
 ) -> list[Problem]:
     problems = []
     for summary in visible:
         rule = summary.rule
+        lapse = _lapse_problem(summary, lapsed)
+        if lapse is not None:
+            problems.append(lapse)
+            continue
         lost_account = rule.state is SyncRuleState.ENABLED and bool(
-            {rule.source.connected_account_id.value, rule.destination.connected_account_id.value}
-            & disconnected
+            _rule_accounts(summary) & disconnected
         )
         if rule.state not in {SyncRuleState.DEGRADED, SyncRuleState.REMOVING} and not lost_account:
             continue
@@ -233,6 +267,7 @@ def _stopped(
                     rule.id.value,
                     incident.summary,
                     datetime.fromisoformat(incident.opened_at),
+                    incident.message,
                 )
             )
         elif lost_account:
@@ -244,6 +279,21 @@ def _stopped(
         else:
             problems.append(Problem(ProblemKind.STOPPED, rule.id.value, "Stopped syncing"))
     return problems
+
+
+def _lapse_problem(summary: SyncRuleSummary, lapsed: Mapping[str, str]) -> Problem | None:
+    """A running or stopped rule an account's Lapsed Authorization stops, naming no account."""
+    if summary.rule.state not in {SyncRuleState.ENABLED, SyncRuleState.DEGRADED}:
+        return None
+    account = next((a for a in sorted(_rule_accounts(summary)) if a in lapsed), None)
+    if account is None:
+        return None
+    return Problem(
+        ProblemKind.STOPPED,
+        summary.rule.id.value,
+        "A calendar account needs reauthorization",
+        message=IncidentMessage("authorization_lapsed", {"provider": lapsed[account]}),
+    )
 
 
 def _is_waiting(incident: IncidentSummary, now: datetime) -> bool:
@@ -292,11 +342,18 @@ def _incident_problems(
     waits: list[Problem] = []
     for group in _group_incidents(incidents, named, block_rule_ids):
         incident = _primary_incident(group, now)
-        opened = datetime.fromisoformat(incident.opened_at)
-        if _is_waiting(incident, now):
-            waits.append(Problem(ProblemKind.WAITING, incident.rule_id, incident.summary, opened))
+        waiting = _is_waiting(incident, now)
+        problem = Problem(
+            ProblemKind.WAITING if waiting else ProblemKind.REVIEW,
+            incident.rule_id,
+            incident.summary,
+            datetime.fromisoformat(incident.opened_at),
+            incident.message,
+        )
+        if waiting:
+            waits.append(problem)
         else:
-            reviews.append(Problem(ProblemKind.REVIEW, incident.rule_id, incident.summary, opened))
+            reviews.append(problem)
     return reviews, waits
 
 

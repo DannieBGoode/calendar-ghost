@@ -385,6 +385,9 @@ class SyncRule:
     initial_lookback_days: int = 30
     state: SyncRuleState = SyncRuleState.DRAFT
     reprojection_required: bool = False
+    awaiting_reauthorization: bool = False
+    """Degraded only by Lapsed Authorization, so it resumes once its accounts are authorized
+    again instead of needing a recovery preview (ADR 0027)."""
 
     def __post_init__(self) -> None:
         if self.source == self.destination:
@@ -410,7 +413,7 @@ class SyncRule:
             SyncRuleState.DEGRADED,
         }:
             raise InvalidStateTransition(f"cannot validate a rule in state {self.state}")
-        return replace(self, state=SyncRuleState.PREVIEWED)
+        return replace(self, state=SyncRuleState.PREVIEWED, awaiting_reauthorization=False)
 
     def enable(self) -> Self:
         if self.state is not SyncRuleState.PREVIEWED:
@@ -420,12 +423,27 @@ class SyncRule:
     def pause(self) -> Self:
         if self.state not in {SyncRuleState.ENABLED, SyncRuleState.DEGRADED}:
             raise InvalidStateTransition(f"cannot pause a rule in state {self.state}")
-        return replace(self, state=SyncRuleState.PAUSED)
+        return replace(self, state=SyncRuleState.PAUSED, awaiting_reauthorization=False)
 
-    def degrade(self) -> Self:
+    def degrade(self, *, awaiting_reauthorization: bool = False) -> Self:
+        """Stop the rule; one stopped only by Lapsed Authorization awaits reauthorization."""
         if self.state not in {SyncRuleState.PREVIEWED, SyncRuleState.ENABLED}:
             raise InvalidStateTransition(f"cannot degrade a rule in state {self.state}")
-        return replace(self, state=SyncRuleState.DEGRADED)
+        return replace(
+            self, state=SyncRuleState.DEGRADED, awaiting_reauthorization=awaiting_reauthorization
+        )
+
+    def resume_after_reauthorization(self) -> Self:
+        """Return a rule stopped only by Lapsed Authorization to scheduled synchronization."""
+        if self.state is not SyncRuleState.DEGRADED or not self.awaiting_reauthorization:
+            raise InvalidStateTransition(
+                "only a rule stopped by lapsed authorization resumes without a preview"
+            )
+        return replace(self, state=SyncRuleState.ENABLED, awaiting_reauthorization=False)
+
+    def require_preview(self) -> Self:
+        """A stopped rule whose recovery now needs a preview, whatever stopped it first."""
+        return replace(self, awaiting_reauthorization=False)
 
     def change_policy(self, transformation: TransformationPolicy) -> Self:
         """Apply a Material Rule Change; the rule must pass a new Rule Preview afterwards."""
@@ -439,14 +457,20 @@ class SyncRule:
             state = SyncRuleState.DEGRADED
         else:
             state = SyncRuleState.DRAFT
-        return replace(self, transformation=transformation, state=state, reprojection_required=True)
+        return replace(
+            self,
+            transformation=transformation,
+            state=state,
+            reprojection_required=True,
+            awaiting_reauthorization=False,
+        )
 
     def complete_reprojection(self) -> Self:
         return replace(self, reprojection_required=False)
 
     def begin_removal(self) -> Self:
         """Removing marks a Rule Removal that started and has not finished."""
-        return replace(self, state=SyncRuleState.REMOVING)
+        return replace(self, state=SyncRuleState.REMOVING, awaiting_reauthorization=False)
 
 
 @dataclass(frozen=True, slots=True)

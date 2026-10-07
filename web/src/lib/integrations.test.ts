@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
 import type { IntegrationToken } from "@/lib/api"
 import {
   copyToken,
@@ -9,6 +10,7 @@ import {
   tokenUsage,
 } from "@/lib/integrations"
 
+const i18n = testI18n()
 const now = Date.parse("2026-10-03T12:00:00Z")
 const token: IntegrationToken = {
   id: "t1",
@@ -21,7 +23,7 @@ const token: IntegrationToken = {
 
 describe("integrationExamples", () => {
   it("fills each example with this installation's address and reads the token from the environment", () => {
-    const examples = integrationExamples("https://ghost.example.lan")
+    const examples = integrationExamples(i18n, "https://ghost.example.lan")
     expect(examples.map((example) => example.title)).toEqual([
       "Uptime Kuma",
       "Homepage",
@@ -40,7 +42,7 @@ describe("integrationExamples", () => {
 
   it("connects desktop apps through the mcp-remote bridge, allowing plain HTTP only where needed", () => {
     const desktop = (origin: string) => {
-      const example = integrationExamples(origin).find((item) => item.title === "Claude Desktop and other apps")
+      const example = integrationExamples(i18n, origin).find((item) => item.title === "Claude Desktop and other apps")
       const config = JSON.parse(example?.code ?? "{}") as { mcpServers: Record<string, { args: string[] }> }
       return config.mcpServers["calendar-ghost"]
     }
@@ -95,24 +97,24 @@ describe("needsTransportNote", () => {
 
 describe("tokenUsage", () => {
   it("says when a token was issued and last used, or that it was revoked", () => {
-    expect(tokenUsage(token, now)).toBe("Last used 3 minutes ago · issued 2 days ago")
-    expect(tokenUsage({ ...token, last_used_at: null }, now)).toBe("Never used · issued 2 days ago")
-    expect(tokenUsage({ ...token, revoked_at: "2026-10-02T12:00:00Z" }, now)).toBe("Revoked yesterday")
+    expect(tokenUsage(i18n, token, now)).toBe("Last used 3 minutes ago · issued 2 days ago")
+    expect(tokenUsage(i18n, { ...token, last_used_at: null }, now)).toBe("Never used · issued 2 days ago")
+    expect(tokenUsage(i18n, { ...token, revoked_at: "2026-10-02T12:00:00Z" }, now)).toBe("Revoked yesterday")
   })
 })
 
 describe("integrationSummary", () => {
   it("says there are no tokens until the first one is issued", () => {
-    expect(integrationSummary([], now)).toBe("No tokens yet")
-    expect(integrationSummary([{ ...token, revoked_at: "2026-10-02T12:00:00Z" }], now)).toBe("No tokens yet")
+    expect(integrationSummary(i18n, [], now)).toBe("No tokens yet")
+    expect(integrationSummary(i18n, [{ ...token, revoked_at: "2026-10-02T12:00:00Z" }], now)).toBe("No tokens yet")
   })
 
   it("counts the tokens in use and names the most recent use", () => {
-    expect(integrationSummary([token], now)).toBe("1 token · last used 3 minutes ago")
+    expect(integrationSummary(i18n, [token], now)).toBe("1 token · last used 3 minutes ago")
     expect(
-      integrationSummary([token, { ...token, id: "t2", last_used_at: "2026-10-03T09:00:00Z" }], now),
+      integrationSummary(i18n, [token, { ...token, id: "t2", last_used_at: "2026-10-03T09:00:00Z" }], now),
     ).toBe("2 tokens · last used 3 minutes ago")
-    expect(integrationSummary([{ ...token, last_used_at: null }], now)).toBe("1 token · never used")
+    expect(integrationSummary(i18n, [{ ...token, last_used_at: null }], now)).toBe("1 token · never used")
   })
 })
 

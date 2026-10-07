@@ -30,9 +30,25 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   and revokes tokens and shows setup examples for each tool.
 - Installation Status notices a scheduler that stopped running passes and a rule that has not
   synced in over a day.
+- The Web UI is ready for translation: catalogs, plural rules, and locale-aware dates and numbers.
+- Every Web API error body carries a stable `code` and `params` beside its unchanged English
+  `detail` and status ([ADR 0026](docs/adr/0026-translate-the-web-ui-through-message-catalogs.md)).
+  The MCP endpoint's HTTP refusals use the same shape.
+- Incidents record what they say as a message code and parameters (migration 19), returned as
+  `message` by the Incidents API and on each Installation Status problem an Incident explains.
 
 ### Changed
 
+- When Google stops accepting a connected account, Calendar Ghost now says which account and how
+  to fix it ([ADR 0027](docs/adr/0027-lapsed-authorization-and-automatic-recovery.md)). Settings
+  lists that account first as **Needs reauthorization** with **Reauthorize account**, which asks
+  Google to offer that account. A rule it stopped names the account, and its next step opens
+  Settings at that account instead of offering a preview that could only fail. The Overview,
+  Activity, the status API, and MCP count it as an account to reauthorize. Once Google accepts the
+  account again, by reauthorizing or by a **Check access** that passes, the rules its lapse alone
+  stopped restart on their own and Settings says how many. One Incident and one notification
+  cover the account instead of one per rule. Check access names why Google refused, and a preview
+  that meets an account Google refuses answers with a clear error instead of a server error.
 - The Web UI's API types are generated from the backend's OpenAPI schema
   ([ADR 0025](docs/adr/0025-generate-web-api-types-from-openapi.md)), so a changed response fails
   the frontend type check instead of breaking a page. The sync, reconcile, and preview routes now
@@ -48,6 +64,18 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Rule Details, Settings, Activity, Rules, and Overview are split into section files, and the
   activity copy into focused modules, so every frontend file and function is within the
   complexity and size bounds. The screens render the same markup.
+- Large numbers are grouped.
+- An Activity entry whose action this version does not know reads "Something happened" instead of
+  its raw action code, and its recorded detail moves to Technical details instead of standing in
+  for the explanation.
+- Error alerts no longer show the browser's own wording: a request that cannot reach the service
+  says "The browser could not reach Calendar Ghost.", and other unexpected failures say "The request
+  could not be completed."
+- Error alerts explain a known server error, including a rejected field, in a full sentence of the
+  Web UI's language, such as "That password is incorrect." for a wrong password. The server's
+  English detail shows only for an error this version has no message for. Incidents and the Overview's problem sentences
+  render each Incident's message in the Web UI's language, keeping the stored summary for
+  Incidents recorded earlier.
 - The Overview hero says each thing once: the headline gives the state, the detail explains it, the
   facts show running rules and the last sync, and the ghost reacts in a few words. The ghost is
   filled with its state's color, and its speech bubble sits beside it at eye level on every screen

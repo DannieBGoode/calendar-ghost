@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, status
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.datastructures import URL
@@ -17,6 +17,7 @@ from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.bootstrap.container import Container, service_container
+from calendar_sync.interfaces.api.problems import install_problem_handlers, problem
 from calendar_sync.interfaces.api.routes import (
     accounts,
     activity,
@@ -76,6 +77,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
     )
+    install_problem_handlers(app)
     app.state.container = services
     # Added flat rather than through include_router, which newer FastAPI versions nest, so
     # app.routes lists every API route for UnknownApiPath and the authorization test.
@@ -165,12 +167,13 @@ class UnknownApiPath:
             for method in route.methods or ()
         }
         if allowed:
-            raise HTTPException(
+            raise problem(
                 status.HTTP_405_METHOD_NOT_ALLOWED,
+                "method_not_allowed",
                 "Method Not Allowed",
                 headers={"Allow": ", ".join(sorted(allowed))},
             )
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
+        raise problem(status.HTTP_404_NOT_FOUND, "not_found", "Not Found")
 
 
 def run() -> None:

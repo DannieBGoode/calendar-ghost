@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 
+import { testI18n } from "@/i18n/testing"
+
 import type { ConnectedAccount, Incident } from "@/lib/api"
 import {
   accessRenewedSince,
@@ -8,6 +10,8 @@ import {
   incidentResolution,
   splitIncidents,
 } from "@/lib/incidents"
+
+const i18n = testI18n()
 
 const NOT_RENEWED = { accessRenewed: false }
 const RENEWED = { accessRenewed: true }
@@ -22,6 +26,7 @@ function account(state: string, authorizedAt: string | null, id = "failed-accoun
     state,
     rule_count: 1,
     authorized_at: authorizedAt,
+    authorization_lapsed_at: null,
   }
 }
 
@@ -37,6 +42,7 @@ function incident(overrides: Partial<Incident> = {}): Incident {
     resolved_at: null,
     resolution: null,
     account_id: "failed-account",
+    message: null,
     ...overrides,
   }
 }
@@ -45,9 +51,11 @@ describe("incident guidance", () => {
   it("sends authorization incidents to Settings while access is lost, even once the rule is gone", () => {
     for (const category of ["authentication", "authorization"]) {
       for (const rule of [NOT_RENEWED, null]) {
-        expect(incidentGuidance(incident({ category }), rule).action).toEqual({
+        expect(incidentGuidance(i18n, incident({ category }), rule).action).toEqual({
           kind: "settings",
           label: "Reauthorize in Settings",
+          // Settings opens at the account that failed.
+          accountId: "failed-account",
         })
       }
     }
@@ -56,7 +64,7 @@ describe("incident guidance", () => {
   it("sends authorization incidents to the rule's recovery once access is renewed", () => {
     // Reauthorizing leaves the rule stopped, so no sync could close the incident on its own.
     for (const category of ["authentication", "authorization"]) {
-      const guidance = incidentGuidance(incident({ category }), RENEWED)
+      const guidance = incidentGuidance(i18n, incident({ category }), RENEWED)
       expect(guidance.action).toEqual({ kind: "rule", ruleId: "rule-1", label: "Recover this rule" })
       expect(guidance.detail).not.toMatch(/reauthorize/i)
     }
@@ -64,25 +72,25 @@ describe("incident guidance", () => {
 
   it("opens a stopped rule so it can be recovered, but only while the rule exists", () => {
     for (const category of ["permanent", "infrastructure"]) {
-      expect(incidentGuidance(incident({ category }), RENEWED).action).toEqual({
+      expect(incidentGuidance(i18n, incident({ category }), RENEWED).action).toEqual({
         kind: "rule",
         ruleId: "rule-1",
         label: "Review this rule",
       })
-      expect(incidentGuidance(incident({ category }), null).action).toBeNull()
+      expect(incidentGuidance(i18n, incident({ category }), null).action).toBeNull()
     }
   })
 
   it("asks nothing of the administrator while transient failures are retried", () => {
     for (const category of ["rate_limit", "temporary"]) {
-      const guidance = incidentGuidance(incident({ category }), RENEWED)
+      const guidance = incidentGuidance(i18n, incident({ category }), RENEWED)
       expect(guidance.action).toBeNull()
       expect(guidance.detail).toMatch(/^Nothing to do now/)
     }
   })
 
   it("filters Activity to the rule's blocked events for a persisting block", () => {
-    expect(incidentGuidance(incident({ category: "conflict" }), RENEWED).action).toEqual({
+    expect(incidentGuidance(i18n, incident({ category: "conflict" }), RENEWED).action).toEqual({
       kind: "blocked",
       ruleId: "rule-1",
       label: "See blocked events",
@@ -90,11 +98,11 @@ describe("incident guidance", () => {
   })
 
   it("offers the rule without explaining a category it does not know", () => {
-    expect(incidentGuidance(incident({ category: "ownership" }), RENEWED)).toEqual({
+    expect(incidentGuidance(i18n, incident({ category: "ownership" }), RENEWED)).toEqual({
       detail: null,
       action: { kind: "rule", ruleId: "rule-1", label: "Review this rule" },
     })
-    expect(incidentGuidance(incident({ category: "ownership", rule_id: null }), null).action).toBeNull()
+    expect(incidentGuidance(i18n, incident({ category: "ownership", rule_id: null }), null).action).toBeNull()
   })
 })
 
@@ -145,20 +153,20 @@ describe("renewed access", () => {
 
 describe("resolved incidents", () => {
   it("says a removal closed an incident rather than claiming it was fixed", () => {
-    expect(incidentResolution(incident({ state: "resolved", resolution: "rule_removed" }))).toBe(
+    expect(incidentResolution(i18n, incident({ state: "resolved", resolution: "rule_removed" }))).toBe(
       "Closed when the rule was removed.",
     )
-    expect(incidentResolution(incident({ state: "resolved", resolution: "sync_succeeded" }))).toBe(
+    expect(incidentResolution(i18n, incident({ state: "resolved", resolution: "sync_succeeded" }))).toBe(
       "Resolved by a successful sync.",
     )
-    expect(incidentResolution(incident({ state: "resolved", resolution: "blocks_cleared" }))).toMatch(
+    expect(incidentResolution(i18n, incident({ state: "resolved", resolution: "blocks_cleared" }))).toMatch(
       /daily check/,
     )
   })
 
   it("claims no reason for incidents resolved before reasons were recorded", () => {
     const legacy = incident({ state: "resolved" })
-    expect(incidentResolution(legacy)).toBeNull()
+    expect(incidentResolution(i18n, legacy)).toBeNull()
     expect(incidentClosedAt(legacy)).toBe(legacy.updated_at)
     expect(incidentClosedAt(incident({ resolved_at: "2026-09-29T08:00:00Z" }))).toBe("2026-09-29T08:00:00Z")
   })

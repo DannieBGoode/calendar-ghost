@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Protocol
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Response, status
 
 from calendar_sync.application.errors import InvalidIntegrationTokenName
 from calendar_sync.application.ports import IntegrationTokens, IntegrationTokenSummary
@@ -12,6 +12,7 @@ from calendar_sync.interfaces.api.dependencies import (
     require_admin,
     require_status_reader,
 )
+from calendar_sync.interfaces.api.problems import problem, problem_from
 from calendar_sync.interfaces.api.schemas import (
     IntegrationTokenResponse,
     IssuedIntegrationTokenResponse,
@@ -65,7 +66,7 @@ def issue_integration_token(
     try:
         issued = services.integration_tokens.issue(payload.name)
     except InvalidIntegrationTokenName as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+        raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     return IssuedIntegrationTokenResponse(**_token(issued.summary).model_dump(), token=issued.token)
 
 
@@ -76,7 +77,9 @@ def issue_integration_token(
 )
 def revoke_integration_token(token_id: str, services: Services) -> None:
     if not services.integration_tokens.revoke(token_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "integration token not found")
+        raise problem(
+            status.HTTP_404_NOT_FOUND, "integration_token_not_found", "integration token not found"
+        )
 
 
 def _token(summary: IntegrationTokenSummary) -> IntegrationTokenResponse:

@@ -17,7 +17,10 @@ import {
 import { RuleEndpoint } from "@/components/rule-endpoint"
 import { Button } from "@/components/ui/button"
 import { RuleBuilder } from "@/features/rule-builder"
-import { api, type ConnectedAccount, type RuleSummary } from "@/lib/api"
+import { useI18n } from "@/i18n/provider"
+import { rich } from "@/i18n/rich"
+import type { MessageKey } from "@/i18n/types"
+import { api, type ConnectedAccount, type RulePolicyPayload, type RuleSummary } from "@/lib/api"
 import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
@@ -27,6 +30,17 @@ import { useRuleCommands, type RuleFeedback } from "@/lib/use-rule-commands"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
 
 export { RuleBuilder }
+
+const POLICY_SUMMARY_KEYS: Record<RulePolicyPayload["privacy_policy"], Record<"allDay" | "timedOnly", MessageKey>> = {
+  busy_only: {
+    allDay: "rules.list.policySummary.busyOnlyAllDay",
+    timedOnly: "rules.list.policySummary.busyOnlyTimedOnly",
+  },
+  copy_details: {
+    allDay: "rules.list.policySummary.copyDetailsAllDay",
+    timedOnly: "rules.list.policySummary.copyDetailsTimedOnly",
+  },
+}
 
 type RulesNoticeText = { text: string; attention: boolean }
 
@@ -43,6 +57,7 @@ export function RulesView({
   onViewChange,
   onOpenRule,
 }: RulesViewProps) {
+  const { t } = useI18n()
   const now = useNow()
   const commands = useRuleCommands()
   const rules = useQuery({
@@ -57,11 +72,11 @@ export function RulesView({
   const createButton = useRef<HTMLButtonElement>(null)
   const rows = useRef(new Map<string, HTMLLIElement>())
 
-  if (rules.isPending || accounts.isPending) return <PageSkeleton label="Loading rules" />
+  if (rules.isPending || accounts.isPending) return <PageSkeleton label={t("rules.list.loading")} />
   if (rules.error || accounts.error) {
     return (
       <LoadFailure
-        title="Rules could not load"
+        title={t("rules.list.loadFailure")}
         onRetry={() => {
           void rules.refetch()
           void accounts.refetch()
@@ -97,7 +112,7 @@ export function RulesView({
             setBuilderChoice(false)
             commands.notify(rule.id, {
               tone: "success",
-              text: "Draft saved. Preview it to see exactly what will be written before anything changes.",
+              text: t("rules.list.draftSavedNotice"),
             })
             createButton.current?.focus()
           }}
@@ -106,7 +121,7 @@ export function RulesView({
       {rules.data.length === 0 ? (
         <NoRulesNote builderOpen={showBuilder} connected={connected} />
       ) : (
-        <ul className="rule-list page-card" aria-label="Sync rules">
+        <ul className="rule-list page-card" aria-label={t("rules.list.ariaLabel")}>
           {rules.data.map((rule) => (
             <RuleRow
               key={rule.id}
@@ -139,14 +154,12 @@ function RulesHeading({
   onToggleBuilder: () => void
   onViewChange: ViewChange
 }) {
+  const { t } = useI18n()
   return (
     <div className="page-heading-row">
       <div>
-        <h1>Sync rules</h1>
-        <p className="page-intro">
-          Each rule shows the events of one calendar in another, as busy time or with their
-          details. The source calendar is never changed.
-        </p>
+        <h1>{t("rules.list.heading")}</h1>
+        <p className="page-intro">{t("rules.list.intro")}</p>
       </div>
       <div className="heading-action">
         <Button
@@ -158,21 +171,24 @@ function RulesHeading({
           aria-controls="rule-builder"
           aria-describedby={noAccounts ? "create-rule-hint" : undefined}
         >
-          {showBuilder ? "Close rule builder" : <><Plus aria-hidden="true" /> Create sync rule</>}
+          {showBuilder ? t("rules.list.closeBuilder") : <><Plus aria-hidden="true" /> {t("rules.list.createButton")}</>}
         </Button>
         {noAccounts && (
           <p id="create-rule-hint" className="action-hint">
-            <a
-              href={appPathForView("settings")}
-              onClick={(event) => {
-                if (!isPlainLeftClick(event)) return
-                event.preventDefault()
-                onViewChange("settings")
-              }}
-            >
-              Connect a Google account
-            </a>{" "}
-            first.
+            {rich(t("rules.list.connectAccountHint"), {
+              link: (text) => (
+                <a
+                  href={appPathForView("settings")}
+                  onClick={(event) => {
+                    if (!isPlainLeftClick(event)) return
+                    event.preventDefault()
+                    onViewChange("settings")
+                  }}
+                >
+                  {text}
+                </a>
+              ),
+            })}
           </p>
         )}
       </div>
@@ -191,6 +207,7 @@ function RulesNotice({
   onDismiss: () => void
   onViewChange: ViewChange
 }) {
+  const { t } = useI18n()
   if (!notice || dismissed) return null
   return (
     <div className="page-notice" data-tone={notice.attention ? "attention" : undefined}>
@@ -207,11 +224,11 @@ function RulesNotice({
                 onViewChange("activity")
               }}
             >
-              Review in Activity
+              {t("rules.list.reviewInActivity")}
             </a>
           </Button>
         )}
-        <Button variant="ghost" onClick={onDismiss}>Dismiss</Button>
+        <Button variant="ghost" onClick={onDismiss}>{t("rules.list.dismiss")}</Button>
       </div>
     </div>
   )
@@ -219,17 +236,14 @@ function RulesNotice({
 
 /** Hidden while the builder is open, which already shows the way forward. */
 function NoRulesNote({ builderOpen, connected }: { builderOpen: boolean; connected: ConnectedAccount[] }) {
+  const { t } = useI18n()
   if (builderOpen) return null
   return (
     <section className="empty-note" aria-labelledby="no-rules-title">
       <GhostMark className="empty-ghost" />
       <div>
-        <h2 id="no-rules-title">No rules yet</h2>
-        <p>
-          {connected.length === 0
-            ? "Connect a Google account in Settings, then create your first rule here."
-            : "Create a rule, preview its effects, then start syncing."}
-        </p>
+        <h2 id="no-rules-title">{t("rules.list.empty.title")}</h2>
+        <p>{connected.length === 0 ? t("rules.list.empty.connectFirst") : t("rules.list.empty.createFirst")}</p>
       </div>
     </section>
   )
@@ -247,8 +261,9 @@ type RuleRowProps = {
 }
 
 function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange, onOpenRule }: RuleRowProps) {
-  const { source, destination, disconnected } = endpoints
-  const stopped = rule.state === "degraded" || disconnected.length > 0
+  const { t } = useI18n()
+  const { source, destination, unauthorized } = endpoints
+  const stopped = rule.state === "degraded" || unauthorized.length > 0
   const work = ruleWork({
     pending: commands.pending[rule.id],
     pendingSince: commands.pendingSince[rule.id],
@@ -278,7 +293,7 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
           <RuleStatusBadge state={state} stopped={stopped} working={work?.kind} />
           <RuleNextAction
             state={state}
-            disconnected={disconnected.length > 0}
+            reauthorize={unauthorized[0]}
             pending={pending}
             describedBy={state === "dry_run_validated" ? `${headingId} ${previewId}` : headingId}
             onRun={run}
@@ -292,14 +307,14 @@ function RuleRow({ rule, endpoints, removing, commands, rows, now, onViewChange,
                 event.preventDefault()
                 onOpenRule(rule.id)
               }}
-              aria-label={`Details for ${source.name} to ${destination.name}`}
+              aria-label={t("rules.list.detailsLabel", { source: source.name, destination: destination.name })}
             >
-              Details <ArrowRight aria-hidden="true" />
+              {t("rules.list.detailsLink")} <ArrowRight aria-hidden="true" />
             </a>
           </Button>
           <RuleCommandMenu
             state={state}
-            disconnected={disconnected.length > 0}
+            unauthorized={unauthorized.length > 0}
             pending={pending}
             source={source.name}
             destination={destination.name}
@@ -332,10 +347,14 @@ function RuleSummaryLine({
   headingId: string
   now: number
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   const { source, destination } = endpoints
   return (
     <div className="rule-summary">
-      <h2 className="sr-only" id={headingId}>{source.name} to {destination.name}</h2>
+      <h2 className="sr-only" id={headingId}>
+        {t("rules.list.ruleName", { source: source.name, destination: destination.name })}
+      </h2>
       <div className="rule-direction">
         <RuleEndpoint
           account={source.account}
@@ -352,13 +371,10 @@ function RuleSummaryLine({
         />
       </div>
       <p className="rule-policy">
-        <span>
-          {rule.privacy_policy === "busy_only" ? "Busy only" : "Copy details"}
-          {rule.sync_all_day_events ? ", including all-day events" : ", timed events only"}
-        </span>
+        <span>{t(POLICY_SUMMARY_KEYS[rule.privacy_policy][rule.sync_all_day_events ? "allDay" : "timedOnly"])}</span>
         <span className="rule-run" data-failed={rule.last_sync?.succeeded === false || undefined}>
           {rule.last_sync?.succeeded === false && <ShieldAlert aria-hidden="true" />}
-          {lastRunLabel(rule.last_sync, now)}
+          {lastRunLabel(i18n, rule.last_sync, now)}
         </span>
       </p>
     </div>
@@ -382,20 +398,18 @@ function RuleNotes({
   feedback: RuleFeedback | undefined
   previewId: string
 }) {
-  const { source, destination, disconnected } = endpoints
+  const { t, format } = useI18n()
+  const { source, destination, unauthorized } = endpoints
   return (
     <>
       {rule.reprojection_required && ["draft", "paused", "degraded"].includes(rule.state) && (
-        <p className="rule-note">
-          Preview required: the policy changed, so existing projections are rewritten on the
-          first run after you start syncing again.
-        </p>
+        <p className="rule-note">{t("rules.list.reprojectionRequired")}</p>
       )}
       {stopped && (
         <p className="rule-note">
-          {disconnected.length > 0
-            ? `Synchronization stopped: ${disconnected.map((account) => account.email).join(" and ")} must be reauthorized before this rule can run.`
-            : "Synchronization stopped to protect your calendars. Nothing was lost; preview the rule to restart it."}
+          {unauthorized.length > 0
+            ? t("rules.list.stoppedDisconnected", { accounts: format.list(unauthorized.map((account) => account.email)) })
+            : t("rules.list.stoppedGeneric")}
         </p>
       )}
       {state === "dry_run_validated" && (

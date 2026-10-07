@@ -6,6 +6,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { CalendarReplacement } from "./calendar-replacement"
+import { StaticI18nProvider } from "@/i18n/provider"
+import { testI18n } from "@/i18n/testing"
 import type { ConnectedAccount, DiscoveredCalendar, RuleDetail } from "@/lib/api"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -23,6 +25,7 @@ const accounts: ConnectedAccount[] = ["a", "b"].map((id) => ({
   state: "connected",
   rule_count: 1,
   authorized_at: "2026-10-02T00:00:00Z",
+  authorization_lapsed_at: null,
 }))
 
 function calendar(id: string): DiscoveredCalendar {
@@ -52,17 +55,20 @@ function detail(sourceCalendar: string, destinationCalendar: string): RuleDetail
 function render(rule: RuleDetail) {
   act(() => {
     root?.render(
-      createElement(
-        QueryClientProvider,
-        { client: queryClient },
-        createElement(CalendarReplacement, {
-          detail: rule,
-          accounts,
-          destinationName: "Work",
-          destinationConnected: true,
-          onReplaced: () => undefined,
-        }),
-      ),
+      createElement(StaticI18nProvider, {
+        i18n: testI18n(),
+        children: createElement(
+          QueryClientProvider,
+          { client: queryClient },
+          createElement(CalendarReplacement, {
+            detail: rule,
+            accounts,
+            destinationName: "Work",
+            destinationConnected: true,
+            onReplaced: () => undefined,
+          }),
+        ),
+      }),
     )
   })
 }

@@ -4,10 +4,10 @@ import { useEffect, useRef, useState, type RefObject } from "react"
 
 import { Button } from "@/components/ui/button"
 import { ProjectionChoice } from "@/features/projection-choice"
+import { useI18n } from "@/i18n/provider"
 import { ApiError, api, type ProjectionHandling, type RuleDetail, type RuleSummary } from "@/lib/api"
 import { isViewingRule } from "@/lib/navigation"
 import {
-  plural,
   removalConfirmLabel,
   removalOutcome,
   removalOutcomeUnknown,
@@ -38,6 +38,7 @@ export function RuleRemoval({
   destinationConnected: boolean
   onRemoved: (outcome: RemovalOutcome) => void
 }) {
+  const i18n = useI18n()
   const invalidate = useRuleInvalidation(detail.id)
   const leave = useRuleExit(detail.id)
   const queryClient = useQueryClient()
@@ -65,12 +66,12 @@ export function RuleRemoval({
   const remove = useMutation({
     mutationKey: removalMutationKey(detail.id),
     mutationFn: (request: RemovalRequest) => api.removeRule(detail.id, request.handling),
-    onSuccess: (result) => finish(removalOutcome(result, destinationName)),
+    onSuccess: (result) => finish(removalOutcome(i18n, result, destinationName)),
     onError: async (error) => {
       // A retry that waited behind an earlier, successful attempt finds the rule already gone;
       // that attempt's counts are lost, so say what to check instead of claiming none.
       if (error instanceof ApiError && error.status === 404) {
-        await finish(removalOutcomeUnknown(destinationName))
+        await finish(removalOutcomeUnknown(i18n, destinationName))
         return
       }
       await invalidate()
@@ -137,18 +138,23 @@ function RemovalHeading({
   mappingCount: number
   onOpen: () => void
 }) {
+  const { t } = useI18n()
   return (
     <div className="section-heading">
       <div>
         <h2 id="removal-title">
-          {active ? "Removing rule" : interrupted ? "Removal incomplete" : "Remove rule"}
+          {active
+            ? t("ruleDetails.removal.activeTitle")
+            : interrupted
+              ? t("ruleDetails.removal.incompleteTitle")
+              : t("ruleDetails.removal.title")}
         </h2>
         <p>
           {active
-            ? "The rule no longer synchronizes. Source events are never changed. Removal continues if you leave this page."
+            ? t("ruleDetails.removal.activeBody")
             : interrupted
-              ? `Removal stopped with ${plural(mappingCount, "projection")} left. Retry to finish; the rule does not synchronize meanwhile.`
-              : "Removing a rule is permanent. Source events are never changed."}
+              ? t("ruleDetails.removal.incompleteBody", { count: mappingCount })
+              : t("ruleDetails.removal.body")}
         </p>
       </div>
       {!expanded && !active && (
@@ -160,7 +166,7 @@ function RemovalHeading({
           aria-expanded={expanded}
           aria-controls="removal-form"
         >
-          <Trash2 aria-hidden="true" /> Remove rule…
+          <Trash2 aria-hidden="true" /> {t("ruleDetails.removal.open")}
         </Button>
       )}
     </div>
@@ -192,6 +198,8 @@ function RemovalForm({
   onRemove: () => void
   onKeep: () => void
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   return (
     <div id="removal-form" className="rule-edit-form removal-form">
       <ProjectionChoice
@@ -206,15 +214,15 @@ function RemovalForm({
       <div className="form-actions">
         <Button ref={confirm} variant="destructive" onClick={onRemove}>
           <Trash2 aria-hidden="true" />
-          {interrupted ? "Retry removal" : removalConfirmLabel(effective, detail.mapping_count)}
+          {interrupted ? t("ruleDetails.removal.retry") : removalConfirmLabel(i18n, effective, detail.mapping_count)}
         </Button>
         {!interrupted && (
           <Button variant="outline" onClick={onKeep}>
-            Keep rule
+            {t("ruleDetails.removal.keep")}
           </Button>
         )}
       </div>
-      {error && <div className="inline-error" role="alert">{removalErrorMessage(error)}</div>}
+      {error && <div className="inline-error" role="alert">{removalErrorMessage(i18n, error)}</div>}
     </div>
   )
 }
@@ -230,8 +238,9 @@ function RemovalProgress({
   remaining: number
   destinationName: string
 }) {
+  const i18n = useI18n()
   const now = useNow(1_000)
-  const { done, label } = removalProgress(request, remaining, destinationName)
+  const { done, label } = removalProgress(i18n, request, remaining, destinationName)
   return (
     <div ref={ref} tabIndex={-1} className="removal-progress">
       <p className="removal-progress-label">
@@ -241,7 +250,9 @@ function RemovalProgress({
       {done !== null && (
         <progress className="removal-bar" value={done} max={request.total} aria-label={label} />
       )}
-      <p className="removal-progress-meta">Running for {elapsedLabel(now - request.startedAt)}</p>
+      <p className="removal-progress-meta">
+        {i18n.t("ruleDetails.work.runningFor", { elapsed: elapsedLabel(i18n, now - request.startedAt) })}
+      </p>
     </div>
   )
 }

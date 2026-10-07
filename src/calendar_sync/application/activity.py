@@ -15,7 +15,7 @@ from calendar_sync.application.errors import (
     ActivityRuleRemoved,
     EventInspectionUnavailable,
 )
-from calendar_sync.application.ports import CalendarReader, UnitOfWorkFactory
+from calendar_sync.application.ports import CalendarReader, IncidentMessage, UnitOfWorkFactory
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventId,
@@ -176,6 +176,8 @@ class AccountStanding:
     id: str
     state: str
     provider: str
+    lapsed: bool = False
+    """Whether the provider stopped accepting a connected account (ADR 0027)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,10 +191,17 @@ class OperationsOverview:
     accounts: tuple[AccountStanding, ...] = ()
     """Every Connected Account, ordered by id."""
 
+    @property
+    def lapsed_accounts(self) -> int:
+        """Connected accounts whose authorization lapsed."""
+        return sum(account.lapsed for account in self.accounts)
+
 
 # The values the incidents table allows; its CHECK constraints keep stored rows to these.
 IncidentState = Literal["open", "resolved"]
-IncidentResolutionValue = Literal["sync_succeeded", "blocks_cleared", "rule_removed"]
+IncidentResolutionValue = Literal[
+    "sync_succeeded", "blocks_cleared", "rule_removed", "access_restored"
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +218,8 @@ class IncidentSummary:
     """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
     account_id: str | None = None
     """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
+    message: IncidentMessage | None = None
+    """The summary as a code and parameters, when it was recorded (ADR 0026)."""
 
 
 class OperationsQueries(Protocol):
@@ -227,6 +238,7 @@ _STOPPED = frozenset({SyncRuleState.DEGRADED, SyncRuleState.REMOVING})
 class Dashboard:
     connected_accounts: int
     disconnected_accounts: int
+    lapsed_accounts: int
     sync_rules: int
     enabled_rules: int
     stopped_rules: int
@@ -245,6 +257,7 @@ class Dashboard:
         return cls(
             connected_accounts=overview.connected_accounts,
             disconnected_accounts=overview.disconnected_accounts,
+            lapsed_accounts=overview.lapsed_accounts,
             sync_rules=len(states),
             enabled_rules=sum(state is SyncRuleState.ENABLED for state in states),
             stopped_rules=sum(state in _STOPPED for state in states),

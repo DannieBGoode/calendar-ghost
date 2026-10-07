@@ -6,7 +6,11 @@ import { AccountAvatar } from "@/components/account-avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { accountSummary } from "@/lib/account-summary"
+import { apiErrorMessage } from "@/i18n/api-errors"
+import { useI18n } from "@/i18n/provider"
+import { codeTag, rich } from "@/i18n/rich"
+import type { MessageKey } from "@/i18n/types"
+import { accountSummary, needsReauthorization } from "@/lib/account-summary"
 import { type ConnectedAccount, api } from "@/lib/api"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
 import { type AccountCommands, useAccountCommands } from "@/lib/use-account-commands"
@@ -14,35 +18,34 @@ import type { GoogleReturn } from "@/lib/use-google-return"
 import { AccountRow } from "@/features/settings-account-row"
 import { GoogleReturnNote, GoogleReturnStep } from "@/features/settings-google-return"
 
+const CONNECTION_STEPS: { title: MessageKey; body: MessageKey }[] = [
+  { title: "settings.connectionGuide.connect.title", body: "settings.connectionGuide.connect.body" },
+  { title: "settings.connectionGuide.choose.title", body: "settings.connectionGuide.choose.body" },
+  { title: "settings.connectionGuide.preview.title", body: "settings.connectionGuide.preview.body" },
+]
+
 function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
+  const { t } = useI18n()
   return (
     <details className="inline-help connection-guide">
       <summary>
         <KeyRound aria-hidden="true" />
-        <span>How connecting works</span>
+        <span>{t("settings.connectionGuide.summary")}</span>
         <ChevronDown className="inline-help-chevron" aria-hidden="true" />
       </summary>
       <div className="inline-help-body connection-guide-body">
         <ol className="connection-guide-steps">
-          <li>
-            <strong>Connect a Google account</strong>
-            <span>Authorize calendar discovery and event access for one account.</span>
-          </li>
-          <li>
-            <strong>Choose calendars</strong>
-            <span>Create a Directional Sync Rule with one source and one destination.</span>
-          </li>
-          <li>
-            <strong>Preview before syncing</strong>
-            <span>Review what will be written before anything reaches the destination.</span>
-          </li>
+          {CONNECTION_STEPS.map((step) => (
+            <li key={step.title}>
+              <strong>{t(step.title)}</strong>
+              <span>{t(step.body)}</span>
+            </li>
+          ))}
         </ol>
         {googleConfigured ? (
-          <p className="connection-guide-note">Use the Connect Google account button above to begin.</p>
+          <p className="connection-guide-note">{t("settings.connectionGuide.ready")}</p>
         ) : (
-          <p className="connection-guide-note">
-            Add the master key and Google OAuth credentials in <code>.env</code>, then restart before connecting.
-          </p>
+          <p className="connection-guide-note">{rich(t("settings.connectionGuide.notConfigured"), { code: codeTag })}</p>
         )}
       </div>
     </details>
@@ -52,12 +55,16 @@ function ConnectionGuide({ googleConfigured }: { googleConfigured: boolean }) {
 export function AccountsSection({
   googleConfigured,
   justConnected,
+  focusAccountId,
   returnHelp,
 }: {
   googleConfigured: boolean
   justConnected: boolean
+  /** The account a stopped rule or Google's return pointed to, shown open and in view. */
+  focusAccountId: string | null
   returnHelp: GoogleReturn
 }) {
+  const { t } = useI18n()
   const [accountsChoice, setAccountsChoice] = useState<boolean | null>(null)
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts })
   const commands = useAccountCommands(accounts.data)
@@ -68,21 +75,20 @@ export function AccountsSection({
 
       {!googleConfigured && (
         <p className="settings-note" role="status">
-          Add the master key and Google OAuth credentials in <code>.env</code>, then restart
-          before connecting an account.
+          {rich(t("settings.accounts.notConfiguredNote"), { code: codeTag })}
         </p>
       )}
       <GoogleReturnStep help={returnHelp} />
       <ConnectionGuide googleConfigured={googleConfigured} />
       {accounts.isPending && (
-        <div className="account-list-loading" aria-label="Loading connected accounts">
+        <div className="account-list-loading" aria-label={t("settings.accounts.loading")}>
           <Skeleton className="h-20 w-full" />
           <Skeleton className="h-20 w-full" />
         </div>
       )}
       {accounts.error && (
         <div className="inline-error" role="alert">
-          Connected accounts could not be loaded. Reload the page and try again.
+          {t("settings.accounts.loadError")}
         </div>
       )}
       {accounts.data && (
@@ -91,6 +97,7 @@ export function AccountsSection({
           choice={accountsChoice}
           onChoose={setAccountsChoice}
           justConnected={justConnected}
+          focusAccountId={focusAccountId}
           googleConfigured={googleConfigured}
           returnHelp={returnHelp}
           commands={commands}
@@ -102,21 +109,22 @@ export function AccountsSection({
 }
 
 function AccountsHeading({ googleConfigured, hasAccounts }: { googleConfigured: boolean; hasAccounts: boolean }) {
+  const { t } = useI18n()
   return (
     <div className="section-heading">
       <div>
-        <h2 id="accounts-title">Connected accounts</h2>
-        <p>The Google accounts whose calendars your rules can read and write.</p>
+        <h2 id="accounts-title">{t("settings.accounts.title")}</h2>
+        <p>{t("settings.accounts.intro")}</p>
       </div>
       {googleConfigured ? (
         // The next step only while nothing is connected; otherwise a routine addition.
         <Button variant={hasAccounts ? "outline" : "default"} asChild>
           <a href="/api/v1/oauth/google/start" onClick={() => recordAuthorizationStart()}>
-            <Plus aria-hidden="true" /> Connect Google account
+            <Plus aria-hidden="true" /> {t("settings.accounts.connect")}
           </a>
         </Button>
       ) : (
-        <Badge variant="attention"><ShieldAlert aria-hidden="true" /> Not configured</Badge>
+        <Badge variant="attention"><ShieldAlert aria-hidden="true" /> {t("settings.accounts.notConfigured")}</Badge>
       )}
     </div>
   )
@@ -127,6 +135,7 @@ function AccountGroup({
   choice,
   onChoose,
   justConnected,
+  focusAccountId,
   googleConfigured,
   returnHelp,
   commands,
@@ -135,17 +144,21 @@ function AccountGroup({
   choice: boolean | null
   onChoose: (open: boolean) => void
   justConnected: boolean
+  focusAccountId: string | null
   googleConfigured: boolean
   returnHelp: GoogleReturn
   commands: AccountCommands
 }) {
-  const summary = accountSummary(accounts)
+  const i18n = useI18n()
+  const { t } = i18n
+  const summary = accountSummary(i18n, accounts)
   // Collapsed while every account is healthy; open when one needs attention or just connected.
   const accountsOpen =
     choice ??
     Boolean(
       summary.needsAttention ||
         justConnected ||
+        focusAccountId ||
         commands.confirmingAccountId ||
         commands.deletingAccountId,
     )
@@ -155,8 +168,8 @@ function AccountGroup({
         <div className="account-empty">
           <CircleUserRound aria-hidden="true" />
           <div>
-            <h3>No Google accounts connected</h3>
-            <p>Connect an account to choose its calendars for your rules.</p>
+            <h3>{t("settings.accounts.empty.title")}</h3>
+            <p>{t("settings.accounts.empty.body")}</p>
           </div>
         </div>
       ) : (
@@ -168,7 +181,12 @@ function AccountGroup({
             onToggle={() => onChoose(!accountsOpen)}
           />
           {accountsOpen && (
-            <AccountList accounts={accounts} googleConfigured={googleConfigured} commands={commands} />
+            <AccountList
+              accounts={accounts}
+              focusAccountId={focusAccountId}
+              googleConfigured={googleConfigured}
+              commands={commands}
+            />
           )}
         </>
       )}
@@ -188,6 +206,8 @@ function AccountSummaryToggle({
   open: boolean
   onToggle: () => void
 }) {
+  const i18n = useI18n()
+  const { t } = i18n
   return (
     <button
       type="button"
@@ -220,12 +240,16 @@ function AccountSummaryToggle({
           {summary.text}
         </span>
         <span className="account-summary-emails">
-          {accounts.map((account) => account.email).join(", ")}
+          {i18n.format.unitList(accounts.map((account) => account.email))}
         </span>
       </span>
       <span className="account-summary-toggle">
-        {open ? "Hide" : "Show"}
-        <span className="sr-only"> accounts</span>
+        <span aria-hidden="true">
+          {open ? t("settings.accounts.toggle.hide") : t("settings.accounts.toggle.show")}
+        </span>
+        <span className="sr-only">
+          {open ? t("settings.accounts.toggle.hideAccounts") : t("settings.accounts.toggle.showAccounts")}
+        </span>
         <ChevronDown aria-hidden="true" />
       </span>
     </button>
@@ -234,23 +258,28 @@ function AccountSummaryToggle({
 
 function AccountList({
   accounts,
+  focusAccountId,
   googleConfigured,
   commands,
 }: {
   accounts: ConnectedAccount[]
+  focusAccountId: string | null
   googleConfigured: boolean
   commands: AccountCommands
 }) {
   const names = accounts.map((account) => account.display_name)
   const sharedNames = new Set(names.filter((name, index) => names.indexOf(name) !== index))
+  // Accounts to reauthorize lead, so the fix is the first thing in the list.
+  const ordered = [...accounts.filter(needsReauthorization), ...accounts.filter((a) => !needsReauthorization(a))]
   return (
     <ul className="account-list" id="account-list">
-      {accounts.map((account) => (
+      {ordered.map((account) => (
         <AccountRow
           key={account.id}
           account={account}
           sharedName={sharedNames.has(account.display_name)}
           googleConfigured={googleConfigured}
+          focused={account.id === focusAccountId}
           commands={commands}
         />
       ))}
@@ -259,18 +288,19 @@ function AccountList({
 }
 
 function AccountFeedback({ commands }: { commands: AccountCommands }) {
+  const i18n = useI18n()
   const { statusMessage, disconnect, permanentDelete } = commands
   return (
     <>
       {statusMessage && <p className="account-status-message" role="status">{statusMessage}</p>}
       {disconnect.error && (
         <div className="inline-error" role="alert">
-          {disconnect.error.message}
+          {apiErrorMessage(i18n, disconnect.error)}
         </div>
       )}
       {permanentDelete.error && (
         <div className="inline-error" role="alert">
-          {permanentDelete.error.message}
+          {apiErrorMessage(i18n, permanentDelete.error)}
         </div>
       )}
     </>

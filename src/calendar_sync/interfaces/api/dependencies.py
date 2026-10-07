@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import Annotated, Protocol
 
-from fastapi import Cookie, Depends, Header, HTTPException, Request, Response, status
+from fastapi import Cookie, Depends, Header, Request, Response, status
 
 from calendar_sync.application.ports import AdministratorAccess, IntegrationTokens
 from calendar_sync.interfaces.access import StatusAccess, status_access
+from calendar_sync.interfaces.api.problems import ApiProblem, problem
 
 SESSION_COOKIE = "calendar_sync_session"
 
@@ -27,7 +28,9 @@ def require_admin(
     session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
 ) -> None:
     if not services.administrator.session_is_valid(session):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "administrator session required")
+        raise problem(
+            status.HTTP_401_UNAUTHORIZED, "session_required", "administrator session required"
+        )
 
 
 class StatusReaderServices(AdministratorServices, Protocol):
@@ -35,10 +38,11 @@ class StatusReaderServices(AdministratorServices, Protocol):
     def integration_tokens(self) -> IntegrationTokens: ...
 
 
-def _unauthenticated() -> HTTPException:
+def _unauthenticated() -> ApiProblem:
     """A fresh exception every refusal, so repeated failures do not share one growing traceback."""
-    return HTTPException(
+    return problem(
         status.HTTP_401_UNAUTHORIZED,
+        "credentials_required",
         "valid credentials required",
         headers={"WWW-Authenticate": "Bearer"},
     )
@@ -53,15 +57,17 @@ def require_status_reader(
         services.integration_tokens, services.administrator, authorization, session
     )
     if access is StatusAccess.FORBIDDEN:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "token lacks the required scope")
+        raise problem(
+            status.HTTP_403_FORBIDDEN, "insufficient_scope", "token lacks the required scope"
+        )
     if access is not StatusAccess.GRANTED:
         raise _unauthenticated()
 
 
-def available[T](use_case: T | None, detail: str) -> T:
+def available[T](use_case: T | None, code: str, detail: str) -> T:
     """The one guard for what needs the installation master key or Google OAuth."""
     if use_case is None:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail)
+        raise problem(status.HTTP_503_SERVICE_UNAVAILABLE, code, detail)
     return use_case
 
 

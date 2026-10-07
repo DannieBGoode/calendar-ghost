@@ -121,9 +121,12 @@ def test_preview_shows_source_changes_with_their_values(tmp_path: Path) -> None:
                 "blocked_events": 0,
             },
         ),
-        (Scenario.STOPPED, {"open_incidents": 2, "stopped_rules": 2, "blocked_events": 0}),
+        (
+            Scenario.STOPPED,
+            {"open_incidents": 1, "stopped_rules": 2, "blocked_events": 0, "lapsed_accounts": 1},
+        ),
         (Scenario.WAITING, {"open_incidents": 1, "stopped_rules": 0, "enabled_rules": 3}),
-        (Scenario.SEVERAL, {"open_incidents": 3, "stopped_rules": 2, "blocked_events": 2}),
+        (Scenario.SEVERAL, {"open_incidents": 2, "stopped_rules": 2, "blocked_events": 2}),
         (
             Scenario.PAUSED,
             {"status": "paused", "needs_attention": False, "enabled_rules": 0, "sync_rules": 3},
@@ -155,3 +158,28 @@ def test_preview_names_calendars_of_an_account_that_lost_access(tmp_path: Path) 
     personal = next(rule for rule in rules if rule["id"] == "preview-personal-work")
     assert personal["state"] == "degraded"
     assert personal["source"]["calendar_name"] == "Personal"
+
+
+def _incident_messages(path: Path, scenario: Scenario) -> dict[str, object]:
+    container = build_preview_container(path, NOW, scenario=scenario)
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        incidents = client.get("/api/v1/incidents").json()
+    return {incident["id"]: incident["message"] for incident in incidents}
+
+
+def test_preview_incidents_carry_messages_and_one_keeps_only_its_summary(tmp_path: Path) -> None:
+    review = _incident_messages(tmp_path / "dev-preview.db", Scenario.REVIEW)
+    stopped = _incident_messages(tmp_path / "dev-preview.db", Scenario.STOPPED)
+
+    assert review["preview-incident"] == {"code": "events_still_blocked", "params": {"count": 1}}
+    assert review["preview-resolved-sync_succeeded"] == {
+        "code": "provider_failure",
+        "params": {"kind": "temporary", "provider": "google"},
+    }
+    # Kept without a message so the Web UI's fallback to the stored summary stays visible.
+    assert review["preview-resolved-rule_removed"] is None
+    assert stopped["authorization:preview-sam-personal"] == {
+        "code": "authorization_lapsed",
+        "params": {"kind": "authentication", "provider": "google"},
+    }

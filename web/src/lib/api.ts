@@ -1,13 +1,30 @@
 import type { components, paths } from "@/lib/api-schema"
 
+/** An error body's parameters; the Web UI fills its translated message with them. */
+export type ApiErrorParams = Readonly<Record<string, string | number | null>>
+/** What an error body says besides its detail: a stable code (ADR 0026) and its parameters. */
+export type ApiErrorCode = { code?: string | null; params?: ApiErrorParams }
+
 export class ApiError extends Error {
+  /** The server's stable error code; null when the body had none. */
+  public readonly code: string | null
+  public readonly params: ApiErrorParams
+
   constructor(
     message: string,
     public readonly status: number,
+    /** The server's English detail, including validation messages; null when it sent none. */
+    public readonly detail: string | null = null,
+    { code = null, params = {} }: ApiErrorCode = {},
   ) {
     super(message)
+    this.code = code
+    this.params = params
   }
 }
+
+/** The server answered, but its body was not JSON; a proxy fallback page is the usual cause. */
+export class UnreadableResponseError extends ApiError {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
@@ -15,7 +32,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, credentials: "same-origin", headers })
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null)
-    throw new ApiError(errorDetail(body) ?? "The request could not be completed.", response.status)
+    const detail = errorDetail(body)
+    throw new ApiError(detail ?? "The request could not be completed.", response.status, detail, errorCode(body))
   }
   if (response.status === 204) return undefined as T
   try {
@@ -24,7 +42,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // The request reached a server, so an unparseable body is a service failure, not a
     // connectivity one; a proxy fallback page is the usual cause.
     if (!(error instanceof SyntaxError)) throw error
-    throw new ApiError("The service returned an unreadable response.", response.status)
+    throw new UnreadableResponseError("The service returned an unreadable response.", response.status)
   }
 }
 
@@ -41,6 +59,21 @@ export function errorDetail(body: unknown): string | null {
     typeof item === "object" && item !== null && "msg" in item && typeof item.msg === "string" ? [item.msg] : [],
   )
   return messages.length ? messages.join("; ") : null
+}
+
+/** The stable code and parameters of an error body; params keep only text, numbers, and null. */
+function errorCode(body: unknown): ApiErrorCode {
+  if (typeof body !== "object" || body === null) return { code: null, params: {} }
+  const code = "code" in body && typeof body.code === "string" ? body.code : null
+  const raw = "params" in body ? body.params : null
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { code, params: {} }
+  const params = Object.fromEntries(
+    Object.entries(raw).filter(
+      (entry): entry is [string, string | number | null] =>
+        entry[1] === null || typeof entry[1] === "string" || typeof entry[1] === "number",
+    ),
+  )
+  return { code, params }
 }
 
 type Method = "get" | "post" | "patch" | "delete"

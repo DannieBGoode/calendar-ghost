@@ -204,9 +204,11 @@ successful scheduled run. Only scheduled runs report their success to rule healt
 Reconcile Now never resolve it. Each resolved incident records why it resolved (`sync_succeeded`,
 `blocks_cleared`, or `rule_removed`, SQLite migration 12), and reopening one resets its opening
 time, so "First seen" on the Overview measures only the current episode. An authorization failure
-opens the Incident at once and names the Connected Account Google rejected; the preview that
-recovers a stopped rule refreshes it with any other account whose authorization it finds lost,
-so Activity keeps pointing at the account still to reauthorize.
+lapses the Connected Account Google rejected and opens one Incident for that account at once,
+covering every rule it stops; a preview that finds another account's authorization lost lapses
+that account too. Reauthorization, or an access check Google passes, resolves the account's
+Incident (`access_restored`, migration 20) and resumes the rules the lapse alone stopped
+([ADR 0027](adr/0027-lapsed-authorization-and-automatic-recovery.md)).
 
 ## Reconciliation
 

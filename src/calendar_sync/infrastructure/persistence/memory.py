@@ -47,6 +47,9 @@ from calendar_sync.domain.model import (
 @dataclass(slots=True)
 class MemoryState:
     accounts: dict[ConnectedAccountId, ConnectedAccountState] = field(default_factory=dict)
+    lapsed: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
+    authorized_at: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
+    """When each account was last authorized; one missing was authorized before any request."""
     rules: dict[SyncRuleId, SyncRule] = field(default_factory=dict)
     mappings: dict[tuple[SyncRuleId, EventRef], EventMapping] = field(default_factory=dict)
     occurrences: dict[tuple[EventMappingId, OccurrenceStart], OccurrenceMapping] = field(
@@ -83,10 +86,35 @@ class InMemoryConnectedAccountRecords:
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None:
         return self._state.accounts.get(account_id)
 
+    def lapse(self, account_id: ConnectedAccountId, *, attempted_at: datetime) -> bool:
+        if self._state.accounts.get(account_id) is not ConnectedAccountState.CONNECTED:
+            return False
+        authorized = self._state.authorized_at.get(account_id)
+        if authorized is not None and authorized > attempted_at:
+            return False
+        latest = self._state.lapsed.get(account_id)
+        self._state.lapsed[account_id] = max(latest, attempted_at) if latest else attempted_at
+        return True
+
+    def clear_lapse(self, account_id: ConnectedAccountId, *, requested_before: datetime) -> bool:
+        lapsed = self._state.lapsed.get(account_id)
+        if lapsed is None or lapsed > requested_before:
+            return False
+        del self._state.lapsed[account_id]
+        return True
+
+    def authorized(self, account_id: ConnectedAccountId) -> bool:
+        return (
+            self._state.accounts.get(account_id) is ConnectedAccountState.CONNECTED
+            and account_id not in self._state.lapsed
+        )
+
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         if self._state.accounts.get(account_id) is not ConnectedAccountState.DISCONNECTED:
             return False
         del self._state.accounts[account_id]
+        self._state.lapsed.pop(account_id, None)
+        self._state.authorized_at.pop(account_id, None)
         self._state.calendar_names = {
             endpoint: name
             for endpoint, name in self._state.calendar_names.items()

@@ -1,3 +1,5 @@
+import type { MessageKey } from "@/i18n/types"
+
 export type OAuthRedirectMismatch = {
   redirectOrigin: string
   currentOrigin: string
@@ -89,4 +91,25 @@ export function authorizationAwaitingReturn(
     return false
   }
   return started > 0 && now >= started && now - started < AUTHORIZATION_RETURN_MS
+}
+
+/** What the OAuth callback reports when it sends the browser back to Settings (`?google=`). */
+export type OAuthOutcome = "connected" | "calendar_permission_required" | "authorization_failed"
+
+export const OAUTH_OUTCOME_MESSAGES: Record<OAuthOutcome, { title: MessageKey; body: MessageKey }> = {
+  connected: { title: "settings.oauthOutcome.connected.title", body: "settings.oauthOutcome.connected.body" },
+  calendar_permission_required: {
+    title: "settings.oauthOutcome.calendarPermissionRequired.title",
+    body: "settings.oauthOutcome.calendarPermissionRequired.body",
+  },
+  authorization_failed: {
+    title: "settings.oauthOutcome.authorizationFailed.title",
+    body: "settings.oauthOutcome.authorizationFailed.body",
+  },
+}
+
+/** The known outcome in a query string; an unknown or missing one shows nothing. */
+export function oauthOutcome(search: string): OAuthOutcome | null {
+  const value = new URLSearchParams(search).get("google")
+  return value !== null && Object.hasOwn(OAUTH_OUTCOME_MESSAGES, value) ? (value as OAuthOutcome) : null
 }

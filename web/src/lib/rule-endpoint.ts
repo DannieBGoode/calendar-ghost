@@ -1,3 +1,5 @@
+import type { I18n } from "@/i18n/translator"
+
 type EndpointAccount = { email: string }
 type EndpointCalendar = { id: string; summary: string }
 type Endpoint = { calendar_id: string; calendar_name?: string | null }
@@ -6,6 +8,7 @@ export type RuleEndpointLabel = { calendar: string; account: string }
 
 /** Names a rule's calendar as Google lists it now, else as it was last listed. */
 export function ruleEndpointLabel(
+  i18n: I18n,
   endpoint: Endpoint,
   account: EndpointAccount | undefined,
   calendars: readonly EndpointCalendar[] | undefined,
@@ -14,7 +17,7 @@ export function ruleEndpointLabel(
   const isPrimary = email !== undefined && endpoint.calendar_id === email
   const summary =
     calendars?.find((calendar) => calendar.id === endpoint.calendar_id)?.summary || endpoint.calendar_name
-  const calendar = summary || (isPrimary ? email : "Secondary calendar")
-  if (email === undefined) return { calendar, account: "Unknown account" }
-  return { calendar, account: calendar === email ? "Primary calendar" : email }
+  const calendar = summary || (isPrimary ? email : i18n.t("rules.endpoint.secondaryCalendar"))
+  if (email === undefined) return { calendar, account: i18n.t("rules.endpoint.unknownAccount") }
+  return { calendar, account: calendar === email ? i18n.t("rules.endpoint.primaryCalendar") : email }
 }

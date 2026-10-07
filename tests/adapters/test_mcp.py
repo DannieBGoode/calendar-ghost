@@ -133,6 +133,11 @@ def test_mcp_refuses_missing_revoked_and_cookie_only_credentials(mcp: Any) -> No
     assert _rpc(client, "cgs_" + "A" * 43, "tools/list").status_code == 401
     unauthorized = _rpc(client, None, "tools/list")
     assert unauthorized.headers["www-authenticate"] == "Bearer"
+    assert unauthorized.json() == {
+        "detail": "valid credentials required",
+        "code": "credentials_required",
+        "params": {},
+    }
     token_id = client.get("/api/v1/integration-tokens").json()[0]["id"]
     client.delete(f"/api/v1/integration-tokens/{token_id}")
     assert _rpc(client, token, "tools/list").status_code == 401
@@ -144,12 +149,14 @@ def test_only_post_is_served_so_no_stream_stays_open(mcp: Any, method: str) -> N
     response = client.request(method, "/mcp", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 405
     assert response.headers["allow"] == "POST"
+    assert response.json()["code"] == "method_not_allowed"
 
 
 def test_paths_below_mcp_are_not_found_and_the_web_ui_is_unaffected(mcp: Any) -> None:
     client, token = mcp
     below = client.post("/mcp/", headers={"Authorization": f"Bearer {token}"}, json={})
     assert below.status_code == 404
+    assert below.json() == {"detail": "not found", "code": "not_found", "params": {}}
     assert client.post("/mcp/extra", json={}).status_code == 404
     # The compiled Web UI is committed, so its client-side routes still serve the application.
     web_ui = client.get("/rules")
@@ -195,7 +202,7 @@ class _Services:
     get_sync_rule_details: None = None
 
 
-def _call_gate(scope: object) -> tuple[int, dict[str, str]]:
+def _call_gate(scope: object) -> tuple[int, dict[str, object]]:
     """POST /mcp with a bearer token straight to the gate of an MCP endpoint that is not running."""
     endpoint = McpEndpoint(cast(McpServices, _Services(_Tokens(scope))))
     sent: list[MutableMapping[str, Any]] = []
@@ -217,13 +224,20 @@ def _call_gate(scope: object) -> tuple[int, dict[str, str]]:
 
 
 def test_a_token_without_the_status_scope_is_forbidden() -> None:
-    assert _call_gate("rules:write") == (403, {"detail": "token lacks the required scope"})
+    assert _call_gate("rules:write") == (
+        403,
+        {"detail": "token lacks the required scope", "code": "insufficient_scope", "params": {}},
+    )
 
 
 def test_a_valid_token_before_the_server_starts_gets_service_unavailable() -> None:
     assert _call_gate(IntegrationTokenScope.STATUS_READ) == (
         503,
-        {"detail": "the MCP server is starting or stopping"},
+        {
+            "detail": "the MCP server is starting or stopping",
+            "code": "mcp_not_running",
+            "params": {},
+        },
     )
 
 

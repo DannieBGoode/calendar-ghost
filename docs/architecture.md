@@ -82,9 +82,12 @@ and every incident key and summary. `RuleHealth` applies it through the `RuleHea
 `IncidentRepository`, and `IncidentNotifications` ports and the `Clock`. Each use case reports to it
 through a protocol of its own: the scheduler through `RunHealth` after every Sync Run, Reconcile Now
 through `FullPassRecords` after its full pass, Rule Removal through `RemovalIncidents` when lost
-authorization stops it, and the preview that recovers a degraded rule through `RecoveryIncidents`
-when it finds an account's authorization lost. A provider failure names the Connected Account whose
-request failed, so an authorization Incident names the account to reauthorize. Scheduled runs and Rule Removal share one retry helper in
+authorization stops it, and a preview through `RecoveryIncidents` when it finds an account's
+authorization lost. A provider failure names the Connected Account whose request failed. An
+authorization failure marks that account's Lapsed Authorization through `LapsedAuthorizations` in
+`application/lapsed_authorization.py`, which opens one Incident for the account rather than one per
+rule; Reauthorization and a passing access check clear it and resume the rules it alone stopped
+(ADR 0027). Scheduled runs and Rule Removal share one retry helper in
 `application/retry.py`, which retries only temporary and rate-limited failures.
 
 Installation Status follows the same direction ([ADR 0024](adr/0024-integration-tokens-installation-status-and-mcp.md)).

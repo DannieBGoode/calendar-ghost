@@ -228,8 +228,10 @@ account, check its Calendar API access, or disconnect it. **Check access** verif
 and event permissions with read-only requests and reports how many visible calendars can be used as
 destinations. Disconnecting removes stored Google credentials and degrades any enabled rule that
 uses the identity; mappings, Managed Projections, and incremental positions are preserved for safe
-reauthorization. A disconnected account says how many of its rules stopped and offers
-**Reauthorize account**, which is disabled until Google OAuth is configured. Accounts connected before profile photos were supported show initials until they
+reauthorization. A disconnected account, or one Google stopped accepting, is listed first, marked
+**Disconnected** or **Needs reauthorization**, says how many of its rules stopped, and offers
+**Reauthorize account**, which is disabled until Google OAuth is configured. Once Google accepts the
+account again, rules that stopped only because its access lapsed restart on their own. Accounts connected before profile photos were supported show initials until they
 are connected again with **Connect Google account**, which updates the existing identity in place.
 
 Use **Settings → Storage** to see the database size, the number of Activity entries, the oldest

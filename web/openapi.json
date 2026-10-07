@@ -223,6 +223,17 @@
       },
       "ConnectedAccountResponse": {
         "properties": {
+          "authorization_lapsed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Lapsed At"
+          },
           "authorized_at": {
             "anyOf": [
               {
@@ -278,7 +289,8 @@
           "avatar_url",
           "state",
           "rule_count",
-          "authorized_at"
+          "authorized_at",
+          "authorization_lapsed_at"
         ],
         "title": "ConnectedAccountResponse",
         "type": "object"
@@ -373,6 +385,10 @@
             "title": "Enabled Rules",
             "type": "integer"
           },
+          "lapsed_accounts": {
+            "title": "Lapsed Accounts",
+            "type": "integer"
+          },
           "last_synced_at": {
             "anyOf": [
               {
@@ -427,6 +443,7 @@
           "problems",
           "connected_accounts",
           "disconnected_accounts",
+          "lapsed_accounts",
           "sync_rules",
           "enabled_rules",
           "stopped_rules",
@@ -693,6 +710,10 @@
             "title": "Event Access",
             "type": "boolean"
           },
+          "rules_resumed": {
+            "title": "Rules Resumed",
+            "type": "integer"
+          },
           "writable_calendars": {
             "title": "Writable Calendars",
             "type": "integer"
@@ -703,7 +724,8 @@
           "calendar_list_access",
           "event_access",
           "calendars_visible",
-          "writable_calendars"
+          "writable_calendars",
+          "rules_resumed"
         ],
         "title": "GoogleAccountAccessResponse",
         "type": "object"
@@ -746,6 +768,38 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IncidentMessageResponse": {
+        "description": "What an Incident says as a stable code and parameters the Web UI translates (ADR 0026).",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "code",
+          "params"
+        ],
+        "title": "IncidentMessageResponse",
+        "type": "object"
+      },
       "IncidentResponse": {
         "properties": {
           "account_id": {
@@ -767,6 +821,16 @@
             "title": "Id",
             "type": "string"
           },
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentMessageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "opened_at": {
             "title": "Opened At",
             "type": "string"
@@ -777,7 +841,8 @@
                 "enum": [
                   "sync_succeeded",
                   "blocks_cleared",
-                  "rule_removed"
+                  "rule_removed",
+                  "access_restored"
                 ],
                 "type": "string"
               },
@@ -836,7 +901,8 @@
           "updated_at",
           "resolved_at",
           "resolution",
-          "account_id"
+          "account_id",
+          "message"
         ],
         "title": "IncidentResponse",
         "type": "object"
@@ -1147,6 +1213,16 @@
             "title": "Kind",
             "type": "string"
           },
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IncidentMessageResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "rule_id": {
             "anyOf": [
               {
@@ -1178,7 +1254,8 @@
           "kind",
           "rule_id",
           "summary",
-          "since"
+          "since",
+          "message"
         ],
         "title": "ProblemResponse",
         "type": "object"
@@ -2080,6 +2157,10 @@
             "title": "Disconnected Accounts",
             "type": "integer"
           },
+          "lapsed_accounts": {
+            "title": "Lapsed Accounts",
+            "type": "integer"
+          },
           "open_incidents": {
             "title": "Open Incidents",
             "type": "integer"
@@ -2113,7 +2194,8 @@
           "overdue",
           "open_incidents",
           "blocked_events",
-          "disconnected_accounts"
+          "disconnected_accounts",
+          "lapsed_accounts"
         ],
         "title": "StatusCountsResponse",
         "type": "object"
@@ -3333,8 +3415,25 @@
     },
     "/api/v1/oauth/google/start": {
       "get": {
+        "description": "Start Google's consent; reauthorizing a known `account` suggests its email to Google.",
         "operationId": "start_google_oauth_api_v1_oauth_google_start_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account"
+            }
+          },
           {
             "in": "cookie",
             "name": "calendar_sync_session",

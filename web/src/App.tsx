@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthScreen } from "@/features/auth-screen"
 import { Dashboard } from "@/features/dashboard"
+import { rich } from "@/i18n/rich"
+import { useI18n } from "@/i18n/provider"
+import type { MessageKey } from "@/i18n/types"
 import { api } from "@/lib/api"
 import { APP_VERSION, LICENSE_URL, PRODUCT_NAME, SOURCE_URL, documentTitle } from "@/lib/brand"
 import {
@@ -21,14 +24,15 @@ import {
 } from "@/lib/navigation"
 import { cn } from "@/lib/utils"
 
-const navItems: { id: AppView; label: string; icon: typeof Waypoints }[] = [
-  { id: "overview", label: "Overview", icon: CalendarCheck2 },
-  { id: "rules", label: "Rules", icon: Waypoints },
-  { id: "activity", label: "Activity", icon: Activity },
-  { id: "settings", label: "Settings", icon: Settings2 },
+const navItems: { id: AppView; labelKey: MessageKey; icon: typeof Waypoints }[] = [
+  { id: "overview", labelKey: "app.nav.overview", icon: CalendarCheck2 },
+  { id: "rules", labelKey: "app.nav.rules", icon: Waypoints },
+  { id: "activity", labelKey: "app.nav.activity", icon: Activity },
+  { id: "settings", labelKey: "app.nav.settings", icon: Settings2 },
 ]
 
 export default function App() {
+  const { t } = useI18n()
   const setup = useQuery({ queryKey: ["setup"], queryFn: api.setup })
   const configured = setup.data?.administrator_configured === true
   const session = useQuery({
@@ -38,16 +42,18 @@ export default function App() {
   })
 
   if (setup.isPending || (configured && session.isPending)) {
-    return <div className="startup-loading" role="status" aria-label={`Loading ${PRODUCT_NAME}`}><GhostMark className="startup-ghost" /></div>
+    return <div className="startup-loading" role="status" aria-label={t("app.loading")}><GhostMark className="startup-ghost" /></div>
   }
   if (setup.error || session.error) {
-    return <main className="fatal-state"><h1>{PRODUCT_NAME} is unavailable</h1><p>The browser could not reach the local service.</p><Button onClick={() => window.location.reload()}>Reload page</Button></main>
+    return <main className="fatal-state"><h1>{t("app.unavailable.title")}</h1><p>{t("app.unavailable.body")}</p><Button onClick={() => window.location.reload()}>{t("app.unavailable.reload")}</Button></main>
   }
   if (!configured) return <AuthScreen mode="setup" />
   if (!session.data?.authenticated) return <AuthScreen mode="login" />
   return <AuthenticatedApp />
 }
 function AuthenticatedApp() {
+  const i18n = useI18n()
+  const { t } = i18n
   const [location, setLocation] = useState<AppLocation>(() =>
     appLocationFromPathname(window.location.pathname),
   )
@@ -87,10 +93,12 @@ function AuthenticatedApp() {
   // A layout effect runs before the new view's own effects, so a view that focuses its heading
   // (Rule Details, the rule builder) refines this rather than being overridden by it.
   useLayoutEffect(() => {
-    const title = navItems.find((item) => item.id === view)?.label ?? "Overview"
-    document.title = documentTitle(location.ruleId ? "Rule" : title)
+    const title = location.ruleId
+      ? t("app.ruleTitle")
+      : t(navItems.find((item) => item.id === view)?.labelKey ?? "app.nav.overview")
+    document.title = documentTitle(i18n, title)
     if (navigated.current) main.current?.focus({ preventScroll: true })
-  }, [view, location.ruleId])
+  }, [view, location.ruleId, i18n, t])
 
   useEffect(() => {
     // The live region stays mounted across views; filling it after arrival makes the notice
@@ -144,24 +152,41 @@ function AuthenticatedApp() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <a className="wordmark" href={appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label={`${PRODUCT_NAME} overview`}>
+        <a className="wordmark" href={appPathForView("overview")} onClick={(event) => followSectionLink(event, "overview")} aria-label={t("app.wordmarkLabel")}>
           <span className="wordmark-icon"><GhostMark /></span><span>{PRODUCT_NAME}</span>
         </a>
-        <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label="Primary navigation">
+        <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label={t("app.nav.primaryLabel")}>
           {navItems.map((item) => {
             const Icon = item.icon
-            return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{item.label}</span></a>
+            return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{t(item.labelKey)}</span></a>
           })}
         </nav>
         <div className="topbar-actions">
           <ThemeToggle />
-          <Button variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending} aria-label="Sign out"><LogOut /> <span className="desktop-only">Sign out</span></Button>
-          <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? "Close navigation" : "Open navigation"}>{mobileNav ? <X /> : <Menu />}</Button>
+          <Button variant="ghost" onClick={() => logout.mutate()} disabled={logout.isPending} aria-label={t("app.signOut")}><LogOut /> <span className="desktop-only">{t("app.signOut")}</span></Button>
+          <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? t("app.nav.close") : t("app.nav.open")}>{mobileNav ? <X /> : <Menu />}</Button>
         </div>
       </header>
       <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
-      <footer className="app-footer"><span>{PRODUCT_NAME}</span><span>v{APP_VERSION}</span><span>Runs on this device</span><a href="/api/docs">API documentation</a><span className="legal-notice">© 2026 Calendar Ghost contributors · No warranty · <a href={LICENSE_URL} target="_blank" rel="noreferrer">AGPLv3+ license</a></span><a href={SOURCE_URL} target="_blank" rel="noreferrer">Source</a></footer>
+      <footer className="app-footer">
+        <span>{PRODUCT_NAME}</span>
+        <span>{t("app.footer.version", { version: APP_VERSION })}</span>
+        <span>{t("app.footer.runsHere")}</span>
+        <a href="/api/docs">{t("app.footer.apiDocs")}</a>
+        <span className="legal-notice">
+          {rich(t("app.footer.legal"), {
+            license: (text) => (
+              <a href={LICENSE_URL} target="_blank" rel="noreferrer">
+                {text}
+              </a>
+            ),
+          })}
+        </span>
+        <a href={SOURCE_URL} target="_blank" rel="noreferrer">
+          {t("app.footer.source")}
+        </a>
+      </footer>
     </div>
   )
 }
