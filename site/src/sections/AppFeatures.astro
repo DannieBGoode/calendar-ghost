@@ -1,0 +1,84 @@
+---
+// The app, feature by feature: each one a short title, one plain sentence, and its mockup, the
+// mockup on alternating sides (not a grid of boxes).
+import type { Messages } from "../i18n"
+import ActivityHistory from "../mockups/ActivityHistory.astro"
+import OverviewHealth from "../mockups/OverviewHealth.astro"
+import RulesList from "../mockups/RulesList.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const features = m.app.features
+---
+
+<section id="features" class="section feats" aria-labelledby="app-title">
+  <div class="container">
+    <div class="feats-head">
+      <h2 id="app-title">{m.app.title}</h2>
+      <p class="feats-lead">{m.app.body}</p>
+    </div>
+    <ul class="feats-list">
+      <li class="feat">
+        <div class="feat-copy">
+          <p class="feat-screen">{features.rules.screen}</p>
+          <h3>{features.rules.title}</h3>
+          <p class="feat-body">{features.rules.body}</p>
+        </div>
+        <div class="feat-shot"><RulesList m={m} /></div>
+      </li>
+      <li class="feat feat-flip">
+        <div class="feat-copy">
+          <p class="feat-screen">{features.activity.screen}</p>
+          <h3>{features.activity.title}</h3>
+          <p class="feat-body">{features.activity.body}</p>
+        </div>
+        <div class="feat-shot"><ActivityHistory m={m} /></div>
+      </li>
+      <li class="feat">
+        <div class="feat-copy">
+          <p class="feat-screen">{features.health.screen}</p>
+          <h3>{features.health.title}</h3>
+          <p class="feat-body">{features.health.body}</p>
+        </div>
+        <div class="feat-shot"><OverviewHealth m={m} /></div>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<style>
+  .feats-head { display: grid; gap: 0.5rem 2.5rem; align-items: end; }
+  .feats-head h2 { margin: 0 0 0.75rem; }
+  .feats-lead { margin: 0; max-width: 46ch; font-size: 1.125rem; line-height: 1.45; color: var(--muted-foreground); }
+
+  .feats-list { list-style: none; margin: 3.5rem 0 0; padding: 0; display: grid; gap: 4rem; }
+  .feats .feat { display: grid; gap: 1.25rem; align-items: center; min-width: 0; }
+  .feat > * { min-width: 0; }
+  .feat-copy { max-width: 30rem; }
+  /* The app's screen the feature lives on, as a small label over the title. */
+  .feat-screen {
+    margin: 0 0 0.6rem; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--primary);
+  }
+  .feats .feat h3 {
+    margin: 0 0 0.7rem; font-family: var(--font-display); font-weight: var(--display-weight);
+    font-size: clamp(1.625rem, 1.25rem + 1.3vw, 2.25rem); line-height: var(--display-leading); letter-spacing: var(--display-tracking);
+    text-wrap: balance;
+  }
+  .feat-body { margin: 0; max-width: 38ch; font-size: 1.0625rem; line-height: 1.55; color: var(--muted-foreground); text-wrap: pretty; }
+  .feat-shot { position: relative; }
+  .feat-shot > :global(.mock) { position: relative; z-index: 1; }
+
+  /* Wide: the copy beside the mockup with clear air between them, sides alternating. The copy
+     starts level with the mockup's top third, where the eye lands, not its middle. */
+  @media (min-width: 900px) {
+    .feats-list { gap: clamp(4.5rem, 8vw, 7rem); }
+    .feats .feat { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(2rem, 5vw, 5rem); align-items: start; }
+    .feats .feat-flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+    .feat-flip .feat-copy { order: 2; }
+    .feat-copy { padding-top: clamp(1rem, 4vw, 3.5rem); }
+  }
+</style>

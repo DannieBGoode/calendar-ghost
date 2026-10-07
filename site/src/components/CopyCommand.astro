@@ -1,0 +1,65 @@
+---
+// Shell commands with a Copy button, shared by every place that offers a command to copy: one
+// line, or several (one per line, copied together). The button appears only with JavaScript;
+// without the Clipboard API (plain HTTP on a LAN, older browsers) it selects the commands so the
+// visitor can copy them by hand (lib/copy.ts).
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+  /** Unique on the page: the button finds its command by this id. */
+  id: string
+  /** One command, or several separated by newlines. */
+  command: string
+}
+
+const { m, id, command } = Astro.props
+const lines = command.split("\n").length
+---
+
+<div class:list={["command", { "command-lines": lines > 1 }]}>
+  <code id={id}>{command}</code>
+  <button
+    type="button"
+    class="btn btn-small"
+    hidden
+    data-copy={id}
+    data-label={m.selfHost.copy}
+    data-copied={m.selfHost.copied}
+    data-selected={m.selfHost.selected}
+  >
+    {m.selfHost.copy}
+  </button>
+  <span class="sr-only" role="status" data-copy-status></span>
+</div>
+
+<script>
+  import { announceCopy, copyOrSelect } from "../lib/copy"
+
+  // The result also goes to a visually hidden live region beside the button, since a button's
+  // own text change is not reliably announced by screen readers.
+  for (const button of document.querySelectorAll<HTMLButtonElement>("button[data-copy]")) {
+    const status = button.parentElement?.querySelector<HTMLElement>("[data-copy-status]") ?? null
+    button.hidden = false
+    button.addEventListener("click", async () => {
+      const code = document.getElementById(button.dataset.copy ?? "")
+      if (code) announceCopy(button, status, await copyOrSelect(code))
+    })
+  }
+</script>
+
+<style>
+  /* Flex children default to their content's width; a long command must not widen the page, so
+     the command may shrink and scrolls inside its own box. */
+  .command {
+    display: flex; align-items: center; gap: 0.5rem; min-width: 0; padding: 0.6rem 0.6rem 0.6rem 0.9rem;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  }
+  .command code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-size: 0.875rem; padding-block: 0.35rem; }
+  .command .btn { flex: none; }
+  /* Several commands: one per line, across the whole box (the first is the longest), and the
+     button in the bottom corner, beside the last and shortest. */
+  .command-lines { position: relative; display: block; padding: 0.75rem 0.9rem; }
+  .command-lines code { display: block; white-space: pre; line-height: 1.9; padding-block: 0; }
+  .command-lines .btn { position: absolute; right: 0.6rem; bottom: 0.6rem; }
+</style>

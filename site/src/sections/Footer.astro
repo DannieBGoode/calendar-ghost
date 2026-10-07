@@ -1,0 +1,99 @@
+---
+// The home page's ending: night falls, and the ghost keeps watch. A Twilight band with rounded
+// shoulders, like the top of the ghost's own head, holds the last call to action beside the white
+// ghost dozing in its lantern glow, floating and breathing out "z"s for a few seconds each time it
+// comes into view. Once it has dozed off it mumbles in its sleep, like a child in bed ("Five more
+// minutes, please."), and the line under it is plain narration (sync really runs every five
+// minutes). Then the page's organized links.
+import type { Messages } from "../i18n"
+import { Ghost, SpeechBubble } from "../islands/Ghost"
+import { REPO_URL } from "../links"
+import FooterLinks from "./FooterLinks.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<footer class="footer night">
+  <div class="container footer-close">
+    <div class="footer-pitch">
+      <h2>{m.footer.cta}</h2>
+      <p class="footer-body">{m.footer.body}</p>
+      <div class="ctas">
+        <a class="btn btn-primary footer-btn" href="#self-host">{m.hero.primary}</a>
+        <a class="btn footer-btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+          <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
+        </a>
+      </div>
+    </div>
+    <div class="footer-watch">
+      <span class="footer-ghost ghost-stage" data-wake>
+        <Ghost face="sleepy" alive="brief" float size={168} />
+        <SpeechBubble side="top" className="footer-sleep-talk">{m.footer.sleepTalk}</SpeechBubble>
+      </span>
+      <p class="footer-watch-note">{m.footer.watch}</p>
+    </div>
+  </div>
+  <div class="container footer-links">
+    <FooterLinks m={m} />
+  </div>
+</footer>
+
+<style>
+  .footer {
+    --shoulder: clamp(2rem, 6vw, 5rem);
+    position: relative; margin-top: clamp(2rem, 5vw, 4rem); padding-block: clamp(4rem, 9vw, 7.5rem) 2rem;
+    border-radius: var(--shoulder) var(--shoulder) 0 0;
+    /* A few stars, no more. */
+    background:
+      radial-gradient(1.5px 1.5px at 8% 22%, oklch(0.95 0.02 285 / 0.7), transparent),
+      radial-gradient(1px 1px at 21% 9%, oklch(0.95 0.02 285 / 0.55), transparent),
+      radial-gradient(1.5px 1.5px at 39% 30%, oklch(0.95 0.02 285 / 0.45), transparent),
+      radial-gradient(1px 1px at 57% 12%, oklch(0.95 0.02 285 / 0.6), transparent),
+      radial-gradient(1.5px 1.5px at 73% 6%, oklch(0.95 0.02 285 / 0.55), transparent),
+      radial-gradient(1px 1px at 92% 18%, oklch(0.95 0.02 285 / 0.5), transparent),
+      var(--night);
+  }
+
+  .footer-close { display: grid; gap: 2.5rem; align-items: center; }
+  .footer-close > * { min-width: 0; }
+  .footer-pitch h2 { margin: 0 0 1rem; max-width: 13ch; font-size: clamp(2.5rem, 1.6rem + 3.4vw, 4.5rem); line-height: 1.08; text-wrap: balance; }
+  .footer-body { max-width: 40ch; margin: 0 0 1.75rem; font-size: 1.125rem; line-height: 1.6; color: var(--muted-foreground); }
+  .footer-btn { min-height: 3.25rem; padding-inline: 1.4rem; font-size: 1rem; }
+
+  /* The ghost asleep on watch, and under it, quietly, why it can. */
+  .footer-watch { display: grid; justify-items: center; gap: 1rem; }
+  .footer-watch-note { margin: 0; max-width: 24ch; text-align: center; font-size: 0.9375rem; line-height: 1.5; color: var(--muted-foreground); text-wrap: balance; }
+  .footer-ghost { line-height: 0; }
+  /* The sleep talk: a quiet bubble over the ghost's head, its tail pointing down at it. With motion
+     and JavaScript it comes once the ghost has dozed off, a few seconds after the footer is seen;
+     otherwise it is simply there. */
+  .footer-ghost :global(.footer-sleep-talk) { font-weight: 550; font-style: italic; white-space: nowrap; max-width: none; }
+  @media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+    .footer-ghost :global(.footer-sleep-talk) { opacity: 0; }
+    .footer-ghost[data-awake] :global(.footer-sleep-talk) { animation: footer-sleep-talk 600ms var(--ease-out) 2.6s both; }
+  }
+  @keyframes footer-sleep-talk { from { opacity: 0; } to { opacity: 1; } }
+
+  .footer-links { margin-top: clamp(3.5rem, 6vw, 5rem); padding-top: clamp(2rem, 4vw, 3rem); border-top: 1px solid var(--border); }
+
+  /* On a phone the ghost leads: the closing moment first, then the call to action. */
+  @media (max-width: 899px) {
+    .footer-watch { order: -1; grid-template-columns: auto minmax(0, 1fr); justify-items: start; align-items: center; gap: 1.25rem; }
+    .footer-watch-note { text-align: left; }
+    .footer-ghost :global(.ghost) { --ghost-size: 120px !important; }
+    /* The bubble opens to the right of the ghost's head, so it never leaves the page. */
+    .footer-ghost :global(.footer-sleep-talk) { left: 0; transform: none; }
+    .footer-ghost :global(.footer-sleep-talk::before) { left: 2.75rem; }
+  }
+  @media (max-width: 479px) {
+    .footer .ctas { display: grid; }
+    .footer-btn { justify-content: center; }
+  }
+  @media (min-width: 900px) {
+    .footer-close { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  }
+</style>

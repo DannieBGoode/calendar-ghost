@@ -1,0 +1,317 @@
+---
+// Monitors, dashboards, and AI agents: one status answer (Installation Status), shown as what
+// three tools make of it: a dashboard tile, an uptime monitor's checks, and an agent's answer.
+// One sentence says it; the setup (tokens, the status API, the MCP server) lives on the
+// self-hosting guide's page, section 6. Facts from docs/self-hosting.md and ADR 0024.
+import HomelabWatch from "../components/HomelabWatch.astro"
+import Icon from "../components/Icon.astro"
+import type { Messages } from "../i18n"
+import claudeMark from "../marks/claude.svg?raw"
+import { Ghost } from "../islands/Ghost"
+import { INTEGRATIONS_URL } from "../links"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const copy = m.integrations
+// The monitor's recent checks, oldest first: all up but one, when the installation needed a look.
+const BEATS = 24
+const ALERT_AT = 9
+const beats = Array.from({ length: BEATS }, (_, index) => index === ALERT_AT)
+/** The AI assistant answering in the agent mockup: a product name, so not translated. */
+const AGENT = "Claude"
+/** When the question was asked and answered, as the chat shows it: a clock time, not copy. */
+const ASKED_AT = "09:41"
+// Claude's mark, bundled from src/marks (nothing loads from another host), names a compatible
+// client; it does not suggest that Anthropic endorses Calendar Ghost.
+const AGENT_MARK = claudeMark.replace("<svg ", '<svg class="int-agent-mark" aria-hidden="true" focusable="false" ')
+---
+
+<section id="integrations" class="section int" aria-labelledby="integrations-title">
+  <div class="container">
+    <div class="int-head">
+      <div class="int-intro">
+        <h2 id="integrations-title">{copy.title}</h2>
+        <p class="int-lead">{copy.body}</p>
+      </div>
+      <!-- The night watch keeps an eye on the cards from just above them: in the heading row's
+           empty right half on wide screens, above the first card on phones. -->
+      <HomelabWatch />
+    </div>
+
+    <p class="sr-only">{copy.summary}</p>
+    <ul class="int-readers">
+      <li class="int-reader">
+        <h3>{copy.dashboard.label}</h3>
+        <div class="int-mock int-dash" aria-hidden="true" data-wake>
+          <span class="int-tile int-tile-ghost">
+            <span class="int-tile-head">
+              <Ghost face="happy" tone="moss" size={34} />
+              <b>{m.brand}</b>
+              <span class="int-dot"></span>
+            </span>
+            <span class="int-fields">
+              <span class="int-field int-field-status"
+                ><b>{copy.dashboard.healthy}</b><small>{copy.dashboard.statusLabel}</small></span
+              >
+              <span class="int-field"><b>{m.app.overview.running}</b><small>{copy.dashboard.summaryLabel}</small></span>
+            </span>
+          </span>
+          <span class="int-tile int-tile-blank"><i></i><b></b><b></b></span>
+          <span class="int-tile int-tile-blank"><i></i><b></b><b></b></span>
+        </div>
+      </li>
+      <li class="int-reader">
+        <h3>{copy.monitor.label}</h3>
+        <div class="int-mock int-mon" aria-hidden="true" data-wake>
+          <span class="int-mon-head">
+            <span class="int-dot"></span>
+            <b>{m.brand}</b>
+            <span class="int-up">{copy.monitor.up}</span>
+          </span>
+          <span class="int-beats" style={`--beats: ${BEATS}`}>
+            {beats.map((alert, index) => <i class:list={{ "is-alert": alert }} style={`--i: ${index}`} />)}
+          </span>
+          <span class="int-alert" style={`--at: ${ALERT_AT}; --beats: ${BEATS}`}>
+            <Icon name="bell" class="int-alert-icon" />
+            {copy.monitor.alerted}
+          </span>
+        </div>
+      </li>
+      <li class="int-reader">
+        <h3>{copy.agent.label}</h3>
+        <!-- A chat, in the shape everyone knows from messaging apps, in the site's own colours:
+             the contact up top, the question on the right, the tool call as a small system
+             note, and the answer on the left, in the assistant's own words. -->
+        <div class="int-mock int-chat" aria-hidden="true" data-wake>
+          <span class="int-chat-head">
+            <span class="int-agent-avatar" set:html={AGENT_MARK} />
+            <span class="int-chat-who"><b class="int-agent-name">{AGENT}</b><small>{copy.agent.via}</small></span>
+          </span>
+          <span class="int-chat-body">
+            <span class="int-msg int-msg-you"
+              ><span class="int-msg-text">{copy.agent.question}</span><span class="int-msg-meta"
+                >{ASKED_AT}<svg class="int-read" viewBox="0 0 18 11" focusable="false"><path d="M1 6l3.2 3.2L11 2.2M7.5 8.6l.6.6L15 2.2" /></svg></span
+              ></span
+            >
+            <span class="int-tool"><Icon name="check" class="int-tool-icon" />calendar-ghost · get_status</span>
+            <span class="int-msg int-msg-agent"
+              ><span class="int-msg-text">{copy.agent.answer}</span><span class="int-msg-meta">{ASKED_AT}</span></span
+            >
+          </span>
+        </div>
+      </li>
+    </ul>
+
+    <a class="int-guide" href={INTEGRATIONS_URL}>{copy.guide}<Icon name="arrowRight" class="int-guide-icon" /></a>
+  </div>
+</section>
+
+<style>
+  .int {
+    --int-ok: oklch(0.70 0.15 155);
+    --int-mock-bg: var(--surface);
+  }
+  :root[data-theme="dark"] .int { --int-ok: oklch(0.74 0.14 155); }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .int { --int-ok: oklch(0.74 0.14 155); }
+  }
+
+  /* The heading and one sentence, the whole idea in a few seconds, in a plain column; the night
+     watch stands in the row's empty right half, its feet on the line of the sentence's last line,
+     over the right two cards and clear of them: about 28px above their labels. On phones it has a
+     row of its own, at the right, the same distance above the first card's label. */
+  .int {
+    --int-gap: 1.75rem;
+    --int-label-h: 1.25rem;
+    --int-label-gap: 0.6rem;
+    --int-perch: 1.75rem;
+  }
+  .int-head { display: grid; gap: 1.25rem; }
+  .int-intro { min-width: 0; }
+  .int-head h2 { max-width: 16ch; }
+  .int-lead { max-width: 44ch; margin: 0; color: var(--muted-foreground); font-size: 1.125rem; }
+  .int-head > :global(.watch) { justify-self: end; margin-right: 0.5rem; }
+  @media (min-width: 900px) {
+    .int { --int-gap: clamp(1.25rem, 2.5vw, 2rem); }
+    .int-head { position: relative; }
+    /* Centred over the right card while the cards are narrow, over the gap between the right two
+       once there is room beside the sentence. */
+    .int-head > :global(.watch) {
+      position: absolute; bottom: 0; margin: 0;
+      right: calc((100% - 2 * var(--int-gap)) / 6 - 5rem);
+    }
+  }
+  @media (min-width: 1200px) {
+    .int-head > :global(.watch) { right: calc((100% - 2 * var(--int-gap)) / 3 + var(--int-gap) / 2 - 5rem); }
+  }
+
+  .int-readers { list-style: none; margin: var(--int-perch) 0 0; padding: 0; display: grid; gap: var(--int-gap); }
+  .int-reader { display: grid; align-content: start; gap: var(--int-label-gap); min-width: 0; }
+  .int-reader h3 { margin: 0; font-size: 0.8125rem; line-height: var(--int-label-h); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-foreground); }
+  .int-mock {
+    position: relative; min-height: 13.5rem; padding: 1rem; overflow: hidden;
+    border: 1px solid var(--border); border-radius: calc(var(--panel-radius) + 0.25rem); background: var(--int-mock-bg);
+    font-size: 0.8125rem;
+  }
+  .int-dot { width: 0.55rem; height: 0.55rem; flex: none; border-radius: 50%; background: var(--int-ok); }
+
+  /* A dashboard: Calendar Ghost's tile among the homelab's other services. */
+  .int-dash { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 0.6rem; align-content: center; }
+  .int-tile { display: grid; gap: 0.4rem; padding: 0.7rem; border-radius: 0.65rem; border: 1px solid var(--border); background: var(--background); }
+  .int-tile-blank { align-content: start; opacity: 0.7; }
+  .int-tile-blank i { width: 1.4rem; height: 1.4rem; border-radius: 0.4rem; background: var(--muted); }
+  .int-tile-blank b { height: 0.45rem; border-radius: 999px; background: var(--muted); }
+  .int-tile-blank b + b { width: 60%; }
+  .int-tile-ghost {
+    grid-column: 1 / -1; gap: 0.6rem;
+    border-color: color-mix(in oklch, var(--int-ok), transparent 45%);
+    box-shadow: 0 10px 24px -18px color-mix(in oklch, var(--int-ok), transparent 20%);
+  }
+  .int-tile-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9375rem; }
+  .int-tile-head b { flex: 1; min-width: 0; }
+  .int-fields { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem; }
+  .int-field { display: grid; padding: 0.35rem 0.6rem; border-radius: 0.45rem; background: var(--muted); line-height: 1.3; }
+  .int-field b { font-weight: 650; }
+  .int-field small { font-size: 0.6875rem; color: var(--muted-foreground); }
+  .int-field-status { background: var(--success-soft); color: var(--success-foreground); }
+  .int-field-status small { color: inherit; }
+
+  /* An uptime monitor: the latest checks, the one that alerted, and the rule it checks. */
+  .int-mon { display: grid; align-content: center; gap: 0.75rem; }
+  .int-mon-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9375rem; }
+  .int-mon-head b { flex: 1; }
+  .int-up {
+    padding: 0.15rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700;
+    background: var(--success-soft); color: var(--success-foreground);
+  }
+  .int-beats { display: grid; grid-template-columns: repeat(var(--beats), minmax(0, 1fr)); gap: 3px; height: 2.1rem; }
+  .int-beats i { border-radius: 999px; background: var(--int-ok); transform-origin: 50% 100%; }
+  .int-beats i.is-alert { background: var(--warning-bar); }
+  /* The alert's tag hangs under its check: --at of --beats along the line. */
+  .int-alert {
+    justify-self: start; display: inline-flex; align-items: center; gap: 0.35rem; position: relative;
+    margin-left: clamp(0rem, calc((var(--at) + 0.5) / var(--beats) * 100% - 1.1rem), 100%);
+    padding: 0.25rem 0.6rem 0.25rem 0.45rem; border-radius: 0.5rem;
+    background: var(--warning-soft); color: var(--warning-foreground); font-size: 0.75rem; font-weight: 650;
+  }
+  .int-alert::before {
+    content: ""; position: absolute; top: -0.3rem; left: 0.85rem; width: 0.6rem; height: 0.6rem;
+    background: inherit; transform: rotate(45deg);
+  }
+  .int-mock :global(.int-alert-icon) { width: 0.95rem; height: 0.95rem; flex: none; }
+
+  /* An AI agent, as a chat in WhatsApp's colours (not its logo): the wallpaper with a very faint
+     doodle pattern, the contact's header, white (dark: slate) bubbles for Claude and green ones for
+     the person asking, blue read ticks, and the tool call as a system message. Timestamps are a
+     shade deeper (light) or lighter (dark) on the green bubble than WhatsApp's, so they keep
+     4.5:1. The doodles are drawn here, inline, as a mask. */
+  .int-chat {
+    --wa-wall: light-dark(#efeae2, #0b141a);
+    --wa-doodle: light-dark(rgb(17 27 33 / 0.06), rgb(233 237 239 / 0.045));
+    --wa-head: light-dark(#f0f2f5, #202c33);
+    --wa-text: light-dark(#111b21, #e9edef);
+    --wa-sub: light-dark(#54656f, #8696a0);
+    --wa-in: light-dark(#ffffff, #202c33);
+    --wa-out: light-dark(#d9fdd3, #005c4b);
+    --wa-time-in: light-dark(#667781, #8696a0);
+    --wa-time-out: light-dark(#5b6a72, #b3cdc6);
+    --wa-tick: #53bdeb;
+    --wa-system: light-dark(#ffffff, #182229);
+    --wa-system-text: light-dark(#54656f, #8696a0);
+    display: grid; grid-template-rows: auto 1fr; padding: 0; background: var(--wa-wall); color: var(--wa-text);
+  }
+  .int-chat-head {
+    display: flex; align-items: center; gap: 0.55rem; padding: 0.55rem 0.85rem;
+    background: var(--wa-head);
+  }
+  .int-agent-avatar {
+    display: grid; place-items: center; flex: none; width: 1.9rem; height: 1.9rem; border-radius: 50%;
+    background: light-dark(#ffffff, #111b21);
+  }
+  .int-mock :global(.int-agent-mark) { width: 1.1rem; height: 1.1rem; }
+  .int-chat-who { display: grid; line-height: 1.2; }
+  .int-agent-name { font-size: 0.875rem; font-weight: 700; color: var(--wa-text); }
+  .int-chat-who small { font-size: 0.6875rem; color: var(--wa-sub); }
+  .int-chat-body { position: relative; display: grid; align-content: center; gap: 0.5rem; padding: 0.85rem 0.85rem 1rem; }
+  .int-chat-body::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; background: var(--wa-doodle);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 30v-9a7 7 0 0 1 7-7h6a7 7 0 0 1 7 7v9q-2 3-4 0q-2-3-4 0q-2 3-4 0q-2-3-4 0q-2 3-4 0Z'/%3E%3Crect x='72' y='12' width='22' height='20' rx='3'/%3E%3Cpath d='M72 19h22M78 9v6M88 9v6'/%3E%3Cpath d='M54 58l2 5 5 .5-4 3.5 1.2 5L54 69l-4.2 3 1.2-5-4-3.5 5-.5Z'/%3E%3Ccircle cx='22' cy='84' r='7'/%3E%3Cpath d='M22 80v4l3 2'/%3E%3Cpath d='M88 70c4-6 12-6 14 0s-8 10-14 0Z'/%3E%3Cpath d='M72 100q6-8 12 0t12 0'/%3E%3Cpath d='M40 104l6-6M46 104l-6-6'/%3E%3C/svg%3E") 0 0 / 120px 120px repeat;
+  }
+  .int-chat-body > * { position: relative; }
+  .int-msg {
+    position: relative; display: block; max-width: 86%; padding: 0.45rem 0.65rem 0.4rem;
+    border-radius: 0.5rem; font-size: 0.8125rem; line-height: 1.4; color: var(--wa-text);
+    box-shadow: 0 1px 0.5px rgb(11 20 26 / 0.13);
+  }
+  /* The tail: a small corner folded out of the bubble's top, toward its sender's side. */
+  .int-msg::before {
+    content: ""; position: absolute; top: 0; width: 0.55rem; height: 0.6rem; background: inherit;
+  }
+  .int-msg-you { --wa-time: var(--wa-time-out); justify-self: end; border-top-right-radius: 0; background: var(--wa-out); }
+  .int-msg-you::before { right: -0.5rem; clip-path: polygon(0 0, 100% 0, 0 100%); }
+  .int-msg-agent { --wa-time: var(--wa-time-in); justify-self: start; border-top-left-radius: 0; background: var(--wa-in); }
+  .int-msg-agent::before { left: -0.5rem; clip-path: polygon(0 0, 100% 0, 100% 100%); }
+  /* The time sits in the bubble's bottom-right corner, after the last line. */
+  .int-msg-meta {
+    float: right; display: inline-flex; align-items: center; gap: 0.2rem; margin: 0.35rem -0.1rem -0.1rem 0.6rem;
+    font-size: 0.6875rem; line-height: 1; color: var(--wa-time); font-variant-numeric: tabular-nums;
+  }
+  .int-read { width: 0.95rem; height: 0.6rem; fill: none; stroke: var(--wa-tick); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  /* A system message, as WhatsApp centres them: a small rounded label on the wallpaper. */
+  .int-tool {
+    justify-self: center; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.7rem; border-radius: 0.5rem;
+    background: var(--wa-system); box-shadow: 0 1px 0.5px rgb(11 20 26 / 0.13);
+    font-size: 0.75rem; font-weight: 500; color: var(--wa-system-text);
+  }
+  .int-mock :global(.int-tool-icon) { width: 0.85rem; height: 0.85rem; color: currentColor; }
+
+  /* The way to the setup: one quiet link, not another call to action. */
+  .int-guide {
+    display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.75rem; margin-top: 1.5rem;
+    font-weight: 650; text-decoration: none; text-underline-offset: 0.25em;
+  }
+  .int-guide:hover { text-decoration: underline; text-decoration-thickness: 1px; }
+  .int-guide :global(.int-guide-icon) { width: 1.1rem; height: 1.1rem; transition: transform 200ms var(--ease-out); }
+  .int-guide:hover :global(.int-guide-icon) { transform: translateX(3px); }
+
+  @media (min-width: 900px) {
+    .int-readers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  /* Once, when each tool first comes into view: the checks come in one by one, the answer
+     arrives after the question. Without JavaScript, or with reduced motion, everything is
+     simply there. Nothing here runs longer than five seconds, so it needs no pause control. */
+  @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+    .int-mon:not([data-awake]) .int-beats i,
+    .int-mon:not([data-awake]) .int-alert,
+    .int-chat:not([data-awake]) .int-chat-body > *,
+    .int-dash:not([data-awake]) .int-field-status { opacity: 0; }
+    .int-mon[data-awake] .int-beats i { animation: int-beat 360ms var(--ease-out) both; animation-delay: calc(var(--i) * 55ms); }
+    .int-mon[data-awake] .int-alert { animation: int-rise 420ms var(--ease-out) both; animation-delay: calc(var(--at) * 55ms + 200ms); }
+    .int-chat[data-awake] .int-chat-body > * { animation: int-rise 420ms var(--ease-out) both; }
+    .int-chat[data-awake] .int-tool { animation-delay: 700ms; }
+    .int-chat[data-awake] .int-msg-agent { animation-delay: 1400ms; }
+    .int-dash[data-awake] .int-field-status { animation: int-pop 420ms var(--ease-out) 500ms both; }
+  }
+  /* The monitor's newest check beats in time with the night watch's ticks (HomelabWatch.astro: a
+     3.4s round each time the watch comes into view, boxes ticked at 1.6s, 2.5s, and 3.4s). Both
+     start from the same change (the watch waking), so they keep step; the newest bar draws itself
+     on a layer of its own, so the bars' arrival above still applies to it. */
+  .int-beats i:last-child { position: relative; background: transparent; }
+  .int-beats i:last-child::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--int-ok); transform-origin: 50% 100%;
+  }
+  @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+    .int:has(:global(.watch[data-awake])) .int-beats i:last-child::before { animation: int-newest 3.4s var(--ease-out) both; }
+  }
+  @keyframes int-newest {
+    0%, 25.7%, 47.1%, 52.2%, 73.5%, 78.7%, 100% { opacity: 1; transform: none; }
+    29.3%, 55.7%, 82.2% { opacity: 0.2; transform: scaleY(0.2); }
+  }
+  @keyframes int-beat { from { opacity: 0; transform: scaleY(0.2); } to { opacity: 1; transform: none; } }
+  @keyframes int-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes int-pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+</style>

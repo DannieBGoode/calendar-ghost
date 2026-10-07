@@ -1,0 +1,57 @@
+---
+// Activity (web/src/features/activity-table.tsx) at its best: one event per row, what Calendar
+// Ghost did first, in plain words with the app's sign for it (web/src/components/change-sign.tsx:
+// + added, ~ changed, − removed, a slashed circle for a skip), then the event and the reason. The
+// rule is a pair of Sam's portraits, and the time stays quiet.
+import Avatar from "../components/Avatar.astro"
+import Icon from "../components/Icon.astro"
+import type { Calendar } from "../avatars"
+import type { Messages } from "../i18n"
+import type { IconName } from "../icons"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+type Mark = "added" | "changed" | "removed" | "skipped"
+const SIGN: Record<Mark, IconName> = { added: "plus", changed: "tilde", removed: "minus", skipped: "circleSlash" }
+// Matched by position to `app.activity.rows`: what each decision did, and the rule that made it.
+const ROWS: readonly { mark: Mark; rule: readonly [Calendar, Calendar] }[] = [
+  { mark: "added", rule: ["personal", "work"] },
+  { mark: "changed", rule: ["personal", "work"] },
+  { mark: "added", rule: ["family", "work"] },
+  { mark: "removed", rule: ["personal", "work"] },
+  { mark: "skipped", rule: ["personal", "work"] },
+]
+const copy = m.app.activity
+---
+
+<div class="mock mock-activity" role="img" aria-label={copy.alt}>
+  <ol>
+    {
+      copy.rows.map((row, index) => {
+        const { mark, rule } = ROWS[index] ?? ROWS[0]!
+        return (
+          <li class="mock-act" data-mark={mark}>
+            <span class="mock-act-sign">
+              <Icon name={SIGN[mark]} class="mock-icon" />
+            </span>
+            <p class="mock-act-outcome">{row.outcome}</p>
+            <p class="mock-act-trigger">{row.trigger}</p>
+            <p class="mock-act-event">
+              <span class="mock-act-title">{row.title}</span>
+              <span class="mock-act-when">{row.when}</span>
+            </p>
+            <span class="mock-act-rule">
+              <Avatar calendar={rule[0]} />
+              <Icon name="arrowRight" class="mock-icon mock-act-arrow" />
+              <Avatar calendar={rule[1]} />
+            </span>
+            <span class="mock-act-time">{row.time}</span>
+          </li>
+        )
+      })
+    }
+  </ol>
+</div>

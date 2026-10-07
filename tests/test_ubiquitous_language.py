@@ -29,8 +29,8 @@ AVOIDED = (
     "upstream calendar",
 )
 
-SEARCHED = ("src/calendar_sync", "web/src", "docs", "scripts", "tests")
-SUFFIXES = {".py", ".ts", ".tsx", ".md", ".sql", ".html", ".json"}
+SEARCHED = ("src/calendar_sync", "web/src", "site/src", "docs", "scripts", "tests")
+SUFFIXES = {".py", ".ts", ".tsx", ".astro", ".md", ".sql", ".html", ".json"}
 # The glossary and agent instructions name avoided terms in order to rule them out.
 EXEMPT = {GLOSSARY, REPOSITORY / "AGENTS.md", Path(__file__).resolve()}
 # Compiled assets, and implementation plans kept as a record of how past work was planned.
@@ -85,6 +85,13 @@ def test_every_checked_term_is_one_the_glossary_avoids() -> None:
     }
 
     assert set(AVOIDED) <= avoided, set(AVOIDED) - avoided
+
+
+def test_landing_page_copy_is_searched() -> None:
+    searched = set(_searched_files())
+
+    assert REPOSITORY / "site/src/i18n/en.ts" in searched
+    assert REPOSITORY / "site/src/sections/Hero.astro" in searched
 
 
 @pytest.mark.parametrize(

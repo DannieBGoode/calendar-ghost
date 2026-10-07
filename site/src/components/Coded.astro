@@ -1,0 +1,12 @@
+---
+// A sentence whose backticked words (field names, paths) render as code. See i18n/code.ts.
+import { codeParts } from "../i18n/code"
+
+interface Props {
+  text: string
+}
+
+const { text } = Astro.props
+---
+
+{codeParts(text).map((part) => (part.code ? <code>{part.text}</code> : part.text))}

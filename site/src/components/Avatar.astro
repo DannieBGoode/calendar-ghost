@@ -1,0 +1,22 @@
+---
+// One of Sam's portraits for a calendar. Decorative: the calendar's name always sits beside it.
+import { Image } from "astro:assets"
+import { AVATARS, AVATAR_PX, type Calendar } from "../avatars"
+
+interface Props {
+  calendar: Calendar
+  class?: string
+}
+
+const { calendar, class: className } = Astro.props
+---
+
+<Image
+  src={AVATARS[calendar]}
+  width={AVATAR_PX}
+  height={AVATAR_PX}
+  format="webp"
+  alt=""
+  class:list={["avatar", className]}
+  data-calendar={calendar}
+/>

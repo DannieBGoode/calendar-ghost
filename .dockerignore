@@ -7,3 +7,5 @@ __pycache__
 *.db
 .env
 scripts
+# The landing page deploys separately to Cloudflare and never enters the image.
+site

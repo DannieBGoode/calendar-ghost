@@ -1,0 +1,19 @@
+---
+import { avatarUrls } from "../avatars"
+import { HauntedWeek } from "../islands/HauntedWeek"
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="section" aria-labelledby="week-title">
+  <div class="container">
+    <h2 id="week-title">{m.week.title}</h2>
+    <p class="lead">{m.week.body}</p>
+    <HauntedWeek client:visible m={m.demo} motion={m.motion} summary={m.week.summary} avatars={await avatarUrls()} />
+  </div>
+</section>

@@ -1,0 +1,35 @@
+---
+import Layout from "../layouts/Layout.astro"
+import { messagesFor } from "../i18n"
+import AppFeatures from "../sections/AppFeatures.astro"
+import CrossingSection from "../sections/CrossingSection.astro"
+import Faq from "../sections/Faq.astro"
+import Footer from "../sections/Footer.astro"
+import Hero from "../sections/Hero.astro"
+import HowItWorksStrip from "../sections/HowItWorksStrip.astro"
+import Integrations from "../sections/Integrations.astro"
+import Nav from "../sections/Nav.astro"
+import SelfHost from "../sections/SelfHost.astro"
+import Trust from "../sections/Trust.astro"
+import Week from "../sections/Week.astro"
+import Why from "../sections/Why.astro"
+
+const m = messagesFor(Astro.currentLocale)
+---
+
+<Layout title={m.meta.title} description={m.meta.description}>
+  <Nav m={m} />
+  <main>
+    <Hero m={m} />
+    <HowItWorksStrip m={m} />
+    <Week m={m} />
+    <CrossingSection m={m} />
+    <AppFeatures m={m} />
+    <Trust m={m} />
+    <Integrations m={m} />
+    <SelfHost m={m} />
+    <Why m={m} />
+    <Faq m={m} />
+  </main>
+  <Footer m={m} />
+</Layout>

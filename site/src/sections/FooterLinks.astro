@@ -1,0 +1,119 @@
+---
+// The footer's link area, shared by every page: who this is, the project's links, the legal ones,
+// and this page's own proof that it tracks no one. Each page's footer gives it its own look by
+// re-declaring the color tokens around it and, where it needs to, styling the `.flinks-*` parts.
+import Icon from "../components/Icon.astro"
+import { hasLanguagePicker, type Messages } from "../i18n"
+import { GhostMark } from "../islands/GhostMark"
+import { CHANGELOG_URL, DOCS_URL, GUIDE_URL, LICENSE_URL, REPO_URL, TRADEMARKS_URL } from "../links"
+import LanguagePicker from "./LanguagePicker.astro"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const copy = m.footer
+const groups = [
+  {
+    id: "footer-project",
+    title: copy.projectTitle,
+    links: [
+      { href: REPO_URL, label: copy.github },
+      { href: GUIDE_URL, label: copy.guide },
+      { href: DOCS_URL, label: copy.docs },
+      { href: CHANGELOG_URL, label: copy.changelog },
+    ],
+  },
+  {
+    id: "footer-legal",
+    title: copy.legalTitle,
+    links: [
+      { href: LICENSE_URL, label: copy.licenseLink },
+      { href: TRADEMARKS_URL, label: copy.trademarks },
+    ],
+  },
+]
+---
+
+<div class="flinks">
+  <div class="flinks-brand">
+    <a class="flinks-home" href="/" aria-label={m.nav.home}>
+      <GhostMark className="flinks-mark" />
+      <span>{m.brand}</span>
+    </a>
+    <p class="flinks-tagline">{copy.tagline}</p>
+  </div>
+  <nav class="flinks-nav" aria-label={copy.label}>
+    {
+      groups.map((group) => (
+        <div class="flinks-group">
+          <h3 class="flinks-title" id={group.id}>
+            {group.title}
+          </h3>
+          <ul aria-labelledby={group.id}>
+            {group.links.map((link) => (
+              <li>
+                <a href={link.href}>{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))
+    }
+  </nav>
+  <div class="flinks-proof">
+    <p class="flinks-proof-title"><Icon name="shieldCheck" class="flinks-proof-icon" />{copy.noTrackers}</p>
+    <p class="flinks-proof-body">{copy.noTrackersBody}</p>
+  </div>
+  {
+    hasLanguagePicker() && (
+      <div class="flinks-base">
+        <LanguagePicker m={m} />
+      </div>
+    )
+  }
+</div>
+
+<style>
+  .flinks {
+    display: grid; gap: 2.25rem 2rem; font-size: 0.9375rem; color: var(--muted-foreground);
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .flinks > * { min-width: 0; }
+  .flinks p { margin: 0; }
+
+  .flinks-home {
+    display: inline-flex; align-items: center; gap: 0.55rem; min-height: 2.75rem;
+    color: var(--foreground); text-decoration: none; font-weight: 700; font-size: 1.0625rem;
+  }
+  .flinks-home :global(.flinks-mark) { width: 30px; height: 30px; }
+  .flinks-tagline { max-width: 24ch; }
+
+  .flinks-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+  .flinks-title {
+    margin: 0 0 0.35rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted-foreground);
+  }
+  .flinks-group ul { list-style: none; margin: 0; padding: 0; }
+  /* Each link is a finger-sized target, but reads as a plain list. */
+  .flinks-group a {
+    display: inline-flex; align-items: center; min-height: 2.75rem; color: var(--foreground);
+    font-weight: 600; text-decoration: none; text-underline-offset: 0.25em;
+  }
+  .flinks-group a:hover { text-decoration: underline; text-decoration-thickness: 1px; }
+
+  .flinks-proof { display: grid; gap: 0.35rem; align-content: start; max-width: 30ch; }
+  .flinks-proof-title { display: flex; align-items: center; gap: 0.5rem; color: var(--foreground); font-weight: 700; }
+  .flinks-proof :global(.flinks-proof-icon) { width: 1.25rem; height: 1.25rem; flex: none; color: var(--primary); }
+
+  .flinks-base {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 2rem;
+    padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: 0.875rem;
+  }
+
+  @media (min-width: 900px) {
+    .flinks { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 1fr); }
+    .flinks-base { grid-column: 1 / -1; }
+  }
+</style>

@@ -1,0 +1,27 @@
+---
+import { LOCALES, hasLanguagePicker, localePath, stripLocale, type Locale, type Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+const locales = Object.keys(LOCALES) as Locale[]
+const path = stripLocale(Astro.url.pathname)
+---
+
+{
+  hasLanguagePicker() && (
+    <nav aria-label={m.nav.language}>
+      <ul class="languages">
+        {locales.map((locale) => (
+          <li>
+            <a href={localePath(locale, path)} hreflang={locale} lang={locale}>
+              {locale.toUpperCase()}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}

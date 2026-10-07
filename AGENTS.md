@@ -104,6 +104,30 @@ web/ and interfaces/  ->  application/  ->  domain/
 - React Doctor (`npm --prefix web run doctor`) fails on any warning. Fix the code; change
   `web/doctor.config.ts` only for a documented false positive.
 
+## Landing page
+
+`site/` is the public landing page for `calendarghost.com`, an Astro site deployed by Cloudflare
+Workers Builds. It is not part of the application: it has its own `package.json`, is excluded from
+the Docker build context, and has its own `Site` workflow.
+
+- It follows the Landing Page Register Rule in `DESIGN.md`: the ghost may play, explanations stay
+  literal, and every decorative motion stops under reduced motion.
+- All copy lives in `site/src/i18n/en.ts`; components contain no literal copy. Copy must stay true
+  to `CONTEXT.md`; `tests/test_ubiquitous_language.py` searches it.
+- The page contacts no host but its own: no analytics, trackers, CDNs, remote fonts, or live
+  GitHub requests. `npm run audit:dist` and the Playwright tests enforce this.
+- Self-host commands must match the README's quick start; a unit test compares them.
+- `/docs/<slug>` pages render repository documents at build time (`site/src/docs/pages.ts`), with
+  Astro's own Markdown processor. Their headings keep GitHub's anchors; links between rendered
+  documents stay on the site, and every other repository link goes to GitHub
+  (`site/src/docs/repo-links.ts`). The site's links to the self-hosting guide point at these pages.
+- The site is one landing page at `/` (`site/src/pages/index.astro`, one component per section in
+  `site/src/sections/`), the `/docs/<slug>` pages, and the 404 page. Change the page in place; there
+  are no alternative designs or iteration routes. Earlier designs are in git history.
+- To add a language: add its code to `astro.config.mjs` `locales`, and add a module under
+  `site/src/i18n/` that `satisfies Messages` and is registered in `LOCALES`. Then add its pages
+  under `site/src/pages/<locale>/`.
+
 ## Synchronization and persistence safety
 
 - Provider writes must use stable Operation Keys and private Managed Origin metadata.

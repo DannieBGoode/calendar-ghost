@@ -152,6 +152,12 @@ panel, the Overview health hero, empty states, and the startup loading screen.
 Overview health hero, loading, and empty states; labels and explanations always use the glossary
 in `CONTEXT.md`, never calling a Managed Projection a "ghost."
 
+**The Landing Page Register Rule.** On the landing page (`site/`), the ghost is the main character:
+it carries events between calendars, reacts, and reuses the Overview faces (adding proud, surprised,
+and wink), drawn filled at character size by `site/src/islands/Ghost.tsx`. Microcopy may joke.
+Explanations stay literal and true to the glossary, and every decorative motion stops under
+`prefers-reduced-motion`. The rest of this document describes the application.
+
 ## Colors
 
 A lavender-tinted neutral canvas (the "Twilight" palette) supports a single indigo indicator color, Lantern Indigo, with distinct low-chroma semantic surfaces for health and attention. Dark appearance keeps the same roles on a lavender-tinted near-black canvas, increasing foreground and control contrast without turning the interface into an infrastructure console.

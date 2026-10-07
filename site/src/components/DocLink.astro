@@ -1,0 +1,18 @@
+---
+// A claim's title as a link to the documentation that proves it, with a small arrow that says
+// "this goes to the docs" and a hidden phrase that says the same to screen readers.
+import type { Messages } from "../i18n"
+import Icon from "./Icon.astro"
+
+interface Props {
+  m: Messages
+  href: string
+  class?: string
+}
+
+const { m, href, class: className } = Astro.props
+---
+
+<a class:list={["doc-link", className]} href={href}
+  ><slot /><Icon name="arrowUpRight" class="doc-link-icon" /><span class="sr-only"> {m.trust.docs}</span></a
+>

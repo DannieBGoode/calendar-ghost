@@ -1,0 +1,112 @@
+---
+import "@fontsource-variable/figtree"
+import "@fontsource-variable/besley/wght.css"
+import "@fontsource-variable/besley/wght-italic.css"
+import "../styles/tokens.css"
+import "../styles/global.css"
+import "../styles/demos.css"
+import "../styles/ghost.css"
+import "../styles/mockups.css"
+// Preloaded so the Latin glyphs for the headline and body text are ready before first paint,
+// instead of swapping in after layout and shifting the page (the lowest-risk fix for CLS).
+import figtreeLatinWoff2 from "@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2?url"
+import besleyLatinWoff2 from "@fontsource-variable/besley/files/besley-latin-wght-normal.woff2?url"
+import { LOCALES, hasLanguagePicker, localePath, messagesFor, stripLocale, type Locale } from "../i18n"
+
+interface Props {
+  title: string
+  description: string
+  noindex?: boolean
+}
+
+const { title, description, noindex = false } = Astro.props
+const site = Astro.site ?? new URL("https://calendarghost.com")
+const canonical = new URL(Astro.url.pathname, site)
+const ogImage = new URL("/og.png", site)
+const lang = Astro.currentLocale ?? "en"
+const messages = messagesFor(Astro.currentLocale)
+const ogImageAlt = messages.meta.ogImageAlt
+const unprefixedPath = stripLocale(Astro.url.pathname)
+const alternates = hasLanguagePicker()
+  ? (Object.keys(LOCALES) as Locale[]).map((locale) => ({
+      locale,
+      href: new URL(localePath(locale, unprefixedPath), site).href,
+    }))
+  : []
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fbfbfe" />
+    <script is:inline>
+      // Applies a stored Light or Dark choice (lib/theme.ts, same keys and logic, duplicated
+      // here in plain JS: this script must stay inline and same-origin, so it cannot import a
+      // module) before first paint, so there is no flash of the wrong theme. Without JavaScript,
+      // or with no choice stored, this never runs and the page simply follows the device, as it
+      // always has (tokens.css's `@media (prefers-color-scheme: dark)` rules).
+      ;(() => {
+        const storageKey = "calendar-ghost-site-theme"
+        let saved = null
+        try {
+          saved = localStorage.getItem(storageKey)
+        } catch {
+          // Storage can be unavailable in privacy-restricted browser contexts.
+        }
+        const preference = saved === "light" || saved === "dark" ? saved : "device"
+        const prefersDark =
+          typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches
+        const root = document.documentElement
+        if (preference === "device") {
+          delete root.dataset.theme
+          root.style.colorScheme = "light dark"
+        } else {
+          root.dataset.theme = preference
+          root.style.colorScheme = preference
+        }
+        const resolved = preference === "device" ? (prefersDark ? "dark" : "light") : preference
+        document
+          .querySelector('meta[name="theme-color"]')
+          ?.setAttribute("content", resolved === "dark" ? "#0d0e19" : "#fbfbfe")
+      })()
+    </script>
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical.href} />
+    {alternates.map((alt) => <link rel="alternate" hreflang={alt.locale} href={alt.href} />)}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="preload" as="font" type="font/woff2" href={figtreeLatinWoff2} crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href={besleyLatinWoff2} crossorigin />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={messages.brand} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical.href} />
+    <meta property="og:image" content={ogImage.href} />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    {noindex && <meta name="robots" content="noindex" />}
+  </head>
+  <body>
+    <slot />
+    <script>
+      // A ghost that idles briefly (Ghost.tsx, alive="brief"), or any scene marked `data-wake`,
+      // wakes when it is well in view, so its few seconds of life happen where someone can see
+      // them, and sleeps again once it has left the screen, so it plays again the next time it
+      // comes into view. Each run lasts five seconds at most, so none needs a pause control (WCAG
+      // 2.2.2). Without JavaScript it simply stays still.
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.intersectionRatio >= 0.6) entry.target.setAttribute("data-awake", "")
+            else if (!entry.isIntersecting) entry.target.removeAttribute("data-awake")
+          }
+        },
+        { threshold: [0, 0.6] },
+      )
+      for (const sleeper of document.querySelectorAll('.ghost[data-alive="brief"], [data-wake]')) observer.observe(sleeper)
+    </script>
+  </body>
+</html>

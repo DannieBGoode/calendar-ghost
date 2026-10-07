@@ -1,0 +1,185 @@
+/* The ghost character (src/islands/Ghost.tsx) and its speech bubble. The art is flat, like the
+   app's ghost: one fill, an outline a shade deeper in the same hue, a deeper shade for the binder
+   tabs, and the face. No cheeks, no shine, no gradients in the drawing.
+   Tones: mist is the default character, the white ghost on dark pages and filled Lantern Indigo
+   on light ones; lantern is the indigo brand, for a few accents; moss is the Overview's healthy
+   green, only where it means "healthy". Each tone sets the
+   body, its outline, the tabs, the ink of the face, the small props around it, and its glow.
+   Every color is a light-dark() pair, so a ghost follows the device's appearance and also any
+   band that declares `color-scheme: dark` (the footer's night band draws it as in dark appearance). */
+.ghost {
+  --ghost-size: 96px;
+  --ghost-cutout: transparent;
+  --ghost-aside: light-dark(var(--ghost-ink), var(--ghost-body));
+  --ghost-sweat: oklch(0.78 0.08 230);
+  --ghost-shadow: light-dark(oklch(0.22 0.045 280 / 0.14), oklch(0.06 0.03 280 / 0.5));
+  --ghost-glow: transparent;
+  display: inline-block;
+  flex: none;
+  width: var(--ghost-size);
+  height: var(--ghost-size);
+  line-height: 0;
+  vertical-align: middle;
+}
+.ghost svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.ghost[data-tone="moss"] {
+  --ghost-body: light-dark(oklch(0.76 0.135 155), oklch(0.80 0.12 155));
+  --ghost-edge: light-dark(oklch(0.67 0.13 155), oklch(0.72 0.12 155));
+  --ghost-tab: var(--ghost-edge);
+  --ghost-ink: light-dark(oklch(0.29 0.075 155), oklch(0.22 0.04 155));
+}
+.ghost[data-tone="lantern"] {
+  --ghost-body: light-dark(oklch(0.71 0.125 278), oklch(0.79 0.105 278));
+  --ghost-edge: light-dark(oklch(0.62 0.13 278), oklch(0.71 0.115 278));
+  --ghost-tab: var(--ghost-edge);
+  --ghost-ink: light-dark(oklch(0.22 0.07 280), oklch(0.2 0.045 280));
+  --ghost-glow: light-dark(oklch(0.72 0.12 278 / 0.3), oklch(0.7 0.13 278 / 0.38));
+}
+/* The default ghost. On dark surfaces it is the white ghost, the lantern itself, glowing softly.
+   On light ones a white ghost reads as hollow on the near-white canvas, so it takes the lantern
+   tone's filled indigo (its body, outline, tabs, face, and glow). */
+.ghost[data-tone="mist"] {
+  --ghost-body: light-dark(oklch(0.71 0.125 278), oklch(0.965 0.016 285));
+  --ghost-edge: light-dark(oklch(0.62 0.13 278), oklch(0.9 0.035 285));
+  --ghost-tab: light-dark(oklch(0.62 0.13 278), oklch(0.84 0.045 285));
+  --ghost-ink: light-dark(oklch(0.22 0.07 280), oklch(0.22 0.05 280));
+  --ghost-glow: light-dark(oklch(0.72 0.12 278 / 0.3), oklch(0.9 0.07 285 / 0.4));
+}
+
+/* The glow: a soft radial lantern light behind the ghost, never on cards or text. It is part of
+   the character, so it breathes with the ghost's idle life (below) and is still when it is. It is
+   a small disc inside the ghost's box whose blurred shadow spreads the light around it: a shadow
+   is drawn outside the box without widening the page, so a ghost near an edge never makes it
+   scroll sideways. Ghost.tsx sets the reach from the ghost's size (`--ghost-glow-r`). */
+:where(.ghost[data-glow]) { position: relative; isolation: isolate; }
+.ghost[data-glow]::before {
+  content: ""; position: absolute; inset: 22% 18% 18%; z-index: -1; border-radius: 50%; pointer-events: none;
+  background: var(--ghost-glow);
+  box-shadow: 0 0 calc(var(--ghost-glow-r, 22px) * 2.2) var(--ghost-glow-r, 22px) var(--ghost-glow);
+}
+
+.ghost-body { fill: var(--ghost-body); stroke: var(--ghost-edge); stroke-width: 1.4; stroke-linejoin: round; }
+.ghost-tab { fill: var(--ghost-tab); }
+/* A ring of the surface around the silhouette, so the ghost reads on top of busy demos. Dark
+   pages only: on light ones the filled ghost's own outline is enough, and a ring of the page's
+   colour reads as a sticker's white border wherever the ghost overlaps another surface. */
+.ghost-cutout {
+  fill: light-dark(transparent, var(--ghost-cutout)); stroke: light-dark(transparent, var(--ghost-cutout));
+  stroke-width: 5; stroke-linejoin: round;
+}
+.ghost-shadow { fill: var(--ghost-shadow); }
+
+/* Every moving part turns around its own middle. */
+.ghost-float, .ghost-pose, .ghost-eyes, .ghost-glance, .ghost-z, .ghost-shadow {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+.ghost-pose { transform-origin: 50% 100%; transition: transform 420ms var(--ease-out); }
+.ghost-face { transition: opacity 260ms var(--ease-out); }
+
+/* Poses: a face is also a posture. */
+.ghost[data-face="concerned"]:not([data-sequence]) .ghost-pose { transform: rotate(3deg); }
+.ghost[data-face="sleepy"]:not([data-sequence]) .ghost-pose { transform: translateY(1.5px) rotate(-3deg); }
+.ghost[data-face="wink"]:not([data-sequence]) .ghost-pose { transform: rotate(-4deg); }
+
+/* A face change: the first face shows, then gives way to the next. With no animation (reduced
+   motion, or a context that keeps still) the ghost shows where it ends. The default timing is a
+   one-time change a few seconds in; a demo can drive both faces with its own keyframes. */
+.ghost-face-first { opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .ghost[data-sequence] .ghost-face-first { animation: ghost-face-first 4.2s var(--ease-out) both; }
+  .ghost[data-sequence] .ghost-face-then { animation: ghost-face-then 4.2s var(--ease-out) both; }
+}
+@keyframes ghost-face-first { 0%, 88% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes ghost-face-then { 0%, 88% { opacity: 0; } 100% { opacity: 1; } }
+
+/* Idle life: blinking, floating, and drifting "z"s. A `loop` ghost keeps living, only inside a demo
+   with its own pause control. A `brief` ghost (the footer's sleeper, the Overview's healthy ghost,
+   the night watch, every other ghost on its own) wakes each time it comes into view (see
+   Layout.astro) and is still again within five seconds, so it needs no pause control (WCAG
+   2.2.2). */
+@keyframes ghost-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.12); }
+}
+@keyframes ghost-float {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-5%) rotate(1.5deg); }
+}
+@keyframes ghost-shadow {
+  0%, 100% { transform: scaleX(1); opacity: 1; }
+  50% { transform: scaleX(0.82); opacity: 0.6; }
+}
+@keyframes ghost-z {
+  0% { transform: translate(0, 0); opacity: 0; }
+  25%, 60% { opacity: 1; }
+  100% { transform: translate(3px, -6px); opacity: 0; }
+}
+@keyframes ghost-glance {
+  0%, 100% { transform: translateX(0); }
+  20%, 38% { transform: translateX(-2.4px); }
+  52%, 70% { transform: translateX(2.4px); }
+}
+@keyframes ghost-glow {
+  0%, 100% { opacity: 0.8; transform: scale(0.95); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+/* Without JavaScript nothing wakes a ghost, and a demo's loop has no pause control, so nothing idles. */
+@media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
+  .ghost[data-alive="loop"] .ghost-eyes { animation: ghost-blink 5.2s ease-in-out infinite; animation-delay: var(--ghost-blink-delay, 1.4s); }
+  .ghost[data-alive="loop"][data-float] .ghost-float { animation: ghost-float 3.6s ease-in-out infinite; }
+  .ghost[data-alive="loop"][data-float] .ghost-shadow { animation: ghost-shadow 3.6s ease-in-out infinite; }
+  .ghost[data-alive="loop"] .ghost-z { animation: ghost-z 2.6s ease-out infinite; }
+  .ghost[data-alive="loop"] .ghost-z-two { animation-delay: 1.3s; }
+  .ghost[data-alive="loop"][data-glow]::before { animation: ghost-glow 3.6s ease-in-out infinite; }
+
+  .ghost[data-alive="brief"][data-awake] .ghost-eyes { animation: ghost-blink 2.4s ease-in-out 2; }
+  .ghost[data-alive="brief"][data-awake][data-float] .ghost-float { animation: ghost-float 2.4s ease-in-out 2; }
+  .ghost[data-alive="brief"][data-awake][data-float] .ghost-shadow { animation: ghost-shadow 2.4s ease-in-out 2; }
+  .ghost[data-alive="brief"][data-awake] .ghost-z { animation: ghost-z 2.4s ease-out 2; }
+  /* Two runs of 2.4s and this delay end at 5s, the most motion may last without a pause control. */
+  .ghost[data-alive="brief"][data-awake] .ghost-z-two { animation-delay: 0.2s; }
+  .ghost[data-alive="brief"][data-awake] .ghost-glance { animation: ghost-glance 2.2s ease-in-out 1 0.3s; }
+  .ghost[data-alive="brief"][data-awake][data-glow]::before { animation: ghost-glow 2.4s ease-in-out 2; }
+}
+/* A demo's pause control stops its ghost with it. */
+[data-playing="false"] .ghost *, [data-playing="false"] .ghost::before { animation-play-state: paused !important; }
+/* Nothing idles under reduced motion: every ghost shows where it ends. */
+@media (prefers-reduced-motion: reduce) {
+  .ghost *, .ghost::before, .ghost-pose { animation: none !important; transition: none !important; }
+}
+
+/* A ghost with something to say. The stage is the ghost's box; the bubble sits beside it and its
+   tail points at the ghost's head. */
+.ghost-stage { position: relative; display: inline-block; line-height: 0; }
+.speech-bubble {
+  --bubble-bg: color-mix(in oklch, var(--surface), var(--background) 40%);
+  --bubble-edge: var(--border);
+  position: absolute; z-index: 2; top: 12%; left: calc(100% + 0.4rem);
+  display: flex; flex-direction: column; gap: 0.15rem;
+  width: max-content; max-width: 13rem; padding: 0.55rem 0.8rem;
+  border: 1px solid var(--bubble-edge); border-radius: 0.875rem;
+  background: var(--bubble-bg); color: var(--foreground);
+  font: 600 0.875rem/1.35 var(--font-sans); text-align: left;
+  box-shadow: 0 6px 18px -10px color-mix(in oklch, var(--foreground), transparent 70%);
+}
+.speech-bubble::before {
+  content: ""; position: absolute; top: 0.95rem; left: -0.36rem; width: 0.65rem; height: 0.65rem;
+  border-bottom: 1px solid var(--bubble-edge); border-left: 1px solid var(--bubble-edge);
+  background: var(--bubble-bg); transform: rotate(45deg);
+}
+.speech-bubble[data-side="top"] { top: auto; bottom: calc(100% + 0.2rem); left: 50%; transform: translateX(-50%); }
+.speech-bubble[data-side="top"]::before { top: auto; bottom: -0.36rem; left: calc(50% - 0.325rem); transform: rotate(-45deg); }
+.speech-bubble strong { font-size: 0.9375rem; }
+.speech-bubble small { font-size: 0.8125rem; font-weight: 500; color: var(--muted-foreground); }
+
+/* A ghost and its bubble side by side in the flow, for places with room to spare and no demo to
+   sit in: the pair wraps instead of overflowing on a narrow screen. */
+.ghost-says { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.75rem; max-width: 100%; }
+.speech-bubble.speech-bubble-inline { position: relative; top: auto; left: auto; right: auto; max-width: min(15rem, 100%); }
+/* On the narrowest phones the pair stacks: the bubble above, its tail pointing down at the ghost. */
+@media (max-width: 400px) {
+  .ghost-says { flex-direction: column-reverse; flex-wrap: nowrap; gap: 0.35rem; }
+  .speech-bubble.speech-bubble-inline { text-align: center; }
+  .speech-bubble.speech-bubble-inline::before { top: auto; bottom: -0.36rem; left: calc(50% - 0.325rem); transform: rotate(-45deg); }
+}

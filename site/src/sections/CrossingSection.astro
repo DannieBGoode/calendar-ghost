@@ -1,0 +1,31 @@
+---
+// You choose what crosses over: the heading, then the demo across the container's full width,
+// with its switch and one-line explanation on top and the parts that always stay behind on the
+// Personal card itself (islands/Crossing.tsx).
+import { avatarUrls } from "../avatars"
+import { Crossing } from "../islands/Crossing"
+import type { Messages } from "../i18n"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+---
+
+<section class="section" aria-labelledby="crossing-title">
+  <div class="container crossing-section">
+    <h2 id="crossing-title">{m.crossing.title}</h2>
+    <Crossing
+      client:visible
+      m={{ crossing: m.crossing, demo: m.demo, motion: m.motion, ghost: m.ghost }}
+      avatars={await avatarUrls()}
+    />
+  </div>
+</section>
+
+<style>
+  .crossing-section { display: grid; gap: clamp(1.5rem, 3vw, 2.25rem); }
+  .crossing-section > * { min-width: 0; }
+  .crossing-section h2 { margin: 0; max-width: 16ch; }
+</style>

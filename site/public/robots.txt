@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://calendarghost.com/sitemap-index.xml

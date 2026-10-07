@@ -7,11 +7,9 @@ one calendar to another, including calendars owned by different Google identitie
 privacy-controlled projection synchronized without copying invitations or depending on a hosted
 coordinator.
 
-> [!WARNING]
-> **Pre-alpha:** the architecture, synchronization engine, authenticated API, Google adapter, and
-> Web UI form a working first vertical slice, but the project has not completed live-account
-> endurance testing or a production-readiness review. Use test calendars and keep backups. Do not
-> connect important calendars yet.
+> [!NOTE]
+> Calendar Ghost is self-hosted software that writes to your calendars. You run it at your own
+> risk: preview every rule before you enable it, and keep backups of its data directory.
 
 <p align="center">
   <img src="web/src/assets/favicon.svg" alt="Calendar Ghost logo" width="96">
@@ -455,7 +453,7 @@ docs/              Architecture, operation guides, domain references, and ADRs
 ## Project status and support
 
 This repository currently targets `0.1.1` and follows semantic versioning. Persistent configuration
-and SQLite migrations are treated as compatibility surfaces, but pre-alpha releases may still
+and SQLite migrations are treated as compatibility surfaces, but releases before 1.0 may still
 change behavior before the first stable release.
 
 - For setup and operational failures, start with [docs/troubleshooting.md](docs/troubleshooting.md).

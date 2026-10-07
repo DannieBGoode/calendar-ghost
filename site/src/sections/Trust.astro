@@ -1,0 +1,75 @@
+---
+import DocLink from "../components/DocLink.astro"
+import Icon from "../components/Icon.astro"
+import type { Messages } from "../i18n"
+import type { IconName } from "../icons"
+import { TRUST_DOCS } from "../links"
+
+interface Props {
+  m: Messages
+}
+
+const { m } = Astro.props
+// One icon per claim, in the order of `trust.cards`.
+const ICONS: readonly IconName[] = [
+  "rotateCcw",
+  "eye",
+  "mailX",
+  "refreshCwOff",
+  "repeat",
+  "listChecks",
+  "shieldCheck",
+  "activity",
+]
+---
+
+<section id="trust" class="section" aria-labelledby="trust-title">
+  <div class="container">
+    <h2 id="trust-title">{m.trust.title}</h2>
+    <ul class="claims">
+      {
+        m.trust.cards.map((card, index) => (
+          <li>
+            <h3>
+              <Icon name={ICONS[index] ?? "shieldCheck"} class="claim-icon" />
+              <DocLink m={m} href={TRUST_DOCS[index] ?? TRUST_DOCS[0]}>{card.title}</DocLink>
+            </h3>
+            <p>{card.body}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  /* A list of claims, not a grid of boxes: a hairline above each, the icon leading its title. */
+  .claims {
+    list-style: none; margin: 2rem 0 0; padding: 0; display: grid; gap: 0 2.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(16rem, 100%), 1fr));
+  }
+  .claims li { position: relative; padding: 1.25rem 0 1.5rem; border-top: 1px solid var(--border); }
+  /* The whole claim is the link's target, so it is easy to hit; its title is the link's name. */
+  .claims :global(.doc-link)::after { content: ""; position: absolute; inset: 0; }
+  .claims h3 { display: flex; align-items: flex-start; gap: 0.55rem; margin-bottom: 0.4rem; }
+  .claims :global(.claim-icon) {
+    flex: none; width: 1.25rem; height: 1.25rem; margin-top: 0.05rem; color: var(--primary); stroke-width: 2;
+  }
+  .claims p { margin: 0; color: var(--muted-foreground); font-size: 0.9375rem; }
+  /* On a phone, one centred column: each claim's icon above its title, its sentence under it at a
+     comfortable measure, with a short hairline between claims. */
+  @media (max-width: 639px) {
+    #trust-title { text-align: center; }
+    .claims { justify-items: center; margin-top: 1.25rem; }
+    .claims li {
+      display: grid; justify-items: center; gap: 0.4rem; width: 100%; max-width: 22rem;
+      padding: 1.5rem 0; border-top: 0; text-align: center;
+    }
+    .claims li + li::before {
+      content: ""; position: absolute; top: 0; left: 50%; width: 3rem; height: 1px;
+      background: var(--border); transform: translateX(-50%);
+    }
+    .claims h3 { flex-direction: column; align-items: center; gap: 0.5rem; margin: 0; }
+    .claims :global(.claim-icon) { width: 1.5rem; height: 1.5rem; margin: 0; }
+  }
+</style>
