@@ -32,7 +32,7 @@ export const en = {
     notFoundTitle: "Page not found · Calendar Ghost",
     /** A documentation page's title: `{title}` is its document's own first heading. */
     docTitle: "{title} · Calendar Ghost",
-    ogImageAlt: "Calendar Ghost: a work week where personal plans show only as Busy",
+    ogImageAlt: "Calendar Ghost: Sam's calendars pass through the ghost, and the Work calendar shows Personal and Family plans only as Busy",
   },
   nav: {
     label: "Main",
