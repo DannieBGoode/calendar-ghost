@@ -20,7 +20,7 @@ describe("English copy", () => {
   })
 
   it("never uses an em dash", () => {
-    expect(strings(en).filter(([, text]) => text.includes("—"))).toEqual([])
+    expect(strings(en).filter(([, text]) => text.includes("\u2014"))).toEqual([])
   })
 
   it("states the approved headline, one sentence per line", () => {
