@@ -1085,6 +1085,24 @@ for (const width of [1440, 390]) {
   })
 }
 
+for (const width of [390, 660]) {
+  test(`at ${width}px: How it works cards fit their content and stay centered`, async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width, height: 900 } })
+    const page = await context.newPage()
+    await page.goto("/")
+    const steps = page.locator(".how-steps li")
+    const cards = page.locator(".how-frag")
+    await expect(cards).toHaveCount(3)
+    for (const [index, card] of (await cards.all()).entries()) {
+      const step = (await steps.nth(index).boundingBox())!
+      const frame = (await card.boundingBox())!
+      expect(frame.width).toBeLessThan(step.width * 0.8)
+      expect(Math.abs(frame.x + frame.width / 2 - (step.x + step.width / 2))).toBeLessThanOrEqual(1)
+    }
+    await context.close()
+  })
+}
+
 const bodyBackground = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor)
 
 for (const path of ["/", "/docs/self-hosting", "/404"]) {
