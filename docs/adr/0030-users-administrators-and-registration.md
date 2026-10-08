@@ -47,10 +47,9 @@ by a password alone.
   User's rules, then removes their Connected Accounts and every record they own. A User deleting
   themself chooses whether their projections are deleted or kept; an administrator deleting
   another User always deletes them, since that User is not there to choose.
-- **Each User has their own data key**, wrapped by the Installation Master Key, which seals their
-  provider credentials and History Cipher values. User Deletion destroys the key, so those values
-  in old backups can no longer be read. Plain-text Activity fields remain in old backups until the
-  backups rotate out.
+- **User Deletion removes the User from the live database only.** A backup taken before it keeps
+  their records until the backup rotates out, as clearing Activity already does, and the privacy
+  documentation says so.
 
 ## Considered Options
 
@@ -62,5 +61,9 @@ by a password alone.
   promise anyone can verify in the code.
 - **Administrator-created accounts with administrator-set passwords.** An invitation link is as fast
   and keeps passwords known only to their User.
+- **A data key per User, destroyed on deletion.** It would only make old backups unreadable if the
+  key were kept out of them, but a backup holds the wrapped key and the documented backup set holds
+  the Installation Master Key that unwraps it. Keeping per-User keys in a store outside backups
+  would make every restore lose credentials, which is more complexity than the promise is worth.
 - **Usernames instead of email.** Friendlier for children, but Open registration needs email anyway,
   which would leave two identifiers.

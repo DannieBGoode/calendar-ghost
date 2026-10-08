@@ -24,8 +24,7 @@ Each phase can be released alone and keeps existing installations working.
      installation-wide units of work, and every isolation test. Invisible to existing installations.
    - **1b. A second User.** Invitations, Password Reset Links, the Installation Administrator role,
      Incident Notifications to the owning User, Integration Tokens per User with the
-     `installation:read` scope and Installation Health, Disabled Users, User Deletion, and per-User
-     data keys.
+     `installation:read` scope and Installation Health, Disabled Users, and User Deletion.
 2. **Operator Overview.** The administrator's view, each User's page showing what the overview shows
    about them, and provider calls and storage counted per User.
 3. **Plans.** Plan definitions and assignment, the four limits, a per-User sync interval in the

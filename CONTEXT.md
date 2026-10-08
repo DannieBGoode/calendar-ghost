@@ -254,7 +254,7 @@ A User an Installation Administrator has stopped from signing in. Their rules ar
 _Avoid_: Suspended user, banned user
 
 **User Deletion**:
-The permanent removal of a User and everything they own. Their projections are deleted from their calendars by default; a User deleting themself may keep them as ordinary events instead, but an Installation Administrator deleting another User cannot. Their encryption key is destroyed, so their sealed data in old backups can no longer be read.
+The permanent removal of a User and everything they own. Their projections are deleted from their calendars by default; a User deleting themself may keep them as ordinary events instead, but an Installation Administrator deleting another User cannot. It removes them from the live database; a backup taken before it keeps their records until the backup rotates out.
 _Avoid_: Account deletion, user removal
 
 **Registration Policy**:
