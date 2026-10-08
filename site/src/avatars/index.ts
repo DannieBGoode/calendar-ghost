@@ -11,8 +11,9 @@ export type Calendar = "personal" | "family" | "work"
 
 export const AVATARS: Record<Calendar, ImageMetadata> = { personal, family, work }
 
-/** Twice the largest size an avatar is shown at (2rem), so it stays sharp on dense screens. */
-export const AVATAR_PX = 64
+/** Three times the largest size an avatar is shown at (the hero's portraits, about 54px wide), so
+ * it stays sharp on dense screens. The originals are 256px, so this stays well within them. */
+export const AVATAR_PX = 160
 
 export type AvatarUrls = Record<Calendar, string>
 
