@@ -2,9 +2,9 @@
 // The home page's ending: night falls, and the ghost keeps watch. A Twilight band with rounded
 // shoulders, like the top of the ghost's own head, holds the last call to action beside the white
 // ghost dozing in its lantern glow, floating and breathing out "z"s for a few seconds each time it
-// comes into view. Once it has dozed off it mumbles in its sleep, like a child in bed ("Five more
-// minutes, please."), and the line under it is plain narration (sync really runs every five
-// minutes). Then the page's organized links.
+// comes into view. As it dozes off it mumbles in its sleep, like a child in bed ("Five more
+// minutes, please."), then falls quiet with the last frame. The line under it is plain narration
+// (sync really runs every five minutes). Then the page's organized links.
 import type { Messages } from "../i18n"
 import { Ghost, SpeechBubble } from "../islands/Ghost"
 import { REPO_URL } from "../links"
@@ -69,14 +69,17 @@ const { m } = Astro.props
   .footer-watch-note { margin: 0; max-width: 24ch; text-align: center; font-size: 0.9375rem; line-height: 1.5; color: var(--muted-foreground); text-wrap: balance; }
   .footer-ghost { line-height: 0; }
   /* The sleep talk: a quiet bubble over the ghost's head, its tail pointing down at it. With motion
-     and JavaScript it comes once the ghost has dozed off, a few seconds after the footer is seen;
-     otherwise it is simply there. */
-  .footer-ghost :global(.footer-sleep-talk) { font-weight: 550; font-style: italic; white-space: nowrap; max-width: none; }
+     and JavaScript it comes as the ghost dozes off and goes with the last breath, so the still
+     ghost rests without it; without motion it is not there at all. */
+  .footer-ghost :global(.footer-sleep-talk) { visibility: hidden; opacity: 0; font-weight: 550; font-style: italic; white-space: nowrap; max-width: none; }
   @media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
-    .footer-ghost :global(.footer-sleep-talk) { opacity: 0; }
-    .footer-ghost[data-awake] :global(.footer-sleep-talk) { animation: footer-sleep-talk 600ms var(--ease-out) 2.6s both; }
+    .footer-ghost[data-awake] :global(.footer-sleep-talk) { animation: footer-sleep-talk 2.2s var(--ease-out) 2.6s both; }
   }
-  @keyframes footer-sleep-talk { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes footer-sleep-talk {
+    0% { visibility: visible; opacity: 0; }
+    20%, 75% { visibility: visible; opacity: 1; }
+    100% { visibility: hidden; opacity: 0; }
+  }
 
   .footer-links { margin-top: clamp(3.5rem, 6vw, 5rem); padding-top: clamp(2rem, 4vw, 3rem); border-top: 1px solid var(--border); }
 
