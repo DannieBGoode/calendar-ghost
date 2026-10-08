@@ -288,6 +288,7 @@ test.describe("the hero", () => {
       await expect(page.locator(".hc-wide .hc-label.hc-as-work")).toHaveText(hc.dayLabels.work)
       await expectWorkSees(page, "wide")
       for (const chip of await page.locator(".hc-wide .hc-chip").all()) await expect(chip).toHaveCSS("opacity", "0")
+      for (const ripple of await page.locator(".hc-wide .hc-ripple").all()) await expect(ripple).toHaveCSS("opacity", "0")
       if (options.javaScriptEnabled === false) {
         await expect(page.locator(".hc-static-view")).toHaveText(en.demo.workSees)
         await expect(page.locator(".hc-controls")).toBeHidden()
@@ -328,6 +329,29 @@ test.describe("the hero", () => {
     await expect.poll(() => runningCount(page)).toBe(0)
     await page.locator(".hc").getByRole("button", { name: en.motion.play }).click()
     await expect.poll(() => runningCount(page)).toBeGreaterThan(0)
+  })
+
+  test("each calendar is a portrait in its ring, its name and event flush to its left (below it on a phone), and it pops as its event leaves", async ({ browser }) => {
+    for (const [layout, width] of [["wide", 1280], ["tall", 390]] as const) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } })
+      const page = await context.newPage()
+      await page.goto("/")
+      for (const pill of await page.locator(`.hc-${layout} .hc-pill`).all()) {
+        const ring = (await pill.locator(".hc-ring").boundingBox())!
+        const text = (await pill.locator("text").boundingBox())!
+        if (layout === "wide") {
+          expect(text.x + text.width).toBeLessThan(ring.x)
+          expect(ring.x - (text.x + text.width)).toBeLessThan(20)
+          expect(Math.abs(text.y + text.height / 2 - (ring.y + ring.height / 2))).toBeLessThan(4)
+        } else {
+          expect(text.y).toBeGreaterThan(ring.y + ring.height - 2)
+        }
+      }
+      const names = (await run(page)).map((animation) => animation.name)
+      expect(names.filter((name) => name.startsWith(`hc-${layout}-pop-`))).toHaveLength(3)
+      expect(names.filter((name) => name.startsWith(`hc-${layout}-ripple-`))).toHaveLength(3)
+      await context.close()
+    }
   })
 
   test("centres the switch, the ghost, and the page on one axis", async ({ page }) => {
@@ -405,6 +429,9 @@ test.describe("the hero", () => {
       await expect(page.locator(`${block("wide", "work")} .hc-source-dot`)).toHaveCSS("fill", ring)
       const primary = await page.locator(".hero-accent").evaluate((element) => getComputedStyle(element).color)
       for (const title of await page.locator('.hc-wide .hc-block[data-shows="busy"] .hc-as-work .hc-block-title').all()) await expect(title).toHaveCSS("fill", primary)
+      // Busy is hatched, as time that is taken with nothing to read; Work's own meeting is not.
+      await expect(page.locator('.hc-wide .hc-block[data-shows="busy"] .hc-hatch')).toHaveCount(2)
+      await expect(page.locator(`${block("wide", "work")} .hc-hatch`)).toHaveCount(0)
       const ghost = page.locator(".hc-wide .hc-ghost .ghost")
       await expect(ghost).not.toHaveAttribute("data-tone", "moss")
       const body = await rgb(page, await ghost.locator(".ghost-body").evaluate((element) => getComputedStyle(element).fill))
@@ -626,8 +653,8 @@ test("small controls are at least 44px tall", async ({ browser }) => {
   await context.close()
 })
 
-test("the footer's dozing ghost mumbles in its sleep, over its head, and the five-minute line is plain text", async ({ browser }) => {
-  for (const options of [{}, { reducedMotion: "reduce" as const }, { javaScriptEnabled: false }, { viewport: { width: 390, height: 844 } }]) {
+test("the footer's dozing ghost mumbles in its sleep, over its head, then falls quiet", async ({ browser }) => {
+  for (const options of [{}, { viewport: { width: 390, height: 844 } }]) {
     const context = await browser.newContext(options)
     const page = await context.newPage()
     await page.goto("/")
@@ -636,14 +663,26 @@ test("the footer's dozing ghost mumbles in its sleep, over its head, and the fiv
     await expect(watch.locator("p.footer-watch-note")).toHaveText(en.footer.watch)
     const bubble = watch.locator(".speech-bubble")
     await expect(bubble).toHaveText(en.footer.sleepTalk)
-    await bubble.scrollIntoViewIfNeeded()
-    // It comes once the ghost has dozed off (at once, still, without motion or JavaScript).
-    await expect(bubble).toHaveCSS("opacity", "1", { timeout: 6000 })
+    await watch.scrollIntoViewIfNeeded()
+    // It comes once the ghost has dozed off, over its head and inside the page.
+    await expect(bubble).toBeVisible({ timeout: 4000 })
+    await expect(bubble).toHaveCSS("opacity", "1")
     const box = (await bubble.boundingBox())!
     const ghost = (await watch.locator(".ghost").boundingBox())!
     expect(box.y + box.height).toBeLessThanOrEqual(ghost.y + ghost.height * 0.3)
     expect(box.x).toBeGreaterThanOrEqual(0)
     expect(box.x + box.width).toBeLessThanOrEqual(page.viewportSize()!.width)
+    // The still ghost rests without it.
+    await expect(bubble).toBeHidden({ timeout: 4000 })
+    await context.close()
+  }
+  // Without motion or JavaScript there is only the still ghost.
+  for (const options of [{ reducedMotion: "reduce" as const }, { javaScriptEnabled: false }]) {
+    const context = await browser.newContext(options)
+    const page = await context.newPage()
+    await page.goto("/")
+    await page.locator(".footer-watch").scrollIntoViewIfNeeded()
+    await expect(page.locator(".footer-watch .speech-bubble")).toBeHidden()
     await context.close()
   }
 })
@@ -1048,7 +1087,7 @@ test("the footer ends with a call to action and an organized set of links", asyn
   await expect(footer.getByText(en.footer.noTrackers, { exact: true })).toBeVisible()
   await expect(footer.getByText(en.footer.noTrackersBody, { exact: true })).toBeVisible()
   await expect(footer).not.toContainText("network tab")
-  // The sleeping ghost mumbles its five more minutes.
+  // The sleeping ghost mumbles its five more minutes (and then falls quiet).
   await expect(footer.locator(".speech-bubble")).toHaveText([en.footer.sleepTalk])
 })
 

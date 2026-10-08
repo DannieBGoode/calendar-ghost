@@ -1,6 +1,6 @@
 /* The home hero's diagram (sections/Hero.astro, demo/hub.ts), every class prefixed `hc-`:
-   hairlines, outlined pills and an outlined day on the page's own colour, plain text, and a few
-   small colour accents. Each calendar has its own colour (its pill's ring, the chip that carries
+   hairlines, portraits in rings and a lightly filled day, plain text, and a few
+   small colour accents. Each calendar has its own colour (its portrait's ring, the chip that carries
    its event in, the hairline it lights, the dot on its block in the day); Work's is a calm red, so
    it stands apart from Sam's own calendars; Busy is Lantern Indigo. */
 
@@ -9,7 +9,6 @@
      all but vanishes on the near-white page, and sinks into the night on the dark one). */
   --hc-line: light-dark(color-mix(in oklab, var(--border), var(--foreground) 18%), color-mix(in oklab, var(--border), var(--foreground) 8%));
   --hc-curve: light-dark(color-mix(in oklab, var(--border), var(--foreground) 16%), color-mix(in oklab, var(--border), var(--foreground) 20%));
-  --hc-hour: light-dark(color-mix(in oklab, var(--border), var(--background) 10%), color-mix(in oklab, var(--border), var(--background) 50%));
   --hc-personal: var(--event-personal-edge);
   --hc-family: var(--event-family-edge);
   /* The destructive hue, calmed: a brick red, never the alarm red of a stopped rule. */
@@ -49,24 +48,26 @@
 .hc-lit path[data-shows="busy"] { --hc-tone: var(--hc-busy); }
 .hc[data-view="you"] .hc-lit path[data-shows="busy"] { --hc-tone: var(--hc-source); }
 
-/* Sam's calendars, as pills with a thin ring in the calendar's colour. */
-.hc-pill rect, .hc-box { fill: var(--background); stroke: var(--hc-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.hc-ring { fill: none; stroke: var(--hc-tone); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+/* Sam's calendars: each portrait in a solid ring of the calendar's colour, with no box and no glow. */
+.hc-ring { fill: none; stroke: var(--hc-tone); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.hc-tall .hc-ring { stroke-width: 2; }
+/* As an event leaves its calendar, the portrait pops and a faint ring in its colour spreads from
+   it and fades. Both scale about the portrait's middle, set on them in drawing units (Hero.astro);
+   without motion they stand still and the ring is unseen. */
+.hc-portrait, .hc-ripple { transform-box: view-box; }
+.hc-ripple { fill: none; stroke: var(--hc-tone); stroke-width: 1.5; vector-effect: non-scaling-stroke; opacity: 0; }
 
-/* The day: its header, its hours (labelled in the gutter, one even height each), Work's own
-   meeting in Work's red, and Busy in indigo. Every block carries a dot in its calendar's colour. */
+/* The day, like a calendar app's: a lightly filled panel, its header, its hours (dashed, labelled
+   in the gutter, one even height each), and events as tinted blocks with no outline: Work's own
+   meeting in Work's red, and Busy in indigo, hatched (time that is taken, with nothing to read).
+   Every block carries a dot in its calendar's colour. */
+.hc-box { fill: color-mix(in oklab, var(--muted) 35%, var(--background)); stroke: var(--hc-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .hc-rule { fill: none; stroke: var(--hc-line); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.hc-hour { fill: none; stroke: var(--hc-hour); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.hc-hour { fill: none; stroke: var(--hc-line); stroke-width: 1; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
 .hc-svg .hc-hour-label { fill: var(--muted-foreground); text-anchor: end; font-variant-numeric: tabular-nums; }
-.hc-paint {
-  fill: color-mix(in oklab, var(--hc-tone) 10%, var(--background));
-  stroke: color-mix(in oklab, var(--hc-tone) 50%, var(--background));
-  stroke-width: 1; vector-effect: non-scaling-stroke;
-}
-.hc-block[data-shows="busy"] .hc-paint:not(.hc-paint-you) {
-  fill: color-mix(in oklab, var(--hc-busy) 9%, var(--background));
-  stroke: color-mix(in oklab, var(--hc-busy) 45%, var(--background));
-}
+.hc-paint { fill: color-mix(in oklab, var(--hc-tone) 20%, var(--background)); }
+.hc-block[data-shows="busy"] .hc-paint:not(.hc-paint-you) { fill: color-mix(in oklab, var(--hc-busy) 12%, var(--background)); }
+.hc-hatch-line { stroke: color-mix(in oklab, var(--hc-busy) 30%, transparent); stroke-width: 2; }
 .hc-source-dot { fill: var(--hc-tone); }
 .hc-svg .hc-block-title { font-weight: 600; }
 .hc-svg .hc-block[data-shows="busy"] .hc-as-work .hc-block-title { fill: var(--hc-busy); }
@@ -154,7 +155,7 @@
    clears at once and it starts again. It animates `offset-distance` (the motion-path form of a
    transform) and opacity, only while the diagram is on screen. */
 @media (prefers-reduced-motion: no-preference) and (scripting: enabled) {
-  .hc :is(.hc-chip, .hc-lit path, .hc-block, .hc-kept-title, .hc-kept-caption) {
+  .hc :is(.hc-chip, .hc-lit path, .hc-block, .hc-kept-title, .hc-kept-caption, .hc-portrait, .hc-ripple) {
     animation: var(--hc-anim) var(--hc-cycle) linear infinite both;
   }
   .hc .hc-chip-title { animation: var(--hc-drop, none) var(--hc-cycle) linear infinite both; }
@@ -162,7 +163,7 @@
   .hc-wide .hc-ghost .ghost-face-first { animation: hc-wide-face-first var(--hc-cycle) linear infinite both !important; }
   .hc-tall .hc-ghost .ghost-face-then { animation: hc-tall-face-then var(--hc-cycle) linear infinite both !important; }
   .hc-tall .hc-ghost .ghost-face-first { animation: hc-tall-face-first var(--hc-cycle) linear infinite both !important; }
-  .hc:is([data-playing="false"], [data-offscreen]) :is(.hc-chip, .hc-chip-title, .hc-lit path, .hc-block, .hc-kept-title, .hc-kept-caption, .ghost-face-first, .ghost-face-then) {
+  .hc:is([data-playing="false"], [data-offscreen]) :is(.hc-chip, .hc-chip-title, .hc-lit path, .hc-block, .hc-kept-title, .hc-kept-caption, .hc-portrait, .hc-ripple, .ghost-face-first, .ghost-face-then) {
     animation-play-state: paused !important;
   }
 }

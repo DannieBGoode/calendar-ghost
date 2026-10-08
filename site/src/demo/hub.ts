@@ -12,8 +12,9 @@
 //
 // Everything here is plain data and geometry, worked out at build time, so the page draws the
 // diagram, and starts its motion, without JavaScript. Two layouts share it: `wide` (the calendars
-// on the left, the day on the right) and `tall` for phones (a row of calendars on top, the ghost
-// and what it keeps back, then the day).
+// on the left, each name and event set flush against its portrait, whose ring its hairline leaves
+// from; the day on the right) and `tall` for phones (a row of calendars on top, each portrait over
+// its name and event; the ghost and what it keeps back; then the day).
 
 import type { Calendar } from "../avatars"
 import { SAM_WEEK } from "./week"
@@ -140,7 +141,10 @@ function link(from: Point, to: Point, axis: "x" | "y"): Cubic {
 
 export type LayoutKind = "wide" | "tall"
 
-interface Pill extends Box, Source {}
+/** One of Sam's calendars as drawn: its box (its portrait and its text), and its portrait's middle. */
+interface Pill extends Box, Source {
+  portrait: Point
+}
 
 /** A block in the day: Work's own meeting, or a copy shown as Busy. */
 interface Block extends Box {
@@ -180,9 +184,13 @@ export interface Hub {
   kind: LayoutKind
   width: number
   height: number
-  /** Where the two column labels start: over the calendars, and over the day. */
-  labels: { calendars: Point; day: Point }
+  /** Where the two column labels sit, over the calendars and over the day, and which way each
+   * runs from that point. On wide screens both hold to the edge facing the ghost: the calendars'
+   * label ends where the rings do, and the day's starts at its panel's edge. */
+  labels: { calendars: Point & { anchor: "start" | "end" }; day: Point }
   pills: Pill[]
+  /** Each portrait's width. */
+  portrait: number
   /** The day: its box, the height of its header, where its hours start, and its label gutter. */
   day: Box & { header: number; dayTop: number; hour: number; gutter: number }
   /** Each whole hour in the day, for its line and its label. */
@@ -217,6 +225,7 @@ interface Frame {
   height: number
   labels: Hub["labels"]
   pills: Pill[]
+  portrait: number
   ghost: Box
   day: Hub["day"]
   inset: number
@@ -232,7 +241,16 @@ function dayBox(box: { x: number; y: number; width: number }, header: number, ho
   return { ...box, height, header, dayTop: box.y + header + 6, hour, gutter }
 }
 
-/** The wide layout, left to right: the calendars as a close stack of pills, the ghost on the
+/** The space between a portrait and its ring, and from the ring to where a hairline starts. */
+export const RING_GAP = 3.5
+const RING_CLEAR = 7
+
+/** The wide layout's calendars: each box holds the name and event (set flush right against the
+ * portrait) and the portrait, whose ring ends at the box's right edge. Their stack spans the day's
+ * height, so both columns start and end level and their labels sit as far above them. */
+const WIDE = { portrait: 52, width: 228, height: 66 } as const
+
+/** The wide layout, left to right: the calendars in a stack as tall as the day, the ghost on the
  * figure's centre line (the axis of the view switch over it), and the day. */
 function wideFrame(): Frame {
   const width = 1040
@@ -242,9 +260,13 @@ function wideFrame(): Frame {
   const labelRow = 30
   const middle = labelRow + dayHeight / 2
   const day = dayBox({ x: width - 284 - 0.5, y: middle - dayHeight / 2, width: 284 }, header, hour, 52)
-  const pill = { width: 214, height: 54, pitch: 70 }
-  const stack = SOURCES.length * pill.pitch - (pill.pitch - pill.height)
-  const pills = SOURCES.map((source, index) => ({ ...source, x: 0.5, y: middle - stack / 2 + index * pill.pitch, width: pill.width, height: pill.height }))
+  const pitch = (dayHeight - WIDE.height) / (SOURCES.length - 1)
+  // The ring's outer edge: its radius, the gap, and half its 3-unit stroke.
+  const ringEdge = WIDE.portrait / 2 + RING_GAP + 1.5
+  const pills = SOURCES.map((source, index) => {
+    const box = { x: 0.5, y: middle - dayHeight / 2 + index * pitch, width: WIDE.width, height: WIDE.height }
+    return { ...source, ...box, portrait: { x: box.x + box.width - ringEdge, y: box.y + box.height / 2 } }
+  })
   const size = 92
   const center = width / 2
   const edges = ghostEdges({ x: 0, y: 0, width: size, height: size })
@@ -256,12 +278,13 @@ function wideFrame(): Frame {
   return {
     width,
     height: Math.ceil(day.y + day.height + 1),
-    labels: { calendars: { x: 0.5, y: labelY }, day: { x: day.x, y: labelY } },
+    labels: { calendars: { x: 0.5 + WIDE.width, y: labelY, anchor: "end" }, day: { x: day.x, y: labelY } },
     pills,
+    portrait: WIDE.portrait,
     ghost,
     day,
     inset: 10,
-    into: (item) => link({ x: item.x + item.width, y: item.y + item.height / 2 }, hubIn, "x"),
+    into: (item) => link({ x: item.portrait.x + WIDE.portrait / 2 + RING_GAP + RING_CLEAR, y: item.portrait.y }, hubIn, "x"),
     out: (block) => link(hubOut, { x: day.x, y: block.y + block.height / 2 }, "x"),
     shared: false,
     kept: { caption: { x: center, y: placed.bottom.y + 16 }, title: (index) => ({ x: center, y: placed.bottom.y + 38 + index * 24 }) },
@@ -269,20 +292,23 @@ function wideFrame(): Frame {
 }
 
 /**
- * The phone layout, one tidy column down the screen: Sam's three calendars as a row of compact
- * pills (avatar over name over event), each hairline dropping straight down into the ghost's head;
+ * The phone layout, one tidy column down the screen: Sam's three calendars in a row (a portrait in
+ * its ring over the name over the event), each hairline dropping straight down into the ghost's head;
  * under the ghost, centred, the titles it keeps back from Work; then the day. Chips leave the
  * ghost by its right side and go down a lane of their own, beside the kept titles, into the day,
  * so nothing they carry crosses anything else.
  */
-const TALL = { width: 300, pillGap: 8, pillHeight: 66, ghost: 64, keptPitch: 24, lane: 254 } as const
+const TALL = { width: 300, pillGap: 8, pillHeight: 76, ghost: 64, keptPitch: 24, lane: 254, portrait: 34, portraitTop: 6 } as const
 
 function tallFrame(): Frame {
   const { width } = TALL
   const center = width / 2
   const pillWidth = (width - 1 - 2 * TALL.pillGap) / 3
   const top = 22
-  const pills = SOURCES.map((source, index) => ({ ...source, x: 0.5 + index * (pillWidth + TALL.pillGap), y: top, width: pillWidth, height: TALL.pillHeight }))
+  const pills = SOURCES.map((source, index) => {
+    const x = 0.5 + index * (pillWidth + TALL.pillGap)
+    return { ...source, x, y: top, width: pillWidth, height: TALL.pillHeight, portrait: { x: x + pillWidth / 2, y: top + TALL.portraitTop + TALL.portrait / 2 } }
+  })
   const size = TALL.ghost
   const ghost = { x: center - size / 2, y: top + TALL.pillHeight + 40, width: size, height: size }
   const edges = ghostEdges(ghost)
@@ -296,12 +322,13 @@ function tallFrame(): Frame {
   return {
     width,
     height: Math.ceil(day.y + day.height + 1),
-    labels: { calendars: { x: 0.5, y: 9 }, day: { x: 0.5, y: day.y - 13 } },
+    labels: { calendars: { x: 0.5, y: 9, anchor: "start" }, day: { x: 0.5, y: day.y - 13 } },
     pills,
+    portrait: TALL.portrait,
     ghost,
     day,
     inset: 7,
-    into: (item) => link({ x: item.x + item.width / 2, y: item.y + item.height }, hubIn, "y"),
+    into: (item) => link({ x: item.portrait.x, y: item.y + item.height }, hubIn, "y"),
     // Out to the right at once, then straight down the lane, so a chip is clear of the kept
     // titles before it reaches their row.
     out: () => ({ p0: hubOut, p1: { x: TALL.lane, y: hubOut.y }, p2: { x: TALL.lane, y: hubOut.y + 24 }, p3: { x: TALL.lane, y: day.y } }),
@@ -354,6 +381,7 @@ export function buildHub(kind: LayoutKind): Hub {
     height: frame.height,
     labels: frame.labels,
     pills: frame.pills,
+    portrait: frame.portrait,
     day,
     hours,
     blocks,
@@ -386,6 +414,27 @@ export function chipStops(hub: Hub, leg: Leg): Stop[] {
     [at(hub, end - leg.duration * fade), { opacity: 1 }],
     [at(hub, end), { "offset-distance": "100%", opacity: 0 }],
     [100, { "offset-distance": "100%", opacity: 0 }],
+  ]
+}
+
+/** A portrait's pop as its event leaves it: a little larger, then back. */
+export function popStops(hub: Hub, leaves: number): Stop[] {
+  return [
+    [0, { transform: "scale(1)" }],
+    [at(hub, leaves), { transform: "scale(1)" }],
+    [at(hub, leaves + 0.12), { transform: "scale(1.04)" }],
+    [at(hub, leaves + 0.4), { transform: "scale(1)" }],
+    [100, { transform: "scale(1)" }],
+  ]
+}
+
+/** The ring that spreads from a portrait and fades as its event leaves it. */
+export function rippleStops(hub: Hub, leaves: number): Stop[] {
+  return [
+    [0, { opacity: 0, transform: "scale(1)" }],
+    [at(hub, leaves), { opacity: 0.55, transform: "scale(1)" }],
+    [at(hub, leaves + 0.55), { opacity: 0, transform: "scale(1.34)" }],
+    [100, { opacity: 0, transform: "scale(1.34)" }],
   ]
 }
 
