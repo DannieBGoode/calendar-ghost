@@ -41,6 +41,27 @@ def test_a_connection_enforces_foreign_keys_and_names_columns(tmp_path: Path) ->
         connection.close()
 
 
+def test_a_writer_commits_while_a_reader_holds_its_snapshot(tmp_path: Path) -> None:
+    # In SQLite's default rollback journal, an open read keeps any writer from committing, so a
+    # Web UI request could fail a Sync Run's write; write-ahead logging lets both proceed.
+    database = _database(tmp_path)
+    with (
+        closing(open_connection(database, isolation_level=None)) as reader,
+        closing(open_connection(database, timeout=0)) as writer,
+    ):
+        reader.execute("BEGIN")
+        reader.execute("SELECT COUNT(*) FROM oauth_states").fetchone()
+        with writer:
+            writer.execute(
+                "INSERT INTO oauth_states(state_hash, created_at, expires_at) "
+                "VALUES ('h', 'a', 'b')"
+            )
+        # The reader still sees the database as it was when its read began.
+        assert reader.execute("SELECT COUNT(*) FROM oauth_states").fetchone()[0] == 0
+        reader.execute("COMMIT")
+        assert reader.execute("SELECT COUNT(*) FROM oauth_states").fetchone()[0] == 1
+
+
 def test_a_transaction_commits_and_closes(tmp_path: Path) -> None:
     database = _database(tmp_path)
     with transaction(database) as connection:

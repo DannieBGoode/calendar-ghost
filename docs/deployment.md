@@ -160,8 +160,16 @@ incident list fails until those Incidents are removed with their rules or accoun
 release is upgraded again.
 
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
-serializes concurrent scheduler and manual executions of the same rule in memory. Multi-process
-workers are not supported with the SQLite deployment.
+serializes concurrent scheduler and manual executions of the same rule in memory. A scheduler pass
+runs up to four different rules at once, so one rule waiting on Google does not hold up the rest.
+Multi-process workers are not supported with the SQLite deployment.
+
+The database uses SQLite's write-ahead log, so Web UI reads and scheduler writes do not wait for
+each other. SQLite keeps it in `calendar-sync.db-wal` and `calendar-sync.db-shm` beside the
+database; they belong to it, so keep all three together, and keep the data directory on a local
+disk rather than a network share, where SQLite cannot coordinate the log. The first start of this
+release switches an existing database to the write-ahead log, and rolling back keeps it: earlier
+releases read it without change.
 
 The service logs to standard error at `CALENDAR_SYNC_LOG_LEVEL` (`INFO` by default; `DEBUG` adds a
 line per Google call). Compose keeps the container's logs with the `json-file` driver capped at

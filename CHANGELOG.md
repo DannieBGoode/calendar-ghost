@@ -42,6 +42,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The database uses SQLite's write-ahead log, so the Web UI no longer waits for a scheduler write,
+  nor a write for a Web UI read. The first start switches an existing database over; back up the
+  `calendar-sync.db-wal` and `calendar-sync.db-shm` files beside the database with it.
+- A scheduler pass runs up to four rules at once instead of one after another, so a rule waiting on
+  a slow or rate-limited calendar no longer delays every rule behind it.
 - When Google stops accepting a connected account, Calendar Ghost now says which account and how
   to fix it ([ADR 0027](docs/adr/0027-lapsed-authorization-and-automatic-recovery.md)). Settings
   lists that account first as **Needs reauthorization** with **Reauthorize account**, which asks

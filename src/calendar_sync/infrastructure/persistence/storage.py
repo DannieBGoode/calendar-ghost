@@ -121,6 +121,9 @@ class SqliteStorage:
                 )
             ) as connection:
                 connection.execute("VACUUM")
+                # Under write-ahead logging the compacted pages land in the log first; copying them
+                # back and emptying the log is what returns the space to the filesystem.
+                connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         except sqlite3.OperationalError as error:
             detail = str(error).lower()
             if "locked" in detail or "busy" in detail:
