@@ -48,10 +48,12 @@ behavior, fix the mismatch in the same change, and add an ADR when the decision 
 
 The Community Edition is licensed under the GNU Affero General Public License, version 3 or later.
 The future hosted service runs this same codebase with no closed components (ADR 0023). Multi-user
-support, billing, and the operator overview belong in this repository, but only after their
-persistence and isolation ADRs exist; until then the runtime stays single-installation. Billing and
-plan limits must stay behind Commercial Mode, which is off by default: with it off, every user has
-every feature. Preserve the self-hosting promise that there is no mandatory Calendar Ghost account,
+support, billing, and the Operator Overview belong in this repository. ADRs 0029 and 0030 settle
+their persistence, isolation, and identity, and
+`docs/superpowers/specs/2026-10-09-multi-user-design.md` orders the work; until it ships, the
+runtime stays single-installation. Plan limits
+apply only when an administrator turns Plans on, and billing only when Commercial Mode is also on;
+both are off by default, and with Plans off every user has every feature (ADR 0028). Preserve the self-hosting promise that there is no mandatory Calendar Ghost account,
 telemetry, or hosted coordinator.
 
 Use the exact terms defined in `CONTEXT.md`. In particular, do not use “sync pair,” “event copy,” or

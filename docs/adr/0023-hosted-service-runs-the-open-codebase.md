@@ -1,7 +1,9 @@
 # Run the hosted service from the open codebase
 
 Supersedes [ADR 0020](0020-single-installation-community-edition.md) and amends the hosted-service
-decision in [ADR 0021](0021-community-edition-agpl.md).
+decision in [ADR 0021](0021-community-edition-agpl.md). Amended by
+[ADR 0028](0028-plans-apart-from-commercial-mode.md): Plans are their own setting, and Commercial
+Mode now means billing only.
 
 ## Context
 
