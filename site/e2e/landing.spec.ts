@@ -288,6 +288,7 @@ test.describe("the hero", () => {
       await expect(page.locator(".hc-wide .hc-label.hc-as-work")).toHaveText(hc.dayLabels.work)
       await expectWorkSees(page, "wide")
       for (const chip of await page.locator(".hc-wide .hc-chip").all()) await expect(chip).toHaveCSS("opacity", "0")
+      for (const ripple of await page.locator(".hc-wide .hc-ripple").all()) await expect(ripple).toHaveCSS("opacity", "0")
       if (options.javaScriptEnabled === false) {
         await expect(page.locator(".hc-static-view")).toHaveText(en.demo.workSees)
         await expect(page.locator(".hc-controls")).toBeHidden()
@@ -328,6 +329,29 @@ test.describe("the hero", () => {
     await expect.poll(() => runningCount(page)).toBe(0)
     await page.locator(".hc").getByRole("button", { name: en.motion.play }).click()
     await expect.poll(() => runningCount(page)).toBeGreaterThan(0)
+  })
+
+  test("each calendar is a portrait in its ring, its name and event flush to its left (below it on a phone), and it pops as its event leaves", async ({ browser }) => {
+    for (const [layout, width] of [["wide", 1280], ["tall", 390]] as const) {
+      const context = await browser.newContext({ viewport: { width, height: 900 } })
+      const page = await context.newPage()
+      await page.goto("/")
+      for (const pill of await page.locator(`.hc-${layout} .hc-pill`).all()) {
+        const ring = (await pill.locator(".hc-ring").boundingBox())!
+        const text = (await pill.locator("text").boundingBox())!
+        if (layout === "wide") {
+          expect(text.x + text.width).toBeLessThan(ring.x)
+          expect(ring.x - (text.x + text.width)).toBeLessThan(20)
+          expect(Math.abs(text.y + text.height / 2 - (ring.y + ring.height / 2))).toBeLessThan(4)
+        } else {
+          expect(text.y).toBeGreaterThan(ring.y + ring.height - 2)
+        }
+      }
+      const names = (await run(page)).map((animation) => animation.name)
+      expect(names.filter((name) => name.startsWith(`hc-${layout}-pop-`))).toHaveLength(3)
+      expect(names.filter((name) => name.startsWith(`hc-${layout}-ripple-`))).toHaveLength(3)
+      await context.close()
+    }
   })
 
   test("centres the switch, the ghost, and the page on one axis", async ({ page }) => {
@@ -405,6 +429,9 @@ test.describe("the hero", () => {
       await expect(page.locator(`${block("wide", "work")} .hc-source-dot`)).toHaveCSS("fill", ring)
       const primary = await page.locator(".hero-accent").evaluate((element) => getComputedStyle(element).color)
       for (const title of await page.locator('.hc-wide .hc-block[data-shows="busy"] .hc-as-work .hc-block-title').all()) await expect(title).toHaveCSS("fill", primary)
+      // Busy is hatched, as time that is taken with nothing to read; Work's own meeting is not.
+      await expect(page.locator('.hc-wide .hc-block[data-shows="busy"] .hc-hatch')).toHaveCount(2)
+      await expect(page.locator(`${block("wide", "work")} .hc-hatch`)).toHaveCount(0)
       const ghost = page.locator(".hc-wide .hc-ghost .ghost")
       await expect(ghost).not.toHaveAttribute("data-tone", "moss")
       const body = await rgb(page, await ghost.locator(".ghost-body").evaluate((element) => getComputedStyle(element).fill))

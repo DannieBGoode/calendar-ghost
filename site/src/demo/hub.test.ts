@@ -4,6 +4,7 @@ import {
   LAND_S,
   PASSES,
   REST_S,
+  RING_GAP,
   SOURCES,
   SPEED,
   THROUGH_S,
@@ -17,6 +18,8 @@ import {
   keyframes,
   lineStops,
   pointAt,
+  popStops,
+  rippleStops,
   showsOnWork,
   stayStops,
   type Box,
@@ -95,16 +98,36 @@ for (const kind of ["wide", "tall"] as const) {
     })
 
     if (kind === "wide") {
-      it("keeps it compact: the pills close together and the day not much taller, both centred on the ghost's line, the labels on one line", () => {
+      it("keeps it level: the pills as tall as the day, both centred on the ghost's line, the labels on one line", () => {
         const middle = hub.ghost.y + hub.ghost.height / 2
         const stackTop = hub.pills[0]!.y
         const stackBottom = hub.pills.at(-1)!.y + hub.pills.at(-1)!.height
         expect((stackTop + stackBottom) / 2).toBeCloseTo(hub.day.y + hub.day.height / 2, 0)
         expect(Math.abs(middle - (hub.day.y + hub.day.height / 2))).toBeLessThan(hub.ghost.height * 0.15)
-        expect(hub.day.height).toBeLessThan((stackBottom - stackTop) * 1.5)
+        expect(stackBottom - stackTop).toBeCloseTo(hub.day.height)
         expect(hub.labels.calendars.y).toBe(hub.labels.day.y)
       })
     }
+
+    it("sets each portrait in its calendar's box, and starts its hairline at the ring (wide) or under its text (phones)", () => {
+      for (const pill of hub.pills) {
+        const ring = hub.portrait / 2 + RING_GAP
+        expect(pill.portrait.x - ring).toBeGreaterThanOrEqual(pill.x)
+        expect(pill.portrait.x + ring).toBeLessThanOrEqual(pill.x + pill.width)
+        expect(pill.portrait.y - ring).toBeGreaterThanOrEqual(pill.y)
+        expect(pill.portrait.y + ring).toBeLessThanOrEqual(pill.y + pill.height)
+        const start = cubicOf(hub.curves.find((curve) => curve.id === `from-${pill.key}`)!.d).p0
+        if (kind === "wide") {
+          // Just past the ring, level with the portrait's middle.
+          expect(start.y).toBeCloseTo(pill.portrait.y)
+          expect(start.x - pill.portrait.x).toBeGreaterThan(ring)
+          expect(start.x - pill.portrait.x).toBeLessThan(ring + 10)
+        } else {
+          expect(start.x).toBeCloseTo(pill.portrait.x)
+          expect(start.y).toBeCloseTo(pill.y + pill.height)
+        }
+      }
+    })
 
     it("labels each whole hour of the day and places each event at its time", () => {
       expect(hub.hours.map((item) => item.hour)).toEqual([12, 13, 14, 15, 16, 17, 18, 19])
@@ -163,6 +186,19 @@ for (const kind of ["wide", "tall"] as const) {
         expectOrdered(stay)
         expect(stay.some(([, values]) => values.opacity === 1)).toBe(true)
         expect(stay.at(-1)![1].opacity).toBe(0)
+      }
+      for (const leg of hub.legs.filter((item) => item.side === "in")) {
+        const pop = popStops(hub, leg.delay)
+        const ripple = rippleStops(hub, leg.delay)
+        expectOrdered(pop)
+        expectOrdered(ripple)
+        // The portrait rests, swells as its event leaves, and rests again; the ring shows only then.
+        expect(pop[0]![1].transform).toBe("scale(1)")
+        expect(pop.at(-1)![1].transform).toBe("scale(1)")
+        expect(pop.some(([, values]) => values.transform !== "scale(1)")).toBe(true)
+        expect(ripple[0]![1].opacity).toBe(0)
+        expect(ripple.at(-1)![1].opacity).toBe(0)
+        expect(ripple.find(([, values]) => Number(values.opacity) > 0)![0]).toBeCloseTo((leg.delay / hub.cycle) * 100, 0)
       }
       const face = faceStops(hub)
       expectOrdered(face)

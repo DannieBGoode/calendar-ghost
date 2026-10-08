@@ -1,15 +1,18 @@
 ---
 // The home page's hero: the headline, one line, and the calls to action, over a diagram of what
 // Calendar Ghost does. Over the whole diagram, a switch: what work sees, or what Sam sees. On the
-// left, "Your calendars": Sam's three calendars as pills, Work's in its own red. In the middle, the
-// ghost. On the right, a short day: Sam's Work calendar, or Sam's Personal calendar. A chip
-// carrying an event's title leaves each pill and goes through the ghost. Bound for Work, the gym
+// left, "Your calendars": Sam's three calendars, each a portrait in a ring of its colour (Work's in
+// its own red) with its name and event set flush against it, and no box around them. In the
+// middle, the ghost. On the right, a short day: Sam's Work calendar, or Sam's Personal calendar,
+// where events are tinted blocks and Busy is hatched. A chip carrying an event's title comes out
+// from behind each portrait (which pops, a faint ring spreading from it) and goes through the
+// ghost. Bound for Work, the gym
 // session and the family dinner lose their titles there, which the ghost keeps back (small chips
 // under "Kept from Work"), and leave as indigo "Busy" chips; Work's own client call passes with its
 // title. Bound for Personal, every title stays. Each hairline brightens while a chip runs along
 // it. Each lands in the day at its time, the day rests, and the cycle starts again.
 //
-// Wherever an event shows its title (the pills, the chips on their way in, the Personal calendar
+// Wherever an event shows its title (the calendars, the chips on their way in, the Personal calendar
 // in "What you see", Work's own meeting), an emoji stands before it; wherever its title is hidden
 // from Work (the Busy chips and blocks, the titles the ghost keeps back), the page's small ghost
 // glyph does instead. The emojis are text (the visitor's own emoji font), and the drawing stays
@@ -28,6 +31,9 @@ import {
   faceStops,
   keyframes,
   lineStops,
+  popStops,
+  rippleStops,
+  RING_GAP,
   SOURCES,
   showsOnWork,
   stayStops,
@@ -76,8 +82,8 @@ const facts = [
 
 /** Each layout's sizes, in diagram units. */
 const TYPE = {
-  wide: { label: 13.5, name: 16.5, event: 13, avatar: 26, pad: 14, dayAvatar: 28, dayName: 16.5, account: 12.5, block: 12.5, hour: 10.5, chip: 11.5, kept: 11 },
-  tall: { label: 12, name: 12.5, event: 10.5, avatar: 20, pad: 9, dayAvatar: 22, dayName: 14, account: 11.5, block: 11.5, hour: 9.5, chip: 10.5, kept: 10 },
+  wide: { label: 13.5, name: 17, event: 13.5, pad: 14, dayAvatar: 28, dayName: 16.5, account: 12.5, block: 12.5, hour: 10.5, chip: 11.5, kept: 11 },
+  tall: { label: 12, name: 12.5, event: 10.5, pad: 9, dayAvatar: 22, dayName: 14, account: 11.5, block: 11.5, hour: 9.5, chip: 10.5, kept: 10 },
 } as const
 
 /** A chip's size for its label: about half an em per letter, plus its padding. */
@@ -86,8 +92,9 @@ const markedTitle = (leg: Leg, hub: Hub) => marked(hub.pills.find((pill) => pill
 const pct = (value: number, of: number) => `${Math.round((value / of) * 10000) / 100}%`
 
 /** Every element that moves gets its own keyframes for one whole cycle, so the loop needs no
- * script: chips along their hairlines, the hairlines brightening, titles dropping, blocks and kept
- * titles landing and going, and the ghost's face. All are named `hc-`. */
+ * script: chips along their hairlines, the portraits as their events leave, the hairlines
+ * brightening, titles dropping, blocks and kept titles landing and going, and the ghost's face.
+ * All are named `hc-`. */
 const motion = hubs.map((hub) => {
   const rules: string[] = []
   const name = (part: string, index: number) => `hc-${hub.kind}-${part}-${index}`
@@ -104,6 +111,12 @@ const motion = hubs.map((hub) => {
     rules.push(keyframes(name("kept", index), stayStops(hub, title.appears)))
     return name("kept", index)
   })
+  // Each portrait's pop, and the ring that spreads from it, as its event leaves it.
+  const pulses = hub.pills.map((pill, index) => {
+    const leaves = hub.legs.find((leg) => leg.source === pill.key && leg.side === "in")!.delay
+    rules.push(keyframes(name("pop", index), popStops(hub, leaves)), keyframes(name("ripple", index), rippleStops(hub, leaves)))
+    return { pop: name("pop", index), ripple: name("ripple", index) }
+  })
   const caption = name("caption", 0)
   rules.push(keyframes(caption, stayStops(hub, Math.min(...hub.kept.titles.map((title) => title.appears)))))
   const face = faceStops(hub)
@@ -111,7 +124,7 @@ const motion = hubs.map((hub) => {
     keyframes(`hc-${hub.kind}-face-then`, face),
     keyframes(`hc-${hub.kind}-face-first`, face.map(([percent, values]) => [percent, { opacity: 1 - Number(values.opacity) }])),
   )
-  return { legs, blocks, kept, caption, css: rules.join("") }
+  return { legs, blocks, kept, pulses, caption, css: rules.join("") }
 })
 const motionCss = motion.map((item) => item.css).join("")
 ---
@@ -152,19 +165,18 @@ const motionCss = motion.map((item) => item.css).join("")
                 <defs>
                   {hub.pills.map((pill) => (
                     <clipPath id={id(pill.key)}>
-                      {wide ? (
-                        <circle cx={pill.x + type.pad + type.avatar / 2} cy={pill.y + pill.height / 2} r={type.avatar / 2} />
-                      ) : (
-                        <circle cx={pill.x + pill.width / 2} cy={pill.y + 8 + type.avatar / 2} r={type.avatar / 2} />
-                      )}
+                      <circle cx={pill.portrait.x} cy={pill.portrait.y} r={hub.portrait / 2} />
                     </clipPath>
                   ))}
+                  <pattern id={id("hatch")} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <path class="hc-hatch-line" d="M0 0V5" />
+                  </pattern>
                   <clipPath id={id("day")}>
                     <circle cx={day.x + type.pad + type.dayAvatar / 2} cy={dayMiddle} r={type.dayAvatar / 2} />
                   </clipPath>
                 </defs>
 
-                <text class="hc-label" x={hub.labels.calendars.x} y={hub.labels.calendars.y} style={`font-size: ${type.label}px`}>
+                <text class="hc-label" x={hub.labels.calendars.x} y={hub.labels.calendars.y} text-anchor={hub.labels.calendars.anchor} style={`font-size: ${type.label}px`}>
                   {hc.calendarsLabel}
                 </text>
                 <text class="hc-label hc-as-work" x={hub.labels.day.x} y={hub.labels.day.y} style={`font-size: ${type.label}px`}>
@@ -184,48 +196,6 @@ const motionCss = motion.map((item) => item.css).join("")
                     <path d={leg.d} data-source={leg.source} data-shows={leg.shows} style={`--hc-anim: ${timing.legs[index]!.line}`} />
                   ))}
                 </g>
-
-                {hub.pills.map((pill) => {
-                  const title = marked(pill.event.key)
-                  if (!wide) {
-                    // On a phone, a compact pill: the avatar over the calendar's name over its event.
-                    const cx = pill.x + pill.width / 2
-                    const avatarY = pill.y + 8
-                    const nameY = avatarY + type.avatar + 12
-                    return (
-                      <g class="hc-pill" data-calendar={pill.key}>
-                        <rect x={pill.x} y={pill.y} width={pill.width} height={pill.height} rx="6" />
-                        <circle class="hc-ring" cx={cx} cy={avatarY + type.avatar / 2} r={type.avatar / 2 + 2} />
-                        <image href={avatars[pill.key]} x={cx - type.avatar / 2} y={avatarY} width={type.avatar} height={type.avatar} clip-path={`url(#${id(pill.key)})`} />
-                        <text x={cx} y={nameY} text-anchor="middle" style={`font-size: ${type.name}px`}>
-                          <tspan x={cx}>{calendarName(pill.key)}</tspan>
-                          <tspan class="hc-muted" x={cx} dy={type.name * 1.15} style={`font-size: ${type.event}px`}>
-                            {title}
-                          </tspan>
-                        </text>
-                      </g>
-                    )
-                  }
-                  const middle = pill.y + pill.height / 2
-                  const textX = pill.x + type.pad + type.avatar + 11
-                  const line = 9
-                  const event = format(hc.eventLine, { event: title, time: clock(pill.event.start) })
-                  return (
-                    <g class="hc-pill" data-calendar={pill.key}>
-                      <rect x={pill.x} y={pill.y} width={pill.width} height={pill.height} rx="6" />
-                      <circle class="hc-ring" cx={pill.x + type.pad + type.avatar / 2} cy={middle} r={type.avatar / 2 + 2} />
-                      <image href={avatars[pill.key]} x={pill.x + type.pad} y={middle - type.avatar / 2} width={type.avatar} height={type.avatar} clip-path={`url(#${id(pill.key)})`} />
-                      <text x={textX} y={middle} style={`font-size: ${type.name}px`}>
-                        <tspan x={textX} dy={-line}>
-                          {calendarName(pill.key)}
-                        </tspan>
-                        <tspan class="hc-muted" x={textX} dy={line * 2} style={`font-size: ${type.event}px`}>
-                          {event}
-                        </tspan>
-                      </text>
-                    </g>
-                  )
-                })}
 
                 <g class="hc-day">
                   <rect class="hc-box" x={day.x} y={day.y} width={day.width} height={day.height} rx="8" />
@@ -260,6 +230,7 @@ const motionCss = motion.map((item) => item.css).join("")
                     return (
                       <g class="hc-block" data-source={block.source} data-event={block.event.key} data-shows={block.shows} style={`--hc-anim: ${timing.blocks[index]}`}>
                         <rect class="hc-paint" x={block.x} y={block.y} width={block.width} height={block.height} rx="4" />
+                        {block.shows === "busy" && <rect class="hc-hatch hc-as-work" x={block.x} y={block.y} width={block.width} height={block.height} rx="4" fill={`url(#${id("hatch")})`} />}
                         {block.shows === "busy" && <rect class="hc-paint hc-paint-you" x={block.x} y={block.y} width={block.width} height={block.height} rx="4" />}
                         <circle class="hc-source-dot" cx={block.x + (wide ? 10 : 8)} cy={middle} r={wide ? 3.5 : 3} />
                         {block.shows === "busy" && (
@@ -358,6 +329,59 @@ const motionCss = motion.map((item) => item.css).join("")
                     )
                   })}
                 </g>
+                {/* The calendars over the chips, so each chip comes out from behind its portrait. */}
+                {hub.pills.map((pill, index) => {
+                  const title = marked(pill.event.key)
+                  const pulse = timing.pulses[index]!
+                  const r = hub.portrait / 2
+                  const { x: cx, y: cy } = pill.portrait
+                  // As its event leaves, the portrait pops and a faint ring spreads from it. Both
+                  // scale about the portrait's middle, given in drawing units: WebKit misplaces the
+                  // middle of an SVG group's box (`transform-box: fill-box`).
+                  const origin = `transform-origin: ${cx}px ${cy}px`
+                  const portrait = (
+                    <>
+                      <circle class="hc-ripple" cx={cx} cy={cy} r={r + RING_GAP} style={`${origin}; --hc-anim: ${pulse.ripple}`} />
+                      <g class="hc-portrait" style={`${origin}; --hc-anim: ${pulse.pop}`}>
+                        <circle class="hc-ring" cx={cx} cy={cy} r={r + RING_GAP} />
+                        <image href={avatars[pill.key]} x={cx - r} y={cy - r} width={hub.portrait} height={hub.portrait} clip-path={`url(#${id(pill.key)})`} />
+                      </g>
+                    </>
+                  )
+                  if (!wide) {
+                    // On a phone, the portrait over the calendar's name over its event, centred,
+                    // with no room for the event's time.
+                    const nameY = cy + r + RING_GAP + type.name * 0.95
+                    return (
+                      <g class="hc-pill" data-calendar={pill.key}>
+                        {portrait}
+                        <text x={cx} y={nameY} text-anchor="middle" style={`font-size: ${type.name}px`}>
+                          <tspan x={cx}>{calendarName(pill.key)}</tspan>
+                          <tspan class="hc-muted" x={cx} dy={type.name * 1.2} style={`font-size: ${type.event}px`}>
+                            {title}
+                          </tspan>
+                        </text>
+                      </g>
+                    )
+                  }
+                  // On wide screens, the name and event set flush against the portrait, on its left.
+                  const textX = cx - r - RING_GAP - 12
+                  const line = 10
+                  const event = format(hc.eventLine, { event: title, time: clock(pill.event.start) })
+                  return (
+                    <g class="hc-pill" data-calendar={pill.key}>
+                      {portrait}
+                      <text x={textX} y={cy} text-anchor="end" style={`font-size: ${type.name}px`}>
+                        <tspan x={textX} dy={-line}>
+                          {calendarName(pill.key)}
+                        </tspan>
+                        <tspan class="hc-muted" x={textX} dy={line * 2} style={`font-size: ${type.event}px`}>
+                          {event}
+                        </tspan>
+                      </text>
+                    </g>
+                  )
+                })}
               </svg>
               <span class="hc-ghost" style={`left: ${pct(hub.ghost.x, hub.width)}; top: ${pct(hub.ghost.y, hub.height)}; width: ${pct(hub.ghost.width, hub.width)}`}>
                 <Ghost face="neutral" then="happy" tone="mist" alive="still" />
