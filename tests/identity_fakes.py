@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
@@ -14,7 +15,15 @@ from calendar_sync.application.ports import (
     UserQuery,
     UserSort,
 )
-from calendar_sync.domain.access import RegistrationPolicy, User, UserId, link_expiry
+from calendar_sync.domain.access import (
+    RegistrationPolicy,
+    Role,
+    User,
+    UserId,
+    UserState,
+    link_expiry,
+    require_administrator_remains,
+)
 
 
 def _sort_value(user: User, sort: UserSort) -> object:
@@ -29,6 +38,8 @@ def _sort_value(user: User, sort: UserSort) -> object:
 class MemoryUsers:
     users: dict[UserId, User] = field(default_factory=dict)
     hashes: dict[UserId, str] = field(default_factory=dict)
+    meanwhile: Callable[[MemoryUsers], object] | None = None
+    """Another request's change, landing once just before this directory's next guarded write."""
 
     def count(self) -> int:
         return len(self.users)
@@ -70,10 +81,6 @@ class MemoryUsers:
         self.users[user.id] = user
         self.hashes[user.id] = password_hash
 
-    def save(self, user: User) -> None:
-        self._require_free(user)
-        self.users[user.id] = user
-
     def set_email(self, user_id: UserId, email: str) -> None:
         user = self.users.get(user_id)
         if user is None:
@@ -95,9 +102,33 @@ class MemoryUsers:
     def record_sign_in(self, user_id: UserId, at: datetime) -> None:
         self.users[user_id] = replace(self.users[user_id], last_sign_in_at=at)
 
+    def set_role(self, user_id: UserId, role: Role) -> None:
+        self._guarded(user_id, lambda user: replace(user, role=role))
+
+    def set_state(self, user_id: UserId, state: UserState) -> None:
+        self._guarded(user_id, lambda user: replace(user, state=state))
+
     def delete(self, user_id: UserId) -> None:
-        self.users.pop(user_id, None)
-        self.hashes.pop(user_id, None)
+        self._guarded(user_id, lambda _user: None)
+
+    def _guarded(self, user_id: UserId, change: Callable[[User], User | None]) -> None:
+        """SQLite's guarded write: checked against every User as stored at the write."""
+        self._concurrently()
+        current = self.users.get(user_id)
+        if current is None:
+            return
+        after = change(current)
+        require_administrator_remains(self.users.values(), user_id, after)
+        if after is None:
+            del self.users[user_id]
+            self.hashes.pop(user_id, None)
+        else:
+            self.users[user_id] = after
+
+    def _concurrently(self) -> None:
+        meanwhile, self.meanwhile = self.meanwhile, None
+        if meanwhile is not None:
+            meanwhile(self)
 
     def _require_free(self, user: User) -> None:
         if user.email is not None and any(

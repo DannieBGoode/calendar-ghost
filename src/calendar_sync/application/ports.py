@@ -925,10 +925,6 @@ class UserDirectory(Protocol):
         """Add a User; raises EmailTaken when another User has the email."""
         ...
 
-    def save(self, user: User) -> None:
-        """Save a User's email, role, state, and preferences; raises EmailTaken."""
-        ...
-
     def set_email(self, user_id: UserId, email: str) -> None:
         """Change only a User's email, already in its normal form; raises EmailTaken. Never
         writes their role or state, so it cannot undo an administrator's change."""
@@ -944,8 +940,19 @@ class UserDirectory(Protocol):
 
     def record_sign_in(self, user_id: UserId, at: datetime) -> None: ...
 
+    def set_role(self, user_id: UserId, role: Role) -> None:
+        """Change only a User's role. Raises LastAdministrator, changing nothing, when that
+        would take the role from the last active Installation Administrator; the check and the
+        write are one serialized step, so two administrators acting at once cannot both pass."""
+        ...
+
+    def set_state(self, user_id: UserId, state: UserState) -> None:
+        """Change only a User's state, guarded like `set_role`."""
+        ...
+
     def delete(self, user_id: UserId) -> None:
-        """Remove a User and, through their references, every record they own (ADR 0029)."""
+        """Remove a User and, through their references, every record they own (ADR 0029).
+        Guarded like `set_role`, except that the last remaining User may be deleted."""
         ...
 
 

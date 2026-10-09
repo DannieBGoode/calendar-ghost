@@ -1,5 +1,6 @@
 """User Deletion: Rule Removal for each rule, then everything the User owns (ADR 0030)."""
 
+from collections.abc import Callable
 from dataclasses import replace
 
 import pytest
@@ -223,6 +224,56 @@ def test_the_last_administrator_cannot_leave_while_anyone_else_remains() -> None
         assert ShowOwnAccountDeletion(installation.users).execute(ADMIN.id) == (
             OwnAccountDeletion(needs_another_administrator=True, last_user=False)
         )
+
+
+OTHER_ADMIN = User(
+    UserId("other-admin"),
+    "other@example.test",
+    Role.INSTALLATION_ADMINISTRATOR,
+    UserState.ACTIVE,
+    NOW,
+)
+
+
+def _demoting(user_id: UserId) -> Callable[[MemoryUsers], object]:
+    """Another Installation Administrator demoting `user_id` while the deletion runs."""
+    return lambda users: users.users.update(
+        {user_id: replace(users.users[user_id], role=Role.USER)}
+    )
+
+
+def test_deleting_an_administrator_while_the_deleter_is_demoted_keeps_the_user() -> None:
+    installation = Installation(people=(ADMIN, MEMBER, OTHER_ADMIN))
+    installation.users.meanwhile = _demoting(ADMIN.id)
+
+    with pytest.raises(LastAdministrator):
+        installation.delete_user().execute(ADMIN.id, OTHER_ADMIN.id)
+
+    assert installation.users.get(OTHER_ADMIN.id) == OTHER_ADMIN
+
+
+def test_leaving_while_the_other_administrator_is_demoted_keeps_an_administrator() -> None:
+    """The check before Rule Removal passed; the final deletion is checked again and refused."""
+    installation = Installation(people=(ADMIN, MEMBER, OTHER_ADMIN))
+    installation.users.meanwhile = _demoting(OTHER_ADMIN.id)
+
+    with pytest.raises(LastAdministrator):
+        installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
+
+    assert installation.users.get(ADMIN.id) == ADMIN
+
+
+def test_two_last_users_leaving_at_once_return_the_installation_to_setup() -> None:
+    """Both saw another User before removing their rules; the second to finish is the last."""
+    installation = Installation(people=(ADMIN, OTHER_ADMIN))
+    pending = installation.invitations.issue(ADMIN.id, NOW)
+    installation.users.meanwhile = lambda users: users.users.pop(OTHER_ADMIN.id)
+
+    installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
+
+    assert installation.users.count() == 0
+    assert installation.registration.policy() is RegistrationPolicy.ONLY_ME
+    assert not installation.invitations.usable(pending.token, NOW)
 
 
 def test_the_only_user_may_leave_and_the_installation_returns_to_setup() -> None:

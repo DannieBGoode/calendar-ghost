@@ -9,7 +9,14 @@ import pytest
 
 from calendar_sync.application.errors import EmailTaken
 from calendar_sync.application.ports import UserPage, UserQuery, UserSort
-from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
+from calendar_sync.domain.access import (
+    LastAdministrator,
+    RegistrationPolicy,
+    Role,
+    User,
+    UserId,
+    UserState,
+)
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
     SqlitePasswordResetLinks,
@@ -23,6 +30,7 @@ from tests.adapters.test_user_migration import (
     database_at_version,
     seed_single_administrator,
 )
+from tests.identity_fakes import MemoryUsers
 
 NOW = datetime(2026, 10, 9, 9, 0, tzinfo=UTC)
 FIRST = User(
@@ -122,9 +130,10 @@ def test_users_are_found_by_id_and_email_and_keep_what_is_saved(tmp_path: Path) 
     users = _users(tmp_path)
     users.add(FIRST, "hash-1")
     users.add(SECOND, "hash-2")
-    changed = replace(SECOND, state=UserState.DISABLED, language="de", notify_by_email=False)
+    changed = replace(SECOND, state=UserState.DISABLED, notify_by_email=False)
 
-    users.save(changed)
+    users.set_state(SECOND.id, UserState.DISABLED)
+    users.set_notification_email(SECOND.id, False)
     users.record_sign_in(SECOND.id, NOW)
 
     assert users.by_email("second@example.test") == replace(changed, last_sign_in_at=NOW)
@@ -153,6 +162,67 @@ def test_a_users_email_and_incident_emails_change_without_touching_role_or_state
         users.set_email(SECOND.id, "first@example.test")
 
 
+@pytest.fixture(params=["sqlite", "memory"])
+def directory(request: pytest.FixtureRequest, tmp_path: Path) -> SqliteUserDirectory | MemoryUsers:
+    """Both User Directories, so the application tests' stand-in keeps SQLite's rules."""
+    return _users(tmp_path) if request.param == "sqlite" else MemoryUsers()
+
+
+OTHER_ADMIN = replace(SECOND, role=Role.INSTALLATION_ADMINISTRATOR)
+
+
+def test_two_administrators_demoting_each_other_at_once_leave_one(
+    directory: SqliteUserDirectory | MemoryUsers,
+) -> None:
+    directory.add(FIRST, "hash-1")
+    directory.add(OTHER_ADMIN, "hash-2")
+
+    # Each passed the use case's check while the other still administered; the second write
+    # is checked again in the same transaction and refused.
+    directory.set_role(FIRST.id, Role.USER)
+    with pytest.raises(LastAdministrator):
+        directory.set_role(OTHER_ADMIN.id, Role.USER)
+    with pytest.raises(LastAdministrator):
+        directory.set_state(OTHER_ADMIN.id, UserState.DISABLED)
+    with pytest.raises(LastAdministrator):
+        directory.delete(OTHER_ADMIN.id)
+
+    assert directory.get(OTHER_ADMIN.id) == OTHER_ADMIN
+    assert directory.get(FIRST.id) == replace(FIRST, role=Role.USER)
+
+
+def test_roles_and_states_change_while_an_administrator_remains(
+    directory: SqliteUserDirectory | MemoryUsers,
+) -> None:
+    directory.add(FIRST, "hash-1")
+    directory.add(SECOND, "hash-2")
+
+    directory.set_state(SECOND.id, UserState.DISABLED)
+    directory.set_role(SECOND.id, Role.INSTALLATION_ADMINISTRATOR)
+    # A disabled administrator does not count, so the active one keeps the role.
+    with pytest.raises(LastAdministrator):
+        directory.set_role(FIRST.id, Role.USER)
+    directory.set_state(SECOND.id, UserState.ACTIVE)
+    directory.set_role(FIRST.id, Role.USER)
+
+    assert directory.get(SECOND.id) == OTHER_ADMIN
+    assert directory.get(FIRST.id) == replace(FIRST, role=Role.USER)
+
+
+def test_the_last_administrator_is_deleted_only_as_the_last_user(
+    directory: SqliteUserDirectory | MemoryUsers,
+) -> None:
+    directory.add(FIRST, "hash-1")
+    directory.add(SECOND, "hash-2")
+
+    with pytest.raises(LastAdministrator):
+        directory.delete(FIRST.id)
+    directory.delete(SECOND.id)
+    directory.delete(FIRST.id)
+
+    assert directory.count() == 0
+
+
 def test_one_email_signs_in_one_user_whatever_its_case(tmp_path: Path) -> None:
     users = _users(tmp_path)
     users.add(FIRST, "hash-1")
@@ -161,7 +231,7 @@ def test_one_email_signs_in_one_user_whatever_its_case(tmp_path: Path) -> None:
         users.add(replace(SECOND, email="FIRST@example.test"), "hash-2")
     users.add(SECOND, "hash-2")
     with pytest.raises(EmailTaken):
-        users.save(replace(SECOND, email="first@example.test"))
+        users.set_email(SECOND.id, "first@example.test")
     assert users.get(SECOND.id) == SECOND
 
 
@@ -180,8 +250,11 @@ def test_an_email_once_added_cannot_be_removed(tmp_path: Path) -> None:
     users = _users(tmp_path)
     users.add(FIRST, "hash-1")
 
-    with pytest.raises(Exception, match="keeps an email"):
-        users.save(replace(FIRST, email=None))
+    with (
+        pytest.raises(sqlite3.IntegrityError, match="keeps an email"),
+        sqlite3.connect(tmp_path / "test.db") as connection,
+    ):
+        connection.execute("UPDATE users SET email = NULL WHERE id = ?", (FIRST.id.value,))
 
 
 def test_failed_sign_ins_for_one_email_wait_until_the_window_moves_on() -> None:
@@ -306,7 +379,8 @@ def test_deleting_a_user_removes_every_record_they_own(tmp_path: Path) -> None:
     initialize_database(database)
     users = SqliteUserDirectory(database)
     upgraded = users.list()[0]
-    users.add(SECOND, "hash-2")
+    # Another administrator remains, so the first may go.
+    users.add(OTHER_ADMIN, "hash-2")
 
     users.delete(upgraded.id)
 
@@ -315,4 +389,4 @@ def test_deleting_a_user_removes_every_record_they_own(tmp_path: Path) -> None:
             rows = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
             assert rows == (0,), table
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert users.list() == (SECOND,)
+    assert users.list() == (OTHER_ADMIN,)

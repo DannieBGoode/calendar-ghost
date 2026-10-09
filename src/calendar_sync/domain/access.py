@@ -115,9 +115,27 @@ class LastAdministrator(DomainValidationError):
     """The installation keeps at least one Installation Administrator who may sign in."""
 
 
-def require_another_administrator(users: Iterable[User], leaving: UserId) -> None:
-    """Refuse when `leaving` is the last active Installation Administrator."""
-    if not any(
-        user.administers and user.state is UserState.ACTIVE and user.id != leaving for user in users
-    ):
-        raise LastAdministrator("another Installation Administrator must remain")
+def require_administrator_remains(
+    users: Iterable[User], changed: UserId, after: User | None
+) -> None:
+    """Refuse changing User `changed` into `after`, or deleting them when `after` is None, when
+    that takes the role from the last active Installation Administrator while anyone remains.
+
+    The last User may delete themself: the installation then returns to setup (ADR 0030).
+    `users` must hold `changed` and every active Installation Administrator; others may be left
+    out, as long as one other User is there whenever one exists.
+    """
+    users = tuple(users)
+    before = next((user for user in users if user.id == changed), None)
+    others = [user for user in users if user.id != changed]
+    if not _active_administrator(before) or _active_administrator(after):
+        return
+    if any(_active_administrator(user) for user in others):
+        return
+    if after is None and not others:
+        return
+    raise LastAdministrator("another Installation Administrator must remain")
+
+
+def _active_administrator(user: User | None) -> bool:
+    return user is not None and user.administers and user.state is UserState.ACTIVE

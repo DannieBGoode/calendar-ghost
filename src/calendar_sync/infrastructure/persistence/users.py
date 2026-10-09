@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import secrets
 import sqlite3
+from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from calendar_sync.application.errors import EmailTaken
 from calendar_sync.application.ports import Clock, Session, UserPage, UserQuery, UserSort
-from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.access import (
+    Role,
+    User,
+    UserId,
+    UserState,
+    require_administrator_remains,
+)
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash
 
@@ -79,27 +87,6 @@ class SqliteUserDirectory:
         with transaction(self._database_path) as connection:
             insert_user(connection, user, password_hash)
 
-    def save(self, user: User) -> None:
-        try:
-            with transaction(self._database_path) as connection:
-                connection.execute(
-                    """
-                    UPDATE users SET email = ?, role = ?, state = ?, language = ?,
-                        notify_by_email = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        user.email,
-                        user.role.value,
-                        user.state.value,
-                        user.language,
-                        int(user.notify_by_email),
-                        user.id.value,
-                    ),
-                )
-        except sqlite3.IntegrityError as error:
-            raise _taken_or(error) from error
-
     def set_email(self, user_id: UserId, email: str) -> None:
         try:
             with transaction(self._database_path) as connection:
@@ -136,11 +123,60 @@ class SqliteUserDirectory:
                 (at.isoformat(), user_id.value),
             )
 
+    def set_role(self, user_id: UserId, role: Role) -> None:
+        self._guarded(
+            user_id,
+            lambda user: replace(user, role=role),
+            "UPDATE users SET role = ? WHERE id = ?",
+            (role.value, user_id.value),
+        )
+
+    def set_state(self, user_id: UserId, state: UserState) -> None:
+        self._guarded(
+            user_id,
+            lambda user: replace(user, state=state),
+            "UPDATE users SET state = ? WHERE id = ?",
+            (state.value, user_id.value),
+        )
+
     def delete(self, user_id: UserId) -> None:
         # Every owned table refers to its User or its parent with ON DELETE CASCADE (ADR 0029),
         # so one statement removes the User's accounts, rules, activity, tokens, and sessions.
+        self._guarded(
+            user_id, lambda _user: None, "DELETE FROM users WHERE id = ?", (user_id.value,)
+        )
+
+    def _guarded(
+        self,
+        user_id: UserId,
+        change: Callable[[User], User | None],
+        statement: str,
+        parameters: tuple[str, ...],
+    ) -> None:
+        """Write a change to one User only if an Installation Administrator remains after it.
+
+        The write lock is held from the check to the write, so two administrators changing each
+        other at once are serialized and the second is checked against the first's result.
+        """
         with transaction(self._database_path) as connection:
-            connection.execute("DELETE FROM users WHERE id = ?", (user_id.value,))
+            connection.execute("BEGIN IMMEDIATE")
+            # The User, every active administrator, and one other User when there is one: all
+            # require_administrator_remains needs, however many Users the installation has.
+            rows = connection.execute(
+                f"""
+                SELECT {_COLUMNS} FROM users
+                WHERE id = :user
+                    OR (role = 'installation_administrator' AND state = 'active')
+                    OR id = (SELECT id FROM users WHERE id != :user LIMIT 1)
+                """,  # noqa: S608
+                {"user": user_id.value},
+            ).fetchall()
+            users = tuple(_user(row) for row in rows)
+            current = next((user for user in users if user.id == user_id), None)
+            if current is None:
+                return
+            require_administrator_remains(users, user_id, change(current))
+            connection.execute(statement, parameters)
 
     def _one(self, condition: str, *values: object) -> User | None:
         with transaction(self._database_path) as connection:

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -13,7 +14,7 @@ from calendar_sync.domain.access import (
     UserState,
     email_address,
     link_expiry,
-    require_another_administrator,
+    require_administrator_remains,
     require_registration_change,
 )
 
@@ -113,14 +114,34 @@ def _administrators(*states: UserState) -> list[User]:
 def test_the_last_administrator_keeps_the_role() -> None:
     sole = _administrators(UserState.ACTIVE)
     with pytest.raises(LastAdministrator):
-        require_another_administrator(sole, sole[0].id)
+        require_administrator_remains(sole, sole[0].id, replace(sole[0], role=Role.USER))
 
     pair = _administrators(UserState.ACTIVE, UserState.ACTIVE)
-    require_another_administrator(pair, pair[0].id)
+    require_administrator_remains(pair, pair[0].id, replace(pair[0], role=Role.USER))
 
 
 def test_a_disabled_administrator_does_not_count_as_another() -> None:
     users = _administrators(UserState.ACTIVE, UserState.DISABLED)
 
     with pytest.raises(LastAdministrator):
-        require_another_administrator(users, users[0].id)
+        require_administrator_remains(
+            users, users[0].id, replace(users[0], state=UserState.DISABLED)
+        )
+
+
+def test_the_last_administrator_leaves_only_when_nobody_else_remains() -> None:
+    sole = _administrators(UserState.ACTIVE)
+    require_administrator_remains(sole, sole[0].id, None)
+
+    with_a_disabled_one = _administrators(UserState.ACTIVE, UserState.DISABLED)
+    with pytest.raises(LastAdministrator):
+        require_administrator_remains(with_a_disabled_one, with_a_disabled_one[0].id, None)
+
+
+def test_a_change_that_keeps_or_never_held_the_role_is_never_refused() -> None:
+    admin, disabled = _administrators(UserState.ACTIVE, UserState.DISABLED)
+    users = [admin, disabled]
+
+    require_administrator_remains(users, admin.id, replace(admin, email="new@example.test"))
+    require_administrator_remains(users, disabled.id, None)
+    require_administrator_remains(users, UserId("missing"), None)

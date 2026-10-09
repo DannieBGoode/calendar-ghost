@@ -4,7 +4,7 @@ Password Reset Links, roles, and disabling. None of it shows a User's calendars 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from calendar_sync.application.errors import (
     ApplicationError,
@@ -40,7 +40,7 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
     email_address,
-    require_another_administrator,
+    require_administrator_remains,
     require_registration_change,
 )
 from calendar_sync.domain.model import ProjectionHandling, SyncRuleId
@@ -241,12 +241,11 @@ class ChangeRole:
 
     def execute(self, actor: UserId, user_id: UserId, role: Role) -> User:
         require_administrator(self.users, actor)
-        user = _existing(self.users, user_id)
-        if user.administers and role is not Role.INSTALLATION_ADMINISTRATOR:
-            require_another_administrator(self.users.list(), user.id)
-        changed = replace(user, role=role)
-        self.users.save(changed)
-        return changed
+        _existing(self.users, user_id)
+        # Raises LastAdministrator in the same step as the write, so two administrators
+        # demoting each other at once cannot both succeed.
+        self.users.set_role(user_id, role)
+        return _existing(self.users, user_id)
 
 
 @dataclass(slots=True)
@@ -258,17 +257,14 @@ class ChangeUserState:
 
     def execute(self, actor: UserId, user_id: UserId, state: UserState) -> User:
         require_administrator(self.users, actor)
-        user = _existing(self.users, user_id)
+        _existing(self.users, user_id)
+        if state is UserState.DISABLED and user_id == actor:
+            raise YourOwnState("you cannot disable yourself")
+        # Guarded like ChangeRole: the last active administrator is never disabled.
+        self.users.set_state(user_id, state)
         if state is UserState.DISABLED:
-            if user.id == actor:
-                raise YourOwnState("you cannot disable yourself")
-            if user.administers:
-                require_another_administrator(self.users.list(), user.id)
-        changed = replace(user, state=state)
-        self.users.save(changed)
-        if state is UserState.DISABLED:
-            self.sessions.end_all(user.id)
-        return changed
+            self.sessions.end_all(user_id)
+        return _existing(self.users, user_id)
 
 
 class UserDeletionInterrupted(ApplicationError):
@@ -307,6 +303,8 @@ class DeleteUser:
 
     The User is disabled first, so they cannot sign in and the scheduler holds their rules while
     each rule is removed; then the User and every record they own go from the live database.
+    Disabling is guarded like ChangeUserState, so the last active administrator is refused
+    before anything is removed, even when another administrator is demoted at the same moment.
     """
 
     users: UserDirectory
@@ -316,9 +314,7 @@ class DeleteUser:
     def execute(self, actor: UserId, user_id: UserId) -> DeletionResult:
         require_administrator(self.users, actor)
         user = _existing(self.users, user_id)
-        if user.administers:
-            require_another_administrator(self.users.list(), user.id)
-        self.users.save(replace(user, state=UserState.DISABLED))
+        self.users.set_state(user.id, UserState.DISABLED)
         self.sessions.end_all(user.id)
         result = _remove_rules(
             self.owned(user.id), ProjectionHandling.DELETE, keep_unreachable=True
@@ -339,8 +335,7 @@ class OwnAccountDeletion:
 
 def _require_may_leave(users: UserDirectory, user: User) -> None:
     """The last Installation Administrator may leave only when nobody else remains."""
-    if user.administers and users.count() > 1:
-        require_another_administrator(users.list(), user.id)
+    require_administrator_remains(users.list(), user.id, None)
 
 
 @dataclass(slots=True)
@@ -365,6 +360,12 @@ class DeleteOwnAccount:
     When nobody else remains, the installation returns to setup: the Registration Policy goes back
     to Only Me and every pending Invitation is revoked first, so nobody joins an installation
     without an administrator.
+
+    Whether the User may leave is checked before Rule Removal, for a clear refusal, and again by
+    the final deletion in one step with it. When another administrator is demoted, disabled, or
+    leaves meanwhile, that deletion is refused, keeping an administrator: the User stays, with
+    their rules already removed, and may try again. When everyone else left meanwhile, the
+    installation returns to setup after the deletion instead.
     """
 
     users: UserDirectory
@@ -384,11 +385,16 @@ class DeleteOwnAccount:
             raise IncorrectPassword("that is not your current password")
         _require_may_leave(self.users, user)
         if self.users.count() == 1:
-            self.settings.set_policy(RegistrationPolicy.ONLY_ME)
-            self.invitations.revoke_all(self.clock.now())
+            self._return_to_setup()
         result = _remove_rules(self.owned(user.id), handling, keep_unreachable=False)
         self.users.delete(user.id)
+        if self.users.count() == 0:
+            self._return_to_setup()
         return result
+
+    def _return_to_setup(self) -> None:
+        self.settings.set_policy(RegistrationPolicy.ONLY_ME)
+        self.invitations.revoke_all(self.clock.now())
 
 
 def _remove_rules(

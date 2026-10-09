@@ -1,5 +1,6 @@
 """Registration Policy, Invitations, Password Reset Links, roles, and disabling (ADR 0030)."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
@@ -321,6 +322,40 @@ def test_the_role_is_granted_and_revoked_but_never_from_the_last_administrator()
     assert installation.users.get(ADMIN.id) == replace(ADMIN, role=Role.USER)
     with pytest.raises(AdministratorRequired):
         change.execute(ADMIN.id, MEMBER.id, Role.USER)
+
+
+OTHER_ADMIN = replace(MEMBER, role=Role.INSTALLATION_ADMINISTRATOR)
+
+
+def _demote(user_id: UserId) -> Callable[[MemoryUsers], object]:
+    """Another Installation Administrator demoting `user_id` at the same moment."""
+    return lambda users: users.users.update(
+        {user_id: replace(users.users[user_id], role=Role.USER)}
+    )
+
+
+def test_two_administrators_demoting_each_other_at_once_leave_one() -> None:
+    installation = _installation(OTHER_ADMIN)
+    installation.users.meanwhile = _demote(ADMIN.id)
+
+    with pytest.raises(LastAdministrator):
+        ChangeRole(installation.users).execute(ADMIN.id, OTHER_ADMIN.id, Role.USER)
+
+    assert installation.users.get(OTHER_ADMIN.id) == OTHER_ADMIN
+
+
+def test_two_administrators_disabling_each_other_at_once_leave_one() -> None:
+    installation = _installation(OTHER_ADMIN)
+    installation.users.meanwhile = _demote(ADMIN.id)
+    session = installation.sessions.start(OTHER_ADMIN.id)
+
+    with pytest.raises(LastAdministrator):
+        ChangeUserState(installation.users, installation.sessions).execute(
+            ADMIN.id, OTHER_ADMIN.id, UserState.DISABLED
+        )
+
+    assert installation.users.get(OTHER_ADMIN.id) == OTHER_ADMIN
+    assert installation.sessions.user_of(session.token) == OTHER_ADMIN.id
 
 
 def test_a_disabled_user_is_signed_out_and_signs_in_again_once_enabled() -> None:

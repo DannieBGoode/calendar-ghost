@@ -131,7 +131,7 @@ def test_the_upgraded_first_user_signs_in_by_password_alone_until_they_add_an_em
 def test_a_disabled_user_cannot_sign_in() -> None:
     users, sessions = _installation()
     admin = users.list()[0]
-    users.save(replace(admin, state=UserState.DISABLED))
+    users.users[admin.id] = replace(admin, state=UserState.DISABLED)
 
     with pytest.raises(UserDisabled):
         _sign_in(users, sessions).execute("admin@example.test", PASSWORD, "client")
