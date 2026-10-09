@@ -30,11 +30,38 @@ rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
 - Integration Tokens: each token's User, name, scopes, and issue, last-use, and revocation times,
   with a SHA-256 hash of the token. The token itself is shown once when issued and never stored.
 - The Registration Policy.
+- Provider call counts: for each User, calendar provider, and UTC day, how many calls their runs
+  made, how many the provider refused for its rate limit, and how many failed. Only counts are
+  kept, never what a call asked for, and days older than 30 are discarded.
 
 Service log lines contain identifiers, counts, timings, and provider status categories. They do not
 contain event titles, descriptions, locations, guests, calendar identifiers, account emails, or
 provider payloads. The operator can turn file logging off and can download or purge the local log
 files from Settings.
+
+## What an Installation Administrator can see
+
+The Operator Overview, on the People page, shows administrators whether each User's synchronization
+works and why not ([ADR 0030](adr/0030-users-administrators-and-registration.md)). For each User it
+shows:
+
+- their email, role, state, when they joined, and when they last signed in;
+- their Installation Status: its verdict, each problem, and each rule's state and last successful
+  sync, with every calendar named only "Calendar 1", "Calendar 2", and so on, numbered in the order
+  their rules were created; and
+- their resource use: how many rules, Google accounts, and Activity entries they have, and the calls
+  their rules made to each calendar provider over the last 30 days.
+
+It never shows a User's calendar names or identifiers, their Google account emails, or any event
+title or other event content, and there is no setting that shows more. Installation Health, above
+the list, counts Users by status and names nobody. Every User sees exactly what administrators see
+about them under **Settings → Your account → What your administrator can see**, which is shown
+whenever someone else can be on the installation. Tests seed calendar names, Google account emails,
+calendar identifiers, and event titles with markers for two Users and check that none reaches the
+Operator Overview, Installation Health, the installation's notifications, or the logs.
+
+An administrator can still disable or delete a User, issue them a password reset link, and change
+their role. Calendar Ghost does not yet record which administrator did what.
 
 ## What can leave the machine
 

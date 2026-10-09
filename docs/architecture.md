@@ -13,9 +13,10 @@ Every record belongs to one User, and no User sees another's ([ADR 0029](adr/002
 [ADR 0030](adr/0030-users-administrators-and-registration.md)). Users sign in with email and
 password; an Installation Administrator is a User with a role, not a separate account. The
 Registration Policy starts at Only Me, so a household installation that one person runs behaves as
-before. The future hosted service runs this same codebase (ADR 0023). The Operator Overview, Plans
-behind the Plans setting, and billing behind Commercial Mode, both off by default (ADR 0028), follow
-in the phases of `docs/superpowers/specs/2026-10-09-multi-user-design.md`.
+before. The future hosted service runs this same codebase (ADR 0023). The Operator Overview shows
+administrators every User's health without their calendars. Plans behind the Plans setting, and
+billing behind Commercial Mode, both off by default (ADR 0028), follow in the phases of
+`docs/superpowers/specs/2026-10-09-multi-user-design.md`.
 
 ## Bounded contexts
 
@@ -48,7 +49,7 @@ Web API routes only parse input, call one use case or port, and map its result o
 error to HTTP. `bootstrap/container.py` composes in two steps: `build_adapters` makes the SQLite and
 Google adapters from Settings, and `compose` wires the use cases from them into the `Container`
 the routes call. The `Container` holds installation-wide services (identity, administration,
-Installation Health, the scheduler) and `for_user`, which composes one User's use cases from
+Installation Health, the Operator Overview, the scheduler) and `for_user`, which composes one User's use cases from
 adapters made for that User: their unit of work, account store, Activity queries, incidents, and
 Incident Notifications. A route resolves the signed-in User from the session and calls only that
 User's use cases, so no use case can reach another User's records. The scheduler lists due rules
@@ -112,7 +113,21 @@ incidents, and the scheduler's `SchedulerProgress`, read through the `SchedulerH
 installation problems that affect them. `application/installation_health.py` sums every User's
 verdict into Installation Health for Installation Administrators, beside installation incidents,
 such as a scheduler that stalled; `SchedulerWatch` reports that one to the installation's own
-channels. `interfaces/access.py` holds the one access decision both transports use: a present
+channels.
+
+The Operator Overview, `application/operator_overview.py`, is the other reader across Users.
+`UserStatuses` reads a page of Users' rules, last runs, previews, accounts, open incidents, and open
+blocks through `InstallationUnitOfWork.status_records`, in the same few queries however many rules
+they have, and computes each User's verdict with the same `assess_installation`. The records hold no
+calendar or account name; each calendar is labelled "Calendar 1", "Calendar 2" in the order the
+User's rules were created (`sync_rules.creation_order`), so `status_payload.py` renders the result
+with the one privacy contract the status API already uses. Installation Health counts the verdicts
+`UserStatuses` computes, so People and its summary agree. `OperatorOverview` adds each User's
+Resource Use from `InstallationUnitOfWork.resource_use`: counts of rules, Connected Accounts, and
+Activity entries, and the provider calls each Sync Run, reconciliation, and Rule Removal adds to its
+User's `provider_calls` row for that provider and UTC day. The scheduler pass discards days older
+than 30. `OperatorOverview.of` answers an administrator about one User, and `own` answers a User
+about themself; both come from one function, so they cannot differ. `interfaces/access.py` holds the one access decision both transports use: a present
 `Authorization` header decides alone and must carry the scope the route needs, and only the status
 API also accepts a session. `interfaces/api/status_payload.py` translates a verdict into the
 response both transports return. `interfaces/mcp/` serves the MCP SDK's stateless streamable HTTP
@@ -190,7 +205,8 @@ refuses a record whose User differs from its parent's, and a rule's accounts mus
 Each repository of a User's unit of work adds that User to every statement, and an upsert that meets
 another User's record is refused rather than skipped. Deleting a User deletes everything they own
 through these references. `tests/adapters/test_user_isolation_schema.py` checks the schema, and that
-only the scheduler, the migrations, and the composition root reach `InstallationUnitOfWork`.
+only the scheduler, the Operator Overview, the migrations, and the composition root reach
+`InstallationUnitOfWork`.
 
 The in-memory unit of work that application tests use and the SQLite one both pass the persistence
 contract in `tests/contracts/persistence.py`. It states, through the ports alone, the behavior use

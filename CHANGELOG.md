@@ -42,6 +42,18 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   and as the MCP tool `get_installation_health`, through the new `installation:read` token scope:
   incidents about the installation itself and how many people are in each status.
 - The installation's SMTP recipient and webhook are told when the scheduler stops completing passes.
+- The Operator Overview. **People** opens with Installation Health and shows each person's sync
+  status and problem count, filterable and sortable by status. Each person's page at `/people/{id}`
+  shows their Installation Status, with calendars only as "Calendar 1", "Calendar 2", and their
+  resource use: rules, Google accounts, Activity entries, and Google calls over the last 30 days.
+  `GET /api/v1/users` now includes each person's `verdict`, `problems`, `last_synced_at`, and
+  `resources`, and accepts `verdict` and `sort=verdict`; `GET /api/v1/users/{id}/overview` answers
+  administrators and 404 to anyone else. Administrators never see calendar names, Google account
+  emails, or events.
+- **Settings → Your account → What your administrator can see** shows each person exactly what the
+  Operator Overview shows about them, from `GET /api/v1/account/overview`.
+- Migration 24 records the order rules were created in, and migration 25 counts each person's
+  calendar provider calls per day, kept for 30 days. Rolling back past either is safe.
 - Failed sign-ins are throttled per email and per client address. Unusable invitation and password
   reset links are throttled per client address, twenty in 15 minutes, and are refused before any
   password is hashed.
