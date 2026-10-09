@@ -113,6 +113,110 @@ describe("App", () => {
     expect(help?.getAttribute("target")).toBe("_blank")
   })
 
+  it("opens an invitation before any session, and the signed-in app once it is accepted", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/invitation#inv_synthetic")
+    try {
+      RESPONSES["/api/v1/invitations/check"] = { usable: true }
+      const { container } = await renderApp(testI18n())
+      expect(container.querySelector("h1")?.textContent).toBe("Join Calendar Ghost")
+      expect(container.querySelector("header")).toBeNull()
+    } finally {
+      delete RESPONSES["/api/v1/invitations/check"]
+      page.happyDOM.setURL(address)
+    }
+  })
+
+  it("opens a password reset link before any session", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/password-reset#reset_synthetic")
+    try {
+      RESPONSES["/api/v1/password-resets/check"] = { usable: true }
+      const { container } = await renderApp(testI18n())
+      expect(container.querySelector("h1")?.textContent).toBe("Choose a new password")
+    } finally {
+      delete RESPONSES["/api/v1/password-resets/check"]
+      page.happyDOM.setURL(address)
+    }
+  })
+
+  it("returns to the sign-in screen after you delete your own account", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/settings")
+    let signedIn = true
+    const user = { id: "user-robin", email: "robin@example.test", role: "user", notify_by_email: true, language: null }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL, init?: RequestInit) => {
+        const path = String(input).split("?")[0] ?? ""
+        if (init?.method === "DELETE" && path === "/api/v1/account") {
+          signedIn = false
+          return Promise.resolve(jsonResponse({ rules: 0, deleted: 0, detached: 0, left: 0 }))
+        }
+        if (path === "/api/v1/session") {
+          return Promise.resolve(
+            jsonResponse({ authenticated: signedIn, user: signedIn ? user : null, installation_sends_email: false }),
+          )
+        }
+        if (path === "/api/v1/integration-tokens") return Promise.resolve(jsonResponse([]))
+        return Promise.resolve(jsonResponse(RESPONSES[path] ?? {}))
+      }),
+    )
+    try {
+      const { container } = await renderApp(testI18n())
+      act(() => container.querySelector<HTMLButtonElement>("#own-delete-toggle")!.click())
+      const password = container.querySelector<HTMLInputElement>("#own-delete-password")!
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(password, "a very long password")
+        password.dispatchEvent(new Event("input", { bubbles: true }))
+      })
+      const confirm = container.querySelector<HTMLButtonElement>("#own-delete-confirmation .confirmation-actions button:last-child")!
+      act(() => confirm.click())
+      await settle(12)
+
+      expect(container.querySelector("header")).toBeNull()
+      expect(container.querySelector(".auth-shell")).not.toBeNull()
+    } finally {
+      page.happyDOM.setURL(address)
+    }
+  })
+
+  it("returns to the sign-in screen after you sign out", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/settings")
+    const user = { id: "user-robin", email: "robin@example.test", role: "user", notify_by_email: true, language: null }
+    const signedIn = { authenticated: true, user, installation_sends_email: false }
+    const signedOut = { authenticated: false, user: null, installation_sends_email: false }
+    let session: object = signedIn
+    const refused = { ok: false, status: 401, json: () => Promise.resolve({}) } as Response
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL, init?: RequestInit) => {
+        const path = String(input).split("?")[0] ?? ""
+        if (path === "/api/v1/session") {
+          if (init?.method === "DELETE") session = signedOut
+          return Promise.resolve(jsonResponse(session))
+        }
+        if (session === signedOut && path !== "/api/v1/setup") return Promise.resolve(refused)
+        return Promise.resolve(jsonResponse(path === "/api/v1/integration-tokens" ? [] : (RESPONSES[path] ?? {})))
+      }),
+    )
+    try {
+      const { container } = await renderApp(testI18n())
+      act(() => container.querySelector<HTMLButtonElement>("header button[aria-label='Sign out']")!.click())
+      await settle(12)
+
+      expect(container.querySelector("header")).toBeNull()
+      expect(container.querySelector(".auth-shell input[type=email]")).not.toBeNull()
+    } finally {
+      page.happyDOM.setURL(address)
+    }
+  })
+
   it("titles the page in the active language", async () => {
     await renderApp(testI18n())
     expect(document.title).toBe("Overview – Calendar Ghost")

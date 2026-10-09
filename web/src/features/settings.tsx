@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { NativeSelect } from "@/components/ui/native-select"
 import { useTheme } from "@/components/theme-provider"
 import { useI18n } from "@/i18n/provider"
-import { api } from "@/lib/api"
+import { api, type SessionStatus } from "@/lib/api"
 import {
   OAUTH_OUTCOME_MESSAGES,
   clearAuthorizationStart,
@@ -16,11 +16,16 @@ import {
   recordAuthorizationStart,
   type OAuthOutcome,
 } from "@/lib/oauth-redirect"
+import { isAdministrator } from "@/lib/people"
 import type { DarkPalette, ThemePreference } from "@/lib/theme"
 import { useGoogleReturn } from "@/lib/use-google-return"
+import { useRegistration } from "@/lib/use-registration"
 import { cn } from "@/lib/utils"
 import { AccountsSection } from "@/features/settings-accounts"
 import { IntegrationsSection } from "@/features/settings-integrations"
+import { OwnAccountSection } from "@/features/settings-own-account"
+import { PeopleSection } from "@/features/settings-people"
+import { RegistrationSection } from "@/features/settings-registration"
 import { StorageSection } from "@/features/settings-storage"
 
 export { GoogleReturnHelp } from "@/features/settings-google-return"
@@ -29,9 +34,19 @@ export { IntegrationsSection } from "@/features/settings-integrations"
 export function SettingsPage() {
   const { t } = useI18n()
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
-  if (google.isPending) return <PageSkeleton label={t("settings.page.loading")} />
-  if (google.error) return <LoadFailure title={t("settings.page.loadFailure")} onRetry={() => void google.refetch()} />
-  return <SettingsView googleConfigured={google.data.configured} redirectUri={google.data.redirect_uri} />
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session })
+  if (google.isPending || session.isPending) return <PageSkeleton label={t("settings.page.loading")} />
+  if (google.error || session.error) {
+    const retry = () => void Promise.all([google.refetch(), session.refetch()])
+    return <LoadFailure title={t("settings.page.loadFailure")} onRetry={retry} />
+  }
+  return (
+    <SettingsView
+      googleConfigured={google.data.configured}
+      redirectUri={google.data.redirect_uri}
+      session={session.data}
+    />
+  )
 }
 
 type SettingsArrival = {
@@ -69,13 +84,17 @@ function useSettingsArrival(): SettingsArrival {
 function SettingsView({
   googleConfigured,
   redirectUri,
+  session,
 }: {
   googleConfigured: boolean
   redirectUri: string | null
+  session: SessionStatus
 }) {
   const { t } = useI18n()
   const { outcome, accountId, resumed } = useSettingsArrival()
   const returnHelp = useGoogleReturn(redirectUri)
+  const { user } = session
+  const administrator = isAdministrator(user)
 
   return (
     <div className="page-section settings-page">
@@ -93,12 +112,31 @@ function SettingsView({
         returnHelp={returnHelp}
       />
 
-      <StorageSection />
+      {user && <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} />}
 
-      <IntegrationsSection />
+      {administrator && user && <AdministrationSections currentUserId={user.id} />}
+
+      {administrator && <StorageSection />}
+
+      <IntegrationsSection administrator={administrator} />
 
       <AppearanceSection />
     </div>
+  )
+}
+
+/**
+ * Who can join and, unless only the administrator may use this installation, the people here.
+ * Only an Installation Administrator sees them; the server refuses everyone else.
+ */
+function AdministrationSections({ currentUserId }: { currentUserId: string }) {
+  const registration = useRegistration()
+  const policy = registration.registration.data?.policy
+  return (
+    <>
+      <RegistrationSection commands={registration} />
+      {policy === "invitation_only" && <PeopleSection currentUserId={currentUserId} />}
+    </>
   )
 }
 

@@ -3,7 +3,145 @@
     "loading": "Loading settings",
     "loadFailure": "Settings could not load",
     "title": "Settings",
-    "intro": "Accounts, storage, and integrations for this installation. Appearance applies to this browser only."
+    "intro": "Your Google accounts, sign-in, and integrations. Appearance applies to this browser only."
+  },
+  "ownAccount": {
+    "title": "Your account",
+    "intro": "How you sign in to Calendar Ghost, and the email it sends you.",
+    "cancel": "Cancel",
+    "currentPassword": "Current password",
+    "email": {
+      "title": "Email",
+      "none": "No email yet",
+      "change": "Change email",
+      "newLabel": "New email",
+      "save": "Save email",
+      "saved": "You now sign in with {email}."
+    },
+    "password": {
+      "title": "Password",
+      "body": "Changing it signs you out on your other devices.",
+      "change": "Change password",
+      "newLabel": "New password",
+      "confirmLabel": "Confirm new password",
+      "save": "Save password",
+      "saved": "Your password was changed. Your other devices were signed out."
+    },
+    "notifications": {
+      "title": "Incident emails",
+      "body": "When one of your rules needs attention, Calendar Ghost can also email you. Activity always lists every incident.",
+      "label": "Email me about incidents",
+      "unavailable": "This Calendar Ghost does not send email, so incidents appear only in Activity.",
+      "on": "Calendar Ghost now emails you about incidents.",
+      "off": "Calendar Ghost no longer emails you about incidents. They still appear in Activity."
+    },
+    "delete": {
+      "title": "Delete your account",
+      "body": "Removes you and everything you own from this Calendar Ghost.",
+      "open": "Delete your account",
+      "confirmTitle": "Delete your account permanently?",
+      "confirmBody": "Your rules, Google accounts, tokens, and Activity are removed, and you are signed out. Backups taken before now keep them until they rotate out. This cannot be undone.",
+      "legend": "The events your rules wrote",
+      "deleteEvents": "Delete them (recommended)",
+      "deleteEventsHint": "They are removed from your calendars wherever Calendar Ghost can still reach them.",
+      "keepEvents": "Keep them as ordinary events",
+      "keepEventsHint": "They stay in your calendars, and Calendar Ghost no longer manages them.",
+      "keep": "Keep my account",
+      "confirm": "Delete my account",
+      "pending": "Deleting…"
+    }
+  },
+  "registration": {
+    "title": "Who can join",
+    "intro": "Everyone keeps their own calendars, rules, and Activity private. This decides only who can join.",
+    "loadError": "Who can join could not load.",
+    "tryAgain": "Try again",
+    "onlyMe": "Only me",
+    "onlyMeHint": "Nobody else can join. People and invitations stay hidden.",
+    "onlyMeUnavailable": "Available again once you are the only person here. Delete the other people first.",
+    "invitationOnly": "Invitation only",
+    "invitationOnlyHint": "People join with a link you create. Each link works once and expires after 7 days.",
+    "saved": {
+      "onlyMe": "Only you can use this Calendar Ghost now.",
+      "invitationOnly": "People can now join with an invitation link."
+    }
+  },
+  "people": {
+    "title": "People",
+    "intro": "The people who sign in here. You see their email and when they last signed in, never their calendars, rules, or events.",
+    "loadError": "People could not load.",
+    "tryAgain": "Try again",
+    "noEmail": "No email yet",
+    "you": "You",
+    "administrator": "Administrator",
+    "disabled": "Disabled",
+    "lastSignIn": "Joined {joined} · last signed in {relative}",
+    "neverSignedIn": "Joined {joined} · never signed in",
+    "actions": {
+      "label": "Actions for {email}",
+      "makeAdministrator": "Make administrator",
+      "makeAdministratorHint": "They can manage people, storage, and who can join. They still never see anyone else's calendars.",
+      "removeAdministrator": "Remove administrator",
+      "removeAdministratorHint": "They keep their own calendars and rules.",
+      "disable": "Disable",
+      "disableHint": "They cannot sign in, and their rules wait until you enable them again.",
+      "enable": "Enable",
+      "enableHint": "They can sign in again, and their rules resume.",
+      "passwordReset": "Create password reset link",
+      "passwordResetHint": "A link they use once to choose a new password.",
+      "delete": "Delete",
+      "deleteHint": "Removes them and everything they own."
+    },
+    "status": {
+      "administrator": "{email} is now an administrator.",
+      "notAdministrator": "{email} is no longer an administrator.",
+      "disabled": "{email} can no longer sign in. Their rules wait until you enable them again.",
+      "enabled": "{email} can sign in again.",
+      "deleted": "{email} was deleted.",
+      "deletedEvents": {
+        "one": "{count} event their rules wrote was deleted.",
+        "other": "{count} events their rules wrote were deleted."
+      },
+      "left": {
+        "one": "{count} rule could not reach its calendar, so its events stay there, no longer managed.",
+        "other": "{count} rules could not reach their calendars, so their events stay there, no longer managed."
+      }
+    },
+    "delete": {
+      "title": "Delete {email} permanently?",
+      "body": "Their rules are removed, the events those rules wrote are deleted from their calendars wherever Calendar Ghost can still reach them, and everything they own is removed. Backups taken before now keep their records until they rotate out. This cannot be undone.",
+      "keep": "Keep this person",
+      "confirm": "Delete permanently",
+      "pending": "Deleting…"
+    },
+    "reset": {
+      "title": "Copy the password reset link for {email} now",
+      "body": "Send it to them yourself. It works once, until {expires}, and is shown only once. You never see or set their password.",
+      "label": "Password reset link for {email}"
+    }
+  },
+  "invitations": {
+    "title": "Invitations",
+    "body": "Create a link and send it to the person yourself. They choose their own email and password.",
+    "invite": "Invite someone",
+    "inviting": "Creating…",
+    "reveal": {
+      "title": "Copy the invitation link now",
+      "body": "Send it to the person you invite. It works once, until {expires}, and is shown only once.",
+      "label": "Invitation link"
+    },
+    "created": "Invitation created {created}",
+    "expires": "Expires {expires}",
+    "revoke": "Revoke",
+    "revokeLabel": "Revoke the invitation created {created}",
+    "revoked": "The invitation was revoked. Its link no longer works.",
+    "none": "No invitations are waiting."
+  },
+  "links": {
+    "copy": "Copy link",
+    "copied": "Copied",
+    "copyUnavailable": "Select the link and copy it.",
+    "done": "Done"
   },
   "googleReturn": {
     "step": {
@@ -252,8 +390,14 @@
       "label": "Issue a token",
       "hint": "Name the tool that will use it.",
       "placeholder": "For example, Uptime Kuma",
+      "installation": "Also read Installation Health",
+      "installationHint": "Incidents about the whole installation and how many people are in each status. It names no rule, calendar, or person.",
       "submit": "Issue token",
       "pending": "Issuing…"
+    },
+    "scopes": {
+      "status": "Reads your synchronization status",
+      "installation": "Reads your synchronization status and Installation Health"
     },
     "reveal": {
       "title": "Copy the token for {name} now",
@@ -285,6 +429,10 @@
     "examples": {
       "summary": "Examples for monitors and AI assistants",
       "intro": "Replace the token placeholder in each example with the token you copied.",
+      "installationHealth": {
+        "title": "Installation Health",
+        "description": "Use a token that also reads Installation Health: incidents about the whole installation and how many people are in each status."
+      },
       "uptimeKuma": {
         "title": "Uptime Kuma",
         "description": "Add an HTTP(s) - Json Query monitor. Alert when the result is not false."

@@ -8,6 +8,8 @@ import { ThemeToggle } from "@/components/theme-toggle"
 import { AddEmailScreen } from "@/features/add-email-screen"
 import { AuthScreen } from "@/features/auth-screen"
 import { Dashboard } from "@/features/dashboard"
+import { InvitationPage } from "@/features/invitation-page"
+import { PasswordResetPage } from "@/features/password-reset-page"
 import { rich } from "@/i18n/rich"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
@@ -23,6 +25,7 @@ import {
   type AppView,
   type ViewOptions,
 } from "@/lib/navigation"
+import { publicPageAt } from "@/lib/public-links"
 import { cn } from "@/lib/utils"
 
 const navItems: { id: AppView; labelKey: MessageKey; icon: typeof Waypoints }[] = [
@@ -33,6 +36,15 @@ const navItems: { id: AppView; labelKey: MessageKey; icon: typeof Waypoints }[] 
 ]
 
 export default function App() {
+  // A link to pass on opens its own page, before any session; accepting an Invitation signs in.
+  const [publicPage, setPublicPage] = useState(() => publicPageAt(window.location.pathname))
+  if (publicPage === "invitation") return <InvitationPage onSignedIn={() => setPublicPage(null)} />
+  if (publicPage === "password-reset") return <PasswordResetPage />
+  return <SessionGate />
+}
+
+/** Waits for the setup and session state, then shows the sign-in steps or the signed-in app. */
+function SessionGate() {
   const { t } = useI18n()
   const setup = useQuery({ queryKey: ["setup"], queryFn: api.setup })
   const configured = setup.data?.administrator_configured === true
@@ -75,7 +87,7 @@ function AuthenticatedApp() {
   const menuButton = useRef<HTMLButtonElement>(null)
   const navigated = useRef(false)
   const queryClient = useQueryClient()
-  const logout = useMutation({ mutationFn: api.logOut, onSuccess: () => queryClient.clear() })
+  const logout = useMutation({ mutationFn: api.logOut, onSuccess: () => queryClient.resetQueries() })
 
   useEffect(() => {
     if (!isKnownAppPath(window.location.pathname)) {

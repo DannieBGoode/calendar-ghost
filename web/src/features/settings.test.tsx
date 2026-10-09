@@ -95,6 +95,13 @@ const pseudoTokens: IntegrationToken[] = [
   { ...kuma, id: "token-old", name: "Old monitor", created_at: justNow, revoked_at: justNow },
 ]
 
+const ADMIN_EMAIL = "admin@example.test"
+const adminSession = {
+  authenticated: true,
+  installation_sends_email: false,
+  user: { id: "user-admin", email: ADMIN_EMAIL, role: "installation_administrator", notify_by_email: true, language: null },
+}
+
 /** Account names, emails, avatar initials, and the Google return address the fixtures introduce. */
 const FIXTURE_TEXT = [
   "Dana Calendar",
@@ -103,6 +110,7 @@ const FIXTURE_TEXT = [
   "robin@example.test",
   "DC",
   "RA",
+  ADMIN_EMAIL,
   REDIRECT_URI,
   "http://localhost:18000",
   ...dateWords(),
@@ -111,7 +119,7 @@ const FIXTURE_TEXT = [
   issued.name,
   issued.token,
   // Each example's code block is configuration for another tool, shown as is, never translated.
-  ...integrationExamples(testI18n(), PUBLIC_ORIGIN).map((example) => example.code),
+  ...integrationExamples(testI18n(), PUBLIC_ORIGIN, true).map((example) => example.code),
 ]
 
 type Scenario = {
@@ -144,6 +152,8 @@ function mockFetch({
     "/api/v1/storage/activity": clearable ?? jsonResponse({ older_than_days: 90, entries: 41880 }),
     "/api/v1/storage/activity/clear": cleared ?? jsonResponse({ removed: 41880, database: usage.database }),
     "/api/v1/integration-tokens": jsonResponse(tokens),
+    "/api/v1/session": jsonResponse(adminSession),
+    "/api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: true }),
   }
   vi.stubGlobal(
     "fetch",
@@ -357,14 +367,14 @@ async function tick() {
   })
 }
 
-async function renderSection() {
+async function renderSection(administrator = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   root = createRoot(container)
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={testI18n()}>
         <QueryClientProvider client={queryClient}>
-          <IntegrationsSection />
+          <IntegrationsSection administrator={administrator} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
@@ -442,7 +452,7 @@ describe("IntegrationsSection", () => {
 
     await issueToken("Claude Code")
 
-    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code")
+    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
     const heading = container.querySelector(".token-reveal h3")
     expect(heading?.textContent).toBe("Copy the token for Claude Code now")
     expect(document.activeElement).toBe(heading)
@@ -456,6 +466,39 @@ describe("IntegrationsSection", () => {
     root = null
     await renderSection()
     expect(container.textContent).not.toContain(issued.token)
+  })
+
+  it("says what each token may read", async () => {
+    vi.mocked(api.integrationTokens).mockResolvedValue([kuma, { ...homepage, scopes: ["status:read", "installation:read"] }])
+    await renderSection(true)
+    await openGroup()
+    expect(rowOf("Uptime Kuma").textContent).toContain("Reads your synchronization status")
+    expect(rowOf("Homepage").textContent).toContain("Reads your synchronization status and Installation Health")
+  })
+
+  it("lets only an administrator's token also read Installation Health", async () => {
+    await renderSection()
+    await openGroup()
+    expect(container.querySelector("#integration-installation")).toBeNull()
+    expect(container.textContent).not.toContain("/api/v1/installation/health")
+    act(() => root?.unmount())
+    root = null
+
+    await renderSection(true)
+    await openGroup()
+    expect(container.textContent).toContain("/api/v1/installation/health")
+    act(() => container.querySelector<HTMLInputElement>("#integration-installation")!.click())
+    await issueToken("Monitor")
+    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Monitor", ["status:read", "installation:read"])
+    // The next token reads only the administrator's own status unless asked again.
+    expect(container.querySelector<HTMLInputElement>("#integration-installation")!.checked).toBe(false)
+  })
+
+  it("issues an administrator's token for their own status unless they ask for more", async () => {
+    await renderSection(true)
+    await openGroup()
+    await issueToken("Claude Code")
+    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
   })
 
   it("closes the reveal with Done and returns to the name field", async () => {

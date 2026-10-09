@@ -28,7 +28,7 @@ export function AddEmailScreen() {
       await queryClient.invalidateQueries()
     },
   })
-  const signOut = useMutation({ mutationFn: api.logOut, onSuccess: () => queryClient.clear() })
+  const signOut = useMutation({ mutationFn: api.logOut, onSuccess: () => queryClient.resetQueries() })
 
   function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
