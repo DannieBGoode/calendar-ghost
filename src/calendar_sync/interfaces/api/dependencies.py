@@ -64,9 +64,13 @@ def session_user(
 
 def current_user(user: Annotated[User, Depends(signed_in_user)]) -> UserId:
     """The signed-in User, once they have an email; every route but a few depends on it."""
-    if user.needs_email:
-        raise problem(status.HTTP_403_FORBIDDEN, "email_required", "add your email to continue")
+    _require_email(user)
     return user.id
+
+
+def _require_email(user: User | None) -> None:
+    if user is not None and user.needs_email:
+        raise problem(status.HTTP_403_FORBIDDEN, "email_required", "add your email to continue")
 
 
 def administrator(
@@ -122,6 +126,9 @@ def status_reader(
         )
     if access.result is not StatusAccess.GRANTED or access.user is None:
         raise _unauthenticated()
+    if authorization is None:
+        # A session reads status only once its User has added the email they must add first.
+        _require_email(services.identity.users.get(access.user))
     return access.user
 
 
@@ -146,6 +153,8 @@ def installation_reader(
     if access.result is not StatusAccess.GRANTED or access.user is None:
         raise _unauthenticated()
     reader = services.identity.users.get(access.user)
+    if authorization is None:
+        _require_email(reader)
     if reader is None or not reader.administers:
         raise problem(
             status.HTTP_403_FORBIDDEN,

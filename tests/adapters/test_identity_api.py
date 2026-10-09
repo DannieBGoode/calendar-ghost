@@ -90,6 +90,9 @@ def test_the_upgraded_administrator_signs_in_by_password_until_they_add_an_email
         signed_in = client.post("/api/v1/session", json={"email": None, "password": PASSWORD})
         session = client.get("/api/v1/session").json()
         blocked = client.get("/api/v1/dashboard")
+        status_blocked = [
+            client.get(path) for path in ("/api/v1/status", "/api/v1/installation/health")
+        ]
         added = client.put("/api/v1/account/email", json={"email": EMAIL})
         dashboard = client.get("/api/v1/dashboard").status_code
         client.delete("/api/v1/session")
@@ -101,6 +104,10 @@ def test_the_upgraded_administrator_signs_in_by_password_until_they_add_an_email
     assert signed_in.status_code == 200
     assert session["user"]["email"] is None
     assert (blocked.status_code, blocked.json()["code"]) == (403, "email_required")
+    assert [(response.status_code, response.json()["code"]) for response in status_blocked] == [
+        (403, "email_required"),
+        (403, "email_required"),
+    ]
     assert added.json()["email"] == EMAIL
     assert dashboard == 200
     assert password_only.status_code == 401
