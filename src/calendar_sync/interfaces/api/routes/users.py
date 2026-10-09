@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Literal, Protocol
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from calendar_sync.application.administration import (
     AcceptInvitation,
@@ -22,6 +22,7 @@ from calendar_sync.application.administration import (
     DeletionResult,
     InviteUser,
     IssuePasswordReset,
+    LinkAttemptsThrottled,
     LinkUnusable,
     ListInvitations,
     ListUsers,
@@ -57,7 +58,7 @@ from calendar_sync.interfaces.api.dependencies import (
     app_services,
     set_session_cookie,
 )
-from calendar_sync.interfaces.api.problems import problem_from
+from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
 from calendar_sync.interfaces.api.routes.session import signed_in
 from calendar_sync.interfaces.api.schemas import (
     AcceptInvitationRequest,
@@ -173,20 +174,36 @@ def revoke_invitation(invitation_id: str, services: Services, actor: Administrat
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
 
 
+def _client(request: Request) -> str:
+    return request.client.host if request.client is not None else "unknown"
+
+
+def _throttled(error: LinkAttemptsThrottled) -> ApiProblem:
+    throttled = problem_from(status.HTTP_429_TOO_MANY_REQUESTS, error)
+    throttled.headers = {"Retry-After": str(error.retry_after)}
+    return throttled
+
+
 @router.post("/api/v1/invitations/check", response_model=LinkStatusResponse)
-def check_invitation(payload: LinkRequest, services: Services) -> LinkStatusResponse:
-    return LinkStatusResponse(
-        usable=services.administration.check_invitation.execute(payload.token)
-    )
+def check_invitation(
+    payload: LinkRequest, request: Request, services: Services
+) -> LinkStatusResponse:
+    check = services.administration.check_invitation
+    try:
+        return LinkStatusResponse(usable=check.execute(payload.token, _client(request)))
+    except LinkAttemptsThrottled as error:
+        raise _throttled(error) from error
 
 
 @router.post("/api/v1/invitations/accept", response_model=SessionResponse)
 def accept_invitation(
-    payload: AcceptInvitationRequest, services: Services, response: Response
+    payload: AcceptInvitationRequest, request: Request, services: Services, response: Response
 ) -> SessionResponse:
     accept = services.administration.accept_invitation
     try:
-        session = accept.execute(payload.token, payload.email, payload.password)
+        session = accept.execute(payload.token, payload.email, payload.password, _client(request))
+    except LinkAttemptsThrottled as error:
+        raise _throttled(error) from error
     except LinkUnusable as error:
         raise problem_from(status.HTTP_410_GONE, error) from error
     except (InvalidEmail, PasswordPolicyViolation) as error:
@@ -201,16 +218,23 @@ def accept_invitation(
 
 
 @router.post("/api/v1/password-resets/check", response_model=LinkStatusResponse)
-def check_password_reset(payload: LinkRequest, services: Services) -> LinkStatusResponse:
-    return LinkStatusResponse(
-        usable=services.administration.check_password_reset.execute(payload.token)
-    )
+def check_password_reset(
+    payload: LinkRequest, request: Request, services: Services
+) -> LinkStatusResponse:
+    check = services.administration.check_password_reset
+    try:
+        return LinkStatusResponse(usable=check.execute(payload.token, _client(request)))
+    except LinkAttemptsThrottled as error:
+        raise _throttled(error) from error
 
 
 @router.post("/api/v1/password-resets", status_code=status.HTTP_204_NO_CONTENT)
-def reset_password(payload: ResetPasswordRequest, services: Services) -> None:
+def reset_password(payload: ResetPasswordRequest, request: Request, services: Services) -> None:
+    reset = services.administration.reset_password
     try:
-        services.administration.reset_password.execute(payload.token, payload.password)
+        reset.execute(payload.token, payload.password, _client(request))
+    except LinkAttemptsThrottled as error:
+        raise _throttled(error) from error
     except LinkUnusable as error:
         raise problem_from(status.HTTP_410_GONE, error) from error
     except PasswordPolicyViolation as error:

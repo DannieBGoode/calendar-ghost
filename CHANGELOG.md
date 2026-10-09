@@ -42,7 +42,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   and as the MCP tool `get_installation_health`, through the new `installation:read` token scope:
   incidents about the installation itself and how many people are in each status.
 - The installation's SMTP recipient and webhook are told when the scheduler stops completing passes.
-- Failed sign-ins are throttled per email and per client address.
+- Failed sign-ins are throttled per email and per client address. Unusable invitation and password
+  reset links are throttled per client address, twenty in 15 minutes, and are refused before any
+  password is hashed.
 
 - The Web UI footer links to the troubleshooting guide ("Get help"), which ends with where to ask
   questions (GitHub Discussions), report bugs (a new bug report form), or email

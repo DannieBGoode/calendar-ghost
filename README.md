@@ -338,7 +338,8 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   does not retain event data or make provider writes.
 - Google writes use `sendUpdates=none`, and projections contain no attendees or invitation data.
 - The Web UI and operational API require a signed-in session, and answer 404 for another person's
-  records. Failed sign-ins are throttled per email and per client address. `/health` remains public
+  records. Failed sign-ins are throttled per email and per client address, and unusable invitation
+  and password reset links per client address. `/health` remains public
   and intentionally minimal.
 - Integration Tokens read their person's Installation Status only, through `GET /api/v1/status` and
   `/mcp`, and an administrator's token with `installation:read` also reads Installation Health at

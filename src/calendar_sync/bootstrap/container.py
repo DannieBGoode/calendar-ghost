@@ -25,6 +25,7 @@ from calendar_sync.application.administration import (
     DeleteUser,
     InviteUser,
     IssuePasswordReset,
+    LinkAttempts,
     ListInvitations,
     ListUsers,
     OwnedRules,
@@ -272,6 +273,8 @@ class Adapters:
     sessions: Sessions
     passwords: PasswordHasher
     sign_in_throttle: SignInThrottle
+    link_throttle: SignInThrottle
+    """Unusable Invitation and Password Reset Links per client, apart from failed sign-ins."""
     registration: RegistrationSettings
     invitations: Invitations
     password_resets: PasswordResetLinks
@@ -340,6 +343,7 @@ def build_adapters(settings: Settings) -> Adapters:
         sessions=SqliteSessions(database, clock),
         passwords=ScryptPasswords(),
         sign_in_throttle=MemorySignInThrottle(clock),
+        link_throttle=MemorySignInThrottle(clock),
         registration=SqliteRegistrationSettings(database),
         invitations=SqliteInvitations(database, ids),
         password_resets=SqlitePasswordResetLinks(database, ids),
@@ -458,19 +462,20 @@ def _administration(
         adapters.password_resets,
     )
     passwords = adapters.passwords
+    attempts = LinkAttempts(adapters.link_throttle)
     return AdministrationServices(
         show_registration=ShowRegistration(users, settings),
         set_registration_policy=SetRegistrationPolicy(users, settings),
         invite_user=InviteUser(users, settings, invitations, clock),
         list_invitations=ListInvitations(users, invitations, clock),
         revoke_invitation=RevokeInvitation(users, invitations, clock),
-        check_invitation=CheckInvitation(settings, invitations, clock),
+        check_invitation=CheckInvitation(settings, invitations, clock, attempts),
         accept_invitation=AcceptInvitation(
-            users, settings, invitations, passwords, sessions, adapters.ids, clock
+            users, settings, invitations, passwords, sessions, adapters.ids, clock, attempts
         ),
         issue_password_reset=IssuePasswordReset(users, resets, clock),
-        check_password_reset=CheckPasswordReset(resets, clock),
-        reset_password=ResetPassword(resets, passwords, sessions, clock),
+        check_password_reset=CheckPasswordReset(resets, clock, attempts),
+        reset_password=ResetPassword(resets, passwords, sessions, clock, attempts),
         list_users=ListUsers(users),
         change_role=ChangeRole(users),
         change_user_state=ChangeUserState(users, sessions),

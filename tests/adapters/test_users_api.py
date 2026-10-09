@@ -228,3 +228,23 @@ def test_an_administrator_searches_filters_sorts_and_pages_people(tmp_path: Path
         "admin@example.test",
     ]
     assert too_many.status_code == 422
+
+
+def test_a_client_trying_unusable_links_is_throttled_on_every_link_route(tmp_path: Path) -> None:
+    forged = {"token": "forged"}
+    with _client(tmp_path) as client:
+        client.post("/api/v1/setup/admin", json=ADMIN)
+        client.put("/api/v1/registration", json={"policy": "invitation_only"})
+        client.delete("/api/v1/session")
+        failures = [client.post("/api/v1/invitations/check", json=forged) for _ in range(20)]
+        throttled = [
+            client.post("/api/v1/invitations/check", json=forged),
+            client.post("/api/v1/invitations/accept", json={**forged, **MEMBER}),
+            client.post("/api/v1/password-resets/check", json=forged),
+            client.post("/api/v1/password-resets", json={**forged, "password": MEMBER["password"]}),
+        ]
+
+    assert {failure.json()["usable"] for failure in failures} == {False}
+    assert [response.status_code for response in throttled] == [429, 429, 429, 429]
+    assert {response.json()["code"] for response in throttled} == {"sign_in_throttled"}
+    assert all(int(response.headers["retry-after"]) > 0 for response in throttled)

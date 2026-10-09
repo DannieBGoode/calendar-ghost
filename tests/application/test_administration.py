@@ -1,7 +1,7 @@
 """Registration Policy, Invitations, Password Reset Links, roles, and disabling (ADR 0030)."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 import pytest
@@ -15,6 +15,8 @@ from calendar_sync.application.administration import (
     CheckPasswordReset,
     InviteUser,
     IssuePasswordReset,
+    LinkAttempts,
+    LinkAttemptsThrottled,
     LinkUnusable,
     ListInvitations,
     ListUsers,
@@ -51,6 +53,7 @@ from tests.identity_fakes import (
 )
 
 PASSWORD = "correct horse battery staple"
+CLIENT = "192.0.2.10"
 ADMIN = User(
     UserId("admin"), "admin@example.test", Role.INSTALLATION_ADMINISTRATOR, UserState.ACTIVE, NOW
 )
@@ -82,16 +85,26 @@ class Installation:
     resets: MemoryResetLinks
     sessions: MemorySessions
     clock: MovableClock
+    attempts: LinkAttempts = field(default_factory=lambda: LinkAttempts(CountingThrottle()))
 
-    def accept(self) -> AcceptInvitation:
+    def accept(self, passwords: PlainPasswords | None = None) -> AcceptInvitation:
         return AcceptInvitation(
             self.users,
             self.registration,
             self.invitations,
-            PlainPasswords(),
+            passwords or PlainPasswords(),
             self.sessions,
             SequentialIds(),
             self.clock,
+            self.attempts,
+        )
+
+    def check_invitation(self) -> CheckInvitation:
+        return CheckInvitation(self.registration, self.invitations, self.clock, self.attempts)
+
+    def reset(self, passwords: PlainPasswords | None = None) -> ResetPassword:
+        return ResetPassword(
+            self.resets, passwords or PlainPasswords(), self.sessions, self.clock, self.attempts
         )
 
     def invite(self) -> InviteUser:
@@ -169,7 +182,7 @@ def test_an_invited_person_chooses_their_own_email_and_password_and_is_signed_in
     installation.registration.current = RegistrationPolicy.INVITATION_ONLY
     link = installation.invite().execute(ADMIN.id)
 
-    session = installation.accept().execute(link.token, " New@Example.test ", PASSWORD)
+    session = installation.accept().execute(link.token, " New@Example.test ", PASSWORD, CLIENT)
 
     joined = installation.users.get(session.user_id)
     assert joined is not None
@@ -196,7 +209,7 @@ def test_a_password_reset_right_after_joining_leaves_no_session_for_the_chosen_p
     installation.invitations.accept = accepted_then_reset  # type: ignore[method-assign]
 
     with pytest.raises(IncorrectCredentials):
-        installation.accept().execute(link.token, "new@example.test", PASSWORD)
+        installation.accept().execute(link.token, "new@example.test", PASSWORD, CLIENT)
     assert installation.sessions.sessions == {}
 
 
@@ -204,10 +217,10 @@ def test_an_invitation_is_used_once() -> None:
     installation = _installation()
     installation.registration.current = RegistrationPolicy.INVITATION_ONLY
     link = installation.invite().execute(ADMIN.id)
-    installation.accept().execute(link.token, "new@example.test", PASSWORD)
+    installation.accept().execute(link.token, "new@example.test", PASSWORD, CLIENT)
 
     with pytest.raises(LinkUnusable):
-        installation.accept().execute(link.token, "again@example.test", PASSWORD)
+        installation.accept().execute(link.token, "again@example.test", PASSWORD, CLIENT)
     assert installation.users.count() == 2
 
 
@@ -215,14 +228,14 @@ def test_an_invitation_expires_after_seven_days() -> None:
     installation = _installation()
     installation.registration.current = RegistrationPolicy.INVITATION_ONLY
     link = installation.invite().execute(ADMIN.id)
-    check = CheckInvitation(installation.registration, installation.invitations, installation.clock)
+    check = installation.check_invitation()
     installation.clock.moment = NOW + timedelta(days=7) - timedelta(seconds=1)
-    assert check.execute(link.token)
+    assert check.execute(link.token, CLIENT)
 
     installation.clock.moment = NOW + timedelta(days=7)
-    assert not check.execute(link.token)
+    assert not check.execute(link.token, CLIENT)
     with pytest.raises(LinkUnusable):
-        installation.accept().execute(link.token, "new@example.test", PASSWORD)
+        installation.accept().execute(link.token, "new@example.test", PASSWORD, CLIENT)
 
 
 def test_returning_to_only_me_stops_pending_invitations() -> None:
@@ -230,11 +243,11 @@ def test_returning_to_only_me_stops_pending_invitations() -> None:
     installation.registration.current = RegistrationPolicy.INVITATION_ONLY
     link = installation.invite().execute(ADMIN.id)
     installation.registration.current = RegistrationPolicy.ONLY_ME
-    check = CheckInvitation(installation.registration, installation.invitations, installation.clock)
+    check = installation.check_invitation()
 
-    assert not check.execute(link.token)
+    assert not check.execute(link.token, CLIENT)
     with pytest.raises(LinkUnusable):
-        installation.accept().execute(link.token, "new@example.test", PASSWORD)
+        installation.accept().execute(link.token, "new@example.test", PASSWORD, CLIENT)
 
 
 def test_an_invitation_for_an_email_already_used_creates_no_user_and_stays_usable() -> None:
@@ -243,7 +256,7 @@ def test_an_invitation_for_an_email_already_used_creates_no_user_and_stays_usabl
     link = installation.invite().execute(ADMIN.id)
 
     with pytest.raises(EmailTaken):
-        installation.accept().execute(link.token, "admin@example.test", PASSWORD)
+        installation.accept().execute(link.token, "admin@example.test", PASSWORD, CLIENT)
     assert installation.invitations.usable(link.token, NOW)
 
 
@@ -259,7 +272,7 @@ def test_pending_invitations_are_listed_and_revoked_by_an_administrator() -> Non
 
     assert [pending.id for pending in listing.execute(ADMIN.id)] == [second.id]
     with pytest.raises(LinkUnusable):
-        installation.accept().execute(first.token, "new@example.test", PASSWORD)
+        installation.accept().execute(first.token, "new@example.test", PASSWORD, CLIENT)
     with pytest.raises(LinkUnusable):
         revoke.execute(ADMIN.id, first.id)
     with pytest.raises(AdministratorRequired):
@@ -275,17 +288,15 @@ def test_a_reset_link_lets_its_user_choose_a_new_password_once_and_signs_them_ou
     installation = _installation(MEMBER)
     session = installation.sessions.signed_in(MEMBER.id)
     issue = IssuePasswordReset(installation.users, installation.resets, installation.clock)
-    reset = ResetPassword(
-        installation.resets, PlainPasswords(), installation.sessions, installation.clock
-    )
+    reset = installation.reset()
     link = issue.execute(ADMIN.id, MEMBER.id)
 
-    reset.execute(link.token, "a brand new password")
+    reset.execute(link.token, "a brand new password", CLIENT)
 
     assert installation.users.password_hash(MEMBER.id) == "hashed:a brand new password"
     assert installation.sessions.user_of(session.token) is None
     with pytest.raises(LinkUnusable):
-        reset.execute(link.token, "another new password")
+        reset.execute(link.token, "another new password", CLIENT)
     with pytest.raises(IncorrectCredentials):
         installation.sign_in("member@example.test")
 
@@ -293,13 +304,13 @@ def test_a_reset_link_lets_its_user_choose_a_new_password_once_and_signs_them_ou
 def test_a_newer_reset_link_replaces_the_earlier_one() -> None:
     installation = _installation(MEMBER)
     issue = IssuePasswordReset(installation.users, installation.resets, installation.clock)
-    check = CheckPasswordReset(installation.resets, installation.clock)
+    check = CheckPasswordReset(installation.resets, installation.clock, installation.attempts)
     earlier = issue.execute(ADMIN.id, MEMBER.id)
 
     later = issue.execute(ADMIN.id, MEMBER.id)
 
-    assert not check.execute(earlier.token)
-    assert check.execute(later.token)
+    assert not check.execute(earlier.token, CLIENT)
+    assert check.execute(later.token, CLIENT)
 
 
 def test_only_an_administrator_issues_a_reset_link_for_a_user_who_exists() -> None:
@@ -400,3 +411,58 @@ def test_an_administrator_neither_disables_themself_nor_the_last_administrator()
         ChangeRole(installation.users).execute(ADMIN.id, ADMIN.id, Role.USER)
     with pytest.raises(UserNotFound):
         change.execute(ADMIN.id, UserId("missing"), UserState.DISABLED)
+
+
+class CountingPasswords(PlainPasswords):
+    def __init__(self) -> None:
+        self.hashed = 0
+
+    def hash(self, password: str) -> str:
+        self.hashed += 1
+        return super().hash(password)
+
+
+def test_an_unusable_link_is_refused_before_any_password_is_hashed() -> None:
+    installation = _installation(MEMBER)
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    passwords = CountingPasswords()
+
+    with pytest.raises(LinkUnusable):
+        installation.accept(passwords).execute("forged", "new@example.test", PASSWORD, CLIENT)
+    with pytest.raises(LinkUnusable):
+        installation.reset(passwords).execute("forged", "a brand new password", CLIENT)
+
+    assert passwords.hashed == 0
+    assert installation.users.count() == 2
+
+
+def test_an_invitation_under_only_me_is_refused_before_any_password_is_hashed() -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+    installation.registration.current = RegistrationPolicy.ONLY_ME
+    passwords = CountingPasswords()
+
+    with pytest.raises(LinkUnusable):
+        installation.accept(passwords).execute(link.token, "new@example.test", PASSWORD, CLIENT)
+    assert passwords.hashed == 0
+
+
+def test_a_client_trying_unusable_links_waits_whichever_link_route_it_uses() -> None:
+    installation = _installation(MEMBER)
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+    check_reset = CheckPasswordReset(installation.resets, installation.clock, installation.attempts)
+
+    assert not installation.check_invitation().execute("forged", CLIENT)
+    assert not check_reset.execute("forged", CLIENT)
+    with pytest.raises(LinkUnusable):
+        installation.reset().execute("forged", "a brand new password", CLIENT)
+
+    with pytest.raises(LinkAttemptsThrottled):
+        installation.check_invitation().execute(link.token, CLIENT)
+    with pytest.raises(LinkAttemptsThrottled):
+        installation.accept().execute(link.token, "new@example.test", PASSWORD, CLIENT)
+    # Another address is not held up, and a usable link counts no failure.
+    assert installation.check_invitation().execute(link.token, "198.51.100.7")
+    installation.accept().execute(link.token, "new@example.test", PASSWORD, "198.51.100.7")

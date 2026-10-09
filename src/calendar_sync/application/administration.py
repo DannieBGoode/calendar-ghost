@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
 from calendar_sync.application.errors import (
     ApplicationError,
@@ -13,6 +14,7 @@ from calendar_sync.application.errors import (
     RemovalRequiresAuthorization,
     RemovalRequiresProvider,
     RuleNotFound,
+    SignInThrottled,
 )
 from calendar_sync.application.identity import require_password, start_session
 from calendar_sync.application.ports import (
@@ -26,6 +28,7 @@ from calendar_sync.application.ports import (
     RegistrationSettings,
     Session,
     Sessions,
+    SignInThrottle,
     UnitOfWorkFactory,
     UserDirectory,
     UserPage,
@@ -64,6 +67,35 @@ class LinkUnusable(ApplicationError):
 
 class YourOwnState(ApplicationError):
     """An Installation Administrator cannot disable themself."""
+
+
+class LinkAttemptsThrottled(SignInThrottled):
+    """Too many unusable links from this client; the Web UI says what it says for sign-ins."""
+
+    def __init__(self, retry_after: float) -> None:
+        super().__init__(retry_after)
+        self.args = (f"too many unusable links; try again in {self.retry_after} seconds",)
+
+
+@dataclass(frozen=True, slots=True)
+class LinkAttempts:
+    """Unusable Invitation and Password Reset Links tried from one client address, counted as
+    failed sign-ins are, so nobody can try tokens without end. A link is checked before any
+    password is hashed, so an unusable one costs the installation no hashing."""
+
+    throttle: SignInThrottle
+
+    def usable(self, client: str, check: Callable[[], bool]) -> bool:
+        """Whether `check` finds the link usable; raises LinkAttemptsThrottled first when the
+        client has tried too many unusable links lately."""
+        keys = (f"client:{client}",)
+        wait = self.throttle.wait(keys)
+        if wait > 0:
+            raise LinkAttemptsThrottled(wait)
+        usable = check()
+        if not usable:
+            self.throttle.failed(keys)
+        return usable
 
 
 def require_administrator(users: UserDirectory, actor: UserId) -> User:
@@ -148,6 +180,12 @@ class RevokeInvitation:
             raise LinkUnusable("this invitation was already used, revoked, or has expired")
 
 
+def _invitation_usable(
+    settings: RegistrationSettings, invitations: Invitations, token: str, at: datetime
+) -> bool:
+    return settings.policy().lets_people_join and invitations.usable(token, at)
+
+
 @dataclass(slots=True)
 class CheckInvitation:
     """Whether an invitation link can still be used, before its form is filled in."""
@@ -155,10 +193,13 @@ class CheckInvitation:
     settings: RegistrationSettings
     invitations: Invitations
     clock: Clock
+    attempts: LinkAttempts
 
-    def execute(self, token: str) -> bool:
-        joining = self.settings.policy().lets_people_join
-        return joining and self.invitations.usable(token, self.clock.now())
+    def execute(self, token: str, client: str) -> bool:
+        now = self.clock.now()
+        return self.attempts.usable(
+            client, lambda: _invitation_usable(self.settings, self.invitations, token, now)
+        )
 
 
 @dataclass(slots=True)
@@ -172,11 +213,19 @@ class AcceptInvitation:
     sessions: Sessions
     ids: IdGenerator
     clock: Clock
+    attempts: LinkAttempts
 
-    def execute(self, token: str, email: str, password: str) -> Session:
+    def execute(self, token: str, email: str, password: str, client: str) -> Session:
         now = self.clock.now()
         user = User(UserId(self.ids.new()), email_address(email), Role.USER, UserState.ACTIVE, now)
-        hashed = self.passwords.hash(require_password(password))
+        require_password(password)
+        # Checked before hashing, which is slow on purpose; using it checks again.
+        usable = self.attempts.usable(
+            client, lambda: _invitation_usable(self.settings, self.invitations, token, now)
+        )
+        if not usable:
+            raise LinkUnusable("this invitation was already used, revoked, or has expired")
+        hashed = self.passwords.hash(password)
         joining = self.settings.policy().lets_people_join
         if not joining or not self.invitations.accept(token, user, hashed, now):
             raise LinkUnusable("this invitation was already used, revoked, or has expired")
@@ -203,9 +252,11 @@ class IssuePasswordReset:
 class CheckPasswordReset:
     links: PasswordResetLinks
     clock: Clock
+    attempts: LinkAttempts
 
-    def execute(self, token: str) -> bool:
-        return self.links.owner(token, self.clock.now()) is not None
+    def execute(self, token: str, client: str) -> bool:
+        now = self.clock.now()
+        return self.attempts.usable(client, lambda: self.links.owner(token, now) is not None)
 
 
 @dataclass(slots=True)
@@ -216,10 +267,15 @@ class ResetPassword:
     passwords: PasswordHasher
     sessions: Sessions
     clock: Clock
+    attempts: LinkAttempts
 
-    def execute(self, token: str, password: str) -> None:
-        hashed = self.passwords.hash(require_password(password))
-        owner = self.links.reset(token, hashed, self.clock.now())
+    def execute(self, token: str, password: str, client: str) -> None:
+        now = self.clock.now()
+        require_password(password)
+        # Checked before hashing, which is slow on purpose; using it checks again.
+        if not self.attempts.usable(client, lambda: self.links.owner(token, now) is not None):
+            raise LinkUnusable("this link was already used, replaced, or has expired")
+        owner = self.links.reset(token, self.passwords.hash(password), now)
         if owner is None:
             raise LinkUnusable("this link was already used, replaced, or has expired")
         self.sessions.end_all(owner)

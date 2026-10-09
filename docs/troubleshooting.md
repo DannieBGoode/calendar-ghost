@@ -306,8 +306,9 @@ The Google adapter must discard the expired cursor, perform a safe initial-windo
   link from the **People** page. It works once, for 7 days, and signs you out
   everywhere once you choose a new password. An administrator never sees or sets your password.
 - **Too many failed attempts.** After five failures for one email, or twenty from one address, in
-  15 minutes, sign-in waits until the oldest failure is 15 minutes old. Behind a reverse proxy the
-  address is the proxy's, so wait before trying again.
+  15 minutes, sign-in waits until the oldest failure is 15 minutes old. Invitation and password
+  reset links work the same way: after twenty unusable links from one address in 15 minutes, every
+  link waits. Behind a reverse proxy the address is the proxy's, so wait before trying again.
 - **Your access is turned off.** An administrator disabled you; ask them to enable you again. Your
   rules were held meanwhile and resume by themselves.
 - **After upgrading, the sign-in page asks for an email you never had.** Leave the email empty and
