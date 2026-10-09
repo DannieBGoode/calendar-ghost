@@ -22,11 +22,13 @@ from calendar_sync.application.ports import (
     Clock,
     FullPassRecords,
     ProviderCallStats,
+    ProviderCallTally,
     RuleRunOutcome,
     RunIdGenerator,
     RunKind,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.resource_use import record_provider_calls
 from calendar_sync.application.run_log import UntalliedProviderCalls, call_summary, duration
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.model import (
@@ -82,37 +84,51 @@ class ReconcileSyncRule:
             reported or self.locks.working(rule_id, work),
             self.call_stats.measure() as calls,
         ):
-            run = run_id or self.run_ids.new_run_id()
-            names = f"rule={rule_id.value} run={run}"
-            logger.info("reconciliation started %s", names)
             try:
-                report = self._execute_serialized(rule_id, run, already_blocked)
-            except RuleNotExecutable:
-                raise
-            except Exception as error:
-                kind = (
-                    error.kind
-                    if isinstance(error, ProviderFailure)
-                    else ProviderFailureKind.INFRASTRUCTURE
+                return self._execute_measured(
+                    rule_id, run_id or self.run_ids.new_run_id(), already_blocked, calls, started
                 )
-                logger.warning(
-                    "reconciliation failed %s kind=%s after %s %s",
-                    names,
-                    kind.value,
-                    duration(self.clock.now() - started),
-                    call_summary(calls),
-                )
-                raise
-            logger.info(
-                "reconciliation finished %s in %s checked=%d drift=%d conflicts=%d %s",
+            finally:
+                record_provider_calls(self.unit_of_work, self.clock, calls)
+
+    def _execute_measured(
+        self,
+        rule_id: SyncRuleId,
+        run: str,
+        already_blocked: AbstractSet[EventRef],
+        calls: ProviderCallTally,
+        started: datetime,
+    ) -> ReconciliationReport:
+        names = f"rule={rule_id.value} run={run}"
+        logger.info("reconciliation started %s", names)
+        try:
+            report = self._execute_serialized(rule_id, run, already_blocked)
+        except RuleNotExecutable:
+            raise
+        except Exception as error:
+            kind = (
+                error.kind
+                if isinstance(error, ProviderFailure)
+                else ProviderFailureKind.INFRASTRUCTURE
+            )
+            logger.warning(
+                "reconciliation failed %s kind=%s after %s %s",
                 names,
+                kind.value,
                 duration(self.clock.now() - started),
-                report.checked_mappings,
-                len(report.drift),
-                len(report.conflicts),
                 call_summary(calls),
             )
-            return report
+            raise
+        logger.info(
+            "reconciliation finished %s in %s checked=%d drift=%d conflicts=%d %s",
+            names,
+            duration(self.clock.now() - started),
+            report.checked_mappings,
+            len(report.drift),
+            len(report.conflicts),
+            call_summary(calls),
+        )
+        return report
 
     def _execute_serialized(
         self, rule_id: SyncRuleId, run_id: str, already_blocked: AbstractSet[EventRef]

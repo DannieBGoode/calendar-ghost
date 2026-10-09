@@ -15,10 +15,15 @@ import pytest
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AccountStanding,
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
     CalendarAccess,
     ConnectedAccountState,
     DiscoveredCalendar,
     InstallationUnitOfWorkFactory,
+    ProviderCallCounts,
+    ProviderCallUse,
     RecordedRule,
     RulePreviewSummary,
     RuleRunOutcome,
@@ -26,6 +31,7 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
@@ -876,3 +882,75 @@ class PersistenceContract:
         assert records[OTHER_USER].incidents == ()
         assert records[OTHER_USER].overview.accounts == ()
         assert records[OTHER_USER].overview.open_blocks == ()
+
+    # Resource use
+
+    def test_provider_calls_add_up_per_user_provider_and_day(
+        self, harness: PersistenceHarness
+    ) -> None:
+        day, google = NOW.date(), ProviderKind.GOOGLE
+        with harness.unit_of_work() as uow:
+            uow.provider_calls.add(day, google, ProviderCallCounts(5, 1, 2))
+            uow.provider_calls.add(day, google, ProviderCallCounts(3, 0, 1))
+            uow.provider_calls.add(day - DAY, google, ProviderCallCounts(7, 0, 0))
+            uow.commit()
+        _commit_as(
+            harness,
+            OTHER_USER,
+            lambda uow: uow.provider_calls.add(day, google, ProviderCallCounts(100)),
+        )
+
+        with harness.installation() as installation:
+            today = installation.resource_use([USER, OTHER_USER], since=day)
+            two_days = installation.resource_use([USER], since=day - DAY)
+
+        assert today[USER].provider_calls == (ProviderCallUse(google, 8, 1, 3),)
+        assert two_days[USER].provider_calls == (ProviderCallUse(google, 15, 1, 3),)
+        assert today[OTHER_USER].provider_calls == (ProviderCallUse(google, 100, 0, 0),)
+
+    def test_forgetting_provider_calls_keeps_the_later_days(
+        self, harness: PersistenceHarness
+    ) -> None:
+        day, google = NOW.date(), ProviderKind.GOOGLE
+        with harness.unit_of_work() as uow:
+            uow.provider_calls.add(day - 2 * DAY, google, ProviderCallCounts(4))
+            uow.provider_calls.add(day - DAY, google, ProviderCallCounts(2))
+            uow.provider_calls.add(day, google, ProviderCallCounts(1))
+            uow.commit()
+
+        with harness.installation() as installation:
+            installation.forget_provider_calls(before=day - DAY)
+            installation.commit()
+        with harness.installation() as installation:
+            kept = installation.resource_use([USER], since=day - 10 * DAY)
+
+        assert kept[USER].provider_calls == (ProviderCallUse(google, 3, 0, 0),)
+
+    def test_resource_use_counts_each_users_rules_accounts_and_activity(
+        self, harness: PersistenceHarness
+    ) -> None:
+        for account in (RULE.source, RULE.destination, OTHER_RULE.destination):
+            harness.connect_account(account.connected_account_id)
+        harness.connect_account(THEIR_SOURCE.connected_account_id, OTHER_USER)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.add(OTHER_RULE)
+            for number in range(3):
+                uow.audit.append(
+                    AuditEntry(
+                        NOW, RULE.id, AuditAction.CREATE, AuditOutcome.COMPLETED, f"e{number}"
+                    )
+                )
+            uow.commit()
+
+        with harness.installation() as installation:
+            use = installation.resource_use([USER, OTHER_USER], since=NOW.date())
+
+        assert (use[USER].rules, use[USER].connected_accounts, use[USER].activity_entries) == (
+            2,
+            2,
+            3,
+        )
+        assert use[USER].provider_calls == ()
+        assert (use[OTHER_USER].rules, use[OTHER_USER].connected_accounts) == (0, 1)
+        assert use[OTHER_USER].activity_entries == 0

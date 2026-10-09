@@ -26,6 +26,7 @@ from calendar_sync.application.ports import (
     SchedulerHeartbeat,
     SchedulerProgress,
 )
+from calendar_sync.application.resource_use import first_counted_day
 from calendar_sync.application.retry import with_retries
 from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.synchronization import ExecuteSyncRule
@@ -110,6 +111,7 @@ class SyncScheduler:
         with self._installation() as installation:
             # Values of paused and removed rules expire too, although no run of theirs does it.
             installation.forget_change_values(now - SOURCE_CHANGE_RETENTION)
+            installation.forget_provider_calls(first_counted_day(today))
             installation.commit()
             # Each rule's daily full pass is due from its own last one, so a restart or another
             # rule's failure never re-lists calendars that already completed today's pass.

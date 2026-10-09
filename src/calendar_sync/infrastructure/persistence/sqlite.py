@@ -24,7 +24,11 @@ from calendar_sync.application.ports import (
     IncidentResolution,
     InstallationUnitOfWork,
     OccurrenceMappingRepository,
+    ProviderCallCounts,
+    ProviderCallRepository,
+    ProviderCallUse,
     RecordedRule,
+    ResourceUse,
     RulePreviewRepository,
     RulePreviewSummary,
     RuleRunOutcome,
@@ -38,6 +42,7 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -96,6 +101,7 @@ _FORWARD_MIGRATIONS = (
     (22, "0022_registration.sql"),
     (23, "0023_token_scopes.sql"),
     (24, "0024_rule_creation_order.sql"),
+    (25, "0025_provider_calls.sql"),
 )
 _CHECKED_FROM = 21
 """Migrations from here on prove every reference before committing. Earlier ones ran before
@@ -815,6 +821,32 @@ def _preview_from_row(row: sqlite3.Row) -> RulePreviewSummary:
     )
 
 
+class SqliteProviderCallRepository:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId) -> None:
+        self._connection = connection
+        self._user = user_id.value
+
+    def add(self, day: date, provider: ProviderKind, counts: ProviderCallCounts) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO provider_calls (user_id, provider, day, calls, rate_limited, failed)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (user_id, provider, day) DO UPDATE SET
+                calls = calls + excluded.calls,
+                rate_limited = rate_limited + excluded.rate_limited,
+                failed = failed + excluded.failed
+            """,
+            (
+                self._user,
+                provider.value,
+                day.isoformat(),
+                counts.calls,
+                counts.rate_limited,
+                counts.failed,
+            ),
+        )
+
+
 class SqliteCalendarNameRepository:
     def __init__(self, connection: sqlite3.Connection, user_id: UserId, clock: Clock) -> None:
         self._connection = connection
@@ -880,6 +912,7 @@ class SqliteUnitOfWork:
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
     calendar_names: CalendarNameRepository
+    provider_calls: ProviderCallRepository
 
     def __init__(
         self,
@@ -912,6 +945,7 @@ class SqliteUnitOfWork:
         self.run_outcomes = SqliteRuleRunOutcomeRepository(connection, user)
         self.previews = SqliteRulePreviewRepository(connection, user)
         self.calendar_names = SqliteCalendarNameRepository(connection, user, self._clock)
+        self.provider_calls = SqliteProviderCallRepository(connection, user)
         return self
 
     def __exit__(
@@ -1027,6 +1061,19 @@ class SqliteInstallationUnitOfWork:
             (before.isoformat(),),
         )
 
+    def resource_use(self, users: Collection[UserId], since: date) -> dict[UserId, ResourceUse]:
+        assert self._connection is not None
+        use: dict[UserId, ResourceUse] = {}
+        ordered = sorted({user.value for user in users})
+        for start in range(0, len(ordered), _USERS_PER_QUERY):
+            chunk = ordered[start : start + _USERS_PER_QUERY]
+            use |= _resource_use(self._connection, chunk, since)
+        return use
+
+    def forget_provider_calls(self, before: date) -> None:
+        assert self._connection is not None
+        self._connection.execute("DELETE FROM provider_calls WHERE day < ?", (before.isoformat(),))
+
     def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
         assert self._connection is not None
         records: dict[UserId, StatusRecords] = {}
@@ -1045,6 +1092,51 @@ class SqliteInstallationUnitOfWork:
 
 _USERS_PER_QUERY = 500
 """Users read together, well under SQLite's limit on bound values in one statement."""
+
+
+def _resource_use(
+    connection: sqlite3.Connection, users: Sequence[str], since: date
+) -> dict[UserId, ResourceUse]:
+    marks = ", ".join("?" * len(users))
+
+    def counted(table: str) -> dict[str, int]:
+        # Interpolates only constant table names and `?` placeholders; values stay bound.
+        return dict(
+            connection.execute(
+                f"""
+                SELECT user_id, COUNT(*) FROM {table}
+                WHERE user_id IN ({marks}) GROUP BY user_id
+                """,  # noqa: S608
+                users,
+            ).fetchall()
+        )
+
+    rules, accounts, entries = (
+        counted("sync_rules"),
+        counted("connected_accounts"),
+        counted("audit_entries"),
+    )
+    calls: dict[str, list[ProviderCallUse]] = {}
+    for row in connection.execute(
+        f"""
+        SELECT user_id, provider, SUM(calls), SUM(rate_limited), SUM(failed)
+        FROM provider_calls WHERE user_id IN ({marks}) AND day >= ?
+        GROUP BY user_id, provider ORDER BY user_id, provider
+        """,  # noqa: S608
+        (*users, since.isoformat()),
+    ):
+        calls.setdefault(str(row[0]), []).append(
+            ProviderCallUse(ProviderKind(str(row[1])), int(row[2]), int(row[3]), int(row[4]))
+        )
+    return {
+        UserId(user): ResourceUse(
+            rules=rules.get(user, 0),
+            connected_accounts=accounts.get(user, 0),
+            activity_entries=entries.get(user, 0),
+            provider_calls=tuple(calls.get(user, ())),
+        )
+        for user in users
+    }
 
 
 def _recorded_rules(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from types import TracebackType
 from typing import Literal, Protocol, Self
@@ -455,6 +455,14 @@ class ConnectedAccountRecords(Protocol):
         ...
 
 
+class ProviderCallRepository(Protocol):
+    """How many calls a User's runs made to each provider, per UTC day (ADR 0030)."""
+
+    def add(self, day: date, provider: ProviderKind, counts: ProviderCallCounts) -> None:
+        """Add one run's calls to the User's counts for that provider and day."""
+        ...
+
+
 class UnitOfWork(Protocol):
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
@@ -468,6 +476,7 @@ class UnitOfWork(Protocol):
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
     calendar_names: CalendarNameRepository
+    provider_calls: ProviderCallRepository
 
     def __enter__(self) -> Self: ...
 
@@ -527,6 +536,27 @@ class StatusRecords:
     """Open incidents, most recently updated first."""
 
 
+@dataclass(frozen=True, slots=True)
+class ProviderCallUse:
+    """One provider's calls over some days."""
+
+    provider: ProviderKind
+    calls: int
+    rate_limited: int
+    failed: int
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceUse:
+    """How much of the installation one User uses, in counts; never what their records say."""
+
+    rules: int
+    connected_accounts: int
+    activity_entries: int
+    provider_calls: tuple[ProviderCallUse, ...]
+    """Each provider's calls since the day asked for, by provider."""
+
+
 class InstallationUnitOfWork(Protocol):
     """What reaches across Users. Only the scheduler, migrations, and the Operator Overview
     receive it, so crossing Users is visible in a type (ADR 0029)."""
@@ -548,6 +578,15 @@ class InstallationUnitOfWork(Protocol):
 
     def forget_change_values(self, before: datetime) -> None:
         """Discard every User's Source Change values recorded before `before` (ADR 0017)."""
+        ...
+
+    def resource_use(self, users: Collection[UserId], since: date) -> Mapping[UserId, ResourceUse]:
+        """How much each of `users` uses: their rules, Connected Accounts, and Activity entries,
+        and their provider calls from `since` on."""
+        ...
+
+    def forget_provider_calls(self, before: date) -> None:
+        """Discard every User's provider call counts of days before `before`."""
         ...
 
     def status_records(self, users: Collection[UserId]) -> Mapping[UserId, StatusRecords]:
@@ -596,6 +635,17 @@ class RunIdGenerator(Protocol):
 
 
 @dataclass(slots=True)
+class ProviderCallCounts:
+    """How many calls went to one provider, and how many of them did not get what they asked."""
+
+    calls: int = 0
+    rate_limited: int = 0
+    """Calls the provider refused for its rate limit or quota."""
+    failed: int = 0
+    """Calls with no answer, or answered with an error other than a rate limit or not found."""
+
+
+@dataclass(slots=True)
 class ProviderCallTally:
     """The provider calls one run made so far; the adapter adds each call as it returns."""
 
@@ -608,6 +658,8 @@ class ProviderCallTally:
     """Calls the provider answered with a server error."""
     token_refreshes: int = 0
     """Access tokens renewed during the run."""
+    providers: dict[ProviderKind, ProviderCallCounts] = field(default_factory=dict)
+    """The same calls by provider, as each User's resource use counts them."""
 
 
 class ProviderCallStats(Protocol):

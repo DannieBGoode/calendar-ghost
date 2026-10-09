@@ -13,13 +13,16 @@ import logging
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 
-from calendar_sync.application.ports import ProviderCallTally
+from calendar_sync.application.ports import ProviderCallCounts, ProviderCallTally
 from calendar_sync.application.providers import ProviderKind
 
 logger = logging.getLogger(__name__)
 
 # A call this slow is reported even when debug logging is off.
 SLOW_CALL_SECONDS = 10.0
+
+# A not-found answer tells the run what it asked; the call did not fail.
+_ANSWERS = frozenset({404, 410})
 
 _current: ContextVar[ProviderCallTally | None] = ContextVar("provider_call_tally", default=None)
 
@@ -68,6 +71,12 @@ def record_call(
             tally.rate_limited += 1
         if status is not None and status >= 500:
             tally.server_errors += 1
+        counts = tally.providers.setdefault(provider, ProviderCallCounts())
+        counts.calls += 1
+        if rate_limited:
+            counts.rate_limited += 1
+        elif status is None or (status >= 400 and status not in _ANSWERS):
+            counts.failed += 1
     shown = "none" if status is None else str(status)
     logger.debug(
         "provider call provider=%s op=%s status=%s took=%dms",
