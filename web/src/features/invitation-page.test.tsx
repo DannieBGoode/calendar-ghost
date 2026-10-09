@@ -171,6 +171,39 @@ describe("InvitationPage", () => {
     expect(window.location.hash).toBe("")
   })
 
+  it("starts over for a newer link opened in the same tab", async () => {
+    serve({
+      "/api/v1/invitations/check": jsonResponse({ usable: true }),
+      "/api/v1/invitations/accept": jsonResponse({ detail: "gone", code: "link_unusable", params: {} }, 410),
+    })
+    const onSignedIn = await renderPage(testI18n(), `#${TOKEN}`)
+    fillForm("robin@example.test", "a very long password")
+    await submit()
+    expect(container.querySelector('[role="alert"]')).not.toBeNull()
+
+    // Opening another link to this page changes only the fragment; the page is not reloaded.
+    const calls = serve({
+      "/api/v1/invitations/check": jsonResponse({ usable: true }),
+      "/api/v1/invitations/accept": jsonResponse(SIGNED_IN),
+    })
+    act(() => {
+      window.location.hash = "#inv_newer-token"
+    })
+    await settle()
+
+    expect(calls[0]).toEqual({ url: "/api/v1/invitations/check", method: "POST", body: { token: "inv_newer-token" } })
+    expect(container.querySelector('[role="alert"]')).toBeNull()
+    expect(container.querySelector<HTMLInputElement>("input[type=email]")!.value).toBe("")
+    fillForm("robin@example.test", "a very long password")
+    await submit()
+    expect(calls.find((call) => call.url === "/api/v1/invitations/accept")?.body).toEqual({
+      token: "inv_newer-token",
+      email: "robin@example.test",
+      password: "a very long password",
+    })
+    expect(onSignedIn).toHaveBeenCalledOnce()
+  })
+
   it("explains a link that stopped working while the form was open", async () => {
     serve({
       "/api/v1/invitations/check": jsonResponse({ usable: true }),

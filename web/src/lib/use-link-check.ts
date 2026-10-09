@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { api } from "@/lib/api"
 import { linkStatus, linkToken, type PublicPage } from "@/lib/public-links"
@@ -10,16 +10,30 @@ const CHECKS: Record<PublicPage, (token: string) => Promise<{ usable: boolean }>
 }
 
 /**
- * The token in this page's address and whether the server will still accept it. An address
- * without a token is refused without asking the server.
+ * The token in this page's address. Opening a newer link in the same tab changes only the
+ * fragment, without reloading, so the token follows it. An address that loses its token, as when
+ * the page removes a spent one, keeps the link shown.
  */
-export function useLinkCheck(page: PublicPage) {
-  const [token] = useState(() => linkToken(window.location.hash))
+export function useLinkToken(): string {
+  const [token, setToken] = useState(() => linkToken(window.location.hash))
+  useEffect(() => {
+    const follow = () => {
+      const next = linkToken(window.location.hash)
+      if (next) setToken(next)
+    }
+    window.addEventListener("hashchange", follow)
+    return () => window.removeEventListener("hashchange", follow)
+  }, [])
+  return token
+}
+
+/** Whether the server will still accept a link's token. A link without one is refused without asking. */
+export function useLinkCheck(page: PublicPage, token: string) {
   const check = useQuery({
     queryKey: ["link-check", page, token],
     queryFn: () => CHECKS[page](token),
     enabled: token !== "",
     staleTime: Infinity,
   })
-  return { token, status: linkStatus(token, check), error: check.error }
+  return { status: linkStatus(token, check), error: check.error }
 }

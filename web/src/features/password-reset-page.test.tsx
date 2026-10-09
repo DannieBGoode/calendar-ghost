@@ -144,6 +144,35 @@ describe("PasswordResetPage", () => {
     expect(window.location.hash).toBe("")
   })
 
+  it("starts over for a newer link opened in the same tab", async () => {
+    serve({
+      "/api/v1/password-resets/check": jsonResponse({ usable: true }),
+      "/api/v1/password-resets": { ok: true, status: 204, json: () => Promise.resolve(null) } as Response,
+    })
+    await renderPage(testI18n())
+    await resetTo("a very long password")
+    expect(container.querySelector("h2")?.textContent).toBe("Your password was changed")
+
+    // Opening another link to this page changes only the fragment; the page is not reloaded.
+    const calls = serve({
+      "/api/v1/password-resets/check": jsonResponse({ usable: true }),
+      "/api/v1/password-resets": { ok: true, status: 204, json: () => Promise.resolve(null) } as Response,
+    })
+    act(() => {
+      window.location.hash = "#reset_newer-token"
+    })
+    await settle()
+
+    expect(calls[0]).toEqual({ url: "/api/v1/password-resets/check", method: "POST", body: { token: "reset_newer-token" } })
+    expect(container.querySelector("h2")?.textContent).toBe("Your new password")
+    expect(container.querySelector<HTMLInputElement>("input[type=password]")!.value).toBe("")
+    await resetTo("another long password")
+    expect(calls.find((call) => call.url === "/api/v1/password-resets")?.body).toEqual({
+      token: "reset_newer-token",
+      password: "another long password",
+    })
+  })
+
   it("refuses a link that was used or expired", async () => {
     serve({ "/api/v1/password-resets/check": jsonResponse({ usable: false }) })
     await renderPage(testI18n())

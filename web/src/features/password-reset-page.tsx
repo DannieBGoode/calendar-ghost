@@ -11,7 +11,7 @@ import type { MessageKey } from "@/i18n/types"
 import { api } from "@/lib/api"
 import { newPasswordReady } from "@/lib/passwords"
 import type { LinkStatus } from "@/lib/public-links"
-import { useLinkCheck } from "@/lib/use-link-check"
+import { useLinkCheck, useLinkToken } from "@/lib/use-link-check"
 
 type PanelCopy = { title: MessageKey; note: MessageKey }
 
@@ -31,9 +31,15 @@ function panelFor(status: LinkStatus, done: boolean): PanelCopy {
  * password. The administrator never sees or sets it.
  */
 export function PasswordResetPage() {
+  const token = useLinkToken()
+  // A newer link starts over: its own check, an empty form, and no earlier outcome.
+  return <PasswordResetLink key={token} token={token} />
+}
+
+function PasswordResetLink({ token }: { token: string }) {
   const i18n = useI18n()
   const { t } = i18n
-  const { token, status, error } = useLinkCheck("password-reset")
+  const { status, error } = useLinkCheck("password-reset", token)
   const [done, setDone] = useState(false)
   const panel = panelFor(status, done)
   const offerSignIn = done || status === "unusable"

@@ -11,16 +11,22 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { api } from "@/lib/api"
 import { newPasswordReady } from "@/lib/passwords"
-import { useLinkCheck } from "@/lib/use-link-check"
+import { useLinkCheck, useLinkToken } from "@/lib/use-link-check"
 
 /**
  * Where an invited person becomes a User: they choose the email and password they sign in with.
  * The Invitation's token is in the address's fragment, so it never reaches a server log.
  */
 export function InvitationPage({ onSignedIn }: { onSignedIn: () => void }) {
+  const token = useLinkToken()
+  // A newer link starts over: its own check, an empty form, and no earlier refusal.
+  return <InvitationLink key={token} token={token} onSignedIn={onSignedIn} />
+}
+
+function InvitationLink({ token, onSignedIn }: { token: string; onSignedIn: () => void }) {
   const i18n = useI18n()
   const { t } = i18n
-  const { token, status, error } = useLinkCheck("invitation")
+  const { status, error } = useLinkCheck("invitation", token)
   const refused = status === "unusable"
   return (
     <AuthFrame
