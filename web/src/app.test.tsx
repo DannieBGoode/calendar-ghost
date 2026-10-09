@@ -40,6 +40,7 @@ const RESPONSES: Record<string, unknown> = {
   "/api/v1/accounts": [],
   "/api/v1/google/configuration": { configured: false, redirect_uri: null },
   "/api/v1/recent-changes": [],
+  "/api/v1/integration-tokens": [],
 }
 
 function jsonResponse(body: unknown): Response {
@@ -142,10 +143,61 @@ describe("App", () => {
     }
   })
 
-  it("returns to the sign-in screen after you delete your own account", async () => {
+  it("lands on Connections with the connection outcome when Google returns to Settings", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/settings?google=connected&account=acct-a")
+    try {
+      const { container } = await renderApp(testI18n())
+      expect(container.querySelector(".oauth-feedback h2")?.textContent).toBe("Google account connected")
+      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("[aria-labelledby='accounts-title']")).not.toBeNull()
+      expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("Settings")
+      // The address stays at Settings; only the outcome is dropped so a reload does not repeat it.
+      expect(`${window.location.pathname}${window.location.search}`).toBe("/settings")
+    } finally {
+      page.happyDOM.setURL(address)
+    }
+  })
+
+  it("opens a Settings tab at its own address without reloading, and follows back and forward", async () => {
     const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
     const address = window.location.href
     page.happyDOM.setURL("http://localhost:8000/settings")
+    try {
+      const { container } = await renderApp(testI18n())
+      const header = container.querySelector("header")
+      const tab = [...container.querySelectorAll<HTMLAnchorElement>("nav.settings-tabs a")].find(
+        (link) => link.textContent === "Your account",
+      )!
+      const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })
+      act(() => {
+        tab.dispatchEvent(click)
+      })
+      await settle()
+
+      expect(click.defaultPrevented).toBe(true)
+      expect(window.location.pathname).toBe("/settings/account")
+      expect(container.querySelector("header")).toBe(header)
+      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
+      expect(container.querySelector("[aria-labelledby='appearance-title']")).not.toBeNull()
+      expect(container.querySelector("[aria-labelledby='accounts-title']")).toBeNull()
+
+      act(() => {
+        window.history.replaceState(null, "", "/settings/connections")
+        window.dispatchEvent(new PopStateEvent("popstate"))
+      })
+      await settle()
+      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+    } finally {
+      page.happyDOM.setURL(address)
+    }
+  })
+
+  it("returns to the sign-in screen after you delete your own account", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/settings/account")
     let signedIn = true
     const user = { id: "user-robin", email: "robin@example.test", role: "user", notify_by_email: true, language: null }
     vi.stubGlobal(
@@ -179,6 +231,52 @@ describe("App", () => {
 
       expect(container.querySelector("header")).toBeNull()
       expect(container.querySelector(".auth-shell")).not.toBeNull()
+    } finally {
+      page.happyDOM.setURL(address)
+    }
+  })
+
+  it("returns to setup after the last person here deletes their own account", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/settings/account")
+    let remaining = true
+    const user = { id: "user-dana", email: "dana@example.test", role: "installation_administrator", notify_by_email: true, language: null }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL, init?: RequestInit) => {
+        const path = String(input).split("?")[0] ?? ""
+        if (init?.method === "DELETE" && path === "/api/v1/account") {
+          remaining = false
+          return Promise.resolve(jsonResponse({ rules: 0, deleted: 0, detached: 0, left: 0 }))
+        }
+        if (path === "/api/v1/setup") return Promise.resolve(jsonResponse({ administrator_configured: remaining }))
+        if (path === "/api/v1/account/deletion") {
+          return Promise.resolve(jsonResponse({ needs_another_administrator: false, last_user: true }))
+        }
+        if (path === "/api/v1/session") {
+          return Promise.resolve(
+            jsonResponse({ authenticated: remaining, user: remaining ? user : null, installation_sends_email: false }),
+          )
+        }
+        return Promise.resolve(jsonResponse(RESPONSES[path] ?? {}))
+      }),
+    )
+    try {
+      const { container } = await renderApp(testI18n())
+      act(() => container.querySelector<HTMLButtonElement>("#own-delete-toggle")!.click())
+      expect(container.querySelector("#own-delete-confirmation p")?.textContent).toContain("You are the last person here.")
+      const password = container.querySelector<HTMLInputElement>("#own-delete-password")!
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(password, "a very long password")
+        password.dispatchEvent(new Event("input", { bubbles: true }))
+      })
+      const confirm = container.querySelector<HTMLButtonElement>("#own-delete-confirmation .confirmation-actions button:last-child")!
+      act(() => confirm.click())
+      await settle(12)
+
+      expect(container.querySelector("header")).toBeNull()
+      expect(container.querySelector(".auth-shell h1")?.textContent).toBe("Your calendars, under your control.")
     } finally {
       page.happyDOM.setURL(address)
     }

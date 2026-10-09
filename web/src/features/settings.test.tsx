@@ -16,6 +16,7 @@ import {
   type IssuedIntegrationToken,
 } from "@/lib/api"
 import { integrationExamples } from "@/lib/integrations"
+import type { OpenSettingsTab, SettingsTab } from "@/lib/navigation"
 
 import { IntegrationsSection, SettingsPage } from "./settings"
 
@@ -123,6 +124,7 @@ const FIXTURE_TEXT = [
 ]
 
 type Scenario = {
+  tab?: SettingsTab
   configured?: boolean
   redirectUri?: string | null
   accounts?: ConnectedAccount[]
@@ -169,6 +171,7 @@ let container: HTMLDivElement
 let root: Root | null = null
 let clipboard: PropertyDescriptor | undefined
 let address: string
+let openTab: ReturnType<typeof vi.fn<OpenSettingsTab>>
 
 function page() {
   return window as typeof window & { happyDOM: { setURL: (url: string) => void } }
@@ -205,6 +208,7 @@ async function settle(times = 6) {
 
 async function renderSettings(i18n: I18n, scenario: Scenario = {}) {
   mockFetch(scenario)
+  openTab = vi.fn<OpenSettingsTab>()
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
@@ -212,7 +216,7 @@ async function renderSettings(i18n: I18n, scenario: Scenario = {}) {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <SettingsPage />
+            <SettingsPage tab={scenario.tab ?? "connections"} onOpenTab={openTab} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -258,6 +262,12 @@ describe("SettingsPage", () => {
     expect(container.querySelector("#revoke-token-homepage")).not.toBeNull()
     expect(container.querySelector(".revoked-tokens")).not.toBeNull()
     expect(container.querySelector(".integration-examples")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+  })
+
+  it.each(["account", "installation"] as const)("has no untranslated text on the %s tab", async (tab) => {
+    await renderSettings(pseudoI18n(), { tab })
+    expect(container.querySelector("section")).not.toBeNull()
     expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
@@ -310,9 +320,6 @@ describe("SettingsPage", () => {
     expect(container.querySelector(".account-summary-toggle [aria-hidden='true']")?.textContent).toBe("Hide")
     expect(container.querySelector(".account-summary-toggle .sr-only")?.textContent).toBe("Hide accounts")
     expect(container.querySelector(".account-summary-emails")?.textContent).toBe("dana@example.test, robin@example.test")
-    const summaries = [...container.querySelectorAll(".setting-row p")].map((paragraph) => paragraph.textContent)
-    expect(summaries).toContain("48.2 MB · 61,204 Activity entries since Jun 12, 2026 · 1.2 MB can be reclaimed")
-    expect(summaries).toContain("7.9 MB · Sep 12 – Oct 1, 2026")
 
     await click(button("Check access"))
     expect(container.querySelector(".account-access-result p")?.textContent).toBe(
@@ -328,8 +335,16 @@ describe("SettingsPage", () => {
     )
   })
 
+  it("summarizes storage on Installation", async () => {
+    await renderSettings(testI18n(), { tab: "installation" })
+    const summaries = [...container.querySelectorAll(".setting-row p")].map((paragraph) => paragraph.textContent)
+    expect(summaries).toContain("48.2 MB · 61,204 Activity entries since Jun 12, 2026 · 1.2 MB can be reclaimed")
+    expect(summaries).toContain("7.9 MB · Sep 12 – Oct 1, 2026")
+  })
+
   it("explains a failed count with the server's detail", async () => {
     await renderSettings(testI18n(), {
+      tab: "installation",
       clearable: jsonResponse({ detail: "older_than_days must be one of 30, 90." }, 422),
     })
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
@@ -340,6 +355,7 @@ describe("SettingsPage", () => {
 
   it("explains a failed count from the error code, not the server's English", async () => {
     await renderSettings(testI18n(), {
+      tab: "installation",
       clearable: jsonResponse({ detail: "older_than_days must be one of 30, 90.", code: "invalid_activity_age", params: {} }, 422),
     })
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
@@ -350,6 +366,7 @@ describe("SettingsPage", () => {
 
   it("says the old Activity was cleared when its space could not be reclaimed", async () => {
     await renderSettings(testI18n(), {
+      tab: "installation",
       cleared: jsonResponse({ detail: "Database is locked.", code: "storage_busy", params: {} }, 409),
     })
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
@@ -358,6 +375,51 @@ describe("SettingsPage", () => {
     expect(container.querySelector("[aria-labelledby='storage-title'] [role='alert']")?.textContent).toBe(
       "Old Activity was cleared, but its space could not be reclaimed while a rule is synchronizing. Try again when it finishes.",
     )
+  })
+})
+
+describe("Settings tabs", () => {
+  function sections(): (string | null)[] {
+    return [...container.querySelectorAll(".settings-page > section")].map((item) => item.getAttribute("aria-labelledby"))
+  }
+
+  function tabs(): HTMLAnchorElement[] {
+    return [...container.querySelectorAll<HTMLAnchorElement>("nav.settings-tabs a")]
+  }
+
+  it.each([
+    ["connections", ["accounts-title", "integrations-title"]],
+    ["account", ["own-account-title", "appearance-title"]],
+    ["installation", ["registration-title", "storage-title"]],
+  ] as const)("shows the %s tab's sections", async (tab, shown) => {
+    await renderSettings(testI18n(), { tab })
+    expect(sections()).toEqual(shown)
+  })
+
+  it("links each tab to its own address and marks the one shown", async () => {
+    await renderSettings(testI18n(), { tab: "account" })
+    expect(container.querySelector("nav.settings-tabs")?.getAttribute("aria-label")).toBe("Settings sections")
+    expect(tabs().map((tab) => [tab.textContent, tab.getAttribute("href"), tab.getAttribute("aria-current")])).toEqual([
+      ["Connections", "/settings/connections", null],
+      ["Your account", "/settings/account", "page"],
+      ["Installation", "/settings/installation", null],
+    ])
+  })
+
+  it("opens a tab in place on a plain click", async () => {
+    await renderSettings(testI18n())
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })
+    act(() => {
+      tabs()[2]!.dispatchEvent(click)
+    })
+    expect(click.defaultPrevented).toBe(true)
+    expect(openTab).toHaveBeenCalledWith("installation")
+  })
+
+  it("shows a connection outcome only on Connections", async () => {
+    window.history.replaceState(null, "", "/settings?google=connected")
+    await renderSettings(testI18n(), { tab: "account" })
+    expect(container.querySelector(".oauth-feedback")).toBeNull()
   })
 })
 

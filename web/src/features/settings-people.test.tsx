@@ -11,6 +11,7 @@ import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testin
 import type { I18n } from "@/i18n/translator"
 import type { PendingInvitation, Person, Registration, SessionStatus } from "@/lib/api"
 import { integrationExamples } from "@/lib/integrations"
+import type { SettingsTab } from "@/lib/navigation"
 
 import { SettingsPage } from "./settings"
 
@@ -47,6 +48,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 type Call = { method: string; path: string; body: unknown }
 type Scenario = {
+  tab?: SettingsTab
   role?: "installation_administrator" | "user"
   registration?: Registration
   people?: Person[]
@@ -134,7 +136,7 @@ async function renderSettings(i18n: I18n, scenario: Scenario = {}) {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <SettingsPage />
+            <SettingsPage tab={scenario.tab ?? "installation"} onOpenTab={() => undefined} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -317,15 +319,22 @@ describe("Settings for an administrator", () => {
 })
 
 describe("Settings for someone who is not an administrator", () => {
-  it("hides who can join, people, and storage, and never asks for them", async () => {
-    await renderSettings(testI18n(), { role: "user" })
-    expect(section("accounts-title") ?? container.querySelector("h1")).not.toBeNull()
+  it("offers no Installation tab, shows Connections at its address, and never asks for what it holds", async () => {
+    await renderSettings(testI18n(), { role: "user", tab: "installation" })
+    const tabs = [...container.querySelectorAll("nav.settings-tabs a")].map((tab) => tab.textContent)
+    expect(tabs).toEqual(["Connections", "Your account"])
+    expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+    expect(section("accounts-title")).not.toBeNull()
     expect(section("registration-title")).toBeNull()
     expect(section("people-title")).toBeNull()
     expect(section("storage-title")).toBeNull()
     expect(requested("/api/v1/registration")).toBe(false)
     expect(requested("/api/v1/users")).toBe(false)
     expect(requested("/api/v1/storage")).toBe(false)
+  })
+
+  it("keeps their own account under Your account", async () => {
+    await renderSettings(testI18n(), { role: "user", tab: "account" })
     expect(section("own-account-title")).not.toBeNull()
   })
 })

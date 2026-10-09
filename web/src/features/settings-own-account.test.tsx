@@ -22,6 +22,8 @@ const user: SignedInUser = {
   language: null,
 }
 
+const administrator: SignedInUser = { ...user, role: "installation_administrator" }
+
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
@@ -37,6 +39,7 @@ function serve(answers: Record<string, Response> = {}) {
     "PUT /api/v1/account/password": NO_CONTENT,
     "PUT /api/v1/account/notifications": jsonResponse({ ...user, notify_by_email: false }),
     "DELETE /api/v1/account": jsonResponse({ rules: 1, deleted: 3, detached: 0, left: 0 }),
+    "GET /api/v1/account/deletion": jsonResponse({ needs_another_administrator: false, last_user: false }),
     ...answers,
   }
   calls = []
@@ -55,6 +58,7 @@ function serve(answers: Record<string, Response> = {}) {
 let container: HTMLDivElement
 let root: Root | null = null
 let queryClient: QueryClient
+let openInstallation: ReturnType<typeof vi.fn<() => void>>
 
 beforeEach(() => {
   container = document.createElement("div")
@@ -78,15 +82,32 @@ async function settle(times = 6) {
   }
 }
 
-async function renderSection(i18n: I18n, { sendsEmail = true, answers = {} } = {}) {
+async function renderSection(
+  i18n: I18n,
+  {
+    sendsEmail = true,
+    answers = {},
+    signedIn = user,
+    cached = {},
+  }: {
+    sendsEmail?: boolean
+    answers?: Record<string, Response>
+    signedIn?: SignedInUser
+    /** Answers already in the cache, by query key, as another tab left them. */
+    cached?: Record<string, unknown>
+  } = {},
+) {
   serve(answers)
+  openInstallation = vi.fn<() => void>()
   root = createRoot(container)
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  // As fresh as the app keeps answers, so a test can tell a cached answer from a new one.
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+  for (const [key, data] of Object.entries(cached)) queryClient.setQueryData([key], data)
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
-          <OwnAccountSection user={user} sendsEmail={sendsEmail} />
+          <OwnAccountSection user={signedIn} sendsEmail={sendsEmail} onOpenInstallation={openInstallation} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
@@ -130,6 +151,22 @@ function sent(method: string, path: string): unknown {
   return calls.find((call) => call.method === method && call.path === path)?.body
 }
 
+function deletion(answer: { needs_another_administrator?: boolean; last_user?: boolean }): Response {
+  return jsonResponse({ needs_another_administrator: false, last_user: false, ...answer })
+}
+
+function deletionItem(): HTMLElement {
+  const heading = [...container.querySelectorAll("h3")].find((item) => item.textContent === "Delete your account")
+  if (!heading) throw new Error("No deletion item")
+  return heading.closest<HTMLElement>(".setting-item")!
+}
+
+function incidentEmails(): HTMLElement {
+  const heading = [...container.querySelectorAll("h3")].find((item) => item.textContent === "Incident emails")
+  if (!heading) throw new Error("No incident emails item")
+  return heading.closest<HTMLElement>(".setting-item")!
+}
+
 function status(): string | null | undefined {
   return container.querySelector("[role='status']")?.textContent
 }
@@ -144,8 +181,25 @@ describe("OwnAccountSection", () => {
     expect(untranslatedText(container, [user.email!])).toEqual([])
   })
 
+  it("has no untranslated text for the last person here, or an administrator who cannot leave yet", async () => {
+    await renderSection(pseudoI18n(), { answers: { "GET /api/v1/account/deletion": deletion({ last_user: true }) } })
+    await click(container.querySelector<HTMLButtonElement>("#own-delete-toggle")!)
+    expect(untranslatedText(container, [user.email!])).toEqual([])
+    act(() => root?.unmount())
+    root = null
+    await renderSection(pseudoI18n(), {
+      signedIn: administrator,
+      answers: { "GET /api/v1/account/deletion": deletion({ needs_another_administrator: true }) },
+    })
+    expect(untranslatedText(container, [user.email!])).toEqual([])
+  })
+
   it("has no untranslated text where the installation sends no email", async () => {
     await renderSection(pseudoI18n(), { sendsEmail: false })
+    expect(untranslatedText(container, [user.email!])).toEqual([])
+    act(() => root?.unmount())
+    root = null
+    await renderSection(pseudoI18n(), { sendsEmail: false, signedIn: administrator })
     expect(untranslatedText(container, [user.email!])).toEqual([])
   })
 
@@ -202,11 +256,66 @@ describe("OwnAccountSection", () => {
     expect(status()).toBe("Calendar Ghost no longer emails you about incidents. They still appear in Activity.")
   })
 
-  it("says incident emails are unavailable where the installation sends no email", async () => {
+  it("tells a User their administrator can set up incident emails where the installation sends none", async () => {
     await renderSection(testI18n(), { sendsEmail: false })
-    expect(field("own-incident-emails").disabled).toBe(true)
-    expect(container.textContent).toContain(
-      "This Calendar Ghost does not send email, so incidents appear only in Activity.",
+    expect(container.querySelector("#own-incident-emails")).toBeNull()
+    expect(incidentEmails().textContent).toContain(
+      "Your administrator can set up email for this Calendar Ghost. Until then, incidents appear in Activity.",
+    )
+    expect(incidentEmails().querySelector("a")).toBeNull()
+  })
+
+  it("tells an administrator how to set up incident emails where the installation sends none", async () => {
+    await renderSection(testI18n(), { sendsEmail: false, signedIn: administrator })
+    expect(container.querySelector("#own-incident-emails")).toBeNull()
+    expect(incidentEmails().textContent).toContain(
+      "To send incident emails, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
+    )
+    const help = incidentEmails().querySelector("a")
+    expect(help?.textContent).toBe("How to set up email")
+    expect(help?.getAttribute("href")).toBe(
+      "https://calendarghost.com/docs/troubleshooting#incident-emails-are-unavailable-or-never-arrive",
+    )
+    expect(help?.getAttribute("target")).toBe("_blank")
+    expect(help?.getAttribute("rel")).toBe("noreferrer")
+  })
+
+  it("asks the only administrator to make someone else an administrator before deleting their account", async () => {
+    await renderSection(testI18n(), {
+      signedIn: administrator,
+      answers: { "GET /api/v1/account/deletion": deletion({ needs_another_administrator: true }) },
+    })
+    expect(container.querySelector("#own-delete-toggle")).toBeNull()
+    const item = deletionItem()
+    expect(item.querySelector("h3")?.textContent).toBe("Delete your account")
+    expect(item.textContent).toContain(
+      "Someone else must be an administrator before you can delete your account. Make another person an administrator under Installation, then come back.",
+    )
+    const link = item.querySelector<HTMLAnchorElement>("a")!
+    expect(link.textContent).toBe("Open Installation")
+    expect(link.getAttribute("href")).toBe("/settings/installation")
+    const plain = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })
+    act(() => {
+      link.dispatchEvent(plain)
+    })
+    expect(plain.defaultPrevented).toBe(true)
+    expect(openInstallation).toHaveBeenCalledOnce()
+  })
+
+  it("asks again whether the account can be deleted each time it is shown", async () => {
+    // Making someone else an administrator under Installation, then coming back, offers deletion.
+    await renderSection(testI18n(), {
+      signedIn: administrator,
+      cached: { "account-deletion": { needs_another_administrator: true, last_user: false } },
+    })
+    expect(container.querySelector("#own-delete-toggle")).not.toBeNull()
+  })
+
+  it("tells the last person here that Calendar Ghost returns to setup", async () => {
+    await renderSection(testI18n(), { answers: { "GET /api/v1/account/deletion": deletion({ last_user: true }) } })
+    await click(button("Delete your account"))
+    expect(container.querySelector("#own-delete-confirmation p")?.textContent).toBe(
+      "You are the last person here. Your rules, Google accounts, tokens, and Activity are removed, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Backups taken before now keep them until they rotate out. This cannot be undone.",
     )
   })
 
@@ -215,6 +324,9 @@ describe("OwnAccountSection", () => {
     queryClient.setQueryData(["rules"], [{ id: "rule-private" }])
     await click(button("Delete your account"))
     const confirmation = container.querySelector<HTMLElement>("#own-delete-confirmation")!
+    expect(confirmation.querySelector("p")?.textContent).toBe(
+      "Your rules, Google accounts, tokens, and Activity are removed, and you are signed out. Backups taken before now keep them until they rotate out. This cannot be undone.",
+    )
     expect(confirmation.querySelector<HTMLInputElement>("input[value='delete']")!.checked).toBe(true)
     expect(button("Delete my account", confirmation).disabled).toBe(true)
 

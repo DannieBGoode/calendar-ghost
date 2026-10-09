@@ -6,8 +6,9 @@ Check `docker compose ps`, then request `http://localhost:8000/health`. Review c
 
 ## A monitor or agent cannot read status
 
-`GET /api/v1/status` and `/mcp` accept an Integration Token from **Settings → Integrations**
-([self-hosting guide](self-hosting.md#6-connect-monitors-and-agents)). Check the answer with `curl -i`:
+`GET /api/v1/status` and `/mcp` accept an Integration Token from **Settings → Connections →
+Integrations** ([self-hosting guide](self-hosting.md#6-connect-monitors-and-agents)). Check the
+answer with `curl -i`:
 
 - **401 `valid credentials required`.** The token is missing, mistyped, or revoked; every reason
   gets the same answer. Send it as `Authorization: Bearer cgs_…`, never in the address. A token is
@@ -56,8 +57,8 @@ docker compose logs --since 1h app
 ```
 
 The service's own lines, those of the `calendar_sync` loggers, are also kept in its rotating log
-files beside the database, so Settings → Storage → Download gets them without SSH access to the
-host. Uvicorn's request and error lines stay in the container logs only.
+files beside the database, so **Settings → Installation → Storage** → **Download** gets them without
+SSH access to the host. Uvicorn's request and error lines stay in the container logs only.
 
 Lines name a rule and a run only by their internal identifiers. They never contain event titles,
 descriptions, calendar identifiers, account emails, URLs, or tokens, but review them before
@@ -106,15 +107,15 @@ is verbose; set it back to
 
 ## Database is large
 
-Settings → Storage shows the database's size, the number of Activity entries, and the oldest one.
-Clear Activity older than 30, 90, 180, or 365 days; the confirmation shows how many entries that
-removes before you confirm. Clearing deletes in batches and then compacts the database, which
-briefly waits for any rule that is synchronizing; if every rule's lock cannot be taken, or SQLite
-stays locked, within 30 seconds, the response is "Old Activity was cleared, but its space could not
-be reclaimed while a rule is synchronizing. Try again when it finishes." The entries are already
-gone at that point, so clearing again later reclaims the space without deleting anything further.
-See [ADR 0019](adr/0019-administrator-chosen-activity-retention.md) for which entries are kept and
-why.
+**Settings → Installation → Storage** shows the database's size, the number of Activity entries, and
+the oldest one. Clear Activity older than 30, 90, 180, or 365 days; the confirmation shows how many
+entries that removes before you confirm. Clearing deletes in batches and then compacts the database,
+which briefly waits for any rule that is synchronizing; if every rule's lock cannot be taken, or
+SQLite stays locked, within 30 seconds, the response is "Old Activity was cleared, but its space
+could not be reclaimed while a rule is synchronizing. Try again when it finishes." The entries are
+already gone at that point, so clearing again later reclaims the space without deleting anything
+further. See [ADR 0019](adr/0019-administrator-chosen-activity-retention.md) for which entries are
+kept and why.
 
 ## An event did not synchronize
 
@@ -198,10 +199,10 @@ its mappings and last successful incremental positions, and writes nothing while
 
 - **Authorization for Google Calendar expired** or **Access to Google Calendar was denied**: Google
   stopped accepting a connected account (Lapsed Authorization). The incident names the account, and
-  **Settings → Connected accounts** marks it **Needs reauthorization**. The stopped rule's
-  **Reauthorize account**, the Overview, and the incident each open Settings at that account. Choose
-  **Reauthorize account** there; Google offers that account first. Once Google accepts it again,
-  every rule the lapse alone stopped restarts on its own, with no preview, and the return to
+  **Settings → Connections → Connected accounts** marks it **Needs reauthorization**. The stopped
+  rule's **Reauthorize account**, the Overview, and the incident each open Settings at that account.
+  Choose **Reauthorize account** there; Google offers that account first. Once Google accepts it
+  again, every rule the lapse alone stopped restarts on its own, with no preview, and the return to
   Settings says how many. If the rule's calendars belong to two accounts and both lost access, it
   restarts once both are reauthorized. If you think Google's refusal was momentary, choose **Check
   access** first: a check that passes clears the lapse and restarts the same rules.
@@ -224,11 +225,11 @@ run, within five minutes, resolves the incident; **Sync Now** and **Reconcile No
 
 ## A Google account was disconnected
 
-Open **Settings → Connected accounts** and choose **Reauthorize account** for the same Google
-identity. The installation no longer retains credentials for a disconnected account, and enabled
-rules that reference it remain degraded. After reauthorization, open Rules, choose **Validate
-recovery**, inspect the preview, and enable each affected rule. Existing mappings, Managed
-Projections, and incremental positions are preserved throughout recovery.
+Open **Settings → Connections → Connected accounts** and choose **Reauthorize account** for the same
+Google identity. The installation no longer retains credentials for a disconnected account, and
+enabled rules that reference it remain degraded. After reauthorization, open Rules, choose
+**Validate recovery**, inspect the preview, and enable each affected rule. Existing mappings,
+Managed Projections, and incremental positions are preserved throughout recovery.
 
 To remove the local identity permanently, choose **Delete account** and review the destructive
 confirmation. Permanent deletion removes every affected Directional Sync Rule and its mappings,
@@ -249,10 +250,10 @@ redirect URI or an SSH tunnel as described in
 
 ## Google Calendar permission was not granted
 
-The OAuth callback returns to **Settings → Connected accounts** without saving an account. Choose
-**Try again**, select the intended Google identity, and grant both calendar-list and event access.
-Calendar Ghost verifies those permissions before it stores the Connected Account. Declining consent
-does not create an account or retain Google credentials.
+The OAuth callback returns to **Settings → Connections → Connected accounts** without saving an
+account. Choose **Try again**, select the intended Google identity, and grant both calendar-list and
+event access. Calendar Ghost verifies those permissions before it stores the Connected Account.
+Declining consent does not create an account or retain Google credentials.
 
 ## A connected account fails Check access
 
@@ -296,22 +297,12 @@ recreating the series and keeps it dormant until you accept one of its occurrenc
 
 The Google adapter must discard the expired cursor, perform a safe initial-window scan, match managed projections through origin metadata, and establish a new cursor without duplicating events.
 
-## Getting more help
-
-If this guide does not solve the problem, ask in
-[GitHub Discussions](https://github.com/DannieBGoode/calendar-ghost/discussions). Search earlier
-answers first. To report a bug, open an issue with the
-[bug report form](https://github.com/DannieBGoode/calendar-ghost/issues/new/choose). Discussions
-and issues are public: do not include event content, calendar IDs, email addresses, credentials, or
-unredacted logs. If you cannot use GitHub, email support@calendarghost.com. Report security
-vulnerabilities privately, as [SECURITY.md](../SECURITY.md) describes.
-
 ## I cannot sign in
 
 - **The email and password do not match.** Sign in with the email you added or were invited with;
   its case does not matter. If you forgot your password, ask an administrator for a password reset
-  link under **Settings → People**. It works once, for 7 days, and signs you out everywhere once
-  you choose a new password. An administrator never sees or sets your password.
+  link under **Settings → Installation → People**. It works once, for 7 days, and signs you out
+  everywhere once you choose a new password. An administrator never sees or sets your password.
 - **Too many failed attempts.** After five failures for one email, or twenty from one address, in
   15 minutes, sign-in waits until the oldest failure is 15 minutes old. Behind a reverse proxy the
   address is the proxy's, so wait before trying again.
@@ -321,3 +312,28 @@ vulnerabilities privately, as [SECURITY.md](../SECURITY.md) describes.
   sign in with your password; Calendar Ghost then asks for the email you sign in with from now on.
 - **The only administrator forgot their password.** Nobody can create a reset link for them. Make a
   second person an administrator while you can, so each can help the other.
+
+## Incident emails are unavailable or never arrive
+
+**Email me about incidents** under **Settings → Your account** appears only when the installation
+sends email. Until then that page says who can set email up, and every incident still appears in
+**Activity**.
+
+- **The installation does not send email.** An administrator sets `CALENDAR_SYNC_SMTP_HOST` and
+  `CALENDAR_SYNC_SMTP_SENDER`, plus credentials if the server needs them, in `.env` and restarts.
+  See [Incident notifications](deployment.md#incident-notifications).
+- **You have no email yet.** After an upgrade, the first User adds one when they next sign in.
+- **You turned them off.** Turn **Email me about incidents** on again.
+- **The SMTP recipient and webhook stopped receiving rule incidents.** Since Users, they receive only
+  incidents about the installation itself, such as a stalled scheduler. Each person receives their
+  own rule incidents at their email.
+
+## Getting more help
+
+If this guide does not solve the problem, ask in
+[GitHub Discussions](https://github.com/DannieBGoode/calendar-ghost/discussions). Search earlier
+answers first. To report a bug, open an issue with the
+[bug report form](https://github.com/DannieBGoode/calendar-ghost/issues/new/choose). Discussions
+and issues are public: do not include event content, calendar IDs, email addresses, credentials, or
+unredacted logs. If you cannot use GitHub, email support@calendarghost.com. Report security
+vulnerabilities privately, as [SECURITY.md](../SECURITY.md) describes.

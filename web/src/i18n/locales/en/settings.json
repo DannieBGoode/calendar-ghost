@@ -3,7 +3,14 @@
     "loading": "Loading settings",
     "loadFailure": "Settings could not load",
     "title": "Settings",
-    "intro": "Your Google accounts, sign-in, and integrations. Appearance applies to this browser only."
+    "intro": "Your Google accounts and integrations, and your own account.",
+    "introAdministrator": "Your Google accounts and integrations, your own account, and this installation."
+  },
+  "tabs": {
+    "label": "Settings sections",
+    "connections": "Connections",
+    "account": "Your account",
+    "installation": "Installation"
   },
   "ownAccount": {
     "title": "Your account",
@@ -31,7 +38,9 @@
       "title": "Incident emails",
       "body": "When one of your rules needs attention, Calendar Ghost can also email you. Activity always lists every incident.",
       "label": "Email me about incidents",
-      "unavailable": "This Calendar Ghost does not send email, so incidents appear only in Activity.",
+      "unavailable": "Your administrator can set up email for this Calendar Ghost. Until then, incidents appear in Activity.",
+      "unavailableAdministrator": "To send incident emails, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
+      "setUpEmail": "How to set up email",
       "on": "Calendar Ghost now emails you about incidents.",
       "off": "Calendar Ghost no longer emails you about incidents. They still appear in Activity."
     },
@@ -41,6 +50,9 @@
       "open": "Delete your account",
       "confirmTitle": "Delete your account permanently?",
       "confirmBody": "Your rules, Google accounts, tokens, and Activity are removed, and you are signed out. Backups taken before now keep them until they rotate out. This cannot be undone.",
+      "confirmBodyLastUser": "You are the last person here. Your rules, Google accounts, tokens, and Activity are removed, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Backups taken before now keep them until they rotate out. This cannot be undone.",
+      "needsAdministrator": "Someone else must be an administrator before you can delete your account. Make another person an administrator under Installation, then come back.",
+      "openInstallation": "Open Installation",
       "legend": "The events your rules wrote",
       "deleteEvents": "Delete them (recommended)",
       "deleteEventsHint": "They are removed from your calendars wherever Calendar Ghost can still reach them.",

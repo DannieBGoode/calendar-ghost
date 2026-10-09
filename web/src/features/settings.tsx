@@ -5,10 +5,9 @@ import { useEffect, useState } from "react"
 import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { Button } from "@/components/ui/button"
-import { NativeSelect } from "@/components/ui/native-select"
-import { useTheme } from "@/components/theme-provider"
 import { useI18n } from "@/i18n/provider"
 import { api, type SessionStatus } from "@/lib/api"
+import { DEFAULT_SETTINGS_TAB, type OpenSettingsTab, type SettingsTab } from "@/lib/navigation"
 import {
   OAUTH_OUTCOME_MESSAGES,
   clearAuthorizationStart,
@@ -17,21 +16,23 @@ import {
   type OAuthOutcome,
 } from "@/lib/oauth-redirect"
 import { isAdministrator } from "@/lib/people"
-import type { DarkPalette, ThemePreference } from "@/lib/theme"
 import { useGoogleReturn } from "@/lib/use-google-return"
 import { useRegistration } from "@/lib/use-registration"
 import { cn } from "@/lib/utils"
 import { AccountsSection } from "@/features/settings-accounts"
+import { AppearanceSection } from "@/features/settings-appearance"
 import { IntegrationsSection } from "@/features/settings-integrations"
 import { OwnAccountSection } from "@/features/settings-own-account"
 import { PeopleSection } from "@/features/settings-people"
 import { RegistrationSection } from "@/features/settings-registration"
 import { StorageSection } from "@/features/settings-storage"
+import { SettingsTabs } from "@/features/settings-tabs"
 
 export { GoogleReturnHelp } from "@/features/settings-google-return"
 export { IntegrationsSection } from "@/features/settings-integrations"
 
-export function SettingsPage() {
+/** Settings at one tab. Every tab waits for the Google configuration and the session. */
+export function SettingsPage({ tab, onOpenTab }: { tab: SettingsTab; onOpenTab: OpenSettingsTab }) {
   const { t } = useI18n()
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
   const session = useQuery({ queryKey: ["session"], queryFn: api.session })
@@ -45,6 +46,8 @@ export function SettingsPage() {
       googleConfigured={google.data.configured}
       redirectUri={google.data.redirect_uri}
       session={session.data}
+      tab={tab}
+      onOpenTab={onOpenTab}
     />
   )
 }
@@ -81,61 +84,80 @@ function useSettingsArrival(): SettingsArrival {
   return arrival
 }
 
-function SettingsView({
-  googleConfigured,
-  redirectUri,
-  session,
-}: {
+type SettingsViewProps = {
   googleConfigured: boolean
   redirectUri: string | null
   session: SessionStatus
-}) {
+  tab: SettingsTab
+  onOpenTab: OpenSettingsTab
+}
+
+function SettingsView({ session, tab, onOpenTab, ...connections }: SettingsViewProps) {
   const { t } = useI18n()
-  const { outcome, accountId, resumed } = useSettingsArrival()
-  const returnHelp = useGoogleReturn(redirectUri)
   const { user } = session
   const administrator = isAdministrator(user)
+  // Someone else opening Installation's address sees Connections, as Settings itself shows.
+  const shown = tab === "installation" && !administrator ? DEFAULT_SETTINGS_TAB : tab
 
   return (
     <div className="page-section settings-page">
       <div>
         <h1>{t("settings.page.title")}</h1>
-        <p className="page-intro">{t("settings.page.intro")}</p>
+        <p className="page-intro">{t(administrator ? "settings.page.introAdministrator" : "settings.page.intro")}</p>
       </div>
+      <SettingsTabs current={shown} administrator={administrator} onOpen={onOpenTab} />
+      {shown === "connections" && <ConnectionsTab {...connections} administrator={administrator} />}
+      {shown === "account" && user && (
+        <OwnAccountSection
+          user={user}
+          sendsEmail={session.installation_sends_email}
+          onOpenInstallation={() => onOpenTab("installation")}
+        />
+      )}
+      {shown === "account" && <AppearanceSection />}
+      {shown === "installation" && user && <InstallationTab currentUserId={user.id} />}
+    </div>
+  )
+}
 
+/** Google accounts, with what brought the User back from Google above them, and Integrations. */
+function ConnectionsTab({
+  googleConfigured,
+  redirectUri,
+  administrator,
+}: {
+  googleConfigured: boolean
+  redirectUri: string | null
+  administrator: boolean
+}) {
+  const { outcome, accountId, resumed } = useSettingsArrival()
+  const returnHelp = useGoogleReturn(redirectUri)
+  return (
+    <>
       {outcome && <OAuthOutcomeNotice outcome={outcome} resumed={resumed} googleConfigured={googleConfigured} />}
-
       <AccountsSection
         googleConfigured={googleConfigured}
         justConnected={outcome === "connected"}
         focusAccountId={accountId}
         returnHelp={returnHelp}
       />
-
-      {user && <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} />}
-
-      {administrator && user && <AdministrationSections currentUserId={user.id} />}
-
-      {administrator && <StorageSection />}
-
       <IntegrationsSection administrator={administrator} />
-
-      <AppearanceSection />
-    </div>
+    </>
   )
 }
 
 /**
- * Who can join and, unless only the administrator may use this installation, the people here.
- * Only an Installation Administrator sees them; the server refuses everyone else.
+ * Who can join, the people here unless only the administrator may use this installation, and
+ * storage. Only an Installation Administrator sees them; the server refuses everyone else.
  */
-function AdministrationSections({ currentUserId }: { currentUserId: string }) {
+function InstallationTab({ currentUserId }: { currentUserId: string }) {
   const registration = useRegistration()
   const policy = registration.registration.data?.policy
   return (
     <>
       <RegistrationSection commands={registration} />
       {policy === "invitation_only" && <PeopleSection currentUserId={currentUserId} />}
+      <StorageSection />
     </>
   )
 }
@@ -173,57 +195,5 @@ function OAuthOutcomeNotice({
         </Button>
       )}
     </div>
-  )
-}
-
-function AppearanceSection() {
-  const { t } = useI18n()
-  const { preference, setPreference, darkPalette, setDarkPalette } = useTheme()
-  return (
-    <section className="settings-section" aria-labelledby="appearance-title">
-      <div className="section-heading">
-        <div>
-          <h2 id="appearance-title">{t("settings.appearance.title")}</h2>
-          <p>{t("settings.appearance.intro")}</p>
-        </div>
-      </div>
-      <div className="settings-list">
-        <div className="setting-row">
-          <div>
-            <h3 id="theme-title">{t("settings.appearance.theme.title")}</h3>
-            <p>{t("settings.appearance.theme.body")}</p>
-          </div>
-          <div className="appearance-control">
-            <NativeSelect
-              id="theme-preference"
-              aria-labelledby="theme-title"
-              value={preference}
-              onChange={(event) => setPreference(event.target.value as ThemePreference)}
-            >
-              <option value="system">{t("settings.appearance.theme.system")}</option>
-              <option value="light">{t("settings.appearance.theme.light")}</option>
-              <option value="dark">{t("settings.appearance.theme.dark")}</option>
-            </NativeSelect>
-          </div>
-        </div>
-        <div className="setting-row">
-          <div>
-            <h3 id="dark-palette-title">{t("settings.appearance.darkPalette.title")}</h3>
-            <p>{t("settings.appearance.darkPalette.body")}</p>
-          </div>
-          <div className="appearance-control">
-            <NativeSelect
-              id="dark-palette"
-              aria-labelledby="dark-palette-title"
-              value={darkPalette}
-              onChange={(event) => setDarkPalette(event.target.value as DarkPalette)}
-            >
-              <option value="twilight">{t("settings.appearance.darkPalette.twilight")}</option>
-              <option value="midnight">{t("settings.appearance.darkPalette.midnight")}</option>
-            </NativeSelect>
-          </div>
-        </div>
-      </div>
-    </section>
   )
 }

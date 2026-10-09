@@ -240,6 +240,8 @@ export const api = {
     }),
   setIncidentEmails: (notifyByEmail: boolean) =>
     call("/api/v1/account/notifications", "put", { body: { notify_by_email: notifyByEmail } }),
+  /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
+  ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),
   deleteOwnAccount: (password: string, projections: ProjectionHandling) =>
     call("/api/v1/account", "delete", { body: { password, projections } }),
   registration: () => call("/api/v1/registration", "get"),

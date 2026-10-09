@@ -10,13 +10,26 @@ import { SelfDeletionItem } from "@/features/settings-self-deletion"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { api, type SignedInUser } from "@/lib/api"
+import { INCIDENT_EMAIL_HELP_URL } from "@/lib/brand"
 import { newPasswordReady } from "@/lib/passwords"
+import { isAdministrator } from "@/lib/people"
 import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
 
 type Announce = (message: string) => void
 
-/** The signed-in User's own sign-in, incident emails, and deletion; every User has it. */
-export function OwnAccountSection({ user, sendsEmail }: { user: SignedInUser; sendsEmail: boolean }) {
+/**
+ * The signed-in User's own sign-in, incident emails, and deletion; every User has it.
+ * `onOpenInstallation` opens the Installation tab, where an administrator names another one.
+ */
+export function OwnAccountSection({
+  user,
+  sendsEmail,
+  onOpenInstallation,
+}: {
+  user: SignedInUser
+  sendsEmail: boolean
+  onOpenInstallation: () => void
+}) {
   const { t } = useI18n()
   const [message, setMessage] = useState("")
   return (
@@ -31,7 +44,7 @@ export function OwnAccountSection({ user, sendsEmail }: { user: SignedInUser; se
         <EmailItem email={user.email} onDone={setMessage} />
         <PasswordItem onDone={setMessage} />
         <IncidentEmailsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
-        <SelfDeletionItem />
+        <SelfDeletionItem onOpenInstallation={onOpenInstallation} />
       </div>
       {message && <p role="status">{message}</p>}
     </section>
@@ -178,7 +191,10 @@ function PasswordItem({ onDone }: { onDone: Announce }) {
   )
 }
 
-/** Whether Incident Notifications also come by email; the Web UI keeps every incident in Activity. */
+/**
+ * Whether Incident Notifications also come by email; the Web UI keeps every incident in Activity.
+ * Where the installation sends no email there is nothing to choose, so it says who can set it up.
+ */
 function IncidentEmailsItem({
   user,
   sendsEmail,
@@ -188,6 +204,34 @@ function IncidentEmailsItem({
   sendsEmail: boolean
   onDone: Announce
 }) {
+  return sendsEmail ? <IncidentEmailsChoice user={user} onDone={onDone} /> : <IncidentEmailsUnavailable user={user} />
+}
+
+function IncidentEmailsUnavailable({ user }: { user: SignedInUser }) {
+  const { t } = useI18n()
+  const administrator = isAdministrator(user)
+  return (
+    <div className="setting-item">
+      <div className="setting-row">
+        <div>
+          <h3>{t("settings.ownAccount.notifications.title")}</h3>
+          <p>
+            {administrator
+              ? t("settings.ownAccount.notifications.unavailableAdministrator")
+              : t("settings.ownAccount.notifications.unavailable")}
+          </p>
+        </div>
+        {administrator && (
+          <a className="text-link" href={INCIDENT_EMAIL_HELP_URL} target="_blank" rel="noreferrer">
+            {t("settings.ownAccount.notifications.setUpEmail")}
+          </a>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function IncidentEmailsChoice({ user, onDone }: { user: SignedInUser; onDone: Announce }) {
   const i18n = useI18n()
   const { t } = i18n
   const queryClient = useQueryClient()
@@ -199,20 +243,20 @@ function IncidentEmailsItem({
     },
   })
   const saved = change.data?.notify_by_email ?? user.notify_by_email
-  const checked = sendsEmail && (change.isPending ? change.variables : saved)
+  const checked = change.isPending ? change.variables : saved
   return (
     <div className="setting-item">
       <div className="setting-row">
         <div>
           <h3>{t("settings.ownAccount.notifications.title")}</h3>
-          <p>{sendsEmail ? t("settings.ownAccount.notifications.body") : t("settings.ownAccount.notifications.unavailable")}</p>
+          <p>{t("settings.ownAccount.notifications.body")}</p>
         </div>
         <label className="checkbox-row incident-email-toggle" htmlFor="own-incident-emails">
           <input
             id="own-incident-emails"
             type="checkbox"
             checked={checked}
-            disabled={!sendsEmail || change.isPending}
+            disabled={change.isPending}
             onChange={(event) => change.mutate(event.target.checked)}
           />
           <span>

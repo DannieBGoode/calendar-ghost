@@ -1237,7 +1237,19 @@ def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path
     assert "from __future__ import annotations" not in response.text
 
 
-@pytest.mark.parametrize("path", ["/overview", "/rules", "/rules/rule-1", "/activity", "/settings"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/overview",
+        "/rules",
+        "/rules/rule-1",
+        "/activity",
+        "/settings",
+        "/settings/connections",
+        "/settings/account",
+        "/settings/installation",
+    ],
+)
 def test_frontend_fallback_serves_each_application_section(tmp_path: Path, path: str) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 

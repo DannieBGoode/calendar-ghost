@@ -127,17 +127,17 @@ least 12 characters. Then:
 5. Check **Activity** after the first run and confirm that the destination contains only the
    projections you intended.
 
-Check **Settings → Connected accounts** if a calendar is missing. The access check uses read-only
-requests and reports which calendars can be used as destinations.
+Check **Settings → Connections → Connected accounts** if a calendar is missing. The access check
+uses read-only requests and reports which calendars can be used as destinations.
 
 ### Invite other people
 
 A new installation is for you alone: its Registration Policy is **Only me**, so nobody else can
 join and Settings shows nothing about other people. To share it with your household:
 
-1. Open **Settings → Who can join** and choose **Invitation only**.
-2. Under **People**, choose **Invite someone** and pass the link on yourself. It works once and
-   expires after 7 days; the person chooses their own email and password.
+1. Open **Settings → Installation → Who can join** and choose **Invitation only**.
+2. Under **People** on the same tab, choose **Invite someone** and pass the link on yourself. It
+   works once and expires after 7 days; the person chooses their own email and password.
 3. Everyone's Google accounts, rules, Activity, and tokens are their own. As the administrator you
    see each person's email, role, whether they may sign in, and when they last did, never their
    calendars or events.
@@ -177,8 +177,9 @@ options.
 Installation Status is the authenticated counterpart to `/health`: it reports which of your rules
 are running, which are stopped and why, whether the scheduler itself is still running passes, and
 one overall verdict, through `GET /api/v1/status` and an MCP server at `/mcp`. Both require an
-Integration Token, a credential you issue in **Settings → Integrations** for one monitor, dashboard,
-or agent at a time. A token belongs to the person who issued it and reads only their status.
+Integration Token, a credential you issue in **Settings → Connections → Integrations** for one
+monitor, dashboard, or agent at a time. A token belongs to the person who issued it and reads only
+their status.
 
 As an administrator, you may also let a token read Installation Health at
 `GET /api/v1/installation/health`: incidents about the installation itself, such as a stalled
@@ -198,8 +199,8 @@ logging configuration before relying on it.
 
 To issue a token:
 
-1. Open **Settings → Integrations** and choose **Show**. The group stays collapsed to one line, such
-   as "2 tokens · last used 3 minutes ago", until you open it.
+1. Open **Settings → Connections → Integrations** and choose **Show**. The group stays collapsed to
+   one line, such as "2 tokens · last used 3 minutes ago", until you open it.
 2. Under **Issue a token**, name the tool that will use it, for example "Uptime Kuma", and choose
    **Issue token**.
 3. Copy the token, then choose **Done**. It is shown only once. If you lose it, issue a new one and

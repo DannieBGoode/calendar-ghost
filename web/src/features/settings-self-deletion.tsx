@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Trash2 } from "lucide-react"
 import { useRef, useState } from "react"
 
@@ -8,13 +8,49 @@ import { Button } from "@/components/ui/button"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { api, type ProjectionHandling } from "@/lib/api"
+import { appPathForSettingsTab, isPlainLeftClick } from "@/lib/navigation"
 
 /**
  * User Deletion of the signed-in User. They choose whether the events their rules wrote are
  * deleted (recommended) or kept as ordinary events, and confirm with their password. Afterward
- * the app returns to the sign-in screen.
+ * the app returns to the sign-in screen, or to setup when they were the last User. The last
+ * Installation Administrator cannot leave while anyone else remains, so they are sent to
+ * Installation to name another one instead.
  */
-export function SelfDeletionItem() {
+export function SelfDeletionItem({ onOpenInstallation }: { onOpenInstallation: () => void }) {
+  // Asked afresh each time it is shown: who else is here and who administers it change elsewhere.
+  const deletion = useQuery({ queryKey: ["account-deletion"], queryFn: api.ownAccountDeletion, staleTime: 0 })
+  if (deletion.data?.needs_another_administrator) return <NeedsAnotherAdministrator onOpen={onOpenInstallation} />
+  // Until the answer arrives, or if it cannot, the server still refuses what it must.
+  return <SelfDeletion lastUser={deletion.data?.last_user === true} />
+}
+
+function NeedsAnotherAdministrator({ onOpen }: { onOpen: () => void }) {
+  const { t } = useI18n()
+  return (
+    <div className="setting-item">
+      <div className="setting-row">
+        <div>
+          <h3>{t("settings.ownAccount.delete.title")}</h3>
+          <p>{t("settings.ownAccount.delete.needsAdministrator")}</p>
+        </div>
+        <a
+          className="text-link"
+          href={appPathForSettingsTab("installation")}
+          onClick={(event) => {
+            if (!isPlainLeftClick(event)) return
+            event.preventDefault()
+            onOpen()
+          }}
+        >
+          {t("settings.ownAccount.delete.openInstallation")}
+        </a>
+      </div>
+    </div>
+  )
+}
+
+function SelfDeletion({ lastUser }: { lastUser: boolean }) {
   const i18n = useI18n()
   const { t } = i18n
   const queryClient = useQueryClient()
@@ -25,8 +61,9 @@ export function SelfDeletionItem() {
   const remove = useMutation({
     mutationFn: () => api.deleteOwnAccount(password, projections),
     // The session ended with the User. Resetting drops every answer they could see and asks for
-    // the session again, which shows the sign-in screen; `clear()` alone would leave the mounted
-    // session query detached from the cache, so the app would not notice.
+    // setup and the session again, which shows the sign-in screen, or setup after the last User;
+    // `clear()` alone would leave the mounted queries detached from the cache, so the app would
+    // not notice.
     onSuccess: () => queryClient.resetQueries(),
   })
 
@@ -61,7 +98,7 @@ export function SelfDeletionItem() {
         <DestructiveConfirmation
           id="own-delete-confirmation"
           title={t("settings.ownAccount.delete.confirmTitle")}
-          body={t("settings.ownAccount.delete.confirmBody")}
+          body={t(lastUser ? "settings.ownAccount.delete.confirmBodyLastUser" : "settings.ownAccount.delete.confirmBody")}
           cancelLabel={t("settings.ownAccount.delete.keep")}
           confirmLabel={t("settings.ownAccount.delete.confirm")}
           pendingLabel={t("settings.ownAccount.delete.pending")}

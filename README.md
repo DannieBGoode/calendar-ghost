@@ -224,23 +224,24 @@ a new draft; removing a rule asks whether to delete its projections (recommended
 ordinary events that are no longer managed. Removal never deletes an event whose ownership it cannot
 verify; such events are left in place and listed under **Blocked** in Activity.
 
-Use **Settings → Connected accounts** to review every authorized identity, connect another Google
-account, check its Calendar API access, or disconnect it. **Check access** verifies calendar-list
-and event permissions with read-only requests and reports how many visible calendars can be used as
-destinations. Disconnecting removes stored Google credentials and degrades any enabled rule that
-uses the identity; mappings, Managed Projections, and incremental positions are preserved for safe
-reauthorization. A disconnected account, or one Google stopped accepting, is listed first, marked
-**Disconnected** or **Needs reauthorization**, says how many of its rules stopped, and offers
-**Reauthorize account**, which is disabled until Google OAuth is configured. Once Google accepts the
-account again, rules that stopped only because its access lapsed restart on their own. Accounts connected before profile photos were supported show initials until they
-are connected again with **Connect Google account**, which updates the existing identity in place.
+Use **Settings → Connections → Connected accounts** to review every authorized identity, connect
+another Google account, check its Calendar API access, or disconnect it. **Check access** verifies
+calendar-list and event permissions with read-only requests and reports how many visible calendars
+can be used as destinations. Disconnecting removes stored Google credentials and degrades any
+enabled rule that uses the identity; mappings, Managed Projections, and incremental positions are
+preserved for safe reauthorization. A disconnected account, or one Google stopped accepting, is
+listed first, marked **Disconnected** or **Needs reauthorization**, says how many of its rules
+stopped, and offers **Reauthorize account**, which is disabled until Google OAuth is configured.
+Once Google accepts the account again, rules that stopped only because its access lapsed restart on
+their own. Accounts connected before profile photos were supported show initials until they are
+connected again with **Connect Google account**, which updates the existing identity in place.
 
-Use **Settings → Storage** to see the database size, the number of Activity entries, the oldest
-one, and any space earlier clearing left to reclaim, and clear Activity older than 30, 90, 180, or
-365 days; an inline confirmation shows how many entries that removes before you confirm, and offers
-**Reclaim space** when nothing is old enough but space is still left. The Logs row shows the size and date range of the
-service's own rotating log files and offers **Download** and **Purge logs**, so an administrator
-can retrieve or clear them without SSH access to the host.
+Use **Settings → Installation → Storage** to see the database size, the number of Activity entries,
+the oldest one, and any space earlier clearing left to reclaim, and clear Activity older than 30,
+90, 180, or 365 days; an inline confirmation shows how many entries that removes before you confirm,
+and offers **Reclaim space** when nothing is old enough but space is still left. The Logs row shows
+the size and date range of the service's own rotating log files and offers **Download** and **Purge
+logs**, so an administrator can retrieve or clear them without SSH access to the host.
 
 Check service health with:
 
@@ -257,10 +258,10 @@ docker compose down
 ### 4. Connect monitors and AI agents (optional)
 
 Uptime Kuma, homelab dashboards such as Homepage, and AI agents such as Claude Code or Codex can
-read whether synchronization is healthy. Open **Settings → Integrations**, choose **Show**, name a
-token for the tool that will use it, and choose **Issue token**. Copy the token: it is shown once.
-A token only reads status; it can never change a rule or a calendar, and you can revoke it at any
-time.
+read whether synchronization is healthy. Open **Settings → Connections → Integrations**, choose
+**Show**, name a token for the tool that will use it, and choose **Issue token**. Copy the token: it
+is shown once. A token only reads status; it can never change a rule or a calendar, and you can
+revoke it at any time.
 
 Read the status with any HTTP client:
 
@@ -317,10 +318,10 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
   [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). Deleting a person removes
   them from the live database; backups keep them until they rotate out.
-- Activity is kept until an administrator clears it. Settings → Storage shows the database size
-  and Activity's entry count and oldest entry, and clears entries older than 30, 90, 180, or 365
-  days, keeping, per rule and source event, the older entries newer ones are compared with
-  (normally the latest entry older than the cutoff and the latest that recorded a title)
+- Activity is kept until an administrator clears it. **Settings → Installation → Storage** shows the
+  database size and Activity's entry count and oldest entry, and clears entries older than 30, 90,
+  180, or 365 days, keeping, per rule and source event, the older entries newer ones are compared
+  with (normally the latest entry older than the cutoff and the latest that recorded a title)
   ([ADR 0019](docs/adr/0019-administrator-chosen-activity-retention.md)).
 - Mappings retain provider IDs, revisions, and a non-reversible projection fingerprint.
 - Google access and refresh credentials are encrypted at rest with AES-256-GCM using the separate

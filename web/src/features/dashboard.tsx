@@ -3,7 +3,14 @@ import { OverviewView } from "@/features/overview"
 import { RuleDetailsView } from "@/features/rule-details"
 import { RulesView } from "@/features/rules"
 import { SettingsPage } from "@/features/settings"
-import type { AppLocation, OpenRule, ViewChange, ViewOptions } from "@/lib/navigation"
+import {
+  DEFAULT_SETTINGS_TAB,
+  type AppLocation,
+  type OpenRule,
+  type OpenSettingsTab,
+  type ViewChange,
+  type ViewOptions,
+} from "@/lib/navigation"
 
 /** Routes to one view; each view loads only the data it needs so none waits on another's. */
 export function Dashboard({
@@ -12,12 +19,14 @@ export function Dashboard({
   visit,
   onViewChange,
   onOpenRule,
+  onOpenSettingsTab,
 }: {
   location: AppLocation
   arrival: ViewOptions
   visit: number
   onViewChange: ViewChange
   onOpenRule: OpenRule
+  onOpenSettingsTab: OpenSettingsTab
 }) {
   const view = location.view
   if (view === "rules" && location.ruleId !== null) {
@@ -42,6 +51,6 @@ export function Dashboard({
   }
   // Remounted on every arrival so its filters always match the address it was opened at.
   if (view === "activity") return <ActivityView key={visit} onViewChange={onViewChange} onOpenRule={onOpenRule} />
-  if (view === "settings") return <SettingsPage />
+  if (view === "settings") return <SettingsPage tab={location.settingsTab ?? DEFAULT_SETTINGS_TAB} onOpenTab={onOpenSettingsTab} />
   return <OverviewView onViewChange={onViewChange} onOpenRule={onOpenRule} />
 }

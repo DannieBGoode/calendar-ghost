@@ -4,6 +4,7 @@ import {
   appLocationFromPathname,
   appPathForLocation,
   appPathForRule,
+  appPathForSettingsTab,
   appPathForView,
   isKnownAppPath,
   isPlainLeftClick,
@@ -27,6 +28,27 @@ describe("application section URLs", () => {
     expect(appLocationFromPathname("/").view).toBe("overview")
     expect(appLocationFromPathname("/unknown").view).toBe("overview")
     expect(isKnownAppPath("/unknown")).toBe(false)
+  })
+})
+
+describe("Settings tab URLs", () => {
+  it.each(["connections", "account", "installation"] as const)("round-trips the %s tab", (settingsTab) => {
+    const path = appPathForSettingsTab(settingsTab)
+    expect(path).toBe(`/settings/${settingsTab}`)
+    expect(appLocationFromPathname(path)).toEqual({ view: "settings", ruleId: null, settingsTab })
+    expect(appLocationFromPathname(`${path}/`).settingsTab).toBe(settingsTab)
+    expect(appPathForLocation({ view: "settings", ruleId: null, settingsTab })).toBe(path)
+    expect(isKnownAppPath(path)).toBe(true)
+  })
+
+  it("opens Settings without a tab at its own address, which shows Connections", () => {
+    expect(appLocationFromPathname("/settings")).toEqual({ view: "settings", ruleId: null })
+    expect(appPathForLocation({ view: "settings", ruleId: null })).toBe("/settings")
+  })
+
+  it.each(["/settings/unknown", "/settings/account/more", "/settingsx/account"])("falls back safely for %s", (path) => {
+    expect(appLocationFromPathname(path)).toEqual({ view: "overview", ruleId: null })
+    expect(isKnownAppPath(path)).toBe(false)
   })
 })
 

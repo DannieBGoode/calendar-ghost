@@ -1328,6 +1328,57 @@ p {
   gap: 3rem;
 }
 
+/* The Settings tabs are links, underlined like the primary navigation's items. On a screen too
+   narrow for them they scroll sideways rather than wrap, so the underline stays on one line. */
+.settings-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: -1.5rem;
+  overflow-x: auto;
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+.settings-tab {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  min-height: 2.75rem;
+  align-items: center;
+  padding: 0 0.8rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--motion-fast) var(--ease-out);
+}
+
+.settings-tab::after {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0;
+  left: 0.75rem;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: transparent;
+  content: "";
+}
+
+.settings-tab:hover,
+.settings-tab.active {
+  color: var(--foreground);
+}
+
+.settings-tab.active::after {
+  background: var(--primary);
+}
+
+.settings-tab:focus-visible {
+  border-radius: 0.375rem;
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
 /* Each section's rows sit in one bordered group, so a section heading never reads as a row. */
 .settings-section .settings-list,
 .account-group,

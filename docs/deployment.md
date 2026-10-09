@@ -70,7 +70,7 @@ on `audit_entries(rule_id, source_event_id, id)`. New entries record their sourc
 time; existing entries are not backfilled and appear in Activity without an event name. Rolling back
 works with the same database: earlier releases ignore the columns and index and look titles up from
 Google again, but recorded titles stay in the database until their entries are deleted, including by
-clearing old Activity from Settings → Storage
+clearing old Activity from **Settings → Installation → Storage**
 ([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 
 Migration 10 adds the `pending_exception_replays` table, which stores only the identifier of each
@@ -209,18 +209,18 @@ three files of 10 MB, so a long-running Raspberry Pi does not fill its storage. 
 `docker compose logs -f app`; [Troubleshooting](troubleshooting.md#reading-the-logs) explains each
 line.
 
-The service also writes its own lines, those of the `calendar_sync` loggers, to rotating log
-files, next to the database by default: `<database directory>/logs/calendar-sync.log` plus up to
-four rotated files: at most five files of 5 MB each, 25 MB in total. The oldest is deleted when the
+The service also writes its own lines, those of the `calendar_sync` loggers, to rotating log files,
+next to the database by default: `<database directory>/logs/calendar-sync.log` plus up to four
+rotated files: at most five files of 5 MB each, 25 MB in total. The oldest is deleted when the
 current file fills. Uvicorn's request and error lines stay on standard error only, so they appear in
-`docker compose logs` but not in these files. Compose passes `CALENDAR_SYNC_LOG_DIR`
-from `.env` and defaults it to `/data/logs` on the data volume when it is unset, as it is in
-`.env.example`. Set it to another path to use a different directory (inside the container, on a
-mounted volume so the files survive a rebuild), or set it to an empty value to turn file logging
-off; if the configured directory cannot be used, the service logs one warning, keeps logging to
-standard error, and Settings shows file logging as off. Settings
-→ Storage shows these files' size and date range and offers Download and Purge logs, so an
-administrator can retrieve or clear them without SSH access to the host.
+`docker compose logs` but not in these files. Compose passes `CALENDAR_SYNC_LOG_DIR` from `.env` and
+defaults it to `/data/logs` on the data volume when it is unset, as it is in `.env.example`. Set it
+to another path to use a different directory (inside the container, on a mounted volume so the files
+survive a rebuild), or set it to an empty value to turn file logging off; if the configured
+directory cannot be used, the service logs one warning, keeps logging to standard error, and
+Settings shows file logging as off. **Settings → Installation → Storage** shows these files' size
+and date range and offers Download and Purge logs, so an administrator can retrieve or clear them
+without SSH access to the host.
 
 For access beyond localhost or a trusted LAN, place the service behind HTTPS and set `CALENDAR_SYNC_SECURE_COOKIES=true`. Do not expose the service directly to the public internet.
 
@@ -266,13 +266,13 @@ reveal them, and a backup keeps values older than 90 days until it rotates. Repl
 master key makes that history unreadable: Activity then lists which fields changed without their
 values, and each event's next change is described afresh.
 
-Clearing old Activity from Settings → Storage removes rows from the live database only; a backup
-taken before the clear keeps those entries until it rotates out of your backup schedule
-([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
+Clearing old Activity from **Settings → Installation → Storage** removes rows from the live database
+only; a backup taken before the clear keeps those entries until it rotates out of your backup
+schedule ([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 
-Disconnecting a Google identity from Settings replaces its encrypted credential payload with an
-empty encrypted value. Directional Sync Rules and their mappings remain in SQLite so the same
-identity can be reauthorized and reconciled later.
+Disconnecting a Google identity from **Settings → Connections** replaces its encrypted credential
+payload with an empty encrypted value. Directional Sync Rules and their mappings remain in SQLite so
+the same identity can be reauthorized and reconciled later.
 
 ## Incident notifications
 
