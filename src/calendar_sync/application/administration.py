@@ -37,6 +37,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.domain.access import (
     LastAdministrator,
+    OnlyMeNeedsOneUser,
     RegistrationPolicy,
     Role,
     User,
@@ -62,6 +63,10 @@ class RegistrationClosed(ApplicationError):
 
 class LinkUnusable(ApplicationError):
     """The link was used, revoked, replaced, or has expired, or nobody may join now."""
+
+
+class YourOwnResetLink(ApplicationError):
+    """An Installation Administrator changes their own password with it, under Your account."""
 
 
 class YourOwnState(ApplicationError):
@@ -243,6 +248,9 @@ class IssuePasswordReset:
 
     def execute(self, actor: UserId, user_id: UserId) -> IssuedLink:
         require_administrator(self.users, actor)
+        if user_id == actor:
+            # A link would let whoever holds this session skip the current password.
+            raise YourOwnResetLink("change your own password with your current one")
         _existing(self.users, user_id)
         return self.links.issue(user_id, actor, self.clock.now())
 
@@ -441,7 +449,13 @@ class DeleteOwnAccount:
             raise IncorrectPassword("that is not your current password")
         _require_may_leave(self.users, user)
         if self.users.count() == 1:
-            self._return_to_setup()
+            try:
+                self._return_to_setup()
+            except OnlyMeNeedsOneUser as error:
+                # Someone joined since the check, so this User is again the last administrator.
+                raise LastAdministrator(
+                    "someone joined meanwhile; they need an administrator"
+                ) from error
         result = _remove_rules(self.owned(user.id), handling, keep_unreachable=False)
         self.users.delete(user.id)
         if self.users.count() == 0:

@@ -27,6 +27,7 @@ from calendar_sync.application.administration import (
     SetRegistrationPolicy,
     ShowRegistration,
     UserNotFound,
+    YourOwnResetLink,
     YourOwnState,
 )
 from calendar_sync.application.errors import EmailTaken, IncorrectCredentials
@@ -355,6 +356,15 @@ def test_a_newer_reset_link_replaces_the_earlier_one() -> None:
 
     assert not check.execute(earlier.token, CLIENT)
     assert check.execute(later.token, CLIENT)
+
+
+def test_an_administrator_changes_their_own_password_with_it_not_with_a_reset_link() -> None:
+    installation = _installation(MEMBER)
+    issue = IssuePasswordReset(installation.users, installation.resets, installation.clock)
+
+    # A reset link would let whoever holds the session skip the current password.
+    with pytest.raises(YourOwnResetLink):
+        issue.execute(ADMIN.id, ADMIN.id)
 
 
 def test_only_an_administrator_issues_a_reset_link_for_a_user_who_exists() -> None:

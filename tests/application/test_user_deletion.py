@@ -295,3 +295,20 @@ def test_anyone_else_may_leave_while_others_remain() -> None:
     assert ShowOwnAccountDeletion(installation.users).execute(MEMBER.id) == (
         OwnAccountDeletion(needs_another_administrator=False, last_user=False)
     )
+
+
+def test_someone_joining_while_the_last_user_leaves_keeps_their_administrator() -> None:
+    installation = Installation(people=(ADMIN,))
+    set_policy = installation.registration.set_policy
+
+    def joined_meanwhile(policy: RegistrationPolicy) -> None:
+        if installation.users.get(MEMBER.id) is None:
+            installation.users.add(MEMBER, f"hashed:{PASSWORD}")
+        set_policy(policy)
+
+    installation.registration.set_policy = joined_meanwhile  # type: ignore[method-assign]
+
+    with pytest.raises(LastAdministrator):
+        installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
+    assert installation.users.get(ADMIN.id) == ADMIN
+    assert installation.rules_of(MEMBER.id) == (rule().id,)

@@ -22,6 +22,7 @@ from calendar_sync.application.administration import (
     RegistrationClosed,
     UserDeletionInterrupted,
     UserNotFound,
+    YourOwnResetLink,
     YourOwnState,
 )
 from calendar_sync.application.errors import (
@@ -131,6 +132,7 @@ _CODES: dict[type[Exception], str] = {
     UserNotFound: "user_not_found",
     RegistrationClosed: "registration_closed",
     LinkUnusable: "link_unusable",
+    YourOwnResetLink: "your_own_reset_link",
     YourOwnState: "your_own_state",
     LastAdministrator: "last_administrator",
     OnlyMeNeedsOneUser: "only_me_needs_one_user",

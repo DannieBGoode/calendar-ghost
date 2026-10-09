@@ -248,3 +248,12 @@ def test_a_client_trying_unusable_links_is_throttled_on_every_link_route(tmp_pat
     assert [response.status_code for response in throttled] == [429, 429, 429, 429]
     assert {response.json()["code"] for response in throttled} == {"sign_in_throttled"}
     assert all(int(response.headers["retry-after"]) > 0 for response in throttled)
+
+
+def test_an_administrator_cannot_create_a_reset_link_for_themself(tmp_path: Path) -> None:
+    with _client(tmp_path) as admin:
+        admin.post("/api/v1/setup/admin", json=ADMIN)
+        admin_id = admin.get("/api/v1/session").json()["user"]["id"]
+        refused = admin.post(f"/api/v1/users/{admin_id}/password-reset-links")
+
+    assert (refused.status_code, refused.json()["code"]) == (409, "your_own_reset_link")

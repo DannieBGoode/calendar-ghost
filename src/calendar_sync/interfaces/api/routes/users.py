@@ -34,6 +34,7 @@ from calendar_sync.application.administration import (
     ShowRegistration,
     UserDeletionInterrupted,
     UserNotFound,
+    YourOwnResetLink,
     YourOwnState,
 )
 from calendar_sync.application.errors import (
@@ -315,6 +316,8 @@ def issue_password_reset(
         return _link(services.administration.issue_password_reset.execute(actor, UserId(user_id)))
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
+    except YourOwnResetLink as error:
+        raise problem_from(status.HTTP_409_CONFLICT, error) from error
 
 
 @router.delete("/api/v1/users/{user_id}", response_model=UserDeletionResponse)

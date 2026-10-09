@@ -103,6 +103,7 @@
     "user_deletion_interrupted": "Deleting stopped before every rule was removed, because the calendar provider did not answer. Nothing else was deleted. Try again.",
     "user_disabled": "An administrator has turned off your access to this Calendar Ghost.",
     "user_not_found": "This person no longer has access to this Calendar Ghost.",
+    "your_own_reset_link": "Change your own password under Settings, Your account.",
     "your_own_state": "You cannot turn off your own access."
   },
   "provider": {
