@@ -150,12 +150,28 @@ class PlainPasswords:
 @dataclass
 class MemorySessions:
     now: datetime
+    users: MemoryUsers
     sessions: dict[str, UserId] = field(default_factory=dict)
+    started: int = 0
 
-    def start(self, user_id: UserId) -> Session:
-        token = f"session-{len(self.sessions) + 1}"
+    def start(self, user_id: UserId, password_hash: str) -> Session | None:
+        user = self.users.get(user_id)
+        if (
+            user is None
+            or user.state is not UserState.ACTIVE
+            or self.users.password_hash(user_id) != password_hash
+        ):
+            return None
+        self.started += 1
+        token = f"session-{self.started}"
         self.sessions[token] = user_id
         return Session(token, self.now + timedelta(days=7), user_id)
+
+    def signed_in(self, user_id: UserId) -> Session:
+        """A session of `user_id`, as signing in with their current password gives."""
+        session = self.start(user_id, self.users.password_hash(user_id) or "")
+        assert session is not None
+        return session
 
     def user_of(self, token: str | None) -> UserId | None:
         return self.sessions.get(token) if token else None

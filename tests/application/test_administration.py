@@ -113,7 +113,7 @@ def _installation(*others: User) -> Installation:
         MemoryRegistration(),
         MemoryInvitations(users),
         MemoryResetLinks(users),
-        MemorySessions(NOW),
+        MemorySessions(NOW, users),
         MovableClock(),
     )
 
@@ -180,6 +180,24 @@ def test_an_invited_person_chooses_their_own_email_and_password_and_is_signed_in
     )
     assert link.expires_at == NOW + timedelta(days=7)
     assert installation.sign_in("new@example.test") == joined.id
+
+
+def test_a_password_reset_right_after_joining_leaves_no_session_for_the_chosen_password() -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+    accept = installation.invitations.accept
+
+    def accepted_then_reset(token: str, user: User, password_hash: str, at: datetime) -> bool:
+        used = accept(token, user, password_hash, at)
+        installation.users.set_password_hash(user.id, "hashed:reset meanwhile")
+        return used
+
+    installation.invitations.accept = accepted_then_reset  # type: ignore[method-assign]
+
+    with pytest.raises(IncorrectCredentials):
+        installation.accept().execute(link.token, "new@example.test", PASSWORD)
+    assert installation.sessions.sessions == {}
 
 
 def test_an_invitation_is_used_once() -> None:
@@ -255,7 +273,7 @@ def test_pending_invitations_are_listed_and_revoked_by_an_administrator() -> Non
 
 def test_a_reset_link_lets_its_user_choose_a_new_password_once_and_signs_them_out() -> None:
     installation = _installation(MEMBER)
-    session = installation.sessions.start(MEMBER.id)
+    session = installation.sessions.signed_in(MEMBER.id)
     issue = IssuePasswordReset(installation.users, installation.resets, installation.clock)
     reset = ResetPassword(
         installation.resets, PlainPasswords(), installation.sessions, installation.clock
@@ -347,7 +365,7 @@ def test_two_administrators_demoting_each_other_at_once_leave_one() -> None:
 def test_two_administrators_disabling_each_other_at_once_leave_one() -> None:
     installation = _installation(OTHER_ADMIN)
     installation.users.meanwhile = _demote(ADMIN.id)
-    session = installation.sessions.start(OTHER_ADMIN.id)
+    session = installation.sessions.signed_in(OTHER_ADMIN.id)
 
     with pytest.raises(LastAdministrator):
         ChangeUserState(installation.users, installation.sessions).execute(
@@ -360,7 +378,7 @@ def test_two_administrators_disabling_each_other_at_once_leave_one() -> None:
 
 def test_a_disabled_user_is_signed_out_and_signs_in_again_once_enabled() -> None:
     installation = _installation(MEMBER)
-    session = installation.sessions.start(MEMBER.id)
+    session = installation.sessions.signed_in(MEMBER.id)
     change = ChangeUserState(installation.users, installation.sessions)
 
     change.execute(ADMIN.id, MEMBER.id, UserState.DISABLED)

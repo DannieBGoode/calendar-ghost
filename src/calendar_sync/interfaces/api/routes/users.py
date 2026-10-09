@@ -35,7 +35,11 @@ from calendar_sync.application.administration import (
     UserNotFound,
     YourOwnState,
 )
-from calendar_sync.application.errors import EmailTaken, PasswordPolicyViolation
+from calendar_sync.application.errors import (
+    EmailTaken,
+    IncorrectCredentials,
+    PasswordPolicyViolation,
+)
 from calendar_sync.application.ports import IssuedLink, UserQuery, UserSort
 from calendar_sync.domain.access import (
     InvalidEmail,
@@ -189,6 +193,9 @@ def accept_invitation(
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     except EmailTaken as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    except IncorrectCredentials as error:
+        # Joined, but the password was reset before the session started: sign in instead.
+        raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
     return signed_in(services.identity.users.get(session.user_id), services.sends_email)
 

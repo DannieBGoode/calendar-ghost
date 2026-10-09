@@ -14,7 +14,7 @@ from calendar_sync.application.errors import (
     RemovalRequiresProvider,
     RuleNotFound,
 )
-from calendar_sync.application.identity import require_password
+from calendar_sync.application.identity import require_password, start_session
 from calendar_sync.application.ports import (
     Clock,
     IdGenerator,
@@ -180,8 +180,9 @@ class AcceptInvitation:
         joining = self.settings.policy().lets_people_join
         if not joining or not self.invitations.accept(token, user, hashed, now):
             raise LinkUnusable("this invitation was already used, revoked, or has expired")
+        session = start_session(self.sessions, user.id, hashed)
         self.users.record_sign_in(user.id, now)
-        return self.sessions.start(user.id)
+        return session
 
 
 @dataclass(slots=True)

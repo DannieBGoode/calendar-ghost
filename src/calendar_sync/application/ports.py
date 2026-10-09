@@ -1027,7 +1027,11 @@ class PasswordHasher(Protocol):
 
 
 class Sessions(Protocol):
-    def start(self, user_id: UserId) -> Session: ...
+    def start(self, user_id: UserId, password_hash: str) -> Session | None:
+        """Start a session only while the User is active and `password_hash`, the hash their
+        password was just checked against, is still theirs; both in one step with the start.
+        None otherwise, such as after a password change or reset that landed meanwhile."""
+        ...
 
     def user_of(self, token: str | None) -> UserId | None:
         """The User a live session belongs to, while they may sign in."""

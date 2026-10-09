@@ -86,7 +86,7 @@ class Installation:
             self.users.add(user, f"hashed:{PASSWORD}")
         self.registration = MemoryRegistration(RegistrationPolicy.INVITATION_ONLY)
         self.invitations = MemoryInvitations(self.users)
-        self.sessions = MemorySessions(NOW)
+        self.sessions = MemorySessions(NOW, self.users)
         self.database = InMemoryUnitOfWorkFactory()
         self.deleter = Deleter(failing)
         self.locks = RuleLocks()
@@ -145,7 +145,7 @@ class _Authorizations:
 
 def test_an_administrator_deleting_a_user_deletes_their_projections_and_everything_else() -> None:
     installation = Installation()
-    session = installation.sessions.start(MEMBER.id)
+    session = installation.sessions.signed_in(MEMBER.id)
 
     result = installation.delete_user().execute(ADMIN.id, MEMBER.id)
 

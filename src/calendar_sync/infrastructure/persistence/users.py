@@ -256,22 +256,31 @@ class SqliteSessions:
         self._database_path = database_path
         self._clock = clock
 
-    def start(self, user_id: UserId) -> Session:
+    def start(self, user_id: UserId, password_hash: str) -> Session | None:
         token = secrets.token_urlsafe(32)
         now = self._clock.now()
         expires = now + SESSION_LIFETIME
         with transaction(self._database_path) as connection:
-            connection.execute(
+            # One statement, so a password change or reset that ends every session cannot fall
+            # between the check and the insert.
+            started = connection.execute(
                 """
                 INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at)
-                VALUES (?, ?, ?, ?)
+                SELECT ?, id, ?, ? FROM users
+                WHERE id = ? AND password_hash = ? AND state = 'active'
                 """,
-                (token_hash(token), user_id.value, now.isoformat(), expires.isoformat()),
-            )
+                (
+                    token_hash(token),
+                    now.isoformat(),
+                    expires.isoformat(),
+                    user_id.value,
+                    password_hash,
+                ),
+            ).rowcount
             connection.execute(
                 "DELETE FROM user_sessions WHERE expires_at <= ?", (now.isoformat(),)
             )
-        return Session(token, expires, user_id)
+        return Session(token, expires, user_id) if started == 1 else None
 
     def user_of(self, token: str | None) -> UserId | None:
         if not token:

@@ -1,5 +1,6 @@
 """Signing in by email and password (ADR 0030)."""
 
+from collections.abc import Callable
 from dataclasses import replace
 
 import pytest
@@ -49,13 +50,15 @@ def _sign_in(
 
 
 def _installation() -> tuple[MemoryUsers, MemorySessions]:
-    users, sessions = MemoryUsers(), MemorySessions(NOW)
+    users = MemoryUsers()
+    sessions = MemorySessions(NOW, users)
     _set_up(users, sessions).execute(" Admin@Example.TEST ", PASSWORD)
     return users, sessions
 
 
 def test_setup_makes_the_first_user_an_administrator_signed_in_by_email() -> None:
-    users, sessions = MemoryUsers(), MemorySessions(NOW)
+    users = MemoryUsers()
+    sessions = MemorySessions(NOW, users)
 
     session = _set_up(users, sessions).execute(" Admin@Example.TEST ", PASSWORD)
 
@@ -92,7 +95,7 @@ def test_setup_refuses_an_invalid_email_or_a_weak_password(
     users = MemoryUsers()
 
     with pytest.raises(refused):
-        _set_up(users, MemorySessions(NOW)).execute(email, password)
+        _set_up(users, MemorySessions(NOW, users)).execute(email, password)
     assert users.count() == 0
 
 
@@ -116,7 +119,8 @@ def test_a_wrong_email_or_password_is_refused_alike(email: str, password: str) -
 
 
 def test_the_upgraded_first_user_signs_in_by_password_alone_until_they_add_an_email() -> None:
-    users, sessions = MemoryUsers(), MemorySessions(NOW)
+    users = MemoryUsers()
+    sessions = MemorySessions(NOW, users)
     users.add(UPGRADED, f"hashed:{PASSWORD}")
 
     session = _sign_in(users, sessions).execute(None, PASSWORD, "client")
@@ -136,6 +140,49 @@ def test_a_disabled_user_cannot_sign_in() -> None:
     with pytest.raises(UserDisabled):
         _sign_in(users, sessions).execute("admin@example.test", PASSWORD, "client")
     assert len(sessions.sessions) == 1
+
+
+class ChangedWhileVerifying(PlainPasswords):
+    """Another request changes the User while this one checks the password, which is slow."""
+
+    def __init__(self, change: Callable[[], object]) -> None:
+        self.change: Callable[[], object] | None = change
+
+    def verify(self, password: str, hashed: str) -> bool:
+        matches = super().verify(password, hashed)
+        change, self.change = self.change, None
+        if change is not None:
+            change()
+        return matches
+
+
+def test_a_password_reset_while_signing_in_leaves_no_session_for_the_old_password() -> None:
+    users, sessions = _installation()
+    admin = users.list()[0]
+    reset = ChangedWhileVerifying(lambda: users.set_password_hash(admin.id, "hashed:new one"))
+    sign_in = SignIn(users, reset, sessions, CountingThrottle(), FixedClock())
+
+    with pytest.raises(IncorrectCredentials):
+        sign_in.execute("admin@example.test", PASSWORD, "client")
+
+    # Only the session setup started.
+    assert list(sessions.sessions.values()) == [admin.id]
+
+
+def test_a_user_disabled_while_signing_in_gets_no_session() -> None:
+    users, sessions = _installation()
+    admin = users.list()[0]
+
+    def disable() -> None:
+        users.users[admin.id] = replace(admin, state=UserState.DISABLED)
+
+    sign_in = SignIn(
+        users, ChangedWhileVerifying(disable), sessions, CountingThrottle(), FixedClock()
+    )
+
+    with pytest.raises(IncorrectCredentials):
+        sign_in.execute("admin@example.test", PASSWORD, "client")
+    assert list(sessions.sessions.values()) == [admin.id]
 
 
 def test_repeated_failures_throttle_sign_in_even_with_the_right_password() -> None:
@@ -250,8 +297,8 @@ def test_choosing_incident_emails_never_restores_a_role_or_state_changed_meanwhi
 def test_changing_a_password_needs_the_current_one_and_ends_every_other_session() -> None:
     users, sessions = _installation()
     admin = users.list()[0]
-    other = sessions.start(admin.id)
-    current = sessions.start(admin.id)
+    other = sessions.signed_in(admin.id)
+    current = sessions.signed_in(admin.id)
     change = ChangeOwnPassword(users, PlainPasswords(), sessions)
 
     with pytest.raises(IncorrectPassword):

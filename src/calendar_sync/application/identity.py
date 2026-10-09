@@ -65,10 +65,12 @@ class SetUpInstallation:
             UserState.ACTIVE,
             now,
         )
-        if not self.users.add_first(user, self.passwords.hash(require_password(password))):
+        hashed = self.passwords.hash(require_password(password))
+        if not self.users.add_first(user, hashed):
             raise AdminAlreadyConfigured("Calendar Ghost is already set up; sign in instead")
+        session = start_session(self.sessions, user.id, hashed)
         self.users.record_sign_in(user.id, now)
-        return self.sessions.start(user.id)
+        return session
 
 
 @dataclass(slots=True)
@@ -101,14 +103,27 @@ class SignIn:
         if user.state is UserState.DISABLED:
             raise UserDisabled("an Installation Administrator has disabled this User")
         self.throttle.succeeded(keys)
+        session = start_session(self.sessions, user.id, hashed)
         self.users.record_sign_in(user.id, self.clock.now())
-        return self.sessions.start(user.id)
+        return session
 
     def _user(self, email: str | None, address: str | None) -> User | None:
         if email is None:
             # Password alone signs in only the upgraded first User, until they add an email.
             return self.users.without_email()
         return self.users.by_email(address) if address is not None else None
+
+
+def start_session(sessions: Sessions, user_id: UserId, password_hash: str) -> Session:
+    """A session for the User whose password was just checked against `password_hash`.
+
+    Checking a password is slow, so a password change, a reset, or disabling can land in
+    between; the session starts only if none did, atomically with its start.
+    """
+    session = sessions.start(user_id, password_hash)
+    if session is None:
+        raise IncorrectCredentials("the password changed or the User was disabled; sign in again")
+    return session
 
 
 def _normal_email(email: str | None) -> str | None:

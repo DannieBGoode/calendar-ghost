@@ -4,7 +4,11 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Response, status
 
-from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
+from calendar_sync.application.errors import (
+    AdminAlreadyConfigured,
+    IncorrectCredentials,
+    PasswordPolicyViolation,
+)
 from calendar_sync.application.identity import SetUpInstallation
 from calendar_sync.domain.access import InvalidEmail
 from calendar_sync.interfaces.api.dependencies import Identity, app_services, set_session_cookie
@@ -52,5 +56,7 @@ def set_up(payload: SetupRequest, response: Response, services: Services) -> Ses
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     except InvalidEmail as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
+    except IncorrectCredentials as error:
+        raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
     return signed_in(services.identity.users.get(session.user_id), services.sends_email)
