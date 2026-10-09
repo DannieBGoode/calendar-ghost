@@ -7,6 +7,7 @@
 // (sync really runs every five minutes). Then the page's organized links.
 import type { Messages } from "../i18n"
 import { Ghost, SpeechBubble } from "../islands/Ghost"
+import { ANALYTICS_EVENTS } from "../lib/analytics"
 import { REPO_URL } from "../links"
 import FooterLinks from "./FooterLinks.astro"
 
@@ -24,7 +25,14 @@ const { m } = Astro.props
       <p class="footer-body">{m.footer.body}</p>
       <div class="ctas">
         <a class="btn btn-primary footer-btn" href="#self-host">{m.hero.primary}</a>
-        <a class="btn footer-btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+        <a
+          class="btn footer-btn"
+          href={REPO_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-umami-event={ANALYTICS_EVENTS.github}
+          data-umami-event-place="footer"
+        >
           <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
         </a>
       </div>

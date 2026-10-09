@@ -1,6 +1,7 @@
 ---
 import { GhostMark } from "../islands/GhostMark"
 import type { Messages } from "../i18n"
+import { ANALYTICS_EVENTS } from "../lib/analytics"
 import { REPO_URL } from "../links"
 import ThemeToggle from "../components/ThemeToggle.astro"
 import LanguagePicker from "./LanguagePicker.astro"
@@ -36,7 +37,7 @@ const links = [
       </details>
       <LanguagePicker m={m} />
       <ThemeToggle m={m} />
-      <a class="btn btn-small" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+      <a class="btn btn-small" href={REPO_URL} target="_blank" rel="noopener noreferrer" data-umami-event={ANALYTICS_EVENTS.github} data-umami-event-place="nav">
         <span aria-hidden="true">★</span> {m.nav.star}<span class="sr-only"> {m.nav.newTab}</span>
       </a>
     </nav>

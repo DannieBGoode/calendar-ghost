@@ -33,8 +33,11 @@ GitHub. The page loads fast, works without JavaScript for its content, and conta
   deploy secrets in GitHub.
 - **No star count at launch.** The repository has one star, and a button showing "1" works against
   the page. A later change adds a cached `/api/stars` Worker route when the number helps.
-- **No analytics.** Traction is read from Cloudflare's server-side traffic numbers and GitHub's
-  Insights → Traffic. The page loads no tracking script and makes no third-party request.
+- **Cookieless analytics, first-party only.** Superseded "No analytics" before launch: visits,
+  referrers, campaigns, and a few clicks (GitHub, the install commands) are counted with
+  Umami Cloud. A small Worker serves Umami's tracker and forwards its events from
+  `calendarghost.com`, so the page sets no cookies and makes no third-party request. GitHub's
+  Insights → Traffic still shows what happens after the click.
 - **English only at launch, built for many languages.** All copy lives in typed message files, and
   no text is baked into images or animations.
 - **The ghost is the main character.** The landing page is its own register, recorded in
@@ -255,7 +258,7 @@ compose file that uses it.
 
 ## Out of scope
 
-The Hosted Service and pricing, the live star count, languages other than English, analytics, a
+The Hosted Service and pricing, the live star count, languages other than English, a
 blog or comparison pages, and adopting the new headline inside the application.
 
 ## Open items for the administrator

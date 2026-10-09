@@ -116,8 +116,14 @@ the Docker build context, and has its own `Site` workflow.
   literal, and every decorative motion stops under reduced motion.
 - All copy lives in `site/src/i18n/en.ts`; components contain no literal copy. Copy must stay true
   to `CONTEXT.md`; `tests/test_ubiquitous_language.py` searches it.
-- The page contacts no host but its own: no analytics, trackers, CDNs, remote fonts, or live
+- The page contacts no host but its own: no third-party trackers, CDNs, remote fonts, or live
   GitHub requests. `npm run audit:dist` and the Playwright tests enforce this.
+- Visits are counted with Umami Cloud, cookieless, only on `calendarghost.com`, and only when the
+  Cloudflare build sets `PUBLIC_UMAMI_WEBSITE_ID`. The site's Worker (`site/worker/index.ts`)
+  serves the tracker and forwards its events from the site's own origin
+  (`site/src/lib/analytics.ts`). Click events go only on buttons and new-tab links: on a same-tab
+  link, Umami's tracker holds the navigation until its event is sent. This covers the landing page
+  only: the application, its Web UI, and self-hosted installations send no analytics or telemetry.
 - Self-host commands must match the README's quick start; a unit test compares them.
 - `/docs/<slug>` pages render repository documents at build time (`site/src/docs/pages.ts`), with
   Astro's own Markdown processor. Their headings keep GitHub's anchors; links between rendered

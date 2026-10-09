@@ -11,7 +11,9 @@ import "../styles/mockups.css"
 // instead of swapping in after layout and shifting the page (the lowest-risk fix for CLS).
 import figtreeLatinWoff2 from "@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2?url"
 import besleyLatinWoff2 from "@fontsource-variable/besley/files/besley-latin-wght-normal.woff2?url"
+import { PUBLIC_UMAMI_WEBSITE_ID } from "astro:env/client"
 import { LOCALES, hasLanguagePicker, localePath, messagesFor, stripLocale, type Locale } from "../i18n"
+import { ANALYTICS_DOMAIN, ANALYTICS_PREFIX, TRACKER_PATH } from "../lib/analytics"
 
 interface Props {
   title: string
@@ -89,6 +91,18 @@ const alternates = hasLanguagePicker()
     <meta property="og:image:alt" content={ogImageAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     {noindex && <meta name="robots" content="noindex" />}
+    {
+      PUBLIC_UMAMI_WEBSITE_ID && (
+        <script
+          is:inline
+          defer
+          src={TRACKER_PATH}
+          data-website-id={PUBLIC_UMAMI_WEBSITE_ID}
+          data-host-url={ANALYTICS_PREFIX}
+          data-domains={ANALYTICS_DOMAIN}
+        />
+      )
+    }
     <slot name="head" />
   </head>
   <body>

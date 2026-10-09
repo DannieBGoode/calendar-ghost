@@ -1084,8 +1084,8 @@ test("the footer ends with a call to action and an organized set of links", asyn
   for (const [name, href] of expected) await expect(links.getByRole("link", { name, exact: true })).toHaveAttribute("href", href)
   await expect(links.getByRole("list", { name: en.footer.projectTitle }).getByRole("listitem")).toHaveCount(4)
   await expect(links.getByRole("list", { name: en.footer.legalTitle }).getByRole("listitem")).toHaveCount(2)
-  await expect(footer.getByText(en.footer.noTrackers, { exact: true })).toBeVisible()
-  await expect(footer.getByText(en.footer.noTrackersBody, { exact: true })).toBeVisible()
+  await expect(footer.getByText(en.footer.privacy, { exact: true })).toBeVisible()
+  await expect(footer.getByText(en.footer.privacyBody, { exact: true })).toBeVisible()
   await expect(footer).not.toContainText("network tab")
   // The sleeping ghost mumbles its five more minutes (and then falls quiet).
   await expect(footer.locator(".speech-bubble")).toHaveText([en.footer.sleepTalk])
