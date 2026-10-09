@@ -44,7 +44,6 @@ from calendar_sync.domain.access import (
     UserState,
     email_address,
     require_administrator_remains,
-    require_registration_change,
 )
 from calendar_sync.domain.model import ProjectionHandling, SyncRuleId
 
@@ -136,7 +135,7 @@ class SetRegistrationPolicy:
 
     def execute(self, actor: UserId, policy: RegistrationPolicy) -> RegistrationStatus:
         require_administrator(self.users, actor)
-        require_registration_change(policy, self.users.count())
+        # Raises OnlyMeNeedsOneUser, counting Users in one step with the change.
         self.settings.set_policy(policy)
         return RegistrationStatus(policy, self.users.count() == 1)
 

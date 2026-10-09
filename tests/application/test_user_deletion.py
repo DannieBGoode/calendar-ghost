@@ -84,8 +84,8 @@ class Installation:
         self.users = MemoryUsers()
         for user in people:
             self.users.add(user, f"hashed:{PASSWORD}")
-        self.registration = MemoryRegistration(RegistrationPolicy.INVITATION_ONLY)
-        self.invitations = MemoryInvitations(self.users)
+        self.registration = MemoryRegistration(self.users, RegistrationPolicy.INVITATION_ONLY)
+        self.invitations = MemoryInvitations(self.users, self.registration)
         self.sessions = MemorySessions(NOW, self.users)
         self.database = InMemoryUnitOfWorkFactory()
         self.deleter = Deleter(failing)

@@ -9,7 +9,13 @@ from datetime import datetime
 from pathlib import Path
 
 from calendar_sync.application.ports import IdGenerator, IssuedLink, PendingInvitation
-from calendar_sync.domain.access import RegistrationPolicy, User, UserId, link_expiry
+from calendar_sync.domain.access import (
+    RegistrationPolicy,
+    User,
+    UserId,
+    link_expiry,
+    require_registration_change,
+)
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.users import insert_user
 from calendar_sync.infrastructure.security import token_hash
@@ -25,18 +31,26 @@ class SqliteRegistrationSettings:
 
     def policy(self) -> RegistrationPolicy:
         with transaction(self._database_path) as connection:
-            row = connection.execute(
-                "SELECT registration_policy FROM installation_settings WHERE singleton = 1"
-            ).fetchone()
-        return RegistrationPolicy(str(row[0])) if row else RegistrationPolicy.default()
+            return _policy(connection)
 
     def set_policy(self, policy: RegistrationPolicy) -> None:
         with transaction(self._database_path) as connection:
+            # Held from the count to the change, so an invitation accepted meanwhile is counted.
+            connection.execute("BEGIN IMMEDIATE")
+            users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            require_registration_change(policy, int(users))
             # Migration 22 creates the one row.
             connection.execute(
                 "UPDATE installation_settings SET registration_policy = ? WHERE singleton = 1",
                 (policy.value,),
             )
+
+
+def _policy(connection: sqlite3.Connection) -> RegistrationPolicy:
+    row = connection.execute(
+        "SELECT registration_policy FROM installation_settings WHERE singleton = 1"
+    ).fetchone()
+    return RegistrationPolicy(str(row[0])) if row else RegistrationPolicy.default()
 
 
 class SqliteInvitations:
@@ -111,6 +125,11 @@ class SqliteInvitations:
                 (token_hash(token), at.isoformat()),
             ).fetchone()
             if usable is None:
+                return False
+            # Read under the same lock as Only Me is chosen, so a person cannot join after it,
+            # nor after the last User left and the installation returned to setup.
+            anyone = connection.execute("SELECT 1 FROM users LIMIT 1").fetchone()
+            if not _policy(connection).lets_people_join or anyone is None:
                 return False
             # EmailTaken rolls the transaction back, so the invitation stays usable.
             insert_user(connection, user, password_hash)

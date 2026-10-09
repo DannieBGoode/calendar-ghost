@@ -121,10 +121,11 @@ def _installation(*others: User) -> Installation:
     users = MemoryUsers()
     for user in (ADMIN, *others):
         users.add(user, f"hashed:{PASSWORD}")
+    registration = MemoryRegistration(users)
     return Installation(
         users,
-        MemoryRegistration(),
-        MemoryInvitations(users),
+        registration,
+        MemoryInvitations(users, registration),
         MemoryResetLinks(users),
         MemorySessions(NOW, users),
         MovableClock(),
@@ -154,6 +155,49 @@ def test_only_me_is_chosen_again_only_while_no_other_user_exists() -> None:
     set_policy.execute(ADMIN.id, RegistrationPolicy.ONLY_ME)
 
     assert installation.registration.current is RegistrationPolicy.ONLY_ME
+
+
+def test_an_invitation_accepted_while_only_me_is_chosen_is_refused() -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+    accept = installation.accept()
+    set_policy = SetRegistrationPolicy(installation.users, installation.registration)
+    use = installation.invitations.accept
+
+    def chosen_meanwhile(token: str, user: User, password_hash: str, at: datetime) -> bool:
+        # The administrator chooses Only Me after every check, just before the link is used.
+        set_policy.execute(ADMIN.id, RegistrationPolicy.ONLY_ME)
+        return use(token, user, password_hash, at)
+
+    installation.invitations.accept = chosen_meanwhile  # type: ignore[method-assign]
+
+    with pytest.raises(LinkUnusable):
+        accept.execute(link.token, "new@example.test", PASSWORD, CLIENT)
+    assert installation.users.count() == 1
+
+
+def test_only_me_chosen_while_an_invitation_is_accepted_is_refused() -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+    accept = installation.accept()
+    change = installation.registration.set_policy
+
+    def joined_meanwhile(policy: RegistrationPolicy) -> None:
+        # The person joins after every check of the administrator's request, just before the
+        # policy changes.
+        accept.execute(link.token, "new@example.test", PASSWORD, CLIENT)
+        change(policy)
+
+    installation.registration.set_policy = joined_meanwhile  # type: ignore[method-assign]
+
+    with pytest.raises(OnlyMeNeedsOneUser):
+        SetRegistrationPolicy(installation.users, installation.registration).execute(
+            ADMIN.id, RegistrationPolicy.ONLY_ME
+        )
+    assert installation.registration.current is RegistrationPolicy.INVITATION_ONLY
+    assert installation.users.count() == 2
 
 
 def test_only_an_administrator_sees_or_changes_the_registration_policy() -> None:

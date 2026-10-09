@@ -11,6 +11,7 @@ from calendar_sync.application.errors import EmailTaken
 from calendar_sync.application.ports import UserPage, UserQuery, UserSort
 from calendar_sync.domain.access import (
     LastAdministrator,
+    OnlyMeNeedsOneUser,
     RegistrationPolicy,
     Role,
     User,
@@ -307,10 +308,60 @@ def test_new_installations_start_with_only_me_and_keep_the_chosen_policy(tmp_pat
     assert settings.policy() is RegistrationPolicy.INVITATION_ONLY
 
 
+def test_only_me_is_refused_in_one_step_with_the_change_while_another_user_exists(
+    tmp_path: Path,
+) -> None:
+    """An invitation accepted after the administrator's check still stops Only Me."""
+    database = _database(tmp_path)
+    users = SqliteUserDirectory(database)
+    users.add(FIRST, "hash-1")
+    settings = SqliteRegistrationSettings(database)
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
+    users.add(SECOND, "hash-2")
+
+    with pytest.raises(OnlyMeNeedsOneUser):
+        settings.set_policy(RegistrationPolicy.ONLY_ME)
+    assert settings.policy() is RegistrationPolicy.INVITATION_ONLY
+    users.delete(SECOND.id)
+    settings.set_policy(RegistrationPolicy.ONLY_ME)
+    assert settings.policy() is RegistrationPolicy.ONLY_ME
+
+
+def test_an_invitation_is_refused_once_nobody_may_join(tmp_path: Path) -> None:
+    """The policy is read in one step with the acceptance, so Only Me chosen after the person
+    opened their link still stops them."""
+    database = _database(tmp_path)
+    users = SqliteUserDirectory(database)
+    users.add(FIRST, "hash-1")
+    settings = SqliteRegistrationSettings(database)
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
+    invitations = SqliteInvitations(database, SequentialIds())
+    link = invitations.issue(FIRST.id, NOW)
+    settings.set_policy(RegistrationPolicy.ONLY_ME)
+
+    assert not invitations.accept(link.token, SECOND, "hash-2", NOW)
+    assert users.get(SECOND.id) is None
+
+
+def test_an_invitation_is_refused_once_everyone_left(tmp_path: Path) -> None:
+    """The last User leaving returns the installation to setup; nobody joins it meanwhile."""
+    database = _database(tmp_path)
+    users = SqliteUserDirectory(database)
+    users.add(FIRST, "hash-1")
+    SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
+    invitations = SqliteInvitations(database, SequentialIds())
+    link = invitations.issue(FIRST.id, NOW)
+    users.delete(FIRST.id)
+
+    assert not invitations.accept(link.token, SECOND, "hash-2", NOW)
+    assert users.count() == 0
+
+
 def test_an_invitation_adds_one_user_once_and_only_its_hash_is_stored(tmp_path: Path) -> None:
     database = _database(tmp_path)
     users = SqliteUserDirectory(database)
     users.add(FIRST, "hash-1")
+    SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
     invitations = SqliteInvitations(database, SequentialIds())
     link = invitations.issue(FIRST.id, NOW)
 

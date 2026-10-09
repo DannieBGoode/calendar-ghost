@@ -23,6 +23,7 @@ from calendar_sync.domain.access import (
     UserState,
     link_expiry,
     require_administrator_remains,
+    require_registration_change,
 )
 
 
@@ -210,12 +211,14 @@ class CountingThrottle:
 
 @dataclass
 class MemoryRegistration:
+    users: MemoryUsers
     current: RegistrationPolicy = RegistrationPolicy.ONLY_ME
 
     def policy(self) -> RegistrationPolicy:
         return self.current
 
     def set_policy(self, policy: RegistrationPolicy) -> None:
+        require_registration_change(policy, self.users.count())
         self.current = policy
 
 
@@ -235,6 +238,7 @@ class _Link:
 @dataclass
 class MemoryInvitations:
     users: MemoryUsers
+    registration: MemoryRegistration
     links: list[_Link] = field(default_factory=list)
 
     def issue(self, created_by: UserId, at: datetime) -> IssuedLink:
@@ -266,7 +270,8 @@ class MemoryInvitations:
 
     def accept(self, token: str, user: User, password_hash: str, at: datetime) -> bool:
         link = next((link for link in self.links if link.token == token and link.usable(at)), None)
-        if link is None:
+        joining = self.registration.policy().lets_people_join and self.users.count() > 0
+        if link is None or not joining:
             return False
         self.users.add(user, password_hash)
         link.used_at = at

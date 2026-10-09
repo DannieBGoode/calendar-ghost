@@ -975,7 +975,10 @@ class PendingInvitation:
 class RegistrationSettings(Protocol):
     def policy(self) -> RegistrationPolicy: ...
 
-    def set_policy(self, policy: RegistrationPolicy) -> None: ...
+    def set_policy(self, policy: RegistrationPolicy) -> None:
+        """Choose who may join. Raises OnlyMeNeedsOneUser for Only Me while another User exists,
+        counted in one step with the change, so nobody joins between the count and the change."""
+        ...
 
 
 class Invitations(Protocol):
@@ -999,7 +1002,9 @@ class Invitations(Protocol):
 
     def accept(self, token: str, user: User, password_hash: str, at: datetime) -> bool:
         """Use the invitation and add `user` in one step; False, adding nobody, when it is no
-        longer usable. Raises EmailTaken, leaving the invitation usable."""
+        longer usable, the Registration Policy lets nobody join, or no User is left (the
+        installation returned to setup), all read in that same step. Raises EmailTaken,
+        leaving the invitation usable."""
         ...
 
 
