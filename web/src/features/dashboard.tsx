@@ -1,5 +1,6 @@
 import { ActivityView } from "@/features/activity"
 import { OverviewView } from "@/features/overview"
+import { PeopleView } from "@/features/people-page"
 import { RuleDetailsView } from "@/features/rule-details"
 import { RulesView } from "@/features/rules"
 import { SettingsPage } from "@/features/settings"
@@ -51,6 +52,16 @@ export function Dashboard({
   }
   // Remounted on every arrival so its filters always match the address it was opened at.
   if (view === "activity") return <ActivityView key={visit} onViewChange={onViewChange} onOpenRule={onOpenRule} />
-  if (view === "settings") return <SettingsPage tab={location.settingsTab ?? DEFAULT_SETTINGS_TAB} onOpenTab={onOpenSettingsTab} />
+  // Remounted on every arrival so its search, filters, and page match the address.
+  if (view === "people") return <PeopleView key={visit} />
+  if (view === "settings") {
+    return (
+      <SettingsPage
+        tab={location.settingsTab ?? DEFAULT_SETTINGS_TAB}
+        onOpenTab={onOpenSettingsTab}
+        onOpenPeople={() => onViewChange("people")}
+      />
+    )
+  }
   return <OverviewView onViewChange={onViewChange} onOpenRule={onOpenRule} />
 }

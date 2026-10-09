@@ -28,10 +28,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   incidents, and tokens ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
   [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). People sign in with email and
   password. The Registration Policy is **Only me** by default; an administrator may choose
-  **Invitation only** and send single-use invitation links that expire after 7 days. Settings adds
-  **People** (roles, disabling, password reset links, deletion), **Who can join**, and **Your
-  account** (email, password, incident emails, and deleting your own account). An administrator
-  never sees anyone's calendars or events.
+  **Invitation only** and send single-use invitation links that expire after 7 days. A **People**
+  page lists everyone with search, filters, sorting, and pages, and holds invitations, roles,
+  disabling, password reset links, and deletion. Settings is split into **Your account** (email,
+  password, incident emails, appearance, and deleting your own account), **Connections** (Google
+  accounts and Integrations), and, for administrators, **Administration** (Who can join and
+  Storage). An administrator never sees anyone's calendars or events. The last person may delete
+  their own account, which returns the installation to setup.
 - Migrations 21 to 23 give every record a User, turn the existing administrator into the first User
   with every existing record, add the Registration Policy and hashed links, and give Integration
   Tokens scopes. Rolling back past them means restoring the backup taken before the upgrade.
@@ -46,8 +49,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   support@calendarghost.com.
 - Monitors, homelab dashboards, and AI agents can read Installation Status with an Integration
   Token: `GET /api/v1/status` for tools like Uptime Kuma and Homepage, and an MCP server at `/mcp`
-  for Claude Code, Codex, and other agents. Settings → Integrations, collapsed until opened, issues
-  and revokes tokens and shows setup examples for each tool.
+  for Claude Code, Codex, and other agents. Settings → Connections → Integrations, collapsed until
+  opened, issues and revokes tokens and shows setup examples for each tool.
 - Installation Status notices a scheduler that stopped running passes and a rule that has not
   synced in over a day.
 - The Web UI is ready for translation: catalogs, plural rules, and locale-aware dates and numbers.
@@ -68,7 +71,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - `GET /api/v1/status` and MCP answer for the person who issued the token, in the same shape.
   Existing tokens belong to the first User and keep both scopes, so their answers do not change.
   The Integration Token list returns `scopes` instead of `scope`.
-- Settings → Storage is for administrators only. Sync now, Reconcile now, and Preview answer `404`
+- Storage settings are for administrators only. Sync now, Reconcile now, and Preview answer `404`
   instead of `409` for a rule that does not exist.
 
 - The database uses SQLite's write-ahead log, so the Web UI no longer waits for a scheduler write,

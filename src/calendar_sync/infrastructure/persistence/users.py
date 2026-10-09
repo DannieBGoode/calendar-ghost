@@ -8,13 +8,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from calendar_sync.application.errors import EmailTaken
-from calendar_sync.application.ports import Clock, Session
+from calendar_sync.application.ports import Clock, Session, UserPage, UserQuery, UserSort
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash
 
 SESSION_LIFETIME = timedelta(days=7)
 _COLUMNS = "id, email, role, state, language, notify_by_email, created_at, last_sign_in_at"
+_SORT_COLUMNS = {
+    UserSort.JOINED: "created_at",
+    UserSort.EMAIL: "email",
+    UserSort.LAST_SIGN_IN: "last_sign_in_at",
+}
 
 
 class SqliteUserDirectory:
@@ -31,6 +36,26 @@ class SqliteUserDirectory:
                 f"SELECT {_COLUMNS} FROM users ORDER BY created_at, rowid"  # noqa: S608
             ).fetchall()
         return tuple(_user(row) for row in rows)
+
+    def find(self, query: UserQuery) -> UserPage:
+        conditions, parameters = _conditions(query)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        column = _SORT_COLUMNS[query.sort]
+        direction = "DESC" if query.descending else "ASC"
+        with transaction(self._database_path) as connection:
+            total = connection.execute(
+                f"SELECT COUNT(*) FROM users {where}",  # noqa: S608
+                parameters,
+            ).fetchone()[0]
+            rows = connection.execute(
+                f"""
+                SELECT {_COLUMNS} FROM users {where}
+                ORDER BY {column} IS NULL, {column} {direction}, created_at, rowid
+                LIMIT ? OFFSET ?
+                """,  # noqa: S608
+                (*parameters, query.limit, query.offset),
+            ).fetchall()
+        return UserPage(tuple(_user(row) for row in rows), int(total))
 
     def get(self, user_id: UserId) -> User | None:
         return self._one("id = ?", user_id.value)
@@ -140,6 +165,22 @@ def _taken_or(error: sqlite3.IntegrityError) -> Exception:
     if "UNIQUE" in str(error) and "users.email" in str(error):
         return EmailTaken("another User signs in with this email")
     return error
+
+
+def _conditions(query: UserQuery) -> tuple[list[str], list[str]]:
+    conditions: list[str] = []
+    parameters: list[str] = []
+    if query.search:
+        escaped = query.search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        conditions.append("email LIKE ? ESCAPE '\\'")
+        parameters.append(f"%{escaped}%")
+    if query.role is not None:
+        conditions.append("role = ?")
+        parameters.append(query.role.value)
+    if query.state is not None:
+        conditions.append("state = ?")
+        parameters.append(query.state.value)
+    return conditions, parameters
 
 
 def _user(row: sqlite3.Row) -> User:

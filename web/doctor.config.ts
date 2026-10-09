@@ -17,9 +17,10 @@ export default {
   ignore: {
     overrides: [
       {
-        // The Activity table sets explicit table roles on purpose: narrow screens restyle its rows
-        // with CSS display values, which drop the native table semantics in some browsers.
-        files: ["src/features/activity-table.tsx"],
+        // The Activity and People tables set explicit table roles on purpose: narrow screens
+        // restyle their rows with CSS display values, which drop the native table semantics in
+        // some browsers.
+        files: ["src/features/activity-table.tsx", "src/features/people-table.tsx"],
         rules: ["react-doctor/no-redundant-roles", "react-doctor/no-interactive-element-to-noninteractive-role"],
       },
     ],

@@ -7,7 +7,12 @@ import { PageSkeleton } from "@/components/page-skeleton"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import { api, type SessionStatus } from "@/lib/api"
-import { DEFAULT_SETTINGS_TAB, type OpenSettingsTab, type SettingsTab } from "@/lib/navigation"
+import {
+  DEFAULT_SETTINGS_TAB,
+  SETTINGS_ARRIVAL_PARAMS,
+  type OpenSettingsTab,
+  type SettingsTab,
+} from "@/lib/navigation"
 import {
   OAUTH_OUTCOME_MESSAGES,
   clearAuthorizationStart,
@@ -23,7 +28,6 @@ import { AccountsSection } from "@/features/settings-accounts"
 import { AppearanceSection } from "@/features/settings-appearance"
 import { IntegrationsSection } from "@/features/settings-integrations"
 import { OwnAccountSection } from "@/features/settings-own-account"
-import { PeopleSection } from "@/features/settings-people"
 import { RegistrationSection } from "@/features/settings-registration"
 import { StorageSection } from "@/features/settings-storage"
 import { SettingsTabs } from "@/features/settings-tabs"
@@ -32,7 +36,15 @@ export { GoogleReturnHelp } from "@/features/settings-google-return"
 export { IntegrationsSection } from "@/features/settings-integrations"
 
 /** Settings at one tab. Every tab waits for the Google configuration and the session. */
-export function SettingsPage({ tab, onOpenTab }: { tab: SettingsTab; onOpenTab: OpenSettingsTab }) {
+export function SettingsPage({
+  tab,
+  onOpenTab,
+  onOpenPeople,
+}: {
+  tab: SettingsTab
+  onOpenTab: OpenSettingsTab
+  onOpenPeople: () => void
+}) {
   const { t } = useI18n()
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
   const session = useQuery({ queryKey: ["session"], queryFn: api.session })
@@ -48,6 +60,7 @@ export function SettingsPage({ tab, onOpenTab }: { tab: SettingsTab; onOpenTab: 
       session={session.data}
       tab={tab}
       onOpenTab={onOpenTab}
+      onOpenPeople={onOpenPeople}
     />
   )
 }
@@ -59,8 +72,6 @@ type SettingsArrival = {
   /** Rules that resumed because the account was reauthorized. */
   resumed: number
 }
-
-const ARRIVAL_PARAMS = ["google", "account", "resumed"]
 
 /** What brought the administrator here, read once; returning ends the authorization attempt. */
 function useSettingsArrival(): SettingsArrival {
@@ -77,8 +88,8 @@ function useSettingsArrival(): SettingsArrival {
   useEffect(() => {
     // A reload should not announce the same connection, or point at the same account, again.
     const url = new URL(window.location.href)
-    if (!ARRIVAL_PARAMS.some((name) => url.searchParams.has(name))) return
-    for (const name of ARRIVAL_PARAMS) url.searchParams.delete(name)
+    if (!SETTINGS_ARRIVAL_PARAMS.some((name) => url.searchParams.has(name))) return
+    for (const name of SETTINGS_ARRIVAL_PARAMS) url.searchParams.delete(name)
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`)
   }, [])
   return arrival
@@ -90,14 +101,15 @@ type SettingsViewProps = {
   session: SessionStatus
   tab: SettingsTab
   onOpenTab: OpenSettingsTab
+  onOpenPeople: () => void
 }
 
-function SettingsView({ session, tab, onOpenTab, ...connections }: SettingsViewProps) {
+function SettingsView({ session, tab, onOpenTab, onOpenPeople, ...connections }: SettingsViewProps) {
   const { t } = useI18n()
   const { user } = session
   const administrator = isAdministrator(user)
-  // Someone else opening Installation's address sees Connections, as Settings itself shows.
-  const shown = tab === "installation" && !administrator ? DEFAULT_SETTINGS_TAB : tab
+  // Someone else opening Administration's address sees Your account, as Settings itself shows.
+  const shown = tab === "administration" && !administrator ? DEFAULT_SETTINGS_TAB : tab
 
   return (
     <div className="page-section settings-page">
@@ -106,16 +118,12 @@ function SettingsView({ session, tab, onOpenTab, ...connections }: SettingsViewP
         <p className="page-intro">{t(administrator ? "settings.page.introAdministrator" : "settings.page.intro")}</p>
       </div>
       <SettingsTabs current={shown} administrator={administrator} onOpen={onOpenTab} />
-      {shown === "connections" && <ConnectionsTab {...connections} administrator={administrator} />}
       {shown === "account" && user && (
-        <OwnAccountSection
-          user={user}
-          sendsEmail={session.installation_sends_email}
-          onOpenInstallation={() => onOpenTab("installation")}
-        />
+        <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} onOpenPeople={onOpenPeople} />
       )}
       {shown === "account" && <AppearanceSection />}
-      {shown === "installation" && user && <InstallationTab currentUserId={user.id} />}
+      {shown === "connections" && <ConnectionsTab {...connections} administrator={administrator} />}
+      {shown === "administration" && <AdministrationTab />}
     </div>
   )
 }
@@ -147,16 +155,14 @@ function ConnectionsTab({
 }
 
 /**
- * Who can join, the people here unless only the administrator may use this installation, and
- * storage. Only an Installation Administrator sees them; the server refuses everyone else.
+ * Who can join, and storage. Only an Installation Administrator sees them; the server refuses
+ * everyone else. The people here and their invitations have their own page.
  */
-function InstallationTab({ currentUserId }: { currentUserId: string }) {
+function AdministrationTab() {
   const registration = useRegistration()
-  const policy = registration.registration.data?.policy
   return (
     <>
       <RegistrationSection commands={registration} />
-      {policy === "invitation_only" && <PeopleSection currentUserId={currentUserId} />}
       <StorageSection />
     </>
   )

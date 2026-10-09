@@ -215,7 +215,11 @@ and technical identifiers on demand. The rule, filter, and open entry are kept i
 the view survives reloads and can be linked.
 
 The main sections have stable URLs at `/overview`, `/rules`, `/activity`, and `/settings`, so they
-can be bookmarked and browser back/forward navigation works as expected.
+can be bookmarked and browser back/forward navigation works as expected. Settings has three tabs,
+each at its own URL: **Your account** (`/settings/account`, where `/settings` opens),
+**Connections** (`/settings/connections`, where Google returns after you connect an account), and,
+for administrators, **Administration** (`/settings/administration`). Administrators who let other
+people join also get **People** at `/people`.
 
 Open **View details** on a rule (`/rules/{id}`) to see its calendars, policy, projection count, and
 latest runs. Changing any of its policies pauses the rule until it passes a new preview,
@@ -236,7 +240,7 @@ Once Google accepts the account again, rules that stopped only because its acces
 their own. Accounts connected before profile photos were supported show initials until they are
 connected again with **Connect Google account**, which updates the existing identity in place.
 
-Use **Settings → Installation → Storage** to see the database size, the number of Activity entries,
+Use **Settings → Administration → Storage** to see the database size, the number of Activity entries,
 the oldest one, and any space earlier clearing left to reclaim, and clear Activity older than 30,
 90, 180, or 365 days; an inline confirmation shows how many entries that removes before you confirm,
 and offers **Reclaim space** when nothing is old enough but space is still left. The Logs row shows
@@ -318,7 +322,7 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
   [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). Deleting a person removes
   them from the live database; backups keep them until they rotate out.
-- Activity is kept until an administrator clears it. **Settings → Installation → Storage** shows the
+- Activity is kept until an administrator clears it. **Settings → Administration → Storage** shows the
   database size and Activity's entry count and oldest entry, and clears entries older than 30, 90,
   180, or 365 days, keeping, per rule and source event, the older entries newer ones are compared
   with (normally the latest entry older than the cutoff and the latest that recorded a title)

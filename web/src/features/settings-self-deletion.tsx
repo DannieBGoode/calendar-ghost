@@ -8,19 +8,19 @@ import { Button } from "@/components/ui/button"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { api, type ProjectionHandling } from "@/lib/api"
-import { appPathForSettingsTab, isPlainLeftClick } from "@/lib/navigation"
+import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
 
 /**
  * User Deletion of the signed-in User. They choose whether the events their rules wrote are
  * deleted (recommended) or kept as ordinary events, and confirm with their password. Afterward
  * the app returns to the sign-in screen, or to setup when they were the last User. The last
- * Installation Administrator cannot leave while anyone else remains, so they are sent to
- * Installation to name another one instead.
+ * Installation Administrator cannot leave while anyone else remains, so they are sent to the
+ * People page to name another one instead.
  */
-export function SelfDeletionItem({ onOpenInstallation }: { onOpenInstallation: () => void }) {
+export function SelfDeletionItem({ onOpenPeople }: { onOpenPeople: () => void }) {
   // Asked afresh each time it is shown: who else is here and who administers it change elsewhere.
   const deletion = useQuery({ queryKey: ["account-deletion"], queryFn: api.ownAccountDeletion, staleTime: 0 })
-  if (deletion.data?.needs_another_administrator) return <NeedsAnotherAdministrator onOpen={onOpenInstallation} />
+  if (deletion.data?.needs_another_administrator) return <NeedsAnotherAdministrator onOpen={onOpenPeople} />
   // Until the answer arrives, or if it cannot, the server still refuses what it must.
   return <SelfDeletion lastUser={deletion.data?.last_user === true} />
 }
@@ -36,14 +36,14 @@ function NeedsAnotherAdministrator({ onOpen }: { onOpen: () => void }) {
         </div>
         <a
           className="text-link"
-          href={appPathForSettingsTab("installation")}
+          href={appPathForView("people")}
           onClick={(event) => {
             if (!isPlainLeftClick(event)) return
             event.preventDefault()
             onOpen()
           }}
         >
-          {t("settings.ownAccount.delete.openInstallation")}
+          {t("settings.ownAccount.delete.openPeople")}
         </a>
       </div>
     </div>

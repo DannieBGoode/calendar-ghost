@@ -46,6 +46,8 @@ from calendar_sync.interfaces.api.schemas import (
 MANAGE_ACCOUNTS = "configure the installation master key before managing accounts"
 ACCOUNT_MANAGEMENT_UNAVAILABLE = "account_management_unavailable"
 PROVIDER_NOT_CONFIGURED = "provider_not_configured"
+# Where Google returns the browser: Settings, at the tab that lists Google accounts.
+CONNECTIONS = "/settings/connections"
 
 
 class GoogleConnection(Protocol):
@@ -139,7 +141,7 @@ def complete_google_oauth(
         outcome = (
             "calendar_permission_required" if error == "access_denied" else "authorization_failed"
         )
-        return RedirectResponse(f"/settings?google={outcome}", status_code=303)
+        return RedirectResponse(f"{CONNECTIONS}?google={outcome}", status_code=303)
     if code is None:
         raise problem(
             status.HTTP_400_BAD_REQUEST,
@@ -151,9 +153,11 @@ def complete_google_oauth(
     except InvalidAuthorizationState as state_error:
         raise problem_from(status.HTTP_400_BAD_REQUEST, state_error) from state_error
     except CalendarPermissionRequired:
-        return RedirectResponse("/settings?google=calendar_permission_required", status_code=303)
+        return RedirectResponse(
+            f"{CONNECTIONS}?google=calendar_permission_required", status_code=303
+        )
     except AuthorizationFailed:
-        return RedirectResponse("/settings?google=authorization_failed", status_code=303)
+        return RedirectResponse(f"{CONNECTIONS}?google=authorization_failed", status_code=303)
     # The state names the User who began the flow; the account and its rules are theirs.
     account = authorized.account
     lapses = installation.for_user(authorized.owner).lapsed_authorizations
@@ -161,7 +165,7 @@ def complete_google_oauth(
     accepted_at = datetime.fromisoformat(account.authorized_at or datetime.now(UTC).isoformat())
     resumed = lapses.restored(account.id, accepted_at=accepted_at) if lapses is not None else 0
     query = urlencode({"google": "connected", "account": account.id.value, "resumed": resumed})
-    return RedirectResponse(f"/settings?{query}", status_code=303)
+    return RedirectResponse(f"{CONNECTIONS}?{query}", status_code=303)
 
 
 def _account_email(services: AccountServices, account_id: str | None) -> str | None:

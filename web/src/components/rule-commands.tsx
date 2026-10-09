@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
 import type { PreviewSummary } from "@/lib/api"
-import { accountSearch, appPathForView, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
+import { accountSearch, connectionsPath, isPlainLeftClick, type ViewChange } from "@/lib/navigation"
 import { ruleStateLabel } from "@/lib/rule-change"
 import { previewReadyLabel } from "@/lib/rule-run"
 import { workDescription, workLabel, workMeta, type RuleWork, type RuleWorkKind } from "@/lib/rule-work"
@@ -85,12 +85,12 @@ export function RuleNextAction({
     return (
       <Button variant="outline" asChild>
         <a
-          href={`${appPathForView("settings")}${search}`}
+          href={connectionsPath(search)}
           aria-describedby={describedBy}
           onClick={(event) => {
             if (!isPlainLeftClick(event)) return
             event.preventDefault()
-            onViewChange("settings", { search })
+            onViewChange("settings", { search, settingsTab: "connections" })
           }}
         >
           {t("ruleDetails.commands.reauthorize")}

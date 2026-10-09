@@ -811,7 +811,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Users */
+        /**
+         * Users
+         * @description One page of the people here, by part of their email, role, and state; never their data.
+         */
         get: operations["users_api_v1_users_get"];
         put?: never;
         post?: never;
@@ -1928,6 +1931,17 @@ export interface components {
             left: number;
             /** Rules */
             rules: number;
+        };
+        /** UserPageResponse */
+        UserPageResponse: {
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+            /** Users */
+            users: components["schemas"]["UserResponse"][];
         };
         /** UserResponse */
         UserResponse: {
@@ -3737,7 +3751,15 @@ export interface operations {
     };
     users_api_v1_users_get: {
         parameters: {
-            query?: never;
+            query?: {
+                search?: string;
+                role?: ("installation_administrator" | "user") | null;
+                state?: ("active" | "disabled") | null;
+                sort?: "joined" | "email" | "last_sign_in";
+                order?: "asc" | "desc";
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: {
@@ -3752,7 +3774,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserResponse"][];
+                    "application/json": components["schemas"]["UserPageResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1,8 +1,5 @@
-import { Search, X } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
-
 import { RulePicker, type RulePickerOption } from "@/components/rule-picker"
-import { Input } from "@/components/ui/input"
+import { SearchField } from "@/components/search-field"
 import { Label } from "@/components/ui/label"
 import { NativeSelect } from "@/components/ui/native-select"
 import { useI18n } from "@/i18n/provider"
@@ -30,7 +27,14 @@ export function ActivityFilters({
   const pickerOptions = rulePickerOptions(ruleId, entries, context)
   return (
     <div className="activity-filters">
-      <ActivitySearch query={query} onSearch={(next) => onChange({ query: next })} />
+      <SearchField
+        id="activity-search"
+        label={t("activity.search.label")}
+        placeholder={t("activity.search.placeholder")}
+        clearLabel={t("activity.search.clear")}
+        query={query}
+        onSearch={(next) => onChange({ query: next })}
+      />
       <div className="field-stack">
         <Label id="activity-rule-label" onClick={() => document.getElementById("activity-rule")?.focus()}>{t("activity.filters.rule")}</Label>
         <RulePicker
@@ -99,78 +103,4 @@ function rulePickerOptions(
     }
   }
   return { options, showAccounts: [...calendars.values()].some((ids) => ids.size > 1) }
-}
-
-const SEARCH_DELAY_MS = 300
-
-/**
- * Searches recorded event titles as the administrator types, pausing briefly so each keystroke
- * does not replace the table. Enter searches at once; Escape clears.
- */
-function ActivitySearch({ query, onSearch }: { query: string; onSearch: (query: string) => void }) {
-  const { t } = useI18n()
-  const [text, setText] = useState(query)
-  const [shownQuery, setShownQuery] = useState(query)
-  const input = useRef<HTMLInputElement>(null)
-  const search = useRef(onSearch)
-  useEffect(() => {
-    search.current = onSearch
-  })
-  // A search cleared elsewhere, such as from the empty state, empties the field too.
-  if (query !== shownQuery) {
-    setShownQuery(query)
-    if (text.trim() !== query) setText(query)
-  }
-
-  useEffect(() => {
-    if (text.trim() === query) return
-    const timer = window.setTimeout(() => search.current(text.trim()), SEARCH_DELAY_MS)
-    return () => window.clearTimeout(timer)
-  }, [text, query])
-
-  function clear() {
-    setText("")
-    onSearch("")
-    input.current?.focus()
-  }
-
-  return (
-    <div className="field-stack">
-      <Label htmlFor="activity-search">{t("activity.search.label")}</Label>
-      <div className="activity-search">
-        <Search aria-hidden="true" className="activity-search-icon" />
-        <Input
-          ref={input}
-          id="activity-search"
-          type="search"
-          value={text}
-          placeholder={t("activity.search.placeholder")}
-          autoComplete="off"
-          spellCheck={false}
-          maxLength={200}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault()
-              if (text.trim() !== query) onSearch(text.trim())
-            } else if (event.key === "Escape" && text) {
-              event.preventDefault()
-              clear()
-            }
-          }}
-        />
-        {text && (
-          <button
-            type="button"
-            className="activity-search-clear"
-            aria-label={t("activity.search.clear")}
-            title={t("activity.search.clear")}
-            onClick={clear}
-          >
-            <X aria-hidden="true" />
-          </button>
-        )}
-      </div>
-    </div>
-  )
 }

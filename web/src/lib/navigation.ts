@@ -1,9 +1,21 @@
-export type AppView = "overview" | "rules" | "activity" | "settings"
-/** The Settings tabs, in order; Installation is for Installation Administrators only. */
-export const SETTINGS_TABS = ["connections", "account", "installation"] as const
+export type AppView = "overview" | "rules" | "activity" | "people" | "settings"
+/** The Settings tabs, in order; Administration is for Installation Administrators only. */
+export const SETTINGS_TABS = ["account", "connections", "administration"] as const
 export type SettingsTab = (typeof SETTINGS_TABS)[number]
-export const DEFAULT_SETTINGS_TAB: SettingsTab = "connections"
-/** Settings without a tab, as the OAuth callback and account links open it, shows Connections. */
+/** The tab Settings opens at unless Google's return or an account link calls for Connections. */
+export const DEFAULT_SETTINGS_TAB: SettingsTab = "account"
+/** What Google's return, or a link to one Connected Account, carries in the address. */
+export const SETTINGS_ARRIVAL_PARAMS = ["google", "account", "resumed"] as const
+
+/**
+ * The tab Settings without one shows: Connections when Google returned or an account is named,
+ * as the OAuth callback and older links open it, and Your account otherwise.
+ */
+export function defaultSettingsTab(search: string): SettingsTab {
+  const params = new URLSearchParams(search)
+  return SETTINGS_ARRIVAL_PARAMS.some((name) => params.has(name)) ? "connections" : DEFAULT_SETTINGS_TAB
+}
+
 export type AppLocation = { view: AppView; ruleId: string | null; settingsTab?: SettingsTab }
 /**
  * Changes view. A notice is announced on arrival; `createRule` opens the rule builder; `search`
@@ -15,6 +27,8 @@ export type ViewOptions = {
   noticeTone?: "attention" | undefined
   createRule?: boolean
   search?: string
+  /** The Settings tab to open, such as Connections for a link about Google accounts. */
+  settingsTab?: SettingsTab
 }
 export type ViewChange = (view: AppView, options?: ViewOptions) => void
 export type OpenRule = (ruleId: string, options?: ViewOptions) => void
@@ -29,10 +43,16 @@ export function accountSearch(accountId: string): string {
   return `?account=${encodeURIComponent(accountId)}`
 }
 
+/** Settings → Connections, where Google accounts are connected and reauthorized. */
+export function connectionsPath(search = ""): string {
+  return `${appPathForSettingsTab("connections")}${search}`
+}
+
 const APP_VIEW_PATHS: Record<AppView, string> = {
   overview: "/overview",
   rules: "/rules",
   activity: "/activity",
+  people: "/people",
   settings: "/settings",
 }
 
@@ -69,6 +89,17 @@ export function appLocationFromPathname(pathname: string): AppLocation {
   const settingsTab = settingsTabFromPath(normalized)
   if (settingsTab !== null) return { view: "settings", ruleId: null, settingsTab }
   return { view: PATH_VIEWS.get(normalized) ?? "overview", ruleId: null }
+}
+
+/** A location with Settings' tab filled in: one the path does not name follows the query. */
+export function withSettingsTab(location: AppLocation, search: string): AppLocation {
+  if (location.view !== "settings" || location.settingsTab) return location
+  return { ...location, settingsTab: defaultSettingsTab(search) }
+}
+
+/** Where an address opens, including the tab of Settings without one in its path. */
+export function appLocationFromUrl(pathname: string, search: string): AppLocation {
+  return withSettingsTab(appLocationFromPathname(pathname), search)
 }
 
 /** Whether the browser is showing this rule's details right now. */

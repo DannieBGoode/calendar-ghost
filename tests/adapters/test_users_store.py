@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.errors import EmailTaken
+from calendar_sync.application.ports import UserPage, UserQuery, UserSort
 from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
@@ -53,6 +54,68 @@ def test_only_the_first_user_is_added_as_the_first(tmp_path: Path) -> None:
     assert not users.add_first(SECOND, "hash-2")
     assert users.list() == (FIRST,)
     assert users.password_hash(FIRST.id) == "hash-1"
+
+
+def test_users_are_searched_filtered_sorted_and_paged(tmp_path: Path) -> None:
+    users = _users(tmp_path)
+    people = [
+        FIRST,
+        SECOND,
+        User(
+            UserId("third"),
+            "robin@example.test",
+            Role.USER,
+            UserState.DISABLED,
+            NOW + timedelta(2),
+            NOW + timedelta(5),
+        ),
+        User(
+            UserId("fourth"),
+            "dana@home.test",
+            Role.USER,
+            UserState.ACTIVE,
+            NOW + timedelta(3),
+            NOW + timedelta(4),
+        ),
+        User(
+            UserId("fifth"),
+            "under_score@example.test",
+            Role.USER,
+            UserState.ACTIVE,
+            NOW + timedelta(4),
+        ),
+    ]
+    for number, person in enumerate(people):
+        users.add(person, f"hash-{number}")
+        if person.last_sign_in_at is not None:
+            users.record_sign_in(person.id, person.last_sign_in_at)
+
+    def emails(query: UserQuery) -> list[str | None]:
+        return [user.email for user in users.find(query).users]
+
+    assert users.find(UserQuery(limit=2)) == UserPage((FIRST, SECOND), total=5)
+    assert users.find(UserQuery(search="robin")).users == (people[2],)
+    assert emails(UserQuery(offset=4)) == ["under_score@example.test"]
+    assert emails(UserQuery(search="EXAMPLE")) == [
+        "first@example.test",
+        "second@example.test",
+        "robin@example.test",
+        "under_score@example.test",
+    ]
+    assert emails(UserQuery(search="_")) == ["under_score@example.test"]
+    assert emails(UserQuery(role=Role.INSTALLATION_ADMINISTRATOR)) == ["first@example.test"]
+    assert emails(UserQuery(state=UserState.DISABLED)) == ["robin@example.test"]
+    assert emails(UserQuery(sort=UserSort.EMAIL, descending=True, limit=2)) == [
+        "under_score@example.test",
+        "second@example.test",
+    ]
+    # People who never signed in come last, whichever way the list is sorted.
+    assert emails(UserQuery(sort=UserSort.LAST_SIGN_IN, descending=True))[:2] == [
+        "robin@example.test",
+        "dana@home.test",
+    ]
+    assert emails(UserQuery(sort=UserSort.LAST_SIGN_IN))[-1] == "under_score@example.test"
+    assert users.find(UserQuery(search="nobody")) == UserPage((), total=0)
 
 
 def test_users_are_found_by_id_and_email_and_keep_what_is_saved(tmp_path: Path) -> None:

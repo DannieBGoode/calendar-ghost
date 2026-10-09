@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 import { testI18n } from "@/i18n/testing"
 import type { Person } from "@/lib/api"
 
-import { deletionMessage, isAdministrator, personFacts, personName } from "./people"
+import { deletionMessage, isAdministrator, lastSignIn, personName } from "./people"
 
 const NOW = Date.parse("2026-10-09T12:00:00Z")
 
@@ -17,12 +17,10 @@ const robin: Person = {
 }
 
 describe("people", () => {
-  it("says when a person joined and last signed in, and never anything they own", () => {
+  it("says when a person last signed in, or that they never have", () => {
     const i18n = testI18n()
-    expect(personFacts(i18n, robin, NOW)).toBe("Joined 3 hours ago · never signed in")
-    expect(personFacts(i18n, { ...robin, last_sign_in_at: "2026-10-09T11:00:00Z" }, NOW)).toBe(
-      "Joined 3 hours ago · last signed in 1 hour ago",
-    )
+    expect(lastSignIn(i18n, robin, NOW)).toBe("Never")
+    expect(lastSignIn(i18n, { ...robin, last_sign_in_at: "2026-10-09T11:00:00Z" }, NOW)).toBe("1 hour ago")
   })
 
   it("names a person by email, or says they have none yet", () => {

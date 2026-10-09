@@ -70,7 +70,7 @@ on `audit_entries(rule_id, source_event_id, id)`. New entries record their sourc
 time; existing entries are not backfilled and appear in Activity without an event name. Rolling back
 works with the same database: earlier releases ignore the columns and index and look titles up from
 Google again, but recorded titles stay in the database until their entries are deleted, including by
-clearing old Activity from **Settings → Installation → Storage**
+clearing old Activity from **Settings → Administration → Storage**
 ([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 
 Migration 10 adds the `pending_exception_replays` table, which stores only the identifier of each
@@ -218,7 +218,7 @@ defaults it to `/data/logs` on the data volume when it is unset, as it is in `.e
 to another path to use a different directory (inside the container, on a mounted volume so the files
 survive a rebuild), or set it to an empty value to turn file logging off; if the configured
 directory cannot be used, the service logs one warning, keeps logging to standard error, and
-Settings shows file logging as off. **Settings → Installation → Storage** shows these files' size
+Settings shows file logging as off. **Settings → Administration → Storage** shows these files' size
 and date range and offers Download and Purge logs, so an administrator can retrieve or clear them
 without SSH access to the host.
 
@@ -266,7 +266,7 @@ reveal them, and a backup keeps values older than 90 days until it rotates. Repl
 master key makes that history unreadable: Activity then lists which fields changed without their
 values, and each event's next change is described afresh.
 
-Clearing old Activity from **Settings → Installation → Storage** removes rows from the live database
+Clearing old Activity from **Settings → Administration → Storage** removes rows from the live database
 only; a backup taken before the clear keeps those entries until it rotates out of your backup
 schedule ([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 

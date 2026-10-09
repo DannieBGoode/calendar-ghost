@@ -1782,11 +1782,249 @@ p {
   background: transparent;
 }
 
-.person-badges {
+/* People: a search and two filters above a table that pages through everyone here. */
+.people-filters {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(10rem, 13rem) minmax(10rem, 13rem);
+  gap: 0.75rem;
+}
+
+.people-list-title:focus {
+  outline: none;
+}
+
+.people-table-wrap {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1rem;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+.people-table-wrap[data-updating="true"] {
+  opacity: 0.55;
+}
+
+.people-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.people-table th {
+  padding: 0 0.75rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.people-table td {
+  padding: 0.7rem 0.75rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+  vertical-align: middle;
+}
+
+.people-table th:first-child,
+.people-table td:first-child {
+  padding-left: 0;
+}
+
+.people-table th:last-child,
+.people-table td:last-child {
+  width: 3rem;
+  padding-right: 0;
+  text-align: right;
+}
+
+.person-col-email {
+  overflow-wrap: anywhere;
+}
+
+.person-email {
+  margin-right: 0.5rem;
+  font-weight: 550;
+}
+
+/* The upgraded first User has no email yet; the placeholder reads as a note, not an address. */
+.person-email[data-missing="true"] {
+  color: var(--muted-foreground);
+  font-weight: 450;
+}
+
+.person-col-joined,
+.person-col-last {
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.person-details-row td {
+  padding-top: 0;
+  text-align: left;
+}
+
+.people-table .person-details-row td:last-child {
+  width: auto;
+  padding-right: 0;
+  text-align: left;
+}
+
+/* A sortable heading is a button that keeps the heading's look; the arrow shows the order. */
+.sort-button {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.35rem;
+  margin: -0.35rem -0.4rem;
+  padding: 0.35rem 0.4rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+
+.sort-button:hover,
+.sort-button[data-active="true"] {
+  color: var(--foreground);
+}
+
+.sort-button:hover {
+  background: var(--muted);
+}
+
+.sort-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.sort-button svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.sort-button[data-active="false"] svg {
+  opacity: 0.5;
+}
+
+.people-pagination {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-top: 0.375rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.people-pagination p {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.people-pagination-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* On a narrow screen each person becomes a card that labels its values; the sortable headings stay
+   above the cards as buttons, so sorting works at every width without scrolling sideways. */
+@media (max-width: 800px) {
+  .people-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .people-filters > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .people-table,
+  .people-table thead,
+  .people-table tbody,
+  .people-table tr,
+  .people-table td {
+    display: block;
+  }
+
+  .people-table thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+    padding: 0 0 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .people-table th {
+    display: none;
+    padding: 0;
+    border: 0;
+  }
+
+  .people-table th[data-sortable] {
+    display: block;
+  }
+
+  .people-table tr.person-row {
+    display: grid;
+    grid-template-areas:
+      "email email actions"
+      "role state ."
+      "joined last .";
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 0.5rem 1rem;
+    padding: 0.85rem 0;
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
+  }
+
+  .people-table td,
+  .people-table td:first-child,
+  .people-table td:last-child {
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+
+  .people-table td[data-label]::before {
+    display: block;
+    color: var(--muted-foreground);
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .person-col-email {
+    grid-area: email;
+    align-self: center;
+  }
+
+  .person-col-role {
+    grid-area: role;
+  }
+
+  .person-col-state {
+    grid-area: state;
+  }
+
+  .person-col-joined {
+    grid-area: joined;
+  }
+
+  .person-col-last {
+    grid-area: last;
+  }
+
+  .person-col-actions {
+    grid-area: actions;
+  }
+
+  .people-table .person-details-row td {
+    padding: 0 0 0.85rem;
+  }
 }
 
 /* A link to pass on is the next step, so it gets the quiet surface across the whole list. */
@@ -3245,21 +3483,21 @@ a.recent-change-rule:focus-visible {
   margin-bottom: 1rem;
 }
 
-.activity-search {
+.search-field {
   position: relative;
 }
 
-.activity-search input {
+.search-field input {
   padding-right: 2.25rem;
   padding-left: 2.25rem;
 }
 
 /* The field has its own clear button, the same in every browser. */
-.activity-search input::-webkit-search-cancel-button {
+.search-field input::-webkit-search-cancel-button {
   appearance: none;
 }
 
-.activity-search-icon {
+.search-field-icon {
   position: absolute;
   top: 50%;
   left: 0.75rem;
@@ -3270,7 +3508,7 @@ a.recent-change-rule:focus-visible {
   transform: translateY(-50%);
 }
 
-.activity-search-clear {
+.search-field-clear {
   position: absolute;
   top: 50%;
   right: 0.5rem;
@@ -3288,17 +3526,17 @@ a.recent-change-rule:focus-visible {
   transition: color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
 }
 
-.activity-search-clear:hover {
+.search-field-clear:hover {
   background: var(--muted);
   color: var(--foreground);
 }
 
-.activity-search-clear:focus-visible {
+.search-field-clear:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
 }
 
-.activity-search-clear svg {
+.search-field-clear svg {
   width: 1rem;
   height: 1rem;
 }

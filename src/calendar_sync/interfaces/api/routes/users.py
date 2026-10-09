@@ -1,4 +1,4 @@
-"""Settings → Users: the Registration Policy, Invitations, roles, disabling, and deletion.
+"""People and Who can join: the Registration Policy, Invitations, roles, disabling, and deletion.
 
 Every route here is an Installation Administrator's, except the two links people follow to join
 or to choose a new password, which are public and need the link's token.
@@ -7,9 +7,9 @@ or to choose a new password, which are public and need the link's token.
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Protocol
+from typing import Annotated, Literal, Protocol
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from calendar_sync.application.administration import (
     AcceptInvitation,
@@ -36,7 +36,7 @@ from calendar_sync.application.administration import (
     YourOwnState,
 )
 from calendar_sync.application.errors import EmailTaken, PasswordPolicyViolation
-from calendar_sync.application.ports import IssuedLink
+from calendar_sync.application.ports import IssuedLink, UserQuery, UserSort
 from calendar_sync.domain.access import (
     InvalidEmail,
     LastAdministrator,
@@ -67,6 +67,7 @@ from calendar_sync.interfaces.api.schemas import (
     RoleRequest,
     SessionResponse,
     UserDeletionResponse,
+    UserPageResponse,
     UserResponse,
     UserStateRequest,
 )
@@ -209,9 +210,35 @@ def reset_password(payload: ResetPasswordRequest, services: Services) -> None:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
 
 
-@router.get("/api/v1/users", response_model=list[UserResponse])
-def users(services: Services, actor: Administrator) -> list[UserResponse]:
-    return [_user(user) for user in services.administration.list_users.execute(actor)]
+@router.get("/api/v1/users", response_model=UserPageResponse)
+def users(  # noqa: PLR0913
+    services: Services,
+    actor: Administrator,
+    search: Annotated[str, Query(max_length=200)] = "",
+    role: Literal["installation_administrator", "user"] | None = None,
+    state: Literal["active", "disabled"] | None = None,
+    sort: Literal["joined", "email", "last_sign_in"] = "joined",
+    order: Literal["asc", "desc"] = "asc",
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> UserPageResponse:
+    """One page of the people here, by part of their email, role, and state; never their data."""
+    query = UserQuery(
+        search=search.strip(),
+        role=Role(role) if role else None,
+        state=UserState(state) if state else None,
+        sort=UserSort(sort),
+        descending=order == "desc",
+        offset=(page - 1) * page_size,
+        limit=page_size,
+    )
+    found = services.administration.list_users.execute(actor, query)
+    return UserPageResponse(
+        users=[_user(user) for user in found.users],
+        total=found.total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.put("/api/v1/users/{user_id}/role", response_model=UserResponse)

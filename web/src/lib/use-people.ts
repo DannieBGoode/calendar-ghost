@@ -1,9 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
-import { api, type IssuedLink, type Person, type UserDeletion } from "@/lib/api"
+import { api, type IssuedLink, type PeopleQuery, type Person, type UserDeletion } from "@/lib/api"
 import { deletionMessage, personName } from "@/lib/people"
 
 /** What an Installation Administrator can do to another User. */
@@ -14,10 +14,10 @@ export type PersonCommand = { person: Person; action: PersonAction }
 type Outcome = { link?: IssuedLink; deletion?: UserDeletion }
 
 const CHANGED: Partial<Record<PersonAction, MessageKey>> = {
-  promote: "settings.people.status.administrator",
-  demote: "settings.people.status.notAdministrator",
-  disable: "settings.people.status.disabled",
-  enable: "settings.people.status.enabled",
+  promote: "people.status.administrator",
+  demote: "people.status.notAdministrator",
+  disable: "people.status.disabled",
+  enable: "people.status.enabled",
 }
 
 async function run({ person, action }: PersonCommand): Promise<Outcome> {
@@ -41,14 +41,22 @@ async function run({ person, action }: PersonCommand): Promise<Outcome> {
   }
 }
 
+/** One page of the people matching a query; the page shown stays while the next one loads. */
+export function usePeoplePage(query: PeopleQuery) {
+  return useQuery({
+    queryKey: ["people", query],
+    queryFn: () => api.people(query),
+    placeholderData: keepPreviousData,
+  })
+}
+
 /**
- * The people list and the commands an administrator runs on someone else. One command runs at a
- * time; its error is shown beside the person it was for.
+ * The commands an administrator runs on someone else. One command runs at a time; its error is
+ * shown beside the person it was for.
  */
-export function usePeople() {
+export function usePersonCommands() {
   const i18n = useI18n()
   const queryClient = useQueryClient()
-  const people = useQuery({ queryKey: ["people"], queryFn: api.people })
   const [message, setMessage] = useState("")
   const [deleting, setDeleting] = useState<string | null>(null)
   const [resetLink, setResetLink] = useState<{ personId: string; link: IssuedLink } | null>(null)
@@ -87,7 +95,12 @@ export function usePeople() {
     return command.variables?.person.id === person.id ? command.error : null
   }
 
-  return { people, command, message, deleting, setDeleting, resetLink, setResetLink, start, errorFor }
+  /** Whether a command on this person has something to show beside them. */
+  function hasDetails(person: Person): boolean {
+    return errorFor(person) !== null || deleting === person.id || resetLink?.personId === person.id
+  }
+
+  return { command, message, deleting, setDeleting, resetLink, setResetLink, start, errorFor, hasDetails }
 }
 
-export type PeopleCommands = ReturnType<typeof usePeople>
+export type PeopleCommands = ReturnType<typeof usePersonCommands>

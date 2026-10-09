@@ -565,6 +565,14 @@ class UserResponse(ApiResponse):
     last_sign_in_at: str | None
 
 
+class UserPageResponse(ApiResponse):
+    users: list[UserResponse]
+    total: int
+    """How many people match, across every page."""
+    page: int
+    page_size: int
+
+
 class RoleRequest(BaseModel):
     role: Literal["installation_administrator", "user"]
 

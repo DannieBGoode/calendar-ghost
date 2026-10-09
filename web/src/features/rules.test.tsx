@@ -322,9 +322,9 @@ describe("RulesView", () => {
       `Synchronization stopped: ${lapsed.email} must be reauthorized before this rule can run.`,
     )
     const link = [...container.querySelectorAll("a")].find((anchor) => anchor.textContent === "Reauthorize account")
-    expect(link?.getAttribute("href")).toBe("/settings?account=b")
+    expect(link?.getAttribute("href")).toBe("/settings/connections?account=b")
     click(link!)
-    expect(onViewChange).toHaveBeenCalledWith("settings", { search: "?account=b" })
+    expect(onViewChange).toHaveBeenCalledWith("settings", { search: "?account=b", settingsTab: "connections" })
   })
 
   it("has no untranslated text in rule rows, their status, and their commands", async () => {

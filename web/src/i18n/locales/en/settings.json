@@ -3,14 +3,14 @@
     "loading": "Loading settings",
     "loadFailure": "Settings could not load",
     "title": "Settings",
-    "intro": "Your Google accounts and integrations, and your own account.",
-    "introAdministrator": "Your Google accounts and integrations, your own account, and this installation."
+    "intro": "Your own account, and your Google accounts and integrations.",
+    "introAdministrator": "Your own account, your Google accounts and integrations, and who can join this installation and its storage."
   },
   "tabs": {
     "label": "Settings sections",
-    "connections": "Connections",
     "account": "Your account",
-    "installation": "Installation"
+    "connections": "Connections",
+    "administration": "Administration"
   },
   "ownAccount": {
     "title": "Your account",
@@ -46,13 +46,13 @@
     },
     "delete": {
       "title": "Delete your account",
-      "body": "Removes you and everything you own from this Calendar Ghost.",
+      "body": "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your own events stay.",
       "open": "Delete your account",
       "confirmTitle": "Delete your account permanently?",
-      "confirmBody": "Your rules, Google accounts, tokens, and Activity are removed, and you are signed out. Backups taken before now keep them until they rotate out. This cannot be undone.",
-      "confirmBodyLastUser": "You are the last person here. Your rules, Google accounts, tokens, and Activity are removed, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Backups taken before now keep them until they rotate out. This cannot be undone.",
-      "needsAdministrator": "Someone else must be an administrator before you can delete your account. Make another person an administrator under Installation, then come back.",
-      "openInstallation": "Open Installation",
+      "confirmBody": "This deletes your sign-in, rules, Google connections, tokens, and Activity, and signs you out. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
+      "confirmBodyLastUser": "You are the last person here. This deletes your sign-in, rules, Google connections, tokens, and Activity, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
+      "needsAdministrator": "Someone else must be an administrator before you can delete your account. Make another person an administrator on the People page, then come back.",
+      "openPeople": "Open People",
       "legend": "The events your rules wrote",
       "deleteEvents": "Delete them (recommended)",
       "deleteEventsHint": "They are removed from your calendars wherever Calendar Ghost can still reach them.",
@@ -77,77 +77,6 @@
       "onlyMe": "Only you can use this Calendar Ghost now.",
       "invitationOnly": "People can now join with an invitation link."
     }
-  },
-  "people": {
-    "title": "People",
-    "intro": "The people who sign in here. You see their email and when they last signed in, never their calendars, rules, or events.",
-    "loadError": "People could not load.",
-    "tryAgain": "Try again",
-    "noEmail": "No email yet",
-    "you": "You",
-    "administrator": "Administrator",
-    "disabled": "Disabled",
-    "lastSignIn": "Joined {joined} · last signed in {relative}",
-    "neverSignedIn": "Joined {joined} · never signed in",
-    "actions": {
-      "label": "Actions for {email}",
-      "makeAdministrator": "Make administrator",
-      "makeAdministratorHint": "They can manage people, storage, and who can join. They still never see anyone else's calendars.",
-      "removeAdministrator": "Remove administrator",
-      "removeAdministratorHint": "They keep their own calendars and rules.",
-      "disable": "Disable",
-      "disableHint": "They cannot sign in, and their rules wait until you enable them again.",
-      "enable": "Enable",
-      "enableHint": "They can sign in again, and their rules resume.",
-      "passwordReset": "Create password reset link",
-      "passwordResetHint": "A link they use once to choose a new password.",
-      "delete": "Delete",
-      "deleteHint": "Removes them and everything they own."
-    },
-    "status": {
-      "administrator": "{email} is now an administrator.",
-      "notAdministrator": "{email} is no longer an administrator.",
-      "disabled": "{email} can no longer sign in. Their rules wait until you enable them again.",
-      "enabled": "{email} can sign in again.",
-      "deleted": "{email} was deleted.",
-      "deletedEvents": {
-        "one": "{count} event their rules wrote was deleted.",
-        "other": "{count} events their rules wrote were deleted."
-      },
-      "left": {
-        "one": "{count} rule could not reach its calendar, so its events stay there, no longer managed.",
-        "other": "{count} rules could not reach their calendars, so their events stay there, no longer managed."
-      }
-    },
-    "delete": {
-      "title": "Delete {email} permanently?",
-      "body": "Their rules are removed, the events those rules wrote are deleted from their calendars wherever Calendar Ghost can still reach them, and everything they own is removed. Backups taken before now keep their records until they rotate out. This cannot be undone.",
-      "keep": "Keep this person",
-      "confirm": "Delete permanently",
-      "pending": "Deleting…"
-    },
-    "reset": {
-      "title": "Copy the password reset link for {email} now",
-      "body": "Send it to them yourself. It works once, until {expires}, and is shown only once. You never see or set their password.",
-      "label": "Password reset link for {email}"
-    }
-  },
-  "invitations": {
-    "title": "Invitations",
-    "body": "Create a link and send it to the person yourself. They choose their own email and password.",
-    "invite": "Invite someone",
-    "inviting": "Creating…",
-    "reveal": {
-      "title": "Copy the invitation link now",
-      "body": "Send it to the person you invite. It works once, until {expires}, and is shown only once.",
-      "label": "Invitation link"
-    },
-    "created": "Invitation created {created}",
-    "expires": "Expires {expires}",
-    "revoke": "Revoke",
-    "revokeLabel": "Revoke the invitation created {created}",
-    "revoked": "The invitation was revoked. Its link no longer works.",
-    "none": "No invitations are waiting."
   },
   "links": {
     "copy": "Copy link",
@@ -381,7 +310,10 @@
     "summaryDetail": "For monitors, dashboards, and AI assistants",
     "summary": {
       "none": "No tokens yet",
-      "neverUsed": { "one": "{count} token · never used", "other": "{count} tokens · never used" },
+      "neverUsed": {
+        "one": "{count} token · never used",
+        "other": "{count} tokens · never used"
+      },
       "lastUsed": {
         "one": "{count} token · last used {relative}",
         "other": "{count} tokens · last used {relative}"
@@ -428,7 +360,10 @@
       "confirm": "Revoke token",
       "pending": "Revoking…"
     },
-    "revokedCount": { "one": "{count} revoked token", "other": "{count} revoked tokens" },
+    "revokedCount": {
+      "one": "{count} revoked token",
+      "other": "{count} revoked tokens"
+    },
     "revokedItem": "{name} · {usage}",
     "status": {
       "issued": "Token for {name} issued. Copy it now; it is shown only once.",

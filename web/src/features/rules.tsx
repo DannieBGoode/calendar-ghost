@@ -21,7 +21,14 @@ import { useI18n } from "@/i18n/provider"
 import { rich } from "@/i18n/rich"
 import type { MessageKey } from "@/i18n/types"
 import { api, type ConnectedAccount, type RulePolicyPayload, type RuleSummary } from "@/lib/api"
-import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
+import {
+  appPathForRule,
+  appPathForView,
+  connectionsPath,
+  isPlainLeftClick,
+  type OpenRule,
+  type ViewChange,
+} from "@/lib/navigation"
 import { useRemovingRuleIds } from "@/lib/rule-removal"
 import { lastRunLabel } from "@/lib/rule-run"
 import { busyCommand, ruleWork, workRefreshInterval, type RuleWork } from "@/lib/rule-work"
@@ -178,11 +185,11 @@ function RulesHeading({
             {rich(t("rules.list.connectAccountHint"), {
               link: (text) => (
                 <a
-                  href={appPathForView("settings")}
+                  href={connectionsPath()}
                   onClick={(event) => {
                     if (!isPlainLeftClick(event)) return
                     event.preventDefault()
-                    onViewChange("settings")
+                    onViewChange("settings", { settingsTab: "connections" })
                   }}
                 >
                   {text}

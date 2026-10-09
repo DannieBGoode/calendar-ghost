@@ -133,22 +133,28 @@ uses read-only requests and reports which calendars can be used as destinations.
 ### Invite other people
 
 A new installation is for you alone: its Registration Policy is **Only me**, so nobody else can
-join and Settings shows nothing about other people. To share it with your household:
+join and the app shows nothing about other people. To share it with your household:
 
-1. Open **Settings → Installation → Who can join** and choose **Invitation only**.
-2. Under **People** on the same tab, choose **Invite someone** and pass the link on yourself. It
-   works once and expires after 7 days; the person chooses their own email and password.
+1. Open **Settings → Administration → Who can join** and choose **Invitation only**. A **People**
+   page appears in the main navigation.
+2. On **People**, choose **Invite someone** and pass the link on yourself. It works once and expires
+   after 7 days; the person chooses their own email and password.
 3. Everyone's Google accounts, rules, Activity, and tokens are their own. As the administrator you
-   see each person's email, role, whether they may sign in, and when they last did, never their
-   calendars or events.
+   see each person's email, role, whether they may sign in, when they joined, and when they last
+   signed in, never their calendars or events. Search by part of an email, filter by role or
+   state, sort by email, joining, or last sign-in, and page through 50 people at a time; the
+   address keeps your choices, so a reload or a shared link shows the same list.
 
 From **People** you can also make someone an administrator, disable someone, which signs them out
 and holds their rules until you enable them again, create a password reset link for someone who
-forgot theirs, or delete someone with everything they own. While anyone else remains, the
+forgot theirs, or delete someone. Deleting someone deletes their sign-in, rules, Google connections,
+tokens, and Activity, and the events their rules wrote wherever Calendar Ghost can still reach
+them; their own events and their Google accounts stay as they are. While anyone else remains, the
 installation keeps one administrator who can sign in, so the last administrator must make someone
 else an administrator before deleting their own account. You may return to **Only me** once you are
 the only person again. Anyone can change their own email and password, turn their incident emails
-off, or delete their own account under **Settings → Your account**. When the last person deletes
+off, or delete their own account under **Settings → Your account**, choosing whether the events
+their rules wrote are deleted too. When the last person deletes
 their own account, Calendar Ghost returns to setup: the next person to open it creates the
 administrator, as on a new installation, and the Google OAuth settings and master key in `.env`
 stay as they were.

@@ -58,7 +58,7 @@ function serve(answers: Record<string, Response> = {}) {
 let container: HTMLDivElement
 let root: Root | null = null
 let queryClient: QueryClient
-let openInstallation: ReturnType<typeof vi.fn<() => void>>
+let openPeople: ReturnType<typeof vi.fn<() => void>>
 
 beforeEach(() => {
   container = document.createElement("div")
@@ -98,7 +98,7 @@ async function renderSection(
   } = {},
 ) {
   serve(answers)
-  openInstallation = vi.fn<() => void>()
+  openPeople = vi.fn<() => void>()
   root = createRoot(container)
   // As fresh as the app keeps answers, so a test can tell a cached answer from a new one.
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
@@ -107,7 +107,7 @@ async function renderSection(
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
-          <OwnAccountSection user={signedIn} sendsEmail={sendsEmail} onOpenInstallation={openInstallation} />
+          <OwnAccountSection user={signedIn} sendsEmail={sendsEmail} onOpenPeople={openPeople} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
@@ -289,21 +289,21 @@ describe("OwnAccountSection", () => {
     const item = deletionItem()
     expect(item.querySelector("h3")?.textContent).toBe("Delete your account")
     expect(item.textContent).toContain(
-      "Someone else must be an administrator before you can delete your account. Make another person an administrator under Installation, then come back.",
+      "Someone else must be an administrator before you can delete your account. Make another person an administrator on the People page, then come back.",
     )
     const link = item.querySelector<HTMLAnchorElement>("a")!
-    expect(link.textContent).toBe("Open Installation")
-    expect(link.getAttribute("href")).toBe("/settings/installation")
+    expect(link.textContent).toBe("Open People")
+    expect(link.getAttribute("href")).toBe("/people")
     const plain = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })
     act(() => {
       link.dispatchEvent(plain)
     })
     expect(plain.defaultPrevented).toBe(true)
-    expect(openInstallation).toHaveBeenCalledOnce()
+    expect(openPeople).toHaveBeenCalledOnce()
   })
 
   it("asks again whether the account can be deleted each time it is shown", async () => {
-    // Making someone else an administrator under Installation, then coming back, offers deletion.
+    // Making someone else an administrator on the People page, then coming back, offers deletion.
     await renderSection(testI18n(), {
       signedIn: administrator,
       cached: { "account-deletion": { needs_another_administrator: true, last_user: false } },
@@ -315,17 +315,20 @@ describe("OwnAccountSection", () => {
     await renderSection(testI18n(), { answers: { "GET /api/v1/account/deletion": deletion({ last_user: true }) } })
     await click(button("Delete your account"))
     expect(container.querySelector("#own-delete-confirmation p")?.textContent).toBe(
-      "You are the last person here. Your rules, Google accounts, tokens, and Activity are removed, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Backups taken before now keep them until they rotate out. This cannot be undone.",
+      "You are the last person here. This deletes your sign-in, rules, Google connections, tokens, and Activity, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
     )
   })
 
   it("deletes your own account, keeping the events your rules wrote when you choose, then signs you out", async () => {
     await renderSection(testI18n())
     queryClient.setQueryData(["rules"], [{ id: "rule-private" }])
+    expect(deletionItem().querySelector("p")?.textContent).toBe(
+      "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your own events stay.",
+    )
     await click(button("Delete your account"))
     const confirmation = container.querySelector<HTMLElement>("#own-delete-confirmation")!
     expect(confirmation.querySelector("p")?.textContent).toBe(
-      "Your rules, Google accounts, tokens, and Activity are removed, and you are signed out. Backups taken before now keep them until they rotate out. This cannot be undone.",
+      "This deletes your sign-in, rules, Google connections, tokens, and Activity, and signs you out. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
     )
     expect(confirmation.querySelector<HTMLInputElement>("input[value='delete']")!.checked).toBe(true)
     expect(button("Delete my account", confirmation).disabled).toBe(true)

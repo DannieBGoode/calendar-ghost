@@ -10,7 +10,7 @@ from typing import Protocol, Self
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.providers import ProviderKind
-from calendar_sync.domain.access import RegistrationPolicy, User, UserId
+from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -858,6 +858,33 @@ class Session:
     user_id: UserId
 
 
+class UserSort(StrEnum):
+    JOINED = "joined"
+    EMAIL = "email"
+    LAST_SIGN_IN = "last_sign_in"
+
+
+@dataclass(frozen=True, slots=True)
+class UserQuery:
+    """One page of the Users an Installation Administrator looks for."""
+
+    search: str = ""
+    """Part of an email, in any case."""
+    role: Role | None = None
+    state: UserState | None = None
+    sort: UserSort = UserSort.JOINED
+    descending: bool = False
+    offset: int = 0
+    limit: int = 50
+
+
+@dataclass(frozen=True, slots=True)
+class UserPage:
+    users: tuple[User, ...]
+    total: int
+    """How many Users match, across every page."""
+
+
 class UserDirectory(Protocol):
     """Every User of the installation, and their password hashes. Signing in, inviting, and
     administering Users read it; it holds none of a User's calendars, rules, or activity."""
@@ -866,6 +893,10 @@ class UserDirectory(Protocol):
 
     def list(self) -> Sequence[User]:
         """Every User, the first first."""
+        ...
+
+    def find(self, query: UserQuery) -> UserPage:
+        """The Users matching `query`; Users who never signed in sort last either way."""
         ...
 
     def get(self, user_id: UserId) -> User | None: ...

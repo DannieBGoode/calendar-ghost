@@ -214,12 +214,29 @@ export type RegistrationPolicy = Registration["policy"]
 export type Person = Schemas["UserResponse"]
 export type PersonRole = Person["role"]
 export type PersonState = Person["state"]
+/** One page of the people an administrator looks for, and how many match across every page. */
+export type PeoplePage = Schemas["UserPageResponse"]
+type PeopleParams = NonNullable<paths["/api/v1/users"]["get"]["parameters"]["query"]>
+export type PeopleSort = NonNullable<PeopleParams["sort"]>
+export type SortOrder = NonNullable<PeopleParams["order"]>
+/** What the People page asks for; an empty role or state matches everyone. */
+export type PeopleQuery = {
+  /** Part of an email, in any case. */
+  search: string
+  role: PersonRole | ""
+  state: PersonState | ""
+  sort: PeopleSort
+  order: SortOrder
+  /** From 1. */
+  page: number
+}
 export type PendingInvitation = Schemas["PendingInvitationResponse"]
 /** An Invitation or Password Reset Link; its token is shown once. */
 export type IssuedLink = Schemas["IssuedLinkResponse"]
 export type UserDeletion = Schemas["UserDeletionResponse"]
 
 export const ACTIVITY_PAGE_SIZE = 100
+export const PEOPLE_PAGE_SIZE = 50
 
 export const api = {
   setup: () => call("/api/v1/setup", "get"),
@@ -257,7 +274,18 @@ export const api = {
   checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
   resetPassword: (token: string, password: string) =>
     call("/api/v1/password-resets", "post", { body: { token, password } }),
-  people: () => call("/api/v1/users", "get"),
+  people: ({ search, role, state, sort, order, page }: PeopleQuery) =>
+    call("/api/v1/users", "get", {
+      query: {
+        ...(search.trim() ? { search: search.trim() } : {}),
+        role: role || null,
+        state: state || null,
+        sort,
+        order,
+        page,
+        page_size: PEOPLE_PAGE_SIZE,
+      },
+    }),
   setPersonRole: (userId: string, role: PersonRole) =>
     call("/api/v1/users/{user_id}/role", "put", { params: { user_id: userId }, body: { role } }),
   setPersonState: (userId: string, state: PersonState) =>

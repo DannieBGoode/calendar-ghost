@@ -59,7 +59,7 @@ def test_an_invited_person_joins_with_their_own_email_and_password(tmp_path: Pat
         dashboard = member.get("/api/v1/dashboard").json()
         reused = member.post("/api/v1/invitations/accept", json={"token": token, **MEMBER})
         rechecked = member.post("/api/v1/invitations/check", json={"token": token}).json()
-        listed = admin.get("/api/v1/users").json()
+        listed = admin.get("/api/v1/users").json()["users"]
         back_to_only_me = admin.put("/api/v1/registration", json={"policy": "only_me"})
 
     assert checked == {"usable": True}
@@ -168,7 +168,7 @@ def test_users_are_deleted_by_an_administrator_or_by_themselves(tmp_path: Path) 
             "/api/v1/account",
             json={"password": MEMBER["password"], "projections": "detach"},
         )
-        listed = admin.get("/api/v1/users").json()
+        listed = admin.get("/api/v1/users").json()["users"]
 
     assert deleted.json() == {"rules": 0, "deleted": 0, "detached": 0, "left": 0}
     assert gone == 401
@@ -204,3 +204,27 @@ def test_the_last_administrator_leaves_only_when_nobody_else_remains(tmp_path: P
     assert (joined.status_code, joined.json()["code"]) == (410, "link_unusable")
     assert again.status_code in (200, 201)
     assert policy == "only_me"
+
+
+def test_an_administrator_searches_filters_sorts_and_pages_people(tmp_path: Path) -> None:
+    with _client(tmp_path) as admin, _client(tmp_path) as member:
+        _set_up_with_member(admin, member)
+        first = admin.get("/api/v1/users", params={"page_size": 1}).json()
+        second = admin.get("/api/v1/users", params={"page_size": 1, "page": 2}).json()
+        found = admin.get(
+            "/api/v1/users",
+            params={"search": "MEMBER", "role": "user", "state": "active", "sort": "email"},
+        ).json()
+        newest = admin.get("/api/v1/users", params={"sort": "joined", "order": "desc"}).json()
+        too_many = admin.get("/api/v1/users", params={"page_size": 101})
+
+    assert [user["email"] for user in first["users"]] == ["admin@example.test"]
+    assert (first["total"], first["page"], first["page_size"]) == (2, 1, 1)
+    assert [user["email"] for user in second["users"]] == ["member@example.test"]
+    assert [user["email"] for user in found["users"]] == ["member@example.test"]
+    assert found["total"] == 1
+    assert [user["email"] for user in newest["users"]] == [
+        "member@example.test",
+        "admin@example.test",
+    ]
+    assert too_many.status_code == 422

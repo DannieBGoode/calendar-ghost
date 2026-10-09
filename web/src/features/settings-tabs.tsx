@@ -10,9 +10,9 @@ import {
 import { cn } from "@/lib/utils"
 
 const TAB_LABELS: Record<SettingsTab, MessageKey> = {
-  connections: "settings.tabs.connections",
   account: "settings.tabs.account",
-  installation: "settings.tabs.installation",
+  connections: "settings.tabs.connections",
+  administration: "settings.tabs.administration",
 }
 
 /**
@@ -29,7 +29,7 @@ export function SettingsTabs({
   onOpen: OpenSettingsTab
 }) {
   const { t } = useI18n()
-  const tabs = SETTINGS_TABS.filter((tab) => administrator || tab !== "installation")
+  const tabs = SETTINGS_TABS.filter((tab) => administrator || tab !== "administration")
   return (
     <nav className="settings-tabs" aria-label={t("settings.tabs.label")}>
       {tabs.map((tab) => (

@@ -25,7 +25,7 @@ export function useInvitations() {
     onSuccess: async (_result, invitationId) => {
       // A revoked link must not stay on screen as if it still worked.
       setIssued((current) => (current?.id === invitationId ? null : current))
-      setMessage(t("settings.invitations.revoked"))
+      setMessage(t("people.invitations.revoked"))
       await refresh()
     },
   })

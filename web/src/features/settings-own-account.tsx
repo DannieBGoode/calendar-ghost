@@ -19,16 +19,16 @@ type Announce = (message: string) => void
 
 /**
  * The signed-in User's own sign-in, incident emails, and deletion; every User has it.
- * `onOpenInstallation` opens the Installation tab, where an administrator names another one.
+ * `onOpenPeople` opens the People page, where an administrator names another one.
  */
 export function OwnAccountSection({
   user,
   sendsEmail,
-  onOpenInstallation,
+  onOpenPeople,
 }: {
   user: SignedInUser
   sendsEmail: boolean
-  onOpenInstallation: () => void
+  onOpenPeople: () => void
 }) {
   const { t } = useI18n()
   const [message, setMessage] = useState("")
@@ -44,7 +44,7 @@ export function OwnAccountSection({
         <EmailItem email={user.email} onDone={setMessage} />
         <PasswordItem onDone={setMessage} />
         <IncidentEmailsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
-        <SelfDeletionItem onOpenInstallation={onOpenInstallation} />
+        <SelfDeletionItem onOpenPeople={onOpenPeople} />
       </div>
       {message && <p role="status">{message}</p>}
     </section>

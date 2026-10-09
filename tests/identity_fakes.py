@@ -6,8 +6,23 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import EmailTaken
-from calendar_sync.application.ports import IssuedLink, PendingInvitation, Session
+from calendar_sync.application.ports import (
+    IssuedLink,
+    PendingInvitation,
+    Session,
+    UserPage,
+    UserQuery,
+    UserSort,
+)
 from calendar_sync.domain.access import RegistrationPolicy, User, UserId, link_expiry
+
+
+def _sort_value(user: User, sort: UserSort) -> object:
+    if sort is UserSort.EMAIL:
+        return user.email
+    if sort is UserSort.LAST_SIGN_IN:
+        return user.last_sign_in_at
+    return user.created_at
 
 
 @dataclass
@@ -20,6 +35,20 @@ class MemoryUsers:
 
     def list(self) -> tuple[User, ...]:
         return tuple(sorted(self.users.values(), key=lambda user: user.created_at))
+
+    def find(self, query: UserQuery) -> UserPage:
+        matching = [
+            user
+            for user in self.users.values()
+            if query.search.casefold() in (user.email or "").casefold()
+            and query.role in (None, user.role)
+            and query.state in (None, user.state)
+        ]
+        known = [user for user in matching if _sort_value(user, query.sort) is not None]
+        known.sort(key=lambda user: str(_sort_value(user, query.sort)), reverse=query.descending)
+        ordered = known + [user for user in matching if _sort_value(user, query.sort) is None]
+        page = ordered[query.offset : query.offset + query.limit]
+        return UserPage(tuple(page), len(matching))
 
     def get(self, user_id: UserId) -> User | None:
         return self.users.get(user_id)

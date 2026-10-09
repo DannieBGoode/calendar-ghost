@@ -143,10 +143,14 @@ describe("App", () => {
     }
   })
 
-  it("lands on Connections with the connection outcome when Google returns to Settings", async () => {
+  it.each([
+    ["/settings/connections?google=connected&account=acct-a", "/settings/connections"],
+    // Google's return from before Settings had tabs still opens Connections.
+    ["/settings?google=connected&account=acct-a", "/settings"],
+  ])("lands on Connections with the connection outcome when Google returns to %s", async (arrival, settled) => {
     const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
     const address = window.location.href
-    page.happyDOM.setURL("http://localhost:8000/settings?google=connected&account=acct-a")
+    page.happyDOM.setURL(`http://localhost:8000${arrival}`)
     try {
       const { container } = await renderApp(testI18n())
       expect(container.querySelector(".oauth-feedback h2")?.textContent).toBe("Google account connected")
@@ -154,21 +158,30 @@ describe("App", () => {
       expect(container.querySelector("[aria-labelledby='accounts-title']")).not.toBeNull()
       expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("Settings")
       // The address stays at Settings; only the outcome is dropped so a reload does not repeat it.
-      expect(`${window.location.pathname}${window.location.search}`).toBe("/settings")
+      expect(`${window.location.pathname}${window.location.search}`).toBe(settled)
+      // Dropping the outcome does not move Settings to another tab.
+      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
     } finally {
       page.happyDOM.setURL(address)
     }
   })
 
-  it("opens a Settings tab at its own address without reloading, and follows back and forward", async () => {
+  it("opens Settings at Your account, and a tab at its own address without reloading, following back and forward", async () => {
     const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
     const address = window.location.href
     page.happyDOM.setURL("http://localhost:8000/settings")
     try {
       const { container } = await renderApp(testI18n())
+      expect([...container.querySelectorAll("nav.settings-tabs a")].map((tab) => tab.textContent)).toEqual([
+        "Your account",
+        "Connections",
+      ])
+      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
+      expect(container.querySelector("[aria-labelledby='appearance-title']")).not.toBeNull()
+
       const header = container.querySelector("header")
       const tab = [...container.querySelectorAll<HTMLAnchorElement>("nav.settings-tabs a")].find(
-        (link) => link.textContent === "Your account",
+        (link) => link.textContent === "Connections",
       )!
       const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })
       act(() => {
@@ -177,18 +190,18 @@ describe("App", () => {
       await settle()
 
       expect(click.defaultPrevented).toBe(true)
-      expect(window.location.pathname).toBe("/settings/account")
+      expect(window.location.pathname).toBe("/settings/connections")
       expect(container.querySelector("header")).toBe(header)
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
-      expect(container.querySelector("[aria-labelledby='appearance-title']")).not.toBeNull()
-      expect(container.querySelector("[aria-labelledby='accounts-title']")).toBeNull()
+      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("[aria-labelledby='accounts-title']")).not.toBeNull()
+      expect(container.querySelector("[aria-labelledby='appearance-title']")).toBeNull()
 
       act(() => {
-        window.history.replaceState(null, "", "/settings/connections")
+        window.history.replaceState(null, "", "/settings/account")
         window.dispatchEvent(new PopStateEvent("popstate"))
       })
       await settle()
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
     } finally {
       page.happyDOM.setURL(address)
     }
@@ -318,5 +331,81 @@ describe("App", () => {
   it("titles the page in the active language", async () => {
     await renderApp(testI18n())
     expect(document.title).toBe("Overview – Calendar Ghost")
+  })
+})
+
+describe("People", () => {
+  const administrator = {
+    id: "user-dana",
+    email: "dana@example.test",
+    role: "installation_administrator",
+    notify_by_email: true,
+    language: null,
+  }
+  const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+  let address: string
+  let requested: string[]
+
+  beforeEach(() => {
+    address = window.location.href
+  })
+
+  afterEach(() => {
+    page.happyDOM.setURL(address)
+  })
+
+  function serveAs(role: string, policy: "only_me" | "invitation_only") {
+    requested = []
+    const answers: Record<string, unknown> = {
+      ...RESPONSES,
+      "/api/v1/session": { authenticated: true, installation_sends_email: false, user: { ...administrator, role } },
+      "/api/v1/registration": { policy, only_me_available: policy === "only_me" },
+      "/api/v1/users": { users: [{ ...administrator, state: "active", created_at: "2026-10-01T09:00:00Z", last_sign_in_at: null }], total: 1, page: 1, page_size: 50 },
+      "/api/v1/invitations": [],
+    }
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL) => {
+        const path = String(input).split("?")[0] ?? ""
+        requested.push(path)
+        return Promise.resolve(jsonResponse(answers[path] ?? {}))
+      }),
+    )
+  }
+
+  function navLabels(): string[] {
+    return [...document.querySelectorAll("#primary-nav a")].map((link) => link.textContent)
+  }
+
+  it("is offered to an administrator while people can join, and opens at its own address", async () => {
+    page.happyDOM.setURL("http://localhost:8000/overview")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    expect(navLabels()).toEqual(["Overview", "Rules", "Activity", "People", "Settings"])
+
+    const link = [...container.querySelectorAll<HTMLAnchorElement>("#primary-nav a")].find((item) => item.textContent === "People")!
+    expect(link.getAttribute("href")).toBe("/people")
+    act(() => {
+      link.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people")
+    expect(container.querySelector("main h1")?.textContent).toBe("People")
+    expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
+    expect(document.title).toBe("People – Calendar Ghost")
+    expect(requested).toContain("/api/v1/users")
+  })
+
+  it.each([
+    ["someone who is not an administrator", "user", "invitation_only"],
+    ["an administrator under Only me", "installation_administrator", "only_me"],
+  ] as const)("is hidden from %s, and its address falls back to Overview", async (_who, role, policy) => {
+    page.happyDOM.setURL("http://localhost:8000/people")
+    serveAs(role, policy)
+    const { container } = await renderApp(testI18n())
+    expect(navLabels()).toEqual(["Overview", "Rules", "Activity", "Settings"])
+    expect(window.location.pathname).toBe("/overview")
+    expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("Overview")
+    expect(requested).not.toContain("/api/v1/users")
   })
 })

@@ -28,6 +28,8 @@ from calendar_sync.application.ports import (
     Sessions,
     UnitOfWorkFactory,
     UserDirectory,
+    UserPage,
+    UserQuery,
 )
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.domain.access import (
@@ -226,9 +228,9 @@ class ResetPassword:
 class ListUsers:
     users: UserDirectory
 
-    def execute(self, actor: UserId) -> Sequence[User]:
+    def execute(self, actor: UserId, query: UserQuery) -> UserPage:
         require_administrator(self.users, actor)
-        return self.users.list()
+        return self.users.find(query)
 
 
 @dataclass(slots=True)

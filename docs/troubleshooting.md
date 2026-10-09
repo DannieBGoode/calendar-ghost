@@ -57,7 +57,7 @@ docker compose logs --since 1h app
 ```
 
 The service's own lines, those of the `calendar_sync` loggers, are also kept in its rotating log
-files beside the database, so **Settings → Installation → Storage** → **Download** gets them without
+files beside the database, so **Settings → Administration → Storage** → **Download** gets them without
 SSH access to the host. Uvicorn's request and error lines stay in the container logs only.
 
 Lines name a rule and a run only by their internal identifiers. They never contain event titles,
@@ -107,7 +107,7 @@ is verbose; set it back to
 
 ## Database is large
 
-**Settings → Installation → Storage** shows the database's size, the number of Activity entries, and
+**Settings → Administration → Storage** shows the database's size, the number of Activity entries, and
 the oldest one. Clear Activity older than 30, 90, 180, or 365 days; the confirmation shows how many
 entries that removes before you confirm. Clearing deletes in batches and then compacts the database,
 which briefly waits for any rule that is synchronizing; if every rule's lock cannot be taken, or
@@ -301,7 +301,7 @@ The Google adapter must discard the expired cursor, perform a safe initial-windo
 
 - **The email and password do not match.** Sign in with the email you added or were invited with;
   its case does not matter. If you forgot your password, ask an administrator for a password reset
-  link under **Settings → Installation → People**. It works once, for 7 days, and signs you out
+  link from the **People** page. It works once, for 7 days, and signs you out
   everywhere once you choose a new password. An administrator never sees or sets your password.
 - **Too many failed attempts.** After five failures for one email, or twenty from one address, in
   15 minutes, sign-in waits until the oldest failure is 15 minutes old. Behind a reverse proxy the

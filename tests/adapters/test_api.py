@@ -1043,7 +1043,7 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
 
     assert response.status_code == 303
     assert response.headers["location"] == (
-        f"/settings?google=connected&account={account.id.value}&resumed=0"
+        f"/settings/connections?google=connected&account={account.id.value}&resumed=0"
     )
     complete.assert_called_once_with("synthetic-state", "synthetic-code")
 
@@ -1142,7 +1142,9 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=calendar_permission_required"
+    assert (
+        response.headers["location"] == "/settings/connections?google=calendar_permission_required"
+    )
     assert repeated.status_code == 400
 
 
@@ -1161,7 +1163,7 @@ def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=authorization_failed"
+    assert response.headers["location"] == "/settings/connections?google=authorization_failed"
 
 
 def test_google_oauth_callback_requires_an_authorization_result(tmp_path: Path) -> None:
@@ -1199,7 +1201,9 @@ def test_google_oauth_missing_calendar_permission_returns_to_settings(
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=calendar_permission_required"
+    assert (
+        response.headers["location"] == "/settings/connections?google=calendar_permission_required"
+    )
     complete.assert_called_once_with("synthetic-state", "synthetic-code")
 
 
@@ -1221,7 +1225,7 @@ def test_google_oauth_completion_failure_returns_to_settings(
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=authorization_failed"
+    assert response.headers["location"] == "/settings/connections?google=authorization_failed"
     complete.assert_called_once_with("synthetic-state", "synthetic-code")
 
 
@@ -1247,7 +1251,8 @@ def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path
         "/settings",
         "/settings/connections",
         "/settings/account",
-        "/settings/installation",
+        "/settings/administration",
+        "/people",
     ],
 )
 def test_frontend_fallback_serves_each_application_section(tmp_path: Path, path: str) -> None:

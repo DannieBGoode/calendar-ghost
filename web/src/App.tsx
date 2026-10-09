@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Activity, CalendarCheck2, LogOut, Menu, Settings2, Waypoints, X } from "lucide-react"
+import { Activity, CalendarCheck2, LogOut, Menu, Settings2, Users, Waypoints, X } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
@@ -17,6 +17,7 @@ import { api, type SessionStatus, type SetupStatus } from "@/lib/api"
 import { APP_VERSION, HELP_URL, LICENSE_URL, PRODUCT_NAME, SOURCE_URL, documentTitle } from "@/lib/brand"
 import {
   appLocationFromPathname,
+  appLocationFromUrl,
   appPathForLocation,
   appPathForView,
   isKnownAppPath,
@@ -25,14 +26,17 @@ import {
   type AppView,
   type SettingsTab,
   type ViewOptions,
+  withSettingsTab,
 } from "@/lib/navigation"
 import { publicPageAt } from "@/lib/public-links"
+import { usePeopleAccess } from "@/lib/use-people-access"
 import { cn } from "@/lib/utils"
 
 const navItems: { id: AppView; labelKey: MessageKey; icon: typeof Waypoints }[] = [
   { id: "overview", labelKey: "app.nav.overview", icon: CalendarCheck2 },
   { id: "rules", labelKey: "app.nav.rules", icon: Waypoints },
   { id: "activity", labelKey: "app.nav.activity", icon: Activity },
+  { id: "people", labelKey: "app.nav.people", icon: Users },
   { id: "settings", labelKey: "app.nav.settings", icon: Settings2 },
 ]
 
@@ -74,10 +78,16 @@ function SignInGate({ setup, session }: { setup: SetupStatus; session: SessionSt
 function AuthenticatedApp() {
   const i18n = useI18n()
   const { t } = i18n
-  const [location, setLocation] = useState<AppLocation>(() =>
-    appLocationFromPathname(window.location.pathname),
+  const [requested, setLocation] = useState<AppLocation>(() =>
+    appLocationFromUrl(window.location.pathname, window.location.search),
   )
+  const peopleAccess = usePeopleAccess()
+  // Someone the People page is not for, or anyone under Only me, finds Overview at its address,
+  // as at any unknown one.
+  const peopleClosed = requested.view === "people" && peopleAccess === "closed"
+  const location: AppLocation = peopleClosed ? { view: "overview", ruleId: null } : requested
   const view = location.view
+  const shownNavItems = navItems.filter((item) => item.id !== "people" || peopleAccess === "open")
   const [mobileNav, setMobileNav] = useState(false)
   const [arrival, setArrival] = useState<ViewOptions>({})
   // Counts arrivals so views that read the address, such as Activity's filters, start fresh on
@@ -103,12 +113,16 @@ function AuthenticatedApp() {
       navigated.current = true
       setVisit((count) => count + 1)
       setArrival({})
-      setLocation(appLocationFromPathname(window.location.pathname))
+      setLocation(appLocationFromUrl(window.location.pathname, window.location.search))
       setMobileNav(false)
     }
     window.addEventListener("popstate", handlePopState)
     return () => window.removeEventListener("popstate", handlePopState)
   }, [])
+
+  useEffect(() => {
+    if (peopleClosed) window.history.replaceState(null, "", appPathForView("overview"))
+  }, [peopleClosed])
 
   // A layout effect runs before the new view's own effects, so a view that focuses its heading
   // (Rule Details, the rule builder) refines this rather than being overridden by it.
@@ -150,13 +164,14 @@ function AuthenticatedApp() {
     navigated.current = true
     setVisit((count) => count + 1)
     setArrival(options)
-    setLocation(next)
+    setLocation(withSettingsTab(next, options.search ?? ""))
     setMobileNav(false)
     window.scrollTo(0, 0)
   }
 
   function changeView(next: AppView, options?: ViewOptions) {
-    navigate({ view: next, ruleId: null }, options)
+    const tab = next === "settings" && options?.settingsTab ? { settingsTab: options.settingsTab } : {}
+    navigate({ view: next, ruleId: null, ...tab }, options)
   }
 
   function openRule(ruleId: string, options?: ViewOptions) {
@@ -180,7 +195,7 @@ function AuthenticatedApp() {
           <span className="wordmark-icon"><GhostMark /></span><span>{PRODUCT_NAME}</span>
         </a>
         <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label={t("app.nav.primaryLabel")}>
-          {navItems.map((item) => {
+          {shownNavItems.map((item) => {
             const Icon = item.icon
             return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{t(item.labelKey)}</span></a>
           })}
@@ -193,27 +208,34 @@ function AuthenticatedApp() {
       </header>
       <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenSettingsTab={openSettingsTab} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
-      <footer className="app-footer">
-        <span>{PRODUCT_NAME}</span>
-        <span>{t("app.footer.version", { version: APP_VERSION })}</span>
-        <span>{t("app.footer.runsHere")}</span>
-        <a href="/api/docs">{t("app.footer.apiDocs")}</a>
-        <a href={HELP_URL} target="_blank" rel="noreferrer">
-          {t("app.footer.help")}
-        </a>
-        <span className="legal-notice">
-          {rich(t("app.footer.legal"), {
-            license: (text) => (
-              <a href={LICENSE_URL} target="_blank" rel="noreferrer">
-                {text}
-              </a>
-            ),
-          })}
-        </span>
-        <a href={SOURCE_URL} target="_blank" rel="noreferrer">
-          {t("app.footer.source")}
-        </a>
-      </footer>
+      <AppFooter />
     </div>
+  )
+}
+
+function AppFooter() {
+  const { t } = useI18n()
+  return (
+    <footer className="app-footer">
+      <span>{PRODUCT_NAME}</span>
+      <span>{t("app.footer.version", { version: APP_VERSION })}</span>
+      <span>{t("app.footer.runsHere")}</span>
+      <a href="/api/docs">{t("app.footer.apiDocs")}</a>
+      <a href={HELP_URL} target="_blank" rel="noreferrer">
+        {t("app.footer.help")}
+      </a>
+      <span className="legal-notice">
+        {rich(t("app.footer.legal"), {
+          license: (text) => (
+            <a href={LICENSE_URL} target="_blank" rel="noreferrer">
+              {text}
+            </a>
+          ),
+        })}
+      </span>
+      <a href={SOURCE_URL} target="_blank" rel="noreferrer">
+        {t("app.footer.source")}
+      </a>
+    </footer>
   )
 }
