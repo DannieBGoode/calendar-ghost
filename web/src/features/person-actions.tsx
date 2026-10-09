@@ -15,17 +15,21 @@ export function PersonMenu({ person, name, commands }: { person: Person; name: s
   return (
     <OverflowMenu
       label={i18n.t("people.actions.label", { email: name })}
-      items={personActions(i18n, person, commands.start)}
+      items={personActions(i18n, person, commands)}
     />
   )
 }
 
-/** Someone else's commands: their role, whether they can sign in, a new password, or deletion. */
-function personActions({ t }: I18n, person: Person, start: (command: PersonCommand) => void): OverflowMenuItem[] {
+/**
+ * Someone else's commands: their role, whether they can sign in, a new password, or deletion.
+ * They wait while any command runs.
+ */
+function personActions({ t }: I18n, person: Person, { command, start }: PeopleCommands): OverflowMenuItem[] {
   const item = (id: PersonCommand["action"], label: string, description: string): OverflowMenuItem => ({
     id,
     label,
     description,
+    disabled: command.isPending,
     onSelect: () => start({ person, action: id }),
   })
   return [
@@ -78,7 +82,7 @@ function PersonDeletion({ person, name, commands }: { person: Person; name: stri
       confirmLabel={t("people.delete.confirm")}
       pendingLabel={t("people.delete.pending")}
       pending={command.isPending}
-      onConfirm={() => command.mutate({ person, action: "delete" })}
+      onConfirm={() => commands.send({ person, action: "delete" })}
       onCancel={() => commands.setDeleting(null)}
     />
   )

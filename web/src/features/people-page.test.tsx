@@ -440,6 +440,53 @@ describe("People page", () => {
     expect(container.querySelector(".link-reveal")).toBeNull()
   })
 
+  it("runs one command at a time, so a second reset link cannot revoke the one shown", async () => {
+    await renderPeople(testI18n())
+    // Hold each reset link's answer, so a later request can answer first.
+    const held: ((response: Response) => void)[] = []
+    const served = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      const path = input instanceof Request ? input.url : String(input)
+      if (init?.method !== "POST" || !path.endsWith("/password-reset-links")) return served(input, init)
+      return new Promise<Response>((resolve) => held.push(resolve))
+    })
+    const resetFor = (number: number) => jsonResponse({ id: `reset-${number}`, token: `reset_${number}`, expires_at: nextWeek }, 201)
+    const resetItem = () =>
+      [...personRow("robin@example.test").querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
+        (item) => item.querySelector(".overflow-menu-label")?.textContent === "Create password reset link",
+      )!
+
+    // Two quick clicks, before the page shows that the first is running.
+    await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+    const item = resetItem()
+    act(() => {
+      item.click()
+      item.click()
+    })
+    await settle()
+    expect(held).toHaveLength(1)
+
+    // While it runs, every command on everyone waits, deletion included.
+    await click(personRow("sam@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+    const samItems = [...personRow("sam@example.test").querySelectorAll<HTMLButtonElement>("[role='menuitem']")]
+    expect(samItems.map((menuItem) => menuItem.getAttribute("aria-disabled"))).toEqual(["true", "true", "true", "true"])
+    await click(samItems.at(-1)!)
+    expect(container.querySelector("#delete-person-user-sam")).toBeNull()
+    await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+    await click(resetItem())
+    expect(held).toHaveLength(1)
+
+    // Answer in reverse order: any later request first, then the first.
+    for (const [index, answer] of [...held.entries()].reverse()) {
+      act(() => answer(resetFor(index + 1)))
+      await settle()
+    }
+    expect(container.querySelector<HTMLInputElement>(".link-reveal input")!.value).toBe(`${ORIGIN}/password-reset#reset_1`)
+    expect(personRow("robin@example.test").querySelector("[aria-haspopup='menu']")).not.toBeNull()
+    await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+    expect(resetItem().getAttribute("aria-disabled")).toBeNull()
+  })
+
   it("says plainly what deleting someone removes, and deletes only after confirming", async () => {
     await renderPeople(testI18n())
     await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
