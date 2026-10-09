@@ -258,11 +258,11 @@ The permanent removal of a User and everything they own. Their projections are d
 _Avoid_: Account deletion, user removal
 
 **Registration Policy**:
-The installation setting that decides who may become a User: Invitation Only, the default, or Open, where anyone may sign up. Open requires the installation to send email, so new Users can verify their address and reset their own password.
+The installation setting that decides who may become a User: Only Me, the default, where nobody can join; Invitation Only; or Open, where anyone may sign up. Under Only Me the Web UI hides Users, Invitations, Plans, and the Operator Overview. An Installation Administrator may switch to Invitation Only or Open at any time, and back to Only Me only while no other User exists. Data is User-scoped under every policy; the policy decides only who may join and what the Web UI shows. Open requires the installation to send email, so new Users can verify their address and reset their own password; it arrives with sign-up, for the Hosted Service.
 _Avoid_: Signup mode, public registration
 
 **Invitation**:
-A single-use, expiring link an Installation Administrator creates so one person can become a User and choose their own credentials. It works under either Registration Policy. A Password Reset Link is its counterpart for an existing User; neither lets the administrator see or set a password.
+A single-use, expiring link an Installation Administrator creates so one person can become a User and choose their own credentials. It works under Invitation Only and Open, never under Only Me, and expires after 7 days. A Password Reset Link is its counterpart for an existing User; neither lets the administrator see or set a password.
 _Avoid_: Invite code, admin-created account
 
 **Public Health Status**:
