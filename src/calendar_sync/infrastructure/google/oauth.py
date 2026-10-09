@@ -28,6 +28,7 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
     ProviderFailureKind,
+    UserDisabled,
 )
 from calendar_sync.application.ports import (
     AccountAccess,
@@ -150,13 +151,16 @@ class GoogleOAuthService:
             raise AuthorizationFailed("Google primary calendar did not expose an identity")
         profile = _profile_claims(getattr(credentials, "id_token", None))
         display_name = _optional_text(profile.get("name")) or str(primary.get("summary") or email)
-        account = self._accounts.for_user(owner).save(
-            display_name,
-            email,
-            credentials.to_json(),
-            provider=ProviderKind.GOOGLE,
-            avatar_url=_https_url(profile.get("picture")),
-        )
+        try:
+            account = self._accounts.for_user(owner).save(
+                display_name,
+                email,
+                credentials.to_json(),
+                provider=ProviderKind.GOOGLE,
+                avatar_url=_https_url(profile.get("picture")),
+            )
+        except UserDisabled as error:
+            raise AuthorizationFailed("the User was disabled during authorization") from error
         return AuthorizedAccount(owner, account)
 
     def cancel(self, state: str) -> None:

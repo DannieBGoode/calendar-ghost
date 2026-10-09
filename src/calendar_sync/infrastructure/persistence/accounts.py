@@ -7,6 +7,7 @@ from pathlib import Path
 from calendar_sync.application.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
+    UserDisabled,
 )
 from calendar_sync.application.ports import (
     Clock,
@@ -167,6 +168,14 @@ class SqliteUserConnectedAccounts:
         account_id = self._ids.new()
         encrypted = self._cipher.encrypt(credential_json)
         with transaction(self._database_path) as connection:
+            # Held from the check to the save: a User disabled while the provider answered
+            # connects nothing.
+            connection.execute("BEGIN IMMEDIATE")
+            active = connection.execute(
+                "SELECT 1 FROM users WHERE id = ? AND state = 'active'", (self._user,)
+            ).fetchone()
+            if active is None:
+                raise UserDisabled("this User can no longer connect accounts")
             connection.execute(
                 """
                 INSERT INTO connected_accounts (

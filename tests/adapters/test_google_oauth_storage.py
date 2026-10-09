@@ -796,3 +796,49 @@ def test_google_access_roles_translate_to_provider_neutral_access(
 
     assert calendar == DiscoveredCalendar("family", "Family", access=access, primary=False)
     assert calendar.writable is writable
+
+
+def test_a_user_disabled_during_the_token_exchange_connects_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
+    oauth = _oauth(database, store)
+    oauth._states.store("synthetic-state", USER)
+
+    class StubCredentials:
+        id_token = None
+        granted_scopes = OAUTH_SCOPES
+
+        def to_json(self) -> str:
+            return '{"token":"synthetic-token"}'
+
+    class StubFlow:
+        credentials = StubCredentials()
+
+        def fetch_token(self, **kwargs: Any) -> None:
+            # An Installation Administrator disables the User while Google answers.
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "UPDATE users SET state = 'disabled' WHERE id = ?", (USER.value,)
+                )
+
+    class StubCalendarRequest:
+        def execute(self) -> dict[str, Any]:
+            return {
+                "items": [{"id": "person@example.test", "summary": "Personal", "primary": True}]
+            }
+
+    monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
+    monkeypatch.setattr(
+        "calendar_sync.infrastructure.google.oauth.build",
+        lambda *args, **kwargs: SimpleNamespace(
+            calendarList=lambda: SimpleNamespace(list=lambda pageToken=None: StubCalendarRequest())
+        ),
+    )
+
+    with pytest.raises(AuthorizationFailed):
+        oauth.complete("synthetic-state", "synthetic-code", USER)
+    assert store.for_user(USER).list() == ()
