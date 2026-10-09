@@ -133,6 +133,26 @@ def test_users_are_found_by_id_and_email_and_keep_what_is_saved(tmp_path: Path) 
     assert [user.id for user in users.list()] == [FIRST.id, SECOND.id]
 
 
+def test_a_users_email_and_incident_emails_change_without_touching_role_or_state(
+    tmp_path: Path,
+) -> None:
+    users = _users(tmp_path)
+    users.add(FIRST, "hash-1")
+    users.add(replace(SECOND, role=Role.INSTALLATION_ADMINISTRATOR), "hash-2")
+    # An Installation Administrator demotes the User after the Web UI read them.
+    with sqlite3.connect(tmp_path / "test.db") as connection:
+        connection.execute("UPDATE users SET role = 'user' WHERE id = ?", (SECOND.id.value,))
+
+    users.set_email(SECOND.id, "renamed@example.test")
+    users.set_notification_email(SECOND.id, False)
+
+    assert users.get(SECOND.id) == replace(
+        SECOND, email="renamed@example.test", notify_by_email=False
+    )
+    with pytest.raises(EmailTaken):
+        users.set_email(SECOND.id, "first@example.test")
+
+
 def test_one_email_signs_in_one_user_whatever_its_case(tmp_path: Path) -> None:
     users = _users(tmp_path)
     users.add(FIRST, "hash-1")

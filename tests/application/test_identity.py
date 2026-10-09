@@ -15,6 +15,7 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.identity import (
     ChangeOwnPassword,
+    SetNotificationEmail,
     SetOwnEmail,
     SetUpInstallation,
     SignIn,
@@ -184,6 +185,66 @@ def test_an_email_another_user_signs_in_with_is_refused() -> None:
     with pytest.raises(EmailTaken):
         SetOwnEmail(users, PlainPasswords()).execute(UPGRADED.id, "admin@example.test", None)
     assert users.get(UPGRADED.id) == replace(UPGRADED, role=Role.USER)
+
+
+class DemotedAfterReading(MemoryUsers):
+    """An Installation Administrator demotes and disables the User just after it is read."""
+
+    def get(self, user_id: UserId) -> User | None:
+        user = super().get(user_id)
+        if user is not None:
+            self.users[user_id] = replace(user, role=Role.USER, state=UserState.DISABLED)
+        return user
+
+
+def test_setting_ones_email_never_restores_a_role_or_state_changed_meanwhile() -> None:
+    users = DemotedAfterReading()
+    users.add(
+        User(
+            UserId("admin"),
+            "admin@example.test",
+            Role.INSTALLATION_ADMINISTRATOR,
+            UserState.ACTIVE,
+            NOW,
+        ),
+        f"hashed:{PASSWORD}",
+    )
+
+    changed = SetOwnEmail(users, PlainPasswords()).execute(
+        UserId("admin"), "new@example.test", PASSWORD
+    )
+
+    stored = users.users[UserId("admin")]
+    assert (stored.email, stored.role, stored.state) == (
+        "new@example.test",
+        Role.USER,
+        UserState.DISABLED,
+    )
+    assert (changed.role, changed.state) == (Role.USER, UserState.DISABLED)
+
+
+def test_choosing_incident_emails_never_restores_a_role_or_state_changed_meanwhile() -> None:
+    users = DemotedAfterReading()
+    users.add(
+        User(
+            UserId("admin"),
+            "admin@example.test",
+            Role.INSTALLATION_ADMINISTRATOR,
+            UserState.ACTIVE,
+            NOW,
+        ),
+        f"hashed:{PASSWORD}",
+    )
+
+    changed = SetNotificationEmail(users).execute(UserId("admin"), notify_by_email=False)
+
+    stored = users.users[UserId("admin")]
+    assert (stored.notify_by_email, stored.role, stored.state) == (
+        False,
+        Role.USER,
+        UserState.DISABLED,
+    )
+    assert changed == stored
 
 
 def test_changing_a_password_needs_the_current_one_and_ends_every_other_session() -> None:

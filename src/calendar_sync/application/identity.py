@@ -7,7 +7,7 @@ no email and signs in by password alone until they add one.
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 from calendar_sync.application.errors import (
     AdminAlreadyConfigured,
@@ -132,9 +132,10 @@ class SetOwnEmail:
         # The add-email step follows a sign-in by password alone, so it asks for nothing more.
         if not user.needs_email:
             _confirm(self.users, self.passwords, user_id, password)
-        changed = user.with_email(email)
-        self.users.save(changed)
-        return changed
+        # Only the email is written, so a role or state an administrator changed since the read
+        # above stands; the answer is the User as stored now.
+        self.users.set_email(user_id, email_address(email))
+        return _existing(self.users, user_id)
 
 
 @dataclass(slots=True)
@@ -144,9 +145,9 @@ class SetNotificationEmail:
     users: UserDirectory
 
     def execute(self, user_id: UserId, notify_by_email: bool) -> User:
-        changed = replace(_existing(self.users, user_id), notify_by_email=notify_by_email)
-        self.users.save(changed)
-        return changed
+        _existing(self.users, user_id)
+        self.users.set_notification_email(user_id, notify_by_email)
+        return _existing(self.users, user_id)
 
 
 @dataclass(slots=True)

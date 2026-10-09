@@ -100,6 +100,22 @@ class SqliteUserDirectory:
         except sqlite3.IntegrityError as error:
             raise _taken_or(error) from error
 
+    def set_email(self, user_id: UserId, email: str) -> None:
+        try:
+            with transaction(self._database_path) as connection:
+                connection.execute(
+                    "UPDATE users SET email = ? WHERE id = ?", (email, user_id.value)
+                )
+        except sqlite3.IntegrityError as error:
+            raise _taken_or(error) from error
+
+    def set_notification_email(self, user_id: UserId, notify_by_email: bool) -> None:
+        with transaction(self._database_path) as connection:
+            connection.execute(
+                "UPDATE users SET notify_by_email = ? WHERE id = ?",
+                (int(notify_by_email), user_id.value),
+            )
+
     def password_hash(self, user_id: UserId) -> str | None:
         with transaction(self._database_path) as connection:
             row = connection.execute(

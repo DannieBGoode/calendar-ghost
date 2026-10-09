@@ -74,6 +74,18 @@ class MemoryUsers:
         self._require_free(user)
         self.users[user.id] = user
 
+    def set_email(self, user_id: UserId, email: str) -> None:
+        user = self.users.get(user_id)
+        if user is None:
+            return
+        changed = replace(user, email=email)
+        self._require_free(changed)
+        self.users[user_id] = changed
+
+    def set_notification_email(self, user_id: UserId, notify_by_email: bool) -> None:
+        if user_id in self.users:
+            self.users[user_id] = replace(self.users[user_id], notify_by_email=notify_by_email)
+
     def password_hash(self, user_id: UserId) -> str | None:
         return self.hashes.get(user_id)
 
