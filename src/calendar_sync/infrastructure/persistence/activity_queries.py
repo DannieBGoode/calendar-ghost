@@ -7,6 +7,7 @@ import sqlite3
 import unicodedata
 from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -14,21 +15,23 @@ from calendar_sync.application.activity import (
     BLOCK_ACTIONS,
     LEGACY_SKIP_REASON,
     NO_CHANGE_REASONS,
-    AccountStanding,
     ActivityEntry,
     ActivityEvent,
     ActivityFilter,
     EntryEvents,
     FieldChange,
-    IncidentSummary,
-    OpenBlock,
-    OperationsOverview,
     RecentChange,
     RecordedChange,
     RecordedTime,
     activity_category,
 )
-from calendar_sync.application.ports import IncidentMessage
+from calendar_sync.application.ports import (
+    AccountStanding,
+    IncidentMessage,
+    IncidentSummary,
+    OpenBlock,
+    OperationsOverview,
+)
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncAction, SyncReason
@@ -284,72 +287,136 @@ class SqliteOperationsQueries:
 
     def overview(self) -> OperationsOverview:
         with _reading(self._database_path) as connection:
-            accounts = tuple(
-                AccountStanding(
-                    str(row["id"]),
-                    str(row["state"]),
-                    str(row["provider"]),
-                    lapsed=row["state"] == "connected"
-                    and row["authorization_lapsed_at"] is not None,
-                )
-                for row in connection.execute(
-                    """
-                    SELECT id, state, provider, authorization_lapsed_at
-                    FROM connected_accounts WHERE user_id = ? ORDER BY id
-                    """,
-                    (self._user,),
-                )
-            )
-            incidents = int(
-                connection.execute(
-                    "SELECT COUNT(*) FROM incidents WHERE state = 'open' AND user_id = ?",
-                    (self._user,),
-                ).fetchone()[0]
-            )
-            last_synced_at = connection.execute(
-                """
-                SELECT MAX(last_succeeded_at) FROM rule_run_outcomes
-                WHERE kind = 'sync' AND user_id = ?
-                """,
-                (self._user,),
-            ).fetchone()[0]
-            blocks = open_blocks(connection, self._user)
-        return OperationsOverview(
-            connected_accounts=sum(account.state == "connected" for account in accounts),
-            disconnected_accounts=sum(account.state == "disconnected" for account in accounts),
-            open_incidents=incidents,
-            last_synced_at=last_synced_at,
-            open_blocks=tuple(OpenBlock(entry_id, rule_id) for entry_id, rule_id in blocks),
-            accounts=accounts,
-        )
+            return operations_of(connection, [self._user])[self._user].overview
 
     def incidents(self) -> list[IncidentSummary]:
         with _reading(self._database_path) as connection:
             rows = connection.execute(
-                """
-                SELECT id, rule_id, account_id, category, state, summary, opened_at,
-                    updated_at, resolved_at, resolution, message_code, message_params
-                FROM incidents WHERE user_id = ?
+                f"""
+                SELECT {_INCIDENT_COLUMNS} FROM incidents WHERE user_id = ?
                 ORDER BY state ASC, updated_at DESC LIMIT 100
-                """,
+                """,  # noqa: S608
                 (self._user,),
             ).fetchall()
-        return [
-            IncidentSummary(
-                id=row["id"],
-                rule_id=row["rule_id"],
-                category=row["category"],
-                state=row["state"],
-                summary=row["summary"],
-                opened_at=row["opened_at"],
-                updated_at=row["updated_at"],
-                resolved_at=row["resolved_at"],
-                resolution=row["resolution"],
-                account_id=row["account_id"],
-                message=_incident_message(row["message_code"], row["message_params"]),
+        return [_incident_summary(row) for row in rows]
+
+
+@dataclass(frozen=True, slots=True)
+class UserOperations:
+    overview: OperationsOverview
+    incidents: tuple[IncidentSummary, ...]
+    """Open Incidents, most recently updated first."""
+
+
+def operations_of(
+    connection: sqlite3.Connection, users: Sequence[str]
+) -> dict[str, UserOperations]:
+    """Each of `users`' accounts, open Incidents, and blocks, as Installation Status reads them.
+
+    The number of queries stays the same however many Users and rules there are, so the Operator
+    Overview can read a whole page of Users at once.
+    """
+    marks = ", ".join("?" * len(users))
+    accounts: dict[str, list[AccountStanding]] = {user: [] for user in users}
+    # Interpolates only `?` placeholders; values stay bound.
+    for row in connection.execute(
+        f"""
+        SELECT id, user_id, state, provider, authorization_lapsed_at
+        FROM connected_accounts WHERE user_id IN ({marks}) ORDER BY id
+        """,  # noqa: S608
+        users,
+    ):
+        accounts[row["user_id"]].append(
+            AccountStanding(
+                str(row["id"]),
+                str(row["state"]),
+                str(row["provider"]),
+                lapsed=row["state"] == "connected" and row["authorization_lapsed_at"] is not None,
             )
-            for row in rows
-        ]
+        )
+    incidents: dict[str, list[IncidentSummary]] = {user: [] for user in users}
+    for row in connection.execute(
+        f"""
+        SELECT {_INCIDENT_COLUMNS}, user_id FROM incidents
+        WHERE state = 'open' AND user_id IN ({marks}) ORDER BY updated_at DESC
+        """,  # noqa: S608
+        users,
+    ):
+        incidents[row["user_id"]].append(_incident_summary(row))
+    last_synced = dict(
+        connection.execute(
+            f"""
+            SELECT user_id, MAX(last_succeeded_at) FROM rule_run_outcomes
+            WHERE kind = 'sync' AND user_id IN ({marks}) GROUP BY user_id
+            """,  # noqa: S608
+            users,
+        ).fetchall()
+    )
+    blocks = _open_blocks_of(connection, users, marks)
+    return {
+        user: UserOperations(
+            OperationsOverview(
+                connected_accounts=sum(a.state == "connected" for a in accounts[user]),
+                disconnected_accounts=sum(a.state == "disconnected" for a in accounts[user]),
+                open_incidents=len(incidents[user]),
+                last_synced_at=last_synced.get(user),
+                open_blocks=tuple(blocks.get(user, ())),
+                accounts=tuple(accounts[user]),
+            ),
+            tuple(incidents[user]),
+        )
+        for user in users
+    }
+
+
+def _open_blocks_of(
+    connection: sqlite3.Connection, users: Sequence[str], marks: str
+) -> dict[str, list[OpenBlock]]:
+    """What `open_blocks` finds for each of `users`, in one query rather than one per rule."""
+    found: dict[str, list[OpenBlock]] = {}
+    # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
+    for row in connection.execute(
+        f"""
+        SELECT a.id, a.rule_id, a.user_id
+        FROM sync_rules r
+        LEFT JOIN rule_block_checks checked ON checked.rule_id = r.id
+        JOIN audit_entries a INDEXED BY audit_entries_rule_id
+            ON a.rule_id = r.id AND a.user_id = r.user_id
+            AND a.id > COALESCE(checked.audit_floor, 0)
+        WHERE r.user_id IN ({marks})
+            AND {_BLOCK.format(t="a")}
+            AND a.source_event_id IS NOT NULL
+            AND NOT EXISTS (
+                SELECT 1 FROM audit_entries later
+                WHERE later.rule_id = a.rule_id AND later.source_event_id = a.source_event_id
+                    AND later.id > a.id
+            )
+        ORDER BY a.id DESC
+        """,  # noqa: S608
+        users,
+    ):
+        found.setdefault(row["user_id"], []).append(OpenBlock(int(row["id"]), str(row["rule_id"])))
+    return found
+
+
+_INCIDENT_COLUMNS = """id, rule_id, account_id, category, state, summary, opened_at, updated_at,
+    resolved_at, resolution, message_code, message_params"""
+
+
+def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
+    return IncidentSummary(
+        id=row["id"],
+        rule_id=row["rule_id"],
+        category=row["category"],
+        state=row["state"],
+        summary=row["summary"],
+        opened_at=row["opened_at"],
+        updated_at=row["updated_at"],
+        resolved_at=row["resolved_at"],
+        resolution=row["resolution"],
+        account_id=row["account_id"],
+        message=_incident_message(row["message_code"], row["message_params"]),
+    )
 
 
 @contextmanager

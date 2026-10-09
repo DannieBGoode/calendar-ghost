@@ -7,16 +7,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from calendar_sync.application.activity import (
-    IncidentSummary,
-    OperationsOverview,
-    OperationsQueries,
-)
+from calendar_sync.application.activity import OperationsQueries
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.locking import RuleWorkKind
 from calendar_sync.application.ports import (
     Clock,
     IncidentMessage,
+    IncidentSummary,
+    OperationsOverview,
     SchedulerHeartbeat,
     SchedulerProgress,
 )

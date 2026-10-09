@@ -5,15 +5,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.activity import (
+from calendar_sync.application.locking import RuleWork, RuleWorkKind
+from calendar_sync.application.ports import (
     AccountStanding,
+    IncidentMessage,
     IncidentSummary,
     OpenBlock,
     OperationsOverview,
-)
-from calendar_sync.application.locking import RuleWork, RuleWorkKind
-from calendar_sync.application.ports import (
-    IncidentMessage,
     RuleRunOutcome,
     RunKind,
     SchedulerProgress,

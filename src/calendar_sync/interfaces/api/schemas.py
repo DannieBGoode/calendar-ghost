@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from calendar_sync.application.activity import IncidentResolutionValue, IncidentState
+from calendar_sync.application.ports import IncidentResolutionValue, IncidentState
 
 ProjectionChoice = Literal["delete", "detach"]
 # What a rule does with events its source calendar answered Maybe to, or has not answered yet.

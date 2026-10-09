@@ -24,6 +24,7 @@ from calendar_sync.application.ports import (
     IncidentResolution,
     InstallationUnitOfWork,
     OccurrenceMappingRepository,
+    RecordedRule,
     RulePreviewRepository,
     RulePreviewSummary,
     RuleRunOutcome,
@@ -31,6 +32,7 @@ from calendar_sync.application.ports import (
     RunKind,
     ScheduledRule,
     SourceObservationRepository,
+    StatusRecords,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
@@ -61,6 +63,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.infrastructure.persistence.activity_queries import operations_of
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
@@ -92,6 +95,7 @@ _FORWARD_MIGRATIONS = (
     (21, "0021_users.sql"),
     (22, "0022_registration.sql"),
     (23, "0023_token_scopes.sql"),
+    (24, "0024_rule_creation_order.sql"),
 )
 _CHECKED_FROM = 21
 """Migrations from here on prove every reference before committing. Earlier ones ran before
@@ -257,8 +261,11 @@ class SqliteSyncRuleRepository:
                     privacy_policy, all_day_policy, busy_title,
                     tentative_policy, unanswered_policy,
                     initial_lookback_days, state, reprojection_required,
-                    awaiting_reauthorization, user_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    awaiting_reauthorization, user_id, creation_order
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    (SELECT COALESCE(MAX(creation_order), 0) + 1 FROM sync_rules)
+                )
                 """,
                 (*_rule_values(rule), self._user),
             )
@@ -794,16 +801,18 @@ class SqliteRulePreviewRepository:
             "SELECT * FROM rule_previews WHERE rule_id = ? AND user_id = ?",
             (rule_id.value, self._user),
         ).fetchone()
-        if row is None:
-            return None
-        return RulePreviewSummary(
-            rule_id=rule_id,
-            completed_at=datetime.fromisoformat(str(row["completed_at"])),
-            eligible_events=int(row["eligible_events"]),
-            excluded_events=int(row["excluded_events"]),
-            recurring_series=int(row["recurring_series"]),
-            occurrence_changes=int(row["occurrence_changes"]),
-        )
+        return _preview_from_row(row) if row is not None else None
+
+
+def _preview_from_row(row: sqlite3.Row) -> RulePreviewSummary:
+    return RulePreviewSummary(
+        rule_id=SyncRuleId(str(row["rule_id"])),
+        completed_at=datetime.fromisoformat(str(row["completed_at"])),
+        eligible_events=int(row["eligible_events"]),
+        excluded_events=int(row["excluded_events"]),
+        recurring_series=int(row["recurring_series"]),
+        occurrence_changes=int(row["occurrence_changes"]),
+    )
 
 
 class SqliteCalendarNameRepository:
@@ -958,7 +967,7 @@ class _UserUnitsOfWork:
 
 
 class SqliteInstallationUnitOfWork:
-    """What only the scheduler reads across Users: their enabled rules (ADR 0029)."""
+    """What the scheduler and the Operator Overview read across Users (ADR 0029)."""
 
     def __init__(self, database_path: Path) -> None:
         self._database_path = database_path
@@ -1017,6 +1026,60 @@ class SqliteInstallationUnitOfWork:
             """,
             (before.isoformat(),),
         )
+
+    def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
+        assert self._connection is not None
+        records: dict[UserId, StatusRecords] = {}
+        ordered = sorted({user.value for user in users})
+        for start in range(0, len(ordered), _USERS_PER_QUERY):
+            chunk = ordered[start : start + _USERS_PER_QUERY]
+            rules = _recorded_rules(self._connection, chunk)
+            for user, operations in operations_of(self._connection, chunk).items():
+                records[UserId(user)] = StatusRecords(
+                    rules=tuple(rules.get(user, ())),
+                    overview=operations.overview,
+                    incidents=operations.incidents,
+                )
+        return records
+
+
+_USERS_PER_QUERY = 500
+"""Users read together, well under SQLite's limit on bound values in one statement."""
+
+
+def _recorded_rules(
+    connection: sqlite3.Connection, users: Sequence[str]
+) -> dict[str, list[RecordedRule]]:
+    """Each of `users`' rules in the order they were created, with what status reads of them."""
+    marks = ", ".join("?" * len(users))
+    # Interpolates only `?` placeholders; values stay bound.
+    outcomes = {
+        str(row["rule_id"]): _outcome_from_row(row)
+        for row in connection.execute(
+            f"SELECT * FROM rule_run_outcomes WHERE kind = 'sync' AND user_id IN ({marks})",  # noqa: S608
+            users,
+        )
+    }
+    previews = {
+        str(row["rule_id"]): _preview_from_row(row)
+        for row in connection.execute(
+            f"SELECT * FROM rule_previews WHERE user_id IN ({marks})",  # noqa: S608
+            users,
+        )
+    }
+    rules: dict[str, list[RecordedRule]] = {}
+    for row in connection.execute(
+        f"""
+        SELECT * FROM sync_rules WHERE user_id IN ({marks})
+        ORDER BY user_id, creation_order, id
+        """,  # noqa: S608
+        users,
+    ):
+        rule_id = str(row["id"])
+        rules.setdefault(str(row["user_id"]), []).append(
+            RecordedRule(_rule_from_row(row), outcomes.get(rule_id), previews.get(rule_id))
+        )
+    return rules
 
 
 @dataclass(frozen=True, slots=True)

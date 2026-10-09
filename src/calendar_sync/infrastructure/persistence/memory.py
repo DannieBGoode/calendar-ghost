@@ -9,6 +9,7 @@ from typing import Self
 
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
+    AccountStanding,
     AuditEntry,
     AuditRepository,
     CalendarNameRepository,
@@ -19,6 +20,8 @@ from calendar_sync.application.ports import (
     ExceptionReplayRepository,
     InstallationUnitOfWork,
     OccurrenceMappingRepository,
+    OperationsOverview,
+    RecordedRule,
     RulePreviewRepository,
     RulePreviewSummary,
     RuleRunOutcome,
@@ -26,10 +29,12 @@ from calendar_sync.application.ports import (
     RunKind,
     ScheduledRule,
     SourceObservationRepository,
+    StatusRecords,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
@@ -623,6 +628,47 @@ class InMemoryInstallationUnitOfWork:
     def forget_change_values(self, before: datetime) -> None:
         for state in self._database.partitions.values():
             state.change_values_forgotten_before = before
+
+    def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
+        return {user: _status_records(self._database.partitions.get(user)) for user in users}
+
+
+def _status_records(state: MemoryState | None) -> StatusRecords:
+    """A User's records as Installation Status reads them. This store keeps no Incidents or
+    Activity blocks, and every account it records is a Google account."""
+    state = state or MemoryState()
+    accounts = tuple(
+        AccountStanding(
+            account.value,
+            standing.value,
+            ProviderKind.GOOGLE.value,
+            lapsed=standing is ConnectedAccountState.CONNECTED and account in state.lapsed,
+        )
+        for account, standing in sorted(state.accounts.items(), key=lambda item: item[0].value)
+    )
+    succeeded = [
+        outcome.last_succeeded_at
+        for (_, kind), outcome in state.outcomes.items()
+        if kind is RunKind.SYNC and outcome.last_succeeded_at is not None
+    ]
+    return StatusRecords(
+        # Rules keep the order they were added in, as a dictionary keeps its keys'.
+        rules=tuple(
+            RecordedRule(
+                rule, state.outcomes.get((rule.id, RunKind.SYNC)), state.previews.get(rule.id)
+            )
+            for rule in state.rules.values()
+        ),
+        overview=OperationsOverview(
+            connected_accounts=sum(a.state == "connected" for a in accounts),
+            disconnected_accounts=sum(a.state == "disconnected" for a in accounts),
+            open_incidents=0,
+            last_synced_at=max(succeeded).isoformat() if succeeded else None,
+            open_blocks=(),
+            accounts=accounts,
+        ),
+        incidents=(),
+    )
 
 
 def _last_full_sync(state: MemoryState, rule_id: SyncRuleId) -> datetime | None:

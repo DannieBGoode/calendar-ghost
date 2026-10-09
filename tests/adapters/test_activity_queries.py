@@ -7,14 +7,19 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.activity import (
-    AccountStanding,
     ActivityCategory,
     ActivityFilter,
     EntryEvents,
-    OpenBlock,
     activity_category,
 )
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.application.ports import (
+    AccountStanding,
+    AuditAction,
+    AuditEntry,
+    AuditOutcome,
+    OpenBlock,
+    RecordedEvent,
+)
 from calendar_sync.domain.model import SyncAction, SyncReason, SyncRuleId, TimedInterval
 from calendar_sync.infrastructure.persistence import activity_queries
 from calendar_sync.infrastructure.persistence.activity_queries import (

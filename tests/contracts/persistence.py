@@ -14,9 +14,12 @@ import pytest
 
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
+    AccountStanding,
     CalendarAccess,
     ConnectedAccountState,
     DiscoveredCalendar,
+    InstallationUnitOfWorkFactory,
+    RecordedRule,
     RulePreviewSummary,
     RuleRunOutcome,
     RunKind,
@@ -68,6 +71,8 @@ class PersistenceHarness:
     """Disable a User, as an Installation Administrator would outside any unit of work."""
     refused: tuple[type[Exception], ...]
     """What this storage raises for a record whose parent does not exist or is taken."""
+    installation: InstallationUnitOfWorkFactory
+    """Units of work across every User, as the scheduler and the Operator Overview read them."""
 
     @property
     def unit_of_work(self) -> UnitOfWorkFactory:
@@ -798,3 +803,76 @@ class PersistenceContract:
 
         with harness.units(OTHER_USER)() as uow:
             assert uow.rules.list() == ()
+
+    # What the Operator Overview reads across Users
+
+    def test_status_records_hold_each_users_rules_in_the_order_they_were_created(
+        self, harness: PersistenceHarness
+    ) -> None:
+        theirs = replace(
+            RULE, id=SyncRuleId("rule-00"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+        )
+        for account in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(account.connected_account_id, OTHER_USER)
+        outcome = RuleRunOutcome(OTHER_RULE.id, RunKind.SYNC, NOW, True)
+        preview = RulePreviewSummary(RULE.id, NOW, 3, 1)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.add(OTHER_RULE)
+            uow.run_outcomes.record(outcome)
+            uow.previews.record(preview)
+            uow.commit()
+        _commit_as(harness, OTHER_USER, lambda uow: uow.rules.add(theirs))
+        with harness.unit_of_work() as uow:
+            # Saving a rule again keeps its place.
+            uow.rules.save(RULE.pause())
+            uow.commit()
+
+        with harness.installation() as installation:
+            records = installation.status_records([USER, OTHER_USER])
+
+        assert records[USER].rules == (
+            RecordedRule(RULE.pause(), None, preview),
+            RecordedRule(OTHER_RULE, replace(outcome, last_succeeded_at=NOW), None),
+        )
+        assert records[OTHER_USER].rules == (RecordedRule(theirs, None, None),)
+
+    def test_status_records_hold_each_users_accounts_and_last_sync(
+        self, harness: PersistenceHarness
+    ) -> None:
+        for account in (RULE.source, RULE.destination):
+            harness.connect_account(account.connected_account_id)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.run_outcomes.record(RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, True))
+            uow.accounts.lapse(ACCOUNT, attempted_at=NOW + DAY)
+            uow.commit()
+        harness.disconnect_account(RULE.destination.connected_account_id)
+        harness.connect_account(THEIR_SOURCE.connected_account_id, OTHER_USER)
+
+        with harness.installation() as installation:
+            records = installation.status_records([USER, OTHER_USER])
+
+        mine, theirs = records[USER].overview, records[OTHER_USER].overview
+        assert mine.accounts == (
+            AccountStanding("personal-account", "connected", "google", lapsed=True),
+            AccountStanding("work-account", "disconnected", "google"),
+        )
+        assert (mine.connected_accounts, mine.disconnected_accounts) == (1, 1)
+        assert mine.last_synced_at == NOW.isoformat()
+        assert theirs.accounts == (
+            AccountStanding("their-personal-account", "connected", "google"),
+        )
+        assert theirs.last_synced_at is None
+        assert records[OTHER_USER].rules == ()
+
+    def test_status_records_of_a_user_without_records_are_empty(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.installation() as installation:
+            records = installation.status_records([OTHER_USER])
+
+        assert records[OTHER_USER].rules == ()
+        assert records[OTHER_USER].incidents == ()
+        assert records[OTHER_USER].overview.accounts == ()
+        assert records[OTHER_USER].overview.open_blocks == ()
