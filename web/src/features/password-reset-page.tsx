@@ -31,12 +31,14 @@ function panelFor(status: LinkStatus, done: boolean): PanelCopy {
  * password. The administrator never sees or sets it.
  */
 export function PasswordResetPage() {
-  const token = useLinkToken()
+  const { token, isCurrent } = useLinkToken()
   // A newer link starts over: its own check, an empty form, and no earlier outcome.
-  return <PasswordResetLink key={token} token={token} />
+  return <PasswordResetLink key={token} token={token} isCurrent={isCurrent} />
 }
 
-function PasswordResetLink({ token }: { token: string }) {
+type IsCurrent = (token: string) => boolean
+
+function PasswordResetLink({ token, isCurrent }: { token: string; isCurrent: IsCurrent }) {
   const i18n = useI18n()
   const { t } = i18n
   const { status, error } = useLinkCheck("password-reset", token)
@@ -62,18 +64,20 @@ function PasswordResetLink({ token }: { token: string }) {
           <a href="/">{t("auth.passwordReset.signIn")}</a>
         </Button>
       )}
-      {status === "usable" && !done && <ResetForm token={token} onDone={() => setDone(true)} />}
+      {status === "usable" && !done && <ResetForm token={token} isCurrent={isCurrent} onDone={() => setDone(true)} />}
     </AuthFrame>
   )
 }
 
-function ResetForm({ token, onDone }: { token: string; onDone: () => void }) {
+function ResetForm({ token, isCurrent, onDone }: { token: string; isCurrent: IsCurrent; onDone: () => void }) {
   const i18n = useI18n()
   const { t } = i18n
   const [passwords, setPasswords] = useState({ password: "", confirmation: "" })
   const reset = useMutation({
     mutationFn: () => api.resetPassword(token, passwords.password),
     onSuccess: () => {
+      // A newer link was opened while this one was answered: its token stays in the address.
+      if (!isCurrent(token)) return
       // The link is spent; it should not stay in the address bar.
       window.history.replaceState(null, "", window.location.pathname)
       onDone()

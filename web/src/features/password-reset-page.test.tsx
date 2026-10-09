@@ -173,6 +173,33 @@ describe("PasswordResetPage", () => {
     })
   })
 
+  it("ignores an older link's answer that arrives after a newer link was opened", async () => {
+    serve({ "/api/v1/password-resets/check": jsonResponse({ usable: true }) })
+    const served = vi.mocked(fetch).getMockImplementation()!
+    let answerOlder: (response: Response) => void = () => undefined
+    vi.mocked(fetch).mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url !== "/api/v1/password-resets") return served(input, init)
+      return new Promise<Response>((resolve) => {
+        answerOlder = resolve
+      })
+    })
+    await renderPage(testI18n())
+    await resetTo("a very long password")
+
+    act(() => {
+      window.location.hash = "#reset_newer-token"
+    })
+    await settle()
+    act(() => answerOlder({ ok: true, status: 204, json: () => Promise.resolve(null) } as Response))
+    await settle()
+
+    // The newer link stays in the address, so it still works after a reload.
+    expect(window.location.hash).toBe("#reset_newer-token")
+    expect(container.querySelector("h2")?.textContent).toBe("Your new password")
+    expect(container.querySelector("form")).not.toBeNull()
+  })
+
   it("refuses a link that was used or expired", async () => {
     serve({ "/api/v1/password-resets/check": jsonResponse({ usable: false }) })
     await renderPage(testI18n())

@@ -18,12 +18,14 @@ import { useLinkCheck, useLinkToken } from "@/lib/use-link-check"
  * The Invitation's token is in the address's fragment, so it never reaches a server log.
  */
 export function InvitationPage({ onSignedIn }: { onSignedIn: () => void }) {
-  const token = useLinkToken()
+  const { token, isCurrent } = useLinkToken()
   // A newer link starts over: its own check, an empty form, and no earlier refusal.
-  return <InvitationLink key={token} token={token} onSignedIn={onSignedIn} />
+  return <InvitationLink key={token} token={token} isCurrent={isCurrent} onSignedIn={onSignedIn} />
 }
 
-function InvitationLink({ token, onSignedIn }: { token: string; onSignedIn: () => void }) {
+type LinkProps = { token: string; isCurrent: (token: string) => boolean; onSignedIn: () => void }
+
+function InvitationLink({ token, isCurrent, onSignedIn }: LinkProps) {
   const i18n = useI18n()
   const { t } = i18n
   const { status, error } = useLinkCheck("invitation", token)
@@ -47,12 +49,12 @@ function InvitationLink({ token, onSignedIn }: { token: string; onSignedIn: () =
           <a href="/">{t("auth.invitation.signIn")}</a>
         </Button>
       )}
-      {status === "usable" && <AcceptForm token={token} onSignedIn={onSignedIn} />}
+      {status === "usable" && <AcceptForm token={token} isCurrent={isCurrent} onSignedIn={onSignedIn} />}
     </AuthFrame>
   )
 }
 
-function AcceptForm({ token, onSignedIn }: { token: string; onSignedIn: () => void }) {
+function AcceptForm({ token, isCurrent, onSignedIn }: LinkProps) {
   const i18n = useI18n()
   const { t } = i18n
   const emailId = useId()
@@ -62,6 +64,8 @@ function AcceptForm({ token, onSignedIn }: { token: string; onSignedIn: () => vo
   const accept = useMutation({
     mutationFn: () => api.acceptInvitation(token, email.trim(), passwords.password),
     onSuccess: async (session) => {
+      // A newer link was opened while this one was answered: that page is the one to finish.
+      if (!isCurrent(token)) return
       queryClient.setQueryData(["session"], session)
       // The token is spent; it should not stay in the address bar or the history.
       window.history.replaceState(null, "", "/overview")

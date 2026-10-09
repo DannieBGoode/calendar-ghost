@@ -204,6 +204,34 @@ describe("InvitationPage", () => {
     expect(onSignedIn).toHaveBeenCalledOnce()
   })
 
+  it("ignores an older link's answer that arrives after a newer link was opened", async () => {
+    serve({ "/api/v1/invitations/check": jsonResponse({ usable: true }) })
+    const served = vi.mocked(fetch).getMockImplementation()!
+    let answerOlder: (response: Response) => void = () => undefined
+    vi.mocked(fetch).mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url !== "/api/v1/invitations/accept") return served(input, init)
+      return new Promise<Response>((resolve) => {
+        answerOlder = resolve
+      })
+    })
+    const onSignedIn = await renderPage(testI18n(), `#${TOKEN}`)
+    fillForm("robin@example.test", "a very long password")
+    await submit()
+
+    act(() => {
+      window.location.hash = "#inv_newer-token"
+    })
+    await settle()
+    act(() => answerOlder(jsonResponse(SIGNED_IN)))
+    await settle()
+
+    expect(onSignedIn).not.toHaveBeenCalled()
+    expect(window.location.pathname).toBe("/invitation")
+    expect(window.location.hash).toBe("#inv_newer-token")
+    expect(container.querySelector("form")).not.toBeNull()
+  })
+
   it("explains a link that stopped working while the form was open", async () => {
     serve({
       "/api/v1/invitations/check": jsonResponse({ usable: true }),
