@@ -1,8 +1,8 @@
 ---
 // The footer's link area, shared by every page: who this is, the project's links, where to get
-// help, the legal ones, and this page's own proof that it tracks no one. Each page's footer gives
-// it its own look by re-declaring the color tokens around it and, where it needs to, styling the
-// `.flinks-*` parts.
+// help, the legal ones, and how this page counts visits without tracking anyone. Each page's
+// footer gives it its own look by re-declaring the color tokens around it and, where it needs to,
+// styling the `.flinks-*` parts.
 import Icon from "../components/Icon.astro"
 import { hasLanguagePicker, type Messages } from "../i18n"
 import { GhostMark } from "../islands/GhostMark"
@@ -85,8 +85,8 @@ const groups = [
     }
   </nav>
   <div class="flinks-proof">
-    <p class="flinks-proof-title"><Icon name="shieldCheck" class="flinks-proof-icon" />{copy.noTrackers}</p>
-    <p class="flinks-proof-body">{copy.noTrackersBody}</p>
+    <p class="flinks-proof-title"><Icon name="shieldCheck" class="flinks-proof-icon" />{copy.privacy}</p>
+    <p class="flinks-proof-body">{copy.privacyBody}</p>
   </div>
   {
     hasLanguagePicker() && (

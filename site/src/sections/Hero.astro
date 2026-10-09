@@ -46,6 +46,7 @@ import type { Messages } from "../i18n"
 import { format } from "../i18n/format"
 import { Ghost } from "../islands/Ghost"
 import { HubControls } from "../islands/HubControls"
+import { ANALYTICS_EVENTS } from "../lib/analytics"
 import { REPO_URL } from "../links"
 
 interface Props {
@@ -136,7 +137,7 @@ const motionCss = motion.map((item) => item.css).join("")
       <p class="hero-line">{m.hero.line}</p>
       <div class="ctas hero-ctas">
         <a class="btn btn-primary" href="#self-host">{m.hero.primary}</a>
-        <a class="btn" href={REPO_URL} target="_blank" rel="noopener noreferrer">
+        <a class="btn" href={REPO_URL} target="_blank" rel="noopener noreferrer" data-umami-event={ANALYTICS_EVENTS.github} data-umami-event-place="hero">
           <span aria-hidden="true">★</span> {m.hero.secondary}<span class="sr-only"> {m.nav.newTab}</span>
         </a>
       </div>

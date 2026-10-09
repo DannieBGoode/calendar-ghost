@@ -4,6 +4,7 @@
 // without the Clipboard API (plain HTTP on a LAN, older browsers) it selects the commands so the
 // visitor can copy them by hand (lib/copy.ts).
 import type { Messages } from "../i18n"
+import { ANALYTICS_EVENTS } from "../lib/analytics"
 
 interface Props {
   m: Messages
@@ -27,6 +28,8 @@ const lines = command.split("\n").length
     data-label={m.selfHost.copy}
     data-copied={m.selfHost.copied}
     data-selected={m.selfHost.selected}
+    data-umami-event={ANALYTICS_EVENTS.copyCommands}
+    data-umami-event-place={id}
   >
     {m.selfHost.copy}
   </button>

@@ -356,8 +356,8 @@ export const en = {
     email: "Email support",
     licenseLink: "AGPL-3.0 license",
     trademarks: "Trademarks",
-    noTrackers: "This page has no trackers.",
-    noTrackersBody: "No analytics, no cookies, nothing loaded from another site.",
+    privacy: "This page sets no cookies.",
+    privacyBody: "We count visits with Umami, which does not identify you or follow you across sites. Nothing loads from another site.",
     /** Under the dozing ghost on the home page's footer: narration, not speech. */
     watch: "Sync runs every five minutes. In between, the ghost naps.",
     /** What the dozing ghost mumbles in its sleep, like a child in bed: sync runs every five
