@@ -85,6 +85,7 @@ from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFact
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
+from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import (
     RecentSchedulerHeartbeat,
@@ -99,10 +100,13 @@ from tests.helpers import (
 from tests.users import (
     ADMIN_EMAIL,
     ADMIN_PASSWORD,
+    OTHER_USER,
     RULE_ACCOUNTS,
     add_account,
+    add_user,
     administrator,
     first_user,
+    session_for,
     sign_in,
 )
 
@@ -1036,6 +1040,7 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code",
             follow_redirects=False,
@@ -1045,7 +1050,94 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
     assert response.headers["location"] == (
         f"/settings/connections?google=connected&account={account.id.value}&resumed=0"
     )
-    complete.assert_called_once_with("synthetic-state", "synthetic-code")
+    # The signed-in User completes only a flow they began.
+    complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
+
+
+def _refuse_code_exchange(google: GoogleOAuthService, monkeypatch: pytest.MonkeyPatch) -> Mock:
+    """Fail the test if the callback asks Google to exchange the code."""
+    flow = Mock(side_effect=AssertionError("the code must not be exchanged"))
+    monkeypatch.setattr(google, "_flow", flow)
+    return flow
+
+
+CALLBACK = "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code"
+AUTHORIZATION_FAILED = "/settings/connections?google=authorization_failed"
+
+
+def test_google_oauth_callback_without_a_session_exchanges_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    google = _google(adapters)
+    owner = administrator(adapters)
+    google._states.store("synthetic-state", owner)
+    flow = _refuse_code_exchange(google, monkeypatch)
+
+    with TestClient(create_app(container)) as client:
+        response = client.get(CALLBACK, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == AUTHORIZATION_FAILED
+    flow.assert_not_called()
+    assert _account_store(adapters).list() == ()
+
+
+def test_google_oauth_callback_refuses_a_browser_signed_in_as_another_user(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A User who sends their consent link to someone cannot collect that person's account."""
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
+    )
+    google = _google(adapters)
+    victim = administrator(adapters)
+    attacker = add_user(database, OTHER_USER, role="user")
+    google._states.store("synthetic-state", attacker)
+    flow = _refuse_code_exchange(google, monkeypatch)
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        response = client.get(CALLBACK, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == AUTHORIZATION_FAILED
+    flow.assert_not_called()
+    assert adapters.accounts is not None
+    assert adapters.accounts(attacker).list() == ()
+    assert adapters.accounts(victim).list() == ()
+    # The state is used up, so its User cannot finish the flow with the code later.
+    assert google._states.consume("synthetic-state") is None
+
+
+def test_google_oauth_callback_refuses_a_disabled_user(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
+    )
+    google = _google(adapters)
+    administrator(adapters)
+    owner = add_user(database, OTHER_USER, role="user")
+    google._states.store("synthetic-state", owner)
+    session = session_for(database, owner)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (owner.value,))
+    flow = _refuse_code_exchange(google, monkeypatch)
+
+    with TestClient(create_app(container)) as client:
+        client.cookies.set(SESSION_COOKIE, session)
+        response = client.get(CALLBACK, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == AUTHORIZATION_FAILED
+    flow.assert_not_called()
+    assert adapters.accounts is not None
+    assert adapters.accounts(owner).list() == ()
 
 
 def test_reauthorizing_resumes_the_rules_lapsed_authorization_stopped(
@@ -1132,6 +1224,7 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&error=access_denied",
             follow_redirects=False,
@@ -1157,6 +1250,7 @@ def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&error=temporarily_unavailable",
             follow_redirects=False,
@@ -1173,6 +1267,7 @@ def test_google_oauth_callback_requires_an_authorization_result(tmp_path: Path) 
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state",
             follow_redirects=False,
@@ -1195,6 +1290,7 @@ def test_google_oauth_missing_calendar_permission_returns_to_settings(
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code",
             follow_redirects=False,
@@ -1204,7 +1300,7 @@ def test_google_oauth_missing_calendar_permission_returns_to_settings(
     assert (
         response.headers["location"] == "/settings/connections?google=calendar_permission_required"
     )
-    complete.assert_called_once_with("synthetic-state", "synthetic-code")
+    complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
 
 
 def test_google_oauth_completion_failure_returns_to_settings(
@@ -1219,6 +1315,7 @@ def test_google_oauth_completion_failure_returns_to_settings(
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code",
             follow_redirects=False,
@@ -1226,7 +1323,7 @@ def test_google_oauth_completion_failure_returns_to_settings(
 
     assert response.status_code == 303
     assert response.headers["location"] == "/settings/connections?google=authorization_failed"
-    complete.assert_called_once_with("synthetic-state", "synthetic-code")
+    complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
 
 
 def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path) -> None:

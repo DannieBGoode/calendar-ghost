@@ -33,6 +33,7 @@ from calendar_sync.interfaces.api.dependencies import (
     app_services,
     available,
     current_user,
+    session_user,
     user_services,
 )
 from calendar_sync.interfaces.api.problems import problem, problem_from
@@ -87,6 +88,7 @@ class AuthorizationServices(Protocol):
 Services = Annotated[AccountServices, Depends(user_services)]
 Installation = Annotated[AuthorizationServices, Depends(app_services)]
 SignedIn = Annotated[UserId, Depends(current_user)]
+Browser = Annotated[UserId | None, Depends(session_user)]
 router = APIRouter()
 
 
@@ -124,15 +126,21 @@ def start_google_oauth(
 @router.get("/api/v1/oauth/google/callback", include_in_schema=False)
 def complete_google_oauth(
     installation: Installation,
+    browser: Browser,
     state: str,
     code: str | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
+    """Google returns the browser here. Its session cookie comes along, since the redirect is a
+    top-level navigation, and only the User who began the flow may complete it: a consent link
+    sent to someone else connects nothing."""
     authorization = available(
         installation.authorization,
         "authorization_not_configured",
         "Google OAuth is not configured",
     )
+    if browser is None:
+        return RedirectResponse(f"{CONNECTIONS}?google=authorization_failed", status_code=303)
     if error is not None:
         try:
             authorization.cancel(state)
@@ -149,7 +157,7 @@ def complete_google_oauth(
             "Google OAuth callback did not include an authorization result",
         )
     try:
-        authorized = authorization.complete(state, code)
+        authorized = authorization.complete(state, code, browser)
     except InvalidAuthorizationState as state_error:
         raise problem_from(status.HTTP_400_BAD_REQUEST, state_error) from state_error
     except CalendarPermissionRequired:
@@ -158,7 +166,7 @@ def complete_google_oauth(
         )
     except AuthorizationFailed:
         return RedirectResponse(f"{CONNECTIONS}?google=authorization_failed", status_code=303)
-    # The state names the User who began the flow; the account and its rules are theirs.
+    # The User who began the flow finished it; the account and its rules are theirs.
     account = authorized.account
     lapses = installation.for_user(authorized.owner).lapsed_authorizations
     # Google accepted the account when its new credentials were saved.

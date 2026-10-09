@@ -827,15 +827,18 @@ class AuthorizedAccount:
 
 
 class AccountAuthorization(Protocol):
-    """The provider's state-protected OAuth flow that connects or reauthorizes an account."""
+    """The provider's OAuth flow that connects or reauthorizes an account, protected by its state
+    and by the session of the User who began it."""
 
     def authorization_url(self, owner: UserId, login_hint: str | None = None) -> str:
         """The provider's consent URL for `owner`, whose account the flow connects;
         `login_hint` suggests the account being reauthorized."""
         ...
 
-    def complete(self, state: str, code: str) -> AuthorizedAccount:
-        """Connect the account for the User whose flow the state began."""
+    def complete(self, state: str, code: str, user: UserId) -> AuthorizedAccount:
+        """Connect the account for `user`, the User signed in where the flow returned, only if
+        they began the flow the state names; raises AuthorizationFailed, using the state up and
+        exchanging nothing, when another User began it."""
         ...
 
     def cancel(self, state: str) -> None: ...

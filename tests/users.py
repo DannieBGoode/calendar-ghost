@@ -1,5 +1,6 @@
 """Users for tests, and SQLite units of work that already hold what their rules need."""
 
+import secrets
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
@@ -21,7 +22,7 @@ from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.scheduling import SystemClock
-from calendar_sync.infrastructure.security import HistoryCipher, ScryptPasswords
+from calendar_sync.infrastructure.security import HistoryCipher, ScryptPasswords, token_hash
 from tests.helpers import NOW
 
 USER = UserId("user-1")
@@ -142,3 +143,17 @@ def sign_in(client: TestClient) -> None:
     else:
         response = client.post("/api/v1/setup/admin", json=credentials)
     assert response.status_code == 200, response.text
+
+
+def session_for(database: Path, user: UserId) -> str:
+    """A live session of `user`, as signing in would give them."""
+    token = secrets.token_urlsafe(32)
+    with transaction(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO user_sessions (token_hash, user_id, created_at, expires_at)
+            VALUES (?, ?, '2026-01-01T00:00:00+00:00', '9999-01-01T00:00:00+00:00')
+            """,
+            (token_hash(token), user.value),
+        )
+    return token

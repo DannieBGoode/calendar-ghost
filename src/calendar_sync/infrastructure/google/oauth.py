@@ -114,8 +114,12 @@ class GoogleOAuthService:
         )
         return str(url)
 
-    def complete(self, state: str, code: str) -> AuthorizedAccount:
+    def complete(self, state: str, code: str, user: UserId) -> AuthorizedAccount:
         owner = self._consume_state(state)
+        if owner != user:
+            # Someone else's consent link: the state is used up and the code never exchanged,
+            # so nobody can connect a Google account into another User's installation.
+            raise AuthorizationFailed("Google authorization was begun by another User")
         flow = self._flow(state)
         try:
             flow.fetch_token(code=code)

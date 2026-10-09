@@ -71,6 +71,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - `GET /api/v1/status` and MCP answer for the person who issued the token, in the same shape.
   Existing tokens belong to the first User and keep both scopes, so their answers do not change.
   The Integration Token list returns `scopes` instead of `scope`.
+- Google's OAuth callback connects an account only in a browser signed in as the person who
+  started connecting it. A consent link opened by anyone else, or without signing in, connects
+  nothing and returns to Connections with "authorization failed".
 - Storage settings are for administrators only. Sync now, Reconcile now, and Preview answer `404`
   instead of `409` for a rule that does not exist.
 

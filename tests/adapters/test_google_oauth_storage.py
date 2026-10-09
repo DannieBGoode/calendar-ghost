@@ -15,6 +15,7 @@ from oauthlib.oauth2 import WebApplicationClient  # type: ignore[import-untyped]
 
 from calendar_sync.application.errors import (
     AccountAccessCheckFailed,
+    AuthorizationFailed,
     CalendarPermissionRequired,
     ConnectedAccountDisconnected,
     InvalidAuthorizationState,
@@ -43,7 +44,7 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher, InvalidMasterKey
 from tests.adapters.test_user_migration import LATEST_VERSION
-from tests.users import USER, add_user
+from tests.users import OTHER_USER, USER, add_user
 
 DEFAULT_REDIRECT_URI = "http://localhost:8000/api/v1/oauth/google/callback"
 UNCONFIGURED_CLIENT = OAuthClientConfig("", "", DEFAULT_REDIRECT_URI)
@@ -296,6 +297,37 @@ def test_an_oauth_state_is_rejected_once_its_lifetime_ends(tmp_path: Path) -> No
     assert states.consume("synthetic-state") is None
 
 
+def test_an_oauth_state_of_a_disabled_user_cannot_be_used(tmp_path: Path) -> None:
+    states, _ = _states(tmp_path)
+    states.store("synthetic-state", USER)
+    with sqlite3.connect(tmp_path / "test.db") as connection:
+        connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (USER.value,))
+
+    assert states.consume("synthetic-state") is None
+
+
+def test_oauth_completion_refuses_a_user_who_did_not_begin_the_flow(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
+    add_user(database, OTHER_USER, role="user")
+    oauth = _oauth(database, store)
+    oauth._states.store("synthetic-state", USER)
+
+    def no_exchange(state: str) -> None:
+        raise AssertionError("the code must not be exchanged")
+
+    oauth._flow = no_exchange  # type: ignore[method-assign]
+
+    with pytest.raises(AuthorizationFailed):
+        oauth.complete("synthetic-state", "synthetic-code", OTHER_USER)
+    # The state is used up, so it cannot be tried again by anyone.
+    assert oauth._states.consume("synthetic-state") is None
+    assert store.for_user(OTHER_USER).list() == ()
+    assert store.for_user(USER).list() == ()
+
+
 def test_pkce_verifier_survives_oauth_flow_reconstruction(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
@@ -387,7 +419,7 @@ def test_oauth_completion_exchanges_explicit_code_without_parsing_callback_url(
     monkeypatch.setattr(oauth, "_flow", fake_flow)
     monkeypatch.setattr("calendar_sync.infrastructure.google.oauth.build", fake_build)
 
-    authorized = oauth.complete("synthetic-state", "synthetic-code")
+    authorized = oauth.complete("synthetic-state", "synthetic-code", USER)
 
     assert flow.fetch_token_calls == [{"code": "synthetic-code"}]
     assert authorized.owner == USER
@@ -443,7 +475,7 @@ def _complete_with_identity(
         "calendar_sync.infrastructure.google.oauth.build",
         lambda *args, **kwargs: StubCalendarService(),
     )
-    return oauth.complete("synthetic-state", "synthetic-code").account
+    return oauth.complete("synthetic-state", "synthetic-code", USER).account
 
 
 def test_oauth_requests_calendar_and_basic_profile_scopes_only() -> None:
@@ -542,7 +574,7 @@ def test_oauth_completion_rejects_a_grant_without_all_calendar_scopes(
     monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
 
     with pytest.raises(CalendarPermissionRequired, match="Calendar permission"):
-        oauth.complete("synthetic-state", "synthetic-code")
+        oauth.complete("synthetic-state", "synthetic-code", USER)
 
     assert store.for_user(USER).list() == ()
 

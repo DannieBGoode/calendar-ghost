@@ -167,11 +167,13 @@ the Docker build context, and has its own `Site` workflow.
   `interfaces/api/dependencies.py`), and Installation Administrator routes behind `administrator`,
   which refuses other Users with 403 before anything is looked up. A route that names another
   User's record answers 404, never 403, so its existence is not revealed (ADR 0029). Only setup,
-  sign-in, the session status and sign-out, the state-protected OAuth callback, the token-protected
-  Invitation and Password Reset Link routes (`/api/v1/invitations/check`,
-  `/api/v1/invitations/accept`, `/api/v1/password-resets/check`, `/api/v1/password-resets`),
-  static application files, and `/health` are intentionally public; `/health` is the only
-  unauthenticated operational status route. `/api/v1/status`, `/api/v1/installation/health`, and
+  sign-in, the session status and sign-out, the token-protected Invitation and Password Reset Link
+  routes (`/api/v1/invitations/check`, `/api/v1/invitations/accept`,
+  `/api/v1/password-resets/check`, `/api/v1/password-resets`), static application files, and
+  `/health` are intentionally public; `/health` is the only unauthenticated operational status
+  route. The OAuth callback is session-and-state protected: it reads the session itself
+  (`session_user`) to redirect rather than answer 401, and completes a flow only for the signed-in
+  User who began it. `/api/v1/status`, `/api/v1/installation/health`, and
   `/mcp` are the only routes that accept an Integration Token, and `/mcp` accepts nothing else
   (ADR 0024). `tests/adapters/test_api_authorization.py` lists them; extend it with every route.
 - Google writes use `sendUpdates=none`. A change that could email attendees or mutate source events

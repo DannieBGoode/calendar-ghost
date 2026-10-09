@@ -83,7 +83,7 @@ second User's session to prove each answers 404, and refuses a User who does not
 every administrator route.
 
 Google authorization is split the same way. `infrastructure/google/oauth.py` holds the
-state-protected OAuth flow, Google credentials, and Google calendar discovery, configured by an
+OAuth flow, protected by its state and by the session of the User who began it, Google credentials, and Google calendar discovery, configured by an
 `OAuthClientConfig` value that bootstrap builds from Settings. Connected Accounts and their
 credentials, encrypted by the `CredentialCipher` in
 `infrastructure/security.py`, live in `infrastructure/persistence/accounts.py`, which implements the

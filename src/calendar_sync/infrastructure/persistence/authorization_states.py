@@ -37,14 +37,15 @@ class SqliteAuthorizationStates:
             )
 
     def consume(self, state: str) -> UserId | None:
-        """Use a state once: the User who began its flow; None when it is missing, expired, or
-        already used."""
+        """Use a state once: the User who began its flow; None when it is missing, expired,
+        already used, or its User has been disabled since."""
         now = self._clock.now().isoformat()
         with transaction(self._database_path) as connection:
             row = connection.execute(
                 """
                 UPDATE oauth_states SET consumed_at = ?
                 WHERE state_hash = ? AND consumed_at IS NULL AND expires_at > ?
+                    AND user_id IN (SELECT id FROM users WHERE state = 'active')
                 RETURNING user_id
                 """,
                 (now, _state_hash(state), now),

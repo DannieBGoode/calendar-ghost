@@ -53,6 +53,15 @@ def signed_in_user(
     return user
 
 
+def session_user(
+    services: Annotated[SessionServices, Depends(app_services)],
+    session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+) -> UserId | None:
+    """The User this browser is signed in as, or None; for a route that answers a redirect
+    rather than a 401, such as the OAuth callback a provider sends the browser to."""
+    return services.identity.sessions.user_of(session)
+
+
 def current_user(user: Annotated[User, Depends(signed_in_user)]) -> UserId:
     """The signed-in User, once they have an email; every route but a few depends on it."""
     if user.needs_email:

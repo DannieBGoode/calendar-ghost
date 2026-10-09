@@ -1,7 +1,6 @@
 """Every API route requires a signed-in User except the documented public ones."""
 
 import re
-import secrets
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -13,29 +12,35 @@ from fastapi.testclient import TestClient
 from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, build_container, compose
-from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.persistence.connections import transaction
-from calendar_sync.infrastructure.security import CredentialCipher, token_hash
+from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import (
     SESSION_COOKIE,
+    session_user,
     signed_in_user,
     status_reader,
 )
 from calendar_sync.interfaces.api.dependencies import administrator as administrator_session
 from tests.helpers import NOW, rule
-from tests.users import OTHER_USER, add_user, administrator, sign_in, sqlite_units
+from tests.users import (
+    OTHER_USER,
+    add_user,
+    administrator,
+    session_for,
+    sign_in,
+    sqlite_units,
+)
 
-# AGENTS.md: only setup, sign-in, the state-protected OAuth callback, and the token-protected
-# Invitation and Password Reset Links are public under /api/, beside the session status and
-# sign-out, which reveal or revoke nothing without a session.
+# AGENTS.md: only setup, sign-in, and the token-protected Invitation and Password Reset Links are
+# public under /api/, beside the session status and sign-out, which reveal or revoke nothing
+# without a session.
 PUBLIC_API_ROUTES = {
     ("GET", "/api/v1/setup"),
     ("POST", "/api/v1/setup/admin"),
     ("GET", "/api/v1/session"),
     ("POST", "/api/v1/session"),
     ("DELETE", "/api/v1/session"),
-    ("GET", "/api/v1/oauth/google/callback"),
     ("POST", "/api/v1/invitations/check"),
     ("POST", "/api/v1/invitations/accept"),
     ("POST", "/api/v1/password-resets/check"),
@@ -64,6 +69,9 @@ ADMINISTRATOR_ROUTES = {
 STATUS_READER_ROUTES = {("GET", "/api/v1/status")}
 INSTALLATION_READER_ROUTES = {("GET", "/api/v1/installation/health")}
 TOKEN_ROUTES = STATUS_READER_ROUTES | INSTALLATION_READER_ROUTES
+# Google's redirect cannot be answered with a 401, so the OAuth callback reads the session itself
+# and connects an account only for the User who began the flow in this browser.
+SESSION_AND_STATE_ROUTES = {("GET", "/api/v1/oauth/google/callback")}
 
 
 def _requires(dependant: Dependant, guard: object) -> bool:
@@ -95,8 +103,15 @@ def test_every_non_public_api_route_requires_a_signed_in_user(tmp_path: Path) ->
         if _requires(route.dependant, administrator_session)
         for method in route.methods or ()
     }
+    session_and_state = {
+        (method, route.path)
+        for route in api_routes
+        if _requires(route.dependant, session_user)
+        for method in route.methods or ()
+    }
     assert len(api_routes) > len(PUBLIC_API_ROUTES)
-    assert unguarded == PUBLIC_API_ROUTES | TOKEN_ROUTES
+    assert unguarded == PUBLIC_API_ROUTES | TOKEN_ROUTES | SESSION_AND_STATE_ROUTES
+    assert session_and_state == SESSION_AND_STATE_ROUTES
     assert readers == STATUS_READER_ROUTES
     assert administered == ADMINISTRATOR_ROUTES
 
@@ -109,7 +124,7 @@ def test_a_user_who_does_not_administer_is_refused_every_administrator_route(
     with TestClient(app) as client:
         sign_in(client)
         add_user(database, OTHER_USER, role="user")
-        client.cookies.set(SESSION_COOKIE, _session_for(database, OTHER_USER))
+        client.cookies.set(SESSION_COOKIE, session_for(database, OTHER_USER))
         answers = {
             (method, path): client.request(
                 method, re.sub(r"\{[^}]+\}", "x", path), json={"policy": "only_me"}
@@ -131,7 +146,10 @@ def test_an_integration_token_is_refused_by_every_other_api_route(tmp_path: Path
             if not isinstance(route, APIRoute) or not route.path.startswith("/api/"):
                 continue
             for method in route.methods or ():
-                if (method, route.path) in PUBLIC_API_ROUTES | TOKEN_ROUTES:
+                if (
+                    method,
+                    route.path,
+                ) in PUBLIC_API_ROUTES | TOKEN_ROUTES | SESSION_AND_STATE_ROUTES:
                     continue
                 path = re.sub(r"\{[^}]+\}", "x", route.path)
                 response = client.request(
@@ -140,20 +158,6 @@ def test_an_integration_token_is_refused_by_every_other_api_route(tmp_path: Path
                 refused.append((method, route.path, response.status_code))
     assert refused
     assert {status for _, _, status in refused} == {401}, refused
-
-
-def _session_for(database: Path, user: UserId) -> str:
-    """A live session of `user`, as signing in would give them."""
-    token = secrets.token_urlsafe(32)
-    with transaction(database) as connection:
-        connection.execute(
-            """
-            INSERT INTO user_sessions (token_hash, user_id, created_at, expires_at)
-            VALUES (?, ?, '2026-01-01T00:00:00+00:00', '9999-01-01T00:00:00+00:00')
-            """,
-            (token_hash(token), user.value),
-        )
-    return token
 
 
 RULE_POLICY = {
@@ -202,7 +206,7 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
 
     answers = {}
     with TestClient(app) as client:
-        client.cookies.set(SESSION_COOKIE, _session_for(database, OTHER_USER))
+        client.cookies.set(SESSION_COOKIE, session_for(database, OTHER_USER))
         for route in app.routes:
             if (
                 not isinstance(route, APIRoute)
