@@ -21,3 +21,21 @@ export function usePeopleAccess(): PeopleAccess {
   const policy = registration.data?.policy
   return policy === undefined || policy === "only_me" ? "closed" : "open"
 }
+
+/** Whether the Operator Overview shows this User to someone else: still being asked, or not. */
+export type OverviewSharing = "pending" | "shared" | "alone"
+
+/**
+ * Whether anyone else is here to see what the Operator Overview shows about this User. Under Only
+ * me nobody else can be; a User who does not administer is never alone, since Only me allows no
+ * second User, so only an administrator asks the Registration Policy.
+ */
+export function useOverviewSharing(): OverviewSharing {
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session })
+  const administrator = isAdministrator(session.data?.user)
+  const registration = useQuery({ queryKey: ["registration"], queryFn: api.registration, enabled: administrator })
+  if (session.isPending) return "pending"
+  if (!administrator) return "shared"
+  if (registration.isPending) return "pending"
+  return registration.data?.policy === "only_me" ? "alone" : "shared"
+}

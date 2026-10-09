@@ -25,6 +25,7 @@ import { useGoogleReturn } from "@/lib/use-google-return"
 import { useRegistration } from "@/lib/use-registration"
 import { cn } from "@/lib/utils"
 import { AccountsSection } from "@/features/settings-accounts"
+import { AdministratorViewSection } from "@/features/settings-administrator-view"
 import { AppearanceSection } from "@/features/settings-appearance"
 import { IntegrationsSection } from "@/features/settings-integrations"
 import { OwnAccountSection } from "@/features/settings-own-account"
@@ -121,6 +122,7 @@ function SettingsView({ session, tab, onOpenTab, onOpenPeople, ...connections }:
       {shown === "account" && user && (
         <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} onOpenPeople={onOpenPeople} />
       )}
+      {shown === "account" && <AdministratorViewSection />}
       {shown === "account" && <AppearanceSection />}
       {shown === "connections" && <ConnectionsTab {...connections} administrator={administrator} />}
       {shown === "administration" && <AdministrationTab />}

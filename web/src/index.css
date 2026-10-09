@@ -1782,6 +1782,62 @@ p {
   background: transparent;
 }
 
+/* What the Operator Overview shows about one User: in People's person view, and in Settings for
+   the User themself. Calendars appear only as neutral labels, so a rule's name is its labels. */
+.user-overview {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.user-overview-verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.user-overview-verdict p {
+  margin: 0;
+}
+
+.user-overview-block {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.user-overview-block h2,
+.user-overview-block h3 {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.user-overview-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 0.5rem;
+  list-style: none;
+}
+
+.user-overview-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  overflow-wrap: anywhere;
+}
+
+.user-overview-rule {
+  margin-right: 0.5rem;
+  font-weight: 600;
+}
+
+.user-overview-muted {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* People: a search and two filters above a table that pages through everyone here. */
 .people-filters {
   display: grid;

@@ -418,5 +418,11 @@
       "twilight": "Twilight (indigo)",
       "midnight": "Midnight (blue)"
     }
+  },
+  "administratorView": {
+    "title": "What your administrator can see",
+    "intro": "Your administrator sees exactly this, to help when synchronization stops. They never see your calendar names, Google account emails, or events.",
+    "loadFailure": "What your administrator can see could not load.",
+    "tryAgain": "Try again"
   }
 }

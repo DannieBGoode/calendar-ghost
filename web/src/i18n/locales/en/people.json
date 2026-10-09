@@ -116,5 +116,72 @@
     "revokeLabel": "Revoke the invitation created {created}",
     "revoked": "The invitation was revoked. Its link no longer works.",
     "none": "No invitations are waiting."
+  },
+  "verdicts": {
+    "stalled": "Not running",
+    "stopped": "Stopped",
+    "review": "Needs a look",
+    "waiting": "Waiting for Google",
+    "paused": "Paused",
+    "setup": "Not set up",
+    "healthy": "Healthy"
+  },
+  "overview": {
+    "verdict": {
+      "stalled": "Calendar Ghost has not checked calendars recently, so nothing synchronizes until the service runs again.",
+      "stopped": "A rule stopped syncing and writes nothing until it is fixed.",
+      "review": "Rules keep running, but something kept happening or events could not be synced.",
+      "waiting": "Google is limiting or failing requests. Calendar Ghost retries by itself.",
+      "paused": "Rules exist, but none is running.",
+      "setup": "No rule is synchronizing yet.",
+      "healthy": "Every rule is running and up to date."
+    },
+    "lastSync": "Last synced {relative}",
+    "neverSynced": "Not synced yet",
+    "problemsTitle": "Problems",
+    "since": "Since {relative}",
+    "rulesTitle": "Rules",
+    "noRules": "No rules yet.",
+    "resourcesTitle": "Resource use",
+    "callsTitle": "Calls to calendar providers since {since}",
+    "noCalls": "No calls to calendar providers since {since}.",
+    "kept": {
+      "rules": {
+        "one": "{count} rule",
+        "other": "{count} rules"
+      },
+      "accounts": {
+        "one": "{count} Google account",
+        "other": "{count} Google accounts"
+      },
+      "activity": {
+        "one": "{count} Activity entry",
+        "other": "{count} Activity entries"
+      }
+    },
+    "calls": {
+      "total": {
+        "one": "{provider}: {count} call",
+        "other": "{provider}: {count} calls"
+      },
+      "rateLimited": {
+        "one": "{count} refused for its rate limit",
+        "other": "{count} refused for its rate limit"
+      },
+      "failed": {
+        "one": "{count} failed",
+        "other": "{count} failed"
+      },
+      "list": "{total}, {details}"
+    },
+    "problem": {
+      "stalled": "Scheduled synchronization stopped running",
+      "stopped": "Stopped syncing",
+      "overdue": "Not synced in over a day",
+      "blocked": {
+        "one": "{count} event couldn't be synced",
+        "other": "{count} events couldn't be synced"
+      }
+    }
   }
 }

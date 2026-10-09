@@ -216,6 +216,15 @@ export type PersonRole = Person["role"]
 export type PersonState = Person["state"]
 /** A row of People: the person, their Installation Status verdict, and their resource use. */
 export type PersonRow = Schemas["PersonResponse"]
+/** An Installation Status verdict, as People filters and sorts by it. */
+export type Verdict = PersonRow["verdict"]
+/** How much one User uses: counts only, never what their records say. */
+export type ResourceUse = Schemas["ResourceUseResponse"]
+/**
+ * What the Operator Overview shows about one User, to an administrator and to that User: their
+ * Installation Status with calendars only as "Calendar 1", "Calendar 2", and their resource use.
+ */
+export type UserOverview = Schemas["UserOverviewResponse"]
 /** One page of the people an administrator looks for, and how many match across every page. */
 export type PeoplePage = Schemas["UserPageResponse"]
 type PeopleParams = NonNullable<paths["/api/v1/users"]["get"]["parameters"]["query"]>
@@ -259,6 +268,8 @@ export const api = {
     }),
   setIncidentEmails: (notifyByEmail: boolean) =>
     call("/api/v1/account/notifications", "put", { body: { notify_by_email: notifyByEmail } }),
+  /** What the Operator Overview shows administrators about the signed-in User. */
+  ownOverview: () => call("/api/v1/account/overview", "get"),
   /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
   ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),
   deleteOwnAccount: (password: string, projections: ProjectionHandling) =>
