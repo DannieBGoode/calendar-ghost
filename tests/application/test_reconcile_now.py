@@ -27,7 +27,9 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.application.test_run_logging import SteppedClock
 from tests.fake_calendar import FakeCalendars, FixedClock, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, rule
@@ -51,7 +53,7 @@ class RecordingFullPasses:
 
 
 def _reconcile_now(
-    unit_of_work: InMemoryUnitOfWorkFactory, full_passes: RecordingFullPasses
+    unit_of_work: InMemoryUserUnitOfWorkFactory, full_passes: RecordingFullPasses
 ) -> tuple[ReconcileNow, FakeCalendars]:
     calendars = FakeCalendars()
     calendars.put(event())

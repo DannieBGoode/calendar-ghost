@@ -16,7 +16,9 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, rule
 
@@ -24,7 +26,9 @@ DETAILS = replace(rule(), transformation=TransformationPolicy(content=Projection
 GUESTS = ("ana@example.com", "ben@example.com")
 
 
-def _synced(sync_rule: SyncRule | None = None) -> tuple[FakeCalendars, InMemoryUnitOfWorkFactory]:
+def _synced(
+    sync_rule: SyncRule | None = None,
+) -> tuple[FakeCalendars, InMemoryUserUnitOfWorkFactory]:
     calendars = FakeCalendars()
     calendars.put(replace(event(), guests=GUESTS, conferencing=()))
     factory = enabled_rule_factory(sync_rule)
@@ -33,7 +37,7 @@ def _synced(sync_rule: SyncRule | None = None) -> tuple[FakeCalendars, InMemoryU
 
 
 def _run_with(
-    calendars: FakeCalendars, factory: InMemoryUnitOfWorkFactory, *reported: CalendarEvent
+    calendars: FakeCalendars, factory: InMemoryUserUnitOfWorkFactory, *reported: CalendarEvent
 ) -> None:
     calendars.report(*(calendars.put(item) for item in reported))
     sync_use_case(factory, calendars).execute(rule().id)

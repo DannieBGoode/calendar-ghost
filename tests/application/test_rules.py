@@ -27,16 +27,19 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+)
 from tests.application.test_execute_sync_rule import FixedClock
 from tests.helpers import rule
+from tests.users import USER
 
 MARK = TentativeEventPolicy.MARK
 AS_TENTATIVE = UnansweredInvitationPolicy.AS_TENTATIVE
 
 
 def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
 
     changed = ChangeSyncRulePolicy(unit_of_work, FixedClock()).execute(
@@ -60,7 +63,7 @@ def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -
 
 
 def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
 
     unchanged = ChangeSyncRulePolicy(unit_of_work, FixedClock()).execute(
@@ -76,7 +79,7 @@ def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
 
 
 def test_policy_change_is_blocked_for_missing_or_removing_rules() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.REMOVING)
     use_case = ChangeSyncRulePolicy(unit_of_work, FixedClock())
 
@@ -99,7 +102,7 @@ def test_policy_change_is_blocked_for_missing_or_removing_rules() -> None:
 
 
 def test_details_report_mapping_count_and_latest_outcomes() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule()
     synced = RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
     unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)] = synced
@@ -115,7 +118,7 @@ def test_details_report_mapping_count_and_latest_outcomes() -> None:
 
 
 def test_policy_change_waits_for_an_in_flight_provider_write() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
     locks = RuleLocks()
     change = ChangeSyncRulePolicy(unit_of_work, FixedClock(), locks)
@@ -139,7 +142,7 @@ def test_policy_change_waits_for_an_in_flight_provider_write() -> None:
 
 
 def test_enabling_a_previewed_rule_saves_it_enabled() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.PREVIEWED)
 
     enabled = EnableSyncRule(unit_of_work, RuleLocks()).execute(rule().id)
@@ -149,7 +152,7 @@ def test_enabling_a_previewed_rule_saves_it_enabled() -> None:
 
 
 def test_enabling_is_blocked_for_missing_or_unpreviewed_rules() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.DRAFT)
     enable = EnableSyncRule(unit_of_work, RuleLocks())
 
@@ -161,7 +164,7 @@ def test_enabling_is_blocked_for_missing_or_unpreviewed_rules() -> None:
 
 
 def test_pausing_keeps_the_rule_and_is_blocked_unless_enabled() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
     pause = PauseSyncRule(unit_of_work, RuleLocks())
 
@@ -177,7 +180,7 @@ def test_pausing_keeps_the_rule_and_is_blocked_unless_enabled() -> None:
 
 @pytest.mark.parametrize("change", ["enable", "pause"])
 def test_lifecycle_changes_wait_for_an_in_flight_provider_write(change: str) -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     starting = SyncRuleState.PREVIEWED if change == "enable" else SyncRuleState.ENABLED
     unit_of_work.state.rules[rule().id] = rule(state=starting)
     locks = RuleLocks()
@@ -196,7 +199,7 @@ def test_lifecycle_changes_wait_for_an_in_flight_provider_write(change: str) -> 
 
 
 def test_new_rules_are_drafts_under_a_generated_identity() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     for endpoint_ in (rule().source, rule().destination):
         unit_of_work.state.accounts[endpoint_.connected_account_id] = (
             ConnectedAccountState.CONNECTED
@@ -214,7 +217,7 @@ def test_new_rules_are_drafts_under_a_generated_identity() -> None:
 
 
 def test_listing_reports_each_rule_with_its_latest_outcomes_and_running_work() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule()
     synced = RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
     unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)] = synced
@@ -245,7 +248,7 @@ class GeneratedIds:
 
 @pytest.mark.parametrize("missing", ["source", "destination"])
 def test_new_rules_require_both_connected_accounts_to_exist(missing: str) -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     present = rule().destination if missing == "source" else rule().source
     unit_of_work.state.accounts[present.connected_account_id] = ConnectedAccountState.CONNECTED
 

@@ -25,6 +25,7 @@ from calendar_sync.application.ports import (
     DiscoveredCalendar,
 )
 from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,
@@ -41,6 +42,7 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
 )
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher, InvalidMasterKey
+from tests.users import USER, add_user
 
 DEFAULT_REDIRECT_URI = "http://localhost:8000/api/v1/oauth/google/callback"
 UNCONFIGURED_CLIENT = OAuthClientConfig("", "", DEFAULT_REDIRECT_URI)
@@ -75,17 +77,18 @@ def test_connected_account_upsert_preserves_identity(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
 
-    first = store.save(
+    first = store.for_user(USER).save(
         "Personal", "person@example.test", '{"token":"one"}', provider=ProviderKind.GOOGLE
     )
-    updated = store.save(
+    updated = store.for_user(USER).save(
         "Renamed", "person@example.test", '{"token":"two"}', provider=ProviderKind.GOOGLE
     )
 
     assert updated.id == first.id
     assert updated.display_name == "Renamed"
-    assert len(store.list()) == 1
+    assert len(store.for_user(USER).list()) == 1
 
 
 def test_connected_account_avatar_round_trips_and_follows_reauthorization(
@@ -94,13 +97,16 @@ def test_connected_account_avatar_round_trips_and_follows_reauthorization(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     photo = "https://lh3.googleusercontent.com/a/synthetic=s96-c"
 
-    saved = store.save(
+    saved = store.for_user(USER).save(
         "Person", "person@example.test", "{}", avatar_url=photo, provider=ProviderKind.GOOGLE
     )
-    listed = store.list()
-    reauthorized = store.save("Person", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
+    listed = store.for_user(USER).list()
+    reauthorized = store.for_user(USER).save(
+        "Person", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
 
     assert saved.avatar_url == photo
     assert listed[0].avatar_url == photo
@@ -126,6 +132,9 @@ def test_avatar_migration_upgrades_an_existing_installation(tmp_path: Path) -> N
                 'connected', '2026-01-01', '2026-01-01')
             """
         )
+        connection.execute(
+            "INSERT INTO installation_admin VALUES (1, 'scrypt$synthetic', '2026-01-01')"
+        )
 
     initialize_database(database)
     initialize_database(database)
@@ -133,8 +142,9 @@ def test_avatar_migration_upgrades_an_existing_installation(tmp_path: Path) -> N
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     with sqlite3.connect(database) as connection:
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
-    assert versions == list(range(1, 21))
-    assert [(account.id.value, account.avatar_url) for account in store.list()] == [
+        owner = UserId(str(connection.execute("SELECT id FROM users").fetchone()[0]))
+    assert versions == list(range(1, 22))
+    assert [(account.id.value, account.avatar_url) for account in store.for_user(owner).list()] == [
         ("existing", None)
     ]
 
@@ -146,13 +156,14 @@ def test_disconnect_discards_credentials_and_reauthorization_preserves_identity(
     initialize_database(database)
     cipher = CredentialCipher(CredentialCipher.generate_key())
     store = SqliteConnectedAccountStore(database, cipher)
-    account = store.save(
+    add_user(database)
+    account = store.for_user(USER).save(
         "Personal",
         "person@example.test",
         '{"refresh_token":"synthetic-secret"}',
         provider=ProviderKind.GOOGLE,
     )
-    disconnected = store.disconnect(account.id)
+    disconnected = store.for_user(USER).disconnect(account.id)
 
     assert disconnected.state == "disconnected"
     with pytest.raises(ConnectedAccountDisconnected, match="reauthorize"):
@@ -167,7 +178,7 @@ def test_disconnect_discards_credentials_and_reauthorization_preserves_identity(
     assert cipher.decrypt(cleared) == "{}"
     assert b"synthetic-secret" not in cleared
 
-    reauthorized = store.save(
+    reauthorized = store.for_user(USER).save(
         "Personal",
         "person@example.test",
         '{"refresh_token":"replacement-secret"}',
@@ -197,17 +208,22 @@ def test_authorized_at_follows_connection_and_reauthorization_only(tmp_path: Pat
         CredentialCipher(CredentialCipher.generate_key()),
         SteppingClock(connected_at, disconnected_at, reauthorized_at),
     )
+    add_user(database)
 
-    account = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
-    disconnected = store.disconnect(account.id)
-    listed_disconnected = store.list()
-    reauthorized = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
+    account = store.for_user(USER).save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    disconnected = store.for_user(USER).disconnect(account.id)
+    listed_disconnected = store.for_user(USER).list()
+    reauthorized = store.for_user(USER).save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
 
     assert account.authorized_at == connected_at.isoformat()
     assert disconnected.authorized_at is None
     assert [item.authorized_at for item in listed_disconnected] == [None]
     assert reauthorized.authorized_at == reauthorized_at.isoformat()
-    fetched = store.get(account.id)
+    fetched = store.for_user(USER).get(account.id)
     assert fetched is not None
     assert fetched.authorized_at == reauthorized_at.isoformat()
 
@@ -216,9 +232,10 @@ def test_oauth_state_is_single_use(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
 
-    oauth._store_state("synthetic-state")
+    oauth._states.store("synthetic-state", USER)
     oauth._consume_state("synthetic-state")
 
     with pytest.raises(InvalidAuthorizationState, match="already used"):
@@ -229,8 +246,9 @@ def test_expired_oauth_state_is_rejected(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
-    oauth._store_state("expired-state")
+    oauth._states.store("expired-state", USER)
     with sqlite3.connect(database) as connection:
         connection.execute(
             "UPDATE oauth_states SET expires_at = ?",
@@ -256,24 +274,25 @@ def _states(tmp_path: Path) -> tuple[SqliteAuthorizationStates, MovableClock]:
     database = tmp_path / "test.db"
     initialize_database(database)
     clock = MovableClock(STORED)
+    add_user(database)
     return SqliteAuthorizationStates(database, clock), clock
 
 
 def test_an_oauth_state_is_consumed_once_within_its_lifetime(tmp_path: Path) -> None:
     states, clock = _states(tmp_path)
-    states.store("synthetic-state")
+    states.store("synthetic-state", USER)
 
     clock.moment = STORED + STATE_LIFETIME - timedelta(seconds=1)
-    assert states.consume("synthetic-state") is True
-    assert states.consume("synthetic-state") is False
+    assert states.consume("synthetic-state") == USER
+    assert states.consume("synthetic-state") is None
 
 
 def test_an_oauth_state_is_rejected_once_its_lifetime_ends(tmp_path: Path) -> None:
     states, clock = _states(tmp_path)
-    states.store("synthetic-state")
+    states.store("synthetic-state", USER)
 
     clock.moment = STORED + STATE_LIFETIME
-    assert states.consume("synthetic-state") is False
+    assert states.consume("synthetic-state") is None
 
 
 def test_pkce_verifier_survives_oauth_flow_reconstruction(tmp_path: Path) -> None:
@@ -281,6 +300,7 @@ def test_pkce_verifier_survives_oauth_flow_reconstruction(tmp_path: Path) -> Non
     initialize_database(database)
     master_key = CredentialCipher.generate_key()
     store = SqliteConnectedAccountStore(database, CredentialCipher(master_key))
+    add_user(database)
     oauth = _oauth(
         database,
         store,
@@ -348,8 +368,9 @@ def test_oauth_completion_exchanges_explicit_code_without_parsing_callback_url(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
-    oauth._store_state("synthetic-state")
+    oauth._states.store("synthetic-state", USER)
     flow = StubFlow()
 
     def fake_flow(state: str) -> StubFlow:
@@ -365,10 +386,11 @@ def test_oauth_completion_exchanges_explicit_code_without_parsing_callback_url(
     monkeypatch.setattr(oauth, "_flow", fake_flow)
     monkeypatch.setattr("calendar_sync.infrastructure.google.oauth.build", fake_build)
 
-    account = oauth.complete("synthetic-state", "synthetic-code")
+    authorized = oauth.complete("synthetic-state", "synthetic-code")
 
     assert flow.fetch_token_calls == [{"code": "synthetic-code"}]
-    assert account.email == "person@example.test"
+    assert authorized.owner == USER
+    assert authorized.account.email == "person@example.test"
 
 
 def _synthetic_id_token(claims: dict[str, Any]) -> str:
@@ -412,14 +434,15 @@ def _complete_with_identity(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
-    oauth._store_state("synthetic-state")
+    oauth._states.store("synthetic-state", USER)
     monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
     monkeypatch.setattr(
         "calendar_sync.infrastructure.google.oauth.build",
         lambda *args, **kwargs: StubCalendarService(),
     )
-    return oauth.complete("synthetic-state", "synthetic-code")
+    return oauth.complete("synthetic-state", "synthetic-code").account
 
 
 def test_oauth_requests_calendar_and_basic_profile_scopes_only() -> None:
@@ -512,14 +535,15 @@ def test_oauth_completion_rejects_a_grant_without_all_calendar_scopes(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
-    oauth._store_state("synthetic-state")
+    oauth._states.store("synthetic-state", USER)
     monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
 
     with pytest.raises(CalendarPermissionRequired, match="Calendar permission"):
         oauth.complete("synthetic-state", "synthetic-code")
 
-    assert store.list() == ()
+    assert store.for_user(USER).list() == ()
 
 
 def test_access_check_verifies_calendar_list_and_event_permissions(
@@ -564,6 +588,7 @@ def test_access_check_verifies_calendar_list_and_event_permissions(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
     monkeypatch.setattr(oauth, "_credentials", lambda _: object())
     monkeypatch.setattr(
@@ -598,6 +623,7 @@ def test_access_check_explains_calendar_api_permission_failure(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
     monkeypatch.setattr(oauth, "_credentials", lambda _: object())
     monkeypatch.setattr(
@@ -641,6 +667,7 @@ def test_access_check_classifies_expired_and_unexpected_provider_failures(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
     monkeypatch.setattr(oauth, "_credentials", lambda _: object())
     monkeypatch.setattr(
@@ -671,6 +698,7 @@ def test_access_check_rejects_an_account_without_visible_calendars(
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
     oauth = _oauth(database, store)
     monkeypatch.setattr(oauth, "_credentials", lambda _: object())
     monkeypatch.setattr(
@@ -686,29 +714,33 @@ def test_connected_account_authorization_reflects_disconnection(tmp_path: Path) 
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    account = store.save(
+    add_user(database)
+    account = store.for_user(USER).save(
         "Work", "work@example.test", '{"refresh_token":"synthetic"}', provider=ProviderKind.GOOGLE
     )
 
-    assert store.is_connected(account.id) is True
-    store.disconnect(account.id)
-    assert store.is_connected(account.id) is False
-    assert store.is_connected(ConnectedAccountId("missing")) is False
+    assert store.for_user(USER).is_connected(account.id) is True
+    store.for_user(USER).disconnect(account.id)
+    assert store.for_user(USER).is_connected(account.id) is False
+    assert store.for_user(USER).is_connected(ConnectedAccountId("missing")) is False
 
 
 def test_account_state_is_stored_under_its_existing_values(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    account = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
-    store.disconnect(account.id)
+    add_user(database)
+    account = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    store.for_user(USER).disconnect(account.id)
 
     with sqlite3.connect(database) as connection:
         stored = connection.execute("SELECT state FROM connected_accounts").fetchone()[0]
     assert stored == "disconnected"
-    assert store.get(account.id) == store.list()[0]
-    assert store.list()[0].state is ConnectedAccountState.DISCONNECTED
-    assert store.get(ConnectedAccountId("missing")) is None
+    assert store.for_user(USER).get(account.id) == store.for_user(USER).list()[0]
+    assert store.for_user(USER).list()[0].state is ConnectedAccountState.DISCONNECTED
+    assert store.for_user(USER).get(ConnectedAccountId("missing")) is None
 
 
 @pytest.mark.parametrize(

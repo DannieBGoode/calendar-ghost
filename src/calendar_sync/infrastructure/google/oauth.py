@@ -31,11 +31,12 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.ports import (
     AccountAccess,
+    AuthorizedAccount,
     CalendarAccess,
-    ConnectedAccount,
     DiscoveredCalendar,
 )
 from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
@@ -99,10 +100,10 @@ class GoogleOAuthService:
         self._refresh_locks: dict[ConnectedAccountId, Lock] = {}
         self._refresh_guard = Lock()
 
-    def authorization_url(self, login_hint: str | None = None) -> str:
+    def authorization_url(self, owner: UserId, login_hint: str | None = None) -> str:
         self._require_client_configuration()
         state = secrets.token_urlsafe(32)
-        self._store_state(state)
+        self._states.store(state, owner)
         flow = self._flow(state)
         hint = {"login_hint": login_hint} if login_hint else {}
         url, _ = flow.authorization_url(
@@ -113,8 +114,8 @@ class GoogleOAuthService:
         )
         return str(url)
 
-    def complete(self, state: str, code: str) -> ConnectedAccount:
-        self._consume_state(state)
+    def complete(self, state: str, code: str) -> AuthorizedAccount:
+        owner = self._consume_state(state)
         flow = self._flow(state)
         try:
             flow.fetch_token(code=code)
@@ -145,13 +146,14 @@ class GoogleOAuthService:
             raise AuthorizationFailed("Google primary calendar did not expose an identity")
         profile = _profile_claims(getattr(credentials, "id_token", None))
         display_name = _optional_text(profile.get("name")) or str(primary.get("summary") or email)
-        return self._accounts.save(
+        account = self._accounts.for_user(owner).save(
             display_name,
             email,
             credentials.to_json(),
             provider=ProviderKind.GOOGLE,
             avatar_url=_https_url(profile.get("picture")),
         )
+        return AuthorizedAccount(owner, account)
 
     def cancel(self, state: str) -> None:
         self._consume_state(state)
@@ -306,12 +308,11 @@ class GoogleOAuthService:
                 "configure the Google OAuth client ID, secret, and redirect URI"
             )
 
-    def _store_state(self, state: str) -> None:
-        self._states.store(state)
-
-    def _consume_state(self, state: str) -> None:
-        if not self._states.consume(state):
+    def _consume_state(self, state: str) -> UserId:
+        owner = self._states.consume(state)
+        if owner is None:
             raise InvalidAuthorizationState("OAuth state is missing, expired, or already used")
+        return owner
 
 
 def discovered_calendar(item: Mapping[str, Any]) -> DiscoveredCalendar:

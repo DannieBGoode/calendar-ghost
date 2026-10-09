@@ -33,10 +33,10 @@ def test_an_admin_session_lasts_seven_days_from_sign_in(tmp_path: Path) -> None:
     auth, clock, token = _signed_in(tmp_path)
 
     clock.moment = SIGNED_IN + timedelta(days=7) - timedelta(seconds=1)
-    assert auth.session_is_valid(token) is True
+    assert auth.session_user(token) is not None
 
     clock.moment = SIGNED_IN + timedelta(days=7)
-    assert auth.session_is_valid(token) is False
+    assert auth.session_user(token) is None
 
 
 def test_signing_in_again_removes_expired_sessions(tmp_path: Path) -> None:
@@ -47,7 +47,7 @@ def test_signing_in_again_removes_expired_sessions(tmp_path: Path) -> None:
 
     assert renewed is not None
     assert renewed.expires_at == SIGNED_IN + 2 * SESSION_LIFETIME
-    assert auth.session_is_valid(renewed.token) is True
+    assert auth.session_user(renewed.token) is not None
     # Moving the clock back shows the expired session was deleted, not merely out of date.
     clock.moment = SIGNED_IN
-    assert auth.session_is_valid(expired) is False
+    assert auth.session_user(expired) is None

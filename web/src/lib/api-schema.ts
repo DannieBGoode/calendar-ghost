@@ -252,7 +252,8 @@ export interface paths {
         };
         /**
          * Start Google Oauth
-         * @description Start Google's consent; reauthorizing a known `account` suggests its email to Google.
+         * @description Start Google's consent for the signed-in User; reauthorizing a known `account` suggests
+         *     its email to Google.
          */
         get: operations["start_google_oauth_api_v1_oauth_google_start_get"];
         put?: never;
@@ -479,7 +480,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Installation Status */
+        /**
+         * Installation Status
+         * @description The Installation Status of the User the token or session belongs to (ADR 0030).
+         */
         get: operations["installation_status_api_v1_status_get"];
         put?: never;
         post?: never;

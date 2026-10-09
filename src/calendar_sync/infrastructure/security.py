@@ -4,7 +4,6 @@ import base64
 import hashlib
 import hmac
 import secrets
-import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -14,7 +13,9 @@ from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
-from calendar_sync.application.ports import AdministratorSession, Clock
+from calendar_sync.application.ports import AdministratorSession, Clock, IdGenerator
+from calendar_sync.domain.access import UserId
+from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.scheduling import SystemClock
 
@@ -87,76 +88,94 @@ class HistoryCipher:
 
 
 class SqliteAdminAuth:
-    def __init__(self, database_path: Path, clock: Clock | None = None) -> None:
+    """The first User's password and every User's sessions.
+
+    Until sign-in by email arrives, the first User, who has no email, signs in by password alone.
+    """
+
+    def __init__(
+        self, database_path: Path, clock: Clock | None = None, ids: IdGenerator | None = None
+    ) -> None:
         self._database_path = database_path
         self._clock = clock or SystemClock()
+        self._ids = ids or UuidIdGenerator()
 
     def is_configured(self) -> bool:
         with transaction(self._database_path) as connection:
-            return (
-                connection.execute(
-                    "SELECT 1 FROM installation_admin WHERE singleton = 1"
-                ).fetchone()
-                is not None
-            )
+            return connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
 
     def create_admin(self, password: str) -> None:
         if len(password) < 12:
             raise PasswordPolicyViolation("password must contain at least 12 characters")
-        salt = secrets.token_bytes(16)
-        derived = _derive_password(password, salt)
-        encoded = "scrypt$" + base64.urlsafe_b64encode(salt + derived).decode()
-        try:
-            with transaction(self._database_path) as connection:
-                connection.execute(
-                    """
-                    INSERT INTO installation_admin(singleton, password_hash, created_at)
-                    VALUES (1, ?, ?)
-                    """,
-                    (encoded, self._clock.now().isoformat()),
-                )
-        except sqlite3.IntegrityError as error:
-            raise AdminAlreadyConfigured("installation administrator already exists") from error
+        with transaction(self._database_path) as connection:
+            # Held from the check to the insert, so two first-run requests cannot both succeed.
+            connection.execute("BEGIN IMMEDIATE")
+            if connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None:
+                raise AdminAlreadyConfigured("installation administrator already exists")
+            connection.execute(
+                """
+                INSERT INTO users (id, email, password_hash, role, state, created_at)
+                VALUES (?, NULL, ?, 'installation_administrator', 'active', ?)
+                """,
+                (self._ids.new(), hash_password(password), self._clock.now().isoformat()),
+            )
 
     def authenticate(self, password: str) -> AdministratorSession | None:
         with transaction(self._database_path) as connection:
             row = connection.execute(
-                "SELECT password_hash FROM installation_admin WHERE singleton = 1"
+                "SELECT id, password_hash FROM users WHERE email IS NULL AND state = 'active'"
             ).fetchone()
             if row is None or not _verify_password(password, str(row["password_hash"])):
                 return None
 
             token = secrets.token_urlsafe(32)
-            hashed = token_hash(token)
             now = self._clock.now()
             expires = now + SESSION_LIFETIME
             connection.execute(
-                "INSERT INTO admin_sessions(token_hash, created_at, expires_at) VALUES (?, ?, ?)",
-                (hashed, now.isoformat(), expires.isoformat()),
+                """
+                INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (token_hash(token), row["id"], now.isoformat(), expires.isoformat()),
             )
             connection.execute(
-                "DELETE FROM admin_sessions WHERE expires_at <= ?", (now.isoformat(),)
+                "UPDATE users SET last_sign_in_at = ? WHERE id = ?", (now.isoformat(), row["id"])
             )
-            return AdministratorSession(token, expires)
+            connection.execute(
+                "DELETE FROM user_sessions WHERE expires_at <= ?", (now.isoformat(),)
+            )
+            return AdministratorSession(token, expires, UserId(str(row["id"])))
 
-    def session_is_valid(self, token: str | None) -> bool:
+    def session_user(self, token: str | None) -> UserId | None:
         if not token:
-            return False
+            return None
         now = self._clock.now()
         with transaction(self._database_path) as connection:
             row = connection.execute(
-                "SELECT expires_at FROM admin_sessions WHERE token_hash = ?",
+                """
+                SELECT user_sessions.user_id, user_sessions.expires_at FROM user_sessions
+                JOIN users ON users.id = user_sessions.user_id AND users.state = 'active'
+                WHERE token_hash = ?
+                """,
                 (token_hash(token),),
             ).fetchone()
-        return row is not None and datetime.fromisoformat(str(row["expires_at"])) > now
+        if row is None or datetime.fromisoformat(str(row["expires_at"])) <= now:
+            return None
+        return UserId(str(row["user_id"]))
 
     def revoke(self, token: str | None) -> None:
         if not token:
             return
         with transaction(self._database_path) as connection:
             connection.execute(
-                "DELETE FROM admin_sessions WHERE token_hash = ?", (token_hash(token),)
+                "DELETE FROM user_sessions WHERE token_hash = ?", (token_hash(token),)
             )
+
+
+def hash_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    derived = _derive_password(password, salt)
+    return "scrypt$" + base64.urlsafe_b64encode(salt + derived).decode()
 
 
 def _verify_password(password: str, encoded: str) -> bool:

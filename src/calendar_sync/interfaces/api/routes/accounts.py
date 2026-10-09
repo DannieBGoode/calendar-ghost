@@ -27,8 +27,14 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.ports import AccountAuthorization, CalendarAccess
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
-from calendar_sync.interfaces.api.dependencies import app_services, available, require_admin
+from calendar_sync.interfaces.api.dependencies import (
+    app_services,
+    available,
+    current_user,
+    user_services,
+)
 from calendar_sync.interfaces.api.problems import problem, problem_from
 from calendar_sync.interfaces.api.schemas import (
     ConnectedAccountResponse,
@@ -50,10 +56,8 @@ class GoogleConnection(Protocol):
 
 
 class AccountServices(Protocol):
-    @property
-    def google(self) -> GoogleConnection: ...
-    @property
-    def authorization(self) -> AccountAuthorization | None: ...
+    """One User's account use cases."""
+
     @property
     def discover_calendars(self) -> DiscoverCalendars | None: ...
     @property
@@ -68,34 +72,48 @@ class AccountServices(Protocol):
     def lapsed_authorizations(self) -> LapsedAuthorizations | None: ...
 
 
-Services = Annotated[AccountServices, Depends(app_services)]
+class AuthorizationServices(Protocol):
+    """The installation's provider connection, and each User's account use cases."""
+
+    @property
+    def google(self) -> GoogleConnection: ...
+    @property
+    def authorization(self) -> AccountAuthorization | None: ...
+    def for_user(self, user_id: UserId) -> AccountServices: ...
+
+
+Services = Annotated[AccountServices, Depends(user_services)]
+Installation = Annotated[AuthorizationServices, Depends(app_services)]
+SignedIn = Annotated[UserId, Depends(current_user)]
 router = APIRouter()
 
 
 @router.get(
     "/api/v1/google/configuration",
     response_model=GoogleConfigurationResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
-def google_configuration(services: Services) -> GoogleConfigurationResponse:
+def google_configuration(services: Installation) -> GoogleConfigurationResponse:
     return GoogleConfigurationResponse(
         configured=services.google.configured, redirect_uri=services.google.redirect_uri
     )
 
 
-@router.get(
-    "/api/v1/oauth/google/start",
-    dependencies=[Depends(require_admin)],
-)
-def start_google_oauth(services: Services, account: str | None = None) -> RedirectResponse:
-    """Start Google's consent; reauthorizing a known `account` suggests its email to Google."""
+@router.get("/api/v1/oauth/google/start")
+def start_google_oauth(
+    installation: Installation, user: SignedIn, account: str | None = None
+) -> RedirectResponse:
+    """Start Google's consent for the signed-in User; reauthorizing a known `account` suggests
+    its email to Google."""
     authorization = available(
-        services.authorization,
+        installation.authorization,
         ACCOUNT_MANAGEMENT_UNAVAILABLE,
         "configure the installation master key before connecting Google",
     )
     try:
-        url = authorization.authorization_url(_account_email(services, account))
+        url = authorization.authorization_url(
+            user, _account_email(installation.for_user(user), account)
+        )
         return RedirectResponse(url, status_code=302)
     except AuthorizationNotConfigured as error:
         raise problem_from(status.HTTP_503_SERVICE_UNAVAILABLE, error) from error
@@ -103,13 +121,15 @@ def start_google_oauth(services: Services, account: str | None = None) -> Redire
 
 @router.get("/api/v1/oauth/google/callback", include_in_schema=False)
 def complete_google_oauth(
-    services: Services,
+    installation: Installation,
     state: str,
     code: str | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
     authorization = available(
-        services.authorization, "authorization_not_configured", "Google OAuth is not configured"
+        installation.authorization,
+        "authorization_not_configured",
+        "Google OAuth is not configured",
     )
     if error is not None:
         try:
@@ -127,14 +147,16 @@ def complete_google_oauth(
             "Google OAuth callback did not include an authorization result",
         )
     try:
-        account = authorization.complete(state, code)
+        authorized = authorization.complete(state, code)
     except InvalidAuthorizationState as state_error:
         raise problem_from(status.HTTP_400_BAD_REQUEST, state_error) from state_error
     except CalendarPermissionRequired:
         return RedirectResponse("/settings?google=calendar_permission_required", status_code=303)
     except AuthorizationFailed:
         return RedirectResponse("/settings?google=authorization_failed", status_code=303)
-    lapses = services.lapsed_authorizations
+    # The state names the User who began the flow; the account and its rules are theirs.
+    account = authorized.account
+    lapses = installation.for_user(authorized.owner).lapsed_authorizations
     # Google accepted the account when its new credentials were saved.
     accepted_at = datetime.fromisoformat(account.authorized_at or datetime.now(UTC).isoformat())
     resumed = lapses.restored(account.id, accepted_at=accepted_at) if lapses is not None else 0
@@ -159,7 +181,7 @@ def _account_email(services: AccountServices, account_id: str | None) -> str | N
 @router.get(
     "/api/v1/accounts",
     response_model=list[ConnectedAccountResponse],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def list_accounts(services: Services) -> list[ConnectedAccountResponse]:
     if services.list_connected_accounts is None:
@@ -170,7 +192,7 @@ def list_accounts(services: Services) -> list[ConnectedAccountResponse]:
 @router.post(
     "/api/v1/accounts/{account_id}/disconnect",
     response_model=ConnectedAccountResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def disconnect_account(account_id: str, services: Services) -> ConnectedAccountResponse:
     disconnect = available(
@@ -185,7 +207,7 @@ def disconnect_account(account_id: str, services: Services) -> ConnectedAccountR
 @router.delete(
     "/api/v1/accounts/{account_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def delete_account(account_id: str, services: Services) -> None:
     delete = available(
@@ -202,7 +224,7 @@ def delete_account(account_id: str, services: Services) -> None:
 @router.get(
     "/api/v1/accounts/{account_id}/calendars",
     response_model=list[DiscoveredCalendarResponse],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def discover_calendars(account_id: str, services: Services) -> list[DiscoveredCalendarResponse]:
     discover = available(
@@ -240,7 +262,7 @@ _LEGACY_ACCESS_ROLES: dict[CalendarAccess, str] = {
 @router.post(
     "/api/v1/accounts/{account_id}/verify",
     response_model=GoogleAccountAccessResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def verify_account_access(account_id: str, services: Services) -> GoogleAccountAccessResponse:
     check = available(

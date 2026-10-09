@@ -54,7 +54,14 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
+from calendar_sync.bootstrap.container import (
+    Adapters,
+    Container,
+    UserServices,
+    build_adapters,
+    compose,
+)
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -348,8 +355,8 @@ def build_preview_container(
     history = HistoryCipher(CredentialCipher.generate_key())
     adapters = replace(
         adapters,
-        unit_of_work=SqliteUnitOfWorkFactory(path, adapters.clock, history),
-        activity=SqliteActivityQueries(path, history),
+        unit_of_work=SqliteUnitOfWorkFactory(path, adapters.clock, history).for_user,
+        activity=lambda user: SqliteActivityQueries(path, user, history),
     )
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute(f"CREATE TABLE {MARKER_TABLE} (created_at TEXT NOT NULL)")
@@ -361,37 +368,50 @@ def build_preview_container(
     moment = now or adapters.clock.now()
     google = PreviewGoogle()
     composed = compose(settings, adapters)
-    # Only reads are substituted: without a master key nothing synchronizes or writes.
+    accounts = cast(
+        ConnectedAccountRepository, PreviewAccounts(_scenario_accounts(scenario, moment))
+    )
+
+    def preview_services(user: UserId) -> UserServices:
+        services = composed.for_user(user)
+        units = adapters.unit_of_work(user)
+        # Only reads are substituted: without a master key nothing synchronizes or writes.
+        return replace(
+            services,
+            inspect_activity_event=InspectActivityEvent(
+                adapters.activity(user), units, cast(CalendarProvider, PreviewCalendar(moment))
+            ),
+            list_connected_accounts=ListConnectedAccounts(units, accounts),
+            discover_calendars=DiscoverCalendars(cast(AccountCalendars, google), units),
+            # The preview has no scheduler (no master key is ever configured here); a heartbeat
+            # that always reports a recent pass keeps each scenario's own health visible instead
+            # of "stalled", which is correct for a real installation with no scheduler at all.
+            # The clock is pinned to the preview's own fictional `moment`, so its seeded history
+            # never reads as overdue just because real time moved on since it was generated.
+            get_installation_status=GetInstallationStatus(
+                services.list_sync_rules,
+                adapters.operations(user),
+                _FixedClock(moment),
+                _RecentSchedulerHeartbeat(_FixedClock(moment), _enabled_rule_ids(scenario)),
+            ),
+        )
+
     container = replace(
         composed,
-        inspect_activity_event=InspectActivityEvent(
-            adapters.activity,
-            adapters.unit_of_work,
-            cast(CalendarProvider, PreviewCalendar(moment)),
-        ),
-        list_connected_accounts=ListConnectedAccounts(
-            adapters.unit_of_work,
-            cast(ConnectedAccountRepository, PreviewAccounts(_scenario_accounts(scenario, moment))),
-        ),
         authorization=cast(AccountAuthorization, google),
         account_calendars=cast(AccountCalendars, google),
-        discover_calendars=DiscoverCalendars(cast(AccountCalendars, google), adapters.unit_of_work),
-        # The preview has no scheduler (no master key is ever configured here); a heartbeat that
-        # always reports a recent pass keeps each scenario's own health visible instead of
-        # "stalled", which is correct for a real installation with no scheduler at all. The clock
-        # is pinned to the preview's own fictional `moment`, so its seeded history never reads as
-        # overdue just because real time moved on since it was generated.
-        get_installation_status=GetInstallationStatus(
-            composed.list_sync_rules,
-            adapters.operations,
-            _FixedClock(moment),
-            _RecentSchedulerHeartbeat(_FixedClock(moment), _enabled_rule_ids(scenario)),
-        ),
+        user_services=preview_services,
     )
-    if scenario is not Scenario.SETUP:
-        _seed(adapters, path, moment, scenario)
     adapters.administrator.create_admin(PREVIEW_PASSWORD)
+    if scenario is not Scenario.SETUP:
+        _seed(adapters, path, preview_user(path), moment, scenario)
     return container
+
+
+def preview_user(path: Path) -> UserId:
+    """The preview's one User, who owns everything it seeds."""
+    with closing(sqlite3.connect(path)) as connection:
+        return UserId(str(connection.execute("SELECT id FROM users").fetchone()[0]))
 
 
 PREVIEW_RULES = (
@@ -536,10 +556,33 @@ def _preview_change(found: CalendarEvent, seeded: SeededEntry) -> SourceChange |
     return SourceChange.between(before, after)
 
 
-def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> None:
+def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario: Scenario) -> None:
     calendar = PreviewCalendar(now)
     rules = _scenario_rules(scenario)
-    with adapters.unit_of_work() as uow:
+    with closing(sqlite3.connect(path)) as connection, connection:
+        # Records only, so the preview's accounts can be used by new rules; no credentials.
+        connection.executemany(
+            """
+            INSERT INTO connected_accounts (
+                id, user_id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at, authorization_lapsed_at
+            ) VALUES (?, ?, 'google', ?, ?, x'00', ?, ?, ?, ?)
+            """,
+            [
+                (
+                    account.id.value,
+                    user.value,
+                    account.display_name,
+                    account.email,
+                    account.state.value,
+                    now.isoformat(),
+                    now.isoformat(),
+                    account.authorization_lapsed_at,
+                )
+                for account in _scenario_accounts(scenario, now)
+            ],
+        )
+    with adapters.unit_of_work(user)() as uow:
         for rule in rules:
             uow.rules.add(rule)
         for seeded in _history():
@@ -572,35 +615,14 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
             )
         uow.commit()
     with closing(sqlite3.connect(path)) as connection, connection:
-        # Records only, so the preview's accounts can be used by new rules; no credentials.
-        connection.executemany(
-            """
-            INSERT INTO connected_accounts (
-                id, provider, display_name, email, encrypted_credentials,
-                state, created_at, updated_at, authorization_lapsed_at
-            ) VALUES (?, 'google', ?, ?, x'00', ?, ?, ?, ?)
-            """,
-            [
-                (
-                    account.id.value,
-                    account.display_name,
-                    account.email,
-                    account.state.value,
-                    now.isoformat(),
-                    now.isoformat(),
-                    account.authorization_lapsed_at,
-                )
-                for account in _scenario_accounts(scenario, now)
-            ],
-        )
         if scenario not in _BLOCKED:
             # A daily pass after the seeded history found nothing still blocked.
             connection.executemany(
                 """
-                INSERT INTO rule_block_checks (rule_id, audit_floor, checked_at)
-                VALUES (?, (SELECT MAX(id) FROM audit_entries), ?)
+                INSERT INTO rule_block_checks (rule_id, user_id, audit_floor, checked_at)
+                VALUES (?, ?, (SELECT MAX(id) FROM audit_entries), ?)
                 """,
-                [(rule.id.value, now.isoformat()) for rule in PREVIEW_RULES],
+                [(rule.id.value, user.value, now.isoformat()) for rule in PREVIEW_RULES],
             )
         if scenario in _EXPIRED:
             # One Incident for the account, however many of its rules stopped.
@@ -608,8 +630,8 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, account_id, category, state, summary,
-                    opened_at, updated_at, message_code, message_params
-                ) VALUES (?, ?, NULL, ?, 'authentication', 'open', ?, ?, ?, ?, ?)
+                    opened_at, updated_at, message_code, message_params, user_id
+                ) VALUES (?, ?, NULL, ?, 'authentication', 'open', ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     f"authorization:{PERSONAL_ACCOUNT.value}",
@@ -620,6 +642,7 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                     (now - timedelta(minutes=2)).isoformat(),
                     "authorization_lapsed",
                     json.dumps({"kind": "authentication", "provider": "google"}),
+                    user.value,
                 ),
             )
         # Provider Incidents, worded as the service words them.
@@ -632,8 +655,8 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                message_code, message_params
-            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
+                message_code, message_params, user_id
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -646,6 +669,7 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                     (now - timedelta(minutes=2)).isoformat(),
                     "provider_failure",
                     json.dumps({"kind": category, "provider": "google"}),
+                    user.value,
                 )
                 for rule_id, category, summary, minutes_ago in provider_incidents
             ],
@@ -655,8 +679,8 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                    message_code, message_params
-                ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
+                    message_code, message_params, user_id
+                ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     "preview-incident",
@@ -668,14 +692,16 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                     (now - timedelta(hours=1)).isoformat(),
                     "events_still_blocked",
                     json.dumps({"count": 1}),
+                    user.value,
                 ),
             )
         connection.executemany(
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary,
-                opened_at, updated_at, resolved_at, resolution, message_code, message_params
-            ) VALUES (?, ?, ?, ?, 'resolved', ?, ?, ?, ?, ?, ?, ?)
+                opened_at, updated_at, resolved_at, resolution, message_code, message_params,
+                user_id
+            ) VALUES (?, ?, ?, ?, 'resolved', ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -690,6 +716,7 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
                     resolution,
                     message_code,
                     message_params,
+                    user.value,
                 )
                 for rule_id, category, summary, days, resolution, message_code, message_params in (
                     (
@@ -715,7 +742,7 @@ def _seed(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> 
             ],
         )
     # The names Google last gave each calendar, kept after an account's access expires.
-    with adapters.unit_of_work() as uow:
+    with adapters.unit_of_work(user)() as uow:
         for account_id, calendars in CALENDARS.items():
             uow.calendar_names.remember(ConnectedAccountId(account_id), calendars)
         uow.commit()

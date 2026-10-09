@@ -16,7 +16,9 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TransformationPolicy,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import (
     NOW,
@@ -304,7 +306,7 @@ def test_full_pass_verifies_an_unedited_projection_whose_source_was_not_listed()
 
 
 def _projection_matching_a_source_moved_out_of_the_window() -> tuple[
-    FakeCalendars, InMemoryUnitOfWorkFactory, EventRef
+    FakeCalendars, InMemoryUserUnitOfWorkFactory, EventRef
 ]:
     calendars = FakeCalendars()
     calendars.put(event())

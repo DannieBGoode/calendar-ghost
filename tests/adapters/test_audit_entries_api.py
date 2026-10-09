@@ -33,8 +33,11 @@ def test_skips_no_longer_recorded_are_hidden_from_earlier_history(tmp_path: Path
         with sqlite3.connect(database) as connection:
             connection.executemany(
                 """
-                INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, detail, reason)
-                VALUES ('2026-09-01T10:00:00+00:00', 'rule-1', ?, ?, '', ?)
+                INSERT INTO audit_entries (
+                    occurred_at, rule_id, action, outcome, detail, reason, user_id
+                )
+                VALUES ('2026-09-01T10:00:00+00:00', 'rule-1', ?, ?, '', ?,
+                    (SELECT id FROM users ORDER BY rowid LIMIT 1))
                 """,
                 [
                     ("ignore", "skipped", "managed_projection_source"),

@@ -12,9 +12,13 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, endpoint, rule
+from tests.users import USER
 
 PERSONAL = ConnectedAccountId("personal-account")
 WORK = ConnectedAccountId("work-account")
@@ -43,8 +47,8 @@ class Incidents:
         self.resolved.append((key, resolution))
 
 
-def _installation() -> tuple[InMemoryUnitOfWorkFactory, Incidents, LapsedAuthorizations]:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+def _installation() -> tuple[InMemoryUserUnitOfWorkFactory, Incidents, LapsedAuthorizations]:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     for account in (PERSONAL, WORK):
         unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
     incidents = Incidents()

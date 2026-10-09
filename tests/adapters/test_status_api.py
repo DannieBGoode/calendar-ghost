@@ -23,11 +23,12 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
-from calendar_sync.interfaces.access import StatusAccess
+from calendar_sync.interfaces.access import StatusAccess, StatusPrincipal
 from calendar_sync.interfaces.api import dependencies
 from calendar_sync.interfaces.api.app import create_app
-from calendar_sync.interfaces.api.dependencies import StatusReaderServices, require_status_reader
+from calendar_sync.interfaces.api.dependencies import StatusReaderServices, status_reader
 from tests.helpers import endpoint, rule
+from tests.users import add_account, administrator, sign_in
 
 PASSWORD = {"password": "correct horse battery staple"}
 SECRETS = {
@@ -39,13 +40,15 @@ SECRETS = {
 
 
 def _installation(tmp_path: Path) -> tuple[Container, Adapters]:
+    """An installation with its first User, so records can be seeded for them."""
     settings = Settings(tmp_path / "test.db")
     adapters = build_adapters(settings)
+    administrator(adapters.administrator)
     return replace(compose(settings, adapters), scheduler=None), adapters
 
 
 def _signed_in(client: TestClient) -> None:
-    client.post("/api/v1/setup/admin", json=PASSWORD)
+    sign_in(client)
 
 
 def _issue(client: TestClient, name: str = "Uptime Kuma") -> str:
@@ -82,8 +85,8 @@ def test_tokens_are_managed_only_with_an_administrator_session(tmp_path: Path) -
 
 
 class _RefusingAdministrator:
-    def session_is_valid(self, token: str | None) -> bool:
-        return False
+    def session_user(self, token: str | None) -> None:
+        return None
 
 
 class _RefusingTokens:
@@ -93,7 +96,7 @@ class _RefusingTokens:
 
 class _RefusingServices:
     administrator = _RefusingAdministrator()
-    integration_tokens = _RefusingTokens()
+    token_authentication = _RefusingTokens()
 
 
 def _traceback_depth(traceback: TracebackType | None) -> int:
@@ -106,13 +109,13 @@ def _traceback_depth(traceback: TracebackType | None) -> int:
 
 def _refuse(services: StatusReaderServices) -> HTTPException:
     try:
-        require_status_reader(services, authorization=None, session=None)
+        status_reader(services, authorization=None, session=None)
     except HTTPException as error:
         return error
-    raise AssertionError("expected require_status_reader to raise")
+    raise AssertionError("expected status_reader to raise")
 
 
-def test_require_status_reader_raises_an_independent_exception_each_refusal() -> None:
+def test_status_reader_raises_an_independent_exception_each_refusal() -> None:
     """A shared exception object would append frames to one `__traceback__` on every refusal and
     keep each refused call's locals alive; a fresh exception per call does neither."""
     services = cast(StatusReaderServices, _RefusingServices())
@@ -173,7 +176,9 @@ def test_a_token_without_the_status_scope_is_forbidden(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Every token issued today has the status scope, so the refusal is forced at the decision.
-    monkeypatch.setattr(dependencies, "status_access", lambda *_: StatusAccess.FORBIDDEN)
+    monkeypatch.setattr(
+        dependencies, "status_access", lambda *_: StatusPrincipal(StatusAccess.FORBIDDEN)
+    )
     container, _ = _installation(tmp_path)
     with TestClient(create_app(container)) as client:
         response = client.get("/api/v1/status", headers={"Authorization": "Bearer cgs_token"})
@@ -228,13 +233,15 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
             """
             INSERT INTO connected_accounts (
                 id, provider, display_name, email, encrypted_credentials,
-                state, created_at, updated_at
+                state, created_at, updated_at, user_id
             ) VALUES (
-                ?, 'google', 'Secret Person', ?, x'00', 'connected', '2026-09-01', '2026-09-01'
+                ?, 'google', 'Secret Person', ?, x'00', 'connected', '2026-09-01', '2026-09-01',
+                    (SELECT id FROM users ORDER BY rowid LIMIT 1)
             )
             """,
             (SECRETS["account"], SECRETS["email"]),
         )
+    add_account(database, "work-account", administrator(adapters.administrator))
     seeded = SyncRule(
         id=SyncRuleId("rule-1"),
         source=CalendarEndpoint(
@@ -243,7 +250,7 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
         destination=endpoint("work-account", "work-calendar"),
         state=SyncRuleState.DEGRADED,
     )
-    with adapters.unit_of_work() as uow:
+    with adapters.unit_of_work(administrator(adapters.administrator))() as uow:
         uow.rules.add(seeded)
         uow.audit.append(
             AuditEntry(
@@ -261,10 +268,10 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                account_id
+                account_id, user_id
             ) VALUES ('incident-1', 'provider:rule-1', 'rule-1', 'authentication', 'open',
                 'Calendar provider authorization expired', '2026-10-03T08:00:00+00:00',
-                '2026-10-03T08:00:00+00:00', ?)
+                '2026-10-03T08:00:00+00:00', ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             (SECRETS["account"],),
         )
@@ -274,15 +281,18 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
         # id (destination). Both must stay out of the status response.
         connection.execute(
             """
-            INSERT INTO calendar_names (connected_account_id, calendar_id, name, updated_at)
-            VALUES (?, ?, ?, '2026-10-03T08:00:00+00:00')
+            INSERT INTO calendar_names (
+                connected_account_id, calendar_id, name, updated_at, user_id
+            ) VALUES (?, ?, ?, '2026-10-03T08:00:00+00:00', (SELECT id FROM users))
             """,
             (SECRETS["account"], SECRETS["calendar"], SECRETS["calendar"]),
         )
         connection.execute(
             """
-            INSERT INTO calendar_names (connected_account_id, calendar_id, name, updated_at)
-            VALUES ('work-account', 'work-calendar', ?, '2026-10-03T08:00:00+00:00')
+            INSERT INTO calendar_names (
+                connected_account_id, calendar_id, name, updated_at, user_id
+            ) VALUES ('work-account', 'work-calendar', ?, '2026-10-03T08:00:00+00:00',
+                (SELECT id FROM users))
             """,
             (SECRETS["email"],),
         )
@@ -328,15 +338,16 @@ def test_counts_never_call_a_stopped_rule_running(tmp_path: Path) -> None:
             """
             INSERT INTO connected_accounts (
                 id, provider, display_name, email, encrypted_credentials,
-                state, created_at, updated_at
-            ) VALUES (?, 'google', ?, ?, x'00', ?, '2026-09-01', '2026-09-01')
+                state, created_at, updated_at, user_id
+            ) VALUES (?, 'google', ?, ?, x'00', ?, '2026-09-01', '2026-09-01',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [
                 ("personal-account", "Personal", "personal@example.test", "connected"),
                 ("work-account", "Work", "work@example.test", "disconnected"),
             ],
         )
-    with adapters.unit_of_work() as uow:
+    with adapters.unit_of_work(administrator(adapters.administrator))() as uow:
         uow.rules.add(rule())
         uow.commit()
     with TestClient(create_app(container)) as client:
@@ -368,15 +379,16 @@ def test_a_problem_from_an_incident_carries_its_message(tmp_path: Path) -> None:
             """
             INSERT INTO connected_accounts (
                 id, provider, display_name, email, encrypted_credentials,
-                state, created_at, updated_at
-            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01')
+                state, created_at, updated_at, user_id
+            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [
                 ("personal-account", "Personal", "personal@example.test"),
                 ("work-account", "Work", "work@example.test"),
             ],
         )
-    with adapters.unit_of_work() as uow:
+    with adapters.unit_of_work(administrator(adapters.administrator))() as uow:
         uow.rules.add(rule(state=SyncRuleState.DEGRADED))
         uow.commit()
     with sqlite3.connect(tmp_path / "test.db") as connection:
@@ -384,11 +396,12 @@ def test_a_problem_from_an_incident_carries_its_message(tmp_path: Path) -> None:
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                message_code, message_params
+                message_code, message_params, user_id
             ) VALUES ('incident-1', 'provider:rule-1', 'rule-1', 'authentication', 'open',
                 'Authorization for Google Calendar expired', '2026-10-03T08:00:00+00:00',
                 '2026-10-03T08:00:00+00:00', 'provider_failure',
-                '{"kind": "authentication", "provider": "google"}')
+                '{"kind": "authentication", "provider": "google"}',
+                    (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """
         )
     with TestClient(create_app(container)) as client:

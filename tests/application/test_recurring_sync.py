@@ -34,18 +34,20 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUserUnitOfWorkFactory,
+)
 from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import occurrence, rule, series, week_start
+from tests.users import sqlite_units
 
 STARTS = tuple(week_start(week) for week in range(4))
 
 
-def _synced() -> tuple[FakeCalendars, InMemoryUnitOfWorkFactory, EventRef]:
+def _synced() -> tuple[FakeCalendars, InMemoryUserUnitOfWorkFactory, EventRef]:
     calendars = FakeCalendars()
     calendars.put(series(), starts=STARTS)
     factory = enabled_rule_factory()
@@ -55,7 +57,7 @@ def _synced() -> tuple[FakeCalendars, InMemoryUnitOfWorkFactory, EventRef]:
 
 
 def _occurrence_states(
-    factory: InMemoryUnitOfWorkFactory,
+    factory: InMemoryUserUnitOfWorkFactory,
 ) -> dict[OccurrenceStart, OccurrenceState]:
     return {key[1]: mapping.state for key, mapping in factory.state.occurrences.items()}
 
@@ -261,7 +263,7 @@ class _LiveLookupCalendars(FakeCalendars):
 
 def _dormant(
     calendars: FakeCalendars,
-) -> tuple[CalendarEvent, InMemoryUnitOfWorkFactory]:
+) -> tuple[CalendarEvent, InMemoryUserUnitOfWorkFactory]:
     """Project a one-occurrence series, then cancel that occurrence in the source."""
     master = calendars.put(series(), starts=STARTS[:1])
     factory = enabled_rule_factory()
@@ -543,7 +545,7 @@ def test_series_repair_that_rewrites_the_series_is_still_recorded() -> None:
 def test_rule_change_during_a_run_stops_occurrence_writes(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     with factory() as uow:
         uow.rules.add(rule())
         uow.commit()
@@ -590,7 +592,7 @@ def test_every_occurrence_audit_entry_names_its_event_but_keeps_no_other_content
     assert all("Sensitive" not in repr(entry) for entry in factory.state.audit)
 
 
-def _change_policy(factory: InMemoryUnitOfWorkFactory, policy: TransformationPolicy) -> None:
+def _change_policy(factory: InMemoryUserUnitOfWorkFactory, policy: TransformationPolicy) -> None:
     with factory() as uow:
         current = uow.rules.get(rule().id)
         assert current is not None
@@ -726,7 +728,7 @@ def test_series_recreated_during_an_occurrence_repair_keeps_source_cancellations
 def test_occurrence_reverification_never_holds_the_database_write_lock(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     with factory() as uow:
         uow.rules.add(rule())
         uow.commit()
@@ -1243,7 +1245,7 @@ class _OccurrenceLookups(FakeCalendars):
 
 def _reprojected_with_exceptions(
     calendars: _OccurrenceLookups,
-) -> tuple[InMemoryUnitOfWorkFactory, EventRef, EventRef]:
+) -> tuple[InMemoryUserUnitOfWorkFactory, EventRef, EventRef]:
     master = calendars.put(series(), starts=STARTS)
     for week in (1, 2, 3):
         calendars.put(occurrence(master, week, moved_by=timedelta(hours=1)))

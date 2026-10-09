@@ -54,6 +54,12 @@ class DiscoverCalendars:
     unit_of_work: UnitOfWorkFactory
 
     def execute(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
+        # The provider answers for any account, so only the User's own may be asked about.
+        with self.unit_of_work() as uow:
+            if uow.accounts.state(account_id) is None:
+                raise ConnectedAccountNotFound(
+                    f"connected account {account_id.value} does not exist"
+                )
         discovered = tuple(self.calendars.calendars(account_id))
         # Recorded after Google answered, so no write lock is held across the request.
         with self.unit_of_work() as uow:
@@ -82,6 +88,9 @@ class CheckAccountAccess:
     lapses: LapsedAuthorizations
 
     def execute(self, account_id: ConnectedAccountId) -> AccessCheck:
+        # The provider answers for any account, so only the User's own may be asked about.
+        if self.accounts.get(account_id) is None:
+            raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
         started = self.lapses.clock.now()
         try:
             access = self.calendars.verify_access(account_id)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
@@ -17,17 +17,20 @@ from calendar_sync.application.ports import (
     DiscoveredCalendar,
     EventMappingRepository,
     ExceptionReplayRepository,
+    InstallationUnitOfWork,
     OccurrenceMappingRepository,
     RulePreviewRepository,
     RulePreviewSummary,
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
+    ScheduledRule,
     SourceObservationRepository,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
 )
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -38,9 +41,11 @@ from calendar_sync.domain.model import (
     EventMappingId,
     EventRef,
     OccurrenceMapping,
+    OccurrenceMappingId,
     OccurrenceStart,
     SyncRule,
     SyncRuleId,
+    SyncRuleState,
 )
 
 
@@ -124,8 +129,9 @@ class InMemoryConnectedAccountRecords:
 
 
 class InMemorySyncRuleRepository:
-    def __init__(self, state: MemoryState) -> None:
+    def __init__(self, state: MemoryState, others: _OtherUsers) -> None:
         self._state = state
+        self._others = others
 
     def get(self, rule_id: SyncRuleId) -> SyncRule | None:
         return self._state.rules.get(rule_id)
@@ -135,8 +141,13 @@ class InMemorySyncRuleRepository:
 
     def add(self, rule: SyncRule) -> None:
         # Mirror SQLite's primary key and its unique source-and-destination constraint.
-        if rule.id in self._state.rules or self.relationship_exists(rule.source, rule.destination):
+        if (
+            rule.id in self._state.rules
+            or self._others.hold_rule(rule.id)
+            or self.relationship_exists(rule.source, rule.destination)
+        ):
             raise _duplicate_relationship()
+        self._require_own_accounts(rule)
         self._state.rules[rule.id] = rule
 
     def save(self, rule: SyncRule) -> None:
@@ -149,7 +160,15 @@ class InMemorySyncRuleRepository:
             for other in self._state.rules.values()
         ):
             raise _duplicate_relationship()
+        self._require_own_accounts(rule)
         self._state.rules[rule.id] = rule
+
+    def _require_own_accounts(self, rule: SyncRule) -> None:
+        # Mirror SQLite's reference from a rule to its own User's accounts. Accounts this store
+        # never recorded are let through, as application tests leave accounts unrecorded.
+        for endpoint in (rule.source, rule.destination):
+            if self._others.hold_account(endpoint.connected_account_id):
+                raise KeyError(endpoint.connected_account_id)
 
     def remove(self, rule_id: SyncRuleId) -> None:
         self._state.rules.pop(rule_id, None)
@@ -185,8 +204,9 @@ class InMemorySyncRuleRepository:
 
 
 class InMemoryEventMappingRepository:
-    def __init__(self, state: MemoryState) -> None:
+    def __init__(self, state: MemoryState, others: _OtherUsers) -> None:
         self._state = state
+        self._others = others
 
     def for_source(self, rule_id: SyncRuleId, source: EventRef) -> EventMapping | None:
         return self._state.mappings.get((rule_id, source))
@@ -215,6 +235,9 @@ class InMemoryEventMappingRepository:
 
     def save(self, mapping: EventMapping) -> None:
         _require_rule(self._state, mapping.rule_id)
+        if self._others.hold_mapping(mapping.id):
+            # Mirror SQLite's primary key: another User's mapping is neither replaced nor changed.
+            raise ValueError("the mapping id names another User's mapping")
         same_id = next((m for m in self._state.mappings.values() if m.id == mapping.id), None)
         if same_id is not None:
             # Mirror SQLite's upsert by id: a mapping keeps its rule and source.
@@ -271,8 +294,9 @@ class InMemoryExceptionReplayRepository:
 
 
 class InMemoryOccurrenceMappingRepository:
-    def __init__(self, state: MemoryState) -> None:
+    def __init__(self, state: MemoryState, others: _OtherUsers) -> None:
         self._state = state
+        self._others = others
 
     def for_series(self, series_mapping_id: EventMappingId) -> tuple[OccurrenceMapping, ...]:
         # SQLite orders by the stored ISO text; one series' starts are all dates or all instants.
@@ -301,7 +325,9 @@ class InMemoryOccurrenceMappingRepository:
         if existing is not None:
             # Mirror SQLite's upsert by series and start: the occurrence keeps its id.
             mapping = replace(mapping, id=existing.id)
-        elif any(other.id == mapping.id for other in self._state.occurrences.values()):
+        elif self._others.hold_occurrence(mapping.id) or any(
+            other.id == mapping.id for other in self._state.occurrences.values()
+        ):
             # Mirror SQLite's primary key: one id names one occurrence.
             raise ValueError("the occurrence id already names another occurrence")
         self._state.occurrences[key] = mapping
@@ -434,6 +460,8 @@ class InMemoryCalendarNameRepository:
 
 
 class InMemoryUnitOfWork:
+    """One User's records, like SQLite's unit of work: they live in that User's partition."""
+
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
     mappings: EventMappingRepository
@@ -447,27 +475,30 @@ class InMemoryUnitOfWork:
     previews: RulePreviewRepository
     calendar_names: CalendarNameRepository
 
-    def __init__(self, target: MemoryState) -> None:
-        self._target = target
+    def __init__(self, database: MemoryDatabase, user_id: UserId) -> None:
+        self._database = database
+        self._user = user_id
         self._working: MemoryState | None = None
         self._committed = False
 
     def __enter__(self) -> Self:
-        self._working = deepcopy(self._target)
-        self.accounts = InMemoryConnectedAccountRecords(self._working)
-        self.rules = InMemorySyncRuleRepository(self._working)
-        self.mappings = InMemoryEventMappingRepository(self._working)
-        self.occurrences = InMemoryOccurrenceMappingRepository(self._working)
-        self.replays = InMemoryExceptionReplayRepository(self._working)
-        self.cursors = InMemorySyncCursorRepository(self._working, self._working.cursors)
+        working = deepcopy(self._database.state_of(self._user))
+        self._working = working
+        others = _OtherUsers(self._database, self._user)
+        self.accounts = InMemoryConnectedAccountRecords(working)
+        self.rules = InMemorySyncRuleRepository(working, others)
+        self.mappings = InMemoryEventMappingRepository(working, others)
+        self.occurrences = InMemoryOccurrenceMappingRepository(working, others)
+        self.replays = InMemoryExceptionReplayRepository(working)
+        self.cursors = InMemorySyncCursorRepository(working, working.cursors)
         self.destination_cursors = InMemorySyncCursorRepository(
-            self._working, self._working.destination_cursors
+            working, working.destination_cursors
         )
-        self.audit = InMemoryAuditRepository(self._working)
-        self.observations = InMemorySourceObservationRepository(self._working)
-        self.run_outcomes = InMemoryRuleRunOutcomeRepository(self._working)
-        self.previews = InMemoryRulePreviewRepository(self._working)
-        self.calendar_names = InMemoryCalendarNameRepository(self._working)
+        self.audit = InMemoryAuditRepository(working)
+        self.observations = InMemorySourceObservationRepository(working)
+        self.run_outcomes = InMemoryRuleRunOutcomeRepository(working)
+        self.previews = InMemoryRulePreviewRepository(working)
+        self.calendar_names = InMemoryCalendarNameRepository(working)
         return self
 
     def __exit__(
@@ -480,15 +511,125 @@ class InMemoryUnitOfWork:
 
     def commit(self) -> None:
         assert self._working is not None
+        target = self._database.state_of(self._user)
         # Copies, so writes after this commit stay in the unit until it commits again.
         for each in fields(MemoryState):
-            setattr(self._target, each.name, deepcopy(getattr(self._working, each.name)))
+            setattr(target, each.name, deepcopy(getattr(self._working, each.name)))
         self._committed = True
 
 
+@dataclass(slots=True)
+class MemoryDatabase:
+    """Every User's records, each User's in a partition of their own."""
+
+    partitions: dict[UserId, MemoryState] = field(default_factory=dict)
+    disabled: set[UserId] = field(default_factory=set)
+    """Users who may not sign in; the scheduler holds their rules."""
+
+    def state_of(self, user_id: UserId) -> MemoryState:
+        return self.partitions.setdefault(user_id, MemoryState())
+
+
+@dataclass(frozen=True, slots=True)
+class _OtherUsers:
+    """What SQLite's shared tables would refuse because another User holds it."""
+
+    database: MemoryDatabase
+    user: UserId
+
+    def _states(self) -> Iterator[MemoryState]:
+        return (state for owner, state in self.database.partitions.items() if owner != self.user)
+
+    def hold_rule(self, rule_id: SyncRuleId) -> bool:
+        return any(rule_id in state.rules for state in self._states())
+
+    def hold_account(self, account_id: ConnectedAccountId) -> bool:
+        return any(account_id in state.accounts for state in self._states())
+
+    def hold_mapping(self, mapping_id: EventMappingId) -> bool:
+        return any(
+            mapping.id == mapping_id
+            for state in self._states()
+            for mapping in state.mappings.values()
+        )
+
+    def hold_occurrence(self, occurrence_id: OccurrenceMappingId) -> bool:
+        return any(
+            occurrence.id == occurrence_id
+            for state in self._states()
+            for occurrence in state.occurrences.values()
+        )
+
+
 class InMemoryUnitOfWorkFactory:
-    def __init__(self, state: MemoryState | None = None) -> None:
-        self.state = state or MemoryState()
+    """Units of work over one in-memory database, each for the one User `for_user` names."""
+
+    def __init__(self, database: MemoryDatabase | None = None) -> None:
+        self.database = database or MemoryDatabase()
+
+    def for_user(self, user_id: UserId) -> InMemoryUserUnitOfWorkFactory:
+        return InMemoryUserUnitOfWorkFactory(self.database, user_id)
+
+    def installation(self) -> InMemoryInstallationUnitOfWorkFactory:
+        return InMemoryInstallationUnitOfWorkFactory(self.database)
+
+
+@dataclass(frozen=True, slots=True)
+class InMemoryUserUnitOfWorkFactory:
+    database: MemoryDatabase
+    user_id: UserId
+
+    @property
+    def state(self) -> MemoryState:
+        """This User's committed records, for tests to seed and inspect."""
+        return self.database.state_of(self.user_id)
 
     def __call__(self) -> UnitOfWork:
-        return InMemoryUnitOfWork(self.state)
+        return InMemoryUnitOfWork(self.database, self.user_id)
+
+
+class InMemoryInstallationUnitOfWork:
+    def __init__(self, database: MemoryDatabase) -> None:
+        self._database = database
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        return None
+
+    def commit(self) -> None:
+        return None
+
+    def scheduled_rules(self) -> tuple[ScheduledRule, ...]:
+        return tuple(
+            ScheduledRule(owner, rule, _last_full_sync(state, rule.id))
+            for owner, state in sorted(
+                self._database.partitions.items(), key=lambda item: item[0].value
+            )
+            if owner not in self._database.disabled
+            for rule in sorted(state.rules.values(), key=lambda rule: rule.id.value)
+            if rule.state is SyncRuleState.ENABLED
+        )
+
+    def forget_change_values(self, before: datetime) -> None:
+        for state in self._database.partitions.values():
+            state.change_values_forgotten_before = before
+
+
+def _last_full_sync(state: MemoryState, rule_id: SyncRuleId) -> datetime | None:
+    outcome = state.outcomes.get((rule_id, RunKind.SYNC))
+    return outcome.last_full_succeeded_at if outcome is not None else None
+
+
+@dataclass(frozen=True, slots=True)
+class InMemoryInstallationUnitOfWorkFactory:
+    database: MemoryDatabase
+
+    def __call__(self) -> InstallationUnitOfWork:
+        return InMemoryInstallationUnitOfWork(self.database)

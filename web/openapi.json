@@ -3415,7 +3415,7 @@
     },
     "/api/v1/oauth/google/start": {
       "get": {
-        "description": "Start Google's consent; reauthorizing a known `account` suggests its email to Google.",
+        "description": "Start Google's consent for the signed-in User; reauthorizing a known `account` suggests\nits email to Google.",
         "operationId": "start_google_oauth_api_v1_oauth_google_start_get",
         "parameters": [
           {
@@ -4341,6 +4341,7 @@
     },
     "/api/v1/status": {
       "get": {
+        "description": "The Installation Status of the User the token or session belongs to (ADR 0030).",
         "operationId": "installation_status_api_v1_status_get",
         "parameters": [
           {

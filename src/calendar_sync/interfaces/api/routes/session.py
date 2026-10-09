@@ -39,7 +39,7 @@ def session_status(
     services: Services,
     session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
 ) -> SessionResponse:
-    return SessionResponse(authenticated=services.administrator.session_is_valid(session))
+    return SessionResponse(authenticated=services.administrator.session_user(session) is not None)
 
 
 @router.delete("/api/v1/session", status_code=status.HTTP_204_NO_CONTENT)

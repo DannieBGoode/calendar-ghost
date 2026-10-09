@@ -20,7 +20,9 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.application.test_run_logging import SteppedClock
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory
 from tests.helpers import event, rule
@@ -58,7 +60,9 @@ class WatchedCalendars(FakeCalendars):
         return super().get_event(reference)
 
 
-def use_case(factory: InMemoryUnitOfWorkFactory, calendars: WatchedCalendars) -> ExecuteSyncRule:
+def use_case(
+    factory: InMemoryUserUnitOfWorkFactory, calendars: WatchedCalendars
+) -> ExecuteSyncRule:
     fingerprinter = ProjectionFingerprinter()
     return ExecuteSyncRule(
         factory,

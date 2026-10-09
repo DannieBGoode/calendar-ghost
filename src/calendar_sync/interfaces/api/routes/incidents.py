@@ -5,7 +5,7 @@ from typing import Annotated, Protocol
 from fastapi import APIRouter, Depends
 
 from calendar_sync.application.activity import OperationsQueries
-from calendar_sync.interfaces.api.dependencies import app_services, require_admin
+from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.schemas import IncidentResponse
 from calendar_sync.interfaces.api.status_payload import message_response
 
@@ -15,14 +15,14 @@ class IncidentServices(Protocol):
     def operations(self) -> OperationsQueries: ...
 
 
-Services = Annotated[IncidentServices, Depends(app_services)]
+Services = Annotated[IncidentServices, Depends(user_services)]
 router = APIRouter()
 
 
 @router.get(
     "/api/v1/incidents",
     response_model=list[IncidentResponse],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def list_incidents(services: Services) -> list[IncidentResponse]:
     return [

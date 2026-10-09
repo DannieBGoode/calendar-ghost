@@ -48,7 +48,9 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, endpoint, event, rule, series
 
@@ -112,7 +114,7 @@ class CountedCalls:
 
 
 def use_case(
-    factory: InMemoryUnitOfWorkFactory,
+    factory: InMemoryUserUnitOfWorkFactory,
     calendars: FakeCalendars,
     clock: SteppedClock | None = None,
     calls: CountedCalls | None = None,
@@ -321,7 +323,7 @@ def test_no_event_content_reaches_the_logs(logs: pytest.LogCaptureFixture) -> No
 
 
 def reconcile_use_case(
-    factory: InMemoryUnitOfWorkFactory,
+    factory: InMemoryUserUnitOfWorkFactory,
     calendars: FakeCalendars,
     calls: CountedCalls | None = None,
 ) -> ReconcileSyncRule:
@@ -381,7 +383,7 @@ class Connected:
         return True
 
 
-def removal(factory: InMemoryUnitOfWorkFactory, calendars: ProjectionDeleter) -> RemoveSyncRule:
+def removal(factory: InMemoryUserUnitOfWorkFactory, calendars: ProjectionDeleter) -> RemoveSyncRule:
     return RemoveSyncRule(
         factory,
         calendars,

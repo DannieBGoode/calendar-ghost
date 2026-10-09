@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Protocol
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
@@ -16,9 +16,14 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.application.errors import RuleNotFound
-from calendar_sync.application.ports import AdministratorAccess, IntegrationTokens, RuleRunOutcome
+from calendar_sync.application.ports import (
+    AdministratorAccess,
+    IntegrationTokenAuthentication,
+    RuleRunOutcome,
+)
 from calendar_sync.application.rules import GetSyncRuleDetails
 from calendar_sync.application.status import GetInstallationStatus
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.interfaces.access import StatusAccess, status_access
 from calendar_sync.interfaces.api.status_payload import status_response
@@ -43,15 +48,23 @@ run. Events already synced stay where they are while a rule is stopped.
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True)
 
 
-class McpServices(Protocol):
-    @property
-    def administrator(self) -> AdministratorAccess: ...
-    @property
-    def integration_tokens(self) -> IntegrationTokens: ...
+_READER = "calendar_ghost_reader"
+"""Where the gate leaves the token's owner in the request scope for the tools to read."""
+
+
+class McpUserServices(Protocol):
     @property
     def get_installation_status(self) -> GetInstallationStatus: ...
     @property
     def get_sync_rule_details(self) -> GetSyncRuleDetails: ...
+
+
+class McpServices(Protocol):
+    @property
+    def administrator(self) -> AdministratorAccess: ...
+    @property
+    def token_authentication(self) -> IntegrationTokenAuthentication: ...
+    def for_user(self, user_id: UserId) -> McpUserServices: ...
 
 
 class McpEndpoint:
@@ -82,21 +95,23 @@ def _sdk_app(services: McpServices) -> tuple[ASGIApp, StreamableHTTPSessionManag
     server = MCPServer(name="calendar-ghost", instructions=INSTRUCTIONS, version=__version__)
 
     @server.tool(annotations=READ_ONLY)
-    def get_status() -> dict[str, Any]:
+    def get_status(ctx: Context) -> dict[str, Any]:
         """Installation Status: the verdict, each problem, and every rule's state."""
-        return status_response(services.get_installation_status.execute()).model_dump(mode="json")
+        reader = services.for_user(_reader(ctx))
+        return status_response(reader.get_installation_status.execute()).model_dump(mode="json")
 
     @server.tool(annotations=READ_ONLY)
-    def get_rule(rule: str) -> dict[str, Any]:
+    def get_rule(rule: str, ctx: Context) -> dict[str, Any]:
         """One rule by id or "Source → Destination" name, with its last runs and problem."""
-        status = status_response(services.get_installation_status.execute())
+        reader = services.for_user(_reader(ctx))
+        status = status_response(reader.get_installation_status.execute())
         matches = [item for item in status.rules if rule in {item.id, item.name}]
         if len(matches) != 1:
             reason = "matches more than one rule" if matches else "matches no rule"
             raise ToolError(f"'{rule}' {reason}. Call get_status to see each rule's id.")
         found = matches[0]
         try:
-            details = services.get_sync_rule_details.execute(SyncRuleId(found.id))
+            details = reader.get_sync_rule_details.execute(SyncRuleId(found.id))
         except RuleNotFound as error:
             raise ToolError("That rule was removed. Call get_status again.") from error
         return {
@@ -115,6 +130,15 @@ def _sdk_app(services: McpServices) -> tuple[ASGIApp, StreamableHTTPSessionManag
     )
     endpoint: ASGIApp = sdk.routes[0].endpoint  # type: ignore[attr-defined]
     return endpoint, server.session_manager
+
+
+def _reader(ctx: Context) -> UserId:
+    """The User whose token the gate accepted for this request; their status is the answer."""
+    request = ctx.request_context.request
+    reader = getattr(getattr(request, "state", None), _READER, None)
+    if not isinstance(reader, UserId):
+        raise ToolError("This request carries no accepted token.")
+    return reader
 
 
 def _outcome(outcome: RuleRunOutcome | None) -> dict[str, Any] | None:
@@ -144,12 +168,12 @@ class McpGate:
         # Starlette's Headers keeps the first of repeated headers, as /api/v1/status does.
         access = await run_in_threadpool(
             status_access,
-            self._services.integration_tokens,
+            self._services.token_authentication,
             self._services.administrator,
             Headers(scope=scope).get("authorization"),
             None,
         )
-        if access is StatusAccess.UNAUTHENTICATED:
+        if access.result is StatusAccess.UNAUTHENTICATED:
             await _problem(
                 send,
                 401,
@@ -158,7 +182,7 @@ class McpGate:
                 [(b"www-authenticate", b"Bearer")],
             )
             return
-        if access is StatusAccess.FORBIDDEN:
+        if access.result is StatusAccess.FORBIDDEN:
             await _problem(send, 403, "insufficient_scope", "token lacks the required scope")
             return
         # Stateless mode has no stream to resume, and a GET would hold one open.
@@ -171,6 +195,8 @@ class McpGate:
         if inner is None:
             await _problem(send, 503, "mcp_not_running", "the MCP server is starting or stopping")
             return
+        # The SDK hands its tools a Request over this scope, so they read whose status to answer.
+        scope.setdefault("state", {})[_READER] = access.user
         await inner(scope, receive, send)
 
 

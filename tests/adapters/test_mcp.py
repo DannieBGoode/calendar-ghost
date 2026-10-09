@@ -14,9 +14,11 @@ from fastapi.testclient import TestClient
 from calendar_sync.application.ports import IntegrationTokenScope
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
+from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.mcp.server import McpEndpoint, McpServices
 from tests.helpers import rule
+from tests.users import USER, administrator, sign_in
 
 PASSWORD = {"password": "correct horse battery staple"}
 PROTOCOL = "2025-06-18"
@@ -34,24 +36,26 @@ def mcp(tmp_path: Path) -> Iterator[tuple[TestClient, str]]:
     settings = Settings(database)
     adapters = build_adapters(settings)
     container = replace(compose(settings, adapters), scheduler=None)
+    user = administrator(adapters.administrator)
     with sqlite3.connect(database) as connection:
         connection.executemany(
             """
             INSERT INTO connected_accounts (
                 id, provider, display_name, email, encrypted_credentials,
-                state, created_at, updated_at
-            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01')
+                state, created_at, updated_at, user_id
+            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [
                 (account, account, f"{account}@example.test")
                 for account in ("personal-account", "work-account")
             ],
         )
-    with adapters.unit_of_work() as uow:
+    with adapters.unit_of_work(user)() as uow:
         uow.rules.add(rule())
         uow.commit()
     with TestClient(create_app(container), base_url="http://ghost.lan:8000") as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         token: str = client.post("/api/v1/integration-tokens", json={"name": "Agent"}).json()[
             "token"
         ]
@@ -184,6 +188,7 @@ def test_the_first_authorization_header_decides_as_on_the_status_api(mcp: Any) -
 @dataclass(frozen=True)
 class _Summary:
     scope: object
+    owner: UserId = USER
 
 
 @dataclass(frozen=True)
@@ -196,10 +201,8 @@ class _Tokens:
 
 @dataclass(frozen=True)
 class _Services:
-    integration_tokens: _Tokens
+    token_authentication: _Tokens
     administrator: None = None
-    get_installation_status: None = None
-    get_sync_rule_details: None = None
 
 
 def _call_gate(scope: object) -> tuple[int, dict[str, object]]:

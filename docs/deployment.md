@@ -159,6 +159,23 @@ preview. An earlier release cannot read an Incident resolved as `access_restored
 incident list fails until those Incidents are removed with their rules or accounts, or the
 release is upgraded again.
 
+Migration 21 makes every record belong to a User
+([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
+[ADR 0030](adr/0030-users-administrators-and-registration.md)). It adds the `users` table and turns
+the single administrator into User #1: an Installation Administrator with the same password and no
+email. Every Connected Account, rule, mapping, cursor, Audit Entry, Incident, Integration Token,
+and session is given to that User, and the administrator stays signed in. SQLite cannot add the new
+references to an existing table, so the migration rebuilds every owned table with a `user_id`
+column and a reference to its parent by identifier and User together. Rows an earlier release left
+without their rule, such as a failure count of a removed rule, are not copied, because nothing could
+read them. Unfinished Google consent started before the upgrade is forgotten; start it again. The
+migration runs in one transaction and checks every reference before it commits: if any record would
+refer to one that does not exist, the service stops with a message naming the table and the database
+is left exactly as it was. Back up the data directory before upgrading, as always: the rebuild
+rewrites every owned table, so the database is briefly about twice its size. Rolling back past
+migration 21 means restoring that backup: an earlier release cannot read the rebuilt tables, and
+records made after the upgrade are lost with the restore.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. A scheduler pass
 runs up to four different rules at once, so one rule waiting on Google does not hold up the rest.

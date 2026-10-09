@@ -17,6 +17,7 @@ from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.bootstrap.container import Container, service_container
+from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.api.problems import install_problem_handlers, problem
 from calendar_sync.interfaces.api.routes import (
     accounts,
@@ -29,25 +30,41 @@ from calendar_sync.interfaces.api.routes import (
     setup,
     storage,
 )
-from calendar_sync.interfaces.mcp.server import McpNotFound, McpServices, build_mcp
+from calendar_sync.interfaces.mcp.server import (
+    McpNotFound,
+    McpServices,
+    McpUserServices,
+    build_mcp,
+)
 
 # python:3.12-slim has no /etc/mime.types entry for woff2, so StaticFiles would otherwise serve
 # the bundled fonts as text/plain there; register it explicitly so the type is correct everywhere.
 mimetypes.add_type("font/woff2", ".woff2")
 
 
-class ApiServices(
-    session.SessionServices,
+class UserApiServices(
     accounts.AccountServices,
     activity.ActivityServices,
     incidents.IncidentServices,
     integrations.IntegrationServices,
     rules.RuleServices,
+    McpUserServices,
+    Protocol,
+):
+    """Everything the routers read from one User's services."""
+
+
+class ApiServices(
+    session.SessionServices,
+    accounts.AuthorizationServices,
+    integrations.StatusServices,
     storage.StorageServices,
     McpServices,
     Protocol,
 ):
     """Everything the routers read from the composed container."""
+
+    def for_user(self, user_id: UserId) -> UserApiServices: ...
 
 
 def create_app(container: Container | None = None) -> FastAPI:

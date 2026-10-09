@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, Response, status
 from calendar_sync.application.errors import InvalidIntegrationTokenName
 from calendar_sync.application.ports import IntegrationTokens, IntegrationTokenSummary
 from calendar_sync.application.status import GetInstallationStatus
+from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.api.dependencies import (
     app_services,
-    require_admin,
-    require_status_reader,
+    current_user,
+    status_reader,
+    user_services,
 )
 from calendar_sync.interfaces.api.problems import problem, problem_from
 from calendar_sync.interfaces.api.schemas import (
@@ -23,25 +25,32 @@ from calendar_sync.interfaces.api.status_payload import status_response
 
 
 class IntegrationServices(Protocol):
+    """One User's tokens and Installation Status."""
+
     @property
     def integration_tokens(self) -> IntegrationTokens: ...
     @property
     def get_installation_status(self) -> GetInstallationStatus: ...
 
 
-Services = Annotated[IntegrationServices, Depends(app_services)]
-ADMIN = [Depends(require_admin)]
+class StatusServices(Protocol):
+    def for_user(self, user_id: UserId) -> IntegrationServices: ...
+
+
+Services = Annotated[IntegrationServices, Depends(user_services)]
+Installation = Annotated[StatusServices, Depends(app_services)]
+Reader = Annotated[UserId, Depends(status_reader)]
+ADMIN = [Depends(current_user)]
 router = APIRouter()
 
 
-@router.get(
-    "/api/v1/status",
-    response_model=StatusResponse,
-    dependencies=[Depends(require_status_reader)],
-)
-def installation_status(services: Services, response: Response) -> StatusResponse:
+@router.get("/api/v1/status", response_model=StatusResponse)
+def installation_status(
+    installation: Installation, reader: Reader, response: Response
+) -> StatusResponse:
+    """The Installation Status of the User the token or session belongs to (ADR 0030)."""
     response.headers["Cache-Control"] = "no-store"
-    return status_response(services.get_installation_status.execute())
+    return status_response(installation.for_user(reader).get_installation_status.execute())
 
 
 @router.get(

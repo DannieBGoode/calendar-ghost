@@ -23,6 +23,7 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -41,6 +42,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
 )
 from tests.helpers import NOW, endpoint, rule, week_start
+from tests.users import USER
 
 RULE = rule()
 OTHER_RULE = replace(
@@ -52,12 +54,23 @@ ACCOUNT = ConnectedAccountId("personal-account")
 
 @dataclass(frozen=True, slots=True)
 class PersistenceHarness:
-    unit_of_work: UnitOfWorkFactory
-    connect_account: Callable[[ConnectedAccountId], object]
-    """Record a Connected Account, as authorizing it would outside any unit of work."""
-    disconnect_account: Callable[[ConnectedAccountId], object]
+    units: Callable[[UserId], UnitOfWorkFactory]
+    """Each User's units of work over one store."""
+    connect: Callable[[ConnectedAccountId, UserId], object]
+    """Record a User's Connected Account, as authorizing it would outside any unit of work."""
+    disconnect: Callable[[ConnectedAccountId, UserId], object]
     refused: tuple[type[Exception], ...]
     """What this storage raises for a record whose parent does not exist or is taken."""
+
+    @property
+    def unit_of_work(self) -> UnitOfWorkFactory:
+        return self.units(USER)
+
+    def connect_account(self, account_id: ConnectedAccountId, user: UserId = USER) -> None:
+        self.connect(account_id, user)
+
+    def disconnect_account(self, account_id: ConnectedAccountId, user: UserId = USER) -> None:
+        self.disconnect(account_id, user)
 
 
 def _mapping(name: str, rule_id: SyncRuleId = RULE.id, destination: str = "") -> EventMapping:

@@ -30,6 +30,7 @@ from calendar_sync.application.activity import (
 )
 from calendar_sync.application.ports import IncidentMessage
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncAction, SyncReason
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import open_change_values
@@ -42,6 +43,7 @@ _BLOCK = "{t}.action = 'conflict' AND COALESCE({t}.reason, '') != 'recurring_uns
 
 def open_blocks(
     connection: sqlite3.Connection,
+    user_id: str,
     *,
     rule_id: str | None = None,
     after: int | None = None,
@@ -63,7 +65,10 @@ def open_blocks(
     rules = (
         [rule_id]
         if rule_id is not None
-        else [str(row[0]) for row in connection.execute("SELECT id FROM sync_rules")]
+        else [
+            str(row[0])
+            for row in connection.execute("SELECT id FROM sync_rules WHERE user_id = ?", (user_id,))
+        ]
     )
     # With a named run, "latest" means that run's latest decision about the event, so a run
     # interleaved after it can neither hide nor supply the named run's verdict.
@@ -72,6 +77,7 @@ def open_blocks(
     # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
     conditions = [
         "a.rule_id = :rule",
+        "a.user_id = :user",
         "a.id > :floor",
         _BLOCK.format(t="a"),
         "a.source_event_id IS NOT NULL",
@@ -104,7 +110,7 @@ def open_blocks(
                 SELECT a.id FROM audit_entries a INDEXED BY audit_entries_rule_id
                 WHERE {" AND ".join(conditions)}
                 """,  # noqa: S608
-                {"rule": rule, "floor": floor, "run": run_id},
+                {"rule": rule, "user": user_id, "floor": floor, "run": run_id},
             )
         )
     return sorted(blocks, reverse=True)
@@ -169,13 +175,18 @@ _TITLE_OBSERVED = "event_title IS NOT NULL AND (event_title <> '' OR NOT event_c
 
 
 class SqliteActivityQueries:
-    def __init__(self, database_path: Path, history: HistoryCipher | None = None) -> None:
+    """One User's Activity."""
+
+    def __init__(
+        self, database_path: Path, user_id: UserId, history: HistoryCipher | None = None
+    ) -> None:
         self._database_path = database_path
+        self._user = user_id.value
         self._history = history
 
     def entries(self, selection: ActivityFilter) -> list[ActivityEntry]:
-        conditions = [f"COALESCE(reason, '') NOT IN ({_UNRECORDED_SQL})"]
-        parameters: list[object] = []
+        conditions = ["user_id = ?", f"COALESCE(reason, '') NOT IN ({_UNRECORDED_SQL})"]
+        parameters: list[object] = [self._user]
         search = selection.search.strip() if selection.search is not None else ""
         if search:
             conditions.append("search_fold(event_title) LIKE ? ESCAPE '\\'")
@@ -205,8 +216,9 @@ class SqliteActivityQueries:
         with _reading(self._database_path) as connection:
             # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
             row = connection.execute(
-                f"SELECT {_ENTRY_COLUMNS} FROM audit_entries WHERE id = ?",  # noqa: S608
-                (entry_id,),
+                f"SELECT {_ENTRY_COLUMNS} FROM audit_entries "  # noqa: S608
+                "WHERE id = ? AND user_id = ?",
+                (entry_id, self._user),
             ).fetchone()
             return _entries(connection, [row])[0] if row is not None else None
 
@@ -215,9 +227,9 @@ class SqliteActivityQueries:
             row = connection.execute(
                 """
                 SELECT rule_id, source_event_id, destination_event_id
-                FROM audit_entries WHERE id = ?
+                FROM audit_entries WHERE id = ? AND user_id = ?
                 """,
-                (entry_id,),
+                (entry_id, self._user),
             ).fetchone()
         if row is None:
             return None
@@ -233,9 +245,9 @@ class SqliteActivityQueries:
                 """
                 SELECT rule_id, source_event_id, event_title,
                     change_fields, change_title_before, change_sealed
-                FROM audit_entries WHERE id = ?
+                FROM audit_entries WHERE id = ? AND user_id = ?
                 """,
-                (entry_id,),
+                (entry_id, self._user),
             ).fetchone()
         if row is None or row["change_fields"] is None:
             return None
@@ -255,7 +267,7 @@ class SqliteActivityQueries:
         # same event as recorded at the same time, is counted on it rather than listed again, so a
         # repair repeated on every run shows as one line.
         with _reading(self._database_path) as connection:
-            chosen = _recent_write_groups(connection, limit)
+            chosen = _recent_write_groups(connection, self._user, limit)
             heads = _entries(connection, [group[0] for group in chosen])
         return [
             RecentChange(entry=head, repeats=len(group), first_occurred_at=group[-1]["occurred_at"])
@@ -264,8 +276,11 @@ class SqliteActivityQueries:
 
 
 class SqliteOperationsQueries:
-    def __init__(self, database_path: Path) -> None:
+    """One User's accounts, Incidents, and blocks, as Installation Status reads them."""
+
+    def __init__(self, database_path: Path, user_id: UserId) -> None:
         self._database_path = database_path
+        self._user = user_id.value
 
     def overview(self) -> OperationsOverview:
         with _reading(self._database_path) as connection:
@@ -280,19 +295,25 @@ class SqliteOperationsQueries:
                 for row in connection.execute(
                     """
                     SELECT id, state, provider, authorization_lapsed_at
-                    FROM connected_accounts ORDER BY id
-                    """
+                    FROM connected_accounts WHERE user_id = ? ORDER BY id
+                    """,
+                    (self._user,),
                 )
             )
             incidents = int(
                 connection.execute(
-                    "SELECT COUNT(*) FROM incidents WHERE state = 'open'"
+                    "SELECT COUNT(*) FROM incidents WHERE state = 'open' AND user_id = ?",
+                    (self._user,),
                 ).fetchone()[0]
             )
             last_synced_at = connection.execute(
-                "SELECT MAX(last_succeeded_at) FROM rule_run_outcomes WHERE kind = 'sync'"
+                """
+                SELECT MAX(last_succeeded_at) FROM rule_run_outcomes
+                WHERE kind = 'sync' AND user_id = ?
+                """,
+                (self._user,),
             ).fetchone()[0]
-            blocks = open_blocks(connection)
+            blocks = open_blocks(connection, self._user)
         return OperationsOverview(
             connected_accounts=sum(account.state == "connected" for account in accounts),
             disconnected_accounts=sum(account.state == "disconnected" for account in accounts),
@@ -308,8 +329,10 @@ class SqliteOperationsQueries:
                 """
                 SELECT id, rule_id, account_id, category, state, summary, opened_at,
                     updated_at, resolved_at, resolution, message_code, message_params
-                FROM incidents ORDER BY state ASC, updated_at DESC LIMIT 100
-                """
+                FROM incidents WHERE user_id = ?
+                ORDER BY state ASC, updated_at DESC LIMIT 100
+                """,
+                (self._user,),
             ).fetchall()
         return [
             IncidentSummary(
@@ -372,7 +395,9 @@ def _like_escape(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _recent_write_groups(connection: sqlite3.Connection, limit: int) -> list[list[sqlite3.Row]]:
+def _recent_write_groups(
+    connection: sqlite3.Connection, user_id: str, limit: int
+) -> list[list[sqlite3.Row]]:
     """The newest `limit` distinct writes, each with the identical repairs it stands for."""
     groups: dict[tuple[object, ...], list[sqlite3.Row]] = {}
     # Page backwards until more distinct changes than requested are found, so a repair repeated
@@ -383,11 +408,12 @@ def _recent_write_groups(connection: sqlite3.Connection, limit: int) -> list[lis
         rows = connection.execute(
             f"""
             SELECT {_ENTRY_COLUMNS} FROM audit_entries
-            WHERE action IN ({_sql_list(_WRITES)}) AND source_event_id IS NOT NULL
+            WHERE user_id = ? AND action IN ({_sql_list(_WRITES)})
+                AND source_event_id IS NOT NULL
                 {"AND id < ?" if before is not None else ""}
             ORDER BY id DESC LIMIT ?
             """,  # noqa: S608
-            (*([before] if before is not None else []), _RECENT_WRITE_PAGE_SIZE),
+            (user_id, *([before] if before is not None else []), _RECENT_WRITE_PAGE_SIZE),
         ).fetchall()
         for row in rows:
             # Only repairs collapse; any other write is a change of its own.

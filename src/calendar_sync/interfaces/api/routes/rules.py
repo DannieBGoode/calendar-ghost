@@ -47,7 +47,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
-from calendar_sync.interfaces.api.dependencies import app_services, available, require_admin
+from calendar_sync.interfaces.api.dependencies import available, current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, problem, problem_from
 from calendar_sync.interfaces.api.schemas import (
     CalendarEndpointPayload,
@@ -98,14 +98,14 @@ class RuleServices(Protocol):
     def reconcile_now(self) -> ReconcileNow | None: ...
 
 
-Services = Annotated[RuleServices, Depends(app_services)]
+Services = Annotated[RuleServices, Depends(user_services)]
 router = APIRouter()
 
 
 @router.get(
     "/api/v1/rules",
     response_model=list[RuleSummaryResponse],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def list_rules(services: Services) -> list[RuleSummaryResponse]:
     return [
@@ -123,7 +123,7 @@ def list_rules(services: Services) -> list[RuleSummaryResponse]:
     "/api/v1/rules",
     response_model=RuleResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
     transformation = TransformationPolicy(
@@ -146,7 +146,7 @@ def create_rule(request: CreateRuleRequest, services: Services) -> RuleResponse:
 @router.post(
     "/api/v1/rules/{rule_id}/sync",
     response_model=SyncResultResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
     execute_sync_rule = available(
@@ -171,7 +171,7 @@ async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
 @router.post(
     "/api/v1/rules/{rule_id}/reconcile",
     response_model=ReconcileResultResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 async def reconcile_now(rule_id: str, services: Services) -> ReconcileResultResponse:
     reconcile = available(
@@ -204,7 +204,7 @@ async def reconcile_now(rule_id: str, services: Services) -> ReconcileResultResp
 @router.post(
     "/api/v1/rules/{rule_id}/preview",
     response_model=RulePreviewResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 async def preview_rule(rule_id: str, services: Services) -> RulePreviewResponse:
     preview_sync_rule = available(
@@ -241,7 +241,7 @@ async def preview_rule(rule_id: str, services: Services) -> RulePreviewResponse:
 @router.post(
     "/api/v1/rules/{rule_id}/enable",
     response_model=RuleResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def enable_rule(rule_id: str, services: Services) -> RuleResponse:
     return _rule_response(_lifecycle_change(services.enable_sync_rule.execute, rule_id))
@@ -250,7 +250,7 @@ def enable_rule(rule_id: str, services: Services) -> RuleResponse:
 @router.post(
     "/api/v1/rules/{rule_id}/pause",
     response_model=RuleResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def pause_rule(rule_id: str, services: Services) -> RuleResponse:
     return _rule_response(_lifecycle_change(services.pause_sync_rule.execute, rule_id))
@@ -259,7 +259,7 @@ def pause_rule(rule_id: str, services: Services) -> RuleResponse:
 @router.get(
     "/api/v1/rules/{rule_id}",
     response_model=RuleDetailResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
     try:
@@ -280,7 +280,7 @@ def rule_details(rule_id: str, services: Services) -> RuleDetailResponse:
 @router.patch(
     "/api/v1/rules/{rule_id}",
     response_model=RuleResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def change_rule_policy(
     rule_id: str, request: UpdateRulePolicyRequest, services: Services
@@ -305,7 +305,7 @@ def change_rule_policy(
 @router.delete(
     "/api/v1/rules/{rule_id}",
     response_model=RemovalResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 async def remove_rule(
     rule_id: str, projections: ProjectionChoice, services: Services
@@ -327,7 +327,7 @@ async def remove_rule(
     "/api/v1/rules/{rule_id}/replace",
     response_model=RuleReplacementResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 async def replace_rule_calendars(
     rule_id: str, request: ReplaceRuleRequest, services: Services

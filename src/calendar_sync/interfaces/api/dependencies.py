@@ -1,4 +1,4 @@
-"""What every router shares: the administrator session guard and the services it reads."""
+"""What every router shares: the session guard, and the services of the User it resolves."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ from typing import Annotated, Protocol
 
 from fastapi import Cookie, Depends, Header, Request, Response, status
 
-from calendar_sync.application.ports import AdministratorAccess, IntegrationTokens
+from calendar_sync.application.ports import AdministratorAccess, IntegrationTokenAuthentication
+from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.access import StatusAccess, status_access
 from calendar_sync.interfaces.api.problems import ApiProblem, problem
 
@@ -18,24 +19,37 @@ def app_services(request: Request) -> object:
     return request.app.state.container
 
 
-class AdministratorServices(Protocol):
+class SessionServices(Protocol):
     @property
     def administrator(self) -> AdministratorAccess: ...
 
 
-def require_admin(
-    services: Annotated[AdministratorServices, Depends(app_services)],
+class UserScopedServices(Protocol):
+    def for_user(self, user_id: UserId) -> object: ...
+
+
+def current_user(
+    services: Annotated[SessionServices, Depends(app_services)],
     session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-) -> None:
-    if not services.administrator.session_is_valid(session):
-        raise problem(
-            status.HTTP_401_UNAUTHORIZED, "session_required", "administrator session required"
-        )
+) -> UserId:
+    """The signed-in User; every route but the public ones depends on it."""
+    user = services.administrator.session_user(session)
+    if user is None:
+        raise problem(status.HTTP_401_UNAUTHORIZED, "session_required", "a signed-in User required")
+    return user
 
 
-class StatusReaderServices(AdministratorServices, Protocol):
+def user_services(
+    services: Annotated[UserScopedServices, Depends(app_services)],
+    user: Annotated[UserId, Depends(current_user)],
+) -> object:
+    """The signed-in User's use cases, which see only that User's records (ADR 0029)."""
+    return services.for_user(user)
+
+
+class StatusReaderServices(SessionServices, Protocol):
     @property
-    def integration_tokens(self) -> IntegrationTokens: ...
+    def token_authentication(self) -> IntegrationTokenAuthentication: ...
 
 
 def _unauthenticated() -> ApiProblem:
@@ -48,20 +62,22 @@ def _unauthenticated() -> ApiProblem:
     )
 
 
-def require_status_reader(
+def status_reader(
     services: Annotated[StatusReaderServices, Depends(app_services)],
     authorization: Annotated[str | None, Header()] = None,
     session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-) -> None:
+) -> UserId:
+    """The User whose Installation Status a token or session may read."""
     access = status_access(
-        services.integration_tokens, services.administrator, authorization, session
+        services.token_authentication, services.administrator, authorization, session
     )
-    if access is StatusAccess.FORBIDDEN:
+    if access.result is StatusAccess.FORBIDDEN:
         raise problem(
             status.HTTP_403_FORBIDDEN, "insufficient_scope", "token lacks the required scope"
         )
-    if access is not StatusAccess.GRANTED:
+    if access.result is not StatusAccess.GRANTED or access.user is None:
         raise _unauthenticated()
+    return access.user
 
 
 def available[T](use_case: T | None, code: str, detail: str) -> T:

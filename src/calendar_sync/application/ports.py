@@ -10,6 +10,7 @@ from typing import Protocol, Self
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -481,7 +482,51 @@ class UnitOfWork(Protocol):
 
 
 class UnitOfWorkFactory(Protocol):
+    """Opens units of work for the one User it was made for (ADR 0029).
+
+    Every repository of its units adds that User to every statement, so a use case given one can
+    neither read nor change another User's records.
+    """
+
     def __call__(self) -> UnitOfWork: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ScheduledRule:
+    """An enabled rule of a User who may sign in, with what the scheduler needs to run it."""
+
+    owner: UserId
+    rule: SyncRule
+    last_full_succeeded_at: datetime | None
+    """When the rule's last successful full run completed, so its daily pass is due per rule."""
+
+
+class InstallationUnitOfWork(Protocol):
+    """What reaches across Users. Only the scheduler, migrations, and the Operator Overview
+    receive it, so crossing Users is visible in a type (ADR 0029)."""
+
+    def __enter__(self) -> Self: ...
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None: ...
+
+    def commit(self) -> None: ...
+
+    def scheduled_rules(self) -> Sequence[ScheduledRule]:
+        """Every enabled rule of a User who is not disabled, by User and then by rule."""
+        ...
+
+    def forget_change_values(self, before: datetime) -> None:
+        """Discard every User's Source Change values recorded before `before` (ADR 0017)."""
+        ...
+
+
+class InstallationUnitOfWorkFactory(Protocol):
+    def __call__(self) -> InstallationUnitOfWork: ...
 
 
 class Clock(Protocol):
@@ -773,14 +818,25 @@ class AccountAccess:
     writable_calendars: int
 
 
+@dataclass(frozen=True, slots=True)
+class AuthorizedAccount:
+    """A Connected Account an OAuth flow connected or reauthorized, and the User it belongs to."""
+
+    owner: UserId
+    account: ConnectedAccount
+
+
 class AccountAuthorization(Protocol):
     """The provider's state-protected OAuth flow that connects or reauthorizes an account."""
 
-    def authorization_url(self, login_hint: str | None = None) -> str:
-        """The provider's consent URL; `login_hint` suggests the account being reauthorized."""
+    def authorization_url(self, owner: UserId, login_hint: str | None = None) -> str:
+        """The provider's consent URL for `owner`, whose account the flow connects;
+        `login_hint` suggests the account being reauthorized."""
         ...
 
-    def complete(self, state: str, code: str) -> ConnectedAccount: ...
+    def complete(self, state: str, code: str) -> AuthorizedAccount:
+        """Connect the account for the User whose flow the state began."""
+        ...
 
     def cancel(self, state: str) -> None: ...
 
@@ -797,10 +853,12 @@ class AccountCalendars(Protocol):
 class AdministratorSession:
     token: str
     expires_at: datetime
+    user_id: UserId
+    """The User the session belongs to."""
 
 
 class AdministratorAccess(Protocol):
-    """The Installation Administrator's password and sessions."""
+    """Users' passwords and sessions."""
 
     def is_configured(self) -> bool: ...
 
@@ -808,7 +866,9 @@ class AdministratorAccess(Protocol):
 
     def authenticate(self, password: str) -> AdministratorSession | None: ...
 
-    def session_is_valid(self, token: str | None) -> bool: ...
+    def session_user(self, token: str | None) -> UserId | None:
+        """The User a live session belongs to, while they may sign in."""
+        ...
 
     def revoke(self, token: str | None) -> None: ...
 
@@ -827,6 +887,8 @@ class IntegrationTokenSummary:
     created_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None
+    owner: UserId = field(kw_only=True)
+    """The User who issued it; it reads that User's Installation Status (ADR 0030)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -838,7 +900,7 @@ class IssuedIntegrationToken:
 
 
 class IntegrationTokens(Protocol):
-    """Named credentials the administrator issues so monitors and agents can read status."""
+    """One User's named credentials, issued so monitors and agents can read their status."""
 
     def issue(self, name: str) -> IssuedIntegrationToken: ...
 
@@ -847,11 +909,14 @@ class IntegrationTokens(Protocol):
         ...
 
     def revoke(self, token_id: str) -> bool:
-        """Whether a token that was not yet revoked is revoked now."""
+        """Whether a token of this User's that was not yet revoked is revoked now."""
         ...
 
+
+class IntegrationTokenAuthentication(Protocol):
     def authenticate(self, token: str) -> IntegrationTokenSummary | None:
-        """The token's summary when it is well formed, known, and not revoked."""
+        """The token's summary, naming its owner, when it is well formed, known, and not
+        revoked."""
         ...
 
 
