@@ -48,6 +48,12 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.services import (
+    EventProjector,
+    ProjectionFingerprinter,
+    SyncDecisionService,
+)
+from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteOperationsQueries,
@@ -75,7 +81,8 @@ from calendar_sync.infrastructure.scheduling import (
     fairly_ordered,
 )
 from calendar_sync.infrastructure.security import CredentialCipher
-from tests.helpers import endpoint, rule
+from tests.fake_calendar import FakeCalendars, FixedClock
+from tests.helpers import endpoint, event, rule
 from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, sqlite_units
 
 
@@ -1257,6 +1264,43 @@ def test_a_disabled_users_rules_are_held_until_they_are_enabled_again() -> None:
 
     assert held == ["rule-1"]
     assert sorted(rule_id for rule_id, _ in execute.full) == ["rule-1", "rule-1", "rule-2"]
+
+
+def test_a_queued_rule_does_not_run_once_its_user_is_disabled() -> None:
+    """A pass lists rules before running them; a User disabled in between gets no writes."""
+    database = InMemoryUnitOfWorkFactory()
+    theirs = replace(rule(), id=SyncRuleId("rule-2"))
+    for user, owned in ((USER, rule()), (OTHER_USER, theirs)):
+        with database.for_user(user)() as uow:
+            uow.rules.add(owned)
+            uow.commit()
+    calendars = FakeCalendars()
+    calendars.put(event(calendar=theirs.source))
+    health = RecordingHealth()
+
+    class DisablingTheOtherUser:
+        def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+            database.database.disabled.add(OTHER_USER)
+            return SyncRunResult(rule_id)
+
+    fingerprinter = ProjectionFingerprinter()
+    their_runs = ExecuteSyncRule(
+        database.for_user(OTHER_USER),
+        calendars,
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        FixedClock(),
+        UuidRunIdGenerator(),
+    )
+
+    def services_for(owner: UserId) -> ScheduledServices:
+        runs = their_runs if owner == OTHER_USER else DisablingTheOtherUser()
+        return ScheduledServices(cast(ExecuteSyncRule, runs), cast(RunHealth, health))
+
+    asyncio.run(SyncScheduler(database.installation(), services_for, concurrency=1).run_once())
+
+    assert calendars.writes == []
+    assert health.failures == []
 
 
 def test_rules_take_turns_between_users() -> None:

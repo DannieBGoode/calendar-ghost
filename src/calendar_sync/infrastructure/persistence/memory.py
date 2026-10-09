@@ -517,6 +517,9 @@ class InMemoryUnitOfWork:
             setattr(target, each.name, deepcopy(getattr(self._working, each.name)))
         self._committed = True
 
+    def user_active(self) -> bool:
+        return self._user not in self._database.disabled
+
 
 @dataclass(slots=True)
 class MemoryDatabase:

@@ -102,6 +102,9 @@ def _executable_rule(uow: UnitOfWork, rule_id: SyncRuleId) -> SyncRule:
         raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
     if rule.state is not SyncRuleState.ENABLED:
         raise RuleNotExecutable(f"sync rule is {rule.state}, not enabled")
+    # The scheduler lists rules before it runs them, so a User disabled since is caught here.
+    if not uow.user_active():
+        raise RuleNotExecutable("the rule's User is disabled")
     return rule
 
 

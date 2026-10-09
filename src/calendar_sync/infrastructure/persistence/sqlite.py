@@ -922,6 +922,13 @@ class SqliteUnitOfWork:
         assert self._connection is not None
         self._connection.commit()
 
+    def user_active(self) -> bool:
+        assert self._connection is not None
+        row = self._connection.execute(
+            "SELECT 1 FROM users WHERE id = ? AND state = 'active'", (self._user.value,)
+        ).fetchone()
+        return row is not None
+
 
 @dataclass(frozen=True, slots=True)
 class SqliteUnitOfWorkFactory:

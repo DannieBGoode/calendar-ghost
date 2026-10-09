@@ -37,6 +37,7 @@ class TestInMemoryUnitOfWork(PersistenceContract):
             database.for_user,
             connect=connect,
             disconnect=disconnect,
+            disable=database.database.disabled.add,
             refused=(KeyError, ValueError),
         )
 
@@ -68,6 +69,12 @@ class TestSqliteUnitOfWork(PersistenceContract):
                     (account_id.value, user.value),
                 )
 
+        def disable(user: UserId) -> None:
+            with transaction(database) as connection:
+                connection.execute(
+                    "UPDATE users SET state = 'disabled' WHERE id = ?", (user.value,)
+                )
+
         return PersistenceHarness(
             # Source Observations are sealed, so the store needs a History Cipher to keep them.
             SqliteUnitOfWorkFactory(
@@ -75,5 +82,6 @@ class TestSqliteUnitOfWork(PersistenceContract):
             ).for_user,
             connect=connect,
             disconnect=disconnect,
+            disable=disable,
             refused=(sqlite3.IntegrityError,),
         )

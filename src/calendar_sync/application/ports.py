@@ -480,6 +480,11 @@ class UnitOfWork(Protocol):
 
     def commit(self) -> None: ...
 
+    def user_active(self) -> bool:
+        """Whether this unit's User is still active, neither disabled nor deleted, as of now,
+        even while the unit is open. A rule of theirs writes nothing otherwise (ADR 0030)."""
+        ...
+
 
 class UnitOfWorkFactory(Protocol):
     """Opens units of work for the one User it was made for (ADR 0029).

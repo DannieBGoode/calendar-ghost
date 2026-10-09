@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Collection, Iterator
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -810,6 +811,50 @@ def test_run_stops_before_writing_when_the_rule_changes_mid_run(tmp_path: Path) 
             return super().changes(source, cursor, not_ended_before)
 
     provider = EditingProvider(event())
+
+    with pytest.raises(RuleNotExecutable):
+        _use_case(factory, provider).execute(rule().id)
+
+    assert provider.destination is None
+    assert provider.operation_keys == []
+    with factory() as uow:
+        assert uow.cursors.get(rule().id) is None
+        assert uow.mappings.count_for_rule(rule().id) == 0
+
+
+def test_a_rule_of_a_disabled_user_does_not_run() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work.state.rules[rule().id] = rule()
+    unit_of_work.database.disabled.add(USER)
+    provider = FakeCalendarProvider(event())
+
+    with pytest.raises(RuleNotExecutable, match="disabled"):
+        _use_case(unit_of_work, provider).execute(rule().id)
+
+    assert provider.requested_endpoints == []
+    assert provider.operation_keys == []
+
+
+def test_run_stops_before_writing_when_its_user_is_disabled_mid_run(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    factory = sqlite_units(database)
+    with factory() as uow:
+        uow.rules.add(rule(state=SyncRuleState.ENABLED))
+        uow.commit()
+
+    class DisablingProvider(FakeCalendarProvider):
+        def changes(
+            self, source: CalendarEndpoint, cursor: str | None, not_ended_before: datetime
+        ) -> ProviderChangeSet:
+            # An Installation Administrator disables the rule's User while it lists changes.
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "UPDATE users SET state = 'disabled' WHERE id = ?", (USER.value,)
+                )
+            return super().changes(source, cursor, not_ended_before)
+
+    provider = DisablingProvider(event())
 
     with pytest.raises(RuleNotExecutable):
         _use_case(factory, provider).execute(rule().id)

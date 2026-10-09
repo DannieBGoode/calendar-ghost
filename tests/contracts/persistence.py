@@ -64,6 +64,8 @@ class PersistenceHarness:
     connect: Callable[[ConnectedAccountId, UserId], object]
     """Record a User's Connected Account, as authorizing it would outside any unit of work."""
     disconnect: Callable[[ConnectedAccountId, UserId], object]
+    disable: Callable[[UserId], object]
+    """Disable a User, as an Installation Administrator would outside any unit of work."""
     refused: tuple[type[Exception], ...]
     """What this storage raises for a record whose parent does not exist or is taken."""
 
@@ -179,6 +181,18 @@ class PersistenceContract:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
             assert uow.rules.get(RULE.id) == RULE
+
+    def test_a_unit_sees_its_user_disabled_even_while_it_is_open(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            active = uow.user_active()
+            harness.disable(USER)
+            disabled_meanwhile = uow.user_active()
+        with harness.units(OTHER_USER)() as theirs:
+            assert theirs.user_active()
+
+        assert (active, disabled_meanwhile) == (True, False)
 
     # Directional Sync Rules
 
