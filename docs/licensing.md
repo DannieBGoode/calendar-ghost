@@ -12,8 +12,8 @@ network must give its users an opportunity to receive the corresponding source c
 license cannot forbid commercial forks while remaining an OSI-approved open-source license; that
 restriction would make the project source-available instead.
 
-The Community Edition is single-installation and single-administrator: one SQLite database, one
-scheduler, and one application process per installation. It does not require a Calendar Ghost
+The Community Edition is one installation per deployment: one SQLite database, one scheduler, and
+one application process, for one person or the people they invite. It does not require a Calendar Ghost
 account, hosted coordinator, license server, or paid subscription.
 
 The AGPL does not grant rights to use the Calendar Ghost name, logo, ghost mark, or tagline. See

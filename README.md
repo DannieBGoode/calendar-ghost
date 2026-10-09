@@ -1,6 +1,6 @@
 # Calendar Ghost
 
-*Your busy time, everywhere it needs to be.* Self-hosted, single-installation, one-way sync between Google calendars.
+*Your busy time, everywhere it needs to be.* Self-hosted one-way sync between Google calendars, for you or your household.
 
 A self-hosted, source-authoritative Google Calendar synchronizer. Define a directional rule from
 one calendar to another, including calendars owned by different Google identities, and keep a
@@ -17,10 +17,10 @@ coordinator.
 
 ## Editions and license
 
-This repository contains the Calendar Ghost Community Edition. It is a single-installation,
-single-administrator deployment designed for self-hosting on a personal server, home lab, or small
-machine. It uses one SQLite database and does not require a Calendar Ghost account or hosted
-coordinator. There is no Community Edition subscription or license server; the operator provides
+This repository contains the Calendar Ghost Community Edition. It is one deployment designed for
+self-hosting on a personal server, home lab, or small machine, for you alone or for the people you
+invite, each with private calendars and rules. It uses one SQLite database and does not require a
+Calendar Ghost account or hosted coordinator. There is no Community Edition subscription or license server; the operator provides
 the infrastructure and remains responsible for any hosting or provider costs.
 
 The Community Edition is genuine open-source software under the [GNU Affero General Public License,
@@ -97,9 +97,9 @@ machine and creates only the destination representation selected by each rule.
 | Reconciliation | Daily full pass plus **Reconcile Now**, which reports remaining drift and records conflicts as blocked |
 | Loop prevention | Private managed-origin metadata prevents projections from becoming sources |
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
-| Incidents | Authenticated Activity view, deduplication, optional SMTP, and optional webhook delivery |
-| Monitoring | Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, authorized with Integration Tokens issued in Settings |
-| Access | One local administrator password and encrypted Google OAuth credentials |
+| Incidents | Each person's Activity view, deduplication, optional email to each person, and the installation's SMTP recipient and webhook for installation incidents |
+| Monitoring | Each person's Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, and Installation Health for administrators, authorized with Integration Tokens issued in Settings |
+| Access | People sign in with email and password; Only me by default, or Invitation only, with single-use invitation and password reset links; an administrator role; encrypted Google OAuth credentials |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
 | Deployment | One Docker image and Compose service for `linux/amd64` and `linux/arm64` |
@@ -178,7 +178,8 @@ account credentials unreadable.
 docker compose up -d --build
 ```
 
-Open <http://localhost:8000>, create the local administrator, and follow the three-step setup:
+Open <http://localhost:8000>, create the administrator with your email and a password, and follow
+the three-step setup:
 
 1. Connect each Google identity you need.
 2. Create a directional rule and choose its privacy, all-day, Maybe, and unanswered-invitation policies.
@@ -311,7 +312,12 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   installation master key ([ADR 0017](docs/adr/0017-record-source-changes.md)). Values are stored
   as Google returns them, including any meeting codes in descriptions. Treat the database and its
   backups as sensitive; together with the master key they reveal those details.
-- Activity is kept until the administrator clears it. Settings → Storage shows the database size
+- Every record belongs to one person, and nobody sees another person's calendars, rules, Activity,
+  or tokens; an administrator sees each person's email, role, state, and last sign-in only
+  ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
+  [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). Deleting a person removes
+  them from the live database; backups keep them until they rotate out.
+- Activity is kept until an administrator clears it. Settings → Storage shows the database size
   and Activity's entry count and oldest entry, and clears entries older than 30, 90, 180, or 365
   days, keeping, per rule and source event, the older entries newer ones are compared with
   (normally the latest entry older than the cutoff and the latest that recorded a title)
@@ -326,10 +332,12 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
 - The account access check requests calendar metadata and, from one calendar, event IDs only. It
   does not retain event data or make provider writes.
 - Google writes use `sendUpdates=none`, and projections contain no attendees or invitation data.
-- The Web UI and operational API require the local administrator session. `/health` remains public
+- The Web UI and operational API require a signed-in session, and answer 404 for another person's
+  records. Failed sign-ins are throttled per email and per client address. `/health` remains public
   and intentionally minimal.
-- Integration Tokens read Installation Status only, through `GET /api/v1/status` and `/mcp`; every
-  other route refuses them. Only a SHA-256 hash of each token is stored, the token is shown once,
+- Integration Tokens read their person's Installation Status only, through `GET /api/v1/status` and
+  `/mcp`, and an administrator's token with `installation:read` also reads Installation Health at
+  `GET /api/v1/installation/health`; every other route refuses them. Only a SHA-256 hash of each token is stored, the token is shown once,
   and it can be revoked at any time. Status names rules by their calendars and never contains event
   content, calendar IDs, or account emails ([ADR 0024](docs/adr/0024-integration-tokens-installation-status-and-mcp.md)).
 - There is no mandatory analytics, license server, remote logging, or developer-operated backend.
@@ -357,8 +365,8 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_SMTP_PORT` | No | SMTP port; defaults to `587` |
 | `CALENDAR_SYNC_SMTP_USERNAME` | No | Optional SMTP authentication username |
 | `CALENDAR_SYNC_SMTP_PASSWORD` | No | Optional SMTP authentication password |
-| `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Incident email sender |
-| `CALENDAR_SYNC_SMTP_RECIPIENT` | With SMTP | Incident email recipient |
+| `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Incident email sender; with the host, each person receives their own incidents by email |
+| `CALENDAR_SYNC_SMTP_RECIPIENT` | No | Operator who receives incidents about the installation itself, such as a stalled scheduler |
 | `CALENDAR_SYNC_SMTP_STARTTLS` | No | Enable SMTP STARTTLS; defaults to `true` |
 
 Notification delivery is best-effort. A delivery failure never prevents the incident from being

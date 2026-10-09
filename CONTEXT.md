@@ -8,9 +8,9 @@ Google Calendar is the only supported calendar provider today. Outlook and iClou
 advertised as coming soon, with no release date promised. Other providers remain unsupported.
 
 **Community Edition**:
-The Calendar Ghost software in this repository, run on infrastructure the operator controls. Today
-one Installation Administrator operates one SQLite database, one scheduler, and one application
-process; ADR 0023 lets one installation serve many users later. It has no mandatory Calendar Ghost
+The Calendar Ghost software in this repository, run on infrastructure the operator controls. One
+SQLite database, one scheduler, and one application process serve one or more Users, each with
+private records, and an Installation Administrator operates it (ADR 0023, ADR 0030). It has no mandatory Calendar Ghost
 account, telemetry, or hosted control plane. The Community Edition is intended to remain genuine
 open-source software under the GNU Affero General Public License, version 3 or later; the name and
 marks are governed separately.
@@ -54,7 +54,7 @@ _Avoid_: Account type, integration
 A previously connected identity whose stored credentials have been removed from the installation. It remains listed so the same identity can be reauthorized without losing rule mappings or incremental positions. Enabled rules that use it become degraded immediately.
 _Avoid_: Deleted account, removed user
 
-A Disconnected Account may instead be permanently deleted by the Installation Administrator. This
+A Disconnected Account may instead be permanently deleted by the User it belongs to. This
 removes every affected Directional Sync Rule and its mappings, cursors, incidents, and audit
 activity. Existing Managed Projections remain in their destination calendars and are no longer
 managed because the installation no longer has the authorization or ownership records required to
@@ -266,7 +266,7 @@ A single-use, expiring link an Installation Administrator creates so one person 
 _Avoid_: Invite code, admin-created account
 
 **Public Health Status**:
-The minimal unauthenticated indication that the service is running. Calendar, account, rule, OAuth, audit, and incident details require an administrator session. Installation Status is its authenticated counterpart.
+The minimal unauthenticated indication that the service is running. Calendar, account, rule, OAuth, audit, and incident details require the session of the User they belong to. Installation Status is its authenticated counterpart.
 _Avoid_: Public dashboard, anonymous status page
 
 **Integration Token**:
@@ -296,7 +296,7 @@ A reversible rule state that suspends synchronization while leaving its managed 
 _Avoid_: Disabled rule, stopped rule
 
 **Rule Removal**:
-Permanent removal of a rule after the administrator explicitly chooses to delete its mapped projections or keep them as detached ordinary events. Mapped projection deletion is the recommended default and requires an authorized destination account. An event whose ownership cannot be verified is a conflict for that event only: it is left in place and removal continues. A removal interrupted by a provider failure leaves the rule inert until it is retried; lost authorization also opens an incident.
+Permanent removal of a rule after its User explicitly chooses to delete its mapped projections or keep them as detached ordinary events. Mapped projection deletion is the recommended default and requires an authorized destination account. An event whose ownership cannot be verified is a conflict for that event only: it is left in place and removal continues. A removal interrupted by a provider failure leaves the rule inert until it is retried; lost authorization also opens an incident.
 _Avoid_: Disable rule, pause rule
 
 **Rule Replacement**:
@@ -341,7 +341,7 @@ _Avoid_: Independent deployment, separate worker
 
 ## Interface Wording
 
-The Web UI speaks to a household administrator, so its primary copy uses calendar language and
+The Web UI speaks to each person in a household, so its primary copy uses calendar language and
 keeps glossary terms for places that need their precision. Code, documentation, audit reasons, and
 diagnostics keep the glossary terms above.
 
@@ -360,13 +360,13 @@ diagnostics keep the glossary terms above.
 | Lapsed Authorization | "Needs reauthorization", naming the account; its action is "Reauthorize account" |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
-| Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the administrator's step when one exists, otherwise that Calendar Ghost checks again daily |
+| Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
 
 - The product is named **Calendar Ghost**. "Ghost" is brand language for the mark and tagline;
   the interface and documentation keep this glossary's terms, so a Managed Projection is never
   called a "ghost" in labels, explanations, or incidents.
-- The Web UI's language follows the administrator's saved choice, then the browser's languages,
+- The Web UI's language follows the User's saved choice, then the browser's languages,
   then English. Diagnostics (provider error text, Audit Entry detail, Drift detail, and conflict
   detail) stay as recorded and are shown only under a translated diagnostic label, never
   translated or used as a primary sentence.
@@ -387,5 +387,5 @@ stored in plaintext, and event content is not included in incident notifications
 _Avoid_: Event history, cached event
 
 **Audit Entry**:
-An Operational Record of one synchronization decision worth explaining: a write, a block, a no-change check, or a skip that explains why an expected projection is absent. Loop-prevention and bookkeeping decisions are counted on the run instead. It carries the rule, run, source and destination event identities, the action, and a stable reason code explaining why. It also records the source event's title, time, recurrence, and cancellation as the run saw them, so Activity names events without asking the provider and can show renames. Entries recorded before that decision name no event. Activity keeps every entry until the administrator clears it: Settings → Storage clears entries older than a chosen age (30, 90, 180, or 365 days), keeping, per Directional Sync Rule and source event, the latest entry older than the cutoff and the latest that recorded a title.
+An Operational Record of one synchronization decision worth explaining: a write, a block, a no-change check, or a skip that explains why an expected projection is absent. Loop-prevention and bookkeeping decisions are counted on the run instead. It carries the rule, run, source and destination event identities, the action, and a stable reason code explaining why. It also records the source event's title, time, recurrence, and cancellation as the run saw them, so Activity names events without asking the provider and can show renames. Entries recorded before that decision name no event. Activity keeps every entry until an Installation Administrator clears it: Settings → Storage clears every User's entries older than a chosen age (30, 90, 180, or 365 days), keeping, per Directional Sync Rule and source event, the latest entry older than the cutoff and the latest that recorded a title.
 _Avoid_: Event log, history item

@@ -50,11 +50,15 @@ The Community Edition is licensed under the GNU Affero General Public License, v
 The future hosted service runs this same codebase with no closed components (ADR 0023). Multi-user
 support, billing, and the Operator Overview belong in this repository. ADRs 0029 and 0030 settle
 their persistence, isolation, and identity, and
-`docs/superpowers/specs/2026-10-09-multi-user-design.md` orders the work; until it ships, the
-runtime stays single-installation. Plan limits
-apply only when an administrator turns Plans on, and billing only when Commercial Mode is also on;
-both are off by default, and with Plans off every user has every feature (ADR 0028). Preserve the self-hosting promise that there is no mandatory Calendar Ghost account,
-telemetry, or hosted coordinator.
+`docs/superpowers/specs/2026-10-09-multi-user-design.md` orders the work. Users have shipped: every
+record belongs to one User, use cases receive a unit of work scoped to that User, and only the
+scheduler, migrations, and (later) the Operator Overview receive the installation-wide
+`InstallationUnitOfWork`. A new owned table carries `user_id` and refers to its parent by
+identifier and User together; `tests/adapters/test_user_isolation_schema.py` fails otherwise.
+Plan limits apply only when an administrator turns Plans on, and billing only when Commercial Mode
+is also on; both are off by default, and with Plans off every user has every feature (ADR 0028).
+Preserve the self-hosting promise that there is no mandatory Calendar Ghost account, telemetry, or
+hosted coordinator.
 
 Use the exact terms defined in `CONTEXT.md`. In particular, do not use “sync pair,” “event copy,” or
 “conflict” when Directional Sync Rule, Event Projection, or Drift is the intended concept.
@@ -159,10 +163,17 @@ the Docker build context, and has its own `Site` workflow.
   real provider responses. Fixtures must be synthetic.
 - Never print secrets or decrypted credentials. Keep notification payloads free of event content.
 - Validate paths against resolved trusted roots before serving files.
-- Keep administrator-only API routes behind the session dependency. Only setup, login, the
-  state-protected OAuth callback, static application files, and `/health` are intentionally public;
-  `/health` is the only unauthenticated operational status route. `/api/v1/status` and `/mcp` are
-  the only routes that accept an Integration Token, and `/mcp` accepts nothing else (ADR 0024).
+- Keep every API route behind the signed-in User's session (`current_user` in
+  `interfaces/api/dependencies.py`), and Installation Administrator routes behind `administrator`,
+  which refuses other Users with 403 before anything is looked up. A route that names another
+  User's record answers 404, never 403, so its existence is not revealed (ADR 0029). Only setup,
+  sign-in, the session status and sign-out, the state-protected OAuth callback, the token-protected
+  Invitation and Password Reset Link routes (`/api/v1/invitations/check`,
+  `/api/v1/invitations/accept`, `/api/v1/password-resets/check`, `/api/v1/password-resets`),
+  static application files, and `/health` are intentionally public; `/health` is the only
+  unauthenticated operational status route. `/api/v1/status`, `/api/v1/installation/health`, and
+  `/mcp` are the only routes that accept an Integration Token, and `/mcp` accepts nothing else
+  (ADR 0024). `tests/adapters/test_api_authorization.py` lists them; extend it with every route.
 - Google writes use `sendUpdates=none`. A change that could email attendees or mutate source events
   is release-blocking.
 - Preserve least-privilege OAuth scopes and encrypted credential storage.

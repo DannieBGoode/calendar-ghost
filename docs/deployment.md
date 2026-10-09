@@ -174,7 +174,22 @@ refer to one that does not exist, the service stops with a message naming the ta
 is left exactly as it was. Back up the data directory before upgrading, as always: the rebuild
 rewrites every owned table, so the database is briefly about twice its size. Rolling back past
 migration 21 means restoring that backup: an earlier release cannot read the rebuilt tables, and
-records made after the upgrade are lost with the restore.
+records made after the upgrade are lost with the restore. After upgrading, the administrator signs
+in with their password alone once and must then add an email; from then on they sign in with email
+and password. The installation starts with the Only Me Registration Policy, so nothing changes for
+anyone else until the administrator invites someone.
+
+Migration 22 adds the Registration Policy, Only Me for new and upgraded installations, and the
+hashed Invitations and Password Reset Links. Migration 23 gives Integration Tokens scopes: every
+token issued before the upgrade keeps `status:read` and gains `installation:read`, so an existing
+monitor keeps receiving the answer it received before. Rolling back past either means restoring the
+backup taken before the upgrade, as for migration 21.
+
+Sign-in failures are counted per email and per client address for 15 minutes: after five failures
+for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
+the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's
+address, so the per-address limit is shared by everyone behind it. The counts are kept in memory,
+so a restart forgets them.
 
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. A scheduler pass
@@ -261,8 +276,19 @@ identity can be reauthorized and reconciled later.
 
 ## Incident notifications
 
-Incidents always appear in the authenticated Activity screen. Optionally set
-`CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` to receive a JSON POST when an incident opens. SMTP delivery
-requires `CALENDAR_SYNC_SMTP_HOST`, `CALENDAR_SYNC_SMTP_SENDER`, and
-`CALENDAR_SYNC_SMTP_RECIPIENT`; credentials are optional. Delivery is deduplicated while an
-incident remains open and failures never stop synchronization or local incident recording.
+Incidents always appear in the Activity screen of the User they belong to
+([ADR 0030](adr/0030-users-administrators-and-registration.md)).
+
+Set `CALENDAR_SYNC_SMTP_HOST` and `CALENDAR_SYNC_SMTP_SENDER` (credentials are optional) and the
+installation sends email: each User then also receives their own rules' and accounts' Incident
+Notifications at their email, unless they turn them off in **Settings → Your account**. No User
+receives another User's incidents.
+
+The installation's own channels hear only of incidents about the installation itself, which affect
+every User; the first is a scheduler that stopped completing passes. Set
+`CALENDAR_SYNC_SMTP_RECIPIENT` to email them to an operator, and
+`CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` to receive a JSON POST, whose `rule_id` is `null` and whose
+`category` is `scheduler_stalled`. Before Users existed these channels received every rule incident;
+after upgrading, rule incidents reach the first User by email once they add an email and SMTP is
+configured. Delivery is deduplicated while an incident remains open and failures never stop
+synchronization or local incident recording.

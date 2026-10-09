@@ -17,7 +17,11 @@ Check `docker compose ps`, then request `http://localhost:8000/health`. Review c
 - **401 behind a reverse proxy, although `curl` on the host works.** The proxy is dropping the
   `Authorization` header. Configure it to pass the header through to Calendar Ghost.
 - **401 on any other `/api/` route.** Expected. A token reads status only; Rules, Activity, and
-  Settings need the administrator session.
+  Settings need a signed-in session.
+- **403 `insufficient_scope` from `/api/v1/installation/health`.** The token was issued without
+  Installation Health. Issue one with it ticked; only an administrator can.
+- **403 `administrator_required` from `/api/v1/installation/health`.** The person who issued the
+  token is no longer an administrator, so the token reads only their own status now.
 - **405 from `/mcp`.** The client sent `GET` or `DELETE`. The MCP server is stateless and answers
   `POST` only; use a client that speaks MCP over streamable HTTP.
 - **404 from `/mcp/`.** The address has a trailing slash or a longer path. Use exactly `/mcp`.
@@ -177,7 +181,7 @@ from the remaining projections.
 
 The Activity screen names the reason it could not load audit entries and incidents:
 
-- **Your administrator session has expired.** Choose **Sign in again**.
+- **Your session has expired.** Choose **Sign in again**.
 - **Calendar Ghost was updated.** The open page predates the running service, for example after an
   upgrade renamed an API path. Choose **Reload page**; if the message returns, hard-refresh the tab.
 - **The local service returned an error.** The request reached the service or a reverse proxy in
@@ -301,3 +305,19 @@ answers first. To report a bug, open an issue with the
 and issues are public: do not include event content, calendar IDs, email addresses, credentials, or
 unredacted logs. If you cannot use GitHub, email support@calendarghost.com. Report security
 vulnerabilities privately, as [SECURITY.md](../SECURITY.md) describes.
+
+## I cannot sign in
+
+- **The email and password do not match.** Sign in with the email you added or were invited with;
+  its case does not matter. If you forgot your password, ask an administrator for a password reset
+  link under **Settings → People**. It works once, for 7 days, and signs you out everywhere once
+  you choose a new password. An administrator never sees or sets your password.
+- **Too many failed attempts.** After five failures for one email, or twenty from one address, in
+  15 minutes, sign-in waits until the oldest failure is 15 minutes old. Behind a reverse proxy the
+  address is the proxy's, so wait before trying again.
+- **Your access is turned off.** An administrator disabled you; ask them to enable you again. Your
+  rules were held meanwhile and resume by themselves.
+- **After upgrading, the sign-in page asks for an email you never had.** Leave the email empty and
+  sign in with your password; Calendar Ghost then asks for the email you sign in with from now on.
+- **The only administrator forgot their password.** Nobody can create a reset link for them. Make a
+  second person an administrator while you can, so each can help the other.

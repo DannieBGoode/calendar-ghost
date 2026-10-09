@@ -24,6 +24,23 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Several people can share one installation, each with private Google accounts, rules, Activity,
+  incidents, and tokens ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
+  [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). People sign in with email and
+  password. The Registration Policy is **Only me** by default; an administrator may choose
+  **Invitation only** and send single-use invitation links that expire after 7 days. Settings adds
+  **People** (roles, disabling, password reset links, deletion), **Who can join**, and **Your
+  account** (email, password, incident emails, and deleting your own account). An administrator
+  never sees anyone's calendars or events.
+- Migrations 21 to 23 give every record a User, turn the existing administrator into the first User
+  with every existing record, add the Registration Policy and hashed links, and give Integration
+  Tokens scopes. Rolling back past them means restoring the backup taken before the upgrade.
+- Installation Health, for administrators and their monitors, at `GET /api/v1/installation/health`
+  and as the MCP tool `get_installation_health`, through the new `installation:read` token scope:
+  incidents about the installation itself and how many people are in each status.
+- The installation's SMTP recipient and webhook are told when the scheduler stops completing passes.
+- Failed sign-ins are throttled per email and per client address.
+
 - The Web UI footer links to the troubleshooting guide ("Get help"), which ends with where to ask
   questions (GitHub Discussions), report bugs (a new bug report form), or email
   support@calendarghost.com.
@@ -41,6 +58,18 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   `message` by the Incidents API and on each Installation Status problem an Incident explains.
 
 ### Changed
+
+- After upgrading, the administrator signs in with their password once and then adds the email they
+  sign in with from now on. Setup asks for an email and a password.
+- Incident Notifications go to the person who owns the rule or account, by email when SMTP is
+  configured, unless they turn it off. `CALENDAR_SYNC_SMTP_RECIPIENT` and
+  `CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` now receive only incidents about the installation itself, so
+  a webhook that received rule incidents before no longer does.
+- `GET /api/v1/status` and MCP answer for the person who issued the token, in the same shape.
+  Existing tokens belong to the first User and keep both scopes, so their answers do not change.
+  The Integration Token list returns `scopes` instead of `scope`.
+- Settings → Storage is for administrators only. Sync now, Reconcile now, and Preview answer `404`
+  instead of `409` for a rule that does not exist.
 
 - The database uses SQLite's write-ahead log, so the Web UI no longer waits for a scheduler write,
   nor a write for a Web UI read. The first start switches an existing database over; back up the
