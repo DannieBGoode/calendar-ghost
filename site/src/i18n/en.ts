@@ -30,7 +30,7 @@ export const en = {
   meta: {
     title: "Calendar Ghost: private calendar sync you host yourself",
     description:
-      "Sync your Google calendars on your own server. Share only “Busy”, or the event's details. Open source, self-hosted, no trackers.",
+      "Sync your Google calendars on your own server. Share only “Busy”, or the event's details. Open source, self-hosted, with no app telemetry.",
     notFoundTitle: "Page not found · Calendar Ghost",
     /** A documentation page's title: `{title}` is its document's own first heading. */
     docTitle: "{title} · Calendar Ghost",
@@ -266,7 +266,10 @@ export const en = {
         body: "A weekly meeting arrives as a weekly event, with its exceptions.",
       },
       { title: "See what happened", body: "Activity shows what each rule did, and why." },
-      { title: "No telemetry", body: "It talks only to Google and to the notification targets you set up." },
+      {
+        title: "No app telemetry",
+        body: "The installed application talks only to Google and to the notification targets you set up.",
+      },
       {
         title: "Monitors and AI agents",
         body: "A status API and an MCP server report health to Uptime Kuma, your homelab dashboard, or your AI agent.",
@@ -360,8 +363,9 @@ export const en = {
     email: "Email support",
     licenseLink: "AGPL-3.0 license",
     trademarks: "Trademarks",
-    privacy: "This page sets no cookies.",
-    privacyBody: "We count visits with Umami, which does not identify you or follow you across sites. Nothing loads from another site.",
+    privacy: "Website analytics, no app telemetry.",
+    privacyBody:
+      "calendarghost.com uses cookieless Umami Cloud to count visits, referrers, campaigns, and selected clicks. The tracker runs through calendarghost.com and does not follow you across sites. The installed application sends no analytics or telemetry.",
     /** Under the dozing ghost on the home page's footer: narration, not speech. */
     watch: "Sync runs every five minutes. In between, the ghost naps.",
     /** What the dozing ghost mumbles in its sleep, like a child in bed: sync runs every five

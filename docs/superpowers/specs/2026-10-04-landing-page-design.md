@@ -114,7 +114,7 @@ What the comparison changed:
    Sam, one feature each with a short title and one sentence, on alternating sides.
 7. **Built to be trusted.** Eight short claims, each true today and each linking to the
    documentation that proves it: fixes itself, preview first, never emails your guests, no loops,
-   recurring events stay recurring, see what happened, no telemetry, monitors and AI agents.
+   recurring events stay recurring, see what happened, no app telemetry, monitors and AI agents.
 8. **"It reports to your homelab."** One sentence, three small pictures (a dashboard tile, an
    uptime monitor, and an AI agent's chat over MCP), the night watch (a ghost by a rack ticking its
    checklist in time with the monitor), and one link to the guide's section on monitors and agents.
@@ -125,8 +125,8 @@ What the comparison changed:
     real calendars; is there a hosted version.
 12. **Footer.** A last call to action ("Ready when your server is."), the dozing ghost that
     mumbles "Five more minutes, please.", links under Project and Legal (GitHub, the self-hosting
-    guide, documentation, changelog, the AGPL-3.0 license, trademarks), and "This page has no
-    trackers."
+    guide, documentation, changelog, the AGPL-3.0 license, trademarks), and the cookieless Umami
+    notice that distinguishes website analytics from the installed application's no-telemetry promise.
 
 Other pages:
 
