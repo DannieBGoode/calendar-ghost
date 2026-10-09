@@ -58,9 +58,10 @@ export function usePeoplePage(query: PeopleQuery) {
  * The commands an administrator runs on someone else. One command runs at a time, even across
  * opening the page again: a second one started before the first answers could undo what the
  * first returned, as a new Password Reset Link revokes the one just shown. Its error is shown
- * beside the person it was for.
+ * beside the person it was for. `onDeleted` hears what a deletion did, for a page that cannot
+ * stay once its person is gone.
  */
-export function usePersonCommands() {
+export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string) => void } = {}) {
   const i18n = useI18n()
   const queryClient = useQueryClient()
   const [message, setMessage] = useState("")
@@ -85,8 +86,10 @@ export function usePersonCommands() {
     const changed = CHANGED[action]
     if (link) setResetLink({ personId: person.id, link })
     if (deletion) {
+      const deleted = deletionMessage(i18n, name, deletion)
       setDeleting(null)
-      setMessage(deletionMessage(i18n, name, deletion))
+      setMessage(deleted)
+      onDeleted?.(deleted)
     }
     if (changed) setMessage(i18n.t(changed, { email: name }))
   }

@@ -462,7 +462,32 @@ describe("People", () => {
       ...RESPONSES,
       "/api/v1/session": { authenticated: true, installation_sends_email: false, user: { ...administrator, role } },
       "/api/v1/registration": { policy, only_me_available: policy === "only_me" },
-      "/api/v1/users": { users: [{ ...administrator, state: "active", created_at: "2026-10-01T09:00:00Z", last_sign_in_at: null }], total: 1, page: 1, page_size: 50 },
+      "/api/v1/users": {
+        users: [
+          {
+            ...administrator,
+            state: "active",
+            created_at: "2026-10-01T09:00:00Z",
+            last_sign_in_at: null,
+            verdict: "setup",
+            problems: 0,
+            last_synced_at: null,
+            resources: NOTHING_SET_UP.resources,
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+      "/api/v1/installation/health": {
+        status: "setup",
+        needs_attention: false,
+        incidents: [],
+        users: { setup: 1 },
+        disabled_users: 0,
+        checked_at: "2026-10-01T09:00:00Z",
+      },
+      [`/api/v1/users/${administrator.id}/overview`]: { ...NOTHING_SET_UP, user: { ...NOTHING_SET_UP.user, id: administrator.id } },
       "/api/v1/invitations": [],
     }
     vi.stubGlobal(
@@ -496,6 +521,24 @@ describe("People", () => {
     expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
     expect(document.title).toBe("People – Calendar Ghost")
     expect(requested).toContain("/api/v1/users")
+  })
+
+  it("opens a person's page at its own address, and returns to People", async () => {
+    page.happyDOM.setURL(`http://localhost:8000/people/${administrator.id}`)
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    expect(container.querySelector("main h1")?.textContent).toBe(`${administrator.email}You`)
+    expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
+    expect(requested).toContain(`/api/v1/users/${administrator.id}/overview`)
+
+    act(() => {
+      container
+        .querySelector<HTMLAnchorElement>("a.person-back")!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people")
+    expect(container.querySelector("main h1")?.textContent).toBe("People")
   })
 
   it.each([

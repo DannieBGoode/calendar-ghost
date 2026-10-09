@@ -5,17 +5,19 @@ import { Badge } from "@/components/ui/badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
-import type { PeopleQuery, PeopleSort, Person, SortOrder } from "@/lib/api"
+import type { PeopleQuery, PeopleSort, PersonRow, SortOrder } from "@/lib/api"
+import { appPathForPerson, isPlainLeftClick, type OpenPerson } from "@/lib/navigation"
+import { verdictTone } from "@/lib/operator-overview"
 import { lastSignIn, personName } from "@/lib/people"
 import type { PeopleCommands } from "@/lib/use-people"
 
-const COLUMNS = 6
+const COLUMNS = 7
 const ARIA_SORT: Record<SortOrder, "ascending" | "descending"> = { asc: "ascending", desc: "descending" }
 const SORT_ICONS = { asc: ArrowUp, desc: ArrowDown }
 
 /**
- * One page of people as a table. Email, Joined, and Last sign-in sort when their heading is
- * pressed. On a narrow screen each row becomes a card that labels its own values, and the sortable
+ * One page of people as a table. Email, Sync, Joined, and Last sign-in sort when their heading is
+ * pressed; each email opens that person's page. On a narrow screen each row becomes a card that labels its own values, and the sortable
  * headings stay above the cards as buttons.
  */
 export function PeopleTable({
@@ -25,13 +27,15 @@ export function PeopleTable({
   now,
   commands,
   onSort,
+  onOpenPerson,
 }: {
-  people: Person[]
+  people: PersonRow[]
   query: PeopleQuery
   currentUserId: string
   now: number
   commands: PeopleCommands
   onSort: (sort: PeopleSort) => void
+  onOpenPerson: OpenPerson
 }) {
   const { t } = useI18n()
   const sortable = (column: PeopleSort, label: MessageKey) => (
@@ -42,6 +46,7 @@ export function PeopleTable({
       <thead role="rowgroup">
         <tr role="row">
           {sortable("email", "people.table.email")}
+          {sortable("verdict", "people.table.sync")}
           <th scope="col" role="columnheader">{t("people.table.role")}</th>
           <th scope="col" role="columnheader">{t("people.table.state")}</th>
           {sortable("joined", "people.table.joined")}
@@ -53,7 +58,14 @@ export function PeopleTable({
       </thead>
       <tbody role="rowgroup">
         {people.map((person) => (
-          <PersonRows key={person.id} person={person} you={person.id === currentUserId} now={now} commands={commands} />
+          <PersonRows
+            key={person.id}
+            person={person}
+            you={person.id === currentUserId}
+            now={now}
+            commands={commands}
+            onOpen={onOpenPerson}
+          />
         ))}
       </tbody>
     </table>
@@ -88,11 +100,13 @@ function PersonRows({
   you,
   now,
   commands,
+  onOpen,
 }: {
-  person: Person
+  person: PersonRow
   you: boolean
   now: number
   commands: PeopleCommands
+  onOpen: OpenPerson
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -101,8 +115,25 @@ function PersonRows({
     <Fragment>
       <tr role="row" className="person-row">
         <td role="cell" className="person-col-email">
-          <span className="person-email" data-missing={person.email === null}>{name}</span>
+          <a
+            className="person-email"
+            data-missing={person.email === null}
+            href={appPathForPerson(person.id)}
+            onClick={(event) => {
+              if (!isPlainLeftClick(event)) return
+              event.preventDefault()
+              onOpen(person.id)
+            }}
+          >
+            {name}
+          </a>
           {you && <Badge variant="outline">{t("people.you")}</Badge>}
+        </td>
+        <td role="cell" className="person-col-sync" data-label={t("people.table.sync")}>
+          <Badge variant={verdictTone(person.verdict)}>{t(`people.verdicts.${person.verdict}`)}</Badge>
+          {person.problems > 0 && (
+            <span className="person-problems">{t("people.problems", { count: person.problems })}</span>
+          )}
         </td>
         <td role="cell" className="person-col-role" data-label={t("people.table.role")}>
           {t(`people.roles.${person.role}`)}

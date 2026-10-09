@@ -37,7 +37,11 @@ function AdministratorView() {
           </Button>
         </div>
       )}
-      {overview.data && <UserOverviewDetails overview={overview.data} headingLevel={3} />}
+      {overview.data && (
+        <div className="settings-list">
+          <UserOverviewDetails overview={overview.data} headingLevel={3} />
+        </div>
+      )}
     </section>
   )
 }

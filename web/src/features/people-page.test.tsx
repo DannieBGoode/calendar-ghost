@@ -9,7 +9,14 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { PendingInvitation, PeoplePage, Person, PersonRow, SessionStatus } from "@/lib/api"
+import type {
+  InstallationHealthReport,
+  PendingInvitation,
+  PeoplePage,
+  Person,
+  PersonRow,
+  SessionStatus,
+} from "@/lib/api"
 
 import { PeopleView } from "./people-page"
 
@@ -51,8 +58,24 @@ const NOTHING_SET_UP: Omit<PersonRow, keyof Person> = {
   resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-10" },
 }
 
+/** What the Operator Overview says of people who have more than nothing set up. */
+const OVERVIEWS: Record<string, Partial<PersonRow>> = {
+  "user-robin": { verdict: "stopped", problems: 2 },
+  "user-sam": { verdict: "healthy" },
+}
+
 function onePage(users: Person[], page: Partial<PeoplePage> = {}): PeoplePage {
-  return { users: users.map((user) => ({ ...NOTHING_SET_UP, ...user })), total: users.length, page: 1, page_size: 50, ...page }
+  const rows = users.map((user) => ({ ...NOTHING_SET_UP, ...OVERVIEWS[user.id], ...user }))
+  return { users: rows, total: users.length, page: 1, page_size: 50, ...page }
+}
+
+const health: InstallationHealthReport = {
+  status: "stopped",
+  needs_attention: true,
+  incidents: [],
+  users: { stopped: 1, healthy: 1, setup: 2 },
+  disabled_users: 1,
+  checked_at: justNow,
 }
 
 type Call = { method: string; path: string; query: URLSearchParams; body: unknown }
@@ -72,6 +95,7 @@ function serve({ people = () => jsonResponse(onePage([me, robin, sam])), answers
     "GET /api/v1/session": jsonResponse(session),
     "GET /api/v1/registration": jsonResponse({ policy: "invitation_only", only_me_available: false }),
     "GET /api/v1/invitations": jsonResponse([invitation]),
+    "GET /api/v1/installation/health": jsonResponse(health),
     "POST /api/v1/invitations": jsonResponse({ id: "inv-2", token: "inv_synthetic", expires_at: nextWeek }, 201),
     "DELETE /api/v1/invitations/inv-1": { ok: true, status: 204, json: () => Promise.resolve(null) } as Response,
     "POST /api/v1/users/user-robin/password-reset-links": jsonResponse(
@@ -99,6 +123,7 @@ function serve({ people = () => jsonResponse(onePage([me, robin, sam])), answers
 let container: HTMLDivElement
 let root: Root | null = null
 let address: string
+let openPerson: ReturnType<typeof vi.fn<(personId: string) => void>>
 
 function page() {
   return window as typeof window & { happyDOM: { setURL: (url: string) => void } }
@@ -141,7 +166,7 @@ function showPeople(i18n: I18n, queryClient: QueryClient, visit = 0) {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <PeopleView key={visit} />
+            <PeopleView key={visit} notice={null} onOpenPerson={openPerson} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -152,6 +177,7 @@ function showPeople(i18n: I18n, queryClient: QueryClient, visit = 0) {
 async function renderPeople(i18n: I18n, scenario: Scenario = {}) {
   page().happyDOM.setURL(`${ORIGIN}/people${scenario.search ?? ""}`)
   serve(scenario)
+  openPerson = vi.fn<(personId: string) => void>()
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   showPeople(i18n, queryClient)
@@ -255,6 +281,7 @@ describe("People page", () => {
     await renderPeople(testI18n(), { people: () => jsonResponse(onePage([me, robin, sam, firstUser])) })
     expect([...container.querySelectorAll("thead th")].map((cell) => cell.textContent.trim())).toEqual([
       "Email",
+      "Sync",
       "Role",
       "State",
       "Joined",
@@ -263,6 +290,7 @@ describe("People page", () => {
     ])
     expect(cells(personRow("dana@example.test"))).toEqual([
       "dana@example.testYou",
+      "Not set up",
       "Administrator",
       "Active",
       "just now",
@@ -270,8 +298,14 @@ describe("People page", () => {
       "",
     ])
     expect(personRow("dana@example.test").querySelector("[aria-haspopup='menu']")).toBeNull()
-    expect(cells(personRow("robin@example.test")).slice(1, 5)).toEqual(["User", "Active", "just now", "Never"])
-    expect(cells(personRow("sam@example.test"))[2]).toBe("Disabled")
+    expect(cells(personRow("robin@example.test")).slice(1, 6)).toEqual([
+      "Stopped2 problems",
+      "User",
+      "Active",
+      "just now",
+      "Never",
+    ])
+    expect(cells(personRow("sam@example.test")).slice(1, 4)).toEqual(["Healthy", "User", "Disabled"])
     expect(personRow("No email yet").querySelector("[aria-haspopup='menu']")).not.toBeNull()
     expect(personRow("robin@example.test").querySelector("[aria-haspopup='menu']")?.getAttribute("aria-label")).toBe(
       "Actions for robin@example.test",
@@ -280,18 +314,20 @@ describe("People page", () => {
 
   it("restores the search, filters, sort, and page from the address", async () => {
     await renderPeople(testI18n(), {
-      search: "?search=rob&role=user&state=disabled&sort=email&order=desc&page=2",
+      search: "?search=rob&role=user&state=disabled&verdict=stopped&sort=email&order=desc&page=2",
       people: () => jsonResponse(onePage([robin], { page: 2, total: 51 })),
     })
     expect(lastPeopleQuery()).toEqual({
       search: "rob",
       role: "user",
       state: "disabled",
+      verdict: "stopped",
       sort: "email",
       order: "desc",
       page: "2",
       page_size: "50",
     })
+    expect(container.querySelector<HTMLSelectElement>("#people-verdict")!.value).toBe("stopped")
     expect(container.querySelector<HTMLInputElement>("#people-search")!.value).toBe("rob")
     expect(container.querySelector<HTMLSelectElement>("#people-role")!.value).toBe("user")
     expect(container.querySelector<HTMLSelectElement>("#people-state")!.value).toBe("disabled")
@@ -312,6 +348,58 @@ describe("People page", () => {
     expect(`${window.location.pathname}${window.location.search}`).toBe("/people?search=rob")
     // Typing replaces the address rather than adding a history entry for each pause.
     expect(window.history.length).toBe(length)
+  })
+
+  it("shows how everyone's synchronization is doing above the list, naming nobody", async () => {
+    await renderPeople(testI18n())
+    const summary = container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    expect(summary.querySelector("h2")?.textContent).toBe("Installation health")
+    expect(summary.textContent).toContain("Someone's rules stopped syncing.")
+    expect([...summary.querySelectorAll("button")].map((item) => item.textContent)).toEqual([
+      "Stopped: 1",
+      "Not set up: 2",
+      "Healthy: 1",
+    ])
+    expect(summary.textContent).toContain("1 person is disabled")
+    expect(summary.textContent).not.toContain("robin@example.test")
+  })
+
+  it("filters by a verdict from Installation Health, and shows everyone again", async () => {
+    await renderPeople(testI18n(), { search: "?page=2", people: () => jsonResponse(onePage([robin], { total: 60 })) })
+    const summary = () => container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    await click(button("Stopped: 1", summary()))
+    expect(lastPeopleQuery()).toMatchObject({ verdict: "stopped", page: "1" })
+    expect(window.location.search).toBe("?verdict=stopped")
+    expect(button("Stopped: 1", summary()).getAttribute("aria-pressed")).toBe("true")
+
+    await click(button("Stopped: 1", summary()))
+    expect(lastPeopleQuery().verdict).toBeUndefined()
+    expect(window.location.search).toBe("")
+  })
+
+  it("says when the installation itself stopped synchronizing", async () => {
+    const stalled = { ...health, status: "stalled", incidents: [{ kind: "scheduler_stalled", since: justNow }] }
+    await renderPeople(testI18n(), { answers: { "GET /api/v1/installation/health": jsonResponse(stalled) } })
+    const summary = container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    expect(summary.textContent).toContain("Scheduled synchronization stopped running just now.")
+  })
+
+  it("filters and sorts by sync status, kept in the address", async () => {
+    await renderPeople(testI18n())
+    await select("people-verdict", "review")
+    expect(lastPeopleQuery()).toMatchObject({ verdict: "review", page: "1" })
+    await click(header("Sync").querySelector("button")!)
+    expect(lastPeopleQuery()).toMatchObject({ verdict: "review", sort: "verdict", order: "asc" })
+    expect(header("Sync").getAttribute("aria-sort")).toBe("ascending")
+    expect(window.location.search).toBe("?verdict=review&sort=verdict")
+  })
+
+  it("opens a person's page from their email", async () => {
+    await renderPeople(testI18n())
+    const link = personRow("robin@example.test").querySelector<HTMLAnchorElement>("a.person-email")!
+    expect(link.getAttribute("href")).toBe("/people/user-robin")
+    await click(link)
+    expect(openPerson).toHaveBeenCalledWith("user-robin")
   })
 
   it("filters by role and state from the first page", async () => {

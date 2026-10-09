@@ -4,11 +4,14 @@ import { DEFAULT_PEOPLE_QUERY, nextSort, pageRange, peopleQueryFromSearch, peopl
 
 describe("the People page address", () => {
   it("reads every part of the query", () => {
-    expect(peopleQueryFromSearch("?search=rob&role=user&state=disabled&sort=email&order=desc&page=3")).toEqual({
+    expect(
+      peopleQueryFromSearch("?search=rob&role=user&state=disabled&verdict=stopped&sort=verdict&order=desc&page=3"),
+    ).toEqual({
       search: "rob",
       role: "user",
       state: "disabled",
-      sort: "email",
+      verdict: "stopped",
+      sort: "verdict",
       order: "desc",
       page: 3,
     })
@@ -16,7 +19,9 @@ describe("the People page address", () => {
 
   it("falls back to the defaults for missing or unknown values", () => {
     expect(peopleQueryFromSearch("")).toEqual(DEFAULT_PEOPLE_QUERY)
-    expect(peopleQueryFromSearch("?role=owner&state=gone&sort=name&order=up&page=-2")).toEqual(DEFAULT_PEOPLE_QUERY)
+    expect(peopleQueryFromSearch("?role=owner&state=gone&verdict=fine&sort=name&order=up&page=-2")).toEqual(
+      DEFAULT_PEOPLE_QUERY,
+    )
     expect(peopleQueryFromSearch("?page=1.5").page).toBe(1)
     expect(peopleQueryFromSearch("?search=%20%20").search).toBe("")
   })
@@ -29,10 +34,21 @@ describe("the People page address", () => {
     expect(peopleSearch({ ...DEFAULT_PEOPLE_QUERY, sort: "last_sign_in", order: "desc", state: "active" })).toBe(
       "?state=active&sort=last_sign_in&order=desc",
     )
+    expect(peopleSearch({ ...DEFAULT_PEOPLE_QUERY, verdict: "review", sort: "verdict" })).toBe(
+      "?verdict=review&sort=verdict",
+    )
   })
 
   it("round-trips through the address", () => {
-    const query = { search: "dana", role: "user", state: "active", sort: "email", order: "desc", page: 4 } as const
+    const query = {
+      search: "dana",
+      role: "user",
+      state: "active",
+      verdict: "waiting",
+      sort: "email",
+      order: "desc",
+      page: 4,
+    } as const
     expect(peopleQueryFromSearch(peopleSearch(query))).toEqual(query)
   })
 })

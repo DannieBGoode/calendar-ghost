@@ -401,6 +401,8 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         if adapters.calendar_provider is not None and adapters.accounts is not None
         else None
     )
+    # Installation Health counts the verdicts People shows, so the two never disagree.
+    statuses = UserStatuses(adapters.installation_units, adapters.locks, adapters.clock, scheduler)
     google_configured = bool(
         adapters.authorization and settings.google_client_id and settings.google_client_secret
     )
@@ -431,15 +433,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         ),
         installation_health=GetInstallationHealth(
             adapters.users,
-            lambda user: user_services(user).get_installation_status.execute().health,
+            lambda user: statuses.of([user])[user].health,
             scheduler,
             adapters.clock,
         ),
         operator_overview=OperatorOverview(
-            adapters.users,
-            UserStatuses(adapters.installation_units, adapters.locks, adapters.clock, scheduler),
-            adapters.installation_units,
-            adapters.clock,
+            adapters.users, statuses, adapters.installation_units, adapters.clock
         ),
         sends_email=adapters.sends_email,
         user_services=user_services,

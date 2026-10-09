@@ -1,7 +1,7 @@
 {
   "page": {
     "title": "People",
-    "intro": "The people who sign in here. You see their email, role, and sign-ins, never their calendars, rules, or events.",
+    "intro": "The people who sign in here and whether their synchronization works. You see their email, role, sign-ins, and sync status, never their calendars, Google account emails, or events.",
     "loading": "Loading people",
     "loadFailure": "People could not load",
     "listTitle": "Everyone here"
@@ -28,7 +28,9 @@
     "state": "State",
     "anyState": "Any state",
     "active": "Active",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "verdict": "Sync",
+    "anyVerdict": "Any sync status"
   },
   "table": {
     "email": "Email",
@@ -36,7 +38,9 @@
     "state": "State",
     "joined": "Joined",
     "lastSignIn": "Last sign-in",
-    "actions": "Actions"
+    "actions": "Actions",
+    "sync": "Sync",
+    "open": "Open {email}"
   },
   "pagination": {
     "label": "Pages of people",
@@ -182,6 +186,45 @@
         "one": "{count} event couldn't be synced",
         "other": "{count} events couldn't be synced"
       }
+    }
+  },
+  "problems": {
+    "one": "{count} problem",
+    "other": "{count} problems"
+  },
+  "health": {
+    "title": "Installation health",
+    "loadFailure": "Installation health could not load.",
+    "tryAgain": "Try again",
+    "summary": {
+      "stalled": "Calendar Ghost stopped checking calendars, so nobody's rules synchronize until the service runs again.",
+      "stopped": "Someone's rules stopped syncing.",
+      "review": "Someone's synchronization needs a look.",
+      "waiting": "Google is limiting or failing requests. Calendar Ghost retries by itself.",
+      "healthy": "Everyone's synchronization is working.",
+      "paused": "Synchronization is paused for everyone here.",
+      "setup": "Nobody is synchronizing yet."
+    },
+    "count": "{verdict}: {count}",
+    "countsLabel": "Show only the people with one sync status",
+    "schedulerStalled": "Scheduled synchronization stopped running {relative}.",
+    "disabled": {
+      "one": "{count} person is disabled and not counted.",
+      "other": "{count} people are disabled and not counted."
+    }
+  },
+  "person": {
+    "back": "People",
+    "loading": "Loading this person",
+    "loadFailure": "This person could not load",
+    "intro": "What the Operator Overview shows about them. You never see their calendar names, Google account emails, or events, and they can see exactly this in their Settings.",
+    "joined": "Joined {relative}",
+    "lastSignIn": "Last signed in {relative}",
+    "neverSignedIn": "Never signed in",
+    "missing": {
+      "title": "Nobody here has this address",
+      "body": "This person may have been deleted.",
+      "back": "Back to People"
     }
   }
 }

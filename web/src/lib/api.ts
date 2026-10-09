@@ -216,6 +216,8 @@ export type PersonRole = Person["role"]
 export type PersonState = Person["state"]
 /** A row of People: the person, their Installation Status verdict, and their resource use. */
 export type PersonRow = Schemas["PersonResponse"]
+/** The whole installation's verdict, and how many Users are in each; it names nobody. */
+export type InstallationHealthReport = Schemas["InstallationHealthResponse"]
 /** An Installation Status verdict, as People filters and sorts by it. */
 export type Verdict = PersonRow["verdict"]
 /** How much one User uses: counts only, never what their records say. */
@@ -230,12 +232,13 @@ export type PeoplePage = Schemas["UserPageResponse"]
 type PeopleParams = NonNullable<paths["/api/v1/users"]["get"]["parameters"]["query"]>
 export type PeopleSort = NonNullable<PeopleParams["sort"]>
 export type SortOrder = NonNullable<PeopleParams["order"]>
-/** What the People page asks for; an empty role or state matches everyone. */
+/** What the People page asks for; an empty role, state, or verdict matches everyone. */
 export type PeopleQuery = {
   /** Part of an email, in any case. */
   search: string
   role: PersonRole | ""
   state: PersonState | ""
+  verdict: Verdict | ""
   sort: PeopleSort
   order: SortOrder
   /** From 1. */
@@ -287,12 +290,13 @@ export const api = {
   checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
   resetPassword: (token: string, password: string) =>
     call("/api/v1/password-resets", "post", { body: { token, password } }),
-  people: ({ search, role, state, sort, order, page }: PeopleQuery) =>
+  people: ({ search, role, state, verdict, sort, order, page }: PeopleQuery) =>
     call("/api/v1/users", "get", {
       query: {
         ...(search.trim() ? { search: search.trim() } : {}),
         role: role || null,
         state: state || null,
+        verdict: verdict || null,
         sort,
         order,
         page,
@@ -306,6 +310,11 @@ export const api = {
   issuePasswordResetLink: (userId: string) =>
     call("/api/v1/users/{user_id}/password-reset-links", "post", { params: { user_id: userId } }),
   deletePerson: (userId: string) => call("/api/v1/users/{user_id}", "delete", { params: { user_id: userId } }),
+  /** What the Operator Overview shows about one person; 404 for anyone but an administrator. */
+  personOverview: (userId: string) =>
+    call("/api/v1/users/{user_id}/overview", "get", { params: { user_id: userId } }),
+  /** Every User's verdict counted, and incidents about the installation itself; names nobody. */
+  installationHealth: () => call("/api/v1/installation/health", "get"),
   dashboard: () => call("/api/v1/dashboard", "get"),
   rules: () => call("/api/v1/rules", "get"),
   rule: (ruleId: string) => call("/api/v1/rules/{rule_id}", "get", { params: { rule_id: ruleId } }),

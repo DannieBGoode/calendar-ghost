@@ -16,7 +16,13 @@ export function defaultSettingsTab(search: string): SettingsTab {
   return SETTINGS_ARRIVAL_PARAMS.some((name) => params.has(name)) ? "connections" : DEFAULT_SETTINGS_TAB
 }
 
-export type AppLocation = { view: AppView; ruleId: string | null; settingsTab?: SettingsTab }
+export type AppLocation = {
+  view: AppView
+  ruleId: string | null
+  settingsTab?: SettingsTab
+  /** One person's page under People. */
+  personId?: string
+}
 /**
  * Changes view. A notice is announced on arrival; `createRule` opens the rule builder; `search`
  * carries filters such as `?rule=` into the destination.
@@ -33,6 +39,7 @@ export type ViewOptions = {
 export type ViewChange = (view: AppView, options?: ViewOptions) => void
 export type OpenRule = (ruleId: string, options?: ViewOptions) => void
 export type OpenSettingsTab = (tab: SettingsTab) => void
+export type OpenPerson = (personId: string) => void
 
 export function activitySearch(ruleId: string): string {
   return `?rule=${encodeURIComponent(ruleId)}`
@@ -60,21 +67,26 @@ const PATH_VIEWS = new Map(
   Object.entries(APP_VIEW_PATHS).map(([view, path]) => [path, view as AppView]),
 )
 const RULE_PATH = /^\/rules\/([^/]+)$/
+const PERSON_PATH = /^\/people\/([^/]+)$/
 const SETTINGS_TAB_PATH = /^\/settings\/([^/]+)$/
 
 function normalize(pathname: string): string {
   return pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname
 }
 
-function ruleIdFromPath(pathname: string): string | null {
-  const encoded = RULE_PATH.exec(pathname)?.[1]
+function idFromPath(pattern: RegExp, pathname: string): string | null {
+  const encoded = pattern.exec(pathname)?.[1]
   if (encoded === undefined) return null
   try {
-    const ruleId = decodeURIComponent(encoded)
-    return ruleId.trim() ? ruleId : null
+    const id = decodeURIComponent(encoded)
+    return id.trim() ? id : null
   } catch {
     return null
   }
+}
+
+function ruleIdFromPath(pathname: string): string | null {
+  return idFromPath(RULE_PATH, pathname)
 }
 
 function settingsTabFromPath(pathname: string): SettingsTab | null {
@@ -86,6 +98,8 @@ export function appLocationFromPathname(pathname: string): AppLocation {
   const normalized = normalize(pathname)
   const ruleId = ruleIdFromPath(normalized)
   if (ruleId !== null) return { view: "rules", ruleId }
+  const personId = idFromPath(PERSON_PATH, normalized)
+  if (personId !== null) return { view: "people", ruleId: null, personId }
   const settingsTab = settingsTabFromPath(normalized)
   if (settingsTab !== null) return { view: "settings", ruleId: null, settingsTab }
   return { view: PATH_VIEWS.get(normalized) ?? "overview", ruleId: null }
@@ -115,19 +129,29 @@ export function appPathForRule(ruleId: string): string {
   return `${APP_VIEW_PATHS.rules}/${encodeURIComponent(ruleId)}`
 }
 
+export function appPathForPerson(personId: string): string {
+  return `${APP_VIEW_PATHS.people}/${encodeURIComponent(personId)}`
+}
+
 export function appPathForSettingsTab(tab: SettingsTab): string {
   return `${APP_VIEW_PATHS.settings}/${tab}`
 }
 
 export function appPathForLocation(location: AppLocation): string {
   if (location.ruleId !== null) return appPathForRule(location.ruleId)
+  if (location.view === "people" && location.personId) return appPathForPerson(location.personId)
   if (location.view === "settings" && location.settingsTab) return appPathForSettingsTab(location.settingsTab)
   return appPathForView(location.view)
 }
 
 export function isKnownAppPath(pathname: string): boolean {
   const normalized = normalize(pathname)
-  return PATH_VIEWS.has(normalized) || ruleIdFromPath(normalized) !== null || settingsTabFromPath(normalized) !== null
+  return (
+    PATH_VIEWS.has(normalized) ||
+    ruleIdFromPath(normalized) !== null ||
+    idFromPath(PERSON_PATH, normalized) !== null ||
+    settingsTabFromPath(normalized) !== null
+  )
 }
 
 export function isPlainLeftClick(event: {
