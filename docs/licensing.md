@@ -25,9 +25,10 @@ The future hosted service runs the code in this repository for people who do not
 themselves. It has no closed components and no private fork: billing, plans, and the operator
 overview will be public code in this repository, so anyone can read what the hosted service runs.
 
-Billing and plan limits only apply when Commercial Mode is on, and it is off by default. On a
-self-hosted installation, every user has every feature, and no billing code contacts a payment
-provider. The hosted service charges for operating Calendar Ghost, not for features: the Community
+Plan limits apply only when an installation's own administrator turns Plans on, and billing
+only when Commercial Mode is also on; both are off by default. Unless its administrator chooses
+otherwise, every user of a self-hosted installation has every feature, and no billing code contacts
+a payment provider ([ADR 0028](adr/0028-plans-apart-from-commercial-mode.md)). The hosted service charges for operating Calendar Ghost, not for features: the Community
 Edition will not have features removed, limited, or held back to push people toward it. See
 [ADR 0023](adr/0023-hosted-service-runs-the-open-codebase.md).
 

@@ -91,6 +91,9 @@ def initialize_database(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     migrations = files("calendar_sync.infrastructure.persistence")
     with closing(open_connection(path)) as connection:
+        # Recorded in the database file, so every later connection writes ahead too: a reader then
+        # never keeps the scheduler from committing, nor the scheduler a request from reading.
+        connection.execute("PRAGMA journal_mode = WAL")
         connection.executescript(migrations.joinpath("0001_initial.sql").read_text())
         connection.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",

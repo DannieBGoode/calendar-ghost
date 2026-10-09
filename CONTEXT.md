@@ -20,15 +20,30 @@ A future commercial service where the project runs the Community Edition for peo
 to operate it themselves, with Commercial Mode on. It sells managed upgrades, backups, support, and
 availability. It runs the same open code, with no closed components (ADR 0023).
 
+**Plan**:
+A named set of limits, such as how many rules a User may have or how often they synchronize, that
+an Installation Administrator defines and assigns to Users. A Plan limits only how much a User
+uses, never how a rule projects events or how a User sees and recovers from a problem. Plans are an installation setting that
+is off by default; when off, every User has every feature with no limits (ADR 0028).
+_Avoid_: Tier, subscription, quota
+
+**Plan Hold**:
+The pause of a User's Directional Sync Rules beyond their Plan's rule limit, applied after a 7-day
+grace period. The User chooses which rules stay enabled; otherwise the most recently created are
+held. A held rule keeps its mappings and projections, and resumes by itself without a new preview
+once the User's limit allows it again.
+_Avoid_: Suspension, plan pause, downgrade deletion
+
 **Commercial Mode**:
-The installation setting that enables plans, plan limits, and billing. It is off by default. When it
-is off, every user has every feature and no billing code contacts a payment provider. Only the
+The installation setting that lets a payment provider set a User's Plan. It is off by default and
+requires Plans to be on. When it is off, no billing code runs or contacts a payment provider. The
 Hosted Service turns it on.
+_Avoid_: SaaS mode, billing mode
 
 ## Authorization
 
 **Connected Account**:
-A calendar-service identity authorized on this installation, such as a Google account authorized through one OAuth grant. It belongs to exactly one Provider Kind. A sync rule may use different connected accounts, even of different providers, for its source and destination calendars.
+A calendar-service identity authorized on this installation by one User, such as a Google account authorized through one OAuth grant. It belongs to exactly one Provider Kind and one User. Two Users may each connect the same calendar-service identity; each gets a Connected Account of their own, and neither learns of the other's. A sync rule may use different connected accounts, even of different providers, for its source and destination calendars, but both belong to the rule's User.
 _Avoid_: Account, user, login
 
 **Provider Kind**:
@@ -209,25 +224,53 @@ A persistent operational condition requiring attention, such as expired authoriz
 _Avoid_: Error message, failure log
 
 **Incident Notification**:
-A deduplicated notice sent when an incident opens or resolves. The Web UI always retains the incident; an installation may additionally configure SMTP email or a generic JSON webhook.
+A deduplicated notice sent when an incident opens or resolves. It goes to the User who owns the incident's rule or Connected Account, never to another User; the Web UI always retains the incident, and the User receives email too when the installation can send it, unless they turn it off. Incidents about the installation itself, such as a stalled scheduler, go to the Installation Administrators' SMTP recipient or generic JSON webhook.
 _Avoid_: Error alert, retry notification
 
 **Installation Status**:
-The server's one verdict on the installation's health (stalled, stopped, review, waiting, paused, setup, or healthy) with every current problem, most urgent first. The Overview, the status API, and MCP all show it. It names rules by their calendars and never carries event content, calendar IDs, or account emails. A rule stopped by Lapsed Authorization is reported as stopped for that cause; the Web UI names the account from its own records, so monitors and agents learn only that a Google account needs reauthorization.
+The server's one verdict on the installation's health as it affects one User (stalled, stopped, review, waiting, paused, setup, or healthy) with every current problem, most urgent first. The Overview, the status API, and MCP all show it. It covers that User's rules and any installation problem that affects them, such as a stalled scheduler. It names rules by their calendars and never carries event content, calendar IDs, or account emails. A rule stopped by Lapsed Authorization is reported as stopped for that cause; the Web UI names the account from its own records, so monitors and agents learn only that a Google account needs reauthorization.
 _Avoid_: Health check, status page
+
+**Installation Health**:
+The one verdict on the whole installation that Installation Administrators and their monitors read: installation incidents plus how many Users are in each Installation Status verdict. It names no rule, calendar, or User.
+_Avoid_: Global status, admin status
 
 ## Access
 
+**User**:
+A person who signs in to an installation. Every Connected Account, Directional Sync Rule, Integration Token, incident, and Audit Entry belongs to exactly one User, and no User sees another's. Calendar sharing between people stays in the calendar provider, not in Calendar Ghost.
+_Avoid_: Tenant, customer, member, login
+
 **Installation Administrator**:
-The single local identity authorized to configure the installation, connected accounts, rules, and incident delivery. The initial release does not have additional users or roles.
-_Avoid_: User, owner, superuser
+A User who holds the role that operates the installation. The first User holds it, it may be given to other Users, and the last one cannot lose it. It grants installation-wide operational powers, never sight of another User's event content; an Installation Administrator's own rules and accounts are as private as anyone's.
+_Avoid_: Owner, superuser, admin user
+
+**Operator Overview**:
+The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels, plus the User's email, plan, last sign-in, state, and resource use. It is the same on every installation, never shows calendar names, account emails, or event content, and every User can see exactly what it shows about them.
+_Avoid_: Admin dashboard, user management, support view
+
+**Disabled User**:
+A User an Installation Administrator has stopped from signing in. Their rules are held and resume by themselves when the User is enabled again; nothing they own is removed.
+_Avoid_: Suspended user, banned user
+
+**User Deletion**:
+The permanent removal of a User and everything they own. Their projections are deleted from their calendars by default; a User deleting themself may keep them as ordinary events instead, but an Installation Administrator deleting another User cannot. It removes them from the live database; a backup taken before it keeps their records until the backup rotates out.
+_Avoid_: Account deletion, user removal
+
+**Registration Policy**:
+The installation setting that decides who may become a User: Invitation Only, the default, or Open, where anyone may sign up. Open requires the installation to send email, so new Users can verify their address and reset their own password.
+_Avoid_: Signup mode, public registration
+
+**Invitation**:
+A single-use, expiring link an Installation Administrator creates so one person can become a User and choose their own credentials. It works under either Registration Policy. A Password Reset Link is its counterpart for an existing User; neither lets the administrator see or set a password.
+_Avoid_: Invite code, admin-created account
 
 **Public Health Status**:
 The minimal unauthenticated indication that the service is running. Calendar, account, rule, OAuth, audit, and incident details require an administrator session. Installation Status is its authenticated counterpart.
 _Avoid_: Public dashboard, anonymous status page
 
 **Integration Token**:
-A named credential the Installation Administrator issues so a monitor or AI agent can read Installation Status, and nothing else. Only its hash is stored; it is shown once and can be revoked.
+A named credential a User issues so a monitor or AI agent can read their Installation Status, and nothing else; an Installation Administrator's token may also read Installation Health. Only its hash is stored; it is shown once and can be revoked.
 _Avoid_: API key, personal access token
 
 **Installation Master Key**:

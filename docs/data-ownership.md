@@ -47,7 +47,8 @@ The service does not contact a Calendar Ghost account, send analytics, or upload
 A usable backup contains both the SQLite data and the secrets that are intentionally kept outside
 the database:
 
-- the application data directory, including `calendar-sync.db` and any retained local logs;
+- the application data directory, including `calendar-sync.db` with its `calendar-sync.db-wal` and
+  `calendar-sync.db-shm` files, and any retained local logs;
 - the Installation Master Key;
 - the Google OAuth client settings and notification settings from the operator's protected `.env`
   or secret store; and

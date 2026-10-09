@@ -1,5 +1,8 @@
 # Integration Tokens, Installation Status, and MCP
 
+Amended by [ADR 0030](0030-users-administrators-and-registration.md): tokens belong to a User and
+read that User's Installation Status; an `installation:read` scope reads Installation Health.
+
 ## Context
 
 `/health` reports only that the process is running. Everything else, including whether a rule is

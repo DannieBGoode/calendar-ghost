@@ -10,9 +10,10 @@ identifier, hosted account, billing path, or remote control plane. This keeps th
 boundary visible in the code and makes backups and ownership understandable to the operator.
 
 The future hosted service runs this same codebase (ADR 0023). Multi-user support, billing, and an
-operator overview will be added here, with billing and plan limits behind Commercial Mode, which is
-off by default. That work needs its own ADRs for persistence and per-user data isolation before it
-starts; until then, do not add user ownership, billing, or plans to the runtime piecemeal.
+operator overview will be added here, with plan limits behind the Plans setting and billing behind
+Commercial Mode, both off by default (ADR 0028). ADR 0029 decides its persistence and per-User isolation and ADR 0030 its identity and
+registration; build it in the phases of `docs/superpowers/specs/2026-10-09-multi-user-design.md`,
+not piecemeal.
 
 ## Bounded contexts
 
