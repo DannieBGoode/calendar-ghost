@@ -24,6 +24,8 @@ class StatusPrincipal:
     result: StatusAccess
     user: UserId | None = None
     """The User whose Installation Status is read, when access is granted."""
+    scopes: frozenset[IntegrationTokenScope] = frozenset()
+    """What a token may read; empty for a session, whose route decides."""
 
 
 def status_access(
@@ -31,16 +33,21 @@ def status_access(
     sessions: Sessions,
     authorization: str | None,
     session: str | None,
+    scopes: frozenset[IntegrationTokenScope] = frozenset({IntegrationTokenScope.STATUS_READ}),
 ) -> StatusPrincipal:
-    """A present Authorization header decides alone, so a broken token is never hidden."""
+    """A present Authorization header decides alone, so a broken token is never hidden.
+
+    A token must carry one of `scopes`; a session stands for every scope, and the route decides
+    what its User may read.
+    """
     if authorization is not None:
         scheme, _, credential = authorization.partition(" ")
         summary = tokens.authenticate(credential.strip()) if scheme.lower() == "bearer" else None
         if summary is None:
             return StatusPrincipal(StatusAccess.UNAUTHENTICATED)
-        if summary.scope is not IntegrationTokenScope.STATUS_READ:
+        if not scopes & summary.scopes:
             return StatusPrincipal(StatusAccess.FORBIDDEN)
-        return StatusPrincipal(StatusAccess.GRANTED, summary.owner)
+        return StatusPrincipal(StatusAccess.GRANTED, summary.owner, summary.scopes)
     user = sessions.user_of(session) if session is not None else None
     if user is not None:
         return StatusPrincipal(StatusAccess.GRANTED, user)

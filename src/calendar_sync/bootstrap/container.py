@@ -36,9 +36,14 @@ from calendar_sync.application.administration import (
 from calendar_sync.application.health import RuleHealth
 from calendar_sync.application.identity import (
     ChangeOwnPassword,
+    SetNotificationEmail,
     SetOwnEmail,
     SetUpInstallation,
     SignIn,
+)
+from calendar_sync.application.installation_health import (
+    GetInstallationHealth,
+    InstallationNotifications,
 )
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
@@ -104,7 +109,9 @@ from calendar_sync.infrastructure.log_files import RotatingLogFiles
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
+    OwnerNotifier,
     SmtpChannel,
+    SmtpServer,
     WebhookChannel,
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
@@ -138,6 +145,7 @@ from calendar_sync.infrastructure.providers.routing import (
 )
 from calendar_sync.infrastructure.scheduling import (
     ScheduledServices,
+    SchedulerWatch,
     SyncScheduler,
     SystemClock,
 )
@@ -192,6 +200,7 @@ class IdentityServices:
     set_up: SetUpInstallation
     sign_in: SignIn
     set_own_email: SetOwnEmail
+    set_notification_email: SetNotificationEmail
     change_own_password: ChangeOwnPassword
 
 
@@ -230,6 +239,11 @@ class Container:
     authorization: AccountAuthorization | None
     account_calendars: AccountCalendars | None
     scheduler: SyncScheduler | None
+    scheduler_watch: SchedulerWatch | None
+    """Tells the installation's channels when the scheduler stops completing passes."""
+    installation_health: GetInstallationHealth
+    sends_email: bool
+    """Whether Incident Notifications can also reach each User by email."""
     user_services: Callable[[UserId], UserServices]
 
     def for_user(self, user_id: UserId) -> UserServices:
@@ -266,7 +280,11 @@ class Adapters:
     database_storage: DatabaseStorage
     integration_tokens: Callable[[UserId], IntegrationTokens]
     token_authentication: IntegrationTokenAuthentication
-    notifications: IncidentNotifications | None = None
+    notifications: Callable[[UserId], IncidentNotifications | None] = lambda _owner: None
+    """Each User's own Incident Notifications, by email when the installation sends it."""
+    installation_notifications: InstallationNotifications | None = None
+    """The installation's SMTP recipient and webhook, which hear only installation incidents."""
+    sends_email: bool = False
     accounts: Callable[[UserId], ConnectedAccountRepository] | None = None
     authorization: AccountAuthorization | None = None
     """Connects and reauthorizes accounts through the provider's OAuth flow."""
@@ -307,6 +325,8 @@ def build_adapters(settings: Settings) -> Adapters:
     # Source Change values are sealed with a key derived from the master key (ADR 0017).
     history = HistoryCipher(settings.master_key) if settings.master_key else None
     tokens = SqliteIntegrationTokens(database, clock, ids)
+    users = SqliteUserDirectory(database)
+    mail = _mail_server(settings)
     adapters = Adapters(
         unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
         installation_units=SqliteInstallationUnitOfWorkFactory(database),
@@ -314,7 +334,7 @@ def build_adapters(settings: Settings) -> Adapters:
         clock=clock,
         ids=ids,
         run_ids=UuidRunIdGenerator(),
-        users=SqliteUserDirectory(database),
+        users=users,
         sessions=SqliteSessions(database, clock),
         passwords=ScryptPasswords(),
         sign_in_throttle=MemorySignInThrottle(clock),
@@ -328,6 +348,9 @@ def build_adapters(settings: Settings) -> Adapters:
         database_storage=SqliteStorage(database),
         integration_tokens=tokens.for_user,
         token_authentication=tokens,
+        notifications=lambda owner: OwnerNotifier(users, owner, mail) if mail else None,
+        installation_notifications=_installation_notifier(settings, mail),
+        sends_email=mail is not None,
     )
     if not settings.master_key:
         return adapters
@@ -354,7 +377,6 @@ def build_adapters(settings: Settings) -> Adapters:
             {ProviderKind.GOOGLE: GoogleCalendarProvider(google_oauth.service_for, clock)},
         ),
         call_stats=ContextProviderCallStats(),
-        notifications=_notifier(settings),
     )
 
 
@@ -395,6 +417,18 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         authorization=adapters.authorization,
         account_calendars=adapters.account_calendars,
         scheduler=scheduler,
+        scheduler_watch=(
+            SchedulerWatch(scheduler, adapters.installation_notifications, adapters.clock)
+            if scheduler is not None and adapters.installation_notifications is not None
+            else None
+        ),
+        installation_health=GetInstallationHealth(
+            adapters.users,
+            lambda user: user_services(user).get_installation_status.execute().health,
+            scheduler,
+            adapters.clock,
+        ),
+        sends_email=adapters.sends_email,
         user_services=user_services,
     )
 
@@ -407,6 +441,7 @@ def _identity(adapters: Adapters) -> IdentityServices:
         set_up=SetUpInstallation(users, passwords, sessions, adapters.ids, adapters.clock),
         sign_in=SignIn(users, passwords, sessions, adapters.sign_in_throttle, adapters.clock),
         set_own_email=SetOwnEmail(users, passwords),
+        set_notification_email=SetNotificationEmail(users),
         change_own_password=ChangeOwnPassword(users, passwords, sessions),
     )
 
@@ -462,7 +497,7 @@ def _compose_user(
         adapters.incidents(user_id),
         clock,
         locks,
-        adapters.notifications,
+        adapters.notifications(user_id),
     )
     call_stats = adapters.call_stats
     remove_sync_rule = RemoveSyncRule(
@@ -545,20 +580,24 @@ def _compose_user(
     )
 
 
-def _notifier(settings: Settings) -> IncidentNotifier | None:
+def _mail_server(settings: Settings) -> SmtpServer | None:
+    """The installation's mail server, once it has a host and a sender to send as."""
+    if not (settings.smtp_host and settings.smtp_sender):
+        return None
+    return SmtpServer(
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        sender=settings.smtp_sender,
+        username=settings.smtp_username,
+        password=settings.smtp_password,
+        use_starttls=settings.smtp_starttls,
+    )
+
+
+def _installation_notifier(settings: Settings, mail: SmtpServer | None) -> IncidentNotifier | None:
     channels: list[NotificationChannel] = []
     if settings.incident_webhook_url:
         channels.append(WebhookChannel(settings.incident_webhook_url))
-    if settings.smtp_host and settings.smtp_sender and settings.smtp_recipient:
-        channels.append(
-            SmtpChannel(
-                host=settings.smtp_host,
-                port=settings.smtp_port,
-                sender=settings.smtp_sender,
-                recipient=settings.smtp_recipient,
-                username=settings.smtp_username,
-                password=settings.smtp_password,
-                use_starttls=settings.smtp_starttls,
-            )
-        )
+    if mail is not None and settings.smtp_recipient:
+        channels.append(SmtpChannel(mail, settings.smtp_recipient))
     return IncidentNotifier(channels) if channels else None

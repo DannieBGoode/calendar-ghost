@@ -6,8 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from calendar_sync.application.errors import IncorrectCredentials
+from calendar_sync.application.identity import SetOwnEmail, SignIn
 from calendar_sync.infrastructure.persistence import sqlite as sqlite_module
 from calendar_sync.infrastructure.persistence.sqlite import MigrationFailed, initialize_database
+from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
+from calendar_sync.infrastructure.scheduling import SystemClock
+from calendar_sync.infrastructure.security import ScryptPasswords, hash_password
+from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 
 ADMIN_HASH = "scrypt$stored-admin-hash"
 LATEST_VERSION = max(version for version, _ in sqlite_module._FORWARD_MIGRATIONS)
@@ -127,6 +133,10 @@ def test_upgrading_makes_the_administrator_user_one_and_gives_them_every_record(
             owners = connection.execute(f"SELECT DISTINCT user_id FROM {table}").fetchall()
             assert owners == [(user_id,)], table
         assert connection.execute("SELECT rule_id FROM rule_failures").fetchall() == [("rule-1",)]
+        # Existing monitors keep the answer they had: the whole installation, now User #1's.
+        assert connection.execute("SELECT scopes FROM integration_tokens").fetchall() == [
+            ("installation:read status:read",)
+        ]
         assert connection.execute("SELECT COUNT(*) FROM oauth_states").fetchone() == (0,)
         versions = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
         assert 21 in versions
@@ -187,3 +197,27 @@ def test_a_fresh_database_does_not_recreate_the_single_administrator_tables(
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master")}
     assert "users" in tables
     assert not tables & {"installation_admin", "admin_sessions"}
+
+
+def test_the_upgraded_administrator_signs_in_by_password_alone_until_they_add_an_email(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    database_at_version(database, 20)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO installation_admin VALUES (1, ?, '2026-01-01T00:00:00+00:00')",
+            (hash_password("the administrator's password"),),
+        )
+    initialize_database(database)
+    users, passwords = SqliteUserDirectory(database), ScryptPasswords()
+    sessions = SqliteSessions(database, SystemClock())
+    sign_in = SignIn(users, passwords, sessions, MemorySignInThrottle(SystemClock()), SystemClock())
+
+    upgraded = sign_in.execute(None, "the administrator's password", "client").user_id
+    SetOwnEmail(users, passwords).execute(upgraded, "admin@example.test", None)
+
+    with pytest.raises(IncorrectCredentials):
+        sign_in.execute(None, "the administrator's password", "client")
+    by_email = sign_in.execute("admin@example.test", "the administrator's password", "client")
+    assert by_email.user_id == upgraded

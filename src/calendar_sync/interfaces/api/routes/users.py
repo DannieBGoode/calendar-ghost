@@ -110,6 +110,8 @@ class AdministrationServices(Protocol):
     def identity(self) -> Identity: ...
     @property
     def secure_cookies(self) -> bool: ...
+    @property
+    def sends_email(self) -> bool: ...
 
 
 Services = Annotated[AdministrationServices, Depends(app_services)]
@@ -187,7 +189,7 @@ def accept_invitation(
     except EmailTaken as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id))
+    return signed_in(services.identity.users.get(session.user_id), services.sends_email)
 
 
 @router.post("/api/v1/password-resets/check", response_model=LinkStatusResponse)

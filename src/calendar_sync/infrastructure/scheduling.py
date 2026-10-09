@@ -14,10 +14,16 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.health import RunHealth
+from calendar_sync.application.installation_health import (
+    InstallationIncidentKind,
+    InstallationNotifications,
+    installation_incidents,
+)
 from calendar_sync.application.ports import (
     Clock,
     InstallationUnitOfWorkFactory,
     ScheduledRule,
+    SchedulerHeartbeat,
     SchedulerProgress,
 )
 from calendar_sync.application.retry import with_retries
@@ -146,6 +152,40 @@ class SyncScheduler:
         listed = full or result.listed_in_full
         _record_success(services.health, rule, floor if listed else None, result.run_id)
         return True
+
+
+class SchedulerWatch:
+    """Watches the scheduler from outside its loop, so a scheduler that stops completing passes
+    is reported to the installation's channels once, when it stalls (ADR 0030)."""
+
+    def __init__(
+        self,
+        heartbeat: SchedulerHeartbeat,
+        notifications: InstallationNotifications,
+        clock: Clock,
+        interval_seconds: int = 60,
+    ) -> None:
+        self._heartbeat = heartbeat
+        self._notifications = notifications
+        self._clock = clock
+        self._interval_seconds = interval_seconds
+        self._open: frozenset[InstallationIncidentKind] = frozenset()
+
+    async def run_forever(self) -> None:
+        while True:
+            try:
+                self.check()
+            except Exception:
+                logger.exception("Could not check the scheduler; checking again shortly")
+            await asyncio.sleep(self._interval_seconds)
+
+    def check(self) -> None:
+        """Notify each installation incident that has opened since the last check."""
+        incidents = installation_incidents(self._heartbeat.progress(), self._clock.now())
+        opened = [incident for incident in incidents if incident.kind not in self._open]
+        self._open = frozenset(incident.kind for incident in incidents)
+        for incident in opened:
+            self._notifications.installation_incident_opened(incident)
 
 
 def fairly_ordered(rules: Sequence[ScheduledRule]) -> tuple[ScheduledRule, ...]:

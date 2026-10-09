@@ -211,12 +211,21 @@ def _removal_running(summary: SyncRuleSummary) -> bool:
 
 
 def _stalled(scheduler: SchedulerProgress | None, now: datetime) -> bool:
-    if scheduler is None:
-        return True
+    return scheduler is None or stalled_since(scheduler, now) is not None
+
+
+def stalled_since(scheduler: SchedulerProgress, now: datetime) -> datetime | None:
+    """Since when a scheduler stopped doing its job; None while it does it (ADR 0024).
+
+    A pass running for longer than PASS_LIMIT has stalled since it started; otherwise the
+    scheduler has stalled since its last completed pass, or its start, once that is longer ago
+    than STALL_AFTER.
+    """
     if scheduler.pass_started_at is not None:
-        return now - scheduler.pass_started_at > PASS_LIMIT
+        started = scheduler.pass_started_at
+        return started if now - started > PASS_LIMIT else None
     baseline = scheduler.last_completed_at or scheduler.running_since
-    return now - baseline > STALL_AFTER
+    return baseline if now - baseline > STALL_AFTER else None
 
 
 def _accounts_of(visible: Sequence[SyncRuleSummary], rule_ids: set[str | None]) -> set[str]:

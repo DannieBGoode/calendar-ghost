@@ -15,7 +15,11 @@ from calendar_sync.application.errors import (
     RemovalRequiresAuthorization,
     RemovalRequiresProvider,
 )
-from calendar_sync.application.identity import ChangeOwnPassword, SetOwnEmail
+from calendar_sync.application.identity import (
+    ChangeOwnPassword,
+    SetNotificationEmail,
+    SetOwnEmail,
+)
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, User, UserId
 from calendar_sync.domain.model import ProjectionHandling
 from calendar_sync.interfaces.api.dependencies import (
@@ -31,6 +35,7 @@ from calendar_sync.interfaces.api.routes.users import deletion_response
 from calendar_sync.interfaces.api.schemas import (
     ChangePasswordRequest,
     DeleteOwnAccountRequest,
+    NotificationPreferenceRequest,
     SetEmailRequest,
     SignedInUserResponse,
     UserDeletionResponse,
@@ -45,6 +50,8 @@ class OwnAccountAdministration(Protocol):
 class AccountIdentity(Identity, Protocol):
     @property
     def set_own_email(self) -> SetOwnEmail: ...
+    @property
+    def set_notification_email(self) -> SetNotificationEmail: ...
     @property
     def change_own_password(self) -> ChangeOwnPassword: ...
 
@@ -72,6 +79,17 @@ def set_email(payload: SetEmailRequest, user: SignedIn, services: Services) -> S
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except EmailTaken as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
+    return user_response(changed)
+
+
+@router.put("/api/v1/account/notifications", response_model=SignedInUserResponse)
+def set_notifications(
+    payload: NotificationPreferenceRequest,
+    services: Services,
+    user_id: Annotated[UserId, Depends(current_user)],
+) -> SignedInUserResponse:
+    """Whether the User's Incident Notifications also come by email; the Web UI keeps them all."""
+    changed = services.identity.set_notification_email.execute(user_id, payload.notify_by_email)
     return user_response(changed)
 
 

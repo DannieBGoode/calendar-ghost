@@ -91,6 +91,7 @@ _FORWARD_MIGRATIONS = (
     (20, "0020_lapsed_authorization.sql"),
     (21, "0021_users.sql"),
     (22, "0022_registration.sql"),
+    (23, "0023_token_scopes.sql"),
 )
 _CHECKED_FROM = 21
 """Migrations from here on prove every reference before committing. Earlier ones ran before

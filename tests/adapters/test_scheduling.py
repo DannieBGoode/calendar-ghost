@@ -16,12 +16,17 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.health import RuleHealth, RunHealth
+from calendar_sync.application.installation_health import (
+    InstallationIncident,
+    InstallationIncidentKind,
+)
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
     IncidentMessage,
+    IncidentNotifications,
     IncidentReport,
     IncidentResolution,
     InstallationUnitOfWork,
@@ -42,11 +47,6 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
     SyncRuleState,
-)
-from calendar_sync.infrastructure.notifications import (
-    IncidentNotification,
-    IncidentNotifier,
-    NotificationChannel,
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import (
@@ -69,6 +69,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
 )
 from calendar_sync.infrastructure.scheduling import (
     ScheduledServices,
+    SchedulerWatch,
     SyncScheduler,
     SystemClock,
     fairly_ordered,
@@ -78,11 +79,13 @@ from tests.helpers import endpoint, rule
 from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, sqlite_units
 
 
-class RecordingChannel(NotificationChannel):
-    def __init__(self) -> None:
-        self.incidents: list[IncidentNotification] = []
+class RecordingNotifications:
+    """The owning User's Incident Notifications, as they are delivered."""
 
-    def send(self, incident: IncidentNotification) -> None:
+    def __init__(self) -> None:
+        self.incidents: list[IncidentReport] = []
+
+    def incident_opened(self, incident: IncidentReport, at: datetime) -> None:
         self.incidents.append(incident)
 
 
@@ -145,7 +148,7 @@ def _scheduled(rule_: SyncRule) -> ScheduledRule:
 def _rule_health(
     database: Path,
     unit_of_work: UnitOfWorkFactory,
-    notifier: IncidentNotifier | None = None,
+    notifier: IncidentNotifications | None = None,
     *,
     locks: RuleLocks | None = None,
 ) -> RuleHealth:
@@ -204,15 +207,15 @@ def test_open_incident_notification_is_deduplicated(tmp_path: Path) -> None:
     with unit_of_work() as uow:
         uow.rules.add(rule())
         uow.commit()
-    channel = RecordingChannel()
-    health = _rule_health(database, unit_of_work, IncidentNotifier([channel]))
+    channel = RecordingNotifications()
+    health = _rule_health(database, unit_of_work, channel)
     failure = ProviderFailure(ProviderFailureKind.PERMANENT, "synthetic rejection")
 
     health.record_failure(rule(), failure)
     health.record_failure(rule(), failure)
 
     assert len(channel.incidents) == 1
-    assert channel.incidents[0].rule_id == rule().id.value
+    assert channel.incidents[0].rule_id == rule().id
 
 
 def test_success_resolves_existing_incident_and_resets_failure_count(tmp_path: Path) -> None:
@@ -345,8 +348,8 @@ def test_blocked_removal_opens_one_incident_that_completed_removal_resolves(
     with unit_of_work() as uow:
         uow.rules.add(rule(state=SyncRuleState.REMOVING))
         uow.commit()
-    channel = RecordingChannel()
-    health = _rule_health(database, unit_of_work, IncidentNotifier([channel]))
+    channel = RecordingNotifications()
+    health = _rule_health(database, unit_of_work, channel)
     failure = ProviderFailure(ProviderFailureKind.AUTHORIZATION, "synthetic denial")
 
     health.removal_blocked(rule().id, failure, attempted_at=datetime.now(UTC))
@@ -710,13 +713,11 @@ def test_blocked_incident_is_notified_after_the_rule_lock_is_released(tmp_path: 
     locks = RuleLocks()
     held: list[bool] = []
 
-    class LockCheckingChannel(NotificationChannel):
-        def send(self, incident: IncidentNotification) -> None:
+    class LockChecking:
+        def incident_opened(self, incident: IncidentReport, at: datetime) -> None:
             held.append(locks.for_rule(rule().id).locked())
 
-    health = _rule_health(
-        database, unit_of_work, IncidentNotifier([LockCheckingChannel()]), locks=locks
-    )
+    health = _rule_health(database, unit_of_work, LockChecking(), locks=locks)
 
     health.record_full_pass(rule().id, 1)
 
@@ -1268,3 +1269,53 @@ def test_rules_take_turns_between_users() -> None:
     ordered = fairly_ordered([*many, *few])
 
     assert [item.rule.id.value for item in ordered] == ["mine-0", "theirs", "mine-1", "mine-2"]
+
+
+class Progressing:
+    def __init__(self, progress: SchedulerProgress) -> None:
+        self.current = progress
+
+    def progress(self) -> SchedulerProgress:
+        return self.current
+
+
+class HeardIncidents:
+    def __init__(self) -> None:
+        self.heard: list[InstallationIncident] = []
+
+    def installation_incident_opened(self, incident: InstallationIncident) -> None:
+        self.heard.append(incident)
+
+
+def test_the_installation_hears_once_when_the_scheduler_stalls_and_again_after_it_recovers() -> (
+    None
+):
+    now = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
+    ticking = SchedulerProgress(now - timedelta(days=1), None, now - timedelta(minutes=2))
+    stalled = replace(ticking, last_completed_at=now - timedelta(minutes=20))
+    heartbeat = Progressing(ticking)
+    heard = HeardIncidents()
+
+    class Clock:
+        def now(self) -> datetime:
+            return now
+
+    watch = SchedulerWatch(heartbeat, heard, Clock())
+    watch.check()
+    heartbeat.current = stalled
+    watch.check()
+    watch.check()
+    heartbeat.current = ticking
+    watch.check()
+    heartbeat.current = stalled
+    watch.check()
+
+    assert (
+        heard.heard
+        == [
+            InstallationIncident(
+                InstallationIncidentKind.SCHEDULER_STALLED, now - timedelta(minutes=20)
+            )
+        ]
+        * 2
+    )

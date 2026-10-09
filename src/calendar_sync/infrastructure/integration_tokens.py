@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 USAGE_GRANULARITY = timedelta(minutes=5)
 """A monitor polling every 20 seconds must not write to SQLite on every request."""
 
-_COLUMNS = "id, user_id, name, scope, created_at, last_used_at, revoked_at"
+_COLUMNS = "id, user_id, name, scopes, created_at, last_used_at, revoked_at"
 
 
 class SqliteIntegrationTokens:
@@ -71,13 +71,17 @@ class SqliteUserIntegrationTokens:
         self._clock = clock
         self._ids = ids
 
-    def issue(self, name: str) -> IssuedIntegrationToken:
+    def issue(
+        self,
+        name: str,
+        scopes: frozenset[IntegrationTokenScope] = frozenset({IntegrationTokenScope.STATUS_READ}),
+    ) -> IssuedIntegrationToken:
         cleaned = token_name(name)
         token = TOKEN_PREFIX + secrets.token_urlsafe(32)
         summary = IntegrationTokenSummary(
             self._ids.new(),
             cleaned,
-            IntegrationTokenScope.STATUS_READ,
+            scopes,
             self._clock.now(),
             None,
             None,
@@ -86,7 +90,7 @@ class SqliteUserIntegrationTokens:
         with transaction(self._database_path) as connection:
             connection.execute(
                 """
-                INSERT INTO integration_tokens (id, user_id, name, token_hash, scope, created_at)
+                INSERT INTO integration_tokens (id, user_id, name, token_hash, scopes, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -94,7 +98,7 @@ class SqliteUserIntegrationTokens:
                     self._user.value,
                     summary.name,
                     token_hash(token),
-                    summary.scope.value,
+                    " ".join(sorted(scope.value for scope in scopes)),
                     summary.created_at.isoformat(),
                 ),
             )
@@ -147,7 +151,7 @@ def _summary(row: sqlite3.Row) -> IntegrationTokenSummary:
     return IntegrationTokenSummary(
         id=str(row["id"]),
         name=str(row["name"]),
-        scope=IntegrationTokenScope(str(row["scope"])),
+        scopes=frozenset(IntegrationTokenScope(scope) for scope in str(row["scopes"]).split()),
         created_at=datetime.fromisoformat(str(row["created_at"])),
         last_used_at=_time(row["last_used_at"]),
         revoked_at=_time(row["revoked_at"]),

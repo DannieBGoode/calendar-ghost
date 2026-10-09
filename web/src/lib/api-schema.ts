@@ -44,6 +44,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Notifications
+         * @description Whether the User's Incident Notifications also come by email; the Web UI keeps them all.
+         */
+        put: operations["set_notifications_api_v1_account_notifications_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/password": {
         parameters: {
             query?: never;
@@ -260,6 +280,27 @@ export interface paths {
         };
         /** List Incidents */
         get: operations["list_incidents_api_v1_incidents_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/installation/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Installation Health
+         * @description Installation Health, for an Installation Administrator's session or installation:read
+         *     token; it names no rule, calendar, or User (ADR 0030).
+         */
+        get: operations["installation_health_api_v1_installation_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1179,6 +1220,39 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /**
+         * InstallationHealthResponse
+         * @description The whole installation's verdict; it names no rule, calendar, or User (ADR 0030).
+         */
+        InstallationHealthResponse: {
+            /** Checked At */
+            checked_at: string;
+            /** Disabled Users */
+            disabled_users: number;
+            /** Incidents */
+            incidents: components["schemas"]["InstallationIncidentResponse"][];
+            /** Needs Attention */
+            needs_attention: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy";
+            /** Users */
+            users: {
+                [key: string]: number;
+            };
+        };
+        /** InstallationIncidentResponse */
+        InstallationIncidentResponse: {
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "scheduler_stalled";
+            /** Since */
+            since: string;
+        };
         /** IntegrationTokenResponse */
         IntegrationTokenResponse: {
             /** Created At */
@@ -1191,16 +1265,15 @@ export interface components {
             name: string;
             /** Revoked At */
             revoked_at: string | null;
-            /**
-             * Scope
-             * @constant
-             */
-            scope: "status:read";
+            /** Scopes */
+            scopes: ("installation:read" | "status:read")[];
         };
         /** IssueIntegrationTokenRequest */
         IssueIntegrationTokenRequest: {
             /** Name */
             name: string;
+            /** Scopes */
+            scopes?: ("installation:read" | "status:read")[];
         };
         /** IssuedIntegrationTokenResponse */
         IssuedIntegrationTokenResponse: {
@@ -1214,11 +1287,8 @@ export interface components {
             name: string;
             /** Revoked At */
             revoked_at: string | null;
-            /**
-             * Scope
-             * @constant
-             */
-            scope: "status:read";
+            /** Scopes */
+            scopes: ("installation:read" | "status:read")[];
             /** Token */
             token: string;
         };
@@ -1260,6 +1330,11 @@ export interface components {
             calendar_name: string | null;
             /** Connected Account Id */
             connected_account_id: string;
+        };
+        /** NotificationPreferenceRequest */
+        NotificationPreferenceRequest: {
+            /** Notify By Email */
+            notify_by_email: boolean;
         };
         /** PendingInvitationResponse */
         PendingInvitationResponse: {
@@ -1628,6 +1703,11 @@ export interface components {
         SessionResponse: {
             /** Authenticated */
             authenticated: boolean;
+            /**
+             * Installation Sends Email
+             * @default false
+             */
+            installation_sends_email: boolean;
             user: components["schemas"]["SignedInUserResponse"] | null;
         };
         /** SetEmailRequest */
@@ -1920,6 +2000,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SetEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedInUserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_notifications_api_v1_account_notifications_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferenceRequest"];
             };
         };
         responses: {
@@ -2353,6 +2468,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncidentResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    installation_health_api_v1_installation_health_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationHealthResponse"];
                 };
             };
             /** @description Validation Error */

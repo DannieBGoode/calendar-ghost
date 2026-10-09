@@ -59,8 +59,11 @@ ADMINISTRATOR_ROUTES = {
     ("GET", "/api/v1/storage/logs"),
     ("DELETE", "/api/v1/storage/logs"),
 }
-# Readable with an administrator session or an Integration Token (ADR 0024).
+# Readable with a session or an Integration Token (ADR 0024); Installation Health only by an
+# Installation Administrator's session or installation:read token (ADR 0030).
 STATUS_READER_ROUTES = {("GET", "/api/v1/status")}
+INSTALLATION_READER_ROUTES = {("GET", "/api/v1/installation/health")}
+TOKEN_ROUTES = STATUS_READER_ROUTES | INSTALLATION_READER_ROUTES
 
 
 def _requires(dependant: Dependant, guard: object) -> bool:
@@ -93,7 +96,7 @@ def test_every_non_public_api_route_requires_a_signed_in_user(tmp_path: Path) ->
         for method in route.methods or ()
     }
     assert len(api_routes) > len(PUBLIC_API_ROUTES)
-    assert unguarded == PUBLIC_API_ROUTES | STATUS_READER_ROUTES
+    assert unguarded == PUBLIC_API_ROUTES | TOKEN_ROUTES
     assert readers == STATUS_READER_ROUTES
     assert administered == ADMINISTRATOR_ROUTES
 
@@ -128,7 +131,7 @@ def test_an_integration_token_is_refused_by_every_other_api_route(tmp_path: Path
             if not isinstance(route, APIRoute) or not route.path.startswith("/api/"):
                 continue
             for method in route.methods or ():
-                if (method, route.path) in PUBLIC_API_ROUTES | STATUS_READER_ROUTES:
+                if (method, route.path) in PUBLIC_API_ROUTES | TOKEN_ROUTES:
                     continue
                 path = re.sub(r"\{[^}]+\}", "x", route.path)
                 response = client.request(

@@ -997,6 +997,9 @@ class SignInThrottle(Protocol):
 
 class IntegrationTokenScope(StrEnum):
     STATUS_READ = "status:read"
+    """Its User's Installation Status, over the status API and MCP."""
+    INSTALLATION_READ = "installation:read"
+    """Installation Health; only while its User is an Installation Administrator (ADR 0030)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -1005,7 +1008,7 @@ class IntegrationTokenSummary:
 
     id: str
     name: str
-    scope: IntegrationTokenScope
+    scopes: frozenset[IntegrationTokenScope]
     created_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None
@@ -1024,7 +1027,11 @@ class IssuedIntegrationToken:
 class IntegrationTokens(Protocol):
     """One User's named credentials, issued so monitors and agents can read their status."""
 
-    def issue(self, name: str) -> IssuedIntegrationToken: ...
+    def issue(
+        self,
+        name: str,
+        scopes: frozenset[IntegrationTokenScope] = frozenset({IntegrationTokenScope.STATUS_READ}),
+    ) -> IssuedIntegrationToken: ...
 
     def list(self) -> Sequence[IntegrationTokenSummary]:
         """Every token, newest first, revoked ones last."""

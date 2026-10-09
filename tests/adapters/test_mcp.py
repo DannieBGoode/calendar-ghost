@@ -79,7 +79,7 @@ def test_tools_are_listed_and_read_only(mcp: Any) -> None:
     client.cookies.clear()
     response = _rpc(client, token, "tools/list")
     tools = {tool["name"]: tool for tool in response.json()["result"]["tools"]}
-    assert set(tools) == {"get_status", "get_rule"}
+    assert set(tools) == {"get_status", "get_rule", "get_installation_health"}
     assert all(tool["annotations"]["readOnlyHint"] is True for tool in tools.values())
 
 
@@ -189,6 +189,10 @@ def test_the_first_authorization_header_decides_as_on_the_status_api(mcp: Any) -
 class _Summary:
     scope: object
     owner: UserId = USER
+
+    @property
+    def scopes(self) -> frozenset[object]:
+        return frozenset({self.scope})
 
 
 @dataclass(frozen=True)

@@ -27,6 +27,8 @@ class SetupServices(Protocol):
     def identity(self) -> SetupIdentity: ...
     @property
     def secure_cookies(self) -> bool: ...
+    @property
+    def sends_email(self) -> bool: ...
 
 
 Services = Annotated[SetupServices, Depends(app_services)]
@@ -51,4 +53,4 @@ def set_up(payload: SetupRequest, response: Response, services: Services) -> Ses
     except InvalidEmail as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id))
+    return signed_in(services.identity.users.get(session.user_id), services.sends_email)

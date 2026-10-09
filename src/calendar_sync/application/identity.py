@@ -7,7 +7,7 @@ no email and signs in by password alone until they add one.
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.errors import (
     AdminAlreadyConfigured,
@@ -133,6 +133,18 @@ class SetOwnEmail:
         if not user.needs_email:
             _confirm(self.users, self.passwords, user_id, password)
         changed = user.with_email(email)
+        self.users.save(changed)
+        return changed
+
+
+@dataclass(slots=True)
+class SetNotificationEmail:
+    """Whether the signed-in User's Incident Notifications also come by email."""
+
+    users: UserDirectory
+
+    def execute(self, user_id: UserId, notify_by_email: bool) -> User:
+        changed = replace(_existing(self.users, user_id), notify_by_email=notify_by_email)
         self.users.save(changed)
         return changed
 

@@ -977,6 +977,90 @@
         "title": "IncidentResponse",
         "type": "object"
       },
+      "InstallationHealthResponse": {
+        "description": "The whole installation's verdict; it names no rule, calendar, or User (ADR 0030).",
+        "properties": {
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "disabled_users": {
+            "title": "Disabled Users",
+            "type": "integer"
+          },
+          "incidents": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationIncidentResponse"
+            },
+            "title": "Incidents",
+            "type": "array"
+          },
+          "needs_attention": {
+            "title": "Needs Attention",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "waiting",
+              "paused",
+              "setup",
+              "healthy"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "users": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "stalled",
+                "stopped",
+                "review",
+                "waiting",
+                "paused",
+                "setup",
+                "healthy"
+              ]
+            },
+            "title": "Users",
+            "type": "object"
+          }
+        },
+        "required": [
+          "status",
+          "needs_attention",
+          "incidents",
+          "users",
+          "disabled_users",
+          "checked_at"
+        ],
+        "title": "InstallationHealthResponse",
+        "type": "object"
+      },
+      "InstallationIncidentResponse": {
+        "properties": {
+          "kind": {
+            "const": "scheduler_stalled",
+            "title": "Kind",
+            "type": "string"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "since"
+        ],
+        "title": "InstallationIncidentResponse",
+        "type": "object"
+      },
       "IntegrationTokenResponse": {
         "properties": {
           "created_at": {
@@ -1013,16 +1097,22 @@
             ],
             "title": "Revoked At"
           },
-          "scope": {
-            "const": "status:read",
-            "title": "Scope",
-            "type": "string"
+          "scopes": {
+            "items": {
+              "enum": [
+                "installation:read",
+                "status:read"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "name",
-          "scope",
+          "scopes",
           "created_at",
           "last_used_at",
           "revoked_at"
@@ -1036,6 +1126,18 @@
             "maxLength": 200,
             "title": "Name",
             "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "installation:read",
+                "status:read"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Scopes",
+            "type": "array"
           }
         },
         "required": [
@@ -1080,10 +1182,16 @@
             ],
             "title": "Revoked At"
           },
-          "scope": {
-            "const": "status:read",
-            "title": "Scope",
-            "type": "string"
+          "scopes": {
+            "items": {
+              "enum": [
+                "installation:read",
+                "status:read"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
           },
           "token": {
             "title": "Token",
@@ -1093,7 +1201,7 @@
         "required": [
           "id",
           "name",
-          "scope",
+          "scopes",
           "created_at",
           "last_used_at",
           "revoked_at",
@@ -1225,6 +1333,19 @@
           "calendar_name"
         ],
         "title": "NamedCalendarEndpointResponse",
+        "type": "object"
+      },
+      "NotificationPreferenceRequest": {
+        "properties": {
+          "notify_by_email": {
+            "title": "Notify By Email",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notify_by_email"
+        ],
+        "title": "NotificationPreferenceRequest",
         "type": "object"
       },
       "PendingInvitationResponse": {
@@ -2278,6 +2399,11 @@
             "title": "Authenticated",
             "type": "boolean"
           },
+          "installation_sends_email": {
+            "default": false,
+            "title": "Installation Sends Email",
+            "type": "boolean"
+          },
           "user": {
             "anyOf": [
               {
@@ -2291,7 +2417,8 @@
         },
         "required": [
           "authenticated",
-          "user"
+          "user",
+          "installation_sends_email"
         ],
         "title": "SessionResponse",
         "type": "object"
@@ -3116,6 +3243,63 @@
         "summary": "Set Email"
       }
     },
+    "/api/v1/account/notifications": {
+      "put": {
+        "description": "Whether the User's Incident Notifications also come by email; the Web UI keeps them all.",
+        "operationId": "set_notifications_api_v1_account_notifications_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedInUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Notifications"
+      }
+    },
     "/api/v1/account/password": {
       "put": {
         "description": "Replace the password; every other session of the User ends.",
@@ -3875,6 +4059,69 @@
           }
         },
         "summary": "List Incidents"
+      }
+    },
+    "/api/v1/installation/health": {
+      "get": {
+        "description": "Installation Health, for an Installation Administrator's session or installation:read\ntoken; it names no rule, calendar, or User (ADR 0030).",
+        "operationId": "installation_health_api_v1_installation_health_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Installation Health"
       }
     },
     "/api/v1/integration-tokens": {

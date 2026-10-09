@@ -35,6 +35,8 @@ class SessionServices(Protocol):
     def identity(self) -> SignInIdentity: ...
     @property
     def secure_cookies(self) -> bool: ...
+    @property
+    def sends_email(self) -> bool: ...
 
 
 Services = Annotated[SessionServices, Depends(app_services)]
@@ -57,7 +59,7 @@ def sign_in(
         throttled.headers = {"Retry-After": str(error.retry_after)}
         raise throttled from error
     set_session_cookie(response, session.token, services.secure_cookies)
-    return signed_in(services.identity.users.get(session.user_id))
+    return signed_in(services.identity.users.get(session.user_id), services.sends_email)
 
 
 @router.get("/api/v1/session", response_model=SessionResponse)
@@ -66,7 +68,8 @@ def session_status(
     session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
 ) -> SessionResponse:
     user_id = services.identity.sessions.user_of(session)
-    return signed_in(services.identity.users.get(user_id) if user_id is not None else None)
+    user = services.identity.users.get(user_id) if user_id is not None else None
+    return signed_in(user, services.sends_email)
 
 
 @router.delete("/api/v1/session", status_code=status.HTTP_204_NO_CONTENT)
@@ -79,10 +82,12 @@ def sign_out(
     response.delete_cookie(SESSION_COOKIE, path="/")
 
 
-def signed_in(user: User | None) -> SessionResponse:
+def signed_in(user: User | None, sends_email: bool = False) -> SessionResponse:
     if user is None:
         return SessionResponse(authenticated=False)
-    return SessionResponse(authenticated=True, user=user_response(user))
+    return SessionResponse(
+        authenticated=True, user=user_response(user), installation_sends_email=sends_email
+    )
 
 
 def user_response(user: User) -> SignedInUserResponse:

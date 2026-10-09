@@ -95,17 +95,19 @@ def create_app(container: Container | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        scheduler_task: asyncio.Task[None] | None = None
+        tasks: list[asyncio.Task[None]] = []
         if resolved.scheduler is not None:
-            scheduler_task = asyncio.create_task(resolved.scheduler.run_forever())
+            tasks.append(asyncio.create_task(resolved.scheduler.run_forever()))
+        if resolved.scheduler_watch is not None:
+            tasks.append(asyncio.create_task(resolved.scheduler_watch.run_forever()))
         try:
             async with mcp.running():
                 yield
         finally:
-            if scheduler_task is not None:
-                scheduler_task.cancel()
+            for task in tasks:
+                task.cancel()
                 with suppress(asyncio.CancelledError):
-                    await scheduler_task
+                    await task
 
     app = FastAPI(
         title="Calendar Ghost",

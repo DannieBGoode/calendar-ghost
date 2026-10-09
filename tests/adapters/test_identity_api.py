@@ -137,3 +137,26 @@ def test_a_user_changes_their_email_and_password_with_their_current_password(
     assert renewed.status_code == 204
     assert still_signed_in == 200
     assert signed_in.status_code == 200
+
+
+def test_a_user_turns_their_incident_emails_off_and_on(tmp_path: Path) -> None:
+    settings = Settings(
+        tmp_path / "test.db", smtp_host="smtp.example.test", smtp_sender="ghost@example.test"
+    )
+    with TestClient(create_app(build_container(settings))) as client:
+        client.post("/api/v1/setup/admin", json={"email": EMAIL, "password": PASSWORD})
+        before = client.get("/api/v1/session").json()
+        off = client.put("/api/v1/account/notifications", json={"notify_by_email": False})
+        after = client.get("/api/v1/session").json()
+
+    assert (before["installation_sends_email"], before["user"]["notify_by_email"]) == (True, True)
+    assert off.json()["notify_by_email"] is False
+    assert after["user"]["notify_by_email"] is False
+
+
+def test_without_smtp_the_installation_sends_no_email(tmp_path: Path) -> None:
+    with _client(tmp_path / "test.db") as client:
+        client.post("/api/v1/setup/admin", json={"email": EMAIL, "password": PASSWORD})
+        session = client.get("/api/v1/session").json()
+
+    assert session["installation_sends_email"] is False

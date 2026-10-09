@@ -8,6 +8,7 @@ from fastapi import Cookie, Depends, Header, Request, Response, status
 
 from calendar_sync.application.ports import (
     IntegrationTokenAuthentication,
+    IntegrationTokenScope,
     Sessions,
     UserDirectory,
 )
@@ -113,6 +114,36 @@ def status_reader(
     if access.result is not StatusAccess.GRANTED or access.user is None:
         raise _unauthenticated()
     return access.user
+
+
+def installation_reader(
+    services: Annotated[StatusReaderServices, Depends(app_services)],
+    authorization: Annotated[str | None, Header()] = None,
+    session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
+) -> UserId:
+    """An Installation Administrator reading Installation Health with a session or a token
+    carrying installation:read. A token stops working here once its User stops administering."""
+    access = status_access(
+        services.token_authentication,
+        services.identity.sessions,
+        authorization,
+        session,
+        frozenset({IntegrationTokenScope.INSTALLATION_READ}),
+    )
+    if access.result is StatusAccess.FORBIDDEN:
+        raise problem(
+            status.HTTP_403_FORBIDDEN, "insufficient_scope", "token lacks the required scope"
+        )
+    if access.result is not StatusAccess.GRANTED or access.user is None:
+        raise _unauthenticated()
+    reader = services.identity.users.get(access.user)
+    if reader is None or not reader.administers:
+        raise problem(
+            status.HTTP_403_FORBIDDEN,
+            "administrator_required",
+            "only an Installation Administrator may do this",
+        )
+    return reader.id
 
 
 def available[T](use_case: T | None, code: str, detail: str) -> T:

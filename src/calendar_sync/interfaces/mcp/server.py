@@ -16,17 +16,23 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.application.errors import RuleNotFound
+from calendar_sync.application.installation_health import GetInstallationHealth
 from calendar_sync.application.ports import (
     IntegrationTokenAuthentication,
+    IntegrationTokenScope,
     RuleRunOutcome,
     Sessions,
+    UserDirectory,
 )
 from calendar_sync.application.rules import GetSyncRuleDetails
 from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.interfaces.access import StatusAccess, status_access
-from calendar_sync.interfaces.api.status_payload import status_response
+from calendar_sync.interfaces.api.status_payload import (
+    installation_health_response,
+    status_response,
+)
 
 INSTRUCTIONS = """\
 Calendar Ghost synchronizes calendars one way, from a source calendar to a destination calendar,
@@ -44,12 +50,20 @@ Call get_status first. Its `status` is one of:
 `needs_attention` is true only for stalled, stopped, and review. `problems` lists each problem,
 most urgent first. Call get_rule with a rule id or its "Source → Destination" name for its last
 run. Events already synced stay where they are while a rule is stopped.
+
+get_status and get_rule answer for the User the token belongs to. An Installation
+Administrator's token with the installation:read scope may also call get_installation_health:
+incidents about the installation itself, and how many Users are in each status. It names no rule,
+calendar, or person.
 """
 READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_hint=True)
 
 
 _READER = "calendar_ghost_reader"
 """Where the gate leaves the token's owner in the request scope for the tools to read."""
+_SCOPES = "calendar_ghost_scopes"
+"""Where the gate leaves what the token may read."""
+_ANY_SCOPE = frozenset(IntegrationTokenScope)
 
 
 class McpUserServices(Protocol):
@@ -62,11 +76,15 @@ class McpUserServices(Protocol):
 class McpIdentity(Protocol):
     @property
     def sessions(self) -> Sessions: ...
+    @property
+    def users(self) -> UserDirectory: ...
 
 
 class McpServices(Protocol):
     @property
     def identity(self) -> McpIdentity: ...
+    @property
+    def installation_health(self) -> GetInstallationHealth: ...
     @property
     def token_authentication(self) -> IntegrationTokenAuthentication: ...
     def for_user(self, user_id: UserId) -> McpUserServices: ...
@@ -102,13 +120,13 @@ def _sdk_app(services: McpServices) -> tuple[ASGIApp, StreamableHTTPSessionManag
     @server.tool(annotations=READ_ONLY)
     def get_status(ctx: Context) -> dict[str, Any]:
         """Installation Status: the verdict, each problem, and every rule's state."""
-        reader = services.for_user(_reader(ctx))
+        reader = services.for_user(_reader(ctx, IntegrationTokenScope.STATUS_READ))
         return status_response(reader.get_installation_status.execute()).model_dump(mode="json")
 
     @server.tool(annotations=READ_ONLY)
     def get_rule(rule: str, ctx: Context) -> dict[str, Any]:
         """One rule by id or "Source → Destination" name, with its last runs and problem."""
-        reader = services.for_user(_reader(ctx))
+        reader = services.for_user(_reader(ctx, IntegrationTokenScope.STATUS_READ))
         status = status_response(reader.get_installation_status.execute())
         matches = [item for item in status.rules if rule in {item.id, item.name}]
         if len(matches) != 1:
@@ -125,6 +143,16 @@ def _sdk_app(services: McpServices) -> tuple[ASGIApp, StreamableHTTPSessionManag
             "last_reconciliation": _outcome(details.last_reconciliation),
         }
 
+    @server.tool(annotations=READ_ONLY)
+    def get_installation_health(ctx: Context) -> dict[str, Any]:
+        """Installation Health: incidents about the installation itself, and how many Users are
+        in each status. For an Installation Administrator's token with installation:read."""
+        reader = services.identity.users.get(_reader(ctx, IntegrationTokenScope.INSTALLATION_READ))
+        if reader is None or not reader.administers:
+            raise ToolError("Only an Installation Administrator's token reads Installation Health.")
+        health = services.installation_health.execute()
+        return installation_health_response(health).model_dump(mode="json")
+
     # Stateless JSON: no per-client session to keep in the single process. The Host allowlist is
     # off because every request carries a bearer token a rebinding page cannot supply (ADR 0024).
     sdk = server.streamable_http_app(
@@ -137,12 +165,14 @@ def _sdk_app(services: McpServices) -> tuple[ASGIApp, StreamableHTTPSessionManag
     return endpoint, server.session_manager
 
 
-def _reader(ctx: Context) -> UserId:
-    """The User whose token the gate accepted for this request; their status is the answer."""
-    request = ctx.request_context.request
-    reader = getattr(getattr(request, "state", None), _READER, None)
+def _reader(ctx: Context, scope: IntegrationTokenScope) -> UserId:
+    """The User whose token the gate accepted for this request, if it carries `scope`."""
+    state = getattr(ctx.request_context.request, "state", None)
+    reader = getattr(state, _READER, None)
     if not isinstance(reader, UserId):
         raise ToolError("This request carries no accepted token.")
+    if scope not in getattr(state, _SCOPES, frozenset()):
+        raise ToolError(f"This tool needs a token with the {scope.value} scope.")
     return reader
 
 
@@ -177,6 +207,7 @@ class McpGate:
             self._services.identity.sessions,
             Headers(scope=scope).get("authorization"),
             None,
+            _ANY_SCOPE,
         )
         if access.result is StatusAccess.UNAUTHENTICATED:
             await _problem(
@@ -201,7 +232,8 @@ class McpGate:
             await _problem(send, 503, "mcp_not_running", "the MCP server is starting or stopping")
             return
         # The SDK hands its tools a Request over this scope, so they read whose status to answer.
-        scope.setdefault("state", {})[_READER] = access.user
+        state = scope.setdefault("state", {})
+        state[_READER], state[_SCOPES] = access.user, access.scopes
         await inner(scope, receive, send)
 
 

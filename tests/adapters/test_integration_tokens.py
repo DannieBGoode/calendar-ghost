@@ -43,12 +43,12 @@ def test_an_issued_token_authenticates_and_only_its_hash_is_stored(tmp_path: Pat
     assert issued.token.startswith("cgs_")
     assert len(issued.token) == 47
     assert issued.summary.name == "Uptime Kuma"
-    assert issued.summary.scope is IntegrationTokenScope.STATUS_READ
+    assert issued.summary.scopes == frozenset({IntegrationTokenScope.STATUS_READ})
     # The first use records itself, so last_used_at is the moment of that use.
     assert tokens.authenticate(issued.token) == IntegrationTokenSummary(
         issued.summary.id,
         "Uptime Kuma",
-        IntegrationTokenScope.STATUS_READ,
+        frozenset({IntegrationTokenScope.STATUS_READ}),
         ISSUED,
         ISSUED,
         None,
@@ -175,3 +175,15 @@ def test_the_migration_applies_to_an_existing_database(tmp_path: Path) -> None:
         indexes = connection.execute("PRAGMA index_list('integration_tokens')").fetchall()
     assert 18 in versions
     assert any(index[2] == 1 for index in indexes)
+
+
+def test_a_token_may_also_read_installation_health(tmp_path: Path) -> None:
+    tokens, _, _ = _tokens(tmp_path)
+    both = frozenset({IntegrationTokenScope.STATUS_READ, IntegrationTokenScope.INSTALLATION_READ})
+
+    issued = tokens.for_user(USER).issue("Uptime Kuma", both)
+
+    summary = tokens.authenticate(issued.token)
+    assert summary is not None
+    assert summary.scopes == both
+    assert tokens.for_user(USER).list()[0].scopes == both

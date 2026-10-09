@@ -57,6 +57,8 @@ class SignedInUserResponse(ApiResponse):
 class SessionResponse(ApiResponse):
     authenticated: bool
     user: SignedInUserResponse | None = None
+    installation_sends_email: bool = False
+    """Whether Incident Notifications can also reach a User by email."""
 
 
 class SetEmailRequest(BaseModel):
@@ -489,10 +491,14 @@ class StatusResponse(ApiResponse):
     incidents: list[StatusIncidentResponse]
 
 
+TokenScope = Literal["installation:read", "status:read"]
+_STATUS_READ: TokenScope = "status:read"
+
+
 class IntegrationTokenResponse(ApiResponse):
     id: str
     name: str
-    scope: Literal["status:read"]
+    scopes: list[TokenScope]
     created_at: str
     last_used_at: str | None
     revoked_at: str | None
@@ -504,6 +510,8 @@ class IssuedIntegrationTokenResponse(IntegrationTokenResponse):
 
 class IssueIntegrationTokenRequest(BaseModel):
     name: str = Field(max_length=200)
+    scopes: list[TokenScope] = Field(default_factory=lambda: [_STATUS_READ], min_length=1)
+    """installation:read is for Installation Administrators only (ADR 0030)."""
 
 
 class RegistrationResponse(ApiResponse):
@@ -576,3 +584,24 @@ class UserDeletionResponse(ApiResponse):
     detached: int
     left: int
     """Rules whose projections nothing could delete; they stay in their calendars."""
+
+
+class InstallationIncidentResponse(ApiResponse):
+    kind: Literal["scheduler_stalled"]
+    since: str
+
+
+class InstallationHealthResponse(ApiResponse):
+    """The whole installation's verdict; it names no rule, calendar, or User (ADR 0030)."""
+
+    status: StatusVerdictValue
+    needs_attention: bool
+    incidents: list[InstallationIncidentResponse]
+    users: dict[StatusVerdictValue, int]
+    """How many Users who may sign in are in each Installation Status verdict."""
+    disabled_users: int
+    checked_at: str
+
+
+class NotificationPreferenceRequest(BaseModel):
+    notify_by_email: bool
