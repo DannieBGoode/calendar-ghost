@@ -94,7 +94,7 @@ async function renderApp(i18n: I18n) {
     )
   })
   await settle()
-  return { container }
+  return { container, queryClient }
 }
 
 describe("App", () => {
@@ -323,6 +323,88 @@ describe("App", () => {
 
       expect(container.querySelector("header")).toBeNull()
       expect(container.querySelector(".auth-shell input[type=email]")).not.toBeNull()
+    } finally {
+      page.happyDOM.setURL(address)
+    }
+  })
+
+  it("drops the previous User's records and revealed token when another User signs in", async () => {
+    const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
+    const address = window.location.href
+    page.happyDOM.setURL("http://localhost:8000/settings/connections")
+    const people = {
+      a: { id: "user-a", email: "alex@example.test", role: "user", notify_by_email: true, language: null },
+      b: { id: "user-b", email: "blake@example.test", role: "user", notify_by_email: true, language: null },
+    }
+    const accountOf = (who: "a" | "b") => ({
+      id: `acct-${who}`,
+      provider: "google",
+      display_name: who === "a" ? "Alex Calendar" : "Blake Calendar",
+      email: who === "a" ? "alex.calendar@example.test" : "blake.calendar@example.test",
+      avatar_url: null,
+      state: "connected",
+      rule_count: 0,
+      authorized_at: "2026-09-30T10:00:00+00:00",
+      authorization_lapsed_at: null,
+    })
+    const token = { id: "token-alex", name: "Alex agent", scopes: ["status:read"], created_at: "2026-10-01T09:00:00Z", last_used_at: null, revoked_at: null }
+    const answers: Record<"a" | "b", Record<string, unknown>> = {
+      a: { "/api/v1/accounts": [accountOf("a")], "/api/v1/integration-tokens": [token] },
+      b: { "/api/v1/integration-tokens": [] },
+    }
+    let current: "a" | "b" = "a"
+    // Blake's accounts answer only when asked to, so nothing cached may stand in for them.
+    let answerBlake: (response: Response) => void = () => undefined
+    const blakeAccounts = new Promise<Response>((resolve) => {
+      answerBlake = resolve
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: string | URL, init?: RequestInit) => {
+        const path = String(input).split("?")[0] ?? ""
+        if (init?.method === "POST") return Promise.resolve(jsonResponse({ ...token, token: "cgs_alex-secret-shown-once" }))
+        if (path === "/api/v1/session") {
+          return Promise.resolve(jsonResponse({ authenticated: true, user: people[current], installation_sends_email: false }))
+        }
+        if (current === "b" && path === "/api/v1/accounts") return blakeAccounts
+        return Promise.resolve(jsonResponse(answers[current][path] ?? RESPONSES[path] ?? {}))
+      }),
+    )
+    try {
+      const { container, queryClient } = await renderApp(testI18n())
+      act(() => container.querySelector<HTMLButtonElement>("[aria-labelledby='integrations-title'] .group-summary")!.click())
+      const name = container.querySelector<HTMLInputElement>("#integration-name")!
+      act(() => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(name, "Alex agent")
+        name.dispatchEvent(new Event("input", { bubbles: true }))
+      })
+      act(() => {
+        name.closest("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      })
+      await settle()
+      expect(container.textContent).toContain("alex.calendar@example.test")
+      expect(container.querySelector<HTMLInputElement>(".token-field input")?.value).toBe("cgs_alex-secret-shown-once")
+
+      const alexShell = container.querySelector(".app-shell")
+
+      // Another tab of this browser signs in as someone else; this tab learns it from the session.
+      current = "b"
+      await act(async () => {
+        await queryClient.refetchQueries({ queryKey: ["session"] })
+      })
+      await settle(12)
+
+      expect(container.textContent).not.toContain("alex.calendar@example.test")
+      expect(container.querySelector(".token-reveal")).toBeNull()
+      expect(container.innerHTML).not.toContain("cgs_alex-secret-shown-once")
+      expect(container.textContent).not.toContain("Alex agent")
+      // Nothing held for Alex survives: the signed-in app starts over for Blake.
+      expect(container.querySelector(".app-shell")).not.toBe(alexShell)
+
+      act(() => answerBlake(jsonResponse([accountOf("b")])))
+      await settle()
+      expect(container.textContent).toContain("blake.calendar@example.test")
+      expect(container.innerHTML).not.toContain("cgs_alex-secret-shown-once")
     } finally {
       page.happyDOM.setURL(address)
     }

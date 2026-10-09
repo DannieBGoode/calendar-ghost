@@ -30,6 +30,7 @@ import {
 } from "@/lib/navigation"
 import { publicPageAt } from "@/lib/public-links"
 import { usePeopleAccess } from "@/lib/use-people-access"
+import { useUserScopedCache } from "@/lib/use-user-cache"
 import { cn } from "@/lib/utils"
 
 const navItems: { id: AppView; labelKey: MessageKey; icon: typeof Waypoints }[] = [
@@ -51,6 +52,7 @@ export default function App() {
 /** Waits for the setup and session state, then shows the sign-in steps or the signed-in app. */
 function SessionGate() {
   const { t } = useI18n()
+  useUserScopedCache()
   const setup = useQuery({ queryKey: ["setup"], queryFn: api.setup })
   const configured = setup.data?.administrator_configured === true
   const session = useQuery({
@@ -73,8 +75,11 @@ function SignInGate({ setup, session }: { setup: SetupStatus; session: SessionSt
   if (!setup.administrator_configured) return <AuthScreen mode="setup" />
   if (!session?.authenticated) return <AuthScreen mode="login" passwordOnly={setup.password_only_sign_in} />
   if (session.user?.email === null) return <AddEmailScreen />
-  return <AuthenticatedApp />
+  // Keyed by the User, so another User signing in drops everything shown or typed for the last
+  // one: a revealed token, an open dialog, a copied link.
+  return <AuthenticatedApp key={session.user?.id} />
 }
+
 function AuthenticatedApp() {
   const i18n = useI18n()
   const { t } = i18n
