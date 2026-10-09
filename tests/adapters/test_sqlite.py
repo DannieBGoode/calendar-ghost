@@ -58,7 +58,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     initialize_database,
 )
 from calendar_sync.infrastructure.security import CredentialCipher
-from tests.adapters.test_user_migration import database_at_version
+from tests.adapters.test_user_migration import LATEST_VERSION, database_at_version
 from tests.helpers import NOW, endpoint, event, rule, week_start
 from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, sqlite_units
 
@@ -231,7 +231,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == list(range(1, 22))
+    assert versions == list(range(1, LATEST_VERSION + 1))
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),

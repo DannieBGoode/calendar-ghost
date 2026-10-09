@@ -17,12 +17,18 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import CredentialCipher, token_hash
 from calendar_sync.interfaces.api.app import create_app
-from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE, signed_in_user, status_reader
+from calendar_sync.interfaces.api.dependencies import (
+    SESSION_COOKIE,
+    signed_in_user,
+    status_reader,
+)
+from calendar_sync.interfaces.api.dependencies import administrator as administrator_session
 from tests.helpers import NOW, rule
 from tests.users import OTHER_USER, add_user, administrator, sign_in, sqlite_units
 
-# AGENTS.md: only setup, login, and the state-protected OAuth callback are public under /api/,
-# beside the session status and logout, which reveal or revoke nothing without a session.
+# AGENTS.md: only setup, sign-in, the state-protected OAuth callback, and the token-protected
+# Invitation and Password Reset Links are public under /api/, beside the session status and
+# sign-out, which reveal or revoke nothing without a session.
 PUBLIC_API_ROUTES = {
     ("GET", "/api/v1/setup"),
     ("POST", "/api/v1/setup/admin"),
@@ -30,6 +36,28 @@ PUBLIC_API_ROUTES = {
     ("POST", "/api/v1/session"),
     ("DELETE", "/api/v1/session"),
     ("GET", "/api/v1/oauth/google/callback"),
+    ("POST", "/api/v1/invitations/check"),
+    ("POST", "/api/v1/invitations/accept"),
+    ("POST", "/api/v1/password-resets/check"),
+    ("POST", "/api/v1/password-resets"),
+}
+# Only an Installation Administrator may use these (ADR 0030).
+ADMINISTRATOR_ROUTES = {
+    ("GET", "/api/v1/registration"),
+    ("PUT", "/api/v1/registration"),
+    ("GET", "/api/v1/invitations"),
+    ("POST", "/api/v1/invitations"),
+    ("DELETE", "/api/v1/invitations/{invitation_id}"),
+    ("GET", "/api/v1/users"),
+    ("PUT", "/api/v1/users/{user_id}/role"),
+    ("PUT", "/api/v1/users/{user_id}/state"),
+    ("POST", "/api/v1/users/{user_id}/password-reset-links"),
+    ("DELETE", "/api/v1/users/{user_id}"),
+    ("GET", "/api/v1/storage"),
+    ("GET", "/api/v1/storage/activity"),
+    ("POST", "/api/v1/storage/activity/clear"),
+    ("GET", "/api/v1/storage/logs"),
+    ("DELETE", "/api/v1/storage/logs"),
 }
 # Readable with an administrator session or an Integration Token (ADR 0024).
 STATUS_READER_ROUTES = {("GET", "/api/v1/status")}
@@ -58,9 +86,35 @@ def test_every_non_public_api_route_requires_a_signed_in_user(tmp_path: Path) ->
         if _requires(route.dependant, status_reader)
         for method in route.methods or ()
     }
+    administered = {
+        (method, route.path)
+        for route in api_routes
+        if _requires(route.dependant, administrator_session)
+        for method in route.methods or ()
+    }
     assert len(api_routes) > len(PUBLIC_API_ROUTES)
     assert unguarded == PUBLIC_API_ROUTES | STATUS_READER_ROUTES
     assert readers == STATUS_READER_ROUTES
+    assert administered == ADMINISTRATOR_ROUTES
+
+
+def test_a_user_who_does_not_administer_is_refused_every_administrator_route(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "test.db"
+    app = create_app(build_container(Settings(database)))
+    with TestClient(app) as client:
+        sign_in(client)
+        add_user(database, OTHER_USER, role="user")
+        client.cookies.set(SESSION_COOKIE, _session_for(database, OTHER_USER))
+        answers = {
+            (method, path): client.request(
+                method, re.sub(r"\{[^}]+\}", "x", path), json={"policy": "only_me"}
+            ).status_code
+            for method, path in ADMINISTRATOR_ROUTES
+        }
+
+    assert {status for status in answers.values()} == {403}, answers
 
 
 def test_an_integration_token_is_refused_by_every_other_api_route(tmp_path: Path) -> None:
@@ -154,6 +208,9 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
             ):
                 continue
             for method in route.methods or ():
+                if (method, route.path) in ADMINISTRATOR_ROUTES:
+                    # Refused before any lookup, so no record's existence shows either.
+                    continue
                 path = route.path.format(**records)
                 response = client.request(method, path, **REQUESTS.get((method, route.path), {}))
                 answers[method, route.path] = response.status_code

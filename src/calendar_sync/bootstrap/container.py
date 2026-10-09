@@ -15,6 +15,24 @@ from calendar_sync.application.activity import (
     InspectActivityEvent,
     OperationsQueries,
 )
+from calendar_sync.application.administration import (
+    AcceptInvitation,
+    ChangeRole,
+    ChangeUserState,
+    CheckInvitation,
+    CheckPasswordReset,
+    DeleteOwnAccount,
+    DeleteUser,
+    InviteUser,
+    IssuePasswordReset,
+    ListInvitations,
+    ListUsers,
+    OwnedRules,
+    ResetPassword,
+    RevokeInvitation,
+    SetRegistrationPolicy,
+    ShowRegistration,
+)
 from calendar_sync.application.health import RuleHealth
 from calendar_sync.application.identity import (
     ChangeOwnPassword,
@@ -37,9 +55,12 @@ from calendar_sync.application.ports import (
     InstallationUnitOfWorkFactory,
     IntegrationTokenAuthentication,
     IntegrationTokens,
+    Invitations,
     LogFiles,
     PasswordHasher,
+    PasswordResetLinks,
     ProviderCallStats,
+    RegistrationSettings,
     RuleHealthRecords,
     RunIdGenerator,
     SchedulerHeartbeat,
@@ -97,6 +118,11 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
 from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,
+)
+from calendar_sync.infrastructure.persistence.registration import (
+    SqliteInvitations,
+    SqlitePasswordResetLinks,
+    SqliteRegistrationSettings,
 )
 from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteInstallationUnitOfWorkFactory,
@@ -170,12 +196,35 @@ class IdentityServices:
 
 
 @dataclass(frozen=True, slots=True)
+class AdministrationServices:
+    """What Installation Administrators do with Users, and the links people use to join or to
+    choose a new password."""
+
+    show_registration: ShowRegistration
+    set_registration_policy: SetRegistrationPolicy
+    invite_user: InviteUser
+    list_invitations: ListInvitations
+    revoke_invitation: RevokeInvitation
+    check_invitation: CheckInvitation
+    accept_invitation: AcceptInvitation
+    issue_password_reset: IssuePasswordReset
+    check_password_reset: CheckPasswordReset
+    reset_password: ResetPassword
+    list_users: ListUsers
+    change_role: ChangeRole
+    change_user_state: ChangeUserState
+    delete_user: DeleteUser
+    delete_own_account: DeleteOwnAccount
+
+
+@dataclass(frozen=True, slots=True)
 class Container:
     """What the Web API reads: installation-wide services, and each User's through `for_user`."""
 
     secure_cookies: bool
     google: GoogleConnectionStatus
     identity: IdentityServices
+    administration: AdministrationServices
     token_authentication: IntegrationTokenAuthentication
     storage: StorageAdministration
     authorization: AccountAuthorization | None
@@ -207,6 +256,9 @@ class Adapters:
     sessions: Sessions
     passwords: PasswordHasher
     sign_in_throttle: SignInThrottle
+    registration: RegistrationSettings
+    invitations: Invitations
+    password_resets: PasswordResetLinks
     activity: Callable[[UserId], ActivityQueries]
     operations: Callable[[UserId], OperationsQueries]
     health_records: Callable[[UserId], RuleHealthRecords]
@@ -266,6 +318,9 @@ def build_adapters(settings: Settings) -> Adapters:
         sessions=SqliteSessions(database, clock),
         passwords=ScryptPasswords(),
         sign_in_throttle=MemorySignInThrottle(clock),
+        registration=SqliteRegistrationSettings(database),
+        invitations=SqliteInvitations(database, ids),
+        password_resets=SqlitePasswordResetLinks(database, ids),
         activity=lambda user: SqliteActivityQueries(database, user, history),
         operations=lambda user: SqliteOperationsQueries(database, user),
         health_records=lambda user: SqliteRuleHealthRecords(database, user),
@@ -327,6 +382,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             redirect_uri=settings.google_redirect_uri if google_configured else None,
         ),
         identity=_identity(adapters),
+        administration=_administration(
+            adapters,
+            lambda owner: OwnedRules(
+                adapters.unit_of_work(owner), user_services(owner).remove_sync_rule
+            ),
+        ),
         token_authentication=adapters.token_authentication,
         storage=StorageAdministration(
             adapters.database_storage, adapters.locks, adapters.clock, adapters.log_files
@@ -347,6 +408,37 @@ def _identity(adapters: Adapters) -> IdentityServices:
         sign_in=SignIn(users, passwords, sessions, adapters.sign_in_throttle, adapters.clock),
         set_own_email=SetOwnEmail(users, passwords),
         change_own_password=ChangeOwnPassword(users, passwords, sessions),
+    )
+
+
+def _administration(
+    adapters: Adapters, owned: Callable[[UserId], OwnedRules]
+) -> AdministrationServices:
+    users, clock, sessions = adapters.users, adapters.clock, adapters.sessions
+    settings, invitations, resets = (
+        adapters.registration,
+        adapters.invitations,
+        adapters.password_resets,
+    )
+    passwords = adapters.passwords
+    return AdministrationServices(
+        show_registration=ShowRegistration(users, settings),
+        set_registration_policy=SetRegistrationPolicy(users, settings),
+        invite_user=InviteUser(users, settings, invitations, clock),
+        list_invitations=ListInvitations(users, invitations, clock),
+        revoke_invitation=RevokeInvitation(users, invitations, clock),
+        check_invitation=CheckInvitation(settings, invitations, clock),
+        accept_invitation=AcceptInvitation(
+            users, settings, invitations, passwords, sessions, adapters.ids, clock
+        ),
+        issue_password_reset=IssuePasswordReset(users, resets, clock),
+        check_password_reset=CheckPasswordReset(resets, clock),
+        reset_password=ResetPassword(resets, passwords, sessions, clock),
+        list_users=ListUsers(users),
+        change_role=ChangeRole(users),
+        change_user_state=ChangeUserState(users, sessions),
+        delete_user=DeleteUser(users, sessions, owned),
+        delete_own_account=DeleteOwnAccount(users, passwords, sessions, owned),
     )
 
 

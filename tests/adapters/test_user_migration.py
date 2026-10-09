@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from calendar_sync.infrastructure.persistence import sqlite as sqlite_module
 from calendar_sync.infrastructure.persistence.sqlite import MigrationFailed, initialize_database
 
 ADMIN_HASH = "scrypt$stored-admin-hash"
+LATEST_VERSION = max(version for version, _ in sqlite_module._FORWARD_MIGRATIONS)
 OWNED_TABLES = (
     "connected_accounts",
     "calendar_names",
@@ -47,7 +49,7 @@ def database_at_version(path: Path, version: int) -> None:
             )
 
 
-def _seed_single_administrator(path: Path) -> None:
+def seed_single_administrator(path: Path) -> None:
     with sqlite3.connect(path) as connection:
         connection.executescript(
             f"""
@@ -104,7 +106,7 @@ def test_upgrading_makes_the_administrator_user_one_and_gives_them_every_record(
 ) -> None:
     database = tmp_path / "calendar-sync.db"
     database_at_version(database, 20)
-    _seed_single_administrator(database)
+    seed_single_administrator(database)
 
     initialize_database(database)
     initialize_database(database)
@@ -126,10 +128,15 @@ def test_upgrading_makes_the_administrator_user_one_and_gives_them_every_record(
             assert owners == [(user_id,)], table
         assert connection.execute("SELECT rule_id FROM rule_failures").fetchall() == [("rule-1",)]
         assert connection.execute("SELECT COUNT(*) FROM oauth_states").fetchone() == (0,)
-        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone() == (21,)
+        versions = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
+        assert 21 in versions
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master")}
         assert not tables & {"installation_admin", "admin_sessions"}
+        # Upgraded installations start as new ones do: nobody else may join.
+        assert connection.execute(
+            "SELECT registration_policy FROM installation_settings"
+        ).fetchall() == [("only_me",)]
         connection.execute(
             """
             INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, detail, user_id)
@@ -154,7 +161,7 @@ def test_upgrading_an_installation_never_set_up_creates_no_user(tmp_path: Path) 
 def test_an_upgrade_that_would_break_a_reference_changes_nothing(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     database_at_version(database, 20)
-    _seed_single_administrator(database)
+    seed_single_administrator(database)
     with sqlite3.connect(database) as connection:
         # A rule whose account is gone could never run, but it is the administrator's record.
         connection.execute("DELETE FROM calendar_names")

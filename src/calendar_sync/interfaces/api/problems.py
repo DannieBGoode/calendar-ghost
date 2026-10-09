@@ -16,6 +16,14 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.utils import is_body_allowed_for_status_code
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from calendar_sync.application.administration import (
+    AdministratorRequired,
+    LinkUnusable,
+    RegistrationClosed,
+    UserDeletionInterrupted,
+    UserNotFound,
+    YourOwnState,
+)
 from calendar_sync.application.errors import (
     AccountAccessCheckFailed,
     ActivityEventNotFound,
@@ -50,7 +58,7 @@ from calendar_sync.application.errors import (
     StorageBusy,
     UserDisabled,
 )
-from calendar_sync.domain.access import InvalidEmail
+from calendar_sync.domain.access import InvalidEmail, LastAdministrator, OnlyMeNeedsOneUser
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 
 type ParamValue = str | int | None
@@ -119,6 +127,14 @@ _CODES: dict[type[Exception], str] = {
     EmailTaken: "email_taken",
     EmailRequired: "email_required",
     InvalidEmail: "invalid_email",
+    AdministratorRequired: "administrator_required",
+    UserNotFound: "user_not_found",
+    RegistrationClosed: "registration_closed",
+    LinkUnusable: "link_unusable",
+    YourOwnState: "your_own_state",
+    LastAdministrator: "last_administrator",
+    OnlyMeNeedsOneUser: "only_me_needs_one_user",
+    UserDeletionInterrupted: "user_deletion_interrupted",
     DomainValidationError: "invalid_rule",
     # Every rejected lifecycle change (enable, pause, policy edit) with a message naming the state.
     InvalidStateTransition: "invalid_state_transition",
@@ -156,6 +172,8 @@ def _params(error: Exception) -> dict[str, ParamValue]:
         return {"reason": error.kind.value}
     if isinstance(error, SignInThrottled):
         return {"retry_after": error.retry_after}
+    if isinstance(error, UserDeletionInterrupted):
+        return {"removed": error.removed, "remaining": error.remaining}
     return {}
 
 

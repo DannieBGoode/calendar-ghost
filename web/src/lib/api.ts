@@ -124,7 +124,9 @@ export function call<P extends keyof paths, M extends MethodOf<P>>(
   method: M,
   ...[inputs]: InputArgs<Operation<P, M>>
 ): Promise<Success<Operation<P, M>>> {
-  const { params, query, body } = (inputs ?? {}) as {
+  // Widened before it is read: the inputs' own type spans every route, which is too wide to narrow.
+  const given: unknown = inputs
+  const { params, query, body } = (given ?? {}) as {
     params?: Readonly<Record<string, string | number>>
     query?: Readonly<Record<string, QueryValue>>
     body?: unknown

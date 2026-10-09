@@ -6,8 +6,8 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import EmailTaken
-from calendar_sync.application.ports import Session
-from calendar_sync.domain.access import User, UserId
+from calendar_sync.application.ports import IssuedLink, PendingInvitation, Session
+from calendar_sync.domain.access import RegistrationPolicy, User, UserId, link_expiry
 
 
 @dataclass
@@ -118,3 +118,92 @@ class CountingThrottle:
         for key in keys:
             if key.startswith("email:"):
                 self.failures.pop(key, None)
+
+
+@dataclass
+class MemoryRegistration:
+    current: RegistrationPolicy = RegistrationPolicy.ONLY_ME
+
+    def policy(self) -> RegistrationPolicy:
+        return self.current
+
+    def set_policy(self, policy: RegistrationPolicy) -> None:
+        self.current = policy
+
+
+@dataclass
+class _Link:
+    id: str
+    token: str
+    issued_at: datetime
+    owner: UserId | None = None
+    used_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+    def usable(self, at: datetime) -> bool:
+        return self.used_at is None and self.revoked_at is None and at < link_expiry(self.issued_at)
+
+
+@dataclass
+class MemoryInvitations:
+    users: MemoryUsers
+    links: list[_Link] = field(default_factory=list)
+
+    def issue(self, created_by: UserId, at: datetime) -> IssuedLink:
+        link = _Link(f"invitation-{len(self.links) + 1}", f"token-{len(self.links) + 1}", at)
+        self.links.append(link)
+        return IssuedLink(link.id, link.token, link_expiry(at))
+
+    def pending(self, at: datetime) -> tuple[PendingInvitation, ...]:
+        return tuple(
+            PendingInvitation(link.id, link.issued_at, link_expiry(link.issued_at))
+            for link in self.links
+            if link.usable(at)
+        )
+
+    def revoke(self, invitation_id: str, at: datetime) -> bool:
+        link = next((link for link in self.links if link.id == invitation_id), None)
+        if link is None or not link.usable(at):
+            return False
+        link.revoked_at = at
+        return True
+
+    def usable(self, token: str, at: datetime) -> bool:
+        return any(link.token == token and link.usable(at) for link in self.links)
+
+    def accept(self, token: str, user: User, password_hash: str, at: datetime) -> bool:
+        link = next((link for link in self.links if link.token == token and link.usable(at)), None)
+        if link is None:
+            return False
+        self.users.add(user, password_hash)
+        link.used_at = at
+        return True
+
+
+@dataclass
+class MemoryResetLinks:
+    users: MemoryUsers
+    links: list[_Link] = field(default_factory=list)
+
+    def issue(self, user_id: UserId, created_by: UserId, at: datetime) -> IssuedLink:
+        for earlier in self.links:
+            if earlier.owner == user_id and earlier.usable(at):
+                earlier.revoked_at = at
+        link = _Link(
+            f"reset-{len(self.links) + 1}", f"reset-token-{len(self.links) + 1}", at, user_id
+        )
+        self.links.append(link)
+        return IssuedLink(link.id, link.token, link_expiry(at))
+
+    def owner(self, token: str, at: datetime) -> UserId | None:
+        link = next((link for link in self.links if link.token == token and link.usable(at)), None)
+        return link.owner if link is not None else None
+
+    def reset(self, token: str, password_hash: str, at: datetime) -> UserId | None:
+        owner = self.owner(token, at)
+        if owner is None:
+            return None
+        link = next(link for link in self.links if link.token == token)
+        link.used_at = at
+        self.users.set_password_hash(owner, password_hash)
+        return owner

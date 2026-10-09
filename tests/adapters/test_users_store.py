@@ -1,5 +1,6 @@
 """Users and failed sign-ins as the installation stores them."""
 
+import sqlite3
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -7,10 +8,20 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.errors import EmailTaken
-from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
+from calendar_sync.infrastructure.persistence.registration import (
+    SqliteInvitations,
+    SqlitePasswordResetLinks,
+    SqliteRegistrationSettings,
+)
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
 from calendar_sync.infrastructure.throttle import MemorySignInThrottle
+from tests.adapters.test_user_migration import (
+    OWNED_TABLES,
+    database_at_version,
+    seed_single_administrator,
+)
 
 NOW = datetime(2026, 10, 9, 9, 0, tzinfo=UTC)
 FIRST = User(
@@ -114,3 +125,97 @@ def test_a_client_failing_for_many_emails_waits_and_a_success_forgets_only_the_e
     throttle.succeeded(("email:user-0@example.test", "client:10.0.0.1"))
     assert throttle.wait(("email:user-0@example.test", "client:10.0.0.2")) == 0
     assert throttle.wait(("email:other@example.test", "client:10.0.0.1")) > 0
+
+
+def _database(tmp_path: Path) -> Path:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    return database
+
+
+class SequentialIds:
+    def __init__(self) -> None:
+        self.issued = 0
+
+    def new(self) -> str:
+        self.issued += 1
+        return f"link-{self.issued}"
+
+
+def test_new_installations_start_with_only_me_and_keep_the_chosen_policy(tmp_path: Path) -> None:
+    settings = SqliteRegistrationSettings(_database(tmp_path))
+    assert settings.policy() is RegistrationPolicy.ONLY_ME
+
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
+
+    assert settings.policy() is RegistrationPolicy.INVITATION_ONLY
+
+
+def test_an_invitation_adds_one_user_once_and_only_its_hash_is_stored(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    users = SqliteUserDirectory(database)
+    users.add(FIRST, "hash-1")
+    invitations = SqliteInvitations(database, SequentialIds())
+    link = invitations.issue(FIRST.id, NOW)
+
+    assert invitations.usable(link.token, NOW)
+    with pytest.raises(EmailTaken):
+        invitations.accept(link.token, replace(SECOND, email=FIRST.email), "hash-2", NOW)
+    assert invitations.usable(link.token, NOW)
+    assert invitations.accept(link.token, SECOND, "hash-2", NOW)
+    third = replace(SECOND, id=UserId("third"), email="third@example.test")
+    assert not invitations.accept(link.token, third, "hash-3", NOW)
+    assert users.get(third.id) is None
+
+    assert users.get(SECOND.id) == SECOND
+    assert invitations.pending(NOW) == ()
+    with sqlite3.connect(database) as connection:
+        assert link.token not in repr(connection.execute("SELECT * FROM invitations").fetchall())
+
+
+def test_invitations_expire_after_seven_days_and_can_be_revoked(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    SqliteUserDirectory(database).add(FIRST, "hash-1")
+    invitations = SqliteInvitations(database, SequentialIds())
+    first = invitations.issue(FIRST.id, NOW)
+    second = invitations.issue(FIRST.id, NOW + timedelta(days=1))
+
+    assert [pending.id for pending in invitations.pending(NOW + timedelta(days=7))] == [second.id]
+    assert invitations.revoke(second.id, NOW + timedelta(days=2))
+    assert not invitations.revoke(second.id, NOW + timedelta(days=2))
+    assert not invitations.usable(second.token, NOW + timedelta(days=2))
+    assert not invitations.revoke(first.id, NOW + timedelta(days=8))
+
+
+def test_a_reset_link_sets_the_password_once_and_a_newer_one_replaces_it(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    users = SqliteUserDirectory(database)
+    users.add(FIRST, "hash-1")
+    links = SqlitePasswordResetLinks(database, SequentialIds())
+    earlier = links.issue(FIRST.id, FIRST.id, NOW)
+    later = links.issue(FIRST.id, FIRST.id, NOW)
+
+    assert links.owner(earlier.token, NOW) is None
+    assert links.reset(later.token, "new-hash", NOW) == FIRST.id
+    assert links.reset(later.token, "newer-hash", NOW) is None
+    assert users.password_hash(FIRST.id) == "new-hash"
+    assert links.owner(links.issue(FIRST.id, FIRST.id, NOW).token, NOW + timedelta(days=7)) is None
+
+
+def test_deleting_a_user_removes_every_record_they_own(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    database_at_version(database, 20)
+    seed_single_administrator(database)
+    initialize_database(database)
+    users = SqliteUserDirectory(database)
+    upgraded = users.list()[0]
+    users.add(SECOND, "hash-2")
+
+    users.delete(upgraded.id)
+
+    with sqlite3.connect(database) as connection:
+        for table in OWNED_TABLES:
+            rows = connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            assert rows == (0,), table
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert users.list() == (SECOND,)

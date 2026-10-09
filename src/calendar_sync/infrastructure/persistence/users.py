@@ -47,12 +47,12 @@ class SqliteUserDirectory:
             connection.execute("BEGIN IMMEDIATE")
             if connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None:
                 return False
-            _insert(connection, user, password_hash)
+            insert_user(connection, user, password_hash)
         return True
 
     def add(self, user: User, password_hash: str) -> None:
         with transaction(self._database_path) as connection:
-            _insert(connection, user, password_hash)
+            insert_user(connection, user, password_hash)
 
     def save(self, user: User) -> None:
         try:
@@ -95,6 +95,12 @@ class SqliteUserDirectory:
                 (at.isoformat(), user_id.value),
             )
 
+    def delete(self, user_id: UserId) -> None:
+        # Every owned table refers to its User or its parent with ON DELETE CASCADE (ADR 0029),
+        # so one statement removes the User's accounts, rules, activity, tokens, and sessions.
+        with transaction(self._database_path) as connection:
+            connection.execute("DELETE FROM users WHERE id = ?", (user_id.value,))
+
     def _one(self, condition: str, *values: object) -> User | None:
         with transaction(self._database_path) as connection:
             # Interpolates only the constant columns and one of this class's own conditions.
@@ -105,7 +111,8 @@ class SqliteUserDirectory:
         return _user(row) if row is not None else None
 
 
-def _insert(connection: sqlite3.Connection, user: User, password_hash: str) -> None:
+def insert_user(connection: sqlite3.Connection, user: User, password_hash: str) -> None:
+    """Add a User inside the caller's transaction; raises EmailTaken."""
     try:
         connection.execute(
             """

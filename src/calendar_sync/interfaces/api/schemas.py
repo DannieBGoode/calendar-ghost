@@ -504,3 +504,75 @@ class IssuedIntegrationTokenResponse(IntegrationTokenResponse):
 
 class IssueIntegrationTokenRequest(BaseModel):
     name: str = Field(max_length=200)
+
+
+class RegistrationResponse(ApiResponse):
+    policy: Literal["only_me", "invitation_only"]
+    only_me_available: bool
+    """Whether Only Me may be chosen now: only while no other User exists."""
+
+
+class RegistrationRequest(BaseModel):
+    policy: Literal["only_me", "invitation_only"]
+
+
+class IssuedLinkResponse(ApiResponse):
+    id: str
+    token: str
+    """Shown once: the Web UI builds the link from it; only its hash is kept."""
+    expires_at: str
+
+
+class PendingInvitationResponse(ApiResponse):
+    id: str
+    created_at: str
+    expires_at: str
+
+
+class LinkRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+
+
+class LinkStatusResponse(ApiResponse):
+    usable: bool
+
+
+class AcceptInvitationRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+    email: str = Field(max_length=320)
+    password: str = Field(max_length=256)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+    password: str = Field(max_length=256)
+
+
+class UserResponse(ApiResponse):
+    id: str
+    email: str | None
+    role: Literal["installation_administrator", "user"]
+    state: Literal["active", "disabled"]
+    created_at: str
+    last_sign_in_at: str | None
+
+
+class RoleRequest(BaseModel):
+    role: Literal["installation_administrator", "user"]
+
+
+class UserStateRequest(BaseModel):
+    state: Literal["active", "disabled"]
+
+
+class DeleteOwnAccountRequest(BaseModel):
+    password: str = Field(max_length=256)
+    projections: ProjectionChoice
+
+
+class UserDeletionResponse(ApiResponse):
+    rules: int
+    deleted: int
+    detached: int
+    left: int
+    """Rules whose projections nothing could delete; they stay in their calendars."""

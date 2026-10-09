@@ -1,14 +1,20 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from calendar_sync.domain.access import (
     InvalidEmail,
+    LastAdministrator,
+    OnlyMeNeedsOneUser,
+    RegistrationPolicy,
     Role,
     User,
     UserId,
     UserState,
     email_address,
+    link_expiry,
+    require_another_administrator,
+    require_registration_change,
 )
 
 CREATED = datetime(2026, 10, 1, tzinfo=UTC)
@@ -64,3 +70,57 @@ def test_a_user_who_adds_an_email_keeps_everything_else() -> None:
     added = _user(email=None).with_email("person@example.test")
 
     assert added == _user()
+
+
+def test_only_me_is_the_default_registration_policy() -> None:
+    assert RegistrationPolicy.default() is RegistrationPolicy.ONLY_ME
+
+
+@pytest.mark.parametrize("users", [1, 2, 5])
+def test_invitation_only_may_be_chosen_whatever_the_users(users: int) -> None:
+    require_registration_change(RegistrationPolicy.INVITATION_ONLY, users)
+
+
+def test_only_me_may_be_chosen_again_only_while_no_other_user_exists() -> None:
+    require_registration_change(RegistrationPolicy.ONLY_ME, 1)
+
+    with pytest.raises(OnlyMeNeedsOneUser):
+        require_registration_change(RegistrationPolicy.ONLY_ME, 2)
+
+
+def test_only_invitation_only_lets_people_join() -> None:
+    assert RegistrationPolicy.INVITATION_ONLY.lets_people_join
+    assert not RegistrationPolicy.ONLY_ME.lets_people_join
+
+
+def test_a_link_lasts_seven_days() -> None:
+    assert link_expiry(CREATED) == CREATED + timedelta(days=7)
+
+
+def _administrators(*states: UserState) -> list[User]:
+    return [
+        User(
+            UserId(f"admin-{index}"),
+            f"a{index}@example.test",
+            Role.INSTALLATION_ADMINISTRATOR,
+            state,
+            CREATED,
+        )
+        for index, state in enumerate(states)
+    ]
+
+
+def test_the_last_administrator_keeps_the_role() -> None:
+    sole = _administrators(UserState.ACTIVE)
+    with pytest.raises(LastAdministrator):
+        require_another_administrator(sole, sole[0].id)
+
+    pair = _administrators(UserState.ACTIVE, UserState.ACTIVE)
+    require_another_administrator(pair, pair[0].id)
+
+
+def test_a_disabled_administrator_does_not_count_as_another() -> None:
+    users = _administrators(UserState.ACTIVE, UserState.DISABLED)
+
+    with pytest.raises(LastAdministrator):
+        require_another_administrator(users, users[0].id)

@@ -30,6 +30,7 @@ from calendar_sync.interfaces.api.routes import (
     session,
     setup,
     storage,
+    users,
 )
 from calendar_sync.interfaces.mcp.server import (
     McpIdentity,
@@ -62,8 +63,13 @@ class ApiIdentity(
     """Everything the routers read about who is signed in."""
 
 
+class ApiAdministration(users.Administration, account.OwnAccountAdministration, Protocol):
+    """Everything the routers read about administering Users."""
+
+
 class ApiServices(
     session.SessionServices,
+    users.AdministrationServices,
     setup.SetupServices,
     account.OwnAccountServices,
     accounts.AuthorizationServices,
@@ -76,6 +82,8 @@ class ApiServices(
 
     @property
     def identity(self) -> ApiIdentity: ...
+    @property
+    def administration(self) -> ApiAdministration: ...
     def for_user(self, user_id: UserId) -> UserApiServices: ...
 
 
@@ -121,6 +129,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         incidents,
         storage,
         integrations,
+        users,
     ):
         app.router.routes.extend(module.router.routes)
 

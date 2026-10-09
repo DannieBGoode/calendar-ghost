@@ -6,8 +6,9 @@ from pathlib import Path
 
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 
-# Tables that hold no User's records: the migration ledger, and the Users themselves.
-INSTALLATION_TABLES = {"schema_migrations", "users"}
+# Tables that hold no User's records: the migration ledger, the Users themselves, the
+# installation's settings, and Invitations, which belong to nobody until they are used.
+INSTALLATION_TABLES = {"schema_migrations", "users", "installation_settings", "invitations"}
 SOURCE = Path(__file__).resolve().parents[2] / "src" / "calendar_sync"
 # Only these may receive the installation-wide unit of work: the ports that declare it, the
 # adapters that implement it and run migrations, the scheduler, and the composition root that

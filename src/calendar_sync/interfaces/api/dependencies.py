@@ -59,6 +59,21 @@ def current_user(user: Annotated[User, Depends(signed_in_user)]) -> UserId:
     return user.id
 
 
+def administrator(
+    user: Annotated[User, Depends(signed_in_user)],
+    user_id: Annotated[UserId, Depends(current_user)],
+) -> UserId:
+    """The signed-in Installation Administrator; other Users are refused before anything is
+    looked up, so an administrator route reveals nothing about what exists."""
+    if not user.administers:
+        raise problem(
+            status.HTTP_403_FORBIDDEN,
+            "administrator_required",
+            "only an Installation Administrator may do this",
+        )
+    return user_id
+
+
 def user_services(
     services: Annotated[UserScopedServices, Depends(app_services)],
     user: Annotated[UserId, Depends(current_user)],

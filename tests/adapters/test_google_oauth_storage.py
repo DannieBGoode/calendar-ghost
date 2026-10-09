@@ -42,6 +42,7 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
 )
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher, InvalidMasterKey
+from tests.adapters.test_user_migration import LATEST_VERSION
 from tests.users import USER, add_user
 
 DEFAULT_REDIRECT_URI = "http://localhost:8000/api/v1/oauth/google/callback"
@@ -143,7 +144,7 @@ def test_avatar_migration_upgrades_an_existing_installation(tmp_path: Path) -> N
     with sqlite3.connect(database) as connection:
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
         owner = UserId(str(connection.execute("SELECT id FROM users").fetchone()[0]))
-    assert versions == list(range(1, 22))
+    assert versions == list(range(1, LATEST_VERSION + 1))
     assert [(account.id.value, account.avatar_url) for account in store.for_user(owner).list()] == [
         ("existing", None)
     ]

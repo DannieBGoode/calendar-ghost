@@ -10,7 +10,7 @@ from typing import Protocol, Self
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.providers import ProviderKind
-from calendar_sync.domain.access import User, UserId
+from calendar_sync.domain.access import RegistrationPolicy, User, UserId
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -895,6 +895,70 @@ class UserDirectory(Protocol):
     def set_password_hash(self, user_id: UserId, password_hash: str) -> None: ...
 
     def record_sign_in(self, user_id: UserId, at: datetime) -> None: ...
+
+    def delete(self, user_id: UserId) -> None:
+        """Remove a User and, through their references, every record they own (ADR 0029)."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class IssuedLink:
+    """An Invitation or Password Reset Link as issued; its token is shown once."""
+
+    id: str
+    token: str = field(repr=False)
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PendingInvitation:
+    id: str
+    created_at: datetime
+    expires_at: datetime
+
+
+class RegistrationSettings(Protocol):
+    def policy(self) -> RegistrationPolicy: ...
+
+    def set_policy(self, policy: RegistrationPolicy) -> None: ...
+
+
+class Invitations(Protocol):
+    """Single-use, expiring links that let one person become a User; only hashes are kept."""
+
+    def issue(self, created_by: UserId, at: datetime) -> IssuedLink: ...
+
+    def pending(self, at: datetime) -> Sequence[PendingInvitation]:
+        """Invitations still usable at `at`, oldest first."""
+        ...
+
+    def revoke(self, invitation_id: str, at: datetime) -> bool:
+        """Whether an invitation still usable at `at` is revoked now."""
+        ...
+
+    def usable(self, token: str, at: datetime) -> bool: ...
+
+    def accept(self, token: str, user: User, password_hash: str, at: datetime) -> bool:
+        """Use the invitation and add `user` in one step; False, adding nobody, when it is no
+        longer usable. Raises EmailTaken, leaving the invitation usable."""
+        ...
+
+
+class PasswordResetLinks(Protocol):
+    """Single-use, expiring links that let one User choose a new password."""
+
+    def issue(self, user_id: UserId, created_by: UserId, at: datetime) -> IssuedLink:
+        """A new link for the User; their earlier links stop working."""
+        ...
+
+    def owner(self, token: str, at: datetime) -> UserId | None:
+        """The User a link still usable at `at` resets."""
+        ...
+
+    def reset(self, token: str, password_hash: str, at: datetime) -> UserId | None:
+        """Use the link and store the new password in one step; the User, or None when it is no
+        longer usable."""
+        ...
 
 
 class PasswordHasher(Protocol):

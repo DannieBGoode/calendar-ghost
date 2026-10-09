@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from calendar_sync.domain.errors import DomainValidationError
@@ -75,3 +76,48 @@ class User:
 
     def with_email(self, email: str) -> User:
         return replace(self, email=email_address(email))
+
+
+class RegistrationPolicy(StrEnum):
+    """Who may become a User (ADR 0030). Open, for the Hosted Service, arrives with sign-up."""
+
+    ONLY_ME = "only_me"
+    INVITATION_ONLY = "invitation_only"
+
+    @classmethod
+    def default(cls) -> RegistrationPolicy:
+        return cls.ONLY_ME
+
+    @property
+    def lets_people_join(self) -> bool:
+        return self is not RegistrationPolicy.ONLY_ME
+
+
+class OnlyMeNeedsOneUser(DomainValidationError):
+    """Only Me is chosen again only while no other User exists."""
+
+
+def require_registration_change(policy: RegistrationPolicy, users: int) -> None:
+    """Refuse Only Me while the installation has Users besides the one choosing it."""
+    if policy is RegistrationPolicy.ONLY_ME and users > 1:
+        raise OnlyMeNeedsOneUser("delete the other Users before choosing Only Me again")
+
+
+LINK_LIFETIME = timedelta(days=7)
+"""How long an Invitation or a Password Reset Link can be used, once."""
+
+
+def link_expiry(issued_at: datetime) -> datetime:
+    return issued_at + LINK_LIFETIME
+
+
+class LastAdministrator(DomainValidationError):
+    """The installation keeps at least one Installation Administrator who may sign in."""
+
+
+def require_another_administrator(users: Iterable[User], leaving: UserId) -> None:
+    """Refuse when `leaving` is the last active Installation Administrator."""
+    if not any(
+        user.administers and user.state is UserState.ACTIVE and user.id != leaving for user in users
+    ):
+        raise LastAdministrator("another Installation Administrator must remain")
