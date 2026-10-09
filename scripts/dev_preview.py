@@ -773,7 +773,8 @@ def main() -> None:
     print(
         "\n  DEVELOPMENT PREVIEW with synthetic data. Not a real installation.\n"
         f"  Database: {PREVIEW_DATABASE}\n"
-        f"  Open http://127.0.0.1:{port}/activity and sign in with: {PREVIEW_PASSWORD}\n"
+        f"  Open http://127.0.0.1:{port}/activity and sign in with\n"
+        f"  {PREVIEW_EMAIL} / {PREVIEW_PASSWORD}\n"
     )
     uvicorn.run(create_app(container), host="127.0.0.1", port=port)
 
