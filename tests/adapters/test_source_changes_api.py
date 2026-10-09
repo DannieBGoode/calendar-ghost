@@ -12,12 +12,12 @@ from calendar_sync.bootstrap.container import build_container
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import TimedInterval
 from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.helpers import NOW, event, rule
+from tests.users import first_user, sign_in, sqlite_units
 
 PASSWORD = "correct horse battery staple"
 KEY = CredentialCipher.generate_key()
@@ -48,7 +48,7 @@ def _change() -> SourceChange:
 
 def _record(database: Path, key: str, change: SourceChange | None) -> None:
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database, history=HistoryCipher(key))
+    factory = sqlite_units(database, history=HistoryCipher(key), user=first_user(database))
     with factory() as uow:
         if uow.rules.get(rule().id) is None:
             uow.rules.add(rule())
@@ -78,7 +78,7 @@ def test_entries_list_the_fields_their_source_change_touched(tmp_path: Path) -> 
     _record(database, KEY, None)
 
     with _client(database) as client:
-        client.post("/api/v1/setup/admin", json={"password": PASSWORD})
+        sign_in(client)
         listed = client.get("/api/v1/audit-entries").json()
 
     assert [entry["changed_fields"] for entry in listed] == [
@@ -92,7 +92,7 @@ def test_an_entry_shows_its_values_before_and_after(tmp_path: Path) -> None:
     _record(database, KEY, _change())
 
     with _client(database) as client:
-        client.post("/api/v1/setup/admin", json={"password": PASSWORD})
+        sign_in(client)
         entry_id = client.get("/api/v1/audit-entries").json()[0]["id"]
         response = client.get(f"/api/v1/audit-entries/{entry_id}/changes")
 
@@ -116,7 +116,7 @@ def test_values_sealed_under_another_master_key_are_unavailable(tmp_path: Path) 
     _record(database, CredentialCipher.generate_key(), _change())
 
     with _client(database) as client:
-        client.post("/api/v1/setup/admin", json={"password": PASSWORD})
+        sign_in(client)
         entry_id = client.get("/api/v1/audit-entries").json()[0]["id"]
         body = client.get(f"/api/v1/audit-entries/{entry_id}/changes").json()
 
@@ -130,7 +130,7 @@ def test_an_entry_without_a_source_change_has_none(tmp_path: Path) -> None:
     _record(database, KEY, None)
 
     with _client(database) as client:
-        client.post("/api/v1/setup/admin", json={"password": PASSWORD})
+        sign_in(client)
         entry_id = client.get("/api/v1/audit-entries").json()[0]["id"]
         response = client.get(f"/api/v1/audit-entries/{entry_id}/changes")
 

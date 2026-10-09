@@ -35,7 +35,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function renderAuth(i18n: I18n, mode: "setup" | "login") {
+async function renderAuth(i18n: I18n, mode: "setup" | "login", passwordOnly = false) {
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   // A thenable callback makes act flush the first queries before it returns.
@@ -44,7 +44,7 @@ async function renderAuth(i18n: I18n, mode: "setup" | "login") {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <AuthScreen mode={mode} />
+            <AuthScreen mode={mode} passwordOnly={passwordOnly} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -54,20 +54,33 @@ async function renderAuth(i18n: I18n, mode: "setup" | "login") {
   return { container }
 }
 
-/** Submits the login form against a server that answers 401 with `body`; returns the alert. */
-async function logInFailing(i18n: I18n, body: object): Promise<Element | null> {
-  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(body, 401))))
-  const { container } = await renderAuth(i18n, "login")
-  const input = container.querySelector<HTMLInputElement>("input[type=password]")!
+function type(input: HTMLInputElement, value: string) {
   act(() => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, "a very long password")
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set?.call(input, value)
     input.dispatchEvent(new Event("input", { bubbles: true }))
   })
+}
+
+async function submit(container: HTMLElement) {
   const form = container.querySelector("form")!
   await act(async () => {
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
+}
+
+function sentBody(fetch: ReturnType<typeof vi.fn>): unknown {
+  const init = fetch.mock.calls[0]?.[1] as RequestInit | undefined
+  return init?.body ? JSON.parse(init.body as string) : undefined
+}
+
+/** Submits the login form against a server that answers 401 with `body`; returns the alert. */
+async function logInFailing(i18n: I18n, body: object): Promise<Element | null> {
+  vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(body, 401))))
+  const { container } = await renderAuth(i18n, "login")
+  type(container.querySelector<HTMLInputElement>("input[type=email]")!, "person@example.test")
+  type(container.querySelector<HTMLInputElement>("input[type=password]")!, "a very long password")
+  await submit(container)
   return container.querySelector('[role="alert"]')
 }
 
@@ -77,14 +90,62 @@ describe("AuthScreen", () => {
     expect(untranslatedText(container)).toEqual([])
   })
 
-  it("translates the server's code when the password is incorrect", async () => {
-    const body = { detail: "incorrect password", code: "incorrect_password", params: {} }
+  it("translates the sign-in screen", async () => {
+    const { container } = await renderAuth(pseudoI18n(), "login", true)
+    expect(untranslatedText(container)).toEqual([])
+  })
+
+  it("translates the server's code when the email or password is incorrect", async () => {
+    const body = { detail: "no match", code: "incorrect_credentials", params: {} }
     const alert = await logInFailing(testI18n(), body)
-    expect(alert?.textContent).toBe("That password is incorrect.")
+    expect(alert?.textContent).toBe("That email and password do not match.")
+  })
+
+  it("signs in with the email and password", async () => {
+    const fetch = vi.fn(() => Promise.resolve(jsonResponse({ authenticated: true, user: null })))
+    vi.stubGlobal("fetch", fetch)
+    const { container } = await renderAuth(testI18n(), "login")
+    type(container.querySelector<HTMLInputElement>("input[type=email]")!, "person@example.test")
+    type(container.querySelector<HTMLInputElement>("input[type=password]")!, "a very long password")
+
+    await submit(container)
+
+    expect(sentBody(fetch)).toEqual({ email: "person@example.test", password: "a very long password" })
+  })
+
+  it("asks for an email before signing in, unless the installation still allows the password alone", async () => {
+    const fetch = vi.fn(() => Promise.resolve(jsonResponse({ authenticated: true, user: null })))
+    vi.stubGlobal("fetch", fetch)
+    const required = await renderAuth(testI18n(), "login")
+    expect(required.container.querySelector<HTMLInputElement>("input[type=email]")!.required).toBe(true)
+    act(() => root?.unmount())
+
+    const { container } = await renderAuth(testI18n(), "login", true)
+    type(container.querySelector<HTMLInputElement>("input[type=password]")!, "a very long password")
+    await submit(container)
+
+    expect(container.querySelector<HTMLInputElement>("input[type=email]")!.required).toBe(false)
+    expect(sentBody(fetch)).toEqual({ email: null, password: "a very long password" })
+  })
+
+  it("creates the administrator with an email and a confirmed password", async () => {
+    const fetch = vi.fn(() => Promise.resolve(jsonResponse({ authenticated: true, user: null })))
+    vi.stubGlobal("fetch", fetch)
+    const { container } = await renderAuth(testI18n(), "setup")
+    const [password, confirmation] = container.querySelectorAll<HTMLInputElement>("input[type=password]")
+    type(password!, "a very long password")
+    type(confirmation!, "a very long password")
+    const button = container.querySelector<HTMLButtonElement>("button[type=submit]")!
+    expect(button.disabled).toBe(true)
+
+    type(container.querySelector<HTMLInputElement>("input[type=email]")!, "admin@example.test")
+    await submit(container)
+
+    expect(sentBody(fetch)).toEqual({ email: "admin@example.test", password: "a very long password" })
   })
 
   it("has no untranslated text in a coded error", async () => {
-    const body = { detail: "incorrect password", code: "incorrect_password", params: {} }
+    const body = { detail: "no match", code: "incorrect_credentials", params: {} }
     const alert = await logInFailing(pseudoI18n(), body)
     expect(alert).not.toBeNull()
     expect(untranslatedText(alert!)).toEqual([])

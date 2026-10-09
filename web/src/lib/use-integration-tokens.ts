@@ -1,13 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 
 import { useI18n } from "@/i18n/provider"
 import { api, type IntegrationToken, type IssuedIntegrationToken } from "@/lib/api"
+import { tokenScopes } from "@/lib/integrations"
+import { useCopyState } from "@/lib/use-copy-state"
 
-// How long the Copy button says "Copied" before it offers to copy again.
-const COPIED_FOR_MS = 2000
-
-export type CopyState = "idle" | "copied" | "unavailable"
+export type { CopyState } from "@/lib/use-copy-state"
 
 /** The Integration Tokens list, the token issued this visit, and the commands that issue or revoke one. */
 export function useIntegrationTokens() {
@@ -15,21 +14,19 @@ export function useIntegrationTokens() {
   const queryClient = useQueryClient()
   const tokens = useQuery({ queryKey: ["integration-tokens"], queryFn: api.integrationTokens })
   const [name, setName] = useState("")
+  // Only an Installation Administrator is offered this; it is off for every new token.
+  const [installation, setInstallation] = useState(false)
   const [issued, setIssued] = useState<IssuedIntegrationToken | null>(null)
   const [revoking, setRevoking] = useState<string | null>(null)
-  const [copyState, setCopyState] = useState<CopyState>("idle")
+  const [copyState, setCopyState] = useCopyState()
   const [message, setMessage] = useState("")
   const summaryButton = useRef<HTMLButtonElement>(null)
-  useEffect(() => {
-    if (copyState !== "copied") return
-    const timer = window.setTimeout(() => setCopyState("idle"), COPIED_FOR_MS)
-    return () => window.clearTimeout(timer)
-  }, [copyState])
   const issue = useMutation({
-    mutationFn: () => api.issueIntegrationToken(name),
+    mutationFn: () => api.issueIntegrationToken(name, tokenScopes(installation)),
     onSuccess: async (token) => {
       setIssued(token)
       setName("")
+      setInstallation(false)
       setCopyState("idle")
       // Announce the issue, never the token: a screen reader would read the secret aloud.
       setMessage(t("settings.integrations.status.issued", { name: token.name }))
@@ -60,6 +57,8 @@ export function useIntegrationTokens() {
     tokens,
     name,
     setName,
+    installation,
+    setInstallation,
     issued,
     revoking,
     setRevoking,

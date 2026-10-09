@@ -307,7 +307,7 @@ export const en = {
   selfHost: {
     title: "Self-host it",
     /** The one line under the title. */
-    line: "One Docker service and one SQLite file, on a server you own.",
+    line: "One Docker service and one SQLite file, on a server you own. Use it alone, or invite your household.",
     /** What you need, in one quiet line under the commands. */
     requirements: "Docker and a Google Cloud project. Runs on a Raspberry Pi.",
     copy: "Copy",
@@ -331,6 +331,10 @@ export const en = {
       {
         q: "Can it sync both ways?",
         a: "Yes, with two rules, one in each direction. Calendar Ghost never syncs its own events back.",
+      },
+      {
+        q: "Can my family use it too?",
+        a: "Yes. Invite them with a link. Each person signs in with their own email and keeps their own calendars, rules, and Activity. Nobody else sees them, not even the administrator.",
       },
       { q: "Outlook, iCloud, or CalDAV?", a: "Google Calendar is the only provider today. Outlook and iCloud are coming soon; CalDAV is not supported yet." },
       {
@@ -375,10 +379,10 @@ export const en = {
     pages: {
       "self-hosting": {
         description:
-          "Run Calendar Ghost on your own machine: Docker, a Google Cloud project, the settings file, first-run setup, monitors and agents, and backups.",
+          "Run Calendar Ghost on your own machine: Docker, a Google Cloud project, the settings file, first-run setup, inviting other people, monitors and agents, and backups.",
       },
       troubleshooting: {
-        description: "What to check when Calendar Ghost cannot reach Google, a rule stops, or an event did not synchronize.",
+        description: "What to check when Calendar Ghost cannot reach Google, a rule stops, an event did not synchronize, or you cannot sign in.",
       },
     },
     /** The small table of contents beside the document. */

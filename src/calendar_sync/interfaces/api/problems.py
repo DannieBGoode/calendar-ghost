@@ -16,6 +16,16 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.utils import is_body_allowed_for_status_code
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from calendar_sync.application.administration import (
+    AdministratorRequired,
+    LinkUnusable,
+    RegistrationClosed,
+    UserDeletionInterrupted,
+    UserNotFound,
+    YourOwnDeletion,
+    YourOwnResetLink,
+    YourOwnState,
+)
 from calendar_sync.application.errors import (
     AccountAccessCheckFailed,
     ActivityEventNotFound,
@@ -28,8 +38,12 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
+    EmailRequired,
+    EmailTaken,
     EventInspectionUnavailable,
     FileLoggingOff,
+    IncorrectCredentials,
+    IncorrectPassword,
     InvalidActivityAge,
     InvalidAuthorizationState,
     InvalidIntegrationTokenName,
@@ -42,8 +56,11 @@ from calendar_sync.application.errors import (
     ReplacementInterrupted,
     RuleNotExecutable,
     RuleNotFound,
+    SignInThrottled,
     StorageBusy,
+    UserDisabled,
 )
+from calendar_sync.domain.access import InvalidEmail, LastAdministrator, OnlyMeNeedsOneUser
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 
 type ParamValue = str | int | None
@@ -105,6 +122,23 @@ _CODES: dict[type[Exception], str] = {
     StorageBusy: "storage_busy",
     FileLoggingOff: "file_logging_off",
     InvalidIntegrationTokenName: "invalid_integration_token_name",
+    IncorrectCredentials: "incorrect_credentials",
+    IncorrectPassword: "incorrect_password",
+    SignInThrottled: "sign_in_throttled",
+    UserDisabled: "user_disabled",
+    EmailTaken: "email_taken",
+    EmailRequired: "email_required",
+    InvalidEmail: "invalid_email",
+    AdministratorRequired: "administrator_required",
+    UserNotFound: "user_not_found",
+    RegistrationClosed: "registration_closed",
+    LinkUnusable: "link_unusable",
+    YourOwnDeletion: "your_own_deletion",
+    YourOwnResetLink: "your_own_reset_link",
+    YourOwnState: "your_own_state",
+    LastAdministrator: "last_administrator",
+    OnlyMeNeedsOneUser: "only_me_needs_one_user",
+    UserDeletionInterrupted: "user_deletion_interrupted",
     DomainValidationError: "invalid_rule",
     # Every rejected lifecycle change (enable, pause, policy edit) with a message naming the state.
     InvalidStateTransition: "invalid_state_transition",
@@ -140,6 +174,10 @@ def _params(error: Exception) -> dict[str, ParamValue]:
         return failure_params(error)
     if isinstance(error, AccountAccessCheckFailed):
         return {"reason": error.kind.value}
+    if isinstance(error, SignInThrottled):
+        return {"retry_after": error.retry_after}
+    if isinstance(error, UserDeletionInterrupted):
+        return {"removed": error.removed, "remaining": error.remaining}
     return {}
 
 

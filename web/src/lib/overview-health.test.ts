@@ -175,7 +175,7 @@ describe("overviewHealth", () => {
     expect(health.headline).toBe("2 rules stopped syncing")
     expect(health.title).toBe("1 Google account needs reauthorization")
     expect(health.facts).toEqual(["No rules running", "Last sync 3 minutes ago"])
-    expect(health.action?.view).toBe("settings")
+    expect(health.action).toMatchObject({ view: "settings", settingsTab: "connections" })
   })
 
   it("asks for reauthorization before setup when only a disconnected account remains", () => {
@@ -186,7 +186,7 @@ describe("overviewHealth", () => {
     )
     expect(health.tone).toBe("setup")
     expect(health.headline).toBe("Reauthorize your Google account")
-    expect(health.action?.view).toBe("settings")
+    expect(health.action).toMatchObject({ view: "settings", settingsTab: "connections" })
   })
 
   it("puts a stopped rule ahead of problems on running ones", () => {

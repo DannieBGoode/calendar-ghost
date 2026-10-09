@@ -17,6 +17,7 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.security import CredentialCipher
+from tests.users import USER, add_user
 
 CLIENT = OAuthClientConfig(
     "synthetic-client", "synthetic-secret", "http://localhost:8000/api/v1/oauth/google/callback"
@@ -40,6 +41,7 @@ def _stored(token: str, expiry: datetime) -> str:
 def _store(tmp_path: Path) -> SqliteConnectedAccountStore:
     database = tmp_path / "test.db"
     initialize_database(database)
+    add_user(database)
     return SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
 
 
@@ -80,7 +82,7 @@ def test_a_valid_stored_token_is_used_without_refreshing(
     tmp_path: Path, built: list[Credentials], refreshes: list[str]
 ) -> None:
     store = _store(tmp_path)
-    account = store.save(
+    account = store.for_user(USER).save(
         "Work",
         "work@example.test",
         _stored("valid-token", datetime.now(UTC) + timedelta(hours=1)),
@@ -97,7 +99,7 @@ def test_an_expired_token_is_refreshed_once_and_kept_for_later_requests(
     tmp_path: Path, built: list[Credentials], refreshes: list[str]
 ) -> None:
     store = _store(tmp_path)
-    account = store.save(
+    account = store.for_user(USER).save(
         "Work",
         "work@example.test",
         _stored("old-token", datetime.now(UTC) - timedelta(hours=2)),
@@ -123,7 +125,9 @@ def test_a_failed_refresh_keeps_the_stored_credentials(
 ) -> None:
     store = _store(tmp_path)
     expired = _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
-    account = store.save("Work", "work@example.test", expired, provider=ProviderKind.GOOGLE)
+    account = store.for_user(USER).save(
+        "Work", "work@example.test", expired, provider=ProviderKind.GOOGLE
+    )
 
     def refresh(self: Credentials, _request: object) -> None:
         raise RefreshError("invalid_grant")  # type: ignore[no-untyped-call]
@@ -140,9 +144,13 @@ def test_a_failed_refresh_keeps_the_stored_credentials(
 def test_kept_credentials_never_replace_a_newer_authorization(tmp_path: Path) -> None:
     store = _store(tmp_path)
     first = _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
-    account = store.save("Work", "work@example.test", first, provider=ProviderKind.GOOGLE)
+    account = store.for_user(USER).save(
+        "Work", "work@example.test", first, provider=ProviderKind.GOOGLE
+    )
     reauthorized = _stored("reauthorized-token", datetime.now(UTC) + timedelta(hours=1))
-    store.save("Work", "work@example.test", reauthorized, provider=ProviderKind.GOOGLE)
+    store.for_user(USER).save(
+        "Work", "work@example.test", reauthorized, provider=ProviderKind.GOOGLE
+    )
 
     kept = store.replace_credentials(account.id, first, '{"token": "refreshed"}')
 
@@ -153,12 +161,14 @@ def test_kept_credentials_never_replace_a_newer_authorization(tmp_path: Path) ->
 def test_kept_credentials_do_not_reconnect_a_disconnected_account(tmp_path: Path) -> None:
     store = _store(tmp_path)
     first = _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
-    account = store.save("Work", "work@example.test", first, provider=ProviderKind.GOOGLE)
-    store.disconnect(account.id)
+    account = store.for_user(USER).save(
+        "Work", "work@example.test", first, provider=ProviderKind.GOOGLE
+    )
+    store.for_user(USER).disconnect(account.id)
 
     assert store.replace_credentials(account.id, "{}", '{"token": "refreshed"}') is False
     assert store.replace_credentials(account.id, first, '{"token": "refreshed"}') is False
-    assert store.is_connected(account.id) is False
+    assert store.for_user(USER).is_connected(account.id) is False
 
 
 def test_keeping_a_refreshed_token_is_not_a_reauthorization(tmp_path: Path) -> None:
@@ -166,11 +176,13 @@ def test_keeping_a_refreshed_token_is_not_a_reauthorization(tmp_path: Path) -> N
     # refresh must not move the account's authorization time.
     store = _store(tmp_path)
     first = _stored("old-token", datetime.now(UTC) - timedelta(hours=2))
-    account = store.save("Work", "work@example.test", first, provider=ProviderKind.GOOGLE)
+    account = store.for_user(USER).save(
+        "Work", "work@example.test", first, provider=ProviderKind.GOOGLE
+    )
 
     assert store.replace_credentials(account.id, first, '{"token": "refreshed"}') is True
 
-    kept = store.get(account.id)
+    kept = store.for_user(USER).get(account.id)
     assert kept is not None
     assert kept.authorized_at == account.authorized_at
     assert store.credential_json(account.id) == '{"token": "refreshed"}'
@@ -183,7 +195,7 @@ def test_a_token_refresh_is_counted_toward_the_run_and_logged_without_the_token(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     store = _store(tmp_path)
-    account = store.save(
+    account = store.for_user(USER).save(
         "Work",
         "work@example.test",
         _stored("old-token", datetime.now(UTC) - timedelta(hours=2)),
@@ -225,7 +237,7 @@ def test_an_access_check_whose_token_refresh_fails_explains_what_to_do(
     expected: str,
 ) -> None:
     store = _store(tmp_path)
-    account = store.save(
+    account = store.for_user(USER).save(
         "Work",
         "work@example.test",
         _stored("old-token", datetime.now(UTC) - timedelta(hours=2)),
@@ -246,13 +258,13 @@ def test_an_access_check_of_a_disconnected_account_still_says_it_is_disconnected
     tmp_path: Path, built: list[Credentials]
 ) -> None:
     store = _store(tmp_path)
-    account = store.save(
+    account = store.for_user(USER).save(
         "Work",
         "work@example.test",
         _stored("token", datetime.now(UTC) + timedelta(hours=1)),
         provider=ProviderKind.GOOGLE,
     )
-    store.disconnect(account.id)
+    store.for_user(USER).disconnect(account.id)
 
     with pytest.raises(ConnectedAccountDisconnected):
         _oauth(tmp_path, store).verify_access(account.id)

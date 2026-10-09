@@ -7,6 +7,7 @@ import sqlite3
 from datetime import UTC, date, datetime
 from typing import Any
 
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceChange, SourceField, SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -23,8 +24,11 @@ from calendar_sync.infrastructure.security import HistoryCipher
 class SqliteSourceObservationRepository:
     """Without a History Cipher, nothing is observed, so no change is ever described."""
 
-    def __init__(self, connection: sqlite3.Connection, history: HistoryCipher | None) -> None:
+    def __init__(
+        self, connection: sqlite3.Connection, user_id: UserId, history: HistoryCipher | None
+    ) -> None:
         self._connection = connection
+        self._user = user_id.value
         self._history = history
 
     def get(self, rule_id: SyncRuleId, source: EventRef) -> SourceObservation | None:
@@ -34,9 +38,9 @@ class SqliteSourceObservationRepository:
             """
             SELECT revision, title, sealed FROM source_observations
             WHERE rule_id = ? AND source_account_id = ? AND source_calendar_id = ?
-              AND source_event_id = ?
+              AND source_event_id = ? AND user_id = ?
             """,
-            _key(rule_id, source),
+            (*_key(rule_id, source), self._user),
         ).fetchone()
         if row is None:
             return None
@@ -77,12 +81,12 @@ class SqliteSourceObservationRepository:
             "response": observation.response.value if observation.response else None,
         }
         sealed = self._history.seal(json.dumps(details), _observation_context(rule_id, source))
-        self._connection.execute(
+        cursor = self._connection.execute(
             """
             INSERT INTO source_observations (
                 rule_id, source_account_id, source_calendar_id, source_event_id,
-                revision, observed_at, title, recurring, ends, sealed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                revision, observed_at, title, recurring, ends, sealed, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id, source_account_id, source_calendar_id, source_event_id)
             DO UPDATE SET
                 revision = excluded.revision,
@@ -91,6 +95,7 @@ class SqliteSourceObservationRepository:
                 recurring = excluded.recurring,
                 ends = excluded.ends,
                 sealed = excluded.sealed
+            WHERE user_id = excluded.user_id
             """,
             (
                 *_key(rule_id, source),
@@ -100,8 +105,14 @@ class SqliteSourceObservationRepository:
                 int(bool(observation.recurrence)),
                 _ends(observation.time),
                 sealed,
+                self._user,
             ),
         )
+        if cursor.rowcount != 1:
+            # The observation the upsert met is another User's, so nothing was written.
+            raise sqlite3.IntegrityError(
+                f"an observation of rule {rule_id.value} is another User's"
+            )
 
     def forget_stale(
         self, rule_id: SyncRuleId, source: CalendarEndpoint, ended_before: datetime
@@ -111,13 +122,14 @@ class SqliteSourceObservationRepository:
         self._connection.execute(
             """
             DELETE FROM source_observations
-            WHERE rule_id = ? AND (
+            WHERE rule_id = ? AND user_id = ? AND (
                 source_account_id != ? OR source_calendar_id != ?
                 OR (recurring = 0 AND ends < ?)
             )
             """,
             (
                 rule_id.value,
+                self._user,
                 source.connected_account_id.value,
                 source.calendar_id.value,
                 ended_before.astimezone(UTC).isoformat(),

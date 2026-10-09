@@ -4,23 +4,25 @@ Calendar Ghost is a modular monolith: one repository, one deployable application
 
 ## Edition boundary
 
-The Community Edition is intentionally a single-installation runtime: one Installation
-Administrator, one SQLite database, one scheduler, and one application process. It has no tenant
-identifier, hosted account, billing path, or remote control plane. This keeps the self-hosted data
-boundary visible in the code and makes backups and ownership understandable to the operator.
+The Community Edition runs as one installation: one SQLite database, one scheduler, and one
+application process, serving one or more Users. It has no hosted account, billing path, or remote
+control plane. This keeps the self-hosted data boundary visible in the code and makes backups and
+ownership understandable to the operator.
 
-The future hosted service runs this same codebase (ADR 0023). Multi-user support, billing, and an
-operator overview will be added here, with plan limits behind the Plans setting and billing behind
-Commercial Mode, both off by default (ADR 0028). ADR 0029 decides its persistence and per-User isolation and ADR 0030 its identity and
-registration; build it in the phases of `docs/superpowers/specs/2026-10-09-multi-user-design.md`,
-not piecemeal.
+Every record belongs to one User, and no User sees another's ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
+[ADR 0030](adr/0030-users-administrators-and-registration.md)). Users sign in with email and
+password; an Installation Administrator is a User with a role, not a separate account. The
+Registration Policy starts at Only Me, so a household installation that one person runs behaves as
+before. The future hosted service runs this same codebase (ADR 0023). The Operator Overview, Plans
+behind the Plans setting, and billing behind Commercial Mode, both off by default (ADR 0028), follow
+in the phases of `docs/superpowers/specs/2026-10-09-multi-user-design.md`.
 
 ## Bounded contexts
 
 - **Calendar Integration** owns provider authorization, discovery, change cursors, rate limits, provider errors, and translation. Google is the initial adapter.
 - **Synchronization** owns directional rules, transformation, mappings, source authority, loop prevention, idempotent actions, and rule lifecycle.
 - **Reconciliation** derives expected projections and proves provider state, independently of normal incremental synchronization.
-- **Identity and Access** owns the installation administrator, sessions, connected-account authorization, and credential lifecycle.
+- **Identity and Access** owns Users, their roles and sessions, the Registration Policy, Invitations and Password Reset Links, connected-account authorization, and credential lifecycle.
 - **Operations** owns scheduling, retries, incidents, notifications, audit evidence, and health.
 
 ## Dependency direction
@@ -45,11 +47,17 @@ The domain imports only Python's standard library and provider-neutral domain mo
 Web API routes only parse input, call one use case or port, and map its result or application
 error to HTTP. `bootstrap/container.py` composes in two steps: `build_adapters` makes the SQLite and
 Google adapters from Settings, and `compose` wires the use cases from them into the `Container`
-the routes call. The `Container` holds use cases, query ports, and the few configuration values a
-route returns; never a concrete adapter, the unit of work, or the rule locks. Tests and the
-development preview substitute adapters before `compose`, or use cases after it. `Adapters` holds
-ports rather than concrete classes, so a substitute needs only to honor the port. Use cases that
-need the installation master key are absent without it, and one route guard answers 503 for them.
+the routes call. The `Container` holds installation-wide services (identity, administration,
+Installation Health, the scheduler) and `for_user`, which composes one User's use cases from
+adapters made for that User: their unit of work, account store, Activity queries, incidents, and
+Incident Notifications. A route resolves the signed-in User from the session and calls only that
+User's use cases, so no use case can reach another User's records. The scheduler lists due rules
+through the installation-wide `InstallationUnitOfWork` and runs each with its owner's use cases,
+taking turns between Users. The `Container` holds no concrete adapter, unit of work, or rule
+locks. Tests and the development preview substitute adapters before `compose`, or use cases after
+it. `Adapters` holds ports, or functions that make a User's port, rather than concrete classes, so a
+substitute needs only to honor the port. Use cases that need the installation master key are absent
+without it, and one route guard answers 503 for them.
 
 Time and identifiers come through ports too. `build_adapters` makes one `SystemClock`, one
 `UuidIdGenerator`, and one `UuidRunIdGenerator`, and passes them to each adapter and use case that
@@ -61,16 +69,21 @@ check expiry and retry waits without sleeping.
 `interfaces/api/app.py` is only the factory: it installs the container, registers the routers, and
 serves the compiled Web UI after checking each requested file against the resolved static root. The
 routes live in one `APIRouter` module per resource under `interfaces/api/routes/` (session, setup,
-accounts, rules, activity, incidents, storage, integrations, health). Each module declares a small protocol for the
-container services it reads, since interfaces cannot import bootstrap, and the factory's typed
-assignment lets mypy prove the container satisfies every one. `interfaces/api/dependencies.py` holds
-the shared `require_admin` session guard and `require_status_reader`, which also accepts an
-Integration Token; `tests/adapters/test_api_authorization.py` fails if any `/api/` route other than
-setup, the session routes, the OAuth callback, and `GET /api/v1/status` lacks `require_admin`, and
-sends a valid token to every other route to prove each one refuses it.
+account, users, accounts, rules, activity, incidents, storage, integrations, health). Each module
+declares a small protocol for the container services it reads, since interfaces cannot import
+bootstrap, and the factory's typed assignment lets mypy prove the container satisfies every one.
+`interfaces/api/dependencies.py` holds the guards: `current_user` resolves the signed-in User and,
+until the upgraded first User adds an email, refuses everything but the add-email step;
+`user_services` gives a route that User's use cases; `administrator` refuses anyone but an
+Installation Administrator before anything is looked up; `status_reader` and `installation_reader`
+also accept an Integration Token with the right scope. `tests/adapters/test_api_authorization.py`
+fails if any `/api/` route other than the documented public ones lacks a guard, sends a valid token
+to every other route to prove each one refuses it, walks every route that names a record with a
+second User's session to prove each answers 404, and refuses a User who does not administer on
+every administrator route.
 
 Google authorization is split the same way. `infrastructure/google/oauth.py` holds the
-state-protected OAuth flow, Google credentials, and Google calendar discovery, configured by an
+OAuth flow, protected by its state and by the session of the User who began it, Google credentials, and Google calendar discovery, configured by an
 `OAuthClientConfig` value that bootstrap builds from Settings. Connected Accounts and their
 credentials, encrypted by the `CredentialCipher` in
 `infrastructure/security.py`, live in `infrastructure/persistence/accounts.py`, which implements the
@@ -95,14 +108,18 @@ Installation Status follows the same direction ([ADR 0024](adr/0024-integration-
 `application/status.py` decides the one verdict the Overview, `GET /api/v1/status`, and MCP share:
 `assess_installation` is a pure function of the rule summaries, the operations overview, open
 incidents, and the scheduler's `SchedulerProgress`, read through the `SchedulerHeartbeat` port that
-`SyncScheduler` implements in memory. `interfaces/access.py` holds the one access decision both
-transports use: a present `Authorization` header decides alone, and only the status API also
-accepts the administrator session. `interfaces/api/status_payload.py` translates a verdict into the
+`SyncScheduler` implements in memory. Each User's Installation Status covers their rules and the
+installation problems that affect them. `application/installation_health.py` sums every User's
+verdict into Installation Health for Installation Administrators, beside installation incidents,
+such as a scheduler that stalled; `SchedulerWatch` reports that one to the installation's own
+channels. `interfaces/access.py` holds the one access decision both transports use: a present
+`Authorization` header decides alone and must carry the scope the route needs, and only the status
+API also accepts a session. `interfaces/api/status_payload.py` translates a verdict into the
 response both transports return. `interfaces/mcp/` serves the MCP SDK's stateless streamable HTTP
 app as one exact `/mcp` route behind a gate that refuses a request before the SDK sees it, and
 creates a fresh SDK server for each application lifespan. Only `interfaces/mcp` may import the
 `mcp` package. Integration Tokens are stored by `infrastructure/integration_tokens.py` behind the
-`IntegrationTokens` port, as SHA-256 hashes.
+`IntegrationTokens` port, as SHA-256 hashes, each belonging to one User.
 
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
 `application/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
@@ -167,13 +184,23 @@ name, a writer waits up to five seconds for another's lock, and `transaction()` 
 and closes in one block. A test fails if any other module under `src/calendar_sync` calls
 `sqlite3.connect`, so a setting added there applies to every adapter.
 
+Every table holding a User's records carries `user_id`. A child refers to its parent by identifier
+and User together, such as a mapping's `(rule_id, user_id)` to its rule's `(id, user_id)`, so SQLite
+refuses a record whose User differs from its parent's, and a rule's accounts must be its own User's.
+Each repository of a User's unit of work adds that User to every statement, and an upsert that meets
+another User's record is refused rather than skipped. Deleting a User deletes everything they own
+through these references. `tests/adapters/test_user_isolation_schema.py` checks the schema, and that
+only the scheduler, the migrations, and the composition root reach `InstallationUnitOfWork`.
+
 The in-memory unit of work that application tests use and the SQLite one both pass the persistence
 contract in `tests/contracts/persistence.py`. It states, through the ports alone, the behavior use
 cases rely on: writes are discarded until committed, rule removal takes a rule's records with it, a
-record without its rule or series is refused, identities stay unique, and listings come back in a
-fixed order. It does not make the two interchangeable in every respect; when a use case starts
+record without its rule or series is refused, identities stay unique, listings come back in a fixed
+order, and a second User with the same calendar and event identifiers reads, changes, and deletes
+nothing of the first User's. The in-memory store keeps each User's records in a partition of their
+own. It does not make the two interchangeable in every respect; when a use case starts
 relying on another storage behavior, add it to the contract.
 
 ## Public compatibility surfaces
 
-Database migrations, environment configuration, HTTP API payloads, provider ownership metadata, and persisted domain states are compatibility surfaces. The `GET /api/v1/status` payload, the Integration Token format, and the MCP tool names and results are read by monitors, dashboards, and agents outside this repository, so a change to them must stay backward compatible or be announced as a breaking change. Releases must migrate them rather than asking operators to delete SQLite state.
+Database migrations, environment configuration, HTTP API payloads, provider ownership metadata, and persisted domain states are compatibility surfaces. The `GET /api/v1/status` and `GET /api/v1/installation/health` payloads, the Integration Token format and scopes, and the MCP tool names and results are read by monitors, dashboards, and agents outside this repository, so a change to them must stay backward compatible or be announced as a breaking change. Releases must migrate them rather than asking operators to delete SQLite state.

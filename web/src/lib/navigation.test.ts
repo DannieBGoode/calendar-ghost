@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  SETTINGS_TABS,
+  accountSearch,
   appLocationFromPathname,
+  appLocationFromUrl,
   appPathForLocation,
   appPathForRule,
+  appPathForSettingsTab,
   appPathForView,
+  connectionsPath,
+  defaultSettingsTab,
   isKnownAppPath,
   isPlainLeftClick,
   isViewingRule,
@@ -15,6 +21,7 @@ describe("application section URLs", () => {
     ["overview", "/overview"],
     ["rules", "/rules"],
     ["activity", "/activity"],
+    ["people", "/people"],
     ["settings", "/settings"],
   ] as const)("maps %s to %s", (view, path) => {
     expect(appPathForView(view)).toBe(path)
@@ -27,6 +34,59 @@ describe("application section URLs", () => {
     expect(appLocationFromPathname("/").view).toBe("overview")
     expect(appLocationFromPathname("/unknown").view).toBe("overview")
     expect(isKnownAppPath("/unknown")).toBe(false)
+  })
+})
+
+describe("Settings tab URLs", () => {
+  it("lists the tabs in order: Your account, Connections, Administration", () => {
+    expect(SETTINGS_TABS).toEqual(["account", "connections", "administration"])
+  })
+
+  it.each(["connections", "account", "administration"] as const)("round-trips the %s tab", (settingsTab) => {
+    const path = appPathForSettingsTab(settingsTab)
+    expect(path).toBe(`/settings/${settingsTab}`)
+    expect(appLocationFromPathname(path)).toEqual({ view: "settings", ruleId: null, settingsTab })
+    expect(appLocationFromPathname(`${path}/`).settingsTab).toBe(settingsTab)
+    expect(appPathForLocation({ view: "settings", ruleId: null, settingsTab })).toBe(path)
+    expect(isKnownAppPath(path)).toBe(true)
+  })
+
+  it("opens Settings without a tab at its own address", () => {
+    expect(appLocationFromPathname("/settings")).toEqual({ view: "settings", ruleId: null })
+    expect(appPathForLocation({ view: "settings", ruleId: null })).toBe("/settings")
+  })
+
+  it("shows Your account for Settings without a tab", () => {
+    expect(defaultSettingsTab("")).toBe("account")
+    expect(defaultSettingsTab("?unrelated=1")).toBe("account")
+  })
+
+  it.each(["?google=connected&account=acct-a&resumed=0", "?google=authorization_failed", "?account=acct-a", "?resumed=2"])(
+    "shows Connections when Google returns or an account is named (%s)",
+    (search) => {
+      expect(defaultSettingsTab(search)).toBe("connections")
+    },
+  )
+
+  it("resolves the tab Settings opens at from the whole address", () => {
+    expect(appLocationFromUrl("/settings", "")).toEqual({ view: "settings", ruleId: null, settingsTab: "account" })
+    expect(appLocationFromUrl("/settings", "?google=connected")).toEqual({
+      view: "settings",
+      ruleId: null,
+      settingsTab: "connections",
+    })
+    expect(appLocationFromUrl("/settings/administration", "?account=a").settingsTab).toBe("administration")
+    expect(appLocationFromUrl("/rules", "?account=a")).toEqual({ view: "rules", ruleId: null })
+  })
+
+  it("links Google accounts to Connections", () => {
+    expect(connectionsPath()).toBe("/settings/connections")
+    expect(connectionsPath(accountSearch("acct a"))).toBe("/settings/connections?account=acct%20a")
+  })
+
+  it.each(["/settings/unknown", "/settings/installation", "/settings/account/more", "/settingsx/account"])("falls back safely for %s", (path) => {
+    expect(appLocationFromPathname(path)).toEqual({ view: "overview", ruleId: null })
+    expect(isKnownAppPath(path)).toBe(false)
   })
 })
 

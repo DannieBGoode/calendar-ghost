@@ -24,7 +24,7 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.domain.model import CalendarEvent, EventStatus, TimedInterval
-from calendar_sync.interfaces.api.dependencies import app_services, require_admin
+from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, failure_params, problem
 from calendar_sync.interfaces.api.schemas import (
     ActivityEventResponse,
@@ -49,14 +49,14 @@ class ActivityServices(Protocol):
     def inspect_activity_event(self) -> InspectActivityEvent: ...
 
 
-Services = Annotated[ActivityServices, Depends(app_services)]
+Services = Annotated[ActivityServices, Depends(user_services)]
 router = APIRouter()
 
 
 @router.get(
     "/api/v1/dashboard",
     response_model=DashboardResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def dashboard(services: Services) -> DashboardResponse:
     # One read: the counts come from the same rules and overview the verdict was decided on.
@@ -83,7 +83,7 @@ def dashboard(services: Services) -> DashboardResponse:
 @router.get(
     "/api/v1/audit-entries",
     response_model=list[AuditEntryResponse],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def list_activity(
     services: Services,
@@ -106,7 +106,7 @@ def list_activity(
 @router.get(
     "/api/v1/audit-entries/{entry_id}",
     response_model=AuditEntryResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def get_activity_entry(entry_id: int, services: Services) -> AuditEntryResponse:
     entry = services.activity.entry(entry_id)
@@ -120,7 +120,7 @@ def get_activity_entry(entry_id: int, services: Services) -> AuditEntryResponse:
 @router.get(
     "/api/v1/recent-changes",
     response_model=list[RecentChangeResponse],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def recent_changes(
     services: Services,
@@ -139,7 +139,7 @@ def recent_changes(
 @router.get(
     "/api/v1/audit-entries/{entry_id}/changes",
     response_model=SourceChangeResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 def get_activity_entry_changes(entry_id: int, services: Services) -> SourceChangeResponse:
     change = services.activity.entry_change(entry_id)
@@ -171,7 +171,7 @@ def _field_change_response(change: FieldChange) -> FieldChangeResponse:
 @router.get(
     "/api/v1/audit-entries/{entry_id}/event",
     response_model=ActivityEventResponse,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(current_user)],
 )
 async def inspect_activity_event(entry_id: int, services: Services) -> ActivityEventResponse:
     try:

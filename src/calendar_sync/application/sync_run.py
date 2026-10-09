@@ -251,12 +251,14 @@ def read_occurrence(
 
 
 def require_unchanged(run: SyncRunContext) -> None:
-    """Stop before writing if the rule was paused, edited, or removed during this run."""
+    """Stop before writing if the rule was paused, edited, or removed during this run, or its
+    User was disabled."""
     current = run.uow.rules.get(run.rule.id)
     if (
         current is None
         or current.state is not SyncRuleState.ENABLED
         or current.material_signature != run.rule.material_signature
+        or not run.uow.user_active()
     ):
         raise RuleNotExecutable("sync rule changed during synchronization; run stopped")
 

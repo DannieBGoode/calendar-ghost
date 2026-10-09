@@ -29,7 +29,9 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+)
 from tests.application.test_execute_sync_rule import FakeCalendarProvider
 from tests.fake_calendar import (
     WRITE_OPERATIONS,
@@ -39,6 +41,7 @@ from tests.fake_calendar import (
     sync_use_case,
 )
 from tests.helpers import NOW, event, occurrence, rule, series, week_start
+from tests.users import USER
 
 
 class FixedClock:
@@ -58,7 +61,7 @@ def _preview(unit_of_work: UnitOfWorkFactory, provider: CalendarReader) -> Previ
 
 def test_preview_is_side_effect_free_and_unlocks_enablement() -> None:
     draft = rule(state=SyncRuleState.DRAFT)
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[draft.id] = draft
     provider = FakeCalendarProvider(event())
     use_case = _preview(unit_of_work, provider)
@@ -76,7 +79,7 @@ def test_preview_is_side_effect_free_and_unlocks_enablement() -> None:
 
 def test_preview_revalidates_a_degraded_rule_after_reauthorization() -> None:
     degraded = rule(state=SyncRuleState.DEGRADED)
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[degraded.id] = degraded
     provider = FakeCalendarProvider(event())
     use_case = _preview(unit_of_work, provider)
@@ -110,7 +113,7 @@ def _denied_preview(
     state: SyncRuleState, kind: ProviderFailureKind
 ) -> tuple[PreviewSyncRule, RecoveryIncidents, ProviderFailure]:
     stopped = rule(state=state)
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[stopped.id] = stopped
     failure = ProviderFailure(kind, "synthetic", account_id=ConnectedAccountId("work-account"))
     incidents = RecoveryIncidents()
@@ -146,14 +149,14 @@ def test_preview_of_a_missing_rule_is_refused() -> None:
     provider = FakeCalendarProvider(event())
 
     with pytest.raises(RuleNotExecutable, match="does not exist"):
-        _preview(InMemoryUnitOfWorkFactory(), provider).execute(rule().id)
+        _preview(InMemoryUnitOfWorkFactory().for_user(USER), provider).execute(rule().id)
 
     assert provider.requested_endpoints == []
 
 
 @pytest.mark.parametrize("state", [SyncRuleState.ENABLED, SyncRuleState.REMOVING])
 def test_preview_is_refused_for_an_enabled_or_removing_rule(state: SyncRuleState) -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=state)
     provider = FakeCalendarProvider(event())
 

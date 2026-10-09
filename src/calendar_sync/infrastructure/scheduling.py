@@ -3,8 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from itertools import zip_longest
 
 from calendar_sync.application.errors import (
     ProviderFailure,
@@ -12,17 +14,23 @@ from calendar_sync.application.errors import (
     RuleNotExecutable,
 )
 from calendar_sync.application.health import RunHealth
+from calendar_sync.application.installation_health import (
+    InstallationIncidentKind,
+    InstallationNotifications,
+    installation_incidents,
+)
 from calendar_sync.application.ports import (
     Clock,
-    RuleRunOutcome,
-    RunKind,
+    InstallationUnitOfWorkFactory,
+    ScheduledRule,
+    SchedulerHeartbeat,
     SchedulerProgress,
-    UnitOfWorkFactory,
 )
 from calendar_sync.application.retry import with_retries
 from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.synchronization import ExecuteSyncRule
-from calendar_sync.domain.model import SyncRule, SyncRuleState
+from calendar_sync.domain.access import UserId
+from calendar_sync.domain.model import SyncRule
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +41,27 @@ class SystemClock:
         return datetime.now(UTC)
 
 
+@dataclass(frozen=True, slots=True)
+class ScheduledServices:
+    """What the scheduler runs one User's rules with; they see only that User's records."""
+
+    execute_rule: ExecuteSyncRule
+    health: RunHealth
+
+
 class SyncScheduler:
+    """Runs every enabled rule each interval, each with its owner's services (ADR 0029)."""
+
     def __init__(
         self,
-        execute_rule: ExecuteSyncRule,
-        unit_of_work: UnitOfWorkFactory,
-        health: RunHealth,
+        installation: InstallationUnitOfWorkFactory,
+        services_for: Callable[[UserId], ScheduledServices],
         interval_seconds: int = 300,
         clock: Clock | None = None,
         concurrency: int = 4,
     ) -> None:
-        self._execute_rule = execute_rule
-        self._unit_of_work = unit_of_work
-        self._health = health
+        self._installation = installation
+        self._services_for = services_for
         self._interval_seconds = interval_seconds
         self._clock = clock or SystemClock()
         self._concurrency = concurrency
@@ -91,66 +107,115 @@ class SyncScheduler:
         """Runs every enabled rule once; returns the ids of the rules this pass listed."""
         now = self._clock.now()
         today = now.astimezone(UTC).date()
-        with self._unit_of_work() as uow:
+        with self._installation() as installation:
             # Values of paused and removed rules expire too, although no run of theirs does it.
-            uow.audit.forget_change_values(now - SOURCE_CHANGE_RETENTION)
-            uow.commit()
+            installation.forget_change_values(now - SOURCE_CHANGE_RETENTION)
+            installation.commit()
             # Each rule's daily full pass is due from its own last one, so a restart or another
             # rule's failure never re-lists calendars that already completed today's pass.
             due = tuple(
-                (rule, _full_pass_due(uow.run_outcomes.latest(rule.id, RunKind.SYNC), today))
-                for rule in uow.rules.list()
-                if rule.state is SyncRuleState.ENABLED
+                (scheduled, _full_pass_due(scheduled.last_full_succeeded_at, today))
+                for scheduled in fairly_ordered(installation.scheduled_rules())
             )
         # Different rules run side by side, so one waiting on a slow provider does not hold up the
         # rest; the same rule never does, because each run holds that rule's lock.
         slots = asyncio.Semaphore(self._concurrency)
 
-        async def run(rule: SyncRule, full: bool) -> None:
+        async def run(scheduled: ScheduledRule, full: bool) -> None:
             async with slots:
-                await asyncio.to_thread(self._execute_with_retry, rule, full)
+                await asyncio.to_thread(self._execute_with_retry, scheduled, full)
 
-        await asyncio.gather(*(run(rule, full) for rule, full in due))
-        return frozenset(rule.id.value for rule, _ in due)
+        await asyncio.gather(*(run(scheduled, full) for scheduled, full in due))
+        return frozenset(scheduled.rule.id.value for scheduled, _ in due)
 
-    def _execute_with_retry(self, rule: SyncRule, full: bool = False) -> bool:
+    def _execute_with_retry(self, scheduled: ScheduledRule, full: bool = False) -> bool:
+        rule = scheduled.rule
+        services = self._services_for(scheduled.owner)
         # Every decision of this run, including its retries, is recorded above this entry, so a
         # run that turns out to list both calendars in full can stand in for the daily pass.
-        floor = self._audit_floor()
+        floor = _audit_floor(services.health)
         started = self._clock.now()
         try:
-            result = with_retries(lambda: self._execute_rule.execute(rule.id, full=full), _sleep)
+            result = with_retries(lambda: services.execute_rule.execute(rule.id, full=full), _sleep)
         except RuleNotExecutable:
             # The rule was paused, edited, or removed after this pass listed it.
             return True
         except ProviderFailure as failure:
-            self._health.record_failure(rule, failure, attempted_at=started)
+            services.health.record_failure(rule, failure, attempted_at=started)
             return False
         except Exception as error:
             logger.exception("Unexpected synchronization failure for rule %s", rule.id.value)
-            self._health.record_failure(
+            services.health.record_failure(
                 rule, ProviderFailure(ProviderFailureKind.INFRASTRUCTURE, error.__class__.__name__)
             )
             return False
         listed = full or result.listed_in_full
-        self._record_success(rule, floor if listed else None, result.run_id)
+        _record_success(services.health, rule, floor if listed else None, result.run_id)
         return True
 
-    def _audit_floor(self) -> int | None:
-        try:
-            return self._health.audit_floor()
-        except Exception:
-            logger.exception("Could not read the audit position before a run")
-            return None
 
-    def _record_success(
-        self, rule: SyncRule, full_pass_floor: int | None, run_id: str | None
+class SchedulerWatch:
+    """Watches the scheduler from outside its loop, so a scheduler that stops completing passes
+    is reported to the installation's channels once, when it stalls (ADR 0030)."""
+
+    def __init__(
+        self,
+        heartbeat: SchedulerHeartbeat,
+        notifications: InstallationNotifications,
+        clock: Clock,
+        interval_seconds: int = 60,
     ) -> None:
-        # The run succeeded; failing to record its health must not report it as failed.
-        try:
-            self._health.record_success(rule, full_pass_floor=full_pass_floor, full_pass_run=run_id)
-        except Exception:
-            logger.exception("Could not record the successful run of rule %s", rule.id.value)
+        self._heartbeat = heartbeat
+        self._notifications = notifications
+        self._clock = clock
+        self._interval_seconds = interval_seconds
+        self._open: frozenset[InstallationIncidentKind] = frozenset()
+
+    async def run_forever(self) -> None:
+        while True:
+            try:
+                self.check()
+            except Exception:
+                logger.exception("Could not check the scheduler; checking again shortly")
+            await asyncio.sleep(self._interval_seconds)
+
+    def check(self) -> None:
+        """Notify each installation incident that has opened since the last check."""
+        incidents = installation_incidents(self._heartbeat.progress(), self._clock.now())
+        opened = [incident for incident in incidents if incident.kind not in self._open]
+        self._open = frozenset(incident.kind for incident in incidents)
+        for incident in opened:
+            self._notifications.installation_incident_opened(incident)
+
+
+def fairly_ordered(rules: Sequence[ScheduledRule]) -> tuple[ScheduledRule, ...]:
+    """Rules taking turns between Users, so one User's many rules never hold up everyone else's.
+
+    Each User's rules keep their order; the first of every User's comes before anyone's second.
+    """
+    by_owner: dict[UserId, list[ScheduledRule]] = {}
+    for scheduled in rules:
+        by_owner.setdefault(scheduled.owner, []).append(scheduled)
+    turns = zip_longest(*by_owner.values())
+    return tuple(scheduled for turn in turns for scheduled in turn if scheduled is not None)
+
+
+def _audit_floor(health: RunHealth) -> int | None:
+    try:
+        return health.audit_floor()
+    except Exception:
+        logger.exception("Could not read the audit position before a run")
+        return None
+
+
+def _record_success(
+    health: RunHealth, rule: SyncRule, full_pass_floor: int | None, run_id: str | None
+) -> None:
+    # The run succeeded; failing to record its health must not report it as failed.
+    try:
+        health.record_success(rule, full_pass_floor=full_pass_floor, full_pass_run=run_id)
+    except Exception:
+        logger.exception("Could not record the successful run of rule %s", rule.id.value)
 
 
 def _sleep(delay: float) -> None:
@@ -158,6 +223,5 @@ def _sleep(delay: float) -> None:
     time.sleep(delay)
 
 
-def _full_pass_due(latest: RuleRunOutcome | None, today: date) -> bool:
-    completed = latest.last_full_succeeded_at if latest is not None else None
+def _full_pass_due(completed: datetime | None, today: date) -> bool:
     return completed is None or completed.astimezone(UTC).date() != today

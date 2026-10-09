@@ -17,7 +17,9 @@ def test_audit_entries_return_empty_list_before_any_synchronization(tmp_path: Pa
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": PASSWORD})
+        client.post(
+            "/api/v1/setup/admin", json={"email": "admin@example.test", "password": PASSWORD}
+        )
         response = client.get("/api/v1/audit-entries")
 
     assert response.status_code == 200
@@ -29,12 +31,17 @@ def test_skips_no_longer_recorded_are_hidden_from_earlier_history(tmp_path: Path
     app = create_app(build_container(Settings(database)))
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": PASSWORD})
+        client.post(
+            "/api/v1/setup/admin", json={"email": "admin@example.test", "password": PASSWORD}
+        )
         with sqlite3.connect(database) as connection:
             connection.executemany(
                 """
-                INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, detail, reason)
-                VALUES ('2026-09-01T10:00:00+00:00', 'rule-1', ?, ?, '', ?)
+                INSERT INTO audit_entries (
+                    occurred_at, rule_id, action, outcome, detail, reason, user_id
+                )
+                VALUES ('2026-09-01T10:00:00+00:00', 'rule-1', ?, ?, '', ?,
+                    (SELECT id FROM users ORDER BY rowid LIMIT 1))
                 """,
                 [
                     ("ignore", "skipped", "managed_projection_source"),
@@ -71,7 +78,9 @@ def test_unknown_api_paths_return_not_found_instead_of_the_web_page(
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": PASSWORD})
+        client.post(
+            "/api/v1/setup/admin", json={"email": "admin@example.test", "password": PASSWORD}
+        )
         response = client.request(method, path)
 
     assert response.status_code == 404

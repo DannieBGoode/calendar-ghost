@@ -2,7 +2,7 @@ import { incidentText } from "@/i18n/incident-text"
 import type { I18n } from "@/i18n/translator"
 import { activitySearch } from "@/lib/activity-location"
 import type { Dashboard, InstallationHealth, RunningWork, ServerProblem } from "@/lib/api"
-import type { AppView } from "@/lib/navigation"
+import type { AppView, SettingsTab } from "@/lib/navigation"
 
 /**
  * The Overview's health, most urgent first:
@@ -15,7 +15,7 @@ import type { AppView } from "@/lib/navigation"
  */
 export type OverviewTone = "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy"
 
-export type HealthAction = { label: string; view: AppView; ruleId?: string; search?: string }
+export type HealthAction = { label: string; view: AppView; ruleId?: string; search?: string; settingsTab?: SettingsTab }
 
 /** A problem the hero lists under the main one, in a few words. */
 export type OtherProblem = { tone: OverviewTone; summary: string; action: HealthAction | null }
@@ -98,7 +98,7 @@ function problemDetail(i18n: I18n, problem: ServerProblem, now: number): string 
 type Problem = Omit<OverviewHealth, "facts" | "others"> & { summary: string }
 
 function reauthorizeInSettings(i18n: I18n): HealthAction {
-  return { label: i18n.t("overview.health.action.reauthorizeInSettings"), view: "settings" }
+  return { label: i18n.t("overview.health.action.reauthorizeInSettings"), view: "settings", settingsTab: "connections" }
 }
 
 function reviewRulesAction(i18n: I18n): HealthAction {

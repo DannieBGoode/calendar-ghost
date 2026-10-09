@@ -15,7 +15,7 @@ const now = Date.parse("2026-10-03T12:00:00Z")
 const token: IntegrationToken = {
   id: "t1",
   name: "Uptime Kuma",
-  scope: "status:read",
+  scopes: ["status:read"],
   created_at: "2026-10-01T09:00:00Z",
   last_used_at: "2026-10-03T11:57:00Z",
   revoked_at: null,

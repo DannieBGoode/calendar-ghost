@@ -9,6 +9,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RuleNotExecutable,
+    RuleNotFound,
 )
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.occurrences import SynchronizeOccurrences
@@ -98,9 +99,12 @@ class _ChangeFeeds:
 def _executable_rule(uow: UnitOfWork, rule_id: SyncRuleId) -> SyncRule:
     rule = uow.rules.get(rule_id)
     if rule is None:
-        raise RuleNotExecutable(f"sync rule {rule_id.value} does not exist")
+        raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
     if rule.state is not SyncRuleState.ENABLED:
         raise RuleNotExecutable(f"sync rule is {rule.state}, not enabled")
+    # The scheduler lists rules before it runs them, so a User disabled since is caught here.
+    if not uow.user_active():
+        raise RuleNotExecutable("the rule's User is disabled")
     return rule
 
 
@@ -612,6 +616,8 @@ class ExecuteSyncRule:
             destination_loaded=destination_loaded,
             actual_destination=actual_destination,
         )
+        # Deciding may read the provider, which takes time; the User may be disabled meanwhile.
+        require_unchanged(run)
         run.count(decision.action, source_event.reference)
         mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
         if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:

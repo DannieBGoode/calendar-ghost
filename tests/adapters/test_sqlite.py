@@ -26,6 +26,7 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.rules import CreateSyncRule
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarId,
@@ -49,19 +50,23 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.health import SqliteIncidentRepository
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+)
 from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteUnitOfWorkFactory,
+    SqliteInstallationUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.security import CredentialCipher
+from tests.adapters.test_user_migration import LATEST_VERSION, database_at_version
 from tests.helpers import NOW, endpoint, event, rule, week_start
+from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, sqlite_units
 
 
 def test_sqlite_rule_repository_round_trip(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
 
     with factory() as uow:
         uow.rules.add(rule())
@@ -76,7 +81,7 @@ def test_sqlite_rule_repository_round_trip(tmp_path: Path) -> None:
 def test_sqlite_rule_repository_keeps_the_invitation_response_policies(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     waiting = replace(
         rule(),
         transformation=TransformationPolicy(
@@ -101,7 +106,7 @@ def test_migration_15_gives_existing_rules_the_defaults_and_reprojects_them(
 ) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         uow.rules.add(rule())
         uow.commit()
     with sqlite3.connect(database) as connection:
@@ -112,7 +117,7 @@ def test_migration_15_gives_existing_rules_the_defaults_and_reprojects_them(
     initialize_database(database)
     initialize_database(database)
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         restored = uow.rules.get(rule().id)
     assert restored == replace(rule(), reprojection_required=True)
 
@@ -123,7 +128,7 @@ def test_database_migration_is_idempotent(tmp_path: Path) -> None:
     initialize_database(database)
     initialize_database(database)
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         assert uow.rules.list() == ()
 
 
@@ -132,7 +137,7 @@ def test_recreated_projection_updates_existing_mapping_and_destination_cursor(
 ) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     source = event().reference
     first_destination = EventRef(endpoint("work-account", "work-calendar"), EventId("first"))
     restored_destination = EventRef(endpoint("work-account", "work-calendar"), EventId("restored"))
@@ -170,7 +175,7 @@ def test_recreated_projection_updates_existing_mapping_and_destination_cursor(
 def test_sqlite_unique_relationship_is_translated_to_application_error(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     duplicate = rule()
     second_id = type(duplicate)(
         id=SyncRuleId("rule-2"),
@@ -198,6 +203,9 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
         connection.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (1, '2026-09-01')"
         )
+        connection.execute(
+            "INSERT INTO installation_admin VALUES (1, 'scrypt$synthetic', '2026-09-01')"
+        )
         connection.executemany(
             """
             INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, detail)
@@ -223,7 +231,7 @@ def test_version_one_database_upgrades_audit_entries_with_reason_codes(tmp_path:
             "SELECT action, outcome, reason, run_id FROM audit_entries ORDER BY id"
         ).fetchall()
         titles = connection.execute("SELECT DISTINCT event_title FROM audit_entries").fetchall()
-    assert versions == list(range(1, 21))
+    assert versions == list(range(1, LATEST_VERSION + 1))
     assert rows == [
         ("conflict", "blocked", "recurring_unsupported", None),
         ("create", "completed", "source_created", None),
@@ -237,7 +245,7 @@ def test_audit_entries_persist_reason_and_run(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         uow.audit.append(
             AuditEntry(
                 occurred_at=NOW,
@@ -272,7 +280,7 @@ def _mapping(event_id: str = "source-event") -> EventMapping:
 def test_migration_4_upgrades_a_version_3_installation_with_rules(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         uow.rules.add(rule())
         uow.commit()
     with sqlite3.connect(database) as connection:
@@ -283,7 +291,7 @@ def test_migration_4_upgrades_a_version_3_installation_with_rules(tmp_path: Path
     initialize_database(database)
     initialize_database(database)
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         restored = uow.rules.get(rule().id)
     with sqlite3.connect(database) as connection:
         versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
@@ -295,7 +303,7 @@ def test_migration_4_upgrades_a_version_3_installation_with_rules(tmp_path: Path
 def test_migration_6_backfills_the_last_successful_run(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         uow.rules.add(rule())
         uow.run_outcomes.record(
             RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
@@ -313,7 +321,7 @@ def test_migration_6_backfills_the_last_successful_run(tmp_path: Path) -> None:
 
     initialize_database(database)
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         sync = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
         reconciliation = uow.run_outcomes.latest(rule().id, RunKind.RECONCILIATION)
     assert sync is not None
@@ -326,7 +334,7 @@ def test_migration_6_backfills_the_last_successful_run(tmp_path: Path) -> None:
 def test_reprojection_flag_round_trips(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     changed = rule().change_policy(TransformationPolicy(content=ProjectionContent.DETAILS))
     with factory() as uow:
         uow.rules.add(rule())
@@ -340,7 +348,7 @@ def test_reprojection_flag_round_trips(tmp_path: Path) -> None:
 def test_run_outcomes_keep_the_latest_per_kind(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     first = RuleRunOutcome(
         rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True, created=2
     )
@@ -366,7 +374,7 @@ def test_run_outcomes_keep_the_latest_per_kind(tmp_path: Path) -> None:
 def test_a_later_success_replaces_the_last_successful_run(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     failed = RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), False)
     succeeded = replace(failed, completed_at=datetime(2026, 9, 2, tzinfo=UTC), succeeded=True)
     with factory() as uow:
@@ -389,7 +397,7 @@ def test_a_later_success_replaces_the_last_successful_run(tmp_path: Path) -> Non
 def test_rule_previews_keep_the_latest_counts_and_cascade_with_the_rule(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     first = RulePreviewSummary(rule().id, datetime(2026, 9, 1, tzinfo=UTC), 3, 1)
     second = replace(first, completed_at=datetime(2026, 9, 2, tzinfo=UTC), eligible_events=7)
     with factory() as uow:
@@ -409,7 +417,7 @@ def test_rule_previews_keep_the_latest_counts_and_cascade_with_the_rule(tmp_path
 def test_rule_removal_cascades_resolves_incidents_and_keeps_audit(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     with factory() as uow:
         uow.rules.add(rule())
         uow.mappings.save(_mapping())
@@ -430,8 +438,9 @@ def test_rule_removal_cascades_resolves_incidents_and_keeps_audit(tmp_path: Path
         connection.execute(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at)
-            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'temporary', 'open', 's', 't', 't')
+                summary, opened_at, updated_at, user_id)
+            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'temporary', 'open', 's', 't', 't',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """
         )
 
@@ -458,7 +467,7 @@ def test_rule_purge_deletes_its_audit_entries_and_incidents_but_no_other_rules(
 ) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database, accounts=(*RULE_ACCOUNTS, "other"))
     other = replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
     with factory() as uow:
         for kept_or_purged in (rule(), other):
@@ -477,8 +486,9 @@ def test_rule_purge_deletes_its_audit_entries_and_incidents_but_no_other_rules(
         connection.executemany(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at)
-            VALUES (?, ?, ?, 'temporary', 'open', 's', 't', 't')
+                summary, opened_at, updated_at, user_id)
+            VALUES (?, ?, ?, 'temporary', 'open', 's', 't', 't',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [("i-1", "provider:rule-1", "rule-1"), ("i-2", "provider:rule-2", "rule-2")],
         )
@@ -501,12 +511,17 @@ def test_account_deletion_holds_the_write_lock_so_reauthorization_waits_for_it(
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    disconnected = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
-    store.disconnect(disconnected.id)
-    connected = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
-    factory = SqliteUnitOfWorkFactory(database)
+    add_user(database)
+    disconnected = store.for_user(USER).save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    store.for_user(USER).disconnect(disconnected.id)
+    connected = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    factory = sqlite_units(database)
     reauthorize = Thread(
-        target=store.save,
+        target=store.for_user(USER).save,
         args=("Personal", "person@example.test", "{}"),
         kwargs={"provider": ProviderKind.GOOGLE},
     )
@@ -522,10 +537,10 @@ def test_account_deletion_holds_the_write_lock_so_reauthorization_waits_for_it(
 
     assert waited_for_deletion
     # Reauthorizing after the deletion connects the identity afresh.
-    assert {account.email: account.id for account in store.list()}["work@example.test"] == (
-        connected.id
-    )
-    assert store.get(disconnected.id) is None
+    assert {account.email: account.id for account in store.for_user(USER).list()}[
+        "work@example.test"
+    ] == (connected.id)
+    assert store.for_user(USER).get(disconnected.id) is None
 
 
 def test_a_rule_creation_waiting_behind_account_deletion_is_refused_afterwards(
@@ -534,10 +549,15 @@ def test_a_rule_creation_waiting_behind_account_deletion_is_refused_afterwards(
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    deleted = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
-    store.disconnect(deleted.id)
-    kept = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
-    factory = SqliteUnitOfWorkFactory(database)
+    add_user(database)
+    deleted = store.for_user(USER).save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    store.for_user(USER).disconnect(deleted.id)
+    kept = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    factory = sqlite_units(database)
     late_rule = SyncRule(
         SyncRuleId("late"),
         endpoint(deleted.id.value, "personal-calendar"),
@@ -570,9 +590,12 @@ def test_account_records_report_state_inside_the_unit_of_work(tmp_path: Path) ->
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    account = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    add_user(database)
+    account = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         assert uow.accounts.state(account.id) is ConnectedAccountState.CONNECTED
         assert uow.accounts.state(ConnectedAccountId("missing")) is None
 
@@ -593,9 +616,12 @@ def test_calendar_names_record_only_changes_and_go_with_their_account(tmp_path: 
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    account = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
+    add_user(database)
+    account = store.for_user(USER).save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
     clock = _MovableClock(datetime(2026, 9, 1, tzinfo=UTC))
-    factory = SqliteUnitOfWorkFactory(database, clock)
+    factory = sqlite_units(database, clock)
     family = CalendarEndpoint(account.id, CalendarId("family"))
     work = CalendarEndpoint(account.id, CalendarId("work"))
     with factory() as uow:
@@ -626,7 +652,7 @@ def test_calendar_names_record_only_changes_and_go_with_their_account(tmp_path: 
             "family": "2026-09-02T00:00:00+00:00",
             "work": "2026-09-01T00:00:00+00:00",
         }
-    store.disconnect(account.id)
+    store.for_user(USER).disconnect(account.id)
     with factory() as uow:
         assert uow.accounts.delete_disconnected(account.id)
         uow.commit()
@@ -635,7 +661,7 @@ def test_calendar_names_record_only_changes_and_go_with_their_account(tmp_path: 
 
 
 def test_memory_adapter_keeps_calendar_names_of_existing_accounts() -> None:
-    factory = InMemoryUnitOfWorkFactory()
+    factory = InMemoryUnitOfWorkFactory().for_user(USER)
     account = ConnectedAccountId("account-1")
     factory.state.accounts[account] = ConnectedAccountState.DISCONNECTED
     family = CalendarEndpoint(account, CalendarId("family"))
@@ -651,7 +677,7 @@ def test_memory_adapter_keeps_calendar_names_of_existing_accounts() -> None:
 
 
 def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
-    factory = InMemoryUnitOfWorkFactory()
+    factory = InMemoryUnitOfWorkFactory().for_user(USER)
     # Another direction, since SQLite refuses a second rule for one source and destination.
     other = replace(
         rule(), id=SyncRuleId("rule-2"), destination=endpoint("work-account", "other-calendar")
@@ -680,7 +706,7 @@ def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
 
 
 def test_memory_adapter_supports_removal_counts_and_outcomes() -> None:
-    factory = InMemoryUnitOfWorkFactory()
+    factory = InMemoryUnitOfWorkFactory().for_user(USER)
     with factory() as uow:
         uow.rules.add(rule(state=SyncRuleState.PAUSED))
         uow.mappings.save(_mapping())
@@ -727,7 +753,7 @@ def _occurrence(
 def test_occurrence_mappings_round_trip_timed_and_all_day_starts(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     timed = _occurrence(week_start(1))
     all_day = _occurrence(date(2026, 9, 15), OccurrenceState.CANCELLED)
     with factory() as uow:
@@ -752,7 +778,7 @@ def test_occurrence_mappings_round_trip_timed_and_all_day_starts(tmp_path: Path)
 def test_occurrence_mappings_cascade_with_their_series_mapping_and_rule(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
+    factory = sqlite_units(database)
     with factory() as uow:
         uow.rules.add(rule())
         uow.mappings.save(_series_mapping())
@@ -775,28 +801,40 @@ def test_occurrence_mappings_cascade_with_their_series_mapping_and_rule(tmp_path
 
 def test_migration_5_upgrades_a_version_4_installation_and_resets_cursors(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
-    initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database)
-    with factory() as uow:
-        uow.rules.add(rule())
-        uow.mappings.save(_series_mapping())
-        uow.cursors.save(rule().id, "source-cursor")
-        uow.destination_cursors.save(rule().id, "destination-cursor")
-        uow.commit()
+    database_at_version(database, 4)
     with sqlite3.connect(database) as connection:
-        connection.execute("DROP TABLE occurrence_mappings")
-        connection.execute("DELETE FROM schema_migrations WHERE version = 5")
+        connection.executescript(
+            """
+            INSERT INTO installation_admin VALUES (1, 'scrypt$synthetic', '2026-09-01');
+            INSERT INTO connected_accounts (id, provider, display_name, email,
+                encrypted_credentials, state, created_at, updated_at)
+            VALUES
+                ('personal-account', 'google', 'P', 'p@example.test', x'', 'connected', 't', 't'),
+                ('work-account', 'google', 'W', 'w@example.test', x'', 'connected', 't', 't');
+            INSERT INTO sync_rules (id, source_account_id, source_calendar_id,
+                destination_account_id, destination_calendar_id, privacy_policy,
+                all_day_policy, busy_title, initial_lookback_days, state)
+            VALUES ('rule-1', 'personal-account', 'personal-calendar', 'work-account',
+                'work-calendar', 'busy_only', 'include', 'Busy', 30, 'enabled');
+            INSERT INTO event_mappings VALUES ('series-mapping', 'rule-1', 'personal-account',
+                'personal-calendar', 'source-series', 'work-account', 'work-calendar',
+                'destination-series', 'r1', 'fingerprint');
+            INSERT INTO sync_cursors VALUES ('rule-1', 'source-cursor');
+            INSERT INTO destination_sync_cursors VALUES ('rule-1', 'destination-cursor');
+            """
+        )
 
     initialize_database(database)
     initialize_database(database)
 
-    with factory() as uow:
+    with sqlite3.connect(database) as connection:
+        owner = UserId(str(connection.execute("SELECT id FROM users").fetchone()[0]))
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+    with sqlite_units(database, user=owner, accounts=())() as uow:
         assert uow.cursors.get(rule().id) is None
         assert uow.destination_cursors.get(rule().id) is None
         assert uow.mappings.count_for_rule(rule().id) == 1
         assert uow.occurrences.for_series(EventMappingId("series-mapping")) == ()
-    with sqlite3.connect(database) as connection:
-        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
     assert versions.count(5) == 1
 
 
@@ -826,14 +864,16 @@ def test_migration_7_indexes_audit_entries_by_run(tmp_path: Path) -> None:
 def test_migration_12_keeps_earlier_resolutions_unknown(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
+    add_user(database)
     with sqlite3.connect(database) as connection:
         connection.execute("ALTER TABLE incidents DROP COLUMN resolution")
         connection.execute("DELETE FROM schema_migrations WHERE version = 12")
         connection.execute(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at, resolved_at)
-            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'temporary', 'resolved', 's', 't', 't', 't')
+                summary, opened_at, updated_at, resolved_at, user_id)
+            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'temporary', 'resolved', 's', 't', 't', 't',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """
         )
 
@@ -853,14 +893,16 @@ def test_migration_12_keeps_earlier_resolutions_unknown(tmp_path: Path) -> None:
 def test_migration_13_keeps_earlier_incident_accounts_unknown(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
+    add_user(database)
     with sqlite3.connect(database) as connection:
         connection.execute("ALTER TABLE incidents DROP COLUMN account_id")
         connection.execute("DELETE FROM schema_migrations WHERE version = 13")
         connection.execute(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at)
-            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'authentication', 'open', 's', 't', 't')
+                summary, opened_at, updated_at, user_id)
+            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'authentication', 'open', 's', 't', 't',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """
         )
 
@@ -878,6 +920,7 @@ def test_migration_13_keeps_earlier_incident_accounts_unknown(tmp_path: Path) ->
 def test_migration_19_keeps_earlier_incidents_without_a_message(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
+    add_user(database)
     with sqlite3.connect(database) as connection:
         connection.execute("ALTER TABLE incidents DROP COLUMN message_code")
         connection.execute("ALTER TABLE incidents DROP COLUMN message_params")
@@ -885,8 +928,9 @@ def test_migration_19_keeps_earlier_incidents_without_a_message(tmp_path: Path) 
         connection.execute(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at)
-            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'temporary', 'open', 's', 't', 't')
+                summary, opened_at, updated_at, user_id)
+            VALUES ('i-1', 'provider:rule-1', 'rule-1', 'temporary', 'open', 's', 't', 't',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """
         )
 
@@ -909,12 +953,17 @@ def test_migration_20_lapses_accounts_an_open_authorization_incident_names(
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
-    renewed = store.save("Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE)
+    add_user(database)
+    work = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    renewed = store.for_user(USER).save(
+        "Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
     degraded = rule(state=SyncRuleState.DEGRADED)
     stopped = replace(degraded, id=SyncRuleId("stopped"), source=endpoint(work.id.value, "work"))
     other = replace(degraded, id=SyncRuleId("other"), source=endpoint(renewed.id.value, "home"))
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         uow.rules.add(stopped)
         uow.rules.add(other)
         uow.commit()
@@ -927,8 +976,8 @@ def test_migration_20_lapses_accounts_an_open_authorization_incident_names(
         connection.executemany(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, account_id, category, state,
-                summary, opened_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'open', 's', ?, ?)
+                summary, opened_at, updated_at, user_id)
+            VALUES (?, ?, ?, ?, ?, 'open', 's', ?, ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [
                 (
@@ -963,18 +1012,22 @@ def test_migration_20_lapses_accounts_an_open_authorization_incident_names(
         connection.execute(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at, resolved_at, resolution)
+                summary, opened_at, updated_at, resolved_at, resolution, user_id)
             VALUES ('i-4', 'blocked:other', 'other', 'conflict', 'resolved', 's', 't', 't', 't',
-                'rule_removed')
+                'rule_removed', (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """
         )
 
     initialize_database(database)
     initialize_database(database)
 
-    lapsed = {account.id: account.authorization_lapsed_at for account in store.list()}
+    lapsed = {
+        account.id: account.authorization_lapsed_at
+        for account in store.for_user(USER).list()
+        if account.id in {work.id, renewed.id}
+    }
     assert lapsed == {work.id: "9999-01-01T00:00:00+00:00", renewed.id: None}
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         awaiting = {rule.id: rule.awaiting_reauthorization for rule in uow.rules.list()}
     assert awaiting == {stopped.id: True, other.id: False}
     with sqlite3.connect(database) as connection:
@@ -988,9 +1041,12 @@ def test_migration_20_leaves_rules_that_need_a_preview_for_other_reasons(tmp_pat
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
-    gone = store.save("Old", "old@example.test", "{}", provider=ProviderKind.GOOGLE)
-    store.disconnect(gone.id)
+    add_user(database)
+    work = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    gone = store.for_user(USER).save("Old", "old@example.test", "{}", provider=ProviderKind.GOOGLE)
+    store.for_user(USER).disconnect(gone.id)
     degraded = rule(state=SyncRuleState.DEGRADED)
     # Changed materially after authorization stopped it, and one using a disconnected account.
     changed = replace(
@@ -1005,7 +1061,7 @@ def test_migration_20_leaves_rules_that_need_a_preview_for_other_reasons(tmp_pat
         source=endpoint(work.id.value, "work"),
         destination=endpoint(gone.id.value, "old"),
     )
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         uow.rules.add(changed)
         uow.rules.add(orphaned)
         uow.commit()
@@ -1016,8 +1072,9 @@ def test_migration_20_leaves_rules_that_need_a_preview_for_other_reasons(tmp_pat
         connection.executemany(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, account_id, category, state,
-                summary, opened_at, updated_at)
-            VALUES (?, ?, ?, ?, 'authentication', 'open', 's', ?, ?)
+                summary, opened_at, updated_at, user_id)
+            VALUES (?, ?, ?, ?, 'authentication', 'open', 's', ?, ?,
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [
                 (f"i-{name}", f"provider:{name}", name, work.id.value, "9999", "9999")
@@ -1027,7 +1084,7 @@ def test_migration_20_leaves_rules_that_need_a_preview_for_other_reasons(tmp_pat
 
     initialize_database(database)
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         assert not any(rule.awaiting_reauthorization for rule in uow.rules.list())
 
 
@@ -1035,23 +1092,29 @@ def test_deleting_a_disconnected_account_deletes_its_own_incidents(tmp_path: Pat
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    lapsed = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
-    other = store.save("Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE)
+    add_user(database)
+    lapsed = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    other = store.for_user(USER).save(
+        "Home", "home@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
     with sqlite3.connect(database) as connection:
         connection.executemany(
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, account_id, category, state,
-                summary, opened_at, updated_at)
-            VALUES (?, ?, NULL, ?, 'authentication', 'open', 's', 't', 't')
+                summary, opened_at, updated_at, user_id)
+            VALUES (?, ?, NULL, ?, 'authentication', 'open', 's', 't', 't',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [
                 (f"i-{account.id.value}", f"authorization:{account.id.value}", account.id.value)
                 for account in (lapsed, other)
             ],
         )
-    store.disconnect(lapsed.id)
+    store.for_user(USER).disconnect(lapsed.id)
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         assert uow.accounts.delete_disconnected(lapsed.id)
         uow.commit()
 
@@ -1064,9 +1127,12 @@ def test_an_account_incident_is_not_opened_once_its_account_is_deleted(tmp_path:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    kept = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    add_user(database)
+    kept = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
     _lapse(database, kept.id)
-    incidents = SqliteIncidentRepository(database)
+    incidents = SqliteIncidentRepository(database, add_user(database))
 
     def lapse(account_id: str) -> IncidentReport:
         return IncidentReport(
@@ -1092,10 +1158,13 @@ def test_restoring_keeps_open_the_incident_of_a_newer_lapse(tmp_path: Path) -> N
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
-    incidents = SqliteIncidentRepository(database)
+    add_user(database)
+    work = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    incidents = SqliteIncidentRepository(database, add_user(database))
     key = f"authorization:{work.id.value}"
-    unit_of_work = SqliteUnitOfWorkFactory(database)
+    unit_of_work = sqlite_units(database)
     _lapse(database, work.id)
     incidents.open(IncidentReport(key, None, "authentication", "expired", account_id=work.id), NOW)
 
@@ -1117,23 +1186,26 @@ def test_restoring_before_a_lapse_opens_its_incident_leaves_none_open(tmp_path: 
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
-    work = store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    add_user(database)
+    work = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
     _lapse(database, work.id)
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         assert uow.accounts.clear_lapse(work.id, requested_before=datetime.now(UTC))
         uow.commit()
 
     report = IncidentReport(
         f"authorization:{work.id.value}", None, "authentication", "expired", account_id=work.id
     )
-    assert not SqliteIncidentRepository(database).open(report, NOW)
+    assert not SqliteIncidentRepository(database, add_user(database)).open(report, NOW)
 
     with sqlite3.connect(database) as connection:
         assert connection.execute("SELECT COUNT(*) FROM incidents").fetchone() == (0,)
 
 
 def _lapse(database: Path, account_id: ConnectedAccountId) -> None:
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         now = datetime.now(UTC)
         assert uow.accounts.lapse(account_id, attempted_at=now)
         uow.commit()
@@ -1143,7 +1215,7 @@ def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
     completed = datetime(2026, 9, 1, tzinfo=UTC)
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         uow.rules.add(rule())
         uow.run_outcomes.record(RuleRunOutcome(rule().id, RunKind.SYNC, completed, True, True))
         uow.commit()
@@ -1154,7 +1226,7 @@ def test_migration_8_backfills_the_last_full_run(tmp_path: Path) -> None:
     initialize_database(database)
     initialize_database(database)
 
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
     assert latest is not None
     assert latest.last_full_succeeded_at == completed
@@ -1164,7 +1236,7 @@ def test_concurrent_reports_of_one_incident_open_it_once(tmp_path: Path) -> None
     # Each report notifies only when it opened the Incident, so exactly one may say it did.
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    incidents = SqliteIncidentRepository(database)
+    incidents = SqliteIncidentRepository(database, add_user(database))
     for attempt in range(10):
         report = IncidentReport(
             f"provider:rule-{attempt}", SyncRuleId("rule-1"), "authentication", "expired"
@@ -1184,3 +1256,50 @@ def test_concurrent_reports_of_one_incident_open_it_once(tmp_path: Path) -> None
         for thread in threads:
             thread.join()
         assert opened.count(True) == 1
+
+
+def test_the_installation_unit_lists_every_users_enabled_rules_and_holds_disabled_users(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    mine = sqlite_units(database)
+    theirs = sqlite_units(database, user=OTHER_USER, accounts=("their-account",))
+    held = sqlite_units(database, user=UserId("user-3"), accounts=("held-account",))
+    with mine() as uow:
+        uow.rules.add(rule())
+        uow.rules.add(
+            replace(
+                rule(state=SyncRuleState.PAUSED),
+                id=SyncRuleId("paused"),
+                destination=endpoint("work-account", "paused"),
+            )
+        )
+        uow.run_outcomes.record(RuleRunOutcome(rule().id, RunKind.SYNC, NOW, True, full_run=True))
+        uow.commit()
+    for units, account, rule_id in (
+        (theirs, "their-account", "theirs"),
+        (held, "held-account", "held"),
+    ):
+        with units() as uow:
+            uow.rules.add(
+                SyncRule(
+                    SyncRuleId(rule_id),
+                    endpoint(account, "calendar"),
+                    endpoint(account, "other"),
+                    state=SyncRuleState.ENABLED,
+                )
+            )
+            uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE users SET state = 'disabled' WHERE id = 'user-3'")
+
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        scheduled = installation.scheduled_rules()
+
+    assert [
+        (item.owner, item.rule.id.value, item.last_full_succeeded_at) for item in scheduled
+    ] == [
+        (USER, "rule-1", NOW),
+        (OTHER_USER, "theirs", None),
+    ]

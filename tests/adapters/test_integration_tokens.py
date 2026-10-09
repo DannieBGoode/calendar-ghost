@@ -14,6 +14,7 @@ from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.security import token_hash
+from tests.users import USER, add_user
 
 ISSUED = datetime(2026, 10, 3, 9, 0, tzinfo=UTC)
 
@@ -30,21 +31,28 @@ def _tokens(tmp_path: Path) -> tuple[SqliteIntegrationTokens, MovableClock, Path
     database = tmp_path / "test.db"
     initialize_database(database)
     clock = MovableClock(ISSUED)
+    add_user(database)
     return SqliteIntegrationTokens(database, clock, UuidIdGenerator()), clock, database
 
 
 def test_an_issued_token_authenticates_and_only_its_hash_is_stored(tmp_path: Path) -> None:
     tokens, _, database = _tokens(tmp_path)
 
-    issued = tokens.issue("  Uptime Kuma ")
+    issued = tokens.for_user(USER).issue("  Uptime Kuma ")
 
     assert issued.token.startswith("cgs_")
     assert len(issued.token) == 47
     assert issued.summary.name == "Uptime Kuma"
-    assert issued.summary.scope is IntegrationTokenScope.STATUS_READ
+    assert issued.summary.scopes == frozenset({IntegrationTokenScope.STATUS_READ})
     # The first use records itself, so last_used_at is the moment of that use.
     assert tokens.authenticate(issued.token) == IntegrationTokenSummary(
-        issued.summary.id, "Uptime Kuma", IntegrationTokenScope.STATUS_READ, ISSUED, ISSUED, None
+        issued.summary.id,
+        "Uptime Kuma",
+        frozenset({IntegrationTokenScope.STATUS_READ}),
+        ISSUED,
+        ISSUED,
+        None,
+        owner=USER,
     )
     with sqlite3.connect(database) as connection:
         stored = connection.execute("SELECT * FROM integration_tokens").fetchall()
@@ -54,7 +62,7 @@ def test_an_issued_token_authenticates_and_only_its_hash_is_stored(tmp_path: Pat
 
 def test_an_issued_token_never_shows_the_token_in_its_repr(tmp_path: Path) -> None:
     tokens, _, _ = _tokens(tmp_path)
-    issued = tokens.issue("Uptime Kuma")
+    issued = tokens.for_user(USER).issue("Uptime Kuma")
 
     assert issued.token not in repr(issued)
     assert issued.summary.id in repr(issued)
@@ -62,20 +70,20 @@ def test_an_issued_token_never_shows_the_token_in_its_repr(tmp_path: Path) -> No
 
 def test_unknown_malformed_and_revoked_tokens_are_refused(tmp_path: Path) -> None:
     tokens, _, _ = _tokens(tmp_path)
-    issued = tokens.issue("Claude Code")
+    issued = tokens.for_user(USER).issue("Claude Code")
 
     assert tokens.authenticate("cgs_" + "A" * 43) is None
     assert tokens.authenticate(issued.token + "x") is None
     assert tokens.authenticate(issued.token[:-1]) is None
-    assert tokens.revoke(issued.summary.id) is True
-    assert tokens.revoke(issued.summary.id) is False
-    assert tokens.revoke("missing") is False
+    assert tokens.for_user(USER).revoke(issued.summary.id) is True
+    assert tokens.for_user(USER).revoke(issued.summary.id) is False
+    assert tokens.for_user(USER).revoke("missing") is False
     assert tokens.authenticate(issued.token) is None
 
 
 def test_use_is_recorded_at_most_every_five_minutes(tmp_path: Path) -> None:
     tokens, clock, _ = _tokens(tmp_path)
-    issued = tokens.issue("Homepage")
+    issued = tokens.for_user(USER).issue("Homepage")
 
     clock.moment = ISSUED + timedelta(minutes=1)
     tokens.authenticate(issued.token)
@@ -93,7 +101,7 @@ def test_a_busy_database_does_not_refuse_a_valid_token(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tokens, clock, database = _tokens(tmp_path)
-    issued = tokens.issue("Uptime Kuma")
+    issued = tokens.for_user(USER).issue("Uptime Kuma")
     clock.moment = ISSUED + timedelta(minutes=10)
     # Another connection holds the write lock, and this one gives up at once instead of waiting.
     holder = sqlite3.connect(database, isolation_level=None)
@@ -114,15 +122,15 @@ def test_a_busy_database_does_not_refuse_a_valid_token(
 
 def test_tokens_are_listed_newest_first_with_revoked_ones_last(tmp_path: Path) -> None:
     tokens, clock, _ = _tokens(tmp_path)
-    first = tokens.issue("First")
+    first = tokens.for_user(USER).issue("First")
     clock.moment = ISSUED + timedelta(minutes=1)
-    second = tokens.issue("Second")
+    second = tokens.for_user(USER).issue("Second")
     clock.moment = ISSUED + timedelta(minutes=2)
-    third = tokens.issue("Third")
-    tokens.revoke(third.summary.id)
+    third = tokens.for_user(USER).issue("Third")
+    tokens.for_user(USER).revoke(third.summary.id)
 
-    assert [token.name for token in tokens.list()] == ["Second", "First", "Third"]
-    assert tokens.list()[2].revoked_at == ISSUED + timedelta(minutes=2)
+    assert [token.name for token in tokens.for_user(USER).list()] == ["Second", "First", "Third"]
+    assert tokens.for_user(USER).list()[2].revoked_at == ISSUED + timedelta(minutes=2)
     assert first.summary.last_used_at is None
     assert second.summary.last_used_at is None
 
@@ -138,18 +146,19 @@ class _NamedIds:
 def test_tokens_issued_at_the_same_moment_are_listed_in_a_stable_order(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
+    add_user(database)
     tokens = SqliteIntegrationTokens(database, MovableClock(ISSUED), _NamedIds("id-b", "id-a"))
-    tokens.issue("Issued first")
-    tokens.issue("Issued second")
+    tokens.for_user(USER).issue("Issued first")
+    tokens.for_user(USER).issue("Issued second")
 
-    assert [token.id for token in tokens.list()] == ["id-a", "id-b"]
+    assert [token.id for token in tokens.for_user(USER).list()] == ["id-a", "id-b"]
 
 
 def test_invalid_names_are_refused_before_anything_is_stored(tmp_path: Path) -> None:
     tokens, _, _ = _tokens(tmp_path)
     with pytest.raises(InvalidIntegrationTokenName):
-        tokens.issue("Kuma\nadmin")
-    assert tokens.list() == []
+        tokens.for_user(USER).issue("Kuma\nadmin")
+    assert tokens.for_user(USER).list() == []
 
 
 def test_the_migration_applies_to_an_existing_database(tmp_path: Path) -> None:
@@ -166,3 +175,29 @@ def test_the_migration_applies_to_an_existing_database(tmp_path: Path) -> None:
         indexes = connection.execute("PRAGMA index_list('integration_tokens')").fetchall()
     assert 18 in versions
     assert any(index[2] == 1 for index in indexes)
+
+
+def test_a_token_may_also_read_installation_health(tmp_path: Path) -> None:
+    tokens, _, _ = _tokens(tmp_path)
+    both = frozenset({IntegrationTokenScope.STATUS_READ, IntegrationTokenScope.INSTALLATION_READ})
+
+    issued = tokens.for_user(USER).issue("Uptime Kuma", both)
+
+    summary = tokens.authenticate(issued.token)
+    assert summary is not None
+    assert summary.scopes == both
+    assert tokens.for_user(USER).list()[0].scopes == both
+
+
+def test_a_disabled_users_tokens_read_nothing_until_they_are_enabled(tmp_path: Path) -> None:
+    tokens, _, database = _tokens(tmp_path)
+    issued = tokens.for_user(USER).issue("Uptime Kuma")
+
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (USER.value,))
+    refused = tokens.authenticate(issued.token)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE users SET state = 'active' WHERE id = ?", (USER.value,))
+
+    assert refused is None
+    assert tokens.authenticate(issued.token) is not None

@@ -1,0 +1,120 @@
+{
+  "page": {
+    "title": "People",
+    "intro": "The people who sign in here. You see their email, role, and sign-ins, never their calendars, rules, or events.",
+    "loading": "Loading people",
+    "loadFailure": "People could not load",
+    "listTitle": "Everyone here"
+  },
+  "noEmail": "No email yet",
+  "you": "You",
+  "neverSignedIn": "Never",
+  "roles": {
+    "installation_administrator": "Administrator",
+    "user": "User"
+  },
+  "states": {
+    "active": "Active",
+    "disabled": "Disabled"
+  },
+  "filters": {
+    "search": "Search by email",
+    "searchPlaceholder": "Part of an email",
+    "clearSearch": "Clear search",
+    "role": "Role",
+    "anyRole": "Any role",
+    "administrators": "Administrators",
+    "users": "Users",
+    "state": "State",
+    "anyState": "Any state",
+    "active": "Active",
+    "disabled": "Disabled"
+  },
+  "table": {
+    "email": "Email",
+    "role": "Role",
+    "state": "State",
+    "joined": "Joined",
+    "lastSignIn": "Last sign-in",
+    "actions": "Actions"
+  },
+  "pagination": {
+    "label": "Pages of people",
+    "summary": {
+      "one": "Showing {first} to {last} of {count} person",
+      "other": "Showing {first} to {last} of {count} people"
+    },
+    "previous": "Previous",
+    "next": "Next",
+    "updating": "Updating the list…"
+  },
+  "empty": {
+    "title": "Nobody matches",
+    "body": "No one here matches this search and these filters.",
+    "clear": "Clear filters"
+  },
+  "beyond": {
+    "title": "This page is empty",
+    "body": "Fewer people match than when this page was opened.",
+    "first": "Go to the first page"
+  },
+  "actions": {
+    "label": "Actions for {email}",
+    "makeAdministrator": "Make administrator",
+    "makeAdministratorHint": "They can manage people, storage, and who can join. They still never see anyone else's calendars.",
+    "removeAdministrator": "Remove administrator",
+    "removeAdministratorHint": "They keep their own calendars and rules.",
+    "disable": "Disable",
+    "disableHint": "They cannot sign in, and their rules wait until you enable them again.",
+    "enable": "Enable",
+    "enableHint": "They can sign in again, and their rules resume.",
+    "passwordReset": "Create password reset link",
+    "passwordResetHint": "A link they use once to choose a new password.",
+    "delete": "Delete",
+    "deleteHint": "Deletes their sign-in, rules, and Google connections, and the events their rules wrote. Their own events stay."
+  },
+  "status": {
+    "administrator": "{email} is now an administrator.",
+    "notAdministrator": "{email} is no longer an administrator.",
+    "disabled": "{email} can no longer sign in. Their rules wait until you enable them again.",
+    "enabled": "{email} can sign in again.",
+    "deleted": "{email} was deleted.",
+    "deletedEvents": {
+      "one": "{count} event their rules wrote was deleted.",
+      "other": "{count} events their rules wrote were deleted."
+    },
+    "left": {
+      "one": "{count} rule could not reach its calendar, so its events stay there, no longer managed.",
+      "other": "{count} rules could not reach their calendars, so their events stay there, no longer managed."
+    }
+  },
+  "delete": {
+    "title": "Delete {email} permanently?",
+    "body": "This deletes their sign-in, rules, Google connections, tokens, and Activity. The events their rules wrote are deleted from their calendars wherever Calendar Ghost can still reach them. Their own events and their Google accounts stay as they are. Backups taken before now keep their records until they rotate out. This cannot be undone.",
+    "keep": "Keep this person",
+    "confirm": "Delete permanently",
+    "pending": "Deleting…"
+  },
+  "reset": {
+    "title": "Copy the password reset link for {email} now",
+    "body": "Send it to them yourself. It works once, until {expires}, and is shown only once. You never see or set their password.",
+    "label": "Password reset link for {email}"
+  },
+  "invitations": {
+    "title": "Invitations",
+    "body": "Create a link and send it to the person yourself. They choose their own email and password.",
+    "invite": "Invite someone",
+    "inviting": "Creating…",
+    "reveal": {
+      "title": "Copy the invitation link now",
+      "body": "Send it to the person you invite. It works once, until {expires}, and is shown only once.",
+      "label": "Invitation link"
+    },
+    "created": "Invitation created {created}",
+    "expires": "Expires {expires}",
+    "revoke": "Revoke",
+    "revokeLabel": "Revoke the invitation created {created}",
+    "revoked": "The invitation was revoked. Its link no longer works.",
+    "none": "No invitations are waiting."
+  }
+}

@@ -15,12 +15,12 @@ from calendar_sync.infrastructure.persistence.activity_queries import (
     open_blocks,
 )
 from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
 from tests.fake_calendar import FixedClock
 from tests.helpers import rule
+from tests.users import USER, add_user, sqlite_units
 
 NOW = datetime(2026, 10, 1, 12, tzinfo=UTC)
 CUTOFF = NOW - timedelta(days=90)
@@ -29,7 +29,7 @@ CUTOFF = NOW - timedelta(days=90)
 def _database(tmp_path: Path) -> Path:
     path = tmp_path / "sync.db"
     initialize_database(path)
-    with SqliteUnitOfWorkFactory(path, FixedClock())() as uow:
+    with sqlite_units(path, FixedClock())() as uow:
         uow.rules.add(rule())
         uow.commit()
     return path
@@ -46,7 +46,7 @@ def _entry(
     reason: SyncReason | None = None,
     time: TimedInterval | None = None,
 ) -> int:
-    with SqliteUnitOfWorkFactory(path, FixedClock())() as uow:
+    with sqlite_units(path, FixedClock())() as uow:
         uow.audit.append(
             AuditEntry(
                 occurred_at=NOW - timedelta(days=days_ago),
@@ -130,13 +130,13 @@ def test_clearing_keeps_what_an_in_flight_persisting_check_reads(tmp_path: Path)
         floor = int(connection.execute("SELECT MAX(id) FROM audit_entries").fetchone()[0])
     _entry(path, 5, "blocked-event", blocked=True)  # written after the floor was taken
     with sqlite3.connect(path) as connection:
-        persisting = open_blocks(connection, after=floor, persisting=True)
+        persisting = open_blocks(connection, USER.value, after=floor, persisting=True)
     assert persisting
 
     SqliteStorage(path).clear_activity(CUTOFF)
 
     with sqlite3.connect(path) as connection:
-        assert open_blocks(connection, after=floor, persisting=True) == persisting
+        assert open_blocks(connection, USER.value, after=floor, persisting=True) == persisting
 
 
 def test_clearing_keeps_the_title_a_cancellation_is_named_from(tmp_path: Path) -> None:
@@ -272,7 +272,7 @@ def test_clearing_keeps_what_activity_reads_across_the_cutoff(tmp_path: Path) ->
     moved_new = _entry(path, 20, "moved-event", time=_time(20))
 
     kept_ids = (repeat_2, repeat_3, cancelled_mid, moved_new)
-    queries = SqliteActivityQueries(path)
+    queries = SqliteActivityQueries(path, add_user(path))
 
     def _snapshot() -> dict[int, ActivityEntry]:
         return {
@@ -341,7 +341,7 @@ def test_clearing_after_the_clock_stepped_back_keeps_what_recent_entries_compare
     repeated = _entry(path, 10, "repeat", reason=SyncReason.PROJECTION_MISSING, title=None)
     _entry(path, 150, "repeat", reason=SyncReason.SOURCE_CHANGED, title=None)
     kept_ids = (renamed, latest, repeated)
-    queries = SqliteActivityQueries(path)
+    queries = SqliteActivityQueries(path, add_user(path))
 
     def _snapshot() -> dict[int, ActivityEntry]:
         return {
@@ -373,10 +373,10 @@ def test_clearing_keeps_what_a_block_check_reads_when_the_new_block_looks_old(
     # The pass repeats the block, but the clock stepped back, so it looks older than the cutoff.
     _entry(path, 150, "blocked-event", blocked=True)
     with sqlite3.connect(path) as connection:
-        before = open_blocks(connection, after=floor, persisting=True)
+        before = open_blocks(connection, USER.value, after=floor, persisting=True)
     assert before
 
     SqliteStorage(path).clear_activity(CUTOFF)
 
     with sqlite3.connect(path) as connection:
-        assert open_blocks(connection, after=floor, persisting=True) == before
+        assert open_blocks(connection, USER.value, after=floor, persisting=True) == before

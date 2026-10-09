@@ -22,10 +22,10 @@ from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteOperationsQueries,
 )
 from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from tests.helpers import endpoint, rule
+from tests.users import RULE_ACCOUNTS, add_user, sqlite_units
 
 RECORDED_ACTIONS = (
     *(action.value for action in SyncAction),
@@ -42,11 +42,12 @@ START = datetime(2026, 9, 28, 15, 0, tzinfo=UTC)
 def database(tmp_path: Path) -> Path:
     path = tmp_path / "test.db"
     initialize_database(path)
+    add_user(path)
     return path
 
 
 def _append(database: Path, *entries: AuditEntry) -> None:
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         for entry in entries:
             uow.audit.append(entry)
         uow.commit()
@@ -88,8 +89,11 @@ def test_category_sql_agrees_with_the_category_rule_for_every_recorded_decision(
     with sqlite3.connect(database) as connection:
         connection.executemany(
             """
-            INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, detail, reason)
-            VALUES ('2026-09-28T15:00:00+00:00', 'rule-1', ?, 'completed', '', ?)
+            INSERT INTO audit_entries (
+                occurred_at, rule_id, action, outcome, detail, reason, user_id
+            )
+            VALUES ('2026-09-28T15:00:00+00:00', 'rule-1', ?, 'completed', '', ?,
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             combinations,
         )
@@ -135,7 +139,7 @@ def test_entries_filter_by_category(
         _entry("update", "projection_missing"),
     )
 
-    listed = SqliteActivityQueries(database).entries(
+    listed = SqliteActivityQueries(database, add_user(database)).entries(
         ActivityFilter(categories=frozenset(categories))
     )
 
@@ -150,7 +154,7 @@ def test_entries_filter_by_rule_and_title(database: Path) -> None:
         _entry("create", "source_created", rule_id="rule-2", title="Reunion"),
         _entry("create", "source_created", run_id="run-2", title="Dentist"),
     )
-    queries = SqliteActivityQueries(database)
+    queries = SqliteActivityQueries(database, add_user(database))
 
     def ids(selection: ActivityFilter) -> list[int]:
         return [entry.id for entry in queries.entries(selection)]
@@ -167,7 +171,7 @@ def test_entries_filter_by_rule_and_title(database: Path) -> None:
 
 def test_entries_paginate_by_entry_identifier(database: Path) -> None:
     _append(database, *(_entry("create", "source_created", minutes=n) for n in range(5)))
-    queries = SqliteActivityQueries(database)
+    queries = SqliteActivityQueries(database, add_user(database))
 
     def ids(limit: int, before: int | None = None) -> list[int]:
         return [entry.id for entry in queries.entries(ActivityFilter(before=before, limit=limit))]
@@ -186,7 +190,7 @@ def test_entries_name_the_event_by_its_last_observed_title(database: Path) -> No
         _entry("update", "source_changed", title="Daily standup"),
         _entry("remove_projection", None, run_id=None),
     )
-    queries = SqliteActivityQueries(database)
+    queries = SqliteActivityQueries(database, add_user(database))
 
     renamed, removed = queries.entry(2), queries.entry(3)
 
@@ -201,7 +205,7 @@ def test_entries_name_the_event_by_its_last_observed_title(database: Path) -> No
 
 def test_entry_events_name_the_rule_and_events(database: Path) -> None:
     _append(database, _entry("create", "source_created"), _entry("policy_changed", None))
-    queries = SqliteActivityQueries(database)
+    queries = SqliteActivityQueries(database, add_user(database))
 
     assert queries.entry_events(1) == EntryEvents("rule-1", "source-event", None)
     assert queries.entry_events(3) is None
@@ -216,7 +220,7 @@ def test_recent_changes_count_a_repair_repeated_by_later_runs_once(database: Pat
         _entry("ignore", "projection_current", title="Standup", run_id="run-4"),
         _entry("create", "source_created", source_event_id="other", title="Lunch", run_id="run-5"),
     )
-    queries = SqliteActivityQueries(database)
+    queries = SqliteActivityQueries(database, add_user(database))
 
     changes = queries.recent_changes(5)
 
@@ -236,7 +240,7 @@ def test_overview_counts_accounts_incidents_and_open_blocks(database: Path) -> N
         source=endpoint("other-account", "other-calendar"),
         destination=endpoint("work-account", "family-calendar"),
     )
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database, accounts=(*RULE_ACCOUNTS, "other-account"))() as uow:
         uow.rules.add(rule())
         uow.rules.add(second)
         uow.commit()
@@ -256,8 +260,8 @@ def test_overview_counts_accounts_incidents_and_open_blocks(database: Path) -> N
             """
             INSERT INTO connected_accounts
                 (id, provider, display_name, email, encrypted_credentials, state,
-                 created_at, updated_at)
-            VALUES (?, 'google', 'Synthetic', ?, x'00', ?, '2026-09-01', '2026-09-01')
+                 created_at, updated_at, user_id)
+            VALUES (?, 'google', 'Synthetic', ?, x'00', ?, '2026-09-01', '2026-09-01', 'user-1')
             """,
             [
                 ("a1", "a1@example.test", "connected"),
@@ -267,23 +271,25 @@ def test_overview_counts_accounts_incidents_and_open_blocks(database: Path) -> N
         )
         connection.executemany(
             """
-            INSERT INTO incidents
-                (id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at)
-            VALUES (?, ?, 'rule-1', 'provider', ?, 'Synthetic', '2026-09-01', '2026-09-01')
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state, summary,
+                opened_at, updated_at, user_id)
+            VALUES (?, ?, 'rule-1', 'provider', ?, 'Synthetic', '2026-09-01', '2026-09-01',
+                'user-1')
             """,
             [("i1", "k1", "open"), ("i2", "k2", "resolved")],
         )
 
-    overview = SqliteOperationsQueries(database).overview()
+    overview = SqliteOperationsQueries(database, add_user(database)).overview()
 
-    assert (overview.connected_accounts, overview.disconnected_accounts) == (2, 1)
+    # The three accounts the rules use, and the three recorded here.
+    assert (overview.connected_accounts, overview.disconnected_accounts) == (5, 1)
     assert overview.open_incidents == 1
     assert overview.last_synced_at is None
     assert overview.open_blocks == (OpenBlock(5, "rule-2"), OpenBlock(1, "rule-1"))
 
 
 def test_overview_of_an_empty_installation(database: Path) -> None:
-    overview = SqliteOperationsQueries(database).overview()
+    overview = SqliteOperationsQueries(database, add_user(database)).overview()
 
     assert overview.connected_accounts == overview.disconnected_accounts == 0
     assert overview.open_incidents == 0
@@ -293,13 +299,15 @@ def test_overview_of_an_empty_installation(database: Path) -> None:
 def test_the_overview_lists_each_account_state_and_provider(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
     initialize_database(database)
+    add_user(database)
     with sqlite3.connect(database) as connection:
         connection.executemany(
             """
             INSERT INTO connected_accounts (
                 id, provider, display_name, email, encrypted_credentials,
-                state, created_at, updated_at
-            ) VALUES (?, 'google', ?, ?, x'00', ?, '2026-09-01', '2026-09-01')
+                state, created_at, updated_at, user_id
+            ) VALUES (?, 'google', ?, ?, x'00', ?, '2026-09-01', '2026-09-01',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [
                 ("acct-a", "A", "a@example.test", "connected"),
@@ -307,7 +315,7 @@ def test_the_overview_lists_each_account_state_and_provider(tmp_path: Path) -> N
             ],
         )
 
-    overview = SqliteOperationsQueries(database).overview()
+    overview = SqliteOperationsQueries(database, add_user(database)).overview()
 
     assert overview.accounts == (
         AccountStanding("acct-a", "connected", "google"),
@@ -322,9 +330,10 @@ def test_incidents_list_open_ones_first_then_most_recently_updated(database: Pat
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                resolved_at, resolution
+                resolved_at, resolution, user_id
             )
-            VALUES (?, ?, NULL, 'provider', ?, 'Synthetic', '2026-09-01', ?, ?, ?)
+            VALUES (?, ?, NULL, 'provider', ?, 'Synthetic', '2026-09-01', ?, ?, ?,
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [
                 ("old-open", "k1", "open", "2026-09-02", None, None),
@@ -333,7 +342,7 @@ def test_incidents_list_open_ones_first_then_most_recently_updated(database: Pat
             ],
         )
 
-    incidents = SqliteOperationsQueries(database).incidents()
+    incidents = SqliteOperationsQueries(database, add_user(database)).incidents()
 
     assert [incident.id for incident in incidents] == ["new-open", "old-open", "resolved"]
     assert incidents[0].rule_id is None

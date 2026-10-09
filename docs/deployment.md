@@ -70,7 +70,7 @@ on `audit_entries(rule_id, source_event_id, id)`. New entries record their sourc
 time; existing entries are not backfilled and appear in Activity without an event name. Rolling back
 works with the same database: earlier releases ignore the columns and index and look titles up from
 Google again, but recorded titles stay in the database until their entries are deleted, including by
-clearing old Activity from Settings → Storage
+clearing old Activity from **Settings → Administration → Storage**
 ([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 
 Migration 10 adds the `pending_exception_replays` table, which stores only the identifier of each
@@ -159,6 +159,38 @@ preview. An earlier release cannot read an Incident resolved as `access_restored
 incident list fails until those Incidents are removed with their rules or accounts, or the
 release is upgraded again.
 
+Migration 21 makes every record belong to a User
+([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
+[ADR 0030](adr/0030-users-administrators-and-registration.md)). It adds the `users` table and turns
+the single administrator into User #1: an Installation Administrator with the same password and no
+email. Every Connected Account, rule, mapping, cursor, Audit Entry, Incident, Integration Token,
+and session is given to that User, and the administrator stays signed in. SQLite cannot add the new
+references to an existing table, so the migration rebuilds every owned table with a `user_id`
+column and a reference to its parent by identifier and User together. Rows an earlier release left
+without their rule, such as a failure count of a removed rule, are not copied, because nothing could
+read them. Unfinished Google consent started before the upgrade is forgotten; start it again. The
+migration runs in one transaction and checks every reference before it commits: if any record would
+refer to one that does not exist, the service stops with a message naming the table and the database
+is left exactly as it was. Back up the data directory before upgrading, as always: the rebuild
+rewrites every owned table, so the database is briefly about twice its size. Rolling back past
+migration 21 means restoring that backup: an earlier release cannot read the rebuilt tables, and
+records made after the upgrade are lost with the restore. After upgrading, the administrator signs
+in with their password alone once and must then add an email; from then on they sign in with email
+and password. The installation starts with the Only Me Registration Policy, so nothing changes for
+anyone else until the administrator invites someone.
+
+Migration 22 adds the Registration Policy, Only Me for new and upgraded installations, and the
+hashed Invitations and Password Reset Links. Migration 23 gives Integration Tokens scopes: every
+token issued before the upgrade keeps `status:read` and gains `installation:read`, so an existing
+monitor keeps receiving the answer it received before. Rolling back past either means restoring the
+backup taken before the upgrade, as for migration 21.
+
+Sign-in failures are counted per email and per client address for 15 minutes: after five failures
+for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
+the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's
+address, so the per-address limit is shared by everyone behind it. The counts are kept in memory,
+so a restart forgets them.
+
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. A scheduler pass
 runs up to four different rules at once, so one rule waiting on Google does not hold up the rest.
@@ -177,18 +209,18 @@ three files of 10 MB, so a long-running Raspberry Pi does not fill its storage. 
 `docker compose logs -f app`; [Troubleshooting](troubleshooting.md#reading-the-logs) explains each
 line.
 
-The service also writes its own lines, those of the `calendar_sync` loggers, to rotating log
-files, next to the database by default: `<database directory>/logs/calendar-sync.log` plus up to
-four rotated files: at most five files of 5 MB each, 25 MB in total. The oldest is deleted when the
+The service also writes its own lines, those of the `calendar_sync` loggers, to rotating log files,
+next to the database by default: `<database directory>/logs/calendar-sync.log` plus up to four
+rotated files: at most five files of 5 MB each, 25 MB in total. The oldest is deleted when the
 current file fills. Uvicorn's request and error lines stay on standard error only, so they appear in
-`docker compose logs` but not in these files. Compose passes `CALENDAR_SYNC_LOG_DIR`
-from `.env` and defaults it to `/data/logs` on the data volume when it is unset, as it is in
-`.env.example`. Set it to another path to use a different directory (inside the container, on a
-mounted volume so the files survive a rebuild), or set it to an empty value to turn file logging
-off; if the configured directory cannot be used, the service logs one warning, keeps logging to
-standard error, and Settings shows file logging as off. Settings
-→ Storage shows these files' size and date range and offers Download and Purge logs, so an
-administrator can retrieve or clear them without SSH access to the host.
+`docker compose logs` but not in these files. Compose passes `CALENDAR_SYNC_LOG_DIR` from `.env` and
+defaults it to `/data/logs` on the data volume when it is unset, as it is in `.env.example`. Set it
+to another path to use a different directory (inside the container, on a mounted volume so the files
+survive a rebuild), or set it to an empty value to turn file logging off; if the configured
+directory cannot be used, the service logs one warning, keeps logging to standard error, and
+Settings shows file logging as off. **Settings → Administration → Storage** shows these files' size
+and date range and offers Download and Purge logs, so an administrator can retrieve or clear them
+without SSH access to the host.
 
 For access beyond localhost or a trusted LAN, place the service behind HTTPS and set `CALENDAR_SYNC_SECURE_COOKIES=true`. Do not expose the service directly to the public internet.
 
@@ -234,18 +266,29 @@ reveal them, and a backup keeps values older than 90 days until it rotates. Repl
 master key makes that history unreadable: Activity then lists which fields changed without their
 values, and each event's next change is described afresh.
 
-Clearing old Activity from Settings → Storage removes rows from the live database only; a backup
-taken before the clear keeps those entries until it rotates out of your backup schedule
-([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
+Clearing old Activity from **Settings → Administration → Storage** removes rows from the live database
+only; a backup taken before the clear keeps those entries until it rotates out of your backup
+schedule ([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 
-Disconnecting a Google identity from Settings replaces its encrypted credential payload with an
-empty encrypted value. Directional Sync Rules and their mappings remain in SQLite so the same
-identity can be reauthorized and reconciled later.
+Disconnecting a Google identity from **Settings → Connections** replaces its encrypted credential
+payload with an empty encrypted value. Directional Sync Rules and their mappings remain in SQLite so
+the same identity can be reauthorized and reconciled later.
 
 ## Incident notifications
 
-Incidents always appear in the authenticated Activity screen. Optionally set
-`CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` to receive a JSON POST when an incident opens. SMTP delivery
-requires `CALENDAR_SYNC_SMTP_HOST`, `CALENDAR_SYNC_SMTP_SENDER`, and
-`CALENDAR_SYNC_SMTP_RECIPIENT`; credentials are optional. Delivery is deduplicated while an
-incident remains open and failures never stop synchronization or local incident recording.
+Incidents always appear in the Activity screen of the User they belong to
+([ADR 0030](adr/0030-users-administrators-and-registration.md)).
+
+Set `CALENDAR_SYNC_SMTP_HOST` and `CALENDAR_SYNC_SMTP_SENDER` (credentials are optional) and the
+installation sends email: each User then also receives their own rules' and accounts' Incident
+Notifications at their email, unless they turn them off in **Settings → Your account**. No User
+receives another User's incidents.
+
+The installation's own channels hear only of incidents about the installation itself, which affect
+every User; the first is a scheduler that stopped completing passes. Set
+`CALENDAR_SYNC_SMTP_RECIPIENT` to email them to an operator, and
+`CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` to receive a JSON POST, whose `rule_id` is `null` and whose
+`category` is `scheduler_stalled`. Before Users existed these channels received every rule incident;
+after upgrading, rule incidents reach the first User by email once they add an email and SMTP is
+configured. Delivery is deduplicated while an incident remains open and failures never stop
+synchronization or local incident recording.

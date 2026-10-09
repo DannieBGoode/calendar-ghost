@@ -17,8 +17,10 @@ from starlette.types import Receive, Scope, Send
 
 from calendar_sync import __version__
 from calendar_sync.bootstrap.container import Container, service_container
+from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.api.problems import install_problem_handlers, problem
 from calendar_sync.interfaces.api.routes import (
+    account,
     accounts,
     activity,
     health,
@@ -28,26 +30,61 @@ from calendar_sync.interfaces.api.routes import (
     session,
     setup,
     storage,
+    users,
 )
-from calendar_sync.interfaces.mcp.server import McpNotFound, McpServices, build_mcp
+from calendar_sync.interfaces.mcp.server import (
+    McpIdentity,
+    McpNotFound,
+    McpServices,
+    McpUserServices,
+    build_mcp,
+)
 
 # python:3.12-slim has no /etc/mime.types entry for woff2, so StaticFiles would otherwise serve
 # the bundled fonts as text/plain there; register it explicitly so the type is correct everywhere.
 mimetypes.add_type("font/woff2", ".woff2")
 
 
-class ApiServices(
-    session.SessionServices,
+class UserApiServices(
     accounts.AccountServices,
     activity.ActivityServices,
     incidents.IncidentServices,
     integrations.IntegrationServices,
     rules.RuleServices,
+    McpUserServices,
+    Protocol,
+):
+    """Everything the routers read from one User's services."""
+
+
+class ApiIdentity(
+    session.SignInIdentity, setup.SetupIdentity, account.AccountIdentity, McpIdentity, Protocol
+):
+    """Everything the routers read about who is signed in."""
+
+
+class ApiAdministration(users.Administration, account.OwnAccountAdministration, Protocol):
+    """Everything the routers read about administering Users."""
+
+
+class ApiServices(
+    session.SessionServices,
+    users.AdministrationServices,
+    setup.SetupServices,
+    account.OwnAccountServices,
+    accounts.AuthorizationServices,
+    integrations.StatusServices,
     storage.StorageServices,
     McpServices,
     Protocol,
 ):
     """Everything the routers read from the composed container."""
+
+    @property
+    def identity(self) -> ApiIdentity: ...
+    @property
+    def administration(self) -> ApiAdministration: ...
+    def for_user(self, user_id: UserId) -> UserApiServices: ...
 
 
 def create_app(container: Container | None = None) -> FastAPI:
@@ -58,17 +95,19 @@ def create_app(container: Container | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        scheduler_task: asyncio.Task[None] | None = None
+        tasks: list[asyncio.Task[None]] = []
         if resolved.scheduler is not None:
-            scheduler_task = asyncio.create_task(resolved.scheduler.run_forever())
+            tasks.append(asyncio.create_task(resolved.scheduler.run_forever()))
+        if resolved.scheduler_watch is not None:
+            tasks.append(asyncio.create_task(resolved.scheduler_watch.run_forever()))
         try:
             async with mcp.running():
                 yield
         finally:
-            if scheduler_task is not None:
-                scheduler_task.cancel()
+            for task in tasks:
+                task.cancel()
                 with suppress(asyncio.CancelledError):
-                    await scheduler_task
+                    await task
 
     app = FastAPI(
         title="Calendar Ghost",
@@ -85,12 +124,14 @@ def create_app(container: Container | None = None) -> FastAPI:
         health,
         setup,
         session,
+        account,
         activity,
         accounts,
         rules,
         incidents,
         storage,
         integrations,
+        users,
     ):
         app.router.routes.extend(module.router.routes)
 

@@ -1,10 +1,30 @@
 from dataclasses import replace
 from email.message import EmailMessage
+from pathlib import Path
 from typing import Any, ClassVar
 
 import pytest
 
-from calendar_sync.infrastructure.notifications import IncidentNotification, SmtpChannel
+from calendar_sync.application.installation_health import (
+    InstallationIncident,
+    InstallationIncidentKind,
+)
+from calendar_sync.application.ports import IncidentReport
+from calendar_sync.bootstrap.config import Settings
+from calendar_sync.bootstrap.container import build_adapters, compose
+from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.infrastructure.notifications import (
+    IncidentNotification,
+    IncidentNotifier,
+    NotificationChannel,
+    OwnerNotifier,
+    SmtpChannel,
+    SmtpServer,
+)
+from tests.helpers import NOW
+from tests.identity_fakes import MemoryUsers
+from tests.users import ADMIN_EMAIL, administrator
 
 
 class RecordingSmtp:
@@ -42,7 +62,7 @@ def test_incident_email_names_the_product(monkeypatch: pytest.MonkeyPatch) -> No
     RecordingSmtp.sent = []
     monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
     channel = SmtpChannel(
-        host="smtp.example", port=587, sender="a@example.com", recipient="b@example.com"
+        SmtpServer(host="smtp.example", port=587, sender="a@example.com"), recipient="b@example.com"
     )
 
     channel.send(incident())
@@ -56,7 +76,7 @@ def test_an_account_incident_email_names_no_rule(monkeypatch: pytest.MonkeyPatch
     RecordingSmtp.sent = []
     monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
     channel = SmtpChannel(
-        host="smtp.example", port=587, sender="a@example.com", recipient="b@example.com"
+        SmtpServer(host="smtp.example", port=587, sender="a@example.com"), recipient="b@example.com"
     )
 
     channel.send(replace(incident(), rule_id=None, category="authentication"))
@@ -64,3 +84,102 @@ def test_an_account_incident_email_names_no_rule(monkeypatch: pytest.MonkeyPatch
     (message,) = RecordingSmtp.sent
     assert "Rule:" not in message.get_content()
     assert "Category: authentication" in message.get_content()
+
+
+def _server() -> SmtpServer:
+    return SmtpServer(host="smtp.example", port=587, sender="ghost@example.test")
+
+
+def _report() -> IncidentReport:
+    return IncidentReport("provider:rule-1", SyncRuleId("rule-1"), "temporary", "Google is busy")
+
+
+def _owner(**changes: Any) -> MemoryUsers:
+    users = MemoryUsers()
+    owner = User(UserId("owner"), "owner@example.test", Role.USER, UserState.ACTIVE, NOW)
+    users.add(replace(owner, **changes), "hash")
+    return users
+
+
+def test_an_incident_is_emailed_to_the_user_who_owns_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+
+    OwnerNotifier(_owner(), UserId("owner"), _server()).incident_opened(_report(), NOW)
+
+    (message,) = RecordingSmtp.sent
+    assert (message["To"], message["From"]) == ("owner@example.test", "ghost@example.test")
+    assert "Google is busy" in message.get_content()
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [{"notify_by_email": False}, {"email": None}, {"state": UserState.DISABLED}],
+)
+def test_no_email_goes_to_a_user_who_turned_it_off_has_no_address_or_is_disabled(
+    monkeypatch: pytest.MonkeyPatch, changes: dict[str, Any]
+) -> None:
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+
+    OwnerNotifier(_owner(**changes), UserId("owner"), _server()).incident_opened(_report(), NOW)
+
+    assert RecordingSmtp.sent == []
+
+
+def test_a_failed_email_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*_args: Any, **_kwargs: Any) -> None:
+        raise OSError("unreachable")
+
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", refuse)
+
+    OwnerNotifier(_owner(), UserId("owner"), _server()).incident_opened(_report(), NOW)
+
+
+def test_the_installation_channels_hear_of_a_stalled_scheduler() -> None:
+    heard: list[IncidentNotification] = []
+
+    class Recording(NotificationChannel):
+        def send(self, incident: IncidentNotification) -> None:
+            heard.append(incident)
+
+    stalled = InstallationIncident(InstallationIncidentKind.SCHEDULER_STALLED, NOW)
+    IncidentNotifier([Recording()]).installation_incident_opened(stalled)
+
+    assert heard == [
+        IncidentNotification(
+            rule_id=None,
+            category="scheduler_stalled",
+            summary="Scheduled synchronization stopped running",
+            occurred_at=NOW.isoformat(),
+        )
+    ]
+
+
+def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_webhook(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    RecordingSmtp.sent = []
+    posted: list[object] = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
+    monkeypatch.setattr(
+        "calendar_sync.infrastructure.notifications.urlopen", lambda *a, **k: posted.append(a)
+    )
+    settings = Settings(
+        tmp_path / "test.db",
+        incident_webhook_url="https://hooks.example.test/incident",
+        smtp_host="smtp.example.test",
+        smtp_sender="ghost@example.test",
+        smtp_recipient="operator@example.test",
+    )
+    adapters = build_adapters(settings)
+    owner = administrator(adapters)
+    container = compose(settings, adapters)
+
+    notifications = container.for_user(owner).rule_health.notifications
+    assert notifications is not None
+    notifications.incident_opened(_report(), NOW)
+
+    (message,) = RecordingSmtp.sent
+    assert message["To"] == ADMIN_EMAIL
+    assert posted == []

@@ -1,5 +1,5 @@
 import type { I18n } from "@/i18n/translator"
-import type { IntegrationToken } from "@/lib/api"
+import type { IntegrationScope, IntegrationToken } from "@/lib/api"
 
 export type IntegrationExample = { title: string; description: string; code: string }
 
@@ -46,8 +46,36 @@ export function needsTransportNote(origin: string): boolean {
   return !local
 }
 
-/** Copy-ready examples for monitors, dashboards, and AI agents, addressed at this installation. */
-export function integrationExamples(i18n: I18n, origin: string): IntegrationExample[] {
+/** The scopes a new token asks for: always its User's own status, Installation Health only when chosen. */
+export function tokenScopes(installation: boolean): IntegrationScope[] {
+  return installation ? ["status:read", "installation:read"] : ["status:read"]
+}
+
+/** What a token may read, for its row. */
+export function scopeSummary(i18n: I18n, token: IntegrationToken): string {
+  return token.scopes.includes("installation:read")
+    ? i18n.t("settings.integrations.scopes.installation")
+    : i18n.t("settings.integrations.scopes.status")
+}
+
+/**
+ * Copy-ready examples for monitors, dashboards, and AI agents, addressed at this installation. An
+ * Installation Administrator also gets one for Installation Health.
+ */
+export function integrationExamples(i18n: I18n, origin: string, administrator = false): IntegrationExample[] {
+  const examples = statusExamples(i18n, origin)
+  if (!administrator) return examples
+  return [
+    ...examples,
+    {
+      title: i18n.t("settings.integrations.examples.installationHealth.title"),
+      description: i18n.t("settings.integrations.examples.installationHealth.description"),
+      code: `curl -H "Authorization: Bearer <token>" ${origin}/api/v1/installation/health`,
+    },
+  ]
+}
+
+function statusExamples(i18n: I18n, origin: string): IntegrationExample[] {
   const status = `${origin}/api/v1/status`
   const mcp = `${origin}/mcp`
   // Each code block is configuration for another tool, copied as is, so it is never translated.

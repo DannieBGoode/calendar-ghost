@@ -6,17 +6,18 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence import sqlite as sqlite_module
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.security import CredentialCipher
+from tests.adapters.test_user_migration import database_at_version
 from tests.helpers import endpoint
+from tests.users import USER, add_user, sqlite_units
 
 # Timestamps a version-16 installation would have written: distinct per account, so a copy/paste
 # mistake between the two rows would show up as a wrong value rather than a coincidental match.
@@ -138,26 +139,30 @@ def _table_sql(connection: sqlite3.Connection, table: str) -> str | None:
 
 ANOTHER_PROVIDERS_ACCOUNT = """
     INSERT INTO connected_accounts (
-        id, provider, display_name, email, encrypted_credentials, state, created_at, updated_at
+        id, provider, display_name, email, encrypted_credentials, state, created_at, updated_at,
+        user_id
     ) VALUES (
         'elsewhere', 'another-provider', 'Elsewhere', 'person@example.test', x'00',
-        'connected', '2026-10-01', '2026-10-01'
+        'connected', '2026-10-01', '2026-10-01', 'user-1'
     )
 """
 
 
 def _store(database: Path) -> SqliteConnectedAccountStore:
     initialize_database(database)
+    add_user(database)
     return SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
 
 
 def test_a_connected_account_records_its_provider(tmp_path: Path) -> None:
     store = _store(tmp_path / "test.db")
 
-    account = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
+    account = store.for_user(USER).save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
 
     assert account.provider is ProviderKind.GOOGLE
-    assert store.get(account.id) == account
+    assert store.for_user(USER).get(account.id) == account
     assert store.provider_of(account.id) is ProviderKind.GOOGLE
 
 
@@ -171,8 +176,12 @@ def test_reauthorization_finds_the_account_by_provider_and_email(tmp_path: Path)
     with sqlite3.connect(database) as connection:
         connection.execute(ANOTHER_PROVIDERS_ACCOUNT)
 
-    google = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
-    again = store.save("Renamed", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
+    google = store.for_user(USER).save(
+        "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    again = store.for_user(USER).save(
+        "Renamed", "person@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
 
     assert google.id.value != "elsewhere"
     assert (again.id, again.display_name) == (google.id, "Renamed")
@@ -185,32 +194,40 @@ def test_reauthorization_finds_the_account_by_provider_and_email(tmp_path: Path)
 
 def test_migration_17_keeps_accounts_and_their_calendar_names(tmp_path: Path) -> None:
     database = tmp_path / "test.db"
-    store = _store(database)
-    account = store.save(
-        "Personal",
-        "person@example.test",
-        '{"token":"one"}',
-        provider=ProviderKind.GOOGLE,
-        avatar_url="https://example.test/avatar.png",
-    )
-    family = endpoint(account.id.value, "family")
-    with SqliteUnitOfWorkFactory(database)() as uow:
-        uow.calendar_names.remember(
-            account.id,
-            [DiscoveredCalendar("family", "Family", access=CalendarAccess.OWNER, primary=False)],
-        )
-        uow.commit()
+    cipher = CredentialCipher(CredentialCipher.generate_key())
+    database_at_version(database, 16)
     with sqlite3.connect(database) as connection:
-        # Migration 17 rebuilds connected_accounts without the column migration 20 adds, so both
-        # run again, as they would in order.
-        connection.execute("DELETE FROM schema_migrations WHERE version IN (17, 20)")
-        connection.execute("ALTER TABLE sync_rules DROP COLUMN awaiting_reauthorization")
+        connection.execute(
+            "INSERT INTO installation_admin VALUES (1, 'scrypt$synthetic', '2026-09-01')"
+        )
+        connection.execute(
+            """
+            INSERT INTO connected_accounts (
+                id, provider, display_name, email, encrypted_credentials, state, created_at,
+                updated_at, avatar_url
+            ) VALUES ('personal', 'google', 'Personal', 'person@example.test', ?, 'connected',
+                '2026-09-01', '2026-09-01', 'https://example.test/avatar.png')
+            """,
+            (cipher.encrypt('{"token":"one"}'),),
+        )
+        connection.execute(
+            "INSERT INTO calendar_names VALUES ('personal', 'family', 'Family', '2026-09-01')"
+        )
 
     initialize_database(database)
 
-    assert store.get(account.id) == account
+    with sqlite3.connect(database) as connection:
+        owner = UserId(str(connection.execute("SELECT id FROM users").fetchone()[0]))
+    store = SqliteConnectedAccountStore(database, cipher)
+    account = store.for_user(owner).get(ConnectedAccountId("personal"))
+    assert account is not None
+    assert (account.email, account.avatar_url) == (
+        "person@example.test",
+        "https://example.test/avatar.png",
+    )
     assert store.credential_json(account.id) == '{"token":"one"}'
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    family = endpoint("personal", "family")
+    with sqlite_units(database, user=owner, accounts=())() as uow:
         assert uow.calendar_names.names([family]) == {family: "Family"}
 
 

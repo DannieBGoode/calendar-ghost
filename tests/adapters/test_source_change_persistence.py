@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, UnitOfWorkFactory
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -19,20 +19,20 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.infrastructure.persistence.source_changes import open_change_values
 from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 from tests.fake_calendar import FakeCalendars, sync_use_case
 from tests.helpers import NOW, endpoint, event, rule
+from tests.users import sqlite_units
 
 HISTORY = HistoryCipher(CredentialCipher.generate_key())
 
 
-def _factory(tmp_path: Path, history: HistoryCipher | None = HISTORY) -> SqliteUnitOfWorkFactory:
+def _factory(tmp_path: Path, history: HistoryCipher | None = HISTORY) -> UnitOfWorkFactory:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
-    factory = SqliteUnitOfWorkFactory(database, history=history)
+    factory = sqlite_units(database, history=history)
     with factory() as uow:
         uow.rules.add(rule())
         uow.commit()
@@ -126,7 +126,7 @@ def test_an_observation_sealed_under_another_key_reads_as_unobserved(tmp_path: P
     with factory() as uow:
         uow.observations.save(rule().id, event().reference, _observation(), NOW)
         uow.commit()
-    other = SqliteUnitOfWorkFactory(
+    other = sqlite_units(
         tmp_path / "calendar-sync.db", history=HistoryCipher(CredentialCipher.generate_key())
     )
 

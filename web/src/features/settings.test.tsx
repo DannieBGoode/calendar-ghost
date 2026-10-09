@@ -16,6 +16,7 @@ import {
   type IssuedIntegrationToken,
 } from "@/lib/api"
 import { integrationExamples } from "@/lib/integrations"
+import type { OpenSettingsTab, SettingsTab } from "@/lib/navigation"
 
 import { IntegrationsSection, SettingsPage } from "./settings"
 
@@ -71,7 +72,7 @@ const sourceOnlyAccess: Awaited<ReturnType<typeof api.verifyAccountAccess>> = {
 const kuma: IntegrationToken = {
   id: "token-kuma",
   name: "Uptime Kuma",
-  scope: "status:read",
+  scopes: ["status:read"],
   created_at: "2026-10-01T09:00:00Z",
   last_used_at: null,
   revoked_at: null,
@@ -95,6 +96,13 @@ const pseudoTokens: IntegrationToken[] = [
   { ...kuma, id: "token-old", name: "Old monitor", created_at: justNow, revoked_at: justNow },
 ]
 
+const ADMIN_EMAIL = "admin@example.test"
+const adminSession = {
+  authenticated: true,
+  installation_sends_email: false,
+  user: { id: "user-admin", email: ADMIN_EMAIL, role: "installation_administrator", notify_by_email: true, language: null },
+}
+
 /** Account names, emails, avatar initials, and the Google return address the fixtures introduce. */
 const FIXTURE_TEXT = [
   "Dana Calendar",
@@ -103,6 +111,7 @@ const FIXTURE_TEXT = [
   "robin@example.test",
   "DC",
   "RA",
+  ADMIN_EMAIL,
   REDIRECT_URI,
   "http://localhost:18000",
   ...dateWords(),
@@ -111,10 +120,11 @@ const FIXTURE_TEXT = [
   issued.name,
   issued.token,
   // Each example's code block is configuration for another tool, shown as is, never translated.
-  ...integrationExamples(testI18n(), PUBLIC_ORIGIN).map((example) => example.code),
+  ...integrationExamples(testI18n(), PUBLIC_ORIGIN, true).map((example) => example.code),
 ]
 
 type Scenario = {
+  tab?: SettingsTab
   configured?: boolean
   redirectUri?: string | null
   accounts?: ConnectedAccount[]
@@ -144,6 +154,8 @@ function mockFetch({
     "/api/v1/storage/activity": clearable ?? jsonResponse({ older_than_days: 90, entries: 41880 }),
     "/api/v1/storage/activity/clear": cleared ?? jsonResponse({ removed: 41880, database: usage.database }),
     "/api/v1/integration-tokens": jsonResponse(tokens),
+    "/api/v1/session": jsonResponse(adminSession),
+    "/api/v1/registration": jsonResponse({ policy: "only_me", only_me_available: true }),
   }
   vi.stubGlobal(
     "fetch",
@@ -159,6 +171,7 @@ let container: HTMLDivElement
 let root: Root | null = null
 let clipboard: PropertyDescriptor | undefined
 let address: string
+let openTab: ReturnType<typeof vi.fn<OpenSettingsTab>>
 
 function page() {
   return window as typeof window & { happyDOM: { setURL: (url: string) => void } }
@@ -195,6 +208,7 @@ async function settle(times = 6) {
 
 async function renderSettings(i18n: I18n, scenario: Scenario = {}) {
   mockFetch(scenario)
+  openTab = vi.fn<OpenSettingsTab>()
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
@@ -202,7 +216,7 @@ async function renderSettings(i18n: I18n, scenario: Scenario = {}) {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <SettingsPage />
+            <SettingsPage tab={scenario.tab ?? "connections"} onOpenTab={openTab} onOpenPeople={() => undefined} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -248,6 +262,12 @@ describe("SettingsPage", () => {
     expect(container.querySelector("#revoke-token-homepage")).not.toBeNull()
     expect(container.querySelector(".revoked-tokens")).not.toBeNull()
     expect(container.querySelector(".integration-examples")).not.toBeNull()
+    expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
+  })
+
+  it.each(["account", "administration"] as const)("has no untranslated text on the %s tab", async (tab) => {
+    await renderSettings(pseudoI18n(), { tab })
+    expect(container.querySelector("section")).not.toBeNull()
     expect(untranslatedText(container, FIXTURE_TEXT)).toEqual([])
   })
 
@@ -300,9 +320,6 @@ describe("SettingsPage", () => {
     expect(container.querySelector(".account-summary-toggle [aria-hidden='true']")?.textContent).toBe("Hide")
     expect(container.querySelector(".account-summary-toggle .sr-only")?.textContent).toBe("Hide accounts")
     expect(container.querySelector(".account-summary-emails")?.textContent).toBe("dana@example.test, robin@example.test")
-    const summaries = [...container.querySelectorAll(".setting-row p")].map((paragraph) => paragraph.textContent)
-    expect(summaries).toContain("48.2 MB · 61,204 Activity entries since Jun 12, 2026 · 1.2 MB can be reclaimed")
-    expect(summaries).toContain("7.9 MB · Sep 12 – Oct 1, 2026")
 
     await click(button("Check access"))
     expect(container.querySelector(".account-access-result p")?.textContent).toBe(
@@ -318,8 +335,16 @@ describe("SettingsPage", () => {
     )
   })
 
+  it("summarizes storage on Administration", async () => {
+    await renderSettings(testI18n(), { tab: "administration" })
+    const summaries = [...container.querySelectorAll(".setting-row p")].map((paragraph) => paragraph.textContent)
+    expect(summaries).toContain("48.2 MB · 61,204 Activity entries since Jun 12, 2026 · 1.2 MB can be reclaimed")
+    expect(summaries).toContain("7.9 MB · Sep 12 – Oct 1, 2026")
+  })
+
   it("explains a failed count with the server's detail", async () => {
     await renderSettings(testI18n(), {
+      tab: "administration",
       clearable: jsonResponse({ detail: "older_than_days must be one of 30, 90." }, 422),
     })
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
@@ -330,6 +355,7 @@ describe("SettingsPage", () => {
 
   it("explains a failed count from the error code, not the server's English", async () => {
     await renderSettings(testI18n(), {
+      tab: "administration",
       clearable: jsonResponse({ detail: "older_than_days must be one of 30, 90.", code: "invalid_activity_age", params: {} }, 422),
     })
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
@@ -340,6 +366,7 @@ describe("SettingsPage", () => {
 
   it("says the old Activity was cleared when its space could not be reclaimed", async () => {
     await renderSettings(testI18n(), {
+      tab: "administration",
       cleared: jsonResponse({ detail: "Database is locked.", code: "storage_busy", params: {} }, 409),
     })
     await click(container.querySelector<HTMLButtonElement>("[aria-controls='clear-activity-confirmation']")!)
@@ -351,20 +378,65 @@ describe("SettingsPage", () => {
   })
 })
 
+describe("Settings tabs", () => {
+  function sections(): (string | null)[] {
+    return [...container.querySelectorAll(".settings-page > section")].map((item) => item.getAttribute("aria-labelledby"))
+  }
+
+  function tabs(): HTMLAnchorElement[] {
+    return [...container.querySelectorAll<HTMLAnchorElement>("nav.settings-tabs a")]
+  }
+
+  it.each([
+    ["connections", ["accounts-title", "integrations-title"]],
+    ["account", ["own-account-title", "appearance-title"]],
+    ["administration", ["registration-title", "storage-title"]],
+  ] as const)("shows the %s tab's sections", async (tab, shown) => {
+    await renderSettings(testI18n(), { tab })
+    expect(sections()).toEqual(shown)
+  })
+
+  it("links each tab to its own address and marks the one shown", async () => {
+    await renderSettings(testI18n(), { tab: "account" })
+    expect(container.querySelector("nav.settings-tabs")?.getAttribute("aria-label")).toBe("Settings sections")
+    expect(tabs().map((tab) => [tab.textContent, tab.getAttribute("href"), tab.getAttribute("aria-current")])).toEqual([
+      ["Your account", "/settings/account", "page"],
+      ["Connections", "/settings/connections", null],
+      ["Administration", "/settings/administration", null],
+    ])
+  })
+
+  it("opens a tab in place on a plain click", async () => {
+    await renderSettings(testI18n())
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })
+    act(() => {
+      tabs()[2]!.dispatchEvent(click)
+    })
+    expect(click.defaultPrevented).toBe(true)
+    expect(openTab).toHaveBeenCalledWith("administration")
+  })
+
+  it("shows a connection outcome only on Connections", async () => {
+    window.history.replaceState(null, "", "/settings?google=connected")
+    await renderSettings(testI18n(), { tab: "account" })
+    expect(container.querySelector(".oauth-feedback")).toBeNull()
+  })
+})
+
 async function tick() {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
   })
 }
 
-async function renderSection() {
+async function renderSection(administrator = false) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   root = createRoot(container)
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={testI18n()}>
         <QueryClientProvider client={queryClient}>
-          <IntegrationsSection />
+          <IntegrationsSection administrator={administrator} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
@@ -442,7 +514,7 @@ describe("IntegrationsSection", () => {
 
     await issueToken("Claude Code")
 
-    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code")
+    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
     const heading = container.querySelector(".token-reveal h3")
     expect(heading?.textContent).toBe("Copy the token for Claude Code now")
     expect(document.activeElement).toBe(heading)
@@ -456,6 +528,39 @@ describe("IntegrationsSection", () => {
     root = null
     await renderSection()
     expect(container.textContent).not.toContain(issued.token)
+  })
+
+  it("says what each token may read", async () => {
+    vi.mocked(api.integrationTokens).mockResolvedValue([kuma, { ...homepage, scopes: ["status:read", "installation:read"] }])
+    await renderSection(true)
+    await openGroup()
+    expect(rowOf("Uptime Kuma").textContent).toContain("Reads your synchronization status")
+    expect(rowOf("Homepage").textContent).toContain("Reads your synchronization status and Installation Health")
+  })
+
+  it("lets only an administrator's token also read Installation Health", async () => {
+    await renderSection()
+    await openGroup()
+    expect(container.querySelector("#integration-installation")).toBeNull()
+    expect(container.textContent).not.toContain("/api/v1/installation/health")
+    act(() => root?.unmount())
+    root = null
+
+    await renderSection(true)
+    await openGroup()
+    expect(container.textContent).toContain("/api/v1/installation/health")
+    act(() => container.querySelector<HTMLInputElement>("#integration-installation")!.click())
+    await issueToken("Monitor")
+    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Monitor", ["status:read", "installation:read"])
+    // The next token reads only the administrator's own status unless asked again.
+    expect(container.querySelector<HTMLInputElement>("#integration-installation")!.checked).toBe(false)
+  })
+
+  it("issues an administrator's token for their own status unless they ask for more", async () => {
+    await renderSection(true)
+    await openGroup()
+    await issueToken("Claude Code")
+    expect(api.issueIntegrationToken).toHaveBeenCalledWith("Claude Code", ["status:read"])
   })
 
   it("closes the reveal with Done and returns to the name field", async () => {

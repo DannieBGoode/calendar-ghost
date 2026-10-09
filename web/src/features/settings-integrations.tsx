@@ -9,15 +9,23 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { IntegrationToken, IssuedIntegrationToken } from "@/lib/api"
-import { copyToken, integrationExamples, integrationSummary, needsTransportNote, tokenUsage } from "@/lib/integrations"
+import {
+  copyToken,
+  integrationExamples,
+  integrationSummary,
+  needsTransportNote,
+  scopeSummary,
+  tokenUsage,
+} from "@/lib/integrations"
 import { useIntegrationTokens, type CopyState, type IntegrationTokens } from "@/lib/use-integration-tokens"
 import { useNow } from "@/lib/use-now"
 
 /**
  * Integration Tokens as one Settings group. It stays collapsed to a summary row, as Connected
- * accounts does, because most administrators never need it.
+ * accounts does, because most people never need it. An Installation Administrator's tokens may
+ * also read Installation Health.
  */
-export function IntegrationsSection() {
+export function IntegrationsSection({ administrator }: { administrator: boolean }) {
   const i18n = useI18n()
   const { t } = i18n
   const now = useNow()
@@ -67,8 +75,10 @@ export function IntegrationsSection() {
               <ChevronDown aria-hidden="true" />
             </span>
           </button>
-          {open && <IntegrationsBody tokens={tokens.data} now={now} integrations={integrations} />}
-          {open && <IntegrationsFooter origin={window.location.origin} />}
+          {open && (
+            <IntegrationsBody tokens={tokens.data} now={now} integrations={integrations} administrator={administrator} />
+          )}
+          {open && <IntegrationsFooter origin={window.location.origin} administrator={administrator} />}
         </div>
       )}
       {message && <p role="status">{message}</p>}
@@ -80,10 +90,12 @@ function IntegrationsBody({
   tokens,
   now,
   integrations,
+  administrator,
 }: {
   tokens: IntegrationToken[]
   now: number
   integrations: IntegrationTokens
+  administrator: boolean
 }) {
   const nameInput = useRef<HTMLInputElement>(null)
   const { issued, copyState, setCopyState, finishReveal } = integrations
@@ -92,7 +104,7 @@ function IntegrationsBody({
 
   return (
     <div className="group-body" id="integration-body">
-      <IssueTokenForm integrations={integrations} nameInput={nameInput} />
+      <IssueTokenForm integrations={integrations} nameInput={nameInput} administrator={administrator} />
       {issued && (
         <TokenReveal
           issued={issued}
@@ -115,9 +127,11 @@ function IntegrationsBody({
 function IssueTokenForm({
   integrations,
   nameInput,
+  administrator,
 }: {
   integrations: IntegrationTokens
   nameInput: RefObject<HTMLInputElement | null>
+  administrator: boolean
 }) {
   const i18n = useI18n()
   const { t } = i18n
@@ -142,6 +156,7 @@ function IssueTokenForm({
           aria-describedby="integration-name-hint"
           onChange={(event) => setName(event.target.value)}
         />
+        {administrator && <InstallationScopeField integrations={integrations} />}
         {issue.error && (
           <p className="field-error" role="alert">
             {apiErrorMessage(i18n, issue.error)}
@@ -152,6 +167,26 @@ function IssueTokenForm({
         {issue.isPending ? t("settings.integrations.issue.pending") : t("settings.integrations.issue.submit")}
       </Button>
     </form>
+  )
+}
+
+/** An Installation Administrator's choice to let the new token read Installation Health too. */
+function InstallationScopeField({ integrations }: { integrations: IntegrationTokens }) {
+  const { t } = useI18n()
+  const { installation, setInstallation } = integrations
+  return (
+    <label className="checkbox-row integration-scope" htmlFor="integration-installation">
+      <input
+        id="integration-installation"
+        type="checkbox"
+        checked={installation}
+        onChange={(event) => setInstallation(event.target.checked)}
+      />
+      <span>
+        <strong>{t("settings.integrations.issue.installation")}</strong>
+        <small>{t("settings.integrations.issue.installationHint")}</small>
+      </span>
+    </label>
   )
 }
 
@@ -225,6 +260,7 @@ function ActiveToken({
         <div>
           <h3>{token.name}</h3>
           <p>{tokenUsage(i18n, token, now)}</p>
+          <p>{scopeSummary(i18n, token)}</p>
         </div>
         <Button
           ref={trigger}
@@ -288,7 +324,7 @@ function RevokedTokens({ revoked, now }: { revoked: IntegrationToken[]; now: num
   )
 }
 
-function IntegrationsFooter({ origin }: { origin: string }) {
+function IntegrationsFooter({ origin, administrator }: { origin: string; administrator: boolean }) {
   const i18n = useI18n()
   const { t } = i18n
   return (
@@ -313,7 +349,7 @@ function IntegrationsFooter({ origin }: { origin: string }) {
         </summary>
         <div className="inline-help-body integration-examples">
           <p>{t("settings.integrations.examples.intro")}</p>
-          {integrationExamples(i18n, origin).map((example) => (
+          {integrationExamples(i18n, origin, administrator).map((example) => (
             <div key={example.title}>
               <h3>{example.title}</h3>
               <p>{example.description}</p>

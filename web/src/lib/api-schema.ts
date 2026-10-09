@@ -4,6 +4,106 @@
  */
 
 export interface paths {
+    "/api/v1/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Own Account
+         * @description Delete the signed-in User and every record they own, keeping or deleting projections.
+         */
+        delete: operations["delete_own_account_api_v1_account_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own Account Deletion
+         * @description Whether the User may delete themself now, and whether nobody would remain.
+         */
+        get: operations["own_account_deletion_api_v1_account_deletion_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Email
+         * @description Add the email the upgraded first User must add, or change one with the password.
+         */
+        put: operations["set_email_api_v1_account_email_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Notifications
+         * @description Whether the User's Incident Notifications also come by email; the Web UI keeps them all.
+         */
+        put: operations["set_notifications_api_v1_account_notifications_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change Password
+         * @description Replace the password; every other session of the User ends.
+         */
+        put: operations["change_password_api_v1_account_password_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/accounts": {
         parameters: {
             query?: never;
@@ -208,6 +308,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/installation/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Installation Health
+         * @description Installation Health, for an Installation Administrator's session or installation:read
+         *     token; it names no rule, calendar, or User (ADR 0030).
+         */
+        get: operations["installation_health_api_v1_installation_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/integration-tokens": {
         parameters: {
             query?: never;
@@ -243,6 +364,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Invitations */
+        get: operations["invitations_api_v1_invitations_get"];
+        put?: never;
+        /** Invite */
+        post: operations["invite_api_v1_invitations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept Invitation */
+        post: operations["accept_invitation_api_v1_invitations_accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Invitation */
+        post: operations["check_invitation_api_v1_invitations_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/invitations/{invitation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke Invitation */
+        delete: operations["revoke_invitation_api_v1_invitations__invitation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/oauth/google/start": {
         parameters: {
             query?: never;
@@ -252,11 +442,46 @@ export interface paths {
         };
         /**
          * Start Google Oauth
-         * @description Start Google's consent; reauthorizing a known `account` suggests its email to Google.
+         * @description Start Google's consent for the signed-in User; reauthorizing a known `account` suggests
+         *     its email to Google.
          */
         get: operations["start_google_oauth_api_v1_oauth_google_start_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/password-resets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset Password */
+        post: operations["reset_password_api_v1_password_resets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/password-resets/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check Password Reset */
+        post: operations["check_password_reset_api_v1_password_resets_check_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -273,6 +498,24 @@ export interface paths {
         /** Recent Changes */
         get: operations["recent_changes_api_v1_recent_changes_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Registration */
+        get: operations["registration_api_v1_registration_get"];
+        /** Set Registration */
+        put: operations["set_registration_api_v1_registration_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -429,10 +672,10 @@ export interface paths {
         /** Session Status */
         get: operations["session_status_api_v1_session_get"];
         put?: never;
-        /** Log In */
-        post: operations["log_in_api_v1_session_post"];
-        /** Log Out */
-        delete: operations["log_out_api_v1_session_delete"];
+        /** Sign In */
+        post: operations["sign_in_api_v1_session_post"];
+        /** Sign Out */
+        delete: operations["sign_out_api_v1_session_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -464,8 +707,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Admin */
-        post: operations["create_admin_api_v1_setup_admin_post"];
+        /** Set Up */
+        post: operations["set_up_api_v1_setup_admin_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -479,7 +722,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Installation Status */
+        /**
+         * Installation Status
+         * @description The Installation Status of the User the token or session belongs to (ADR 0030).
+         */
         get: operations["installation_status_api_v1_status_get"];
         put?: never;
         post?: never;
@@ -558,6 +804,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Users
+         * @description One page of the people here, by part of their email, role, and state; never their data.
+         */
+        get: operations["users_api_v1_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete User
+         * @description Delete another User and every record they own; their projections are deleted.
+         */
+        delete: operations["delete_user_api_v1_users__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/password-reset-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue Password Reset */
+        post: operations["issue_password_reset_api_v1_users__user_id__password_reset_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change Role */
+        put: operations["change_role_api_v1_users__user_id__role_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change State */
+        put: operations["change_state_api_v1_users__user_id__state_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -579,6 +916,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptInvitationRequest */
+        AcceptInvitationRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
         /** ActivityEventResponse */
         ActivityEventResponse: {
             destination: components["schemas"]["EventSnapshotResponse"] | null;
@@ -626,6 +972,13 @@ export interface components {
             calendar_id: string;
             /** Connected Account Id */
             connected_account_id: string;
+        };
+        /** ChangePasswordRequest */
+        ChangePasswordRequest: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
         };
         /** ClearActivityRequest */
         ClearActivityRequest: {
@@ -741,6 +1094,16 @@ export interface components {
             oldest_activity_at: string | null;
             /** Reclaimable Bytes */
             reclaimable_bytes: number;
+        };
+        /** DeleteOwnAccountRequest */
+        DeleteOwnAccountRequest: {
+            /** Password */
+            password: string;
+            /**
+             * Projections
+             * @enum {string}
+             */
+            projections: "delete" | "detach";
         };
         /** DiscoveredCalendarResponse */
         DiscoveredCalendarResponse: {
@@ -880,6 +1243,39 @@ export interface components {
             /** Updated At */
             updated_at: string;
         };
+        /**
+         * InstallationHealthResponse
+         * @description The whole installation's verdict; it names no rule, calendar, or User (ADR 0030).
+         */
+        InstallationHealthResponse: {
+            /** Checked At */
+            checked_at: string;
+            /** Disabled Users */
+            disabled_users: number;
+            /** Incidents */
+            incidents: components["schemas"]["InstallationIncidentResponse"][];
+            /** Needs Attention */
+            needs_attention: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy";
+            /** Users */
+            users: {
+                [key: string]: number;
+            };
+        };
+        /** InstallationIncidentResponse */
+        InstallationIncidentResponse: {
+            /**
+             * Kind
+             * @constant
+             */
+            kind: "scheduler_stalled";
+            /** Since */
+            since: string;
+        };
         /** IntegrationTokenResponse */
         IntegrationTokenResponse: {
             /** Created At */
@@ -892,16 +1288,15 @@ export interface components {
             name: string;
             /** Revoked At */
             revoked_at: string | null;
-            /**
-             * Scope
-             * @constant
-             */
-            scope: "status:read";
+            /** Scopes */
+            scopes: ("installation:read" | "status:read")[];
         };
         /** IssueIntegrationTokenRequest */
         IssueIntegrationTokenRequest: {
             /** Name */
             name: string;
+            /** Scopes */
+            scopes?: ("installation:read" | "status:read")[];
         };
         /** IssuedIntegrationTokenResponse */
         IssuedIntegrationTokenResponse: {
@@ -915,13 +1310,29 @@ export interface components {
             name: string;
             /** Revoked At */
             revoked_at: string | null;
-            /**
-             * Scope
-             * @constant
-             */
-            scope: "status:read";
+            /** Scopes */
+            scopes: ("installation:read" | "status:read")[];
             /** Token */
             token: string;
+        };
+        /** IssuedLinkResponse */
+        IssuedLinkResponse: {
+            /** Expires At */
+            expires_at: string;
+            /** Id */
+            id: string;
+            /** Token */
+            token: string;
+        };
+        /** LinkRequest */
+        LinkRequest: {
+            /** Token */
+            token: string;
+        };
+        /** LinkStatusResponse */
+        LinkStatusResponse: {
+            /** Usable */
+            usable: boolean;
         };
         /** LogUsageResponse */
         LogUsageResponse: {
@@ -943,10 +1354,26 @@ export interface components {
             /** Connected Account Id */
             connected_account_id: string;
         };
-        /** PasswordRequest */
-        PasswordRequest: {
-            /** Password */
-            password: string;
+        /** NotificationPreferenceRequest */
+        NotificationPreferenceRequest: {
+            /** Notify By Email */
+            notify_by_email: boolean;
+        };
+        /** OwnAccountDeletionResponse */
+        OwnAccountDeletionResponse: {
+            /** Last User */
+            last_user: boolean;
+            /** Needs Another Administrator */
+            needs_another_administrator: boolean;
+        };
+        /** PendingInvitationResponse */
+        PendingInvitationResponse: {
+            /** Created At */
+            created_at: string;
+            /** Expires At */
+            expires_at: string;
+            /** Id */
+            id: string;
         };
         /** PreviewItemResponse */
         PreviewItemResponse: {
@@ -1078,6 +1505,24 @@ export interface components {
             /** Starts */
             starts: string | null;
         };
+        /** RegistrationRequest */
+        RegistrationRequest: {
+            /**
+             * Policy
+             * @enum {string}
+             */
+            policy: "only_me" | "invitation_only";
+        };
+        /** RegistrationResponse */
+        RegistrationResponse: {
+            /** Only Me Available */
+            only_me_available: boolean;
+            /**
+             * Policy
+             * @enum {string}
+             */
+            policy: "only_me" | "invitation_only";
+        };
         /** RemovalResponse */
         RemovalResponse: {
             /** Conflicts */
@@ -1096,6 +1541,21 @@ export interface components {
              */
             projections: "delete" | "detach";
             source: components["schemas"]["CalendarEndpointPayload"];
+        };
+        /** ResetPasswordRequest */
+        ResetPasswordRequest: {
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
+        /** RoleRequest */
+        RoleRequest: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "installation_administrator" | "user";
         };
         /** RuleDetailResponse */
         RuleDetailResponse: {
@@ -1273,11 +1733,56 @@ export interface components {
         SessionResponse: {
             /** Authenticated */
             authenticated: boolean;
+            /**
+             * Installation Sends Email
+             * @default false
+             */
+            installation_sends_email: boolean;
+            user: components["schemas"]["SignedInUserResponse"] | null;
+        };
+        /** SetEmailRequest */
+        SetEmailRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password?: string | null;
+        };
+        /** SetupRequest */
+        SetupRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
         };
         /** SetupStatusResponse */
         SetupStatusResponse: {
             /** Administrator Configured */
             administrator_configured: boolean;
+            /** Password Only Sign In */
+            password_only_sign_in: boolean;
+        };
+        /** SignInRequest */
+        SignInRequest: {
+            /** Email */
+            email?: string | null;
+            /** Password */
+            password: string;
+        };
+        /** SignedInUserResponse */
+        SignedInUserResponse: {
+            /** Email */
+            email: string | null;
+            /** Id */
+            id: string;
+            /** Language */
+            language: string | null;
+            /** Notify By Email */
+            notify_by_email: boolean;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "installation_administrator" | "user";
         };
         /**
          * SourceChangeResponse
@@ -1416,6 +1921,57 @@ export interface components {
              */
             unanswered_invitations: "wait" | "as_tentative";
         };
+        /** UserDeletionResponse */
+        UserDeletionResponse: {
+            /** Deleted */
+            deleted: number;
+            /** Detached */
+            detached: number;
+            /** Left */
+            left: number;
+            /** Rules */
+            rules: number;
+        };
+        /** UserPageResponse */
+        UserPageResponse: {
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+            /** Users */
+            users: components["schemas"]["UserResponse"][];
+        };
+        /** UserResponse */
+        UserResponse: {
+            /** Created At */
+            created_at: string;
+            /** Email */
+            email: string | null;
+            /** Id */
+            id: string;
+            /** Last Sign In At */
+            last_sign_in_at: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "installation_administrator" | "user";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "disabled";
+        };
+        /** UserStateRequest */
+        UserStateRequest: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "disabled";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -1438,6 +1994,175 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    delete_own_account_api_v1_account_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteOwnAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDeletionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    own_account_deletion_api_v1_account_deletion_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnAccountDeletionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_email_api_v1_account_email_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedInUserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_notifications_api_v1_account_notifications_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferenceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedInUserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_password_api_v1_account_password_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_accounts_api_v1_accounts_get: {
         parameters: {
             query?: never;
@@ -1828,6 +2553,39 @@ export interface operations {
             };
         };
     };
+    installation_health_api_v1_installation_health_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallationHealthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_integration_tokens_api_v1_integration_tokens_get: {
         parameters: {
             query?: never;
@@ -1925,6 +2683,165 @@ export interface operations {
             };
         };
     };
+    invitations_api_v1_invitations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingInvitationResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invite_api_v1_invitations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_invitation_api_v1_invitations_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_invitation_api_v1_invitations_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_invitation_api_v1_invitations__invitation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitation_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_google_oauth_api_v1_oauth_google_start_get: {
         parameters: {
             query?: {
@@ -1958,6 +2875,70 @@ export interface operations {
             };
         };
     };
+    reset_password_api_v1_password_resets_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_password_reset_api_v1_password_resets_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     recent_changes_api_v1_recent_changes_get: {
         parameters: {
             query?: {
@@ -1978,6 +2959,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecentChangeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    registration_api_v1_registration_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_registration_api_v1_registration_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2395,7 +3442,7 @@ export interface operations {
             };
         };
     };
-    log_in_api_v1_session_post: {
+    sign_in_api_v1_session_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2404,7 +3451,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PasswordRequest"];
+                "application/json": components["schemas"]["SignInRequest"];
             };
         };
         responses: {
@@ -2428,7 +3475,7 @@ export interface operations {
             };
         };
     };
-    log_out_api_v1_session_delete: {
+    sign_out_api_v1_session_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -2477,7 +3524,7 @@ export interface operations {
             };
         };
     };
-    create_admin_api_v1_setup_admin_post: {
+    set_up_api_v1_setup_admin_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2486,7 +3533,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PasswordRequest"];
+                "application/json": components["schemas"]["SetupRequest"];
             };
         };
         responses: {
@@ -2690,6 +3737,185 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_api_v1_users_get: {
+        parameters: {
+            query?: {
+                search?: string;
+                role?: ("installation_administrator" | "user") | null;
+                state?: ("active" | "disabled") | null;
+                sort?: "joined" | "email" | "last_sign_in";
+                order?: "asc" | "desc";
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_user_api_v1_users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDeletionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_password_reset_api_v1_users__user_id__password_reset_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_role_api_v1_users__user_id__role_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_state_api_v1_users__user_id__state_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserStateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

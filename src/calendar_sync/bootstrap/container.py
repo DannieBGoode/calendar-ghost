@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from calendar_sync.application.accounts import (
@@ -14,13 +15,43 @@ from calendar_sync.application.activity import (
     InspectActivityEvent,
     OperationsQueries,
 )
+from calendar_sync.application.administration import (
+    AcceptInvitation,
+    ChangeRole,
+    ChangeUserState,
+    CheckInvitation,
+    CheckPasswordReset,
+    DeleteOwnAccount,
+    DeleteUser,
+    InviteUser,
+    IssuePasswordReset,
+    LinkAttempts,
+    ListInvitations,
+    ListUsers,
+    OwnedRules,
+    ResetPassword,
+    RevokeInvitation,
+    SetRegistrationPolicy,
+    ShowOwnAccountDeletion,
+    ShowRegistration,
+)
 from calendar_sync.application.health import RuleHealth
+from calendar_sync.application.identity import (
+    ChangeOwnPassword,
+    SetNotificationEmail,
+    SetOwnEmail,
+    SetUpInstallation,
+    SignIn,
+)
+from calendar_sync.application.installation_health import (
+    GetInstallationHealth,
+    InstallationNotifications,
+)
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
-    AdministratorAccess,
     CalendarProvider,
     Clock,
     ConnectedAccountRepository,
@@ -28,12 +59,22 @@ from calendar_sync.application.ports import (
     IdGenerator,
     IncidentNotifications,
     IncidentRepository,
+    InstallationUnitOfWorkFactory,
+    IntegrationTokenAuthentication,
     IntegrationTokens,
+    Invitations,
     LogFiles,
+    PasswordHasher,
+    PasswordResetLinks,
     ProviderCallStats,
+    RegistrationSettings,
     RuleHealthRecords,
     RunIdGenerator,
+    SchedulerHeartbeat,
+    Sessions,
+    SignInThrottle,
     UnitOfWorkFactory,
+    UserDirectory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.providers import ProviderKind
@@ -55,6 +96,7 @@ from calendar_sync.application.storage import StorageAdministration
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import configure_logging
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
@@ -69,7 +111,9 @@ from calendar_sync.infrastructure.log_files import RotatingLogFiles
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
+    OwnerNotifier,
     SmtpChannel,
+    SmtpServer,
     WebhookChannel,
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
@@ -84,22 +128,31 @@ from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,
 )
+from calendar_sync.infrastructure.persistence.registration import (
+    SqliteInvitations,
+    SqlitePasswordResetLinks,
+    SqliteRegistrationSettings,
+)
 from calendar_sync.infrastructure.persistence.sqlite import (
+    SqliteInstallationUnitOfWorkFactory,
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
+from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.providers.routing import (
     RoutingAccountCalendars,
     RoutingCalendarProvider,
 )
-from calendar_sync.infrastructure.scheduling import SyncScheduler, SystemClock
-from calendar_sync.infrastructure.security import (
-    CredentialCipher,
-    HistoryCipher,
-    SqliteAdminAuth,
+from calendar_sync.infrastructure.scheduling import (
+    ScheduledServices,
+    SchedulerWatch,
+    SyncScheduler,
+    SystemClock,
 )
+from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher, ScryptPasswords
+from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 
 
 @dataclass(frozen=True, slots=True)
@@ -110,15 +163,12 @@ class GoogleConnectionStatus:
 
 
 @dataclass(frozen=True, slots=True)
-class Container:
-    """The use cases and ports the Web API calls; nothing else of the installation."""
+class UserServices:
+    """The use cases one User's requests call. Each sees only that User's records (ADR 0029)."""
 
-    secure_cookies: bool
-    google: GoogleConnectionStatus
-    administrator: AdministratorAccess
+    user_id: UserId
     activity: ActivityQueries
     operations: OperationsQueries
-    storage: StorageAdministration
     get_installation_status: GetInstallationStatus
     integration_tokens: IntegrationTokens
     inspect_activity_event: InspectActivityEvent
@@ -130,43 +180,117 @@ class Container:
     get_sync_rule_details: GetSyncRuleDetails
     remove_sync_rule: RemoveSyncRule
     replace_sync_rule_calendars: ReplaceSyncRuleCalendars
+    rule_health: RuleHealth
+    lapsed_authorizations: LapsedAuthorizations
     # Each of these needs the installation master key, and synchronization also Google.
     list_connected_accounts: ListConnectedAccounts | None
     disconnect_connected_account: DisconnectConnectedAccount | None
     delete_connected_account: DeleteConnectedAccount | None
     check_account_access: CheckAccountAccess | None
-    lapsed_authorizations: LapsedAuthorizations
-    authorization: AccountAuthorization | None
-    account_calendars: AccountCalendars | None
     discover_calendars: DiscoverCalendars | None
     execute_sync_rule: ExecuteSyncRule | None
     preview_sync_rule: PreviewSyncRule | None
     reconcile_now: ReconcileNow | None
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityServices:
+    """Who is signed in: setup, sign-in, sessions, and a User's own credentials."""
+
+    users: UserDirectory
+    sessions: Sessions
+    set_up: SetUpInstallation
+    sign_in: SignIn
+    set_own_email: SetOwnEmail
+    set_notification_email: SetNotificationEmail
+    change_own_password: ChangeOwnPassword
+
+
+@dataclass(frozen=True, slots=True)
+class AdministrationServices:
+    """What Installation Administrators do with Users, and the links people use to join or to
+    choose a new password."""
+
+    show_registration: ShowRegistration
+    set_registration_policy: SetRegistrationPolicy
+    invite_user: InviteUser
+    list_invitations: ListInvitations
+    revoke_invitation: RevokeInvitation
+    check_invitation: CheckInvitation
+    accept_invitation: AcceptInvitation
+    issue_password_reset: IssuePasswordReset
+    check_password_reset: CheckPasswordReset
+    reset_password: ResetPassword
+    list_users: ListUsers
+    change_role: ChangeRole
+    change_user_state: ChangeUserState
+    delete_user: DeleteUser
+    delete_own_account: DeleteOwnAccount
+    show_own_account_deletion: ShowOwnAccountDeletion
+
+
+@dataclass(frozen=True, slots=True)
+class Container:
+    """What the Web API reads: installation-wide services, and each User's through `for_user`."""
+
+    secure_cookies: bool
+    google: GoogleConnectionStatus
+    identity: IdentityServices
+    administration: AdministrationServices
+    token_authentication: IntegrationTokenAuthentication
+    storage: StorageAdministration
+    authorization: AccountAuthorization | None
+    account_calendars: AccountCalendars | None
     scheduler: SyncScheduler | None
+    scheduler_watch: SchedulerWatch | None
+    """Tells the installation's channels when the scheduler stops completing passes."""
+    installation_health: GetInstallationHealth
+    sends_email: bool
+    """Whether Incident Notifications can also reach each User by email."""
+    user_services: Callable[[UserId], UserServices]
+
+    def for_user(self, user_id: UserId) -> UserServices:
+        return self.user_services(user_id)
 
 
 @dataclass(frozen=True, slots=True)
 class Adapters:
     """The adapters one installation's use cases are composed from.
 
+    Those holding Users' records are made per User, so a use case receives only its User's.
     `build_adapters` makes them from Settings; tests and the development preview substitute some
     before `compose` wires the use cases.
     """
 
-    unit_of_work: UnitOfWorkFactory
+    unit_of_work: Callable[[UserId], UnitOfWorkFactory]
+    installation_units: InstallationUnitOfWorkFactory
+    """Only the scheduler reads across Users (ADR 0029)."""
     locks: RuleLocks
     clock: Clock
     ids: IdGenerator
     run_ids: RunIdGenerator
-    administrator: AdministratorAccess
-    activity: ActivityQueries
-    operations: OperationsQueries
-    health_records: RuleHealthRecords
-    incidents: IncidentRepository
+    users: UserDirectory
+    sessions: Sessions
+    passwords: PasswordHasher
+    sign_in_throttle: SignInThrottle
+    link_throttle: SignInThrottle
+    """Unusable Invitation and Password Reset Links per client, apart from failed sign-ins."""
+    registration: RegistrationSettings
+    invitations: Invitations
+    password_resets: PasswordResetLinks
+    activity: Callable[[UserId], ActivityQueries]
+    operations: Callable[[UserId], OperationsQueries]
+    health_records: Callable[[UserId], RuleHealthRecords]
+    incidents: Callable[[UserId], IncidentRepository]
     database_storage: DatabaseStorage
-    integration_tokens: IntegrationTokens
-    notifications: IncidentNotifications | None = None
-    accounts: ConnectedAccountRepository | None = None
+    integration_tokens: Callable[[UserId], IntegrationTokens]
+    token_authentication: IntegrationTokenAuthentication
+    notifications: Callable[[UserId], IncidentNotifications | None] = lambda _owner: None
+    """Each User's own Incident Notifications, by email when the installation sends it."""
+    installation_notifications: InstallationNotifications | None = None
+    """The installation's SMTP recipient and webhook, which hear only installation incidents."""
+    sends_email: bool = False
+    accounts: Callable[[UserId], ConnectedAccountRepository] | None = None
     authorization: AccountAuthorization | None = None
     """Connects and reauthorizes accounts through the provider's OAuth flow."""
     account_calendars: AccountCalendars | None = None
@@ -198,30 +322,46 @@ def service_container() -> Container:
 
 
 def build_adapters(settings: Settings) -> Adapters:
-    initialize_database(settings.database_path)
+    database = settings.database_path
+    initialize_database(database)
     # One clock and one identifier source, shared by every adapter and use case.
     clock = SystemClock()
     ids = UuidIdGenerator()
     # Source Change values are sealed with a key derived from the master key (ADR 0017).
     history = HistoryCipher(settings.master_key) if settings.master_key else None
+    tokens = SqliteIntegrationTokens(database, clock, ids)
+    users = SqliteUserDirectory(database)
+    mail = _mail_server(settings)
     adapters = Adapters(
-        unit_of_work=SqliteUnitOfWorkFactory(settings.database_path, clock, history),
+        unit_of_work=SqliteUnitOfWorkFactory(database, clock, history).for_user,
+        installation_units=SqliteInstallationUnitOfWorkFactory(database),
         locks=RuleLocks(),
         clock=clock,
         ids=ids,
         run_ids=UuidRunIdGenerator(),
-        administrator=SqliteAdminAuth(settings.database_path, clock),
-        activity=SqliteActivityQueries(settings.database_path, history),
-        operations=SqliteOperationsQueries(settings.database_path),
-        health_records=SqliteRuleHealthRecords(settings.database_path),
-        incidents=SqliteIncidentRepository(settings.database_path, ids),
-        database_storage=SqliteStorage(settings.database_path),
-        integration_tokens=SqliteIntegrationTokens(settings.database_path, clock, ids),
+        users=users,
+        sessions=SqliteSessions(database, clock),
+        passwords=ScryptPasswords(),
+        sign_in_throttle=MemorySignInThrottle(clock),
+        link_throttle=MemorySignInThrottle(clock),
+        registration=SqliteRegistrationSettings(database),
+        invitations=SqliteInvitations(database, ids),
+        password_resets=SqlitePasswordResetLinks(database, ids),
+        activity=lambda user: SqliteActivityQueries(database, user, history),
+        operations=lambda user: SqliteOperationsQueries(database, user),
+        health_records=lambda user: SqliteRuleHealthRecords(database, user),
+        incidents=lambda user: SqliteIncidentRepository(database, user, ids),
+        database_storage=SqliteStorage(database),
+        integration_tokens=tokens.for_user,
+        token_authentication=tokens,
+        notifications=lambda owner: OwnerNotifier(users, owner, mail) if mail else None,
+        installation_notifications=_installation_notifier(settings, mail),
+        sends_email=mail is not None,
     )
     if not settings.master_key:
         return adapters
     accounts = SqliteConnectedAccountStore(
-        settings.database_path, CredentialCipher(settings.master_key), clock, ids
+        database, CredentialCipher(settings.master_key), clock, ids
     )
     google_oauth = GoogleOAuthService(
         OAuthClientConfig(
@@ -230,12 +370,12 @@ def build_adapters(settings: Settings) -> Adapters:
             settings.google_redirect_uri,
         ),
         accounts,
-        SqliteAuthorizationStates(settings.database_path, clock),
+        SqliteAuthorizationStates(database, clock),
         verifier_key=settings.master_key,
     )
     return replace(
         adapters,
-        accounts=accounts,
+        accounts=accounts.for_user,
         authorization=google_oauth,
         account_calendars=RoutingAccountCalendars(accounts, {ProviderKind.GOOGLE: google_oauth}),
         calendar_provider=RoutingCalendarProvider(
@@ -243,29 +383,135 @@ def build_adapters(settings: Settings) -> Adapters:
             {ProviderKind.GOOGLE: GoogleCalendarProvider(google_oauth.service_for, clock)},
         ),
         call_stats=ContextProviderCallStats(),
-        notifications=_notifier(settings),
     )
 
 
 def compose(settings: Settings, adapters: Adapters) -> Container:
-    unit_of_work, locks, clock = adapters.unit_of_work, adapters.locks, adapters.clock
+    def user_services(user_id: UserId) -> UserServices:
+        # Read when called, after the scheduler exists: every User's status reads its heartbeat.
+        return _compose_user(user_id, adapters, scheduler)
+
+    scheduler = (
+        SyncScheduler(
+            adapters.installation_units,
+            lambda owner: _scheduled_services(user_services(owner)),
+            clock=adapters.clock,
+        )
+        if adapters.calendar_provider is not None and adapters.accounts is not None
+        else None
+    )
+    google_configured = bool(
+        adapters.authorization and settings.google_client_id and settings.google_client_secret
+    )
+    return Container(
+        secure_cookies=settings.secure_cookies,
+        google=GoogleConnectionStatus(
+            configured=google_configured,
+            redirect_uri=settings.google_redirect_uri if google_configured else None,
+        ),
+        identity=_identity(adapters),
+        administration=_administration(
+            adapters,
+            lambda owner: OwnedRules(
+                adapters.unit_of_work(owner), user_services(owner).remove_sync_rule
+            ),
+        ),
+        token_authentication=adapters.token_authentication,
+        storage=StorageAdministration(
+            adapters.database_storage, adapters.locks, adapters.clock, adapters.log_files
+        ),
+        authorization=adapters.authorization,
+        account_calendars=adapters.account_calendars,
+        scheduler=scheduler,
+        scheduler_watch=(
+            SchedulerWatch(scheduler, adapters.installation_notifications, adapters.clock)
+            if scheduler is not None and adapters.installation_notifications is not None
+            else None
+        ),
+        installation_health=GetInstallationHealth(
+            adapters.users,
+            lambda user: user_services(user).get_installation_status.execute().health,
+            scheduler,
+            adapters.clock,
+        ),
+        sends_email=adapters.sends_email,
+        user_services=user_services,
+    )
+
+
+def _identity(adapters: Adapters) -> IdentityServices:
+    users, passwords, sessions = adapters.users, adapters.passwords, adapters.sessions
+    return IdentityServices(
+        users=users,
+        sessions=sessions,
+        set_up=SetUpInstallation(users, passwords, sessions, adapters.ids, adapters.clock),
+        sign_in=SignIn(users, passwords, sessions, adapters.sign_in_throttle, adapters.clock),
+        set_own_email=SetOwnEmail(users, passwords),
+        set_notification_email=SetNotificationEmail(users),
+        change_own_password=ChangeOwnPassword(users, passwords, sessions),
+    )
+
+
+def _administration(
+    adapters: Adapters, owned: Callable[[UserId], OwnedRules]
+) -> AdministrationServices:
+    users, clock, sessions = adapters.users, adapters.clock, adapters.sessions
+    settings, invitations, resets = (
+        adapters.registration,
+        adapters.invitations,
+        adapters.password_resets,
+    )
+    passwords = adapters.passwords
+    attempts = LinkAttempts(adapters.link_throttle)
+    return AdministrationServices(
+        show_registration=ShowRegistration(users, settings),
+        set_registration_policy=SetRegistrationPolicy(users, settings),
+        invite_user=InviteUser(users, settings, invitations, clock),
+        list_invitations=ListInvitations(users, invitations, clock),
+        revoke_invitation=RevokeInvitation(users, invitations, clock),
+        check_invitation=CheckInvitation(settings, invitations, clock, attempts),
+        accept_invitation=AcceptInvitation(
+            users, settings, invitations, passwords, sessions, adapters.ids, clock, attempts
+        ),
+        issue_password_reset=IssuePasswordReset(users, resets, clock),
+        check_password_reset=CheckPasswordReset(resets, clock, attempts),
+        reset_password=ResetPassword(resets, passwords, sessions, clock, attempts),
+        list_users=ListUsers(users),
+        change_role=ChangeRole(users),
+        change_user_state=ChangeUserState(users, sessions),
+        delete_user=DeleteUser(users, sessions, owned),
+        delete_own_account=DeleteOwnAccount(users, passwords, sessions, owned, settings, clock),
+        show_own_account_deletion=ShowOwnAccountDeletion(users),
+    )
+
+
+def _scheduled_services(services: UserServices) -> ScheduledServices:
+    assert services.execute_sync_rule is not None
+    return ScheduledServices(services.execute_sync_rule, services.rule_health)
+
+
+def _compose_user(
+    user_id: UserId, adapters: Adapters, heartbeat: SchedulerHeartbeat | None
+) -> UserServices:
+    unit_of_work, locks, clock = adapters.unit_of_work(user_id), adapters.locks, adapters.clock
     provider = adapters.calendar_provider
-    accounts = adapters.accounts
+    accounts = adapters.accounts(user_id) if adapters.accounts is not None else None
+    operations = adapters.operations(user_id)
     create_sync_rule = CreateSyncRule(unit_of_work)
     list_sync_rules = ListSyncRules(unit_of_work, locks)
     rule_health = RuleHealth(
         unit_of_work,
-        adapters.health_records,
-        adapters.incidents,
+        adapters.health_records(user_id),
+        adapters.incidents(user_id),
         clock,
         locks,
-        adapters.notifications,
+        adapters.notifications(user_id),
     )
     call_stats = adapters.call_stats
     remove_sync_rule = RemoveSyncRule(
         unit_of_work, provider, accounts, clock, locks, incidents=rule_health, call_stats=call_stats
     )
-    execute_sync_rule = preview_sync_rule = reconcile_now = scheduler = None
+    execute_sync_rule = preview_sync_rule = reconcile_now = None
     if provider is not None and accounts is not None:
         fingerprinter = ProjectionFingerprinter()
         projector = EventProjector()
@@ -297,25 +543,18 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             ),
             rule_health,
         )
-        scheduler = SyncScheduler(execute_sync_rule, unit_of_work, rule_health, clock=clock)
-    google_configured = bool(
-        adapters.authorization and settings.google_client_id and settings.google_client_secret
-    )
-    return Container(
-        secure_cookies=settings.secure_cookies,
-        google=GoogleConnectionStatus(
-            configured=google_configured,
-            redirect_uri=settings.google_redirect_uri if google_configured else None,
-        ),
-        administrator=adapters.administrator,
-        activity=adapters.activity,
-        operations=adapters.operations,
-        storage=StorageAdministration(adapters.database_storage, locks, clock, adapters.log_files),
+    calendars = adapters.account_calendars
+    return UserServices(
+        user_id=user_id,
+        activity=adapters.activity(user_id),
+        operations=operations,
         get_installation_status=GetInstallationStatus(
-            list_sync_rules, adapters.operations, clock, scheduler
+            list_sync_rules, operations, clock, heartbeat
         ),
-        integration_tokens=adapters.integration_tokens,
-        inspect_activity_event=InspectActivityEvent(adapters.activity, unit_of_work, provider),
+        integration_tokens=adapters.integration_tokens(user_id),
+        inspect_activity_event=InspectActivityEvent(
+            adapters.activity(user_id), unit_of_work, provider
+        ),
         list_sync_rules=list_sync_rules,
         create_draft_rule=CreateDraftSyncRule(create_sync_rule, adapters.ids),
         enable_sync_rule=EnableSyncRule(unit_of_work, locks),
@@ -326,6 +565,8 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         replace_sync_rule_calendars=ReplaceSyncRuleCalendars(
             unit_of_work, remove_sync_rule, create_sync_rule, adapters.ids
         ),
+        rule_health=rule_health,
+        lapsed_authorizations=rule_health.lapses,
         list_connected_accounts=(
             ListConnectedAccounts(unit_of_work, accounts) if accounts else None
         ),
@@ -336,39 +577,35 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             DeleteConnectedAccount(unit_of_work, locks) if accounts else None
         ),
         check_account_access=(
-            CheckAccountAccess(adapters.account_calendars, accounts, rule_health.lapses)
-            if adapters.account_calendars and accounts
+            CheckAccountAccess(calendars, accounts, rule_health.lapses)
+            if calendars and accounts
             else None
         ),
-        lapsed_authorizations=rule_health.lapses,
-        authorization=adapters.authorization,
-        account_calendars=adapters.account_calendars,
-        discover_calendars=(
-            DiscoverCalendars(adapters.account_calendars, unit_of_work)
-            if adapters.account_calendars
-            else None
-        ),
+        discover_calendars=DiscoverCalendars(calendars, unit_of_work) if calendars else None,
         execute_sync_rule=execute_sync_rule,
         preview_sync_rule=preview_sync_rule,
         reconcile_now=reconcile_now,
-        scheduler=scheduler,
     )
 
 
-def _notifier(settings: Settings) -> IncidentNotifier | None:
+def _mail_server(settings: Settings) -> SmtpServer | None:
+    """The installation's mail server, once it has a host and a sender to send as."""
+    if not (settings.smtp_host and settings.smtp_sender):
+        return None
+    return SmtpServer(
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        sender=settings.smtp_sender,
+        username=settings.smtp_username,
+        password=settings.smtp_password,
+        use_starttls=settings.smtp_starttls,
+    )
+
+
+def _installation_notifier(settings: Settings, mail: SmtpServer | None) -> IncidentNotifier | None:
     channels: list[NotificationChannel] = []
     if settings.incident_webhook_url:
         channels.append(WebhookChannel(settings.incident_webhook_url))
-    if settings.smtp_host and settings.smtp_sender and settings.smtp_recipient:
-        channels.append(
-            SmtpChannel(
-                host=settings.smtp_host,
-                port=settings.smtp_port,
-                sender=settings.smtp_sender,
-                recipient=settings.smtp_recipient,
-                username=settings.smtp_username,
-                password=settings.smtp_password,
-                use_starttls=settings.smtp_starttls,
-            )
-        )
+    if mail is not None and settings.smtp_recipient:
+        channels.append(SmtpChannel(mail, settings.smtp_recipient))
     return IncidentNotifier(channels) if channels else None

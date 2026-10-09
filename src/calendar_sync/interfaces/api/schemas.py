@@ -11,8 +11,8 @@ ProjectionChoice = Literal["delete", "detach"]
 TentativeChoice = Literal["sync", "mark", "skip"]
 UnansweredChoice = Literal["wait", "as_tentative"]
 PrivacyPolicy = Literal["busy_only", "copy_details"]
-# The values of application.status.InstallationHealth and ProblemKind, so the schema lists them.
-InstallationHealthValue = Literal[
+# The values of application.status.StatusVerdict and ProblemKind, so the schema lists them.
+StatusVerdictValue = Literal[
     "stalled", "stopped", "review", "waiting", "paused", "setup", "healthy"
 ]
 ProblemKindValue = Literal["stalled", "stopped", "review", "overdue", "blocked", "waiting"]
@@ -30,14 +30,46 @@ class ApiResponse(BaseModel):
 
 class SetupStatusResponse(ApiResponse):
     administrator_configured: bool
+    password_only_sign_in: bool
+    """Whether the upgraded first User may still sign in by password alone."""
 
 
-class PasswordRequest(BaseModel):
+class SetupRequest(BaseModel):
+    email: str = Field(max_length=320)
     password: str = Field(min_length=12, max_length=256)
+
+
+class SignInRequest(BaseModel):
+    email: str | None = Field(default=None, max_length=320)
+    """Left out only by the upgraded first User, until they add an email."""
+    password: str = Field(min_length=1, max_length=256)
+
+
+class SignedInUserResponse(ApiResponse):
+    id: str
+    email: str | None
+    """None until the upgraded first User adds one, which they must do first."""
+    role: Literal["installation_administrator", "user"]
+    notify_by_email: bool
+    language: str | None
 
 
 class SessionResponse(ApiResponse):
     authenticated: bool
+    user: SignedInUserResponse | None = None
+    installation_sends_email: bool = False
+    """Whether Incident Notifications can also reach a User by email."""
+
+
+class SetEmailRequest(BaseModel):
+    email: str = Field(max_length=320)
+    password: str | None = Field(default=None, max_length=256)
+    """The current password, needed to change an email but not to add the first one."""
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(max_length=256)
+    new_password: str = Field(max_length=256)
 
 
 class CalendarEndpointPayload(BaseModel):
@@ -213,7 +245,7 @@ class ProblemResponse(ApiResponse):
 
 
 class DashboardResponse(ApiResponse):
-    status: InstallationHealthValue
+    status: StatusVerdictValue
     needs_attention: bool
     problems: list[ProblemResponse]
     connected_accounts: int
@@ -446,7 +478,7 @@ class StatusIncidentResponse(ApiResponse):
 
 
 class StatusResponse(ApiResponse):
-    status: InstallationHealthValue
+    status: StatusVerdictValue
     needs_attention: bool
     summary: str
     version: str
@@ -459,10 +491,14 @@ class StatusResponse(ApiResponse):
     incidents: list[StatusIncidentResponse]
 
 
+TokenScope = Literal["installation:read", "status:read"]
+_STATUS_READ: TokenScope = "status:read"
+
+
 class IntegrationTokenResponse(ApiResponse):
     id: str
     name: str
-    scope: Literal["status:read"]
+    scopes: list[TokenScope]
     created_at: str
     last_used_at: str | None
     revoked_at: str | None
@@ -474,3 +510,113 @@ class IssuedIntegrationTokenResponse(IntegrationTokenResponse):
 
 class IssueIntegrationTokenRequest(BaseModel):
     name: str = Field(max_length=200)
+    scopes: list[TokenScope] = Field(default_factory=lambda: [_STATUS_READ], min_length=1)
+    """installation:read is for Installation Administrators only (ADR 0030)."""
+
+
+class RegistrationResponse(ApiResponse):
+    policy: Literal["only_me", "invitation_only"]
+    only_me_available: bool
+    """Whether Only Me may be chosen now: only while no other User exists."""
+
+
+class RegistrationRequest(BaseModel):
+    policy: Literal["only_me", "invitation_only"]
+
+
+class IssuedLinkResponse(ApiResponse):
+    id: str
+    token: str
+    """Shown once: the Web UI builds the link from it; only its hash is kept."""
+    expires_at: str
+
+
+class PendingInvitationResponse(ApiResponse):
+    id: str
+    created_at: str
+    expires_at: str
+
+
+class LinkRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+
+
+class LinkStatusResponse(ApiResponse):
+    usable: bool
+
+
+class AcceptInvitationRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+    email: str = Field(max_length=320)
+    password: str = Field(max_length=256)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+    password: str = Field(max_length=256)
+
+
+class UserResponse(ApiResponse):
+    id: str
+    email: str | None
+    role: Literal["installation_administrator", "user"]
+    state: Literal["active", "disabled"]
+    created_at: str
+    last_sign_in_at: str | None
+
+
+class UserPageResponse(ApiResponse):
+    users: list[UserResponse]
+    total: int
+    """How many people match, across every page."""
+    page: int
+    page_size: int
+
+
+class RoleRequest(BaseModel):
+    role: Literal["installation_administrator", "user"]
+
+
+class UserStateRequest(BaseModel):
+    state: Literal["active", "disabled"]
+
+
+class DeleteOwnAccountRequest(BaseModel):
+    password: str = Field(max_length=256)
+    projections: ProjectionChoice
+
+
+class UserDeletionResponse(ApiResponse):
+    rules: int
+    deleted: int
+    detached: int
+    left: int
+    """Rules whose projections nothing could delete; they stay in their calendars."""
+
+
+class OwnAccountDeletionResponse(ApiResponse):
+    needs_another_administrator: bool
+    """The User is the last Installation Administrator and someone else remains."""
+    last_user: bool
+    """Nobody would remain, so the installation would return to setup."""
+
+
+class InstallationIncidentResponse(ApiResponse):
+    kind: Literal["scheduler_stalled"]
+    since: str
+
+
+class InstallationHealthResponse(ApiResponse):
+    """The whole installation's verdict; it names no rule, calendar, or User (ADR 0030)."""
+
+    status: StatusVerdictValue
+    needs_attention: bool
+    incidents: list[InstallationIncidentResponse]
+    users: dict[StatusVerdictValue, int]
+    """How many Users who may sign in are in each Installation Status verdict."""
+    disabled_users: int
+    checked_at: str
+
+
+class NotificationPreferenceRequest(BaseModel):
+    notify_by_email: bool

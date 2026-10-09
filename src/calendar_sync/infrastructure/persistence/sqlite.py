@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Collection, Sequence
 from contextlib import closing
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from importlib.resources import files
 from pathlib import Path
@@ -21,17 +22,21 @@ from calendar_sync.application.ports import (
     EventMappingRepository,
     ExceptionReplayRepository,
     IncidentResolution,
+    InstallationUnitOfWork,
     OccurrenceMappingRepository,
     RulePreviewRepository,
     RulePreviewSummary,
     RuleRunOutcome,
     RuleRunOutcomeRepository,
     RunKind,
+    ScheduledRule,
     SourceObservationRepository,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
+    UnitOfWorkFactory,
 )
+from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import (
     AllDayRange,
     AllDaySyncPolicy,
@@ -84,7 +89,17 @@ _FORWARD_MIGRATIONS = (
     (18, "0018_integration_tokens.sql"),
     (19, "0019_incident_messages.sql"),
     (20, "0020_lapsed_authorization.sql"),
+    (21, "0021_users.sql"),
+    (22, "0022_registration.sql"),
+    (23, "0023_token_scopes.sql"),
 )
+_CHECKED_FROM = 21
+"""Migrations from here on prove every reference before committing. Earlier ones ran before
+references were checked, and a database they left may hold rows no reference reaches."""
+
+
+class MigrationFailed(RuntimeError):
+    """A migration would have left a record referring to one that does not exist."""
 
 
 def initialize_database(path: Path) -> None:
@@ -94,36 +109,63 @@ def initialize_database(path: Path) -> None:
         # Recorded in the database file, so every later connection writes ahead too: a reader then
         # never keeps the scheduler from committing, nor the scheduler a request from reading.
         connection.execute("PRAGMA journal_mode = WAL")
-        connection.executescript(migrations.joinpath("0001_initial.sql").read_text())
         connection.execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
-            (1, datetime.now(UTC).isoformat()),
+            "CREATE TABLE IF NOT EXISTS schema_migrations "
+            "(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)"
         )
-        connection.commit()
         applied = {
             int(row[0]) for row in connection.execute("SELECT version FROM schema_migrations")
         }
-        for version, name in _FORWARD_MIGRATIONS:
-            if version in applied:
-                continue
-            # Later migrations are not idempotent, so each one commits atomically with its
-            # version record and runs at most once.
-            connection.executescript(
-                "BEGIN;\n"
-                f"{migrations.joinpath(name).read_text()}\n"
-                "INSERT INTO schema_migrations(version, applied_at) "
-                f"VALUES ({version}, '{datetime.now(UTC).isoformat()}');\n"
-                "COMMIT;"
+        if 1 not in applied:
+            # Only a new database: later migrations replace tables the initial schema creates.
+            connection.executescript(migrations.joinpath("0001_initial.sql").read_text())
+            connection.execute(
+                "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                (1, datetime.now(UTC).isoformat()),
             )
+            connection.commit()
+        # SQLite rebuilds a table only with references unchecked, and changes that setting only
+        # outside a transaction; each migration checks its own before it commits.
+        connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            for version, name in _FORWARD_MIGRATIONS:
+                if version not in applied:
+                    _migrate(connection, version, migrations.joinpath(name).read_text())
+        finally:
+            connection.execute("PRAGMA foreign_keys = ON")
+
+
+def _migrate(connection: sqlite3.Connection, version: int, script: str) -> None:
+    """Apply one migration with its version record atomically, so it runs at most once."""
+    connection.executescript(f"BEGIN;\n{script}")
+    broken = (
+        connection.execute("PRAGMA foreign_key_check").fetchall()
+        if version >= _CHECKED_FROM
+        else []
+    )
+    if broken:
+        connection.rollback()
+        tables = ", ".join(sorted({str(row[0]) for row in broken}))
+        raise MigrationFailed(
+            f"migration {version} would leave records in {tables} that refer to missing records; "
+            "nothing was changed"
+        )
+    connection.execute(
+        "INSERT INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+        (version, datetime.now(UTC).isoformat()),
+    )
+    connection.commit()
 
 
 class SqliteConnectedAccountRecords:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId) -> None:
         self._connection = connection
+        self._user = user_id.value
 
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None:
         row = self._connection.execute(
-            "SELECT state FROM connected_accounts WHERE id = ?", (account_id.value,)
+            "SELECT state FROM connected_accounts WHERE id = ? AND user_id = ?",
+            (account_id.value, self._user),
         ).fetchone()
         return ConnectedAccountState(str(row["state"])) if row else None
 
@@ -137,12 +179,13 @@ class SqliteConnectedAccountRecords:
             """
             UPDATE connected_accounts
             SET authorization_lapsed_at = MAX(COALESCE(authorization_lapsed_at, ?), ?)
-            WHERE id = ? AND state = ? AND updated_at <= ?
+            WHERE id = ? AND user_id = ? AND state = ? AND updated_at <= ?
             """,
             (
                 attempted,
                 attempted,
                 account_id.value,
+                self._user,
                 ConnectedAccountState.CONNECTED.value,
                 attempted,
             ),
@@ -153,9 +196,9 @@ class SqliteConnectedAccountRecords:
         cursor = self._connection.execute(
             """
             UPDATE connected_accounts SET authorization_lapsed_at = NULL
-            WHERE id = ? AND authorization_lapsed_at <= ?
+            WHERE id = ? AND user_id = ? AND authorization_lapsed_at <= ?
             """,
-            (account_id.value, requested_before.astimezone(UTC).isoformat()),
+            (account_id.value, self._user, requested_before.astimezone(UTC).isoformat()),
         )
         return cursor.rowcount == 1
 
@@ -163,41 +206,45 @@ class SqliteConnectedAccountRecords:
         row = self._connection.execute(
             """
             SELECT 1 FROM connected_accounts
-            WHERE id = ? AND state = ? AND authorization_lapsed_at IS NULL
+            WHERE id = ? AND user_id = ? AND state = ? AND authorization_lapsed_at IS NULL
             """,
-            (account_id.value, ConnectedAccountState.CONNECTED.value),
+            (account_id.value, self._user, ConnectedAccountState.CONNECTED.value),
         ).fetchone()
         return row is not None
 
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
         # The first write of the transaction takes SQLite's write lock until commit or rollback.
         cursor = self._connection.execute(
-            "DELETE FROM connected_accounts WHERE id = ? AND state = ?",
-            (account_id.value, ConnectedAccountState.DISCONNECTED.value),
+            "DELETE FROM connected_accounts WHERE id = ? AND user_id = ? AND state = ?",
+            (account_id.value, self._user, ConnectedAccountState.DISCONNECTED.value),
         )
         if cursor.rowcount != 1:
             return False
         # The account's own Incidents, such as its Lapsed Authorization, go with it; its rules
         # take theirs when they are purged.
         self._connection.execute(
-            "DELETE FROM incidents WHERE account_id = ? AND rule_id IS NULL", (account_id.value,)
+            "DELETE FROM incidents WHERE account_id = ? AND rule_id IS NULL AND user_id = ?",
+            (account_id.value, self._user),
         )
         return True
 
 
 class SqliteSyncRuleRepository:
-    def __init__(self, connection: sqlite3.Connection, clock: Clock) -> None:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId, clock: Clock) -> None:
         self._connection = connection
+        self._user = user_id.value
         self._clock = clock
 
     def get(self, rule_id: SyncRuleId) -> SyncRule | None:
         row = self._connection.execute(
-            "SELECT * FROM sync_rules WHERE id = ?", (rule_id.value,)
+            "SELECT * FROM sync_rules WHERE id = ? AND user_id = ?", (rule_id.value, self._user)
         ).fetchone()
         return _rule_from_row(row) if row else None
 
     def list(self) -> Sequence[SyncRule]:
-        rows = self._connection.execute("SELECT * FROM sync_rules ORDER BY id").fetchall()
+        rows = self._connection.execute(
+            "SELECT * FROM sync_rules WHERE user_id = ? ORDER BY id", (self._user,)
+        ).fetchall()
         return tuple(_rule_from_row(row) for row in rows)
 
     def add(self, rule: SyncRule) -> None:
@@ -210,10 +257,10 @@ class SqliteSyncRuleRepository:
                     privacy_policy, all_day_policy, busy_title,
                     tentative_policy, unanswered_policy,
                     initial_lookback_days, state, reprojection_required,
-                    awaiting_reauthorization
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    awaiting_reauthorization, user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                _rule_values(rule),
+                (*_rule_values(rule), self._user),
             )
         except sqlite3.IntegrityError as error:
             raise DuplicateDirectionalRelationship(
@@ -240,9 +287,9 @@ class SqliteSyncRuleRepository:
                 tentative_policy = ?, unanswered_policy = ?,
                 initial_lookback_days = ?, state = ?, reprojection_required = ?,
                 awaiting_reauthorization = ?
-            WHERE id = ?
+            WHERE id = ? AND user_id = ?
             """,
-            (*_rule_values(rule)[1:], rule.id.value),
+            (*_rule_values(rule)[1:], rule.id.value, self._user),
         )
 
     def remove(self, rule_id: SyncRuleId) -> None:
@@ -250,24 +297,29 @@ class SqliteSyncRuleRepository:
         self._connection.execute(
             """
             UPDATE incidents SET state = 'resolved', updated_at = ?, resolved_at = ?, resolution = ?
-            WHERE rule_id = ? AND state = 'open'
+            WHERE rule_id = ? AND user_id = ? AND state = 'open'
             """,
-            (now, now, IncidentResolution.RULE_REMOVED.value, rule_id.value),
+            (now, now, IncidentResolution.RULE_REMOVED.value, rule_id.value, self._user),
         )
-        self._connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule_id.value,))
+        self._connection.execute(
+            "DELETE FROM sync_rules WHERE id = ? AND user_id = ?", (rule_id.value, self._user)
+        )
 
     def purge(self, rule_id: SyncRuleId) -> None:
         # Neither table references sync_rules, so nothing cascades to them.
-        self._connection.execute("DELETE FROM audit_entries WHERE rule_id = ?", (rule_id.value,))
-        self._connection.execute("DELETE FROM incidents WHERE rule_id = ?", (rule_id.value,))
-        self._connection.execute("DELETE FROM sync_rules WHERE id = ?", (rule_id.value,))
+        owned = (rule_id.value, self._user)
+        self._connection.execute(
+            "DELETE FROM audit_entries WHERE rule_id = ? AND user_id = ?", owned
+        )
+        self._connection.execute("DELETE FROM incidents WHERE rule_id = ? AND user_id = ?", owned)
+        self._connection.execute("DELETE FROM sync_rules WHERE id = ? AND user_id = ?", owned)
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         row = self._connection.execute(
             """
             SELECT 1 FROM sync_rules
             WHERE source_account_id = ? AND source_calendar_id = ?
-              AND destination_account_id = ? AND destination_calendar_id = ?
+              AND destination_account_id = ? AND destination_calendar_id = ? AND user_id = ?
             LIMIT 1
             """,
             (
@@ -275,24 +327,27 @@ class SqliteSyncRuleRepository:
                 source.calendar_id.value,
                 destination.connected_account_id.value,
                 destination.calendar_id.value,
+                self._user,
             ),
         ).fetchone()
         return row is not None
 
 
 class SqliteEventMappingRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId) -> None:
         self._connection = connection
+        self._user = user_id.value
 
     def for_source(self, rule_id: SyncRuleId, source: EventRef) -> EventMapping | None:
         row = self._connection.execute(
             """
             SELECT * FROM event_mappings
-            WHERE rule_id = ? AND source_account_id = ?
+            WHERE rule_id = ? AND user_id = ? AND source_account_id = ?
               AND source_calendar_id = ? AND source_event_id = ?
             """,
             (
                 rule_id.value,
+                self._user,
                 source.calendar.connected_account_id.value,
                 source.calendar.calendar_id.value,
                 source.event_id.value,
@@ -304,11 +359,12 @@ class SqliteEventMappingRepository:
         row = self._connection.execute(
             """
             SELECT * FROM event_mappings
-            WHERE rule_id = ? AND destination_account_id = ?
+            WHERE rule_id = ? AND user_id = ? AND destination_account_id = ?
               AND destination_calendar_id = ? AND destination_event_id = ?
             """,
             (
                 rule_id.value,
+                self._user,
                 destination.calendar.connected_account_id.value,
                 destination.calendar.calendar_id.value,
                 destination.event_id.value,
@@ -318,24 +374,28 @@ class SqliteEventMappingRepository:
 
     def for_rule(self, rule_id: SyncRuleId) -> Sequence[EventMapping]:
         rows = self._connection.execute(
-            "SELECT * FROM event_mappings WHERE rule_id = ? ORDER BY id", (rule_id.value,)
+            "SELECT * FROM event_mappings WHERE rule_id = ? AND user_id = ? ORDER BY id",
+            (rule_id.value, self._user),
         ).fetchall()
         return tuple(_mapping_from_row(row) for row in rows)
 
     def save(self, mapping: EventMapping) -> None:
-        self._connection.execute(
+        # The composite reference refuses a mapping for another User's rule; the update touches
+        # only this User's mapping, so another User's identifier is refused rather than changed.
+        cursor = self._connection.execute(
             """
             INSERT INTO event_mappings (
                 id, rule_id, source_account_id, source_calendar_id, source_event_id,
                 destination_account_id, destination_calendar_id, destination_event_id,
-                source_revision, projection_fingerprint
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_revision, projection_fingerprint, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 source_revision = excluded.source_revision,
                 destination_account_id = excluded.destination_account_id,
                 destination_calendar_id = excluded.destination_calendar_id,
                 destination_event_id = excluded.destination_event_id,
                 projection_fingerprint = excluded.projection_fingerprint
+            WHERE user_id = excluded.user_id
             """,
             (
                 mapping.id.value,
@@ -348,22 +408,30 @@ class SqliteEventMappingRepository:
                 mapping.destination.event_id.value,
                 mapping.source_revision,
                 mapping.projection_fingerprint.value,
+                self._user,
             ),
         )
+        if cursor.rowcount != 1:
+            raise sqlite3.IntegrityError(f"event mapping {mapping.id.value} is another User's")
 
     def delete(self, mapping: EventMapping) -> None:
-        self._connection.execute("DELETE FROM event_mappings WHERE id = ?", (mapping.id.value,))
+        self._connection.execute(
+            "DELETE FROM event_mappings WHERE id = ? AND user_id = ?",
+            (mapping.id.value, self._user),
+        )
 
     def count_for_rule(self, rule_id: SyncRuleId) -> int:
         row = self._connection.execute(
-            "SELECT COUNT(*) FROM event_mappings WHERE rule_id = ?", (rule_id.value,)
+            "SELECT COUNT(*) FROM event_mappings WHERE rule_id = ? AND user_id = ?",
+            (rule_id.value, self._user),
         ).fetchone()
         return int(row[0])
 
 
 class SqliteExceptionReplayRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId) -> None:
         self._connection = connection
+        self._user = user_id.value
 
     def pending(self, rule_id: SyncRuleId) -> Sequence[EventMapping]:
         rows = self._connection.execute(
@@ -371,33 +439,48 @@ class SqliteExceptionReplayRepository:
             SELECT event_mappings.* FROM event_mappings
             JOIN pending_exception_replays
               ON pending_exception_replays.series_mapping_id = event_mappings.id
-            WHERE event_mappings.rule_id = ? ORDER BY event_mappings.id
+             AND pending_exception_replays.user_id = event_mappings.user_id
+            WHERE event_mappings.rule_id = ? AND event_mappings.user_id = ?
+            ORDER BY event_mappings.id
             """,
-            (rule_id.value,),
+            (rule_id.value, self._user),
         ).fetchall()
         return tuple(_mapping_from_row(row) for row in rows)
 
     def add(self, series_mapping_id: EventMappingId) -> None:
-        self._connection.execute(
-            "INSERT OR IGNORE INTO pending_exception_replays (series_mapping_id) VALUES (?)",
-            (series_mapping_id.value,),
+        # Adding one already pending is a no-op; another User's is refused, not left alone.
+        cursor = self._connection.execute(
+            """
+            INSERT INTO pending_exception_replays (series_mapping_id, user_id) VALUES (?, ?)
+            ON CONFLICT(series_mapping_id) DO UPDATE SET user_id = excluded.user_id
+            WHERE pending_exception_replays.user_id = excluded.user_id
+            """,
+            (series_mapping_id.value, self._user),
         )
+        if cursor.rowcount != 1:
+            raise sqlite3.IntegrityError(
+                f"series mapping {series_mapping_id.value} is not this User's"
+            )
 
     def remove(self, series_mapping_id: EventMappingId) -> None:
         self._connection.execute(
-            "DELETE FROM pending_exception_replays WHERE series_mapping_id = ?",
-            (series_mapping_id.value,),
+            "DELETE FROM pending_exception_replays WHERE series_mapping_id = ? AND user_id = ?",
+            (series_mapping_id.value, self._user),
         )
 
 
 class SqliteOccurrenceMappingRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId) -> None:
         self._connection = connection
+        self._user = user_id.value
 
     def for_series(self, series_mapping_id: EventMappingId) -> Sequence[OccurrenceMapping]:
         rows = self._connection.execute(
-            "SELECT * FROM occurrence_mappings WHERE series_mapping_id = ? ORDER BY original_start",
-            (series_mapping_id.value,),
+            """
+            SELECT * FROM occurrence_mappings WHERE series_mapping_id = ? AND user_id = ?
+            ORDER BY original_start
+            """,
+            (series_mapping_id.value, self._user),
         ).fetchall()
         return tuple(_occurrence_from_row(row) for row in rows)
 
@@ -405,20 +488,23 @@ class SqliteOccurrenceMappingRepository:
         self, series_mapping_id: EventMappingId, original_start: OccurrenceStart
     ) -> OccurrenceMapping | None:
         row = self._connection.execute(
-            "SELECT * FROM occurrence_mappings WHERE series_mapping_id = ? AND original_start = ?",
-            (series_mapping_id.value, _serialize_start(original_start)),
+            """
+            SELECT * FROM occurrence_mappings
+            WHERE series_mapping_id = ? AND original_start = ? AND user_id = ?
+            """,
+            (series_mapping_id.value, _serialize_start(original_start), self._user),
         ).fetchone()
         return _occurrence_from_row(row) if row else None
 
     def save(self, mapping: OccurrenceMapping) -> None:
-        self._connection.execute(
+        cursor = self._connection.execute(
             """
             INSERT INTO occurrence_mappings (
                 id, series_mapping_id, original_start,
                 source_account_id, source_calendar_id, source_event_id,
                 destination_account_id, destination_calendar_id, destination_event_id,
-                state, source_revision, projection_fingerprint
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                state, source_revision, projection_fingerprint, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(series_mapping_id, original_start) DO UPDATE SET
                 source_account_id = excluded.source_account_id,
                 source_calendar_id = excluded.source_calendar_id,
@@ -429,6 +515,7 @@ class SqliteOccurrenceMappingRepository:
                 state = excluded.state,
                 source_revision = excluded.source_revision,
                 projection_fingerprint = excluded.projection_fingerprint
+            WHERE user_id = excluded.user_id
             """,
             (
                 mapping.id.value,
@@ -443,14 +530,26 @@ class SqliteOccurrenceMappingRepository:
                 mapping.state.value,
                 mapping.source_revision,
                 mapping.projection_fingerprint.value if mapping.projection_fingerprint else None,
+                self._user,
             ),
         )
+        if cursor.rowcount != 1:
+            raise sqlite3.IntegrityError(f"occurrence mapping {mapping.id.value} is another User's")
 
     def delete(self, mapping: OccurrenceMapping) -> None:
         self._connection.execute(
-            "DELETE FROM occurrence_mappings WHERE series_mapping_id = ? AND original_start = ?",
-            (mapping.series_mapping_id.value, _serialize_start(mapping.original_start)),
+            """
+            DELETE FROM occurrence_mappings
+            WHERE series_mapping_id = ? AND original_start = ? AND user_id = ?
+            """,
+            (mapping.series_mapping_id.value, _serialize_start(mapping.original_start), self._user),
         )
+
+
+def _require_own(cursor: sqlite3.Cursor, rule_id: SyncRuleId) -> None:
+    """Refuse a write an upsert skipped because the record it met is another User's."""
+    if cursor.rowcount != 1:
+        raise sqlite3.IntegrityError(f"a record of rule {rule_id.value} is another User's")
 
 
 def _serialize_start(value: OccurrenceStart) -> str:
@@ -486,49 +585,44 @@ def _occurrence_from_row(row: sqlite3.Row) -> OccurrenceMapping:
 
 
 class SqliteSyncCursorRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    """A rule's incremental position in one of its calendars, kept in `table`."""
+
+    def __init__(
+        self, connection: sqlite3.Connection, user_id: UserId, table: str = "sync_cursors"
+    ) -> None:
         self._connection = connection
+        self._user = user_id.value
+        self._table = table
 
     def get(self, rule_id: SyncRuleId) -> str | None:
+        # Interpolates only one of the two constant table names.
         row = self._connection.execute(
-            "SELECT cursor FROM sync_cursors WHERE rule_id = ?", (rule_id.value,)
+            f"SELECT cursor FROM {self._table} WHERE rule_id = ? AND user_id = ?",  # noqa: S608
+            (rule_id.value, self._user),
         ).fetchone()
         return str(row["cursor"]) if row else None
 
     def save(self, rule_id: SyncRuleId, cursor: str) -> None:
-        self._connection.execute(
-            """
-            INSERT INTO sync_cursors(rule_id, cursor) VALUES (?, ?)
-            ON CONFLICT(rule_id) DO UPDATE SET cursor = excluded.cursor
-            """,
-            (rule_id.value, cursor),
-        )
-
-
-class SqliteDestinationSyncCursorRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
-        self._connection = connection
-
-    def get(self, rule_id: SyncRuleId) -> str | None:
-        row = self._connection.execute(
-            "SELECT cursor FROM destination_sync_cursors WHERE rule_id = ?",
-            (rule_id.value,),
-        ).fetchone()
-        return str(row["cursor"]) if row else None
-
-    def save(self, rule_id: SyncRuleId, cursor: str) -> None:
-        self._connection.execute(
-            """
-            INSERT INTO destination_sync_cursors(rule_id, cursor) VALUES (?, ?)
-            ON CONFLICT(rule_id) DO UPDATE SET cursor = excluded.cursor
-            """,
-            (rule_id.value, cursor),
+        # Interpolates only one of the two constant table names.
+        _require_own(
+            self._connection.execute(
+                f"""
+                INSERT INTO {self._table}(rule_id, cursor, user_id) VALUES (?, ?, ?)
+                ON CONFLICT(rule_id) DO UPDATE SET cursor = excluded.cursor
+                WHERE user_id = excluded.user_id
+                """,  # noqa: S608
+                (rule_id.value, cursor, self._user),
+            ),
+            rule_id,
         )
 
 
 class SqliteAuditRepository:
-    def __init__(self, connection: sqlite3.Connection, history: HistoryCipher | None) -> None:
+    def __init__(
+        self, connection: sqlite3.Connection, user_id: UserId, history: HistoryCipher | None
+    ) -> None:
         self._connection = connection
+        self._user = user_id.value
         self._history = history
 
     def append(self, entry: AuditEntry) -> None:
@@ -546,8 +640,8 @@ class SqliteAuditRepository:
                 source_event_id, destination_event_id, detail, reason, run_id,
                 event_title, event_starts, event_ends,
                 event_all_day, event_recurring, event_cancelled,
-                change_fields, change_title_before, change_sealed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                change_fields, change_title_before, change_sealed, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry.occurred_at.isoformat(),
@@ -566,6 +660,7 @@ class SqliteAuditRepository:
                 event is not None and event.recurring,
                 event is not None and event.cancelled,
                 *changed,
+                self._user,
             ),
         )
 
@@ -573,24 +668,25 @@ class SqliteAuditRepository:
         self._connection.execute(
             """
             UPDATE audit_entries SET change_sealed = NULL
-            WHERE change_sealed IS NOT NULL AND occurred_at < ?
+            WHERE change_sealed IS NOT NULL AND occurred_at < ? AND user_id = ?
             """,
-            (before.isoformat(),),
+            (before.isoformat(), self._user),
         )
 
 
 class SqliteRuleRunOutcomeRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId) -> None:
         self._connection = connection
+        self._user = user_id.value
 
     def record(self, outcome: RuleRunOutcome) -> None:
-        self._connection.execute(
+        cursor = self._connection.execute(
             """
             INSERT INTO rule_run_outcomes (
                 rule_id, kind, completed_at, succeeded, full_run, created, updated,
                 deleted, conflicts, checked_mappings, drift, failure_kind, last_succeeded_at,
-                last_full_succeeded_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                last_full_succeeded_at, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id, kind) DO UPDATE SET
                 last_succeeded_at = CASE WHEN excluded.succeeded
                     THEN excluded.completed_at ELSE rule_run_outcomes.last_succeeded_at END,
@@ -606,6 +702,7 @@ class SqliteRuleRunOutcomeRepository:
                 checked_mappings = excluded.checked_mappings,
                 drift = excluded.drift,
                 failure_kind = excluded.failure_kind
+            WHERE rule_run_outcomes.user_id = excluded.user_id
             """,
             (
                 outcome.rule_id.value,
@@ -624,59 +721,61 @@ class SqliteRuleRunOutcomeRepository:
                 outcome.completed_at.isoformat()
                 if outcome.succeeded and outcome.full_run
                 else None,
+                self._user,
             ),
         )
+        _require_own(cursor, outcome.rule_id)
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:
         row = self._connection.execute(
-            "SELECT * FROM rule_run_outcomes WHERE rule_id = ? AND kind = ?",
-            (rule_id.value, kind.value),
+            "SELECT * FROM rule_run_outcomes WHERE rule_id = ? AND kind = ? AND user_id = ?",
+            (rule_id.value, kind.value, self._user),
         ).fetchone()
-        if row is None:
-            return None
-        return RuleRunOutcome(
-            rule_id=rule_id,
-            kind=kind,
-            completed_at=datetime.fromisoformat(str(row["completed_at"])),
-            succeeded=bool(row["succeeded"]),
-            full_run=bool(row["full_run"]),
-            created=int(row["created"]),
-            updated=int(row["updated"]),
-            deleted=int(row["deleted"]),
-            conflicts=int(row["conflicts"]),
-            checked_mappings=int(row["checked_mappings"]),
-            drift=int(row["drift"]),
-            failure_kind=None if row["failure_kind"] is None else str(row["failure_kind"]),
-            last_succeeded_at=(
-                None
-                if row["last_succeeded_at"] is None
-                else datetime.fromisoformat(str(row["last_succeeded_at"]))
-            ),
-            last_full_succeeded_at=(
-                None
-                if row["last_full_succeeded_at"] is None
-                else datetime.fromisoformat(str(row["last_full_succeeded_at"]))
-            ),
-        )
+        return _outcome_from_row(row) if row is not None else None
+
+
+def _outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
+    return RuleRunOutcome(
+        rule_id=SyncRuleId(str(row["rule_id"])),
+        kind=RunKind(str(row["kind"])),
+        completed_at=datetime.fromisoformat(str(row["completed_at"])),
+        succeeded=bool(row["succeeded"]),
+        full_run=bool(row["full_run"]),
+        created=int(row["created"]),
+        updated=int(row["updated"]),
+        deleted=int(row["deleted"]),
+        conflicts=int(row["conflicts"]),
+        checked_mappings=int(row["checked_mappings"]),
+        drift=int(row["drift"]),
+        failure_kind=None if row["failure_kind"] is None else str(row["failure_kind"]),
+        last_succeeded_at=_optional_time(row["last_succeeded_at"]),
+        last_full_succeeded_at=_optional_time(row["last_full_succeeded_at"]),
+    )
+
+
+def _optional_time(value: object) -> datetime | None:
+    return None if value is None else datetime.fromisoformat(str(value))
 
 
 class SqliteRulePreviewRepository:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId) -> None:
         self._connection = connection
+        self._user = user_id.value
 
     def record(self, summary: RulePreviewSummary) -> None:
-        self._connection.execute(
+        cursor = self._connection.execute(
             """
             INSERT INTO rule_previews (
                 rule_id, completed_at, eligible_events, excluded_events, recurring_series,
-                occurrence_changes
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                occurrence_changes, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id) DO UPDATE SET
                 completed_at = excluded.completed_at,
                 eligible_events = excluded.eligible_events,
                 excluded_events = excluded.excluded_events,
                 recurring_series = excluded.recurring_series,
                 occurrence_changes = excluded.occurrence_changes
+            WHERE user_id = excluded.user_id
             """,
             (
                 summary.rule_id.value,
@@ -685,12 +784,15 @@ class SqliteRulePreviewRepository:
                 summary.excluded_events,
                 summary.recurring_series,
                 summary.occurrence_changes,
+                self._user,
             ),
         )
+        _require_own(cursor, summary.rule_id)
 
     def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None:
         row = self._connection.execute(
-            "SELECT * FROM rule_previews WHERE rule_id = ?", (rule_id.value,)
+            "SELECT * FROM rule_previews WHERE rule_id = ? AND user_id = ?",
+            (rule_id.value, self._user),
         ).fetchone()
         if row is None:
             return None
@@ -705,25 +807,32 @@ class SqliteRulePreviewRepository:
 
 
 class SqliteCalendarNameRepository:
-    def __init__(self, connection: sqlite3.Connection, clock: Clock) -> None:
+    def __init__(self, connection: sqlite3.Connection, user_id: UserId, clock: Clock) -> None:
         self._connection = connection
+        self._user = user_id.value
         self._clock = clock
 
     def remember(
         self, account_id: ConnectedAccountId, calendars: Sequence[DiscoveredCalendar]
     ) -> None:
         now = self._clock.now().isoformat()
-        # Selecting from the account row records nothing for an account deleted meanwhile.
+        # Selecting from the account row records nothing for an account deleted meanwhile, or
+        # for another User's.
         self._connection.executemany(
             """
-            INSERT INTO calendar_names (connected_account_id, calendar_id, name, updated_at)
-            SELECT id, ?, ?, ? FROM connected_accounts WHERE id = ?
+            INSERT INTO calendar_names (
+                connected_account_id, calendar_id, name, updated_at, user_id
+            )
+            SELECT id, ?, ?, ?, user_id FROM connected_accounts WHERE id = ? AND user_id = ?
             ON CONFLICT(connected_account_id, calendar_id) DO UPDATE SET
                 name = excluded.name,
                 updated_at = excluded.updated_at
             WHERE name != excluded.name
             """,
-            [(calendar.id, calendar.summary, now, account_id.value) for calendar in calendars],
+            [
+                (calendar.id, calendar.summary, now, account_id.value, self._user)
+                for calendar in calendars
+            ],
         )
 
     def names(self, endpoints: Collection[CalendarEndpoint]) -> dict[CalendarEndpoint, str]:
@@ -731,7 +840,8 @@ class SqliteCalendarNameRepository:
         if not wanted:
             return {}
         rows = self._connection.execute(
-            "SELECT connected_account_id, calendar_id, name FROM calendar_names"
+            "SELECT connected_account_id, calendar_id, name FROM calendar_names WHERE user_id = ?",
+            (self._user,),
         )
         named = (
             (
@@ -747,6 +857,8 @@ class SqliteCalendarNameRepository:
 
 
 class SqliteUnitOfWork:
+    """One User's records in one transaction; every repository adds that User (ADR 0029)."""
+
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
     mappings: EventMappingRepository
@@ -761,9 +873,14 @@ class SqliteUnitOfWork:
     calendar_names: CalendarNameRepository
 
     def __init__(
-        self, database_path: Path, clock: Clock, history: HistoryCipher | None = None
+        self,
+        database_path: Path,
+        user_id: UserId,
+        clock: Clock,
+        history: HistoryCipher | None = None,
     ) -> None:
         self._database_path = database_path
+        self._user = user_id
         self._clock = clock
         self._history = history
         self._connection: sqlite3.Connection | None = None
@@ -771,18 +888,21 @@ class SqliteUnitOfWork:
     def __enter__(self) -> Self:
         connection = open_connection(self._database_path)
         self._connection = connection
-        self.accounts = SqliteConnectedAccountRecords(connection)
-        self.rules = SqliteSyncRuleRepository(connection, self._clock)
-        self.mappings = SqliteEventMappingRepository(connection)
-        self.occurrences = SqliteOccurrenceMappingRepository(connection)
-        self.replays = SqliteExceptionReplayRepository(connection)
-        self.cursors = SqliteSyncCursorRepository(connection)
-        self.destination_cursors = SqliteDestinationSyncCursorRepository(connection)
-        self.audit = SqliteAuditRepository(connection, self._history)
-        self.observations = SqliteSourceObservationRepository(connection, self._history)
-        self.run_outcomes = SqliteRuleRunOutcomeRepository(connection)
-        self.previews = SqliteRulePreviewRepository(connection)
-        self.calendar_names = SqliteCalendarNameRepository(connection, self._clock)
+        user = self._user
+        self.accounts = SqliteConnectedAccountRecords(connection, user)
+        self.rules = SqliteSyncRuleRepository(connection, user, self._clock)
+        self.mappings = SqliteEventMappingRepository(connection, user)
+        self.occurrences = SqliteOccurrenceMappingRepository(connection, user)
+        self.replays = SqliteExceptionReplayRepository(connection, user)
+        self.cursors = SqliteSyncCursorRepository(connection, user)
+        self.destination_cursors = SqliteSyncCursorRepository(
+            connection, user, "destination_sync_cursors"
+        )
+        self.audit = SqliteAuditRepository(connection, user, self._history)
+        self.observations = SqliteSourceObservationRepository(connection, user, self._history)
+        self.run_outcomes = SqliteRuleRunOutcomeRepository(connection, user)
+        self.previews = SqliteRulePreviewRepository(connection, user)
+        self.calendar_names = SqliteCalendarNameRepository(connection, user, self._clock)
         return self
 
     def __exit__(
@@ -802,22 +922,109 @@ class SqliteUnitOfWork:
         assert self._connection is not None
         self._connection.commit()
 
+    def user_active(self) -> bool:
+        assert self._connection is not None
+        row = self._connection.execute(
+            "SELECT 1 FROM users WHERE id = ? AND state = 'active'", (self._user.value,)
+        ).fetchone()
+        return row is not None
 
+
+@dataclass(frozen=True, slots=True)
 class SqliteUnitOfWorkFactory:
-    """Units of work over one database; without a History Cipher, no Source Change has values."""
+    """Units of work over one database, each for the one User `for_user` names (ADR 0029).
 
-    def __init__(
-        self,
-        database_path: Path,
-        clock: Clock | None = None,
-        history: HistoryCipher | None = None,
-    ) -> None:
-        self._database_path = database_path
-        self._clock = clock or SystemClock()
-        self._history = history
+    Without a History Cipher, no Source Change has values.
+    """
+
+    database_path: Path
+    clock: Clock = field(default_factory=SystemClock)
+    history: HistoryCipher | None = None
+
+    def for_user(self, user_id: UserId) -> UnitOfWorkFactory:
+        return _UserUnitsOfWork(self, user_id)
+
+
+@dataclass(frozen=True, slots=True)
+class _UserUnitsOfWork:
+    database: SqliteUnitOfWorkFactory
+    user_id: UserId
 
     def __call__(self) -> UnitOfWork:
-        return SqliteUnitOfWork(self._database_path, self._clock, self._history)
+        database = self.database
+        return SqliteUnitOfWork(
+            database.database_path, self.user_id, database.clock, database.history
+        )
+
+
+class SqliteInstallationUnitOfWork:
+    """What only the scheduler reads across Users: their enabled rules (ADR 0029)."""
+
+    def __init__(self, database_path: Path) -> None:
+        self._database_path = database_path
+        self._connection: sqlite3.Connection | None = None
+
+    def __enter__(self) -> Self:
+        self._connection = open_connection(self._database_path)
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> bool | None:
+        assert self._connection is not None
+        if exc_type is not None:
+            self._connection.rollback()
+        self._connection.close()
+        self._connection = None
+        return None
+
+    def commit(self) -> None:
+        assert self._connection is not None
+        self._connection.commit()
+
+    def scheduled_rules(self) -> Sequence[ScheduledRule]:
+        assert self._connection is not None
+        rows = self._connection.execute(
+            """
+            SELECT sync_rules.*, outcome.last_full_succeeded_at
+            FROM sync_rules
+            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
+            LEFT JOIN rule_run_outcomes outcome
+              ON outcome.rule_id = sync_rules.id AND outcome.kind = 'sync'
+            WHERE sync_rules.state = ?
+            ORDER BY sync_rules.user_id, sync_rules.id
+            """,
+            (SyncRuleState.ENABLED.value,),
+        ).fetchall()
+        return tuple(
+            ScheduledRule(
+                UserId(str(row["user_id"])),
+                _rule_from_row(row),
+                _optional_time(row["last_full_succeeded_at"]),
+            )
+            for row in rows
+        )
+
+    def forget_change_values(self, before: datetime) -> None:
+        assert self._connection is not None
+        self._connection.execute(
+            """
+            UPDATE audit_entries SET change_sealed = NULL
+            WHERE change_sealed IS NOT NULL AND occurred_at < ?
+            """,
+            (before.isoformat(),),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SqliteInstallationUnitOfWorkFactory:
+    database_path: Path
+
+    def __call__(self) -> InstallationUnitOfWork:
+        return SqliteInstallationUnitOfWork(self.database_path)
 
 
 def _rule_values(rule: SyncRule) -> tuple[object, ...]:

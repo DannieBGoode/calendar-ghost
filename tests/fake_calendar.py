@@ -40,8 +40,12 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.helpers import NOW, instance_id, rule
+from tests.users import USER
 
 
 @dataclass
@@ -409,8 +413,8 @@ class FakeCalendars:
         )
 
 
-def enabled_rule_factory(rule_: SyncRule | None = None) -> InMemoryUnitOfWorkFactory:
-    factory = InMemoryUnitOfWorkFactory()
+def enabled_rule_factory(rule_: SyncRule | None = None) -> InMemoryUserUnitOfWorkFactory:
+    factory = InMemoryUnitOfWorkFactory().for_user(USER)
     with factory() as uow:
         uow.rules.add(rule_ or rule())
         uow.commit()

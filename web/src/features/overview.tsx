@@ -18,6 +18,7 @@ import { OverviewRules, RecentChanges, REFRESH_INTERVAL } from "@/features/overv
 import { api, type Dashboard } from "@/lib/api"
 import {
   appPathForView,
+  connectionsPath,
   isPlainLeftClick,
   type OpenRule,
   type ViewChange,
@@ -117,11 +118,11 @@ function OnboardingSteps({
       action: (
         <Button asChild>
           <a
-            href={appPathForView("settings")}
+            href={connectionsPath()}
             onClick={(event) => {
               if (!isPlainLeftClick(event)) return
               event.preventDefault()
-              onViewChange("settings")
+              onViewChange("settings", { settingsTab: "connections" })
             }}
           >
             {t("overview.health.action.reauthorizeInSettings")} <ArrowRight aria-hidden="true" />

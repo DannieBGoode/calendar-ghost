@@ -15,15 +15,16 @@ from calendar_sync.infrastructure.persistence.authorization_states import Sqlite
 from calendar_sync.infrastructure.persistence.connections import open_connection, transaction
 from calendar_sync.infrastructure.persistence.health import SqliteRuleHealthRecords
 from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteUnitOfWorkFactory,
     initialize_database,
 )
 from tests.helpers import NOW, rule
+from tests.users import USER, add_user, sqlite_units
 
 
 def _database(tmp_path: Path) -> Path:
     database = tmp_path / "calendar-sync.db"
     initialize_database(database)
+    add_user(database)
     return database
 
 
@@ -53,8 +54,8 @@ def test_a_writer_commits_while_a_reader_holds_its_snapshot(tmp_path: Path) -> N
         reader.execute("SELECT COUNT(*) FROM oauth_states").fetchone()
         with writer:
             writer.execute(
-                "INSERT INTO oauth_states(state_hash, created_at, expires_at) "
-                "VALUES ('h', 'a', 'b')"
+                "INSERT INTO oauth_states(state_hash, user_id, created_at, expires_at) "
+                "VALUES ('h', 'user-1', 'a', 'b')"
             )
         # The reader still sees the database as it was when its read began.
         assert reader.execute("SELECT COUNT(*) FROM oauth_states").fetchone()[0] == 0
@@ -66,7 +67,8 @@ def test_a_transaction_commits_and_closes(tmp_path: Path) -> None:
     database = _database(tmp_path)
     with transaction(database) as connection:
         connection.execute(
-            "INSERT INTO oauth_states(state_hash, created_at, expires_at) VALUES ('h', 'a', 'b')"
+            "INSERT INTO oauth_states(state_hash, user_id, created_at, expires_at) "
+            "VALUES ('h', 'user-1', 'a', 'b')"
         )
 
     with pytest.raises(sqlite3.ProgrammingError):
@@ -79,7 +81,8 @@ def _write_then_fail(database: Path, opened: list[sqlite3.Connection]) -> None:
     with transaction(database) as connection:
         opened.append(connection)
         connection.execute(
-            "INSERT INTO oauth_states(state_hash, created_at, expires_at) VALUES ('h', 'a', 'b')"
+            "INSERT INTO oauth_states(state_hash, user_id, created_at, expires_at) "
+            "VALUES ('h', 'user-1', 'a', 'b')"
         )
         raise RuntimeError("stop")
 
@@ -156,10 +159,10 @@ def test_only_the_connection_module_opens_sqlite() -> None:
 
 def test_consecutive_failures_of_an_existing_rule_are_counted(tmp_path: Path) -> None:
     database = _database(tmp_path)
-    with SqliteUnitOfWorkFactory(database)() as uow:
+    with sqlite_units(database)() as uow:
         uow.rules.add(rule())
         uow.commit()
-    records = SqliteRuleHealthRecords(database)
+    records = SqliteRuleHealthRecords(database, add_user(database))
     later = NOW + timedelta(minutes=5)
 
     assert records.record_failure(rule().id, ProviderFailureKind.TEMPORARY, NOW) == 1
@@ -176,7 +179,7 @@ def test_consecutive_failures_of_an_existing_rule_are_counted(tmp_path: Path) ->
 
 def test_a_failure_for_a_removed_rule_is_counted_without_a_record(tmp_path: Path) -> None:
     database = _database(tmp_path)
-    records = SqliteRuleHealthRecords(database)
+    records = SqliteRuleHealthRecords(database, add_user(database))
 
     assert records.record_failure(rule().id, ProviderFailureKind.TEMPORARY, NOW) == 1
     assert records.record_failure(rule().id, ProviderFailureKind.TEMPORARY, NOW) == 1
@@ -189,12 +192,12 @@ def test_an_orphaned_failure_count_from_an_earlier_release_is_left_alone(tmp_pat
     # Earlier releases wrote failures without enforcing foreign keys, so a row may outlive its rule.
     with closing(sqlite3.connect(database)) as legacy, legacy:
         legacy.execute(
-            "INSERT INTO rule_failures(rule_id, consecutive_failures, last_category, updated_at) "
-            "VALUES (?, 2, 'temporary', ?)",
+            "INSERT INTO rule_failures(rule_id, user_id, consecutive_failures, last_category, "
+            "updated_at) VALUES (?, 'user-1', 2, 'temporary', ?)",
             (rule().id.value, NOW.isoformat()),
         )
 
-    records = SqliteRuleHealthRecords(database)
+    records = SqliteRuleHealthRecords(database, add_user(database))
     later = NOW + timedelta(minutes=5)
 
     assert records.record_failure(rule().id, ProviderFailureKind.RATE_LIMIT, later) == 1
@@ -211,17 +214,17 @@ def test_an_orphaned_failure_count_from_an_earlier_release_is_left_alone(tmp_pat
 def test_an_adapter_write_that_fails_releases_the_database(tmp_path: Path) -> None:
     database = _database(tmp_path)
     states = SqliteAuthorizationStates(database)
-    states.store("state-1")
+    states.store("state-1", USER)
 
     with pytest.raises(sqlite3.IntegrityError) as failure:
-        states.store("state-1")
+        states.store("state-1", USER)
 
     # The traceback keeps the failed call's frames alive, so a connection it left open, with its
     # write lock, would still be held here; a writer that does not wait proves it was released.
     assert failure.value is not None
     with closing(open_connection(database, timeout=0)) as writer, writer:
         writer.execute("DELETE FROM oauth_states")
-    states.store("state-2")
+    states.store("state-2", USER)
     assert states.consume("state-2")
 
 

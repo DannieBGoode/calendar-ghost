@@ -42,10 +42,14 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TransformationPolicy,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import endpoint, event, occurrence, rule, series, week_start
+from tests.users import USER
 
 
 class Accounts:
@@ -93,8 +97,8 @@ class Ids:
 
 def _with_mappings(
     count: int, state: SyncRuleState = SyncRuleState.ENABLED
-) -> InMemoryUnitOfWorkFactory:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+) -> InMemoryUserUnitOfWorkFactory:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule(state=state)
     # Rule Replacement creates its draft under the same Connected Accounts.
     for endpoint_ in (rule().source, rule().destination):
@@ -115,7 +119,7 @@ def _with_mappings(
 
 
 def _remover(
-    unit_of_work: InMemoryUnitOfWorkFactory,
+    unit_of_work: InMemoryUserUnitOfWorkFactory,
     provider: ProjectionDeleter | None = None,
     accounts: AccountAuthorizations | None = None,
 ) -> RemoveSyncRule:
@@ -378,7 +382,7 @@ def test_interrupted_replacement_keeps_the_new_draft_and_a_retryable_old_rule() 
     assert unit_of_work.state.rules[rule().id].state is SyncRuleState.REMOVING
 
 
-def _synced_series() -> tuple[FakeCalendars, InMemoryUnitOfWorkFactory, EventRef]:
+def _synced_series() -> tuple[FakeCalendars, InMemoryUserUnitOfWorkFactory, EventRef]:
     calendars = FakeCalendars()
     master = calendars.put(series(), starts=tuple(week_start(w) for w in range(3)))
     calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED))
@@ -507,7 +511,7 @@ class Sleeps:
 
 
 def _retrying_remover(
-    unit_of_work: InMemoryUnitOfWorkFactory,
+    unit_of_work: InMemoryUserUnitOfWorkFactory,
     provider: ProjectionDeleter,
     incidents: Incidents | None = None,
     sleeps: Sleeps | None = None,

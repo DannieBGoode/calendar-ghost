@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from calendar_sync.application.errors import FileLoggingOff, InvalidActivityAge, StorageBusy
 from calendar_sync.application.ports import DatabaseUsage, LogUsage
 from calendar_sync.application.storage import ACTIVITY_AGES, StorageAdministration
-from calendar_sync.interfaces.api.dependencies import app_services, require_admin
+from calendar_sync.interfaces.api.dependencies import administrator, app_services
 from calendar_sync.interfaces.api.problems import problem_from
 from calendar_sync.interfaces.api.schemas import (
     ClearableActivityResponse,
@@ -28,7 +28,8 @@ class StorageServices(Protocol):
 
 Services = Annotated[StorageServices, Depends(app_services)]
 router = APIRouter()
-ADMIN = [Depends(require_admin)]
+# The database and logs are the installation's, so only Installation Administrators manage them.
+ADMIN = [Depends(administrator)]
 
 
 @router.get("/api/v1/storage", response_model=StorageResponse, dependencies=ADMIN)

@@ -20,9 +20,9 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.application.rules import SyncRuleSummary
 from calendar_sync.application.status import (
-    InstallationHealth,
     InstallationStatus,
     ProblemKind,
+    StatusVerdict,
     assess_installation,
     calendar_display_name,
     rule_name,
@@ -114,7 +114,7 @@ def _assess(
 
 def test_a_running_installation_is_healthy() -> None:
     status = assess_installation([_summary(_rule())], _overview(), (), TICKING, NOW)
-    assert status.health is InstallationHealth.HEALTHY
+    assert status.health is StatusVerdict.HEALTHY
     assert status.needs_attention is False
     assert status.problems == ()
     assert status.summary == "1 rule running."
@@ -163,15 +163,15 @@ def test_rule_names_never_show_an_email_or_a_bare_calendar_id() -> None:
 @pytest.mark.parametrize(
     ("progress", "health"),
     [
-        (SchedulerProgress(NOW - timedelta(minutes=14), None, None), InstallationHealth.HEALTHY),
-        (SchedulerProgress(NOW - timedelta(minutes=16), None, None), InstallationHealth.STALLED),
+        (SchedulerProgress(NOW - timedelta(minutes=14), None, None), StatusVerdict.HEALTHY),
+        (SchedulerProgress(NOW - timedelta(minutes=16), None, None), StatusVerdict.STALLED),
         (
             SchedulerProgress(NOW - timedelta(days=1), None, NOW - timedelta(minutes=14)),
-            InstallationHealth.HEALTHY,
+            StatusVerdict.HEALTHY,
         ),
         (
             SchedulerProgress(NOW - timedelta(days=1), None, NOW - timedelta(minutes=16)),
-            InstallationHealth.STALLED,
+            StatusVerdict.STALLED,
         ),
         (
             SchedulerProgress(
@@ -179,7 +179,7 @@ def test_rule_names_never_show_an_email_or_a_bare_calendar_id() -> None:
                 NOW - timedelta(hours=2, minutes=59),
                 NOW - timedelta(hours=3),
             ),
-            InstallationHealth.HEALTHY,
+            StatusVerdict.HEALTHY,
         ),
         (
             SchedulerProgress(
@@ -187,24 +187,24 @@ def test_rule_names_never_show_an_email_or_a_bare_calendar_id() -> None:
                 NOW - timedelta(hours=3, minutes=1),
                 NOW - timedelta(hours=4),
             ),
-            InstallationHealth.STALLED,
+            StatusVerdict.STALLED,
         ),
-        (None, InstallationHealth.STALLED),
+        (None, StatusVerdict.STALLED),
     ],
 )
 def test_a_scheduler_that_stopped_running_passes_is_stalled(
-    progress: SchedulerProgress | None, health: InstallationHealth
+    progress: SchedulerProgress | None, health: StatusVerdict
 ) -> None:
     status = assess_installation([_summary(_rule())], _overview(), (), progress, NOW)
     assert status.health is health
-    assert status.needs_attention is (health is InstallationHealth.STALLED)
+    assert status.needs_attention is (health is StatusVerdict.STALLED)
 
 
 def test_a_stalled_scheduler_without_enabled_rules_is_not_a_problem() -> None:
     status = assess_installation(
         [_summary(_rule(state=SyncRuleState.PAUSED))], _overview(), (), None, NOW
     )
-    assert status.health is InstallationHealth.PAUSED
+    assert status.health is StatusVerdict.PAUSED
 
 
 def test_a_degraded_rule_is_stopped_and_names_its_incident() -> None:
@@ -216,7 +216,7 @@ def test_a_degraded_rule_is_stopped_and_names_its_incident() -> None:
         TICKING,
         NOW,
     )
-    assert status.health is InstallationHealth.STOPPED
+    assert status.health is StatusVerdict.STOPPED
     assert status.problems[0].kind is ProblemKind.STOPPED
     assert status.problems[0].summary == "Calendar provider authorization expired"
     assert status.problems[0].since == NOW - timedelta(hours=1)
@@ -254,7 +254,7 @@ def test_an_enabled_rule_with_a_disconnected_account_is_stopped(side: str) -> No
     status = assess_installation(
         [_summary(_rule())], _overview(accounts=accounts), (), TICKING, NOW
     )
-    assert status.health is InstallationHealth.STOPPED
+    assert status.health is StatusVerdict.STOPPED
     assert status.problems[0].summary == "A calendar account needs reauthorization"
 
 
@@ -264,7 +264,7 @@ def test_a_rule_whose_removal_is_running_is_not_stopped() -> None:
     status = assess_installation(
         [_summary(_rule("rule-2")), _summary(removing, running=work)], _overview(), (), TICKING, NOW
     )
-    assert status.health is InstallationHealth.HEALTHY
+    assert status.health is StatusVerdict.HEALTHY
     assert [rule.summary.rule.id.value for rule in status.rules] == ["rule-2"]
 
 
@@ -272,27 +272,27 @@ def test_an_interrupted_removal_is_stopped() -> None:
     status = assess_installation(
         [_summary(_rule(state=SyncRuleState.REMOVING))], _overview(), (), TICKING, NOW
     )
-    assert status.health is InstallationHealth.STOPPED
+    assert status.health is StatusVerdict.STOPPED
     assert status.problems[0].summary == "Stopped syncing"
 
 
 def test_provider_waiting_turns_into_review_after_a_day() -> None:
     fresh = _incident("rule-1", "rate_limit", opened=NOW - timedelta(hours=23))
     lasting = _incident("rule-1", "rate_limit", opened=NOW - timedelta(hours=25))
-    assert _assess([_summary(_rule())], incidents=(fresh,)).health is InstallationHealth.WAITING
-    assert _assess([_summary(_rule())], incidents=(lasting,)).health is InstallationHealth.REVIEW
+    assert _assess([_summary(_rule())], incidents=(fresh,)).health is StatusVerdict.WAITING
+    assert _assess([_summary(_rule())], incidents=(lasting,)).health is StatusVerdict.REVIEW
 
 
 def test_waiting_does_not_need_attention() -> None:
     status = _assess([_summary(_rule())], incidents=(_incident("rule-1", "temporary"),))
-    assert status.health is InstallationHealth.WAITING
+    assert status.health is StatusVerdict.WAITING
     assert status.needs_attention is False
 
 
 def test_open_blocks_need_a_look_and_name_their_rule() -> None:
     blocks = (OpenBlock(42, "rule-1"), OpenBlock(41, "rule-1"))
     status = _assess([_summary(_rule())], overview=_overview(blocks=blocks))
-    assert status.health is InstallationHealth.REVIEW
+    assert status.health is StatusVerdict.REVIEW
     assert status.problems[0].kind is ProblemKind.BLOCKED
     assert status.problems[0].rule_id == "rule-1"
     assert status.problems[0].summary == "2 events couldn't be synced"
@@ -311,7 +311,7 @@ def test_a_blocked_incident_is_covered_by_the_open_blocks() -> None:
 @pytest.mark.parametrize(("hours", "overdue"), [(23, False), (25, True)])
 def test_a_rule_not_synced_for_a_day_is_overdue(hours: int, overdue: bool) -> None:
     status = _assess([_summary(_rule(), succeeded_at=NOW - timedelta(hours=hours))])
-    assert (status.health is InstallationHealth.REVIEW) is overdue
+    assert (status.health is StatusVerdict.REVIEW) is overdue
     if overdue:
         assert status.problems[0].kind is ProblemKind.OVERDUE
         assert status.problems[0].since == NOW - timedelta(hours=hours)
@@ -322,7 +322,7 @@ def test_a_rule_resumed_after_days_is_not_overdue_before_the_next_pass_lists_it(
     # last completed pass ran while it was paused and did not list it.
     resumed = _summary(_rule("rule-resumed"), succeeded_at=NOW - timedelta(days=3))
     status = _assess([resumed])
-    assert status.health is InstallationHealth.HEALTHY
+    assert status.health is StatusVerdict.HEALTHY
     assert status.problems == ()
 
 
@@ -330,7 +330,7 @@ def test_a_rule_the_last_pass_listed_that_is_still_stale_is_overdue() -> None:
     listed = replace(TICKING, last_pass_rule_ids=frozenset({"rule-resumed"}))
     stale = _summary(_rule("rule-resumed"), succeeded_at=NOW - timedelta(days=3))
     status = _assess([stale], scheduler=listed)
-    assert status.health is InstallationHealth.REVIEW
+    assert status.health is StatusVerdict.REVIEW
     assert [(p.kind, p.rule_id) for p in status.problems] == [(ProblemKind.OVERDUE, "rule-resumed")]
 
 
@@ -338,7 +338,7 @@ def test_running_and_never_synced_rules_are_never_overdue() -> None:
     work = RuleWork(RuleWorkKind.SYNC, NOW - timedelta(minutes=1))
     running = _summary(_rule(), succeeded_at=NOW - timedelta(days=3), running=work)
     never = _summary(_rule("rule-2"), succeeded_at=None)
-    assert _assess([running, never]).health is InstallationHealth.HEALTHY
+    assert _assess([running, never]).health is StatusVerdict.HEALTHY
 
 
 def test_problems_are_ordered_most_urgent_first() -> None:
@@ -359,39 +359,39 @@ def test_problems_are_ordered_most_urgent_first() -> None:
         (ProblemKind.BLOCKED, "rule-x"),
         (ProblemKind.WAITING, "rule-c"),
     ]
-    assert status.health is InstallationHealth.STOPPED
+    assert status.health is StatusVerdict.STOPPED
 
 
 def test_an_open_incident_never_reads_as_healthy() -> None:
     status = _assess([_summary(_rule())], incidents=(_incident(None, "permanent"),))
-    assert status.health is InstallationHealth.REVIEW
+    assert status.health is StatusVerdict.REVIEW
     assert status.problems[0].rule_id is None
 
 
 @pytest.mark.parametrize(
     ("summaries", "overview", "health"),
     [
-        ([], _overview(accounts=()), InstallationHealth.SETUP),
-        ([], _overview(), InstallationHealth.SETUP),
+        ([], _overview(accounts=()), StatusVerdict.SETUP),
+        ([], _overview(), StatusVerdict.SETUP),
         (
             [_summary(_rule(state=SyncRuleState.PAUSED))],
             _overview(),
-            InstallationHealth.PAUSED,
+            StatusVerdict.PAUSED,
         ),
         (
             [_summary(_rule(state=SyncRuleState.PREVIEWED), succeeded_at=None)],
             _overview(last_synced_at=None),
-            InstallationHealth.SETUP,
+            StatusVerdict.SETUP,
         ),
         (
             [_summary(_rule(state=SyncRuleState.PAUSED))],
             _overview(accounts=tuple(replace(a, state="disconnected") for a in CONNECTED)),
-            InstallationHealth.SETUP,
+            StatusVerdict.SETUP,
         ),
     ],
 )
 def test_installations_without_running_rules(
-    summaries: list[SyncRuleSummary], overview: OperationsOverview, health: InstallationHealth
+    summaries: list[SyncRuleSummary], overview: OperationsOverview, health: StatusVerdict
 ) -> None:
     status = assess_installation(summaries, overview, (), TICKING, NOW)
     assert status.health is health
@@ -407,7 +407,7 @@ def test_overdue_is_superseded_by_a_waiting_incident_on_the_same_rule() -> None:
         TICKING,
         NOW,
     )
-    assert status.health is InstallationHealth.WAITING
+    assert status.health is StatusVerdict.WAITING
     assert status.needs_attention is False
     assert len(status.problems) == 1
     assert status.problems[0].kind is ProblemKind.WAITING
@@ -436,7 +436,7 @@ def test_a_review_worthy_incident_wins_over_a_waiting_one_regardless_of_order() 
     waiting = _incident("rule-1", "rate_limit")
     for incidents in ((permanent, waiting), (waiting, permanent)):
         status = _assess([_summary(_rule())], incidents=incidents)
-        assert status.health is InstallationHealth.REVIEW
+        assert status.health is StatusVerdict.REVIEW
         assert len(status.problems) == 1
         assert status.problems[0].kind is ProblemKind.REVIEW
         assert status.problems[0].rule_id == "rule-1"
@@ -461,7 +461,7 @@ def test_rules_a_lapsed_account_stops_need_reauthorization_and_name_no_account()
         (account_incident,),
     )
 
-    assert status.health is InstallationHealth.STOPPED
+    assert status.health is StatusVerdict.STOPPED
     # The account's Incident is covered by the rules it stopped, so it is not a problem itself.
     assert [(p.kind, p.rule_id) for p in status.problems] == [
         (ProblemKind.STOPPED, "rule-1"),

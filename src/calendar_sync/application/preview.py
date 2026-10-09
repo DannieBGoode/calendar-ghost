@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Literal
 
-from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable
+from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     CalendarReader,
@@ -139,7 +139,7 @@ class PreviewSyncRule:
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
         if rule is None:
-            raise RuleNotExecutable(f"sync rule {rule_id.value} does not exist")
+            raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
         if rule.state not in {
             SyncRuleState.DRAFT,
             SyncRuleState.PAUSED,

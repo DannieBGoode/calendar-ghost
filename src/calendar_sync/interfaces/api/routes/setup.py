@@ -1,37 +1,62 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Response, status
 
-from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
-from calendar_sync.interfaces.api.dependencies import app_services, set_session_cookie
+from calendar_sync.application.errors import (
+    AdminAlreadyConfigured,
+    IncorrectCredentials,
+    PasswordPolicyViolation,
+)
+from calendar_sync.application.identity import SetUpInstallation
+from calendar_sync.domain.access import InvalidEmail
+from calendar_sync.interfaces.api.dependencies import Identity, app_services, set_session_cookie
 from calendar_sync.interfaces.api.problems import problem_from
-from calendar_sync.interfaces.api.routes.session import SessionServices
+from calendar_sync.interfaces.api.routes.session import signed_in
 from calendar_sync.interfaces.api.schemas import (
-    PasswordRequest,
     SessionResponse,
+    SetupRequest,
     SetupStatusResponse,
 )
 
-Services = Annotated[SessionServices, Depends(app_services)]
+
+class SetupIdentity(Identity, Protocol):
+    @property
+    def set_up(self) -> SetUpInstallation: ...
+
+
+class SetupServices(Protocol):
+    @property
+    def identity(self) -> SetupIdentity: ...
+    @property
+    def secure_cookies(self) -> bool: ...
+    @property
+    def sends_email(self) -> bool: ...
+
+
+Services = Annotated[SetupServices, Depends(app_services)]
 router = APIRouter()
 
 
 @router.get("/api/v1/setup", response_model=SetupStatusResponse)
 def setup_status(services: Services) -> SetupStatusResponse:
-    return SetupStatusResponse(administrator_configured=services.administrator.is_configured())
+    users = services.identity.users
+    return SetupStatusResponse(
+        administrator_configured=users.count() > 0,
+        password_only_sign_in=users.without_email() is not None,
+    )
 
 
 @router.post("/api/v1/setup/admin", response_model=SessionResponse)
-def create_admin(
-    request: PasswordRequest, response: Response, services: Services
-) -> SessionResponse:
+def set_up(payload: SetupRequest, response: Response, services: Services) -> SessionResponse:
     try:
-        services.administrator.create_admin(request.password)
+        session = services.identity.set_up.execute(payload.email, payload.password)
     except (AdminAlreadyConfigured, PasswordPolicyViolation) as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
-    session = services.administrator.authenticate(request.password)
-    assert session is not None
+    except InvalidEmail as error:
+        raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
+    except IncorrectCredentials as error:
+        raise problem_from(status.HTTP_401_UNAUTHORIZED, error) from error
     set_session_cookie(response, session.token, services.secure_cookies)
-    return SessionResponse(authenticated=True)
+    return signed_in(services.identity.users.get(session.user_id), services.sends_email)

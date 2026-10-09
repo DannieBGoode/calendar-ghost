@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from calendar_sync import __version__
+from calendar_sync.application.installation_health import InstallationHealth
 from calendar_sync.application.ports import IncidentMessage
 from calendar_sync.application.status import (
     InstallationStatus,
@@ -14,6 +15,8 @@ from calendar_sync.application.status import (
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 from calendar_sync.interfaces.api.schemas import (
     IncidentMessageResponse,
+    InstallationHealthResponse,
+    InstallationIncidentResponse,
     ProblemResponse,
     SchedulerResponse,
     StatusCalendarResponse,
@@ -116,4 +119,18 @@ def _calendar(
     return StatusCalendarResponse(
         calendar=calendar_display_name(endpoint, rule.summary.names),
         provider=status.providers.get(endpoint.connected_account_id.value),
+    )
+
+
+def installation_health_response(health: InstallationHealth) -> InstallationHealthResponse:
+    return InstallationHealthResponse(
+        status=health.status.value,
+        needs_attention=health.needs_attention,
+        incidents=[
+            InstallationIncidentResponse(kind=incident.kind.value, since=incident.since.isoformat())
+            for incident in health.incidents
+        ],
+        users={verdict.value: count for verdict, count in health.users.items()},
+        disabled_users=health.disabled_users,
+        checked_at=health.checked_at.isoformat(),
     )

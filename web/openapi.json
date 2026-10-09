@@ -1,6 +1,33 @@
 {
   "components": {
     "schemas": {
+      "AcceptInvitationRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "email",
+          "password"
+        ],
+        "title": "AcceptInvitationRequest",
+        "type": "object"
+      },
       "ActivityEventResponse": {
         "properties": {
           "destination": {
@@ -171,6 +198,26 @@
           "calendar_id"
         ],
         "title": "CalendarEndpointPayload",
+        "type": "object"
+      },
+      "ChangePasswordRequest": {
+        "properties": {
+          "current_password": {
+            "maxLength": 256,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 256,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "ChangePasswordRequest",
         "type": "object"
       },
       "ClearActivityRequest": {
@@ -489,6 +536,29 @@
           "oldest_activity_at"
         ],
         "title": "DatabaseUsageResponse",
+        "type": "object"
+      },
+      "DeleteOwnAccountRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "title": "Password",
+            "type": "string"
+          },
+          "projections": {
+            "enum": [
+              "delete",
+              "detach"
+            ],
+            "title": "Projections",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password",
+          "projections"
+        ],
+        "title": "DeleteOwnAccountRequest",
         "type": "object"
       },
       "DiscoveredCalendarResponse": {
@@ -907,6 +977,90 @@
         "title": "IncidentResponse",
         "type": "object"
       },
+      "InstallationHealthResponse": {
+        "description": "The whole installation's verdict; it names no rule, calendar, or User (ADR 0030).",
+        "properties": {
+          "checked_at": {
+            "title": "Checked At",
+            "type": "string"
+          },
+          "disabled_users": {
+            "title": "Disabled Users",
+            "type": "integer"
+          },
+          "incidents": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationIncidentResponse"
+            },
+            "title": "Incidents",
+            "type": "array"
+          },
+          "needs_attention": {
+            "title": "Needs Attention",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "waiting",
+              "paused",
+              "setup",
+              "healthy"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "users": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "stalled",
+                "stopped",
+                "review",
+                "waiting",
+                "paused",
+                "setup",
+                "healthy"
+              ]
+            },
+            "title": "Users",
+            "type": "object"
+          }
+        },
+        "required": [
+          "status",
+          "needs_attention",
+          "incidents",
+          "users",
+          "disabled_users",
+          "checked_at"
+        ],
+        "title": "InstallationHealthResponse",
+        "type": "object"
+      },
+      "InstallationIncidentResponse": {
+        "properties": {
+          "kind": {
+            "const": "scheduler_stalled",
+            "title": "Kind",
+            "type": "string"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "since"
+        ],
+        "title": "InstallationIncidentResponse",
+        "type": "object"
+      },
       "IntegrationTokenResponse": {
         "properties": {
           "created_at": {
@@ -943,16 +1097,22 @@
             ],
             "title": "Revoked At"
           },
-          "scope": {
-            "const": "status:read",
-            "title": "Scope",
-            "type": "string"
+          "scopes": {
+            "items": {
+              "enum": [
+                "installation:read",
+                "status:read"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
           }
         },
         "required": [
           "id",
           "name",
-          "scope",
+          "scopes",
           "created_at",
           "last_used_at",
           "revoked_at"
@@ -966,6 +1126,18 @@
             "maxLength": 200,
             "title": "Name",
             "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "installation:read",
+                "status:read"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Scopes",
+            "type": "array"
           }
         },
         "required": [
@@ -1010,10 +1182,16 @@
             ],
             "title": "Revoked At"
           },
-          "scope": {
-            "const": "status:read",
-            "title": "Scope",
-            "type": "string"
+          "scopes": {
+            "items": {
+              "enum": [
+                "installation:read",
+                "status:read"
+              ],
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
           },
           "token": {
             "title": "Token",
@@ -1023,13 +1201,64 @@
         "required": [
           "id",
           "name",
-          "scope",
+          "scopes",
           "created_at",
           "last_used_at",
           "revoked_at",
           "token"
         ],
         "title": "IssuedIntegrationTokenResponse",
+        "type": "object"
+      },
+      "IssuedLinkResponse": {
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "token",
+          "expires_at"
+        ],
+        "title": "IssuedLinkResponse",
+        "type": "object"
+      },
+      "LinkRequest": {
+        "properties": {
+          "token": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "LinkRequest",
+        "type": "object"
+      },
+      "LinkStatusResponse": {
+        "properties": {
+          "usable": {
+            "title": "Usable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "usable"
+        ],
+        "title": "LinkStatusResponse",
         "type": "object"
       },
       "LogUsageResponse": {
@@ -1106,19 +1335,58 @@
         "title": "NamedCalendarEndpointResponse",
         "type": "object"
       },
-      "PasswordRequest": {
+      "NotificationPreferenceRequest": {
         "properties": {
-          "password": {
-            "maxLength": 256,
-            "minLength": 12,
-            "title": "Password",
+          "notify_by_email": {
+            "title": "Notify By Email",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notify_by_email"
+        ],
+        "title": "NotificationPreferenceRequest",
+        "type": "object"
+      },
+      "OwnAccountDeletionResponse": {
+        "properties": {
+          "last_user": {
+            "title": "Last User",
+            "type": "boolean"
+          },
+          "needs_another_administrator": {
+            "title": "Needs Another Administrator",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "needs_another_administrator",
+          "last_user"
+        ],
+        "title": "OwnAccountDeletionResponse",
+        "type": "object"
+      },
+      "PendingInvitationResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
             "type": "string"
           }
         },
         "required": [
-          "password"
+          "id",
+          "created_at",
+          "expires_at"
         ],
-        "title": "PasswordRequest",
+        "title": "PendingInvitationResponse",
         "type": "object"
       },
       "PreviewItemResponse": {
@@ -1482,6 +1750,45 @@
         "title": "RecordedTimeResponse",
         "type": "object"
       },
+      "RegistrationRequest": {
+        "properties": {
+          "policy": {
+            "enum": [
+              "only_me",
+              "invitation_only"
+            ],
+            "title": "Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy"
+        ],
+        "title": "RegistrationRequest",
+        "type": "object"
+      },
+      "RegistrationResponse": {
+        "properties": {
+          "only_me_available": {
+            "title": "Only Me Available",
+            "type": "boolean"
+          },
+          "policy": {
+            "enum": [
+              "only_me",
+              "invitation_only"
+            ],
+            "title": "Policy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy",
+          "only_me_available"
+        ],
+        "title": "RegistrationResponse",
+        "type": "object"
+      },
       "RemovalResponse": {
         "properties": {
           "conflicts": {
@@ -1528,6 +1835,44 @@
           "projections"
         ],
         "title": "ReplaceRuleRequest",
+        "type": "object"
+      },
+      "ResetPasswordRequest": {
+        "properties": {
+          "password": {
+            "maxLength": 256,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ResetPasswordRequest",
+        "type": "object"
+      },
+      "RoleRequest": {
+        "properties": {
+          "role": {
+            "enum": [
+              "installation_administrator",
+              "user"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "RoleRequest",
         "type": "object"
       },
       "RuleDetailResponse": {
@@ -2071,12 +2416,76 @@
           "authenticated": {
             "title": "Authenticated",
             "type": "boolean"
+          },
+          "installation_sends_email": {
+            "default": false,
+            "title": "Installation Sends Email",
+            "type": "boolean"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignedInUserResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "authenticated"
+          "authenticated",
+          "user",
+          "installation_sends_email"
         ],
         "title": "SessionResponse",
+        "type": "object"
+      },
+      "SetEmailRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "SetEmailRequest",
+        "type": "object"
+      },
+      "SetupRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SetupRequest",
         "type": "object"
       },
       "SetupStatusResponse": {
@@ -2084,12 +2493,95 @@
           "administrator_configured": {
             "title": "Administrator Configured",
             "type": "boolean"
+          },
+          "password_only_sign_in": {
+            "title": "Password Only Sign In",
+            "type": "boolean"
           }
         },
         "required": [
-          "administrator_configured"
+          "administrator_configured",
+          "password_only_sign_in"
         ],
         "title": "SetupStatusResponse",
+        "type": "object"
+      },
+      "SignInRequest": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "SignInRequest",
+        "type": "object"
+      },
+      "SignedInUserResponse": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "notify_by_email": {
+            "title": "Notify By Email",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "installation_administrator",
+              "user"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "notify_by_email",
+          "language"
+        ],
+        "title": "SignedInUserResponse",
         "type": "object"
       },
       "SourceChangeResponse": {
@@ -2502,6 +2994,142 @@
         "title": "UpdateRulePolicyRequest",
         "type": "object"
       },
+      "UserDeletionResponse": {
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "integer"
+          },
+          "detached": {
+            "title": "Detached",
+            "type": "integer"
+          },
+          "left": {
+            "title": "Left",
+            "type": "integer"
+          },
+          "rules": {
+            "title": "Rules",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rules",
+          "deleted",
+          "detached",
+          "left"
+        ],
+        "title": "UserDeletionResponse",
+        "type": "object"
+      },
+      "UserPageResponse": {
+        "properties": {
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "page_size": {
+            "title": "Page Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/UserResponse"
+            },
+            "title": "Users",
+            "type": "array"
+          }
+        },
+        "required": [
+          "users",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "UserPageResponse",
+        "type": "object"
+      },
+      "UserResponse": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sign_in_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sign In At"
+          },
+          "role": {
+            "enum": [
+              "installation_administrator",
+              "user"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "state",
+          "created_at",
+          "last_sign_in_at"
+        ],
+        "title": "UserResponse",
+        "type": "object"
+      },
+      "UserStateRequest": {
+        "properties": {
+          "state": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "UserStateRequest",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -2550,6 +3178,274 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/account": {
+      "delete": {
+        "description": "Delete the signed-in User and every record they own, keeping or deleting projections.",
+        "operationId": "delete_own_account_api_v1_account_delete",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteOwnAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Own Account"
+      }
+    },
+    "/api/v1/account/deletion": {
+      "get": {
+        "description": "Whether the User may delete themself now, and whether nobody would remain.",
+        "operationId": "own_account_deletion_api_v1_account_deletion_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnAccountDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Own Account Deletion"
+      }
+    },
+    "/api/v1/account/email": {
+      "put": {
+        "description": "Add the email the upgraded first User must add, or change one with the password.",
+        "operationId": "set_email_api_v1_account_email_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedInUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Email"
+      }
+    },
+    "/api/v1/account/notifications": {
+      "put": {
+        "description": "Whether the User's Incident Notifications also come by email; the Web UI keeps them all.",
+        "operationId": "set_notifications_api_v1_account_notifications_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationPreferenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedInUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Notifications"
+      }
+    },
+    "/api/v1/account/password": {
+      "put": {
+        "description": "Replace the password; every other session of the User ends.",
+        "operationId": "change_password_api_v1_account_password_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Password"
+      }
+    },
     "/api/v1/accounts": {
       "get": {
         "operationId": "list_accounts_api_v1_accounts_get",
@@ -3261,6 +4157,69 @@
         "summary": "List Incidents"
       }
     },
+    "/api/v1/installation/health": {
+      "get": {
+        "description": "Installation Health, for an Installation Administrator's session or installation:read\ntoken; it names no rule, calendar, or User (ADR 0030).",
+        "operationId": "installation_health_api_v1_installation_health_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Installation Health"
+      }
+    },
     "/api/v1/integration-tokens": {
       "get": {
         "operationId": "list_integration_tokens_api_v1_integration_tokens_get",
@@ -3413,9 +4372,227 @@
         "summary": "Revoke Integration Token"
       }
     },
+    "/api/v1/invitations": {
+      "get": {
+        "operationId": "invitations_api_v1_invitations_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PendingInvitationResponse"
+                  },
+                  "title": "Response Invitations Api V1 Invitations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invitations"
+      },
+      "post": {
+        "operationId": "invite_api_v1_invitations_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invite"
+      }
+    },
+    "/api/v1/invitations/accept": {
+      "post": {
+        "operationId": "accept_invitation_api_v1_invitations_accept_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Invitation"
+      }
+    },
+    "/api/v1/invitations/check": {
+      "post": {
+        "operationId": "check_invitation_api_v1_invitations_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Invitation"
+      }
+    },
+    "/api/v1/invitations/{invitation_id}": {
+      "delete": {
+        "operationId": "revoke_invitation_api_v1_invitations__invitation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invitation_id",
+            "required": true,
+            "schema": {
+              "title": "Invitation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Invitation"
+      }
+    },
     "/api/v1/oauth/google/start": {
       "get": {
-        "description": "Start Google's consent; reauthorizing a known `account` suggests its email to Google.",
+        "description": "Start Google's consent for the signed-in User; reauthorizing a known `account` suggests\nits email to Google.",
         "operationId": "start_google_oauth_api_v1_oauth_google_start_get",
         "parameters": [
           {
@@ -3472,6 +4649,75 @@
           }
         },
         "summary": "Start Google Oauth"
+      }
+    },
+    "/api/v1/password-resets": {
+      "post": {
+        "operationId": "reset_password_api_v1_password_resets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Password"
+      }
+    },
+    "/api/v1/password-resets/check": {
+      "post": {
+        "operationId": "check_password_reset_api_v1_password_resets_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LinkStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check Password Reset"
       }
     },
     "/api/v1/recent-changes": {
@@ -3534,6 +4780,106 @@
           }
         },
         "summary": "Recent Changes"
+      }
+    },
+    "/api/v1/registration": {
+      "get": {
+        "operationId": "registration_api_v1_registration_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Registration"
+      },
+      "put": {
+        "operationId": "set_registration_api_v1_registration_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Registration"
       }
     },
     "/api/v1/rules": {
@@ -4166,7 +5512,7 @@
     },
     "/api/v1/session": {
       "delete": {
-        "operationId": "log_out_api_v1_session_delete",
+        "operationId": "sign_out_api_v1_session_delete",
         "parameters": [
           {
             "in": "cookie",
@@ -4200,7 +5546,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Log Out"
+        "summary": "Sign Out"
       },
       "get": {
         "operationId": "session_status_api_v1_session_get",
@@ -4247,12 +5593,12 @@
         "summary": "Session Status"
       },
       "post": {
-        "operationId": "log_in_api_v1_session_post",
+        "operationId": "sign_in_api_v1_session_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PasswordRequest"
+                "$ref": "#/components/schemas/SignInRequest"
               }
             }
           },
@@ -4280,7 +5626,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Log In"
+        "summary": "Sign In"
       }
     },
     "/api/v1/setup": {
@@ -4303,12 +5649,12 @@
     },
     "/api/v1/setup/admin": {
       "post": {
-        "operationId": "create_admin_api_v1_setup_admin_post",
+        "operationId": "set_up_api_v1_setup_admin_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PasswordRequest"
+                "$ref": "#/components/schemas/SetupRequest"
               }
             }
           },
@@ -4336,11 +5682,12 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Admin"
+        "summary": "Set Up"
       }
     },
     "/api/v1/status": {
       "get": {
+        "description": "The Installation Status of the User the token or session belongs to (ADR 0030).",
         "operationId": "installation_status_api_v1_status_get",
         "parameters": [
           {
@@ -4637,6 +5984,397 @@
           }
         },
         "summary": "Download Logs"
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "description": "One page of the people here, by part of their email, role, and state; never their data.",
+        "operationId": "users_api_v1_users_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "default": "",
+              "maxLength": 200,
+              "title": "Search",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "installation_administrator",
+                    "user"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "disabled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "joined",
+              "enum": [
+                "joined",
+                "email",
+                "last_sign_in"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Order",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Users"
+      }
+    },
+    "/api/v1/users/{user_id}": {
+      "delete": {
+        "description": "Delete another User and every record they own; their projections are deleted.",
+        "operationId": "delete_user_api_v1_users__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete User"
+      }
+    },
+    "/api/v1/users/{user_id}/password-reset-links": {
+      "post": {
+        "operationId": "issue_password_reset_api_v1_users__user_id__password_reset_links_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Password Reset"
+      }
+    },
+    "/api/v1/users/{user_id}/role": {
+      "put": {
+        "operationId": "change_role_api_v1_users__user_id__role_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Role"
+      }
+    },
+    "/api/v1/users/{user_id}/state": {
+      "put": {
+        "operationId": "change_state_api_v1_users__user_id__state_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change State"
       }
     },
     "/health": {

@@ -27,6 +27,7 @@ from calendar_sync.application.ports import (
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    AuthorizedAccount,
     CalendarAccess,
     CalendarProvider,
     DiscoveredCalendar,
@@ -34,6 +35,7 @@ from calendar_sync.application.ports import (
     RecordedEvent,
     RuleRunOutcome,
     RunKind,
+    UnitOfWorkFactory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.providers import ProviderKind
@@ -45,6 +47,7 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import (
     Adapters,
     Container,
+    UserServices,
     build_adapters,
     build_container,
     compose,
@@ -77,10 +80,12 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, discovered_calendar
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
+from calendar_sync.infrastructure.persistence.accounts import SqliteUserConnectedAccounts
+from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
+from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import (
     RecentSchedulerHeartbeat,
@@ -92,6 +97,18 @@ from tests.helpers import (
     series,
     week_start,
 )
+from tests.users import (
+    ADMIN_EMAIL,
+    ADMIN_PASSWORD,
+    OTHER_USER,
+    RULE_ACCOUNTS,
+    add_account,
+    add_user,
+    administrator,
+    first_user,
+    session_for,
+    sign_in,
+)
 
 
 def _google(adapters: Adapters) -> GoogleOAuthService:
@@ -100,25 +117,30 @@ def _google(adapters: Adapters) -> GoogleOAuthService:
     return adapters.authorization
 
 
-def _account_store(adapters: Adapters) -> SqliteConnectedAccountStore:
-    """The installation's account store, for seeding accounts as authorizing them would."""
-    assert isinstance(adapters.accounts, SqliteConnectedAccountStore)
-    return adapters.accounts
+def _account_store(adapters: Adapters) -> SqliteUserConnectedAccounts:
+    """The first User's accounts, for seeding them as authorizing them would."""
+    assert adapters.accounts is not None
+    accounts = adapters.accounts(administrator(adapters))
+    assert isinstance(accounts, SqliteUserConnectedAccounts)
+    return accounts
 
 
 def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
     with TestClient(app) as client:
-        assert client.get("/api/v1/setup").json() == {"administrator_configured": False}
+        assert client.get("/api/v1/setup").json() == {
+            "administrator_configured": False,
+            "password_only_sign_in": False,
+        }
         assert client.get("/api/v1/dashboard").status_code == 401
 
         response = client.post(
-            "/api/v1/setup/admin", json={"password": "correct horse battery staple"}
+            "/api/v1/setup/admin", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
         )
 
         assert response.status_code == 200
-        assert response.json() == {"authenticated": True}
+        assert response.json()["authenticated"] is True
         dashboard = client.get("/api/v1/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json() == {
@@ -144,7 +166,7 @@ def test_create_cross_account_rule_through_api(tmp_path: Path) -> None:
     _connect_accounts(tmp_path / "test.db", "personal", "work")
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         payload = {
             "source": {
                 "connected_account_id": "personal",
@@ -174,7 +196,7 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
 ) -> None:
     database = tmp_path / "test.db"
     container, adapters = _installation(Settings(database))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.audit.append(
             AuditEntry(
                 occurred_at=datetime(2026, 8, 30, tzinfo=UTC),
@@ -190,8 +212,8 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at
-            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?)
+                summary, opened_at, updated_at, user_id
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             (
                 "incident-1",
@@ -207,8 +229,9 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at, message_code, message_params
-            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?)
+                summary, opened_at, updated_at, message_code, message_params, user_id
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?,
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             (
                 "incident-2",
@@ -226,7 +249,7 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
     app = create_app(container)
     with TestClient(app) as client:
         assert client.get("/api/v1/audit-entries").status_code == 401
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
 
         activity = client.get("/api/v1/audit-entries").json()
         incidents = client.get("/api/v1/incidents").json()
@@ -248,15 +271,17 @@ def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: P
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         assert client.get("/api/v1/dashboard").status_code == 200
 
         assert client.delete("/api/v1/session").status_code == 204
         unauthorized = client.get("/api/v1/dashboard")
-        wrong_password = client.post("/api/v1/session", json={"password": "this password is wrong"})
+        wrong_password = client.post(
+            "/api/v1/session", json={"email": ADMIN_EMAIL, "password": "this password is wrong"}
+        )
         assert (
             client.post(
-                "/api/v1/session", json={"password": "correct horse battery staple"}
+                "/api/v1/session", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
             ).status_code
             == 200
         )
@@ -265,7 +290,7 @@ def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: P
     assert unauthorized.status_code == 401
     assert unauthorized.json()["code"] == "session_required"
     assert wrong_password.status_code == 401
-    assert wrong_password.json()["code"] == "incorrect_password"
+    assert wrong_password.json()["code"] == "incorrect_credentials"
 
 
 def test_admin_setup_is_single_use_and_secure_cookie_setting_is_honored(tmp_path: Path) -> None:
@@ -273,10 +298,11 @@ def test_admin_setup_is_single_use_and_secure_cookie_setting_is_honored(tmp_path
 
     with TestClient(app) as client:
         first = client.post(
-            "/api/v1/setup/admin", json={"password": "correct horse battery staple"}
+            "/api/v1/setup/admin", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
         )
         second = client.post(
-            "/api/v1/setup/admin", json={"password": "another correct battery staple"}
+            "/api/v1/setup/admin",
+            json={"email": "other@example.test", "password": "another correct battery staple"},
         )
 
         assert "Secure" in first.headers["set-cookie"]
@@ -298,7 +324,7 @@ def test_rule_validation_rejects_unknown_policy_same_endpoint_and_duplicate(
     }
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         unknown = client.post("/api/v1/rules", json={**base_payload, "privacy_policy": "unknown"})
         same_endpoint = client.post(
             "/api/v1/rules",
@@ -333,7 +359,7 @@ def test_rules_are_refused_for_accounts_this_installation_does_not_have(
     }
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         refused = client.post("/api/v1/rules", json=payload)
         rules = client.get("/api/v1/rules").json()
 
@@ -346,7 +372,7 @@ def test_google_routes_report_unconfigured_installation(tmp_path: Path) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
 
         assert client.get("/api/v1/google/configuration").json() == {
             "configured": False,
@@ -374,7 +400,7 @@ def test_google_configuration_reports_redirect_uri_to_administrators(tmp_path: P
 
     with TestClient(app) as client:
         anonymous = client.get("/api/v1/google/configuration")
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         configuration = client.get("/api/v1/google/configuration")
 
     assert anonymous.status_code == 401
@@ -397,7 +423,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
         avatar_url="https://lh3.googleusercontent.com/a/synthetic=s96-c",
         provider=ProviderKind.GOOGLE,
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters, "other-account")() as uow:
         uow.rules.add(rule())
         uow.rules.add(
             SyncRule(
@@ -443,7 +469,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
     with TestClient(app) as client:
         assert client.post(f"/api/v1/accounts/{account.id.value}/disconnect").status_code == 401
         assert client.delete(f"/api/v1/accounts/{account.id.value}").status_code == 401
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
 
         listed = client.get("/api/v1/accounts")
         disconnected = client.post(f"/api/v1/accounts/{account.id.value}/disconnect")
@@ -454,7 +480,8 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
         dashboard = client.get("/api/v1/dashboard")
 
     assert listed.status_code == 200
-    assert listed.json() == [
+    # The other accounts are the synthetic ones the other rules use.
+    assert [item for item in listed.json() if item["id"] == account.id.value] == [
         {
             "id": account.id.value,
             "display_name": "Personal",
@@ -479,7 +506,7 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
     assert repeated.status_code == 200
     assert missing.status_code == 404
     assert missing.json()["code"] == "account_not_found"
-    assert dashboard.json()["connected_accounts"] == 0
+    assert dashboard.json()["connected_accounts"] == 3
     assert dashboard.json()["disconnected_accounts"] == 1
     # rule-1, validated-rule, and destination-rule degrade; the paused rule stays paused.
     assert dashboard.json()["stopped_rules"] == 3
@@ -490,11 +517,11 @@ def test_connected_accounts_can_be_listed_and_disconnected(tmp_path: Path) -> No
         "rule-1",
         "validated-rule",
     }
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         disconnected_rule = uow.rules.get(SyncRuleId("rule-1"))
     assert disconnected_rule is not None
     assert disconnected_rule.state is SyncRuleState.DEGRADED
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         paused_rule = uow.rules.get(SyncRuleId("paused-rule"))
         validated_rule = uow.rules.get(SyncRuleId("validated-rule"))
         unrelated_rule = uow.rules.get(SyncRuleId("unrelated-rule"))
@@ -549,7 +576,7 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
         destination=endpoint("third-account", "third-calendar"),
         state=SyncRuleState.PAUSED,
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters, "third-account")() as uow:
         uow.rules.add(affected_rule)
         uow.rules.add(destination_affected_rule)
         uow.rules.add(unrelated_rule)
@@ -562,8 +589,8 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
             INSERT INTO event_mappings (
                 id, rule_id, source_account_id, source_calendar_id, source_event_id,
                 destination_account_id, destination_calendar_id, destination_event_id,
-                source_revision, projection_fingerprint
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_revision, projection_fingerprint, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             (
                 "mapping-1",
@@ -580,8 +607,8 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
         )
         connection.execute(
             """
-            INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, detail)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO audit_entries (occurred_at, rule_id, action, outcome, detail, user_id)
+            VALUES (?, ?, ?, ?, ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             (
                 "2026-08-31T12:00:00+00:00",
@@ -595,8 +622,8 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state,
-                summary, opened_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                summary, opened_at, updated_at, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             (
                 "incident-1",
@@ -611,15 +638,17 @@ def test_disconnected_account_can_be_permanently_deleted_with_affected_rules(
         )
         connection.execute(
             """
-            INSERT INTO rule_failures (rule_id, consecutive_failures, last_category, updated_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO rule_failures (
+                rule_id, consecutive_failures, last_category, updated_at, user_id
+            )
+            VALUES (?, ?, ?, ?, (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             (affected_rule.id.value, 2, "authentication", "2026-08-31T12:00:00+00:00"),
         )
     app = create_app(container)
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         connected_delete = client.delete(f"/api/v1/accounts/{account.id.value}")
         disconnected = client.post(f"/api/v1/accounts/{account.id.value}/disconnect")
         deleted = client.delete(f"/api/v1/accounts/{account.id.value}")
@@ -697,7 +726,7 @@ def test_disconnected_account_without_rules_can_be_permanently_deleted(tmp_path:
     app = create_app(container)
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         deleted = client.delete(f"/api/v1/accounts/{account.id.value}")
 
     assert deleted.status_code == 204
@@ -717,7 +746,7 @@ def test_account_deletion_waits_for_an_in_flight_run_of_an_affected_rule(tmp_pat
         provider=ProviderKind.GOOGLE,
     )
     store.disconnect(account.id)
-    with adapters.unit_of_work() as uow:
+    with _units(adapters, "work")() as uow:
         uow.rules.add(
             SyncRule(
                 rule().id,
@@ -730,7 +759,7 @@ def test_account_deletion_waits_for_an_in_flight_run_of_an_affected_rule(tmp_pat
     responses: list[int] = []
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         running = adapters.locks.for_rule(rule().id)
         running.acquire()
         worker = Thread(
@@ -741,7 +770,7 @@ def test_account_deletion_waits_for_an_in_flight_run_of_an_affected_rule(tmp_pat
         worker.start()
         worker.join(0.2)
         blocked_while_running = worker.is_alive()
-        with adapters.unit_of_work() as uow:
+        with _units(adapters)() as uow:
             kept_while_running = uow.rules.get(rule().id) is not None
         running.release()
         worker.join(2)
@@ -749,7 +778,7 @@ def test_account_deletion_waits_for_an_in_flight_run_of_an_affected_rule(tmp_pat
     assert blocked_while_running
     assert kept_while_running
     assert responses == [204]
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         assert uow.rules.get(rule().id) is None
 
 
@@ -767,7 +796,7 @@ def test_connected_account_access_can_be_verified(
 
     with TestClient(app) as client:
         assert client.post("/api/v1/accounts/account-1/verify").status_code == 401
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         response = client.post("/api/v1/accounts/account-1/verify")
 
     assert response.status_code == 200
@@ -790,7 +819,7 @@ def test_an_access_check_google_refuses_lapses_the_account_and_one_it_passes_res
         Settings(database, master_key=CredentialCipher.generate_key())
     )
     _connect_accounts(database, "personal-account", "work-account")
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule().degrade(awaiting_reauthorization=True))
         uow.commit()
     refused = AccountAccessCheckFailed("expired", ProviderFailureKind.AUTHENTICATION)
@@ -798,7 +827,7 @@ def test_an_access_check_google_refuses_lapses_the_account_and_one_it_passes_res
     monkeypatch.setattr(_google(adapters), "verify_access", verify_access)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         failed = client.post("/api/v1/accounts/work-account/verify")
         lapsed = client.get("/api/v1/accounts").json()
         passed = client.post("/api/v1/accounts/work-account/verify")
@@ -825,7 +854,7 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
     store = _account_store(adapters)
     google = _google(adapters)
     account = store.save("Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(
             SyncRule(
                 id=SyncRuleId("rule-1"),
@@ -851,7 +880,7 @@ def test_rules_name_their_calendars_as_google_last_listed_them(
         )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         before = names(client.get("/api/v1/rules"))
         discovered = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
         after = names(client.get("/api/v1/rules"))
@@ -888,7 +917,7 @@ def test_discovered_calendars_say_whether_rules_can_write_to_them(
     monkeypatch.setattr(google, "calendars", listed)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         response = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
 
     assert response.json() == [
@@ -930,7 +959,7 @@ def test_discovered_calendars_report_googles_original_access_role(
     monkeypatch.setattr(google, "calendars", listed)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         response = client.get(f"/api/v1/accounts/{account.id.value}/calendars")
 
     assert response.json() == [
@@ -988,7 +1017,7 @@ def test_connected_account_access_failures_are_mapped_to_recovery_statuses(
     app = create_app(container)
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         response = client.post("/api/v1/accounts/account-1/verify")
 
     assert response.status_code == expected_status
@@ -1006,11 +1035,12 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
     account = _account_store(adapters).save(
         "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
     )
-    complete = Mock(return_value=account)
+    complete = Mock(return_value=AuthorizedAccount(administrator(adapters), account))
     monkeypatch.setattr(google, "complete", complete)
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code",
             follow_redirects=False,
@@ -1018,9 +1048,96 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
 
     assert response.status_code == 303
     assert response.headers["location"] == (
-        f"/settings?google=connected&account={account.id.value}&resumed=0"
+        f"/settings/connections?google=connected&account={account.id.value}&resumed=0"
     )
-    complete.assert_called_once_with("synthetic-state", "synthetic-code")
+    # The signed-in User completes only a flow they began.
+    complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
+
+
+def _refuse_code_exchange(google: GoogleOAuthService, monkeypatch: pytest.MonkeyPatch) -> Mock:
+    """Fail the test if the callback asks Google to exchange the code."""
+    flow = Mock(side_effect=AssertionError("the code must not be exchanged"))
+    monkeypatch.setattr(google, "_flow", flow)
+    return flow
+
+
+CALLBACK = "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code"
+AUTHORIZATION_FAILED = "/settings/connections?google=authorization_failed"
+
+
+def test_google_oauth_callback_without_a_session_exchanges_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    container, adapters = _installation(
+        Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
+    )
+    google = _google(adapters)
+    owner = administrator(adapters)
+    google._states.store("synthetic-state", owner)
+    flow = _refuse_code_exchange(google, monkeypatch)
+
+    with TestClient(create_app(container)) as client:
+        response = client.get(CALLBACK, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == AUTHORIZATION_FAILED
+    flow.assert_not_called()
+    assert _account_store(adapters).list() == ()
+
+
+def test_google_oauth_callback_refuses_a_browser_signed_in_as_another_user(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A User who sends their consent link to someone cannot collect that person's account."""
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
+    )
+    google = _google(adapters)
+    victim = administrator(adapters)
+    attacker = add_user(database, OTHER_USER, role="user")
+    google._states.store("synthetic-state", attacker)
+    flow = _refuse_code_exchange(google, monkeypatch)
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        response = client.get(CALLBACK, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == AUTHORIZATION_FAILED
+    flow.assert_not_called()
+    assert adapters.accounts is not None
+    assert adapters.accounts(attacker).list() == ()
+    assert adapters.accounts(victim).list() == ()
+    # The state is used up, so its User cannot finish the flow with the code later.
+    assert google._states.consume("synthetic-state") is None
+
+
+def test_google_oauth_callback_refuses_a_disabled_user(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = tmp_path / "test.db"
+    container, adapters = _installation(
+        Settings(database, master_key=CredentialCipher.generate_key())
+    )
+    google = _google(adapters)
+    administrator(adapters)
+    owner = add_user(database, OTHER_USER, role="user")
+    google._states.store("synthetic-state", owner)
+    session = session_for(database, owner)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (owner.value,))
+    flow = _refuse_code_exchange(google, monkeypatch)
+
+    with TestClient(create_app(container)) as client:
+        client.cookies.set(SESSION_COOKIE, session)
+        response = client.get(CALLBACK, follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == AUTHORIZATION_FAILED
+    flow.assert_not_called()
+    assert adapters.accounts is not None
+    assert adapters.accounts(owner).list() == ()
 
 
 def test_reauthorizing_resumes_the_rules_lapsed_authorization_stopped(
@@ -1038,21 +1155,22 @@ def test_reauthorizing_resumes_the_rules_lapsed_authorization_stopped(
         source=endpoint(home.id.value, "home"),
         destination=endpoint(work.id.value, "work"),
     ).degrade(awaiting_reauthorization=True)
-    with adapters.unit_of_work() as uow:
+    with _units(adapters, rule_accounts=False)() as uow:
         uow.rules.add(stopped)
         now = datetime.now(UTC)
         uow.accounts.lapse(work.id, attempted_at=now)
         uow.commit()
     # Completing consent saves the new credentials, as Google's callback does.
     reauthorize = Mock(
-        side_effect=lambda *_: store.save(
-            "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+        side_effect=lambda *_: AuthorizedAccount(
+            administrator(adapters),
+            store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE),
         )
     )
     monkeypatch.setattr(_google(adapters), "complete", reauthorize)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         lapsed = client.get("/api/v1/accounts").json()
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code",
@@ -1080,7 +1198,7 @@ def test_reauthorizing_starts_google_consent_with_the_accounts_email(
     monkeypatch.setattr(_google(adapters), "authorization_url", authorization_url)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         hinted = client.get(
             f"/api/v1/oauth/google/start?account={account.id.value}", follow_redirects=False
         )
@@ -1088,10 +1206,12 @@ def test_reauthorizing_starts_google_consent_with_the_accounts_email(
         new = client.get("/api/v1/oauth/google/start", follow_redirects=False)
 
     assert [r.status_code for r in (hinted, unknown, new)] == [302, 302, 302]
+    # Consent connects the account for the signed-in User.
+    user = administrator(adapters)
     assert [call.args for call in authorization_url.call_args_list] == [
-        ("work@example.test",),
-        (None,),
-        (None,),
+        (user, "work@example.test"),
+        (user, None),
+        (user, None),
     ]
 
 
@@ -1100,10 +1220,11 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     google = _google(adapters)
-    google._store_state("synthetic-state")
+    google._states.store("synthetic-state", administrator(adapters))
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&error=access_denied",
             follow_redirects=False,
@@ -1114,7 +1235,9 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=calendar_permission_required"
+    assert (
+        response.headers["location"] == "/settings/connections?google=calendar_permission_required"
+    )
     assert repeated.status_code == 400
 
 
@@ -1123,17 +1246,18 @@ def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     google = _google(adapters)
-    google._store_state("synthetic-state")
+    google._states.store("synthetic-state", administrator(adapters))
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&error=temporarily_unavailable",
             follow_redirects=False,
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=authorization_failed"
+    assert response.headers["location"] == "/settings/connections?google=authorization_failed"
 
 
 def test_google_oauth_callback_requires_an_authorization_result(tmp_path: Path) -> None:
@@ -1143,6 +1267,7 @@ def test_google_oauth_callback_requires_an_authorization_result(tmp_path: Path) 
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state",
             follow_redirects=False,
@@ -1165,14 +1290,17 @@ def test_google_oauth_missing_calendar_permission_returns_to_settings(
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code",
             follow_redirects=False,
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=calendar_permission_required"
-    complete.assert_called_once_with("synthetic-state", "synthetic-code")
+    assert (
+        response.headers["location"] == "/settings/connections?google=calendar_permission_required"
+    )
+    complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
 
 
 def test_google_oauth_completion_failure_returns_to_settings(
@@ -1187,14 +1315,15 @@ def test_google_oauth_completion_failure_returns_to_settings(
     app = create_app(container)
 
     with TestClient(app) as client:
+        sign_in(client)
         response = client.get(
             "/api/v1/oauth/google/callback?state=synthetic-state&code=synthetic-code",
             follow_redirects=False,
         )
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/settings?google=authorization_failed"
-    complete.assert_called_once_with("synthetic-state", "synthetic-code")
+    assert response.headers["location"] == "/settings/connections?google=authorization_failed"
+    complete.assert_called_once_with("synthetic-state", "synthetic-code", administrator(adapters))
 
 
 def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path) -> None:
@@ -1209,7 +1338,20 @@ def test_frontend_fallback_cannot_serve_files_outside_static_root(tmp_path: Path
     assert "from __future__ import annotations" not in response.text
 
 
-@pytest.mark.parametrize("path", ["/overview", "/rules", "/rules/rule-1", "/activity", "/settings"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/overview",
+        "/rules",
+        "/rules/rule-1",
+        "/activity",
+        "/settings",
+        "/settings/connections",
+        "/settings/account",
+        "/settings/administration",
+        "/people",
+    ],
+)
 def test_frontend_fallback_serves_each_application_section(tmp_path: Path, path: str) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
@@ -1254,13 +1396,13 @@ def test_woff2_assets_are_served_with_the_font_woff2_media_type(tmp_path: Path) 
 
 def test_enabled_rule_can_be_paused_through_api(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule())
         uow.commit()
     app = create_app(container)
 
     with TestClient(app) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         paused = client.post("/api/v1/rules/rule-1/pause")
         repeated = client.post("/api/v1/rules/rule-1/pause")
 
@@ -1273,8 +1415,9 @@ PASSWORD = {"password": "correct horse battery staple"}
 
 
 def _reconcile_now(container: Container) -> ReconcileNow:
-    assert container.reconcile_now is not None
-    return container.reconcile_now
+    reconcile_now = _services(container).reconcile_now
+    assert reconcile_now is not None
+    return reconcile_now
 
 
 def _installation(settings: Settings, **substitutes: Any) -> tuple[Container, Adapters]:
@@ -1286,6 +1429,32 @@ def _installation(settings: Settings, **substitutes: Any) -> tuple[Container, Ad
     return replace(compose(settings, adapters), scheduler=None), adapters
 
 
+def _services(container: Container) -> UserServices:
+    """The first User's use cases, as their requests reach them."""
+    identity = container.identity
+    if identity.users.count() == 0:
+        identity.set_up.execute(ADMIN_EMAIL, ADMIN_PASSWORD)
+    return container.for_user(identity.users.list()[0].id)
+
+
+def _with_services(container: Container, **changes: Any) -> Container:
+    """`container`, with some of every User's use cases replaced."""
+    return replace(
+        container, user_services=lambda user: replace(container.user_services(user), **changes)
+    )
+
+
+def _units(adapters: Adapters, *accounts: str, rule_accounts: bool = True) -> UnitOfWorkFactory:
+    """The first User's units of work, to arrange what that User's requests then read, with
+    `accounts` recorded, and unless told otherwise the accounts `rule()` uses."""
+    user = administrator(adapters)
+    factory = adapters.unit_of_work.__self__  # type: ignore[attr-defined]
+    assert isinstance(factory, SqliteUnitOfWorkFactory)
+    for account in (*(RULE_ACCOUNTS if rule_accounts else ()), *accounts):
+        add_account(factory.database_path, account, user)
+    return adapters.unit_of_work(user)
+
+
 def _ticking(container: Container, adapters: Adapters) -> Container:
     """`container`, but its Installation Status verdict reads a scheduler that just ran a pass.
 
@@ -1293,11 +1462,11 @@ def _ticking(container: Container, adapters: Adapters) -> Container:
     rule reads "stalled": correct for that case, but this helper is for tests about something
     else entirely (a stopped rule, a block), which should not be masked by "stalled".
     """
-    return replace(
+    return _with_services(
         container,
         get_installation_status=GetInstallationStatus(
-            container.list_sync_rules,
-            adapters.operations,
+            _services(container).list_sync_rules,
+            adapters.operations(administrator(adapters)),
             adapters.clock,
             RecentSchedulerHeartbeat(adapters.clock),
         ),
@@ -1307,21 +1476,24 @@ def _ticking(container: Container, adapters: Adapters) -> Container:
 def _client_with_rule(tmp_path: Path, state: SyncRuleState = SyncRuleState.ENABLED) -> TestClient:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
     _connect_accounts(tmp_path / "test.db", "personal-account", "work-account")
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=state))
         uow.commit()
     return TestClient(create_app(container))
 
 
 def _connect_accounts(database: Path, *account_ids: str) -> None:
-    """Connected Account records, without credentials, for rules that name them."""
+    """The first User's Connected Account records, without credentials, for rules that name
+    them."""
+    first_user(database)
     with sqlite3.connect(database) as connection:
         connection.executemany(
             """
             INSERT INTO connected_accounts (
                 id, provider, display_name, email, encrypted_credentials,
-                state, created_at, updated_at
-            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01')
+                state, created_at, updated_at, user_id
+            ) VALUES (?, 'google', ?, ?, x'00', 'connected', '2026-09-01', '2026-09-01',
+                (SELECT id FROM users ORDER BY rowid LIMIT 1))
             """,
             [(account, account, f"{account}@example.test") for account in account_ids],
         )
@@ -1346,7 +1518,7 @@ def test_rule_management_routes_require_an_administrator(
 
 def test_rule_details_include_policy_state_mapping_count_and_outcomes(tmp_path: Path) -> None:
     with _client_with_rule(tmp_path) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         details = client.get("/api/v1/rules/rule-1")
         missing = client.get("/api/v1/rules/missing")
 
@@ -1366,7 +1538,7 @@ POLICY = {"privacy_policy": "busy_only", "sync_all_day_events": True, **RESPONSE
 
 def test_policy_edit_pauses_rule_and_blocks_enable_until_previewed(tmp_path: Path) -> None:
     with _client_with_rule(tmp_path) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         edited = client.patch(
             "/api/v1/rules/rule-1",
             json={
@@ -1409,7 +1581,7 @@ def test_policy_edit_pauses_rule_and_blocks_enable_until_previewed(tmp_path: Pat
 
 def test_policy_edit_is_rejected_while_removal_is_incomplete(tmp_path: Path) -> None:
     with _client_with_rule(tmp_path, SyncRuleState.REMOVING) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         response = client.patch(
             "/api/v1/rules/rule-1", json={**POLICY, "privacy_policy": "copy_details"}
         )
@@ -1421,7 +1593,7 @@ def test_rule_removal_requires_an_explicit_choice_and_detach_removes_the_rule(
     tmp_path: Path,
 ) -> None:
     with _client_with_rule(tmp_path) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         unspecified = client.delete("/api/v1/rules/rule-1")
         invalid = client.delete("/api/v1/rules/rule-1?projections=everything")
         delete_without_google = client.delete("/api/v1/rules/rule-1?projections=delete")
@@ -1453,7 +1625,7 @@ def test_delete_removal_is_blocked_for_a_disconnected_destination(tmp_path: Path
         provider=ProviderKind.GOOGLE,
     )
     store.disconnect(account.id)
-    with adapters.unit_of_work() as uow:
+    with _units(adapters, "personal")() as uow:
         uow.rules.add(
             SyncRule(
                 SyncRuleId("rule-1"),
@@ -1465,7 +1637,7 @@ def test_delete_removal_is_blocked_for_a_disconnected_destination(tmp_path: Path
         uow.commit()
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         blocked = client.delete("/api/v1/rules/rule-1?projections=delete")
         state = client.get("/api/v1/rules/rule-1").json()["state"]
 
@@ -1486,7 +1658,7 @@ def test_rule_removal_reports_an_interrupted_removal(
     monkeypatch.setattr(RemoveSyncRule, "execute", interrupted)
 
     with _client_with_rule(tmp_path) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         response = client.delete("/api/v1/rules/rule-1?projections=delete")
 
     assert response.status_code == 424
@@ -1513,7 +1685,7 @@ def test_replacement_creates_a_new_draft_and_rejects_invalid_calendars(tmp_path:
         "destination": {"connected_account_id": "work-account", "calendar_id": "team-calendar"},
     }
     with _client_with_rule(tmp_path) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         rejected = client.post("/api/v1/rules/rule-1/replace", json=unchanged)
         invalid = client.post("/api/v1/rules/rule-1/replace", json=same_endpoint)
         replaced = client.post("/api/v1/rules/rule-1/replace", json=changed)
@@ -1532,12 +1704,12 @@ def test_sync_and_reconcile_now_report_a_rule_that_is_not_enabled(tmp_path: Path
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.PAUSED))
         uow.commit()
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         synced = client.post("/api/v1/rules/rule-1/sync")
         reconciled = client.post("/api/v1/rules/rule-1/reconcile")
 
@@ -1554,7 +1726,7 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.commit()
     _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
@@ -1567,7 +1739,7 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
         )
         return SyncRunResult(rule_id, conflicts=1, run_id="run-2", listed_in_full=True)
 
-    container = replace(
+    container = _with_services(
         container,
         reconcile_now=replace(
             _reconcile_now(container),
@@ -1580,7 +1752,7 @@ def test_reconcile_now_counts_as_the_daily_check_for_blocked_events(tmp_path: Pa
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         assert client.post("/api/v1/rules/rule-1/reconcile").status_code == 200
         incidents = client.get("/api/v1/incidents").json()
 
@@ -1592,14 +1764,14 @@ def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_bloc
     tmp_path: Path,
 ) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.commit()
     calendars = FakeCalendars()
     calendars.put(event())
     fingerprinter = ProjectionFingerprinter()
     synchronize = ExecuteSyncRule(
-        adapters.unit_of_work,
+        _units(adapters),
         calendars,
         SyncDecisionService(EventProjector(), fingerprinter),
         fingerprinter,
@@ -1617,17 +1789,17 @@ def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_bloc
         )
     )
     reconcile = ReconcileSyncRule(
-        adapters.unit_of_work,
+        _units(adapters),
         calendars,
         EventProjector(),
         ReconciliationService(fingerprinter),
         FixedClock(),
         UuidRunIdGenerator(),
     )
-    container = replace(container, reconcile_now=ReconcileNow(synchronize, reconcile))
+    container = _with_services(container, reconcile_now=ReconcileNow(synchronize, reconcile))
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         body = client.post("/api/v1/rules/rule-1/reconcile").json()
         blocked = client.get(
             "/api/v1/audit-entries", params={"category": "blocked", "rule_id": "rule-1"}
@@ -1663,14 +1835,14 @@ def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.commit()
     execute = Mock(return_value=SyncRunResult(SyncRuleId("rule-1"), run_id="run-1"))
     reconcile = Mock(return_value=ReconciliationReport(SyncRuleId("rule-1"), 0, ()))
     health = Mock(audit_floor=Mock(return_value=0), record_full_pass=Mock())
     getattr(health, failing).side_effect = sqlite3.OperationalError("database is locked")
-    container = replace(
+    container = _with_services(
         container,
         reconcile_now=ReconcileNow(
             cast(ExecuteSyncRule, _sync_stand_in(execute)),
@@ -1680,7 +1852,7 @@ def test_reconcile_now_is_not_aborted_by_block_health_bookkeeping(
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         response = client.post("/api/v1/rules/rule-1/reconcile")
 
     # Incident bookkeeping is best-effort; the requested sync and reconciliation still run.
@@ -1695,7 +1867,7 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
     container, adapters = _installation(
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.commit()
     _append_audit(adapters, _audit("conflict", "destination_occurrence_missing", run_id="run-1"))
@@ -1707,7 +1879,7 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
         return SyncRunResult(rule_id, conflicts=1, run_id="run-2", listed_in_full=True)
 
     failure = ProviderFailure(ProviderFailureKind.TEMPORARY, "synthetic outage")
-    container = replace(
+    container = _with_services(
         container,
         reconcile_now=replace(
             _reconcile_now(container),
@@ -1717,7 +1889,7 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
     )
 
     with TestClient(create_app(container), raise_server_exceptions=False) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         assert client.post("/api/v1/rules/rule-1/reconcile").status_code >= 500
         incidents = client.get("/api/v1/incidents").json()
 
@@ -1726,7 +1898,7 @@ def test_reconcile_now_records_the_full_pass_even_when_reconciliation_fails(
 
 def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         uow.rules.add(
             SyncRule(
@@ -1757,7 +1929,7 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
         uow.commit()
 
     with TestClient(create_app(_ticking(container, adapters))) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         dashboard = client.get("/api/v1/dashboard").json()
         rules = {item["id"]: item for item in client.get("/api/v1/rules").json()}
 
@@ -1766,9 +1938,8 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
     assert rules["rule-1"]["last_sync"]["last_succeeded_at"] == "2026-09-28T09:00:00+00:00"
     assert rules["rule-2"]["last_sync"]["last_succeeded_at"] is None
     assert dashboard["enabled_rules"] == 2
-    # No connected account is seeded here, so the verdict is "setup", not "healthy"; what this
-    # test cares about is that a failed run alone does not need attention.
-    assert dashboard["status"] == "setup"
+    # A failed run alone does not need attention.
+    assert dashboard["status"] == "healthy"
     assert dashboard["needs_attention"] is False
     assert rules["rule-1"]["last_sync"]["created"] == 2
     assert rules["rule-2"]["last_sync"]["failure_kind"] == "rate_limit"
@@ -1778,14 +1949,14 @@ def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
     tmp_path: Path,
 ) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.REMOVING))
         uow.commit()
     started = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
     work = RuleWork(RuleWorkKind.REMOVAL, started, ProjectionHandling.DELETE, total=4, done=1)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         with adapters.locks.working(SyncRuleId("rule-1"), work):
             (listed,) = client.get("/api/v1/rules").json()
             detail = client.get("/api/v1/rules/rule-1").json()
@@ -1806,7 +1977,7 @@ def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(
 
 def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.ENABLED))
         succeeded = RuleRunOutcome(
             SyncRuleId("rule-1"), RunKind.SYNC, datetime(2026, 9, 28, 9, 0, tzinfo=UTC), True
@@ -1823,7 +1994,7 @@ def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
         uow.commit()
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         dashboard = client.get("/api/v1/dashboard").json()
         (listed,) = client.get("/api/v1/rules").json()
 
@@ -1864,7 +2035,7 @@ def test_activity_searches_recorded_event_titles(tmp_path: Path) -> None:
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
 
         def found(query: str) -> list[str | None]:
             entries = client.get("/api/v1/audit-entries", params={"q": query}).json()
@@ -1896,7 +2067,7 @@ def test_recent_changes_list_each_written_event_newest_first(tmp_path: Path) -> 
 
     with TestClient(create_app(container)) as client:
         assert client.get("/api/v1/recent-changes").status_code == 401
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         changes = client.get("/api/v1/recent-changes").json()
         limited = client.get("/api/v1/recent-changes", params={"limit": 1}).json()
 
@@ -1949,7 +2120,7 @@ def test_recent_changes_collapse_an_identical_repeated_write(tmp_path: Path) -> 
         )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         changes = client.get("/api/v1/recent-changes").json()
 
     assert [
@@ -1972,7 +2143,7 @@ def test_recent_changes_look_past_a_long_repeated_repair(tmp_path: Path) -> None
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         changes = client.get("/api/v1/recent-changes").json()
 
     assert [(change["entry"]["reason"], change["repeats"]) for change in changes] == [
@@ -1983,7 +2154,7 @@ def test_recent_changes_look_past_a_long_repeated_repair(tmp_path: Path) -> None
 
 def test_dashboard_reports_events_whose_latest_decision_was_blocked(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule())
         uow.commit()
     _append_audit(
@@ -1998,7 +2169,7 @@ def test_dashboard_reports_events_whose_latest_decision_was_blocked(tmp_path: Pa
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         dashboard = client.get("/api/v1/dashboard").json()
 
     assert (dashboard["blocked_events"], dashboard["blocked_entry_id"]) == (1, 1)
@@ -2007,7 +2178,7 @@ def test_dashboard_reports_events_whose_latest_decision_was_blocked(tmp_path: Pa
 
 def test_dashboard_names_no_rule_when_blocks_span_rules(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters, "other")() as uow:
         uow.rules.add(rule())
         uow.rules.add(
             replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
@@ -2020,19 +2191,18 @@ def test_dashboard_names_no_rule_when_blocks_span_rules(tmp_path: Path) -> None:
     )
 
     with TestClient(create_app(_ticking(container, adapters))) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         dashboard = client.get("/api/v1/dashboard").json()
 
     assert (dashboard["blocked_events"], dashboard["blocked_entry_id"]) == (2, 2)
     assert dashboard["blocked_rule_id"] is None
-    # A block alone is reported, not an incident: it does not need attention (no account is
-    # connected in this test, so the verdict is "setup" rather than "healthy").
-    assert dashboard["status"] == "setup"
-    assert dashboard["needs_attention"] is False
+    # Blocks spanning rules are one problem to review, not an incident.
+    assert dashboard["status"] == "review"
+    assert dashboard["open_incidents"] == 0
 
 
 def _append_audit(adapters: Adapters, *entries: AuditEntry) -> None:
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         for entry in entries:
             uow.audit.append(entry)
         uow.commit()
@@ -2073,7 +2243,7 @@ def test_removal_conflicts_are_blocked_activity_scoped_by_rule(tmp_path: Path) -
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         everything = client.get("/api/v1/audit-entries").json()
         blocked = client.get(
             "/api/v1/audit-entries", params={"category": "blocked", "rule_id": "rule-1"}
@@ -2099,7 +2269,7 @@ def test_activity_exposes_reasons_categories_and_filters(tmp_path: Path) -> None
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
 
         everything = client.get("/api/v1/audit-entries").json()
 
@@ -2155,14 +2325,14 @@ def test_activity_event_is_read_live_without_persisting_content(tmp_path: Path) 
     container, adapters = _installation(
         Settings(database), calendar_provider=cast(CalendarProvider, provider)
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule())
         uow.commit()
     _append_audit(adapters, _audit("delete", "source_cancelled", destination_event_id="gone"))
 
     with TestClient(create_app(container)) as client:
         assert client.get("/api/v1/audit-entries/1/event").status_code == 401
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
 
         response = client.get("/api/v1/audit-entries/1/event")
 
@@ -2206,13 +2376,13 @@ def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
     )
     settings = Settings(database)
     container, adapters = _installation(settings)
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule())
         uow.commit()
     _append_audit(adapters, _audit("create", "source_created"))
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         unavailable = client.get("/api/v1/audit-entries/1/event")
         assert unavailable.status_code == 503
         assert unavailable.json()["code"] == "event_inspection_unavailable"
@@ -2222,7 +2392,7 @@ def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
             compose(settings, replace(adapters, calendar_provider=cast(CalendarProvider, failing)))
         )
     ) as client:
-        client.post("/api/v1/session", json={"password": "correct horse battery staple"})
+        sign_in(client)
         response = client.get("/api/v1/audit-entries/1/event")
         assert response.status_code == 424
         assert "authentication" in response.json()["detail"]
@@ -2242,7 +2412,7 @@ def test_rule_management_entries_are_listed_as_changes(tmp_path: Path) -> None:
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         changed = client.get("/api/v1/audit-entries", params={"category": "changed"}).json()
 
     assert [entry["action"] for entry in changed] == [
@@ -2265,7 +2435,7 @@ def test_activity_filters_combine_several_categories(tmp_path: Path) -> None:
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         response = client.get(
             "/api/v1/audit-entries",
             params=[("category", "changed"), ("category", "skipped"), ("category", "blocked")],
@@ -2289,7 +2459,7 @@ def test_occurrences_that_already_match_are_listed_as_no_change(tmp_path: Path) 
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         everything = client.get("/api/v1/audit-entries").json()
         unchanged = client.get("/api/v1/audit-entries", params={"category": "unchanged"}).json()
         skipped = client.get("/api/v1/audit-entries", params={"category": "skipped"}).json()
@@ -2308,7 +2478,7 @@ def test_single_activity_entry_can_be_opened_directly(tmp_path: Path) -> None:
 
     with TestClient(create_app(container)) as client:
         assert client.get("/api/v1/audit-entries/1").status_code == 401
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         response = client.get("/api/v1/audit-entries/1")
         missing = client.get("/api/v1/audit-entries/99")
 
@@ -2324,7 +2494,7 @@ def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> Non
     database = tmp_path / "test.db"
     # No provider is configured: Activity names events without asking Google.
     container, adapters = _installation(Settings(database))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule())
         uow.commit()
     renamed = event(title="Dentist (moved)")
@@ -2343,7 +2513,7 @@ def test_activity_names_each_event_as_its_run_recorded_it(tmp_path: Path) -> Non
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         entries = {
             entry["id"]: entry["event"] for entry in client.get("/api/v1/audit-entries").json()
         }
@@ -2411,7 +2581,7 @@ def test_activity_shows_the_time_an_event_moved_from(tmp_path: Path) -> None:
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         moved = {
             entry["id"]: entry["event"]["moved_from"]
             for entry in client.get("/api/v1/audit-entries").json()
@@ -2442,7 +2612,7 @@ def test_activity_marks_a_write_that_repeats_the_previous_run(tmp_path: Path) ->
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         repeated = {
             entry["id"]: entry["repeated"]
             for entry in client.get(
@@ -2479,7 +2649,7 @@ def test_activity_never_calls_a_source_change_a_repeat(tmp_path: Path) -> None:
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         repeated = {
             entry["id"]: entry["repeated"] for entry in client.get("/api/v1/audit-entries").json()
         }
@@ -2509,7 +2679,7 @@ def test_activity_keeps_an_observed_empty_title_but_names_untitled_cancellations
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         entries = {
             entry["id"]: entry["event"] for entry in client.get("/api/v1/audit-entries").json()
         }
@@ -2543,7 +2713,7 @@ def test_activity_shows_the_recurrence_each_entry_saw(tmp_path: Path) -> None:
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         recurring = {
             entry["id"]: entry["event"]["recurring"]
             for entry in client.get("/api/v1/audit-entries").json()
@@ -2565,7 +2735,7 @@ def test_activity_does_not_carry_names_across_rules(tmp_path: Path) -> None:
     )
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         entries = client.get("/api/v1/audit-entries").json()
 
     assert [entry["event"] and entry["event"]["title"] for entry in entries] == [None, "Dentist"]
@@ -2581,13 +2751,13 @@ def test_cancelled_source_events_keep_their_title_for_display(tmp_path: Path) ->
     container, adapters = _installation(
         Settings(tmp_path / "test.db"), calendar_provider=cast(CalendarProvider, provider)
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule())
         uow.commit()
     _append_audit(adapters, _audit("delete", "source_cancelled"))
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         response = client.get("/api/v1/audit-entries/1/event")
 
     assert response.json()["source"]["cancelled"] is True
@@ -2599,22 +2769,23 @@ def test_sync_reconciliation_and_removal_share_one_rule_lock(tmp_path: Path) -> 
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
 
-    assert container.execute_sync_rule is not None
-    assert container.reconcile_now is not None
-    assert container.execute_sync_rule.locks is adapters.locks
-    assert container.reconcile_now.reconcile.locks is adapters.locks
-    assert container.remove_sync_rule.locks is adapters.locks
+    services = _services(container)
+    assert services.execute_sync_rule is not None
+    assert services.reconcile_now is not None
+    assert services.execute_sync_rule.locks is adapters.locks
+    assert services.reconcile_now.reconcile.locks is adapters.locks
+    assert services.remove_sync_rule.locks is adapters.locks
 
 
 def test_pause_waits_for_an_in_flight_provider_write(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule())
         uow.commit()
     responses: list[int] = []
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         writing = adapters.locks.for_writes(rule().id)
         writing.acquire()
         worker = Thread(
@@ -2643,8 +2814,7 @@ def test_activity_event_of_a_removed_rule_reports_gone_without_provider_reads(
         compose(settings, replace(adapters, calendar_provider=cast(CalendarProvider, provider))),
     ):
         with TestClient(create_app(candidate)) as client:
-            client.post("/api/v1/setup/admin", json=PASSWORD)
-            client.post("/api/v1/session", json=PASSWORD)
+            sign_in(client)
             response = client.get("/api/v1/audit-entries/1/event")
             assert response.status_code == 410
             assert "removed" in response.json()["detail"]
@@ -2657,7 +2827,7 @@ def _waits_for_rule_writes(
 ) -> int:
     responses: list[int] = []
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         writing = adapters.locks.for_writes(rule().id)
         writing.acquire()
         worker = Thread(target=lambda: responses.append(request(client)))
@@ -2672,7 +2842,7 @@ def _waits_for_rule_writes(
 
 def test_enable_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.PREVIEWED))
         uow.commit()
 
@@ -2694,7 +2864,7 @@ def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
         '{"refresh_token":"synthetic-secret"}',
         provider=ProviderKind.GOOGLE,
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters, "personal")() as uow:
         uow.rules.add(
             SyncRule(
                 rule().id,
@@ -2712,7 +2882,7 @@ def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
     )
 
     assert status_code == 200
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         degraded = uow.rules.get(rule().id)
     assert degraded is not None
     assert degraded.state is SyncRuleState.DEGRADED
@@ -2720,7 +2890,7 @@ def test_disconnect_waits_for_a_concurrent_rule_change(tmp_path: Path) -> None:
 
 def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) -> None:
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.DRAFT))
         uow.commit()
     calendars = FakeCalendars()
@@ -2728,15 +2898,15 @@ def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) ->
     calendars.put(occurrence(master, 1, status=EventStatus.CANCELLED))
     fingerprinter = ProjectionFingerprinter()
     preview = PreviewSyncRule(
-        adapters.unit_of_work,
+        _units(adapters),
         calendars,
         EventProjector(),
         FixedClock(),
         SyncDecisionService(EventProjector(), fingerprinter),
     )
 
-    with TestClient(create_app(replace(container, preview_sync_rule=preview))) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+    with TestClient(create_app(_with_services(container, preview_sync_rule=preview))) as client:
+        sign_in(client)
         body = client.post("/api/v1/rules/rule-1/preview").json()
 
     assert body["eligible_events"] == 1
@@ -2760,17 +2930,17 @@ def test_delete_removal_reports_events_left_because_ownership_was_not_proven(
     calendars = FakeCalendars()
     calendars.put(event("native", calendar=rule().destination))
     container, adapters = _installation(Settings(tmp_path / "test.db"))
-    container = replace(
+    container = _with_services(
         container,
         remove_sync_rule=RemoveSyncRule(
-            adapters.unit_of_work,
+            _units(adapters),
             calendars,
             _ConnectedAccounts(),
             FixedClock(),
             adapters.locks,
         ),
     )
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule())
         uow.mappings.save(
             EventMapping(
@@ -2785,7 +2955,7 @@ def test_delete_removal_reports_events_left_because_ownership_was_not_proven(
         uow.commit()
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         removed = client.delete("/api/v1/rules/rule-1?projections=delete")
         after = client.get("/api/v1/rules/rule-1")
 
@@ -2820,10 +2990,10 @@ def test_recovering_a_rule_lapses_the_account_still_unauthorized(
         calendar_provider=cast(CalendarProvider, DeniedAccountProvider("personal-account")),
     )
     _connect_accounts(database, "personal-account", "work-account")
-    with adapters.unit_of_work() as uow:
+    with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.DEGRADED))
         uow.commit()
-    adapters.incidents.open(
+    adapters.incidents(administrator(adapters)).open(
         IncidentReport(
             "provider:rule-1",
             SyncRuleId("rule-1"),
@@ -2835,7 +3005,7 @@ def test_recovering_a_rule_lapses_the_account_still_unauthorized(
     )
 
     with TestClient(create_app(container), raise_server_exceptions=False) as client:
-        client.post("/api/v1/setup/admin", json={"password": "correct horse battery staple"})
+        sign_in(client)
         preview = client.post("/api/v1/rules/rule-1/preview")
         incidents = client.get("/api/v1/incidents").json()
         accounts = client.get("/api/v1/accounts").json()
@@ -2862,7 +3032,7 @@ def test_calendars_of_a_provider_this_installation_has_not_configured_are_unavai
     _connect_accounts(database, "account-1")
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/setup/admin", json=PASSWORD)
+        sign_in(client)
         listed = client.get("/api/v1/accounts/account-1/calendars")
         verified = client.post("/api/v1/accounts/account-1/verify")
 

@@ -242,7 +242,8 @@ function ActivityPage({
 
   function followIncident(action: IncidentAction) {
     if (action.kind === "settings") {
-      onViewChange("settings", action.accountId ? { search: accountSearch(action.accountId) } : undefined)
+      const search = action.accountId ? { search: accountSearch(action.accountId) } : {}
+      onViewChange("settings", { settingsTab: "connections", ...search })
     }
     else if (action.kind === "rule") onOpenRule(action.ruleId)
     else {

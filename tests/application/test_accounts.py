@@ -3,30 +3,43 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 from threading import Lock, Thread
+from typing import cast
 
 import pytest
 
 from calendar_sync.application.accounts import (
+    CheckAccountAccess,
     DeleteConnectedAccount,
     DisconnectConnectedAccount,
+    DiscoverCalendars,
     ListConnectedAccounts,
 )
 from calendar_sync.application.errors import (
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
 )
+from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
+    AccountAccess,
     AuditAction,
     AuditEntry,
     AuditOutcome,
+    CalendarAccess,
     ConnectedAccount,
     ConnectedAccountState,
+    DiscoveredCalendar,
+    IncidentRepository,
 )
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+    InMemoryUserUnitOfWorkFactory,
+)
+from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, endpoint
+from tests.users import OTHER_USER, USER
 
 ACCOUNT = ConnectedAccountId("personal")
 
@@ -63,8 +76,8 @@ class RecordingAccounts:
         return self.accounts.get(account_id)
 
 
-def _with_rules(*rules: SyncRule) -> InMemoryUnitOfWorkFactory:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+def _with_rules(*rules: SyncRule) -> InMemoryUserUnitOfWorkFactory:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     with unit_of_work() as uow:
         for rule in rules:
             uow.rules.add(rule)
@@ -74,7 +87,7 @@ def _with_rules(*rules: SyncRule) -> InMemoryUnitOfWorkFactory:
 
 def _deletion(
     *rules: SyncRule, state: ConnectedAccountState | None = ConnectedAccountState.DISCONNECTED
-) -> tuple[DeleteConnectedAccount, InMemoryUnitOfWorkFactory, RuleLocks]:
+) -> tuple[DeleteConnectedAccount, InMemoryUserUnitOfWorkFactory, RuleLocks]:
     unit_of_work = _with_rules(*rules)
     if state is not None:
         unit_of_work.state.accounts[ACCOUNT] = state
@@ -297,3 +310,46 @@ def test_deletion_is_refused_when_the_account_is_reauthorized_while_it_waited() 
     assert len(errors) == 1
     assert unit_of_work.state.accounts == {ACCOUNT: ConnectedAccountState.CONNECTED}
     assert list(unit_of_work.state.rules) == [affected.id]
+
+
+class CountingCalendars:
+    """A provider that answers for any account, so only the use case can refuse one."""
+
+    def __init__(self) -> None:
+        self.asked: list[ConnectedAccountId] = []
+
+    def calendars(self, account_id: ConnectedAccountId) -> tuple[DiscoveredCalendar, ...]:
+        self.asked.append(account_id)
+        return (DiscoveredCalendar("primary", "Family", CalendarAccess.OWNER, primary=True),)
+
+    def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
+        self.asked.append(account_id)
+        return AccountAccess(calendars_visible=1, writable_calendars=1)
+
+
+def test_discovering_calendars_of_another_users_account_asks_no_provider() -> None:
+    database = InMemoryUnitOfWorkFactory()
+    database.for_user(OTHER_USER).state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
+    calendars = CountingCalendars()
+    discover = DiscoverCalendars(calendars, database.for_user(USER))
+
+    with pytest.raises(ConnectedAccountNotFound):
+        discover.execute(ACCOUNT)
+
+    assert calendars.asked == []
+    assert database.for_user(OTHER_USER).state.calendar_names == {}
+
+
+def test_checking_access_of_another_users_account_asks_no_provider() -> None:
+    units = InMemoryUnitOfWorkFactory().for_user(USER)
+    calendars = CountingCalendars()
+    check = CheckAccountAccess(
+        calendars,
+        RecordingAccounts(),
+        LapsedAuthorizations(units, cast(IncidentRepository, None), FixedClock()),
+    )
+
+    with pytest.raises(ConnectedAccountNotFound):
+        check.execute(ACCOUNT)
+
+    assert calendars.asked == []

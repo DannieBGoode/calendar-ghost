@@ -1,9 +1,9 @@
 # Self-host Calendar Ghost
 
 This guide deploys the Calendar Ghost Community Edition on infrastructure you control. The
-Community Edition is a single-installation service: one administrator, one SQLite database, one
-scheduler, and one application process. It does not require a Calendar Ghost account, hosted
-coordinator, telemetry, or subscription.
+Community Edition is one service: one SQLite database, one scheduler, and one application process,
+for you alone or for the people you invite, each with private calendars and rules. It does not
+require a Calendar Ghost account, hosted coordinator, telemetry, or subscription.
 
 For the data inventory and deletion rules, read [Data ownership and privacy](data-ownership.md).
 For deployment details and the LAN redirect options, read [Deployment](deployment.md).
@@ -116,7 +116,8 @@ docker compose up -d --build
 curl --fail http://localhost:8000/health
 ```
 
-Open <http://localhost:8000> and create the local administrator. Then:
+Open <http://localhost:8000> and create the administrator with your email and a password of at
+least 12 characters. Then:
 
 1. Connect each Google identity. The browser must be able to return to the configured redirect
    URI after Google consent.
@@ -126,8 +127,37 @@ Open <http://localhost:8000> and create the local administrator. Then:
 5. Check **Activity** after the first run and confirm that the destination contains only the
    projections you intended.
 
-Check **Settings → Connected accounts** if a calendar is missing. The access check uses read-only
-requests and reports which calendars can be used as destinations.
+Check **Settings → Connections → Connected accounts** if a calendar is missing. The access check
+uses read-only requests and reports which calendars can be used as destinations.
+
+### Invite other people
+
+A new installation is for you alone: its Registration Policy is **Only me**, so nobody else can
+join and the app shows nothing about other people. To share it with your household:
+
+1. Open **Settings → Administration → Who can join** and choose **Invitation only**. A **People**
+   page appears in the main navigation.
+2. On **People**, choose **Invite someone** and pass the link on yourself. It works once and expires
+   after 7 days; the person chooses their own email and password.
+3. Everyone's Google accounts, rules, Activity, and tokens are their own. As the administrator you
+   see each person's email, role, whether they may sign in, when they joined, and when they last
+   signed in, never their calendars or events. Search by part of an email, filter by role or
+   state, sort by email, joining, or last sign-in, and page through 50 people at a time; the
+   address keeps your choices, so a reload or a shared link shows the same list.
+
+From **People** you can also make someone an administrator, disable someone, which signs them out
+and holds their rules until you enable them again, create a password reset link for someone who
+forgot theirs, or delete someone. Deleting someone deletes their sign-in, rules, Google connections,
+tokens, and Activity, and the events their rules wrote wherever Calendar Ghost can still reach
+them; their own events and their Google accounts stay as they are. While anyone else remains, the
+installation keeps one administrator who can sign in, so the last administrator must make someone
+else an administrator before deleting their own account. You may return to **Only me** once you are
+the only person again. Anyone can change their own email and password, turn their incident emails
+off, or delete their own account under **Settings → Your account**, choosing whether the events
+their rules wrote are deleted too. When the last person deletes
+their own account, Calendar Ghost returns to setup: the next person to open it creates the
+administrator, as on a new installation, and the Google OAuth settings and master key in `.env`
+stay as they were.
 
 ## 5. Use a LAN host or HTTPS
 
@@ -150,11 +180,19 @@ options.
 
 ## 6. Connect monitors and agents
 
-Installation Status is the authenticated counterpart to `/health`: it reports which rules are
-running, which are stopped and why, whether the scheduler itself is still running passes, and one
-overall verdict, through `GET /api/v1/status` and an MCP server at `/mcp`. Both require an
-Integration Token, a credential you issue in **Settings → Integrations** for one monitor, dashboard,
-or agent at a time.
+Installation Status is the authenticated counterpart to `/health`: it reports which of your rules
+are running, which are stopped and why, whether the scheduler itself is still running passes, and
+one overall verdict, through `GET /api/v1/status` and an MCP server at `/mcp`. Both require an
+Integration Token, a credential you issue in **Settings → Connections → Integrations** for one
+monitor, dashboard, or agent at a time. A token belongs to the person who issued it and reads only
+their status.
+
+As an administrator, you may also let a token read Installation Health at
+`GET /api/v1/installation/health`: incidents about the installation itself, such as a stalled
+scheduler, and how many people are in each status. It names no rule, calendar, or person, which
+makes it the right answer for a monitor that watches the installation for everyone. Tick **Also
+read Installation Health** when you issue the token; it stops working there if you stop being an
+administrator.
 
 A token only reads status, and plain HTTP on this machine or your home network is normal for a
 homelab: anyone on that network could read a token sent to it, and nothing more. Before you use a
@@ -167,8 +205,8 @@ logging configuration before relying on it.
 
 To issue a token:
 
-1. Open **Settings → Integrations** and choose **Show**. The group stays collapsed to one line, such
-   as "2 tokens · last used 3 minutes ago", until you open it.
+1. Open **Settings → Connections → Integrations** and choose **Show**. The group stays collapsed to
+   one line, such as "2 tokens · last used 3 minutes ago", until you open it.
 2. Under **Issue a token**, name the tool that will use it, for example "Uptime Kuma", and choose
    **Issue token**.
 3. Copy the token, then choose **Done**. It is shown only once. If you lose it, issue a new one and
@@ -310,12 +348,14 @@ stateless and answers `POST` only. Calendar Ghost has no OAuth sign-in for MCP; 
 for one gets `404` and should then use the token you configured. Claude Code, Codex, and Claude
 Code through `mcp-remote` were each checked against a running installation with this release.
 
-The MCP server offers two read-only tools, and explains each status to the agent itself:
+The MCP server offers three read-only tools, and explains each status to the agent itself:
 
 - `get_status` returns the same answer as `/api/v1/status`.
 - `get_rule` takes a rule id or its "Source → Destination" name and adds the rule's last
   synchronization and reconciliation outcome: when it ran, whether it succeeded, and how many events
   it created, updated, deleted, or found in conflict.
+- `get_installation_health` returns the same answer as `/api/v1/installation/health`, for an
+  administrator's token with Installation Health.
 
 Ask the agent in plain words, for example "Is my calendar sync healthy?", "Why did Work → Family
 stop?", or "When did each rule last sync?". Calendar Ghost never changes a rule or a calendar through

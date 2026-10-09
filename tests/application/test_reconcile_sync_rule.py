@@ -29,7 +29,10 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.application.test_execute_sync_rule import (
     FakeCalendarProvider,
     FixedClock,
@@ -44,10 +47,11 @@ from tests.fake_calendar import (
     sync_use_case,
 )
 from tests.helpers import NOW, endpoint, event, occurrence, rule, series, week_start
+from tests.users import USER
 
 
 def test_reconciliation_independently_proves_managed_projection() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
     projector = EventProjector()
@@ -75,7 +79,7 @@ def test_reconciliation_independently_proves_managed_projection() -> None:
 
 
 def test_reconciliation_records_its_outcome() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
     fingerprinter = ProjectionFingerprinter()
@@ -96,7 +100,7 @@ def test_reconciliation_records_its_outcome() -> None:
 
 
 def test_reconciliation_waits_for_the_rule_lock_held_by_removal_or_sync() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule()
     fingerprinter = ProjectionFingerprinter()
     locks = RuleLocks()
@@ -386,7 +390,7 @@ def test_reconciliation_reports_a_projection_left_behind_for_a_declined_event() 
 
 
 def _reconcile(
-    factory: InMemoryUnitOfWorkFactory, calendars: FakeCalendars, clock: Clock | None = None
+    factory: InMemoryUserUnitOfWorkFactory, calendars: FakeCalendars, clock: Clock | None = None
 ) -> ReconciliationReport:
     return ReconcileSyncRule(
         factory,
@@ -474,7 +478,10 @@ def test_reconciliation_runs_against_a_calendar_that_can_only_read() -> None:
 
 
 def _edit_destination_occurrence(
-    factory: InMemoryUnitOfWorkFactory, calendars: FakeCalendars, master_ref: EventRef, week: int
+    factory: InMemoryUserUnitOfWorkFactory,
+    calendars: FakeCalendars,
+    master_ref: EventRef,
+    week: int,
 ) -> None:
     destination = factory.state.mappings[(rule().id, master_ref)].destination
     edited = calendars.get_occurrence(destination, week_start(week))

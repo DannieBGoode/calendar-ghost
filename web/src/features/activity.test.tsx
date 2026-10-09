@@ -9,6 +9,7 @@ import { ActivityView } from "./activity"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
+import type { ViewChange } from "@/lib/navigation"
 import type {
   api,
   AuditEntry,
@@ -283,7 +284,10 @@ async function settle(times = 8) {
   }
 }
 
+let viewChange = vi.fn<ViewChange>()
+
 async function renderActivity(i18n: I18n, scenario: Scenario = {}, search = "") {
+  viewChange = vi.fn<ViewChange>()
   window.history.replaceState(null, "", `/activity${search}`)
   mockFetch(scenario)
   root = createRoot(container)
@@ -292,7 +296,7 @@ async function renderActivity(i18n: I18n, scenario: Scenario = {}, search = "") 
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
-          <ActivityView onViewChange={() => undefined} onOpenRule={() => undefined} />
+          <ActivityView onViewChange={viewChange} onOpenRule={() => undefined} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
@@ -310,6 +314,16 @@ async function click(element: Element | null) {
 }
 
 describe("ActivityView", () => {
+  it("sends an authorization incident to the failed account under Settings → Connections", async () => {
+    await renderActivity(testI18n())
+    const reauthorize = [...container.querySelectorAll("button")].find((item) => item.textContent === "Reauthorize in Settings")
+    await click(reauthorize ?? null)
+    expect(viewChange).toHaveBeenCalledWith("settings", {
+      settingsTab: "connections",
+      search: `?account=${accountA.id}`,
+    })
+  })
+
   it("shows what each Incident says and what each entry did", async () => {
     await renderActivity(testI18n())
     await click(container.querySelector(".resolved-incidents-toggle"))

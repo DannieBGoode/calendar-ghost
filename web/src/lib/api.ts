@@ -76,7 +76,7 @@ function errorCode(body: unknown): ApiErrorCode {
   return { code, params }
 }
 
-type Method = "get" | "post" | "patch" | "delete"
+type Method = "get" | "post" | "put" | "patch" | "delete"
 /** The methods a path declares in the schema. */
 type MethodOf<P extends keyof paths> = {
   [M in Method]: paths[P][M] extends { responses: unknown } ? M : never
@@ -124,7 +124,9 @@ export function call<P extends keyof paths, M extends MethodOf<P>>(
   method: M,
   ...[inputs]: InputArgs<Operation<P, M>>
 ): Promise<Success<Operation<P, M>>> {
-  const { params, query, body } = (inputs ?? {}) as {
+  // Widened before it is read: the inputs' own type spans every route, which is too wide to narrow.
+  const given: unknown = inputs
+  const { params, query, body } = (given ?? {}) as {
     params?: Readonly<Record<string, string | number>>
     query?: Readonly<Record<string, QueryValue>>
     body?: unknown
@@ -196,17 +198,101 @@ export type DatabaseUsage = Schemas["DatabaseUsageResponse"]
 export type LogUsage = Schemas["LogUsageResponse"]
 export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
 
+export type SetupStatus = Schemas["SetupStatusResponse"]
+export type SessionStatus = Schemas["SessionResponse"]
+export type SignedInUser = Schemas["SignedInUserResponse"]
+
 export type IntegrationToken = Schemas["IntegrationTokenResponse"]
 export type IssuedIntegrationToken = Schemas["IssuedIntegrationTokenResponse"]
+/** What a token may read: its User's Installation Status, and for an administrator's, Installation Health. */
+export type IntegrationScope = IntegrationToken["scopes"][number]
+
+/** Who may become a User: Only Me, the default, or Invitation Only. */
+export type Registration = Schemas["RegistrationResponse"]
+export type RegistrationPolicy = Registration["policy"]
+/** A User as an Installation Administrator sees them: never their calendars, rules, or events. */
+export type Person = Schemas["UserResponse"]
+export type PersonRole = Person["role"]
+export type PersonState = Person["state"]
+/** One page of the people an administrator looks for, and how many match across every page. */
+export type PeoplePage = Schemas["UserPageResponse"]
+type PeopleParams = NonNullable<paths["/api/v1/users"]["get"]["parameters"]["query"]>
+export type PeopleSort = NonNullable<PeopleParams["sort"]>
+export type SortOrder = NonNullable<PeopleParams["order"]>
+/** What the People page asks for; an empty role or state matches everyone. */
+export type PeopleQuery = {
+  /** Part of an email, in any case. */
+  search: string
+  role: PersonRole | ""
+  state: PersonState | ""
+  sort: PeopleSort
+  order: SortOrder
+  /** From 1. */
+  page: number
+}
+export type PendingInvitation = Schemas["PendingInvitationResponse"]
+/** An Invitation or Password Reset Link; its token is shown once. */
+export type IssuedLink = Schemas["IssuedLinkResponse"]
+export type UserDeletion = Schemas["UserDeletionResponse"]
 
 export const ACTIVITY_PAGE_SIZE = 100
+export const PEOPLE_PAGE_SIZE = 50
 
 export const api = {
   setup: () => call("/api/v1/setup", "get"),
   session: () => call("/api/v1/session", "get"),
-  createAdmin: (password: string) => call("/api/v1/setup/admin", "post", { body: { password } }),
-  logIn: (password: string) => call("/api/v1/session", "post", { body: { password } }),
+  createAdmin: (email: string, password: string) =>
+    call("/api/v1/setup/admin", "post", { body: { email, password } }),
+  /** A null email signs in the upgraded first User, until they add one. */
+  logIn: (email: string | null, password: string) =>
+    call("/api/v1/session", "post", { body: { email, password } }),
+  /** Adds the email the upgraded first User must add; changing one also needs the password. */
+  setOwnEmail: (email: string, password?: string) =>
+    call("/api/v1/account/email", "put", { body: password === undefined ? { email } : { email, password } }),
   logOut: () => call("/api/v1/session", "delete"),
+  /** Ends every other session of the signed-in User. */
+  changeOwnPassword: (currentPassword: string, newPassword: string) =>
+    call("/api/v1/account/password", "put", {
+      body: { current_password: currentPassword, new_password: newPassword },
+    }),
+  setIncidentEmails: (notifyByEmail: boolean) =>
+    call("/api/v1/account/notifications", "put", { body: { notify_by_email: notifyByEmail } }),
+  /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
+  ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),
+  deleteOwnAccount: (password: string, projections: ProjectionHandling) =>
+    call("/api/v1/account", "delete", { body: { password, projections } }),
+  registration: () => call("/api/v1/registration", "get"),
+  setRegistrationPolicy: (policy: RegistrationPolicy) => call("/api/v1/registration", "put", { body: { policy } }),
+  invitations: () => call("/api/v1/invitations", "get"),
+  invite: () => call("/api/v1/invitations", "post"),
+  revokeInvitation: (invitationId: string) =>
+    call("/api/v1/invitations/{invitation_id}", "delete", { params: { invitation_id: invitationId } }),
+  checkInvitation: (token: string) => call("/api/v1/invitations/check", "post", { body: { token } }),
+  /** Creates the invited User and signs them in. */
+  acceptInvitation: (token: string, email: string, password: string) =>
+    call("/api/v1/invitations/accept", "post", { body: { token, email, password } }),
+  checkPasswordReset: (token: string) => call("/api/v1/password-resets/check", "post", { body: { token } }),
+  resetPassword: (token: string, password: string) =>
+    call("/api/v1/password-resets", "post", { body: { token, password } }),
+  people: ({ search, role, state, sort, order, page }: PeopleQuery) =>
+    call("/api/v1/users", "get", {
+      query: {
+        ...(search.trim() ? { search: search.trim() } : {}),
+        role: role || null,
+        state: state || null,
+        sort,
+        order,
+        page,
+        page_size: PEOPLE_PAGE_SIZE,
+      },
+    }),
+  setPersonRole: (userId: string, role: PersonRole) =>
+    call("/api/v1/users/{user_id}/role", "put", { params: { user_id: userId }, body: { role } }),
+  setPersonState: (userId: string, state: PersonState) =>
+    call("/api/v1/users/{user_id}/state", "put", { params: { user_id: userId }, body: { state } }),
+  issuePasswordResetLink: (userId: string) =>
+    call("/api/v1/users/{user_id}/password-reset-links", "post", { params: { user_id: userId } }),
+  deletePerson: (userId: string) => call("/api/v1/users/{user_id}", "delete", { params: { user_id: userId } }),
   dashboard: () => call("/api/v1/dashboard", "get"),
   rules: () => call("/api/v1/rules", "get"),
   rule: (ruleId: string) => call("/api/v1/rules/{rule_id}", "get", { params: { rule_id: ruleId } }),
@@ -263,7 +349,8 @@ export const api = {
     call("/api/v1/storage/activity/clear", "post", { body: { older_than_days: days } }),
   purgeLogs: () => call(STORAGE_LOGS_URL, "delete"),
   integrationTokens: () => call("/api/v1/integration-tokens", "get"),
-  issueIntegrationToken: (name: string) => call("/api/v1/integration-tokens", "post", { body: { name } }),
+  issueIntegrationToken: (name: string, scopes: IntegrationScope[] = ["status:read"]) =>
+    call("/api/v1/integration-tokens", "post", { body: { name, scopes } }),
   revokeIntegrationToken: (id: string) =>
     call("/api/v1/integration-tokens/{token_id}", "delete", { params: { token_id: id } }),
 }

@@ -15,9 +15,12 @@ from calendar_sync.application.errors import (
     EventInspectionUnavailable,
 )
 from calendar_sync.domain.model import EventId, EventRef, SyncReason, SyncRuleState
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUnitOfWorkFactory,
+)
 from tests.fake_calendar import FakeCalendars
 from tests.helpers import event, rule
+from tests.users import USER
 
 
 @pytest.mark.parametrize(
@@ -93,7 +96,7 @@ class Entries:
 def _inspection(
     events: EntryEvents | None, calendars: FakeCalendars | None
 ) -> InspectActivityEvent:
-    unit_of_work = InMemoryUnitOfWorkFactory()
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule()
     return InspectActivityEvent(Entries(events), unit_of_work, calendars)
 

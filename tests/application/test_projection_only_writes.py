@@ -9,7 +9,9 @@ import pytest
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.domain.model import CalendarEvent, EventRef, OccurrenceStart, SyncReason
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryUserUnitOfWorkFactory,
+)
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import event, occurrence, rule, series, week_start
 
@@ -31,11 +33,11 @@ class FlakyCalendars(FakeCalendars):
         return super().get_occurrence(series, original_start)
 
 
-def _series_mapping_revision(factory: InMemoryUnitOfWorkFactory) -> str:
+def _series_mapping_revision(factory: InMemoryUserUnitOfWorkFactory) -> str:
     return factory.state.mappings[(rule().id, series().reference)].source_revision
 
 
-def _synced_series_with_exception() -> tuple[FlakyCalendars, InMemoryUnitOfWorkFactory]:
+def _synced_series_with_exception() -> tuple[FlakyCalendars, InMemoryUserUnitOfWorkFactory]:
     calendars = FlakyCalendars()
     calendars.put(series(), starts=STARTS)
     factory = enabled_rule_factory()

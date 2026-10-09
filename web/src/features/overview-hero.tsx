@@ -3,7 +3,14 @@ import { ArrowRight, CheckCircle2 } from "lucide-react"
 import { GhostMark, type GhostExpression } from "@/components/ghost-mark"
 import { Button } from "@/components/ui/button"
 import { useI18n } from "@/i18n/provider"
-import { appPathForRule, appPathForView, isPlainLeftClick, type OpenRule, type ViewChange } from "@/lib/navigation"
+import {
+  appPathForLocation,
+  appPathForRule,
+  isPlainLeftClick,
+  type OpenRule,
+  type ViewChange,
+  type ViewOptions,
+} from "@/lib/navigation"
 import type { HealthAction, OverviewHealth, OverviewTone } from "@/lib/overview-health"
 import { overviewHeroCallouts } from "@/lib/overview-hero"
 
@@ -19,7 +26,15 @@ const GHOST_EXPRESSIONS: Record<OverviewTone, GhostExpression> = {
 const CALLOUT_POSITIONS = ["beside", "above", "below", "above-left"] as const
 
 function healthActionPath(action: HealthAction): string {
-  return action.ruleId ? appPathForRule(action.ruleId) : `${appPathForView(action.view)}${action.search ?? ""}`
+  if (action.ruleId) return appPathForRule(action.ruleId)
+  const tab = action.settingsTab ? { settingsTab: action.settingsTab } : {}
+  return `${appPathForLocation({ view: action.view, ruleId: null, ...tab })}${action.search ?? ""}`
+}
+
+/** Where an action leads besides its view: a filter, or the Settings tab it is about. */
+function healthActionOptions({ search, settingsTab }: HealthAction): ViewOptions | undefined {
+  if (!search && !settingsTab) return undefined
+  return { ...(search ? { search } : {}), ...(settingsTab ? { settingsTab } : {}) }
 }
 
 /** The Overview's headline: how synchronization is doing, what to do next, and the ghost's mood. */
@@ -39,7 +54,7 @@ export function HealthHero({
     if (!isPlainLeftClick(event)) return
     event.preventDefault()
     if (action.ruleId) onOpenRule(action.ruleId)
-    else onViewChange(action.view, action.search ? { search: action.search } : undefined)
+    else onViewChange(action.view, healthActionOptions(action))
   }
 
   return (

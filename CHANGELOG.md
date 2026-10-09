@@ -24,13 +24,35 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Several people can share one installation, each with private Google accounts, rules, Activity,
+  incidents, and tokens ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
+  [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). People sign in with email and
+  password. The Registration Policy is **Only me** by default; an administrator may choose
+  **Invitation only** and send single-use invitation links that expire after 7 days. A **People**
+  page lists everyone with search, filters, sorting, and pages, and holds invitations, roles,
+  disabling, password reset links, and deletion. Settings is split into **Your account** (email,
+  password, incident emails, appearance, and deleting your own account), **Connections** (Google
+  accounts and Integrations), and, for administrators, **Administration** (Who can join and
+  Storage). An administrator never sees anyone's calendars or events. The last person may delete
+  their own account, which returns the installation to setup.
+- Migrations 21 to 23 give every record a User, turn the existing administrator into the first User
+  with every existing record, add the Registration Policy and hashed links, and give Integration
+  Tokens scopes. Rolling back past them means restoring the backup taken before the upgrade.
+- Installation Health, for administrators and their monitors, at `GET /api/v1/installation/health`
+  and as the MCP tool `get_installation_health`, through the new `installation:read` token scope:
+  incidents about the installation itself and how many people are in each status.
+- The installation's SMTP recipient and webhook are told when the scheduler stops completing passes.
+- Failed sign-ins are throttled per email and per client address. Unusable invitation and password
+  reset links are throttled per client address, twenty in 15 minutes, and are refused before any
+  password is hashed.
+
 - The Web UI footer links to the troubleshooting guide ("Get help"), which ends with where to ask
   questions (GitHub Discussions), report bugs (a new bug report form), or email
   support@calendarghost.com.
 - Monitors, homelab dashboards, and AI agents can read Installation Status with an Integration
   Token: `GET /api/v1/status` for tools like Uptime Kuma and Homepage, and an MCP server at `/mcp`
-  for Claude Code, Codex, and other agents. Settings → Integrations, collapsed until opened, issues
-  and revokes tokens and shows setup examples for each tool.
+  for Claude Code, Codex, and other agents. Settings → Connections → Integrations, collapsed until
+  opened, issues and revokes tokens and shows setup examples for each tool.
 - Installation Status notices a scheduler that stopped running passes and a rule that has not
   synced in over a day.
 - The Web UI is ready for translation: catalogs, plural rules, and locale-aware dates and numbers.
@@ -41,6 +63,21 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   `message` by the Incidents API and on each Installation Status problem an Incident explains.
 
 ### Changed
+
+- After upgrading, the administrator signs in with their password once and then adds the email they
+  sign in with from now on. Setup asks for an email and a password.
+- Incident Notifications go to the person who owns the rule or account, by email when SMTP is
+  configured, unless they turn it off. `CALENDAR_SYNC_SMTP_RECIPIENT` and
+  `CALENDAR_SYNC_INCIDENT_WEBHOOK_URL` now receive only incidents about the installation itself, so
+  a webhook that received rule incidents before no longer does.
+- `GET /api/v1/status` and MCP answer for the person who issued the token, in the same shape.
+  Existing tokens belong to the first User and keep both scopes, so their answers do not change.
+  The Integration Token list returns `scopes` instead of `scope`.
+- Google's OAuth callback connects an account only in a browser signed in as the person who
+  started connecting it. A consent link opened by anyone else, or without signing in, connects
+  nothing and returns to Connections with "authorization failed".
+- Storage settings are for administrators only. Sync now, Reconcile now, and Preview answer `404`
+  instead of `409` for a rule that does not exist.
 
 - The database uses SQLite's write-ahead log, so the Web UI no longer waits for a scheduler write,
   nor a write for a Web UI read. The first start switches an existing database over; back up the

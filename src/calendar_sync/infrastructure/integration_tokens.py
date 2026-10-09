@@ -4,7 +4,6 @@ import logging
 import secrets
 import sqlite3
 from collections.abc import Sequence
-from contextlib import AbstractContextManager
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -17,6 +16,7 @@ from calendar_sync.application.ports import (
     IntegrationTokenSummary,
     IssuedIntegrationToken,
 )
+from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import token_hash
 
@@ -25,69 +25,33 @@ logger = logging.getLogger(__name__)
 USAGE_GRANULARITY = timedelta(minutes=5)
 """A monitor polling every 20 seconds must not write to SQLite on every request."""
 
-_COLUMNS = "id, name, scope, created_at, last_used_at, revoked_at"
+_COLUMNS = "id, user_id, name, scopes, created_at, last_used_at, revoked_at"
 
 
 class SqliteIntegrationTokens:
+    """Integration Tokens: each User manages their own through `for_user`; authenticating a
+    presented token finds it whoever owns it, and says whose it is. A Disabled User's tokens read
+    nothing until they are enabled again."""
+
     def __init__(self, database_path: Path, clock: Clock, ids: IdGenerator) -> None:
         self._database_path = database_path
         self._clock = clock
         self._ids = ids
 
-    def issue(self, name: str) -> IssuedIntegrationToken:
-        cleaned = token_name(name)
-        token = TOKEN_PREFIX + secrets.token_urlsafe(32)
-        summary = IntegrationTokenSummary(
-            self._ids.new(),
-            cleaned,
-            IntegrationTokenScope.STATUS_READ,
-            self._clock.now(),
-            None,
-            None,
-        )
-        with self._connect() as connection:
-            connection.execute(
-                """
-                INSERT INTO integration_tokens (id, name, token_hash, scope, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (
-                    summary.id,
-                    summary.name,
-                    token_hash(token),
-                    summary.scope.value,
-                    summary.created_at.isoformat(),
-                ),
-            )
-        return IssuedIntegrationToken(summary, token)
-
-    def list(self) -> Sequence[IntegrationTokenSummary]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                f"""
-                SELECT {_COLUMNS} FROM integration_tokens
-                ORDER BY revoked_at IS NOT NULL, created_at DESC, id
-                """  # noqa: S608
-            ).fetchall()
-        return [_summary(row) for row in rows]
-
-    def revoke(self, token_id: str) -> bool:
-        with self._connect() as connection:
-            cursor = connection.execute(
-                "UPDATE integration_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL",
-                (self._clock.now().isoformat(), token_id),
-            )
-        return cursor.rowcount == 1
+    def for_user(self, user_id: UserId) -> SqliteUserIntegrationTokens:
+        return SqliteUserIntegrationTokens(self._database_path, user_id, self._clock, self._ids)
 
     def authenticate(self, token: str) -> IntegrationTokenSummary | None:
         if not is_well_formed(token):
             return None
         now = self._clock.now()
-        with self._connect() as connection:
+        with transaction(self._database_path) as connection:
             row = connection.execute(
                 f"""
                 SELECT {_COLUMNS} FROM integration_tokens
-                WHERE token_hash = ? AND revoked_at IS NULL
+                WHERE token_hash = ? AND revoked_at IS NULL AND user_id IN (
+                    SELECT id FROM users WHERE state = 'active'
+                )
                 """,  # noqa: S608
                 (token_hash(token),),
             ).fetchone()
@@ -98,8 +62,72 @@ class SqliteIntegrationTokens:
                 summary = _record_use(connection, summary, now)
         return summary
 
-    def _connect(self) -> AbstractContextManager[sqlite3.Connection]:
-        return transaction(self._database_path)
+
+class SqliteUserIntegrationTokens:
+    """One User's Integration Tokens; another User's are neither listed nor revoked."""
+
+    def __init__(
+        self, database_path: Path, user_id: UserId, clock: Clock, ids: IdGenerator
+    ) -> None:
+        self._database_path = database_path
+        self._user = user_id
+        self._clock = clock
+        self._ids = ids
+
+    def issue(
+        self,
+        name: str,
+        scopes: frozenset[IntegrationTokenScope] = frozenset({IntegrationTokenScope.STATUS_READ}),
+    ) -> IssuedIntegrationToken:
+        cleaned = token_name(name)
+        token = TOKEN_PREFIX + secrets.token_urlsafe(32)
+        summary = IntegrationTokenSummary(
+            self._ids.new(),
+            cleaned,
+            scopes,
+            self._clock.now(),
+            None,
+            None,
+            owner=self._user,
+        )
+        with transaction(self._database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO integration_tokens (id, user_id, name, token_hash, scopes, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    summary.id,
+                    self._user.value,
+                    summary.name,
+                    token_hash(token),
+                    " ".join(sorted(scope.value for scope in scopes)),
+                    summary.created_at.isoformat(),
+                ),
+            )
+        return IssuedIntegrationToken(summary, token)
+
+    def list(self) -> Sequence[IntegrationTokenSummary]:
+        with transaction(self._database_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT {_COLUMNS} FROM integration_tokens WHERE user_id = ?
+                ORDER BY revoked_at IS NOT NULL, created_at DESC, id
+                """,  # noqa: S608
+                (self._user.value,),
+            ).fetchall()
+        return [_summary(row) for row in rows]
+
+    def revoke(self, token_id: str) -> bool:
+        with transaction(self._database_path) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE integration_tokens SET revoked_at = ?
+                WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+                """,
+                (self._clock.now().isoformat(), token_id, self._user.value),
+            )
+        return cursor.rowcount == 1
 
 
 def _record_use(
@@ -126,10 +154,11 @@ def _summary(row: sqlite3.Row) -> IntegrationTokenSummary:
     return IntegrationTokenSummary(
         id=str(row["id"]),
         name=str(row["name"]),
-        scope=IntegrationTokenScope(str(row["scope"])),
+        scopes=frozenset(IntegrationTokenScope(scope) for scope in str(row["scopes"]).split()),
         created_at=datetime.fromisoformat(str(row["created_at"])),
         last_used_at=_time(row["last_used_at"]),
         revoked_at=_time(row["revoked_at"]),
+        owner=UserId(str(row["user_id"])),
     )
 
 
