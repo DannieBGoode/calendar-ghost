@@ -183,12 +183,17 @@ describe("A person's page", () => {
     expect(text).toContain("3 events couldn't be synced")
     expect(text).toContain(RULE_NAME)
     expect(text).toContain("40 Activity entries")
-    expect(text).toContain("Google Calendar: 75 calls, 1 refused for its rate limit, 0 failed")
+    expect(text).toContain("Google Calendar: 75 calls, 1 refused for too many requests, 0 failed")
+    // Who acts on the problem, and how.
+    expect(text).toContain("robin@example.test finds what happened and what to do in their Activity.")
     expect([...container.querySelectorAll("h2")].map((heading) => heading.textContent)).toEqual([
-      "Problems",
+      "Synchronization",
       "Rules",
-      "Resource use",
+      "Rules, accounts, and calls",
     ])
+    // Health comes before the rules, and the privacy note closes the page.
+    expect(container.querySelector(".user-overview > section")?.textContent).toContain("Needs a look")
+    expect(container.querySelector(".page-footnote")?.textContent).toContain("never their calendar names")
   })
 
   it("has no untranslated text with its actions open", async () => {

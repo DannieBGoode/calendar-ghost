@@ -81,6 +81,17 @@ const overview: UserOverview = {
   },
 }
 
+/** The User's own rules, which name their calendars; only they see these names. */
+const ownEndpoint = (calendar: string, name: string) => ({
+  connected_account_id: "account-1",
+  calendar_id: `${calendar}@group.example`,
+  calendar_name: name,
+})
+const OWN_RULES = [
+  { id: "rule-1", source: ownEndpoint("one", "Family"), destination: ownEndpoint("two", "Work") },
+  { id: "rule-2", source: ownEndpoint("two", "Work"), destination: ownEndpoint("three", "Trips") },
+]
+
 const member: SessionStatus = {
   authenticated: true,
   installation_sends_email: false,
@@ -118,6 +129,7 @@ async function render(i18n: I18n, session: SessionStatus, policy = "invitation_o
     "/api/v1/session": jsonResponse(session),
     "/api/v1/registration": jsonResponse({ policy, only_me_available: policy === "only_me" }),
     "/api/v1/account/overview": jsonResponse(overview),
+    "/api/v1/rules": jsonResponse(OWN_RULES),
   }
   requested = []
   vi.stubGlobal(
@@ -145,20 +157,48 @@ async function render(i18n: I18n, session: SessionStatus, policy = "invitation_o
   }
 }
 
+function showWhatTheySee() {
+  const toggle = container.querySelector<HTMLButtonElement>("button[aria-expanded]")!
+  act(() => toggle.click())
+}
+
+async function settle() {
+  for (let i = 0; i < 6; i += 1) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+  }
+}
+
 describe("AdministratorViewSection", () => {
-  it("shows exactly what administrators see, and what they never see", async () => {
+  it("is one summary row until asked for, saying what administrators never see", async () => {
     await render(testI18n(), member)
 
-    const text = container.textContent
     expect(container.querySelector("h2")?.textContent).toBe("What your administrator can see")
-    expect(text).toContain("They never see your calendar names, Google account emails, or events.")
-    expect(text).toContain("Stopped")
+    expect(container.textContent).toContain("never your calendar names, Google account emails, or events.")
+    expect(container.querySelector(".setting-row")?.textContent).toContain("Stopped")
+    expect(container.querySelector(".user-overview")).toBeNull()
+  })
+
+  it("shows exactly what administrators see, with the key to its numbers", async () => {
+    await render(testI18n(), member)
+    showWhatTheySee()
+    await settle()
+
+    const text = container.textContent
+    expect(container.querySelector("[aria-expanded='true']")?.textContent).toBe("Hide what they see")
+    expect([...container.querySelectorAll(".calendar-key li")].map((item) => item.textContent)).toEqual([
+      "Calendar 1 is Family",
+      "Calendar 2 is Work",
+      "Calendar 3 is Trips",
+    ])
     expect(text).toContain("A rule stopped syncing and writes nothing until it is fixed.")
     expect(text).toContain("Stopped syncing")
     for (const name of RULE_NAMES) expect(text).toContain(name)
     expect(text).toContain("2 rules")
     expect(text).toContain("14 Activity entries")
-    expect(text).toContain("Google Calendar: 120 calls, 0 refused for its rate limit, 1 failed")
+    expect(text).toContain("Google Calendar: 120 calls, 0 refused for too many requests, 1 failed")
+    expect(text).toContain("Open the rule and preview it again to restart it.")
     expect(requested).toContain("/api/v1/account/overview")
   })
 
@@ -177,7 +217,9 @@ describe("AdministratorViewSection", () => {
 
   it("has no untranslated text", async () => {
     await render(pseudoI18n(), member)
+    showWhatTheySee()
+    await settle()
 
-    expect(untranslatedText(container, [...RULE_NAMES, ...dateWords()])).toEqual([])
+    expect(untranslatedText(container, ["Family", "Work", "Trips", ...dateWords()])).toEqual([])
   })
 })

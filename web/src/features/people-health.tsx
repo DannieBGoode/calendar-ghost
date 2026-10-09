@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query"
 
-import { Badge } from "@/components/ui/badge"
+import { Check } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useI18n } from "@/i18n/provider"
 import { api, type InstallationHealthReport, type Verdict } from "@/lib/api"
-import { verdictTone, VERDICTS } from "@/lib/operator-overview"
+import { VERDICTS } from "@/lib/operator-overview"
+import { VerdictBadge, VerdictIcon } from "@/components/verdict-badge"
 
 const REFRESH_INTERVAL = 60_000
 
@@ -30,7 +32,7 @@ export function InstallationHealthSummary({
     refetchInterval: REFRESH_INTERVAL,
   })
   return (
-    <section className="settings-section installation-health" aria-labelledby="installation-health-title">
+    <section className="workflow page-card installation-health" aria-labelledby="installation-health-title">
       <div className="section-heading">
         <h2 id="installation-health-title">{t("people.health.title")}</h2>
       </div>
@@ -65,7 +67,7 @@ function HealthReport({
   return (
     <div className="installation-health-report">
       <div className="user-overview-verdict">
-        <Badge variant={verdictTone(report.status)}>{t(`people.verdicts.${report.status}`)}</Badge>
+        <VerdictBadge verdict={report.status} />
         <p>{t(`people.health.summary.${report.status}`)}</p>
       </div>
       {report.incidents.map((incident) => (
@@ -77,15 +79,17 @@ function HealthReport({
         <div className="installation-health-counts" role="group" aria-label={t("people.health.countsLabel")}>
           {counted.map((each) => {
             const label = t(`people.verdicts.${each}`)
+            const pressed = verdict === each
             return (
               <Button
                 key={each}
                 type="button"
                 variant="outline"
-                size="sm"
-                aria-pressed={verdict === each}
-                onClick={() => onFilter(verdict === each ? "" : each)}
+                className="health-count"
+                aria-pressed={pressed}
+                onClick={() => onFilter(pressed ? "" : each)}
               >
+                {pressed ? <Check aria-hidden="true" /> : <VerdictIcon verdict={each} />}
                 {t("people.health.count", { verdict: label, count: report.users[each] ?? 0 })}
               </Button>
             )

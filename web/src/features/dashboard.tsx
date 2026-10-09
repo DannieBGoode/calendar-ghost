@@ -6,6 +6,7 @@ import { RuleDetailsView } from "@/features/rule-details"
 import { RulesView } from "@/features/rules"
 import { SettingsPage } from "@/features/settings"
 import {
+  DEFAULT_PEOPLE_TAB,
   DEFAULT_SETTINGS_TAB,
   type AppLocation,
   type OpenPerson,
@@ -81,7 +82,7 @@ export function Dashboard({
 
 /** People, or one person's page under it. */
 function PeopleRoute({
-  location: { personId },
+  location: { personId, peopleTab },
   arrival: { notice },
   visit,
   onViewChange,
@@ -104,5 +105,5 @@ function PeopleRoute({
     )
   }
   // Remounted on every arrival so its search, filters, and page match the address.
-  return <PeopleView key={visit} notice={notice ?? null} onOpenPerson={onOpenPerson} />
+  return <PeopleView key={visit} tab={peopleTab ?? DEFAULT_PEOPLE_TAB} notice={notice ?? null} onOpenPerson={onOpenPerson} />
 }

@@ -384,7 +384,7 @@ describe("Settings tabs", () => {
   }
 
   function tabs(): HTMLAnchorElement[] {
-    return [...container.querySelectorAll<HTMLAnchorElement>("nav.settings-tabs a")]
+    return [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")]
   }
 
   it.each([
@@ -398,7 +398,7 @@ describe("Settings tabs", () => {
 
   it("links each tab to its own address and marks the one shown", async () => {
     await renderSettings(testI18n(), { tab: "account" })
-    expect(container.querySelector("nav.settings-tabs")?.getAttribute("aria-label")).toBe("Settings sections")
+    expect(container.querySelector("nav.page-tabs")?.getAttribute("aria-label")).toBe("Settings sections")
     expect(tabs().map((tab) => [tab.textContent, tab.getAttribute("href"), tab.getAttribute("aria-current")])).toEqual([
       ["Your account", "/settings/account", "page"],
       ["Connections", "/settings/connections", null],

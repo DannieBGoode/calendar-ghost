@@ -1328,9 +1328,10 @@ p {
   gap: 3rem;
 }
 
-/* The Settings tabs are links, underlined like the primary navigation's items. On a screen too
-   narrow for them they scroll sideways rather than wrap, so the underline stays on one line. */
-.settings-tabs {
+/* A page's tabs (Settings, People) are links, underlined like the primary navigation's items. On a
+   screen too narrow for them they scroll sideways rather than wrap, so the underline stays on one
+   line. They sit close under the page heading, as part of it. */
+.page-tabs {
   display: flex;
   gap: 0.25rem;
   margin-top: -1.5rem;
@@ -1338,13 +1339,14 @@ p {
   box-shadow: inset 0 -1px 0 var(--border);
 }
 
-.settings-tab {
+.page-tab {
   position: relative;
   display: inline-flex;
   flex: none;
   min-height: 2.75rem;
   align-items: center;
-  padding: 0 0.8rem;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
   color: var(--muted-foreground);
   font-size: 0.875rem;
   font-weight: 600;
@@ -1353,7 +1355,7 @@ p {
   transition: color var(--motion-fast) var(--ease-out);
 }
 
-.settings-tab::after {
+.page-tab::after {
   position: absolute;
   right: 0.75rem;
   bottom: 0;
@@ -1364,31 +1366,45 @@ p {
   content: "";
 }
 
-.settings-tab:hover,
-.settings-tab.active {
+.page-tab:hover,
+.page-tab.active {
   color: var(--foreground);
 }
 
-.settings-tab.active::after {
+.page-tab.active::after {
   background: var(--primary);
 }
 
-.settings-tab:focus-visible {
+.page-tab:focus-visible {
   border-radius: 0.375rem;
   outline: 2px solid var(--ring);
   outline-offset: -2px;
 }
 
-/* Each section's rows sit in one bordered group, so a section heading never reads as a row. */
+.page-tab-count {
+  min-width: 1.5rem;
+  justify-content: center;
+  padding: 0.125rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-tab.active .page-tab-count {
+  background: var(--primary-soft);
+  color: var(--foreground);
+}
+
+/* Each section's rows sit in one group with the same border, fill, and radius as the app's other
+   cards, so a section heading never reads as a row. */
 .settings-section .settings-list,
 .account-group,
 .settings-group {
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--panel-radius);
+  background: var(--surface);
 }
 
 .settings-section .settings-list {
-  padding: 0 1.25rem;
+  padding: 0 var(--panel-padding);
 }
 
 .account-group,
@@ -1782,15 +1798,25 @@ p {
   background: transparent;
 }
 
-/* What the Operator Overview shows about one User: in People's person view, and in Settings for
-   the User themself. Calendars appear only as neutral labels, so a rule's name is its labels. */
+/* What the Operator Overview shows about one User: in People's person page, and in Settings for
+   the User themself. Health leads in its own card; rules and resource use follow, each a card like
+   Activity's, with its heading inside. Calendars appear only as numbers, so a rule's name is its
+   numbers. */
 .user-overview {
   display: grid;
-  gap: 1.25rem;
+  gap: 1rem;
 }
 
-.settings-list > .user-overview {
-  padding: 1rem 0;
+.user-overview .page-card.workflow {
+  gap: 0.75rem;
+  padding-top: var(--panel-padding);
+}
+
+.user-overview h2,
+.user-overview h3 {
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .user-overview-verdict {
@@ -1800,46 +1826,89 @@ p {
   gap: 0.5rem 0.75rem;
 }
 
-.user-overview-verdict p {
-  margin: 0;
-}
-
-.user-overview-block {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.user-overview-block h2,
-.user-overview-block h3 {
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
 .user-overview-list {
   display: grid;
   margin: 0;
   padding: 0;
-  gap: 0.5rem;
   list-style: none;
 }
 
 .user-overview-list li {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.25rem 1rem;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border);
   overflow-wrap: anywhere;
 }
 
+.user-overview-list li:last-child {
+  padding-bottom: 0;
+}
+
+/* Calls per provider read as one line each under their caption, without dividers. */
+.user-overview-calls li {
+  padding: 0.25rem 0 0;
+  border-top: 0;
+}
+
+.user-overview-item-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+
 .user-overview-rule {
-  margin-right: 0.5rem;
   font-weight: 600;
 }
 
-.user-overview-muted {
+.user-overview-next {
+  font-size: 0.875rem;
+}
+
+.user-overview-muted,
+.page-footnote {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-footnote {
+  max-width: 66ch;
+  line-height: 1.5;
+}
+
+/* The result of a command, beside what it changed; screen readers hear it from a status region
+   that stays on the page. */
+.command-result {
+  color: var(--success-foreground);
+  font-size: 0.875rem;
+  font-weight: 550;
+}
+
+/* Settings: what administrators see, opened below its summary row, with the key to its numbers. */
+.administrator-view-details {
+  display: grid;
+  gap: 1rem;
+}
+
+.administrator-view-details:focus {
+  outline: none;
+}
+
+.calendar-key {
   color: var(--muted-foreground);
   font-size: 0.875rem;
-  font-variant-numeric: tabular-nums;
+}
+
+.calendar-key ul {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0.375rem 0 0;
+  padding: 0;
+  gap: 0.25rem 1.25rem;
+  color: var(--foreground);
+  list-style: none;
 }
 
 /* Installation Health above People: one verdict, then a count per sync status that filters. */
@@ -1854,14 +1923,69 @@ p {
   gap: 0.5rem;
 }
 
-.installation-health-counts button[aria-pressed="true"] {
-  border-color: var(--primary);
-  background: var(--muted);
+.health-count {
+  gap: 0.5rem;
+  font-variant-numeric: tabular-nums;
 }
 
-/* One person under People: a way back, who they are, their actions, then their overview. */
+.health-count svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.health-count[aria-pressed="true"] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+  color: var(--foreground);
+}
+
+/* Invitations waiting: one row each, divided like a list, the soonest to expire first. */
+.invitation-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.invitation-item {
+  padding: 1rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.invitation-item:last-child {
+  padding-bottom: 0;
+}
+
+.invitation-item h3 {
+  font-size: 1rem;
+  font-weight: 550;
+}
+
+.invitation-item p {
+  margin-top: 0.25rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+
+/* An empty state inside a card is not another card. */
+.page-card .empty-panel {
+  min-height: 14rem;
+  padding: 2rem 1rem;
+  border: 0;
+}
+
+.page-card .empty-panel h3 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+/* One person under People: a way back, who they are and their actions, then their overview. */
+.person-page {
+  gap: 1.5rem;
+}
+
 .person-page .person-back {
   width: fit-content;
+  min-height: 2.75rem;
 }
 
 .person-page .person-back svg {
@@ -1887,7 +2011,7 @@ p {
 .person-facts {
   display: flex;
   flex-wrap: wrap;
-  margin: 0.25rem 0 0;
+  margin: 0.5rem 0 0;
   padding: 0;
   gap: 0.125rem 0.5rem;
   color: var(--muted-foreground);
@@ -1895,8 +2019,9 @@ p {
   list-style: none;
 }
 
-.person-facts li + li::before {
-  margin-right: 0.5rem;
+/* The separator ends a fact, so a wrapped line never starts with one. */
+.person-facts li:not(:last-child)::after {
+  margin-left: 0.5rem;
   content: "·";
 }
 
@@ -1941,7 +2066,7 @@ p {
 }
 
 .people-table td {
-  padding: 0.7rem 0.75rem;
+  padding: 0.75rem;
   border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
   vertical-align: middle;
 }
@@ -1983,6 +2108,10 @@ p {
 
 .person-col-sync {
   white-space: nowrap;
+}
+
+.person-col-sync > * {
+  vertical-align: middle;
 }
 
 .person-problems {
@@ -2074,9 +2203,16 @@ p {
   gap: 0.5rem;
 }
 
-/* On a narrow screen each person becomes a card that labels its values; the sortable headings stay
-   above the cards as buttons, so sorting works at every width without scrolling sideways. */
-@media (max-width: 800px) {
+/* The list's own width, not the window's, decides its layout, so longer translated text never
+   pushes the table past its card. */
+.people-roster {
+  container: people-roster / inline-size;
+}
+
+/* When the list is narrow each person becomes a card that labels its values; the sortable headings
+   stay above the cards as buttons, so sorting works at every width without scrolling sideways. The
+   other headings stay for screen readers, so each cell keeps its column's name. */
+@container people-roster (max-width: 56rem) {
   .people-filters {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
@@ -2102,13 +2238,31 @@ p {
   }
 
   .people-table th {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
     padding: 0;
+    overflow: hidden;
     border: 0;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .people-table th[data-sortable] {
-    display: block;
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+
+  .sort-button {
+    min-height: 2.75rem;
+  }
+
+  .person-email {
+    display: inline-block;
+    padding: 0.5rem 0;
   }
 
   .people-table tr.person-row {
@@ -2118,7 +2272,7 @@ p {
       "sync sync ."
       "role state ."
       "joined last .";
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 2.75rem;
     gap: 0.5rem 1rem;
     padding: 0.85rem 0;
     border-bottom: 1px solid color-mix(in oklch, var(--border) 55%, transparent);
@@ -2177,11 +2331,11 @@ p {
 
 /* A link to pass on is the next step, so it gets the quiet surface across the whole list. */
 .settings-list .link-reveal {
-  margin: 0 -1.25rem;
-  padding-right: 1.25rem;
-  padding-left: 1.25rem;
+  margin: 0 calc(-1 * var(--panel-padding));
+  padding-right: var(--panel-padding);
+  padding-left: var(--panel-padding);
   align-items: flex-start;
-  background: var(--surface);
+  background: var(--background);
 }
 
 .registration-choice {

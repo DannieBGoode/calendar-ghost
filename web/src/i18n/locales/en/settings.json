@@ -13,7 +13,7 @@
     "administration": "Administration"
   },
   "ownAccount": {
-    "title": "Your account",
+    "title": "Sign-in and email",
     "intro": "How you sign in to Calendar Ghost, and the email it sends you.",
     "cancel": "Cancel",
     "currentPassword": "Current password",
@@ -421,7 +421,12 @@
   },
   "administratorView": {
     "title": "What your administrator can see",
-    "intro": "Your administrator sees exactly this, to help when synchronization stops. They never see your calendar names, Google account emails, or events.",
+    "intro": "Administrators see whether your synchronization works, never your calendar names, Google account emails, or events.",
+    "summary": "Your sync status, your rules by number, and how much you use",
+    "show": "Show what they see",
+    "hide": "Hide what they see",
+    "keyTitle": "Your administrator sees your calendars by number:",
+    "keyItem": "Calendar {number} is {name}",
     "loadFailure": "What your administrator can see could not load.",
     "tryAgain": "Try again"
   }

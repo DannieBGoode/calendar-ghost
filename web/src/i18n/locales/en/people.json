@@ -105,8 +105,8 @@
     "label": "Password reset link for {email}"
   },
   "invitations": {
-    "title": "Invitations",
-    "body": "Create a link and send it to the person yourself. They choose their own email and password.",
+    "title": "Invitations waiting",
+    "body": "Each link works once, for 7 days. Send it to the person yourself; they choose their own email and password.",
     "invite": "Invite someone",
     "inviting": "Creating…",
     "reveal": {
@@ -114,12 +114,15 @@
       "body": "Send it to the person you invite. It works once, until {expires}, and is shown only once.",
       "label": "Invitation link"
     },
-    "created": "Invitation created {created}",
-    "expires": "Expires {expires}",
     "revoke": "Revoke",
-    "revokeLabel": "Revoke the invitation created {created}",
+    "revokeLabel": "Revoke the invitation that expires {expires}",
     "revoked": "The invitation was revoked. Its link no longer works.",
-    "none": "No invitations are waiting."
+    "expiresIn": "Expires {relative}",
+    "createdAgo": "Created {relative}",
+    "empty": {
+      "title": "No invitations are waiting",
+      "body": "Invite someone to create a link they can use once to join."
+    }
   },
   "verdicts": {
     "stalled": "Not running",
@@ -146,7 +149,7 @@
     "since": "Since {relative}",
     "rulesTitle": "Rules",
     "noRules": "No rules yet.",
-    "resourcesTitle": "Resource use",
+    "resourcesTitle": "Rules, accounts, and calls",
     "callsTitle": "Calls to calendar providers since {since}",
     "noCalls": "No calls to calendar providers since {since}.",
     "kept": {
@@ -169,8 +172,8 @@
         "other": "{provider}: {count} calls"
       },
       "rateLimited": {
-        "one": "{count} refused for its rate limit",
-        "other": "{count} refused for its rate limit"
+        "one": "{count} refused for too many requests",
+        "other": "{count} refused for too many requests"
       },
       "failed": {
         "one": "{count} failed",
@@ -186,7 +189,32 @@
         "one": "{count} event couldn't be synced",
         "other": "{count} events couldn't be synced"
       }
-    }
+    },
+    "calendar": "Calendar {number}",
+    "next": {
+      "reauthorize": {
+        "self": "Reauthorize your Google account in Settings, under Connections.",
+        "person": "{name} reauthorizes their Google account in their Settings, under Connections."
+      },
+      "preview": {
+        "self": "Open the rule and preview it again to restart it.",
+        "person": "{name} previews the rule again on their Rules page to restart it."
+      },
+      "activity": {
+        "self": "Activity explains what happened and what to do.",
+        "person": "{name} finds what happened and what to do in their Activity."
+      },
+      "overdue": {
+        "self": "Choose Sync now on the rule, or check Activity.",
+        "person": "{name} can choose Sync now on the rule, or check their Activity."
+      },
+      "waiting": "Nothing to do: Calendar Ghost retries by itself.",
+      "stalled": {
+        "self": "Your administrator restarts Calendar Ghost. Nothing synchronizes until it runs again.",
+        "person": "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again."
+      }
+    },
+    "statusTitle": "Synchronization"
   },
   "problems": {
     "one": "{count} problem",
@@ -217,7 +245,7 @@
     "back": "People",
     "loading": "Loading this person",
     "loadFailure": "This person could not load",
-    "intro": "What the Operator Overview shows about them. You never see their calendar names, Google account emails, or events, and they can see exactly this in their Settings.",
+    "intro": "You see what they see about themselves under Settings, never their calendar names, Google account emails, or events.",
     "joined": "Joined {relative}",
     "lastSignIn": "Last signed in {relative}",
     "neverSignedIn": "Never signed in",
@@ -225,6 +253,15 @@
       "title": "Nobody here has this address",
       "body": "This person may have been deleted.",
       "back": "Back to People"
+    }
+  },
+  "tabs": {
+    "label": "People sections",
+    "everyone": "People",
+    "invitations": "Invitations",
+    "waiting": {
+      "one": "{count} waiting",
+      "other": "{count} waiting"
     }
   }
 }

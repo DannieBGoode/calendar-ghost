@@ -272,7 +272,7 @@ describe("OwnAccountSection", () => {
       "To send incident emails, add SMTP settings to .env and restart Calendar Ghost. Until then, incidents appear in Activity.",
     )
     const help = incidentEmails().querySelector("a")
-    expect(help?.textContent).toBe("How to set up email")
+    expect(help?.textContent).toBe("How to set up email (opens in a new tab)")
     expect(help?.getAttribute("href")).toBe(
       "https://calendarghost.com/docs/troubleshooting#incident-emails-are-unavailable-or-never-arrive",
     )
@@ -340,5 +340,35 @@ describe("OwnAccountSection", () => {
     expect(sent("DELETE", "/api/v1/account")).toEqual({ password: "a very long password", projections: "detach" })
     // Nothing the deleted User could see stays in memory.
     expect(queryClient.getQueryData(["rules"])).toBeUndefined()
+  })
+})
+
+describe("Cancelling a form", () => {
+  it("forgets what was typed and the error shown, so the form opens fresh", async () => {
+    const refused = jsonResponse({ detail: "wrong", code: "incorrect_password", params: {} }, 403)
+    await renderSection(testI18n(), { answers: { "PUT /api/v1/account/email": refused } })
+    await click(container.querySelector<HTMLButtonElement>("#own-email-toggle")!)
+    type(field("own-email"), "robin@home.example.test")
+    type(field("own-email-password"), "not the password")
+    await submit(container.querySelector<HTMLFormElement>("form")!)
+    expect(container.querySelector("[role='alert']")).not.toBeNull()
+
+    await click(button("Cancel"))
+    await click(container.querySelector<HTMLButtonElement>("#own-email-toggle")!)
+
+    expect(field("own-email").value).toBe("")
+    expect(field("own-email-password").value).toBe("")
+    expect(container.querySelector("[role='alert']")).toBeNull()
+  })
+
+  it("does the same for the password form", async () => {
+    await renderSection(testI18n())
+    await click(container.querySelector<HTMLButtonElement>("#own-password-toggle")!)
+    type(field("own-current-password"), "old password")
+
+    await click(button("Cancel"))
+    await click(container.querySelector<HTMLButtonElement>("#own-password-toggle")!)
+
+    expect(field("own-current-password").value).toBe("")
   })
 })

@@ -209,9 +209,9 @@ describe("Administration", () => {
 describe("Settings for someone who is not an administrator", () => {
   it("offers no Administration tab, shows Your account at its address, and never asks for what it holds", async () => {
     await renderSettings(testI18n(), { role: "user", tab: "administration" })
-    const tabs = [...container.querySelectorAll("nav.settings-tabs a")].map((tab) => tab.textContent)
+    const tabs = [...container.querySelectorAll("nav.page-tabs a")].map((tab) => tab.textContent)
     expect(tabs).toEqual(["Your account", "Connections"])
-    expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Your account")
     expect(section("own-account-title")).not.toBeNull()
     expect(section("registration-title")).toBeNull()
     expect(section("storage-title")).toBeNull()

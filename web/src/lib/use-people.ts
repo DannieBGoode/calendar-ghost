@@ -67,6 +67,9 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
   const [message, setMessage] = useState("")
   const [deleting, setDeleting] = useState<string | null>(null)
   const [resetLink, setResetLink] = useState<{ personId: string; link: IssuedLink } | null>(null)
+  // What the last command on someone still listed did, shown beside them.
+  const [result, setResult] = useState<{ personId: string; text: string } | null>(null)
+  const [deletedMessage, setDeletedMessage] = useState("")
   const busy = useIsMutating({ mutationKey: PERSON_COMMAND }) > 0
   const command = useMutation({
     mutationKey: PERSON_COMMAND,
@@ -89,9 +92,14 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
       const deleted = deletionMessage(i18n, name, deletion)
       setDeleting(null)
       setMessage(deleted)
+      setDeletedMessage(deleted)
       onDeleted?.(deleted)
     }
-    if (changed) setMessage(i18n.t(changed, { email: name }))
+    if (changed) {
+      const text = i18n.t(changed, { email: name })
+      setMessage(text)
+      setResult({ personId: person.id, text })
+    }
   }
 
   // Asks the query client rather than `busy`, so even a second click before the page shows the
@@ -108,6 +116,8 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     if (running()) return
     command.reset()
     setMessage("")
+    setResult(null)
+    setDeletedMessage("")
     if (next.action === "delete") setDeleting(next.person.id)
     else send(next)
   }
@@ -117,12 +127,36 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
     return command.variables?.person.id === person.id ? command.error : null
   }
 
-  /** Whether a command on this person has something to show beside them. */
-  function hasDetails(person: Person): boolean {
-    return errorFor(person) !== null || deleting === person.id || resetLink?.personId === person.id
+  /** What the last command on this person did, when it was for them. */
+  function resultFor(person: Person): string | null {
+    return result?.personId === person.id ? result.text : null
   }
 
-  return { command, busy, message, deleting, setDeleting, resetLink, setResetLink, start, send, errorFor, hasDetails }
+  /** Whether a command on this person has something to show beside them. */
+  function hasDetails(person: Person): boolean {
+    return (
+      errorFor(person) !== null ||
+      deleting === person.id ||
+      resetLink?.personId === person.id ||
+      resultFor(person) !== null
+    )
+  }
+
+  return {
+    command,
+    busy,
+    message,
+    deletedMessage,
+    deleting,
+    setDeleting,
+    resetLink,
+    setResetLink,
+    start,
+    send,
+    errorFor,
+    resultFor,
+    hasDetails,
+  }
 }
 
 export type PeopleCommands = ReturnType<typeof usePersonCommands>

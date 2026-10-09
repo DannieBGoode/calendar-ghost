@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "../i18n/testing"
 import type { ResourceUse, ServerProblem } from "./api"
-import { problemText, resourceFacts, verdictTone, VERDICTS } from "./operator-overview"
+import { calendarName, nextStep, problemText, resourceFacts, verdictTone, VERDICTS } from "./operator-overview"
 
 const i18n = testI18n()
 
@@ -69,7 +69,7 @@ describe("resourceFacts", () => {
 
     expect(resourceFacts(i18n, busy)).toEqual({
       kept: ["3 rules", "2 Google accounts", "1,204 Activity entries"],
-      calls: ["Google Calendar: 1,530 calls, 2 refused for its rate limit, 1 failed"],
+      calls: ["Google Calendar: 1,530 calls, 2 refused for too many requests, 1 failed"],
     })
   })
 
@@ -78,5 +78,35 @@ describe("resourceFacts", () => {
       kept: ["1 rule", "2 Google accounts", "1 Activity entry"],
       calls: [],
     })
+  })
+})
+
+describe("calendarName", () => {
+  it("names a numbered calendar in the reader's language, and a named one by its name", () => {
+    expect(calendarName(i18n, { calendar: "Calendar 2", provider: "google", number: 2 })).toBe("Calendar 2")
+    expect(calendarName(i18n, { calendar: "Family", provider: "google", number: null })).toBe("Family")
+  })
+})
+
+describe("nextStep", () => {
+  const lapsed: ServerProblem = {
+    ...problem("stopped", "A calendar account needs reauthorization"),
+    message: { code: "authorization_lapsed", params: { provider: "google" } },
+  }
+  const robin = { name: "robin@example.test" }
+
+  it("says who acts on each problem, and how", () => {
+    expect(nextStep(i18n, lapsed, robin)).toBe(
+      "robin@example.test reauthorizes their Google account in their Settings, under Connections.",
+    )
+    expect(nextStep(i18n, lapsed, "self")).toBe("Reauthorize your Google account in Settings, under Connections.")
+    expect(nextStep(i18n, problem("stopped", "Stopped syncing"), robin)).toBe(
+      "robin@example.test previews the rule again on their Rules page to restart it.",
+    )
+    expect(nextStep(i18n, problem("blocked", "2 events"), "self")).toBe("Activity explains what happened and what to do.")
+    expect(nextStep(i18n, problem("waiting", "busy"), robin)).toBe("Nothing to do: Calendar Ghost retries by itself.")
+    expect(nextStep(i18n, problem("stalled", "stopped running"), robin)).toBe(
+      "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again.",
+    )
   })
 })

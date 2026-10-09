@@ -42,8 +42,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   and as the MCP tool `get_installation_health`, through the new `installation:read` token scope:
   incidents about the installation itself and how many people are in each status.
 - The installation's SMTP recipient and webhook are told when the scheduler stops completing passes.
-- The Operator Overview. **People** opens with Installation Health and shows each person's sync
-  status and problem count, filterable and sortable by status. Each person's page at `/people/{id}`
+- The Operator Overview. **People** shows everyone first, with Installation Health above them, and
+  keeps invitations waiting in an **Invitations** tab that counts them; "Invite someone" sits beside
+  the page title. Each person's sync status is a chip with an icon, and the list filters and sorts
+  by it. Each person's page at `/people/{id}`
   shows their Installation Status, with calendars only as "Calendar 1", "Calendar 2", and their
   resource use: rules, Google accounts, Activity entries, and Google calls over the last 30 days.
   `GET /api/v1/users` now includes each person's `verdict`, `problems`, `last_synced_at`, and
@@ -54,7 +56,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   neutral label carries ("Calendar 2" has 2), so the Web UI can name it in the reader's language;
   `null` in a User's own status, which names the calendar.
 - **Settings → Your account → What your administrator can see** shows each person exactly what the
-  Operator Overview shows about them, from `GET /api/v1/account/overview`.
+  Operator Overview shows about them, from `GET /api/v1/account/overview`, collapsed to one row,
+  with a key naming their own calendars for each number. A person's page and this view lead with
+  sync health and say who takes the next step for each problem.
+
 - Migration 24 records the order rules were created in, and migration 25 counts each person's
   calendar provider calls per day, kept for 30 days. Rolling back past either is safe.
 - Failed sign-ins are throttled per email and per client address. Unusable invitation and password
@@ -79,6 +84,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Settings groups share the border, fill, radius, and padding of the app's other cards. "Your
+  account" opens with **Sign-in and email**. Cancelling the email or password form forgets what was
+  typed.
 - After upgrading, the administrator signs in with their password once and then adds the email they
   sign in with from now on. Setup asks for an email and a password.
 - Incident Notifications go to the person who owns the rule or account, by email when SMTP is

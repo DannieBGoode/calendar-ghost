@@ -16,12 +16,18 @@ export function defaultSettingsTab(search: string): SettingsTab {
   return SETTINGS_ARRIVAL_PARAMS.some((name) => params.has(name)) ? "connections" : DEFAULT_SETTINGS_TAB
 }
 
+/** People's tabs: everyone here, then the Invitations still waiting. */
+export type PeopleTab = "everyone" | "invitations"
+export const DEFAULT_PEOPLE_TAB: PeopleTab = "everyone"
+
 export type AppLocation = {
   view: AppView
   ruleId: string | null
   settingsTab?: SettingsTab
   /** One person's page under People. */
   personId?: string
+  /** The Invitations tab of People; People opens at everyone here. */
+  peopleTab?: PeopleTab
 }
 /**
  * Changes view. A notice is announced on arrival; `createRule` opens the rule builder; `search`
@@ -68,6 +74,7 @@ const PATH_VIEWS = new Map(
 )
 const RULE_PATH = /^\/rules\/([^/]+)$/
 const PERSON_PATH = /^\/people\/([^/]+)$/
+const INVITATIONS_PATH = "/people/invitations"
 const SETTINGS_TAB_PATH = /^\/settings\/([^/]+)$/
 
 function normalize(pathname: string): string {
@@ -98,6 +105,7 @@ export function appLocationFromPathname(pathname: string): AppLocation {
   const normalized = normalize(pathname)
   const ruleId = ruleIdFromPath(normalized)
   if (ruleId !== null) return { view: "rules", ruleId }
+  if (normalized === INVITATIONS_PATH) return { view: "people", ruleId: null, peopleTab: "invitations" }
   const personId = idFromPath(PERSON_PATH, normalized)
   if (personId !== null) return { view: "people", ruleId: null, personId }
   const settingsTab = settingsTabFromPath(normalized)
@@ -129,6 +137,10 @@ export function appPathForRule(ruleId: string): string {
   return `${APP_VIEW_PATHS.rules}/${encodeURIComponent(ruleId)}`
 }
 
+export function appPathForPeopleTab(tab: PeopleTab): string {
+  return tab === "invitations" ? INVITATIONS_PATH : APP_VIEW_PATHS.people
+}
+
 export function appPathForPerson(personId: string): string {
   return `${APP_VIEW_PATHS.people}/${encodeURIComponent(personId)}`
 }
@@ -140,6 +152,7 @@ export function appPathForSettingsTab(tab: SettingsTab): string {
 export function appPathForLocation(location: AppLocation): string {
   if (location.ruleId !== null) return appPathForRule(location.ruleId)
   if (location.view === "people" && location.personId) return appPathForPerson(location.personId)
+  if (location.view === "people" && location.peopleTab) return appPathForPeopleTab(location.peopleTab)
   if (location.view === "settings" && location.settingsTab) return appPathForSettingsTab(location.settingsTab)
   return appPathForView(location.view)
 }

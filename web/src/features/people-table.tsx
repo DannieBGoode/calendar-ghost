@@ -2,12 +2,12 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
 import { Fragment } from "react"
 
 import { Badge } from "@/components/ui/badge"
+import { DisabledBadge, VerdictBadge } from "@/components/verdict-badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
 import type { PeopleQuery, PeopleSort, PersonRow, SortOrder } from "@/lib/api"
 import { appPathForPerson, isPlainLeftClick, type OpenPerson } from "@/lib/navigation"
-import { verdictTone } from "@/lib/operator-overview"
 import { lastSignIn, personName } from "@/lib/people"
 import type { PeopleCommands } from "@/lib/use-people"
 
@@ -130,7 +130,7 @@ function PersonRows({
           {you && <Badge variant="outline">{t("people.you")}</Badge>}
         </td>
         <td role="cell" className="person-col-sync" data-label={t("people.table.sync")}>
-          <Badge variant={verdictTone(person.verdict)}>{t(`people.verdicts.${person.verdict}`)}</Badge>
+          <VerdictBadge verdict={person.verdict} />
           {person.problems > 0 && (
             <span className="person-problems">{t("people.problems", { count: person.problems })}</span>
           )}
@@ -139,7 +139,7 @@ function PersonRows({
           {t(`people.roles.${person.role}`)}
         </td>
         <td role="cell" className="person-col-state" data-label={t("people.table.state")}>
-          {person.state === "disabled" ? <Badge variant="stopped">{t("people.states.disabled")}</Badge> : t("people.states.active")}
+          {person.state === "disabled" ? <DisabledBadge /> : t("people.states.active")}
         </td>
         <td role="cell" className="person-col-joined" data-label={t("people.table.joined")}>
           <time dateTime={person.created_at} title={i18n.format.dateTime(person.created_at)}>

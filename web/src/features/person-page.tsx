@@ -6,6 +6,7 @@ import { LoadFailure } from "@/components/load-failure"
 import { PageSkeleton } from "@/components/page-skeleton"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DisabledBadge } from "@/components/verdict-badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
 import { UserOverviewDetails } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
@@ -62,6 +63,7 @@ function PersonContent({
 }) {
   const i18n = useI18n()
   const { t } = i18n
+  const now = useNow()
   const commands = usePersonCommands({ onDeleted })
   const person = overview.user
   const name = personName(i18n, person)
@@ -73,15 +75,19 @@ function PersonContent({
           <h1>
             {name}
             {you && <Badge variant="outline">{t("people.you")}</Badge>}
+            {person.state === "disabled" && <DisabledBadge />}
           </h1>
-          <PersonFacts person={person} />
+          <PersonFacts person={person} now={now} />
         </div>
         {!you && <PersonMenu person={person} name={name} commands={commands} />}
       </div>
       {!you && <PersonDetails person={person} name={name} commands={commands} />}
-      {commands.message && <p role="status">{commands.message}</p>}
-      <p className="page-intro">{t("people.person.intro")}</p>
-      <UserOverviewDetails overview={overview} headingLevel={2} />
+      {commands.message && <p className="command-result">{commands.message}</p>}
+      <p className="sr-only" role="status">
+        {commands.message}
+      </p>
+      <UserOverviewDetails overview={overview} now={now} audience={{ name }} headingLevel={2} />
+      <p className="page-footnote">{t("people.person.intro")}</p>
     </div>
   )
 }
@@ -104,14 +110,12 @@ function BackToPeople({ onBack }: { onBack: () => void }) {
   )
 }
 
-/** Their role and state, and when they joined and last signed in. */
-function PersonFacts({ person }: { person: Person }) {
+/** Their role, and when they joined and last signed in. */
+function PersonFacts({ person, now }: { person: Person; now: number }) {
   const i18n = useI18n()
   const { t } = i18n
-  const now = useNow()
   const facts = [
     t(`people.roles.${person.role}`),
-    t(`people.states.${person.state}`),
     t("people.person.joined", { relative: i18n.format.relative(person.created_at, now) }),
     person.last_sign_in_at
       ? t("people.person.lastSignIn", { relative: i18n.format.relative(person.last_sign_in_at, now) })

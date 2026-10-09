@@ -236,7 +236,8 @@ The system is flat by default. Tonal layering, dividers, and spacing establish s
 
 ### Chips
 
-- **Style:** Full-pill semantic tint with text and an icon.
+- **Style:** Full-pill semantic tint with text and a 14px icon; the Badge primitive sizes every
+  icon inside it.
 - **State:** Health, attention, and neutral lifecycle labels use separate named roles.
 
 ### Cards / Containers
@@ -299,7 +300,26 @@ Pages carry no label above their title; the active navigation item already says 
 
 ### Settings Groups
 
-Settings sections run from what the installation depends on to what only this browser keeps: Connected accounts, Storage, Integrations, Appearance. Each section's heading and one sentence sit above a single bordered group of rows; a row pairs a title and its current state with at most its own controls, and a section with nothing to show or change does not exist. Connected accounts collapse to one summary row naming how many are connected and how many need reauthorization, and open by themselves when one does. Integrations, which most administrators never use, collapse the same way to one row naming how many tokens are in use and when one was last used. A newly issued token appears once, on Quiet Surface inside the group, in a read-only field with Copy beside it; revoked tokens gather under one disclosure at the end of the group. Plain HTTP on this machine or a home network is the homelab norm and says nothing; only an address that would carry a token across the internet unencrypted gets a quiet note in the group's footer. Conditions that need no action, such as Google returning to a different address, close the group they affect as a quiet disclosure on Quiet Surface, and become an Attention Ochre step only while the administrator can act on them.
+Settings sections run from what the installation depends on to what only this browser keeps: Connected accounts, Storage, Integrations, Appearance. Each section's heading and one sentence sit above a single group of rows with the same border, Quiet Surface fill, panel radius, and panel padding as the app's other cards; a row pairs a title and its current state with at most its own controls, and a section with nothing to show or change does not exist. Connected accounts collapse to one summary row naming how many are connected and how many need reauthorization, and open by themselves when one does. Integrations, which most administrators never use, collapse the same way to one row naming how many tokens are in use and when one was last used. A newly issued token appears once, on Quiet Surface inside the group, in a read-only field with Copy beside it; revoked tokens gather under one disclosure at the end of the group. Plain HTTP on this machine or a home network is the homelab norm and says nothing; only an address that would carry a token across the internet unencrypted gets a quiet note in the group's footer. Conditions that need no action, such as Google returning to a different address, close the group they affect as a quiet disclosure on Quiet Surface, and become an Attention Ochre step only while the administrator can act on them.
+
+### People
+
+People is the Installation Administrator's view of everyone here, laid out like Rules and Activity:
+a Fraunces title with one sentence and "Invite someone" as the page's one primary action, then link
+tabs (People first, then Invitations with a count of those waiting, hidden at zero). The People tab
+shows Installation Health in a card, then everyone here in one card holding its search, filters,
+table, and pages. A count in Installation Health filters the list to the people it counted. A
+person's sync status is a chip with an icon, text, and its tone (red stopped, ochre needs a look,
+neutral otherwise, moss healthy); Disabled is a neutral chip, because disabling is a choice, not an
+emergency. The list becomes cards when the list itself is narrow, not the window, so longer
+translations never push it past its card. A command's result appears beside the person it changed.
+
+A person's page leads with their health: a Synchronization card with the verdict, each problem,
+and who takes the next step ("Robin reauthorizes their Google account in their Settings"), then
+cards for their rules and their rules, accounts, and calls. Calendars appear only by number
+("Calendar 1"), in the reader's language. The privacy note closes the page as a footnote. Settings
+shows each person the same cards, collapsed to one summary row, with a key naming their own
+calendars for each number.
 
 ### Destructive and Privacy-Widening Changes
 

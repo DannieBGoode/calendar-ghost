@@ -49,8 +49,10 @@ export function PersonDetails({ person, name, commands }: { person: Person; name
   const i18n = useI18n()
   const { t } = i18n
   const error = commands.errorFor(person)
+  const result = commands.resultFor(person)
   return (
     <>
+      {result !== null && <p className="command-result">{result}</p>}
       {error !== null && (
         <p className="field-error" role="alert">
           {apiErrorMessage(i18n, error)}

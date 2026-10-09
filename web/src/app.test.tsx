@@ -174,13 +174,13 @@ describe("App", () => {
     try {
       const { container } = await renderApp(testI18n())
       expect(container.querySelector(".oauth-feedback h2")?.textContent).toBe("Google account connected")
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Connections")
       expect(container.querySelector("[aria-labelledby='accounts-title']")).not.toBeNull()
       expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("Settings")
       // The address stays at Settings; only the outcome is dropped so a reload does not repeat it.
       expect(`${window.location.pathname}${window.location.search}`).toBe(settled)
       // Dropping the outcome does not move Settings to another tab.
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Connections")
     } finally {
       page.happyDOM.setURL(address)
     }
@@ -192,15 +192,15 @@ describe("App", () => {
     page.happyDOM.setURL("http://localhost:8000/settings")
     try {
       const { container } = await renderApp(testI18n())
-      expect([...container.querySelectorAll("nav.settings-tabs a")].map((tab) => tab.textContent)).toEqual([
+      expect([...container.querySelectorAll("nav.page-tabs a")].map((tab) => tab.textContent)).toEqual([
         "Your account",
         "Connections",
       ])
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Your account")
       expect(container.querySelector("[aria-labelledby='appearance-title']")).not.toBeNull()
 
       const header = container.querySelector("header")
-      const tab = [...container.querySelectorAll<HTMLAnchorElement>("nav.settings-tabs a")].find(
+      const tab = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find(
         (link) => link.textContent === "Connections",
       )!
       const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })
@@ -212,7 +212,7 @@ describe("App", () => {
       expect(click.defaultPrevented).toBe(true)
       expect(window.location.pathname).toBe("/settings/connections")
       expect(container.querySelector("header")).toBe(header)
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Connections")
       expect(container.querySelector("[aria-labelledby='accounts-title']")).not.toBeNull()
       expect(container.querySelector("[aria-labelledby='appearance-title']")).toBeNull()
 
@@ -221,7 +221,7 @@ describe("App", () => {
         window.dispatchEvent(new PopStateEvent("popstate"))
       })
       await settle()
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Your account")
     } finally {
       page.happyDOM.setURL(address)
     }
