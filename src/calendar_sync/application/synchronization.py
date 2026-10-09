@@ -9,6 +9,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RuleNotExecutable,
+    RuleNotFound,
 )
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.occurrences import SynchronizeOccurrences
@@ -98,7 +99,7 @@ class _ChangeFeeds:
 def _executable_rule(uow: UnitOfWork, rule_id: SyncRuleId) -> SyncRule:
     rule = uow.rules.get(rule_id)
     if rule is None:
-        raise RuleNotExecutable(f"sync rule {rule_id.value} does not exist")
+        raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
     if rule.state is not SyncRuleState.ENABLED:
         raise RuleNotExecutable(f"sync rule is {rule.state}, not enabled")
     return rule

@@ -38,11 +38,12 @@ from calendar_sync.domain.model import (
     OccurrenceStart,
     OccurrenceState,
     ProjectionFingerprint,
+    SyncRule,
     SyncRuleId,
     TimedInterval,
 )
 from tests.helpers import NOW, endpoint, rule, week_start
-from tests.users import USER
+from tests.users import OTHER_USER, USER
 
 RULE = rule()
 OTHER_RULE = replace(
@@ -50,6 +51,10 @@ OTHER_RULE = replace(
 )
 """Sorts before RULE, so listing order is by identifier rather than by insertion."""
 ACCOUNT = ConnectedAccountId("personal-account")
+THEIR_SOURCE = endpoint("their-personal-account", "personal-calendar")
+THEIR_DESTINATION = endpoint("their-work-account", "work-calendar")
+"""Another User's calendars, with the same calendar identifiers as RULE's."""
+DAY = timedelta(days=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +126,14 @@ def _commit_then_fail(unit_of_work: UnitOfWorkFactory) -> None:
         uow.commit()
         uow.rules.add(OTHER_RULE)
         raise RuntimeError("stop")
+
+
+def _commit_as(
+    harness: PersistenceHarness, user: UserId, write: Callable[[UnitOfWork], object]
+) -> None:
+    with harness.units(user)() as uow:
+        write(uow)
+        uow.commit()
 
 
 class PersistenceContract:
@@ -615,3 +628,159 @@ class PersistenceContract:
             uow.occurrences.save(first)
             with pytest.raises(harness.refused):
                 uow.occurrences.save(replace(first, original_start=week_start(2)))
+
+    # Users (ADR 0029): another User can neither read, change, nor delete these records. The two
+    # Users' rules name identical calendar and event identifiers, so only the User tells them apart.
+
+    def _seed_first_user(self, harness: PersistenceHarness) -> tuple[EventMapping, EventRef]:
+        """User A's rule with one record of every kind; returns its series mapping and source."""
+        series = _mapping("series")
+        source = EventRef(RULE.source, EventId("observed"))
+        harness.connect_account(ACCOUNT)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.mappings.save(series)
+            uow.occurrences.save(_occurrence(series, week_start(1), "1"))
+            uow.replays.add(series.id)
+            uow.cursors.save(RULE.id, "source-cursor")
+            uow.destination_cursors.save(RULE.id, "destination-cursor")
+            uow.run_outcomes.record(RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, True))
+            uow.previews.record(RulePreviewSummary(RULE.id, NOW, 1, 0))
+            uow.observations.save(RULE.id, source, _observation(), NOW)
+            uow.calendar_names.remember(ACCOUNT, [_calendar("personal-calendar", "Family")])
+            uow.accounts.lapse(ACCOUNT, attempted_at=NOW)
+            uow.commit()
+        for account in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(account.connected_account_id, OTHER_USER)
+        return series, source
+
+    def _assert_first_user_unchanged(
+        self, harness: PersistenceHarness, series: EventMapping, source: EventRef
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            assert uow.rules.list() == (RULE,)
+            assert uow.mappings.for_rule(RULE.id) == (series,)
+            assert len(uow.occurrences.for_series(series.id)) == 1
+            assert uow.replays.pending(RULE.id) == (series,)
+            assert uow.cursors.get(RULE.id) == "source-cursor"
+            assert uow.destination_cursors.get(RULE.id) == "destination-cursor"
+            assert uow.run_outcomes.latest(RULE.id, RunKind.SYNC) is not None
+            assert uow.previews.latest(RULE.id) == RulePreviewSummary(RULE.id, NOW, 1, 0)
+            assert uow.observations.get(RULE.id, source) == _observation()
+            assert uow.calendar_names.names([RULE.source]) == {RULE.source: "Family"}
+            assert uow.accounts.state(ACCOUNT) is ConnectedAccountState.CONNECTED
+            assert not uow.accounts.authorized(ACCOUNT)
+
+    def test_another_user_reads_none_of_a_users_records(self, harness: PersistenceHarness) -> None:
+        series, source = self._seed_first_user(harness)
+        mapped_destination = series.destination
+
+        with harness.units(OTHER_USER)() as uow:
+            assert uow.rules.get(RULE.id) is None
+            assert uow.rules.list() == ()
+            assert not uow.rules.relationship_exists(RULE.source, RULE.destination)
+            assert uow.mappings.for_source(RULE.id, series.source) is None
+            assert uow.mappings.for_destination(RULE.id, mapped_destination) is None
+            assert uow.mappings.for_rule(RULE.id) == ()
+            assert uow.mappings.count_for_rule(RULE.id) == 0
+            assert uow.occurrences.for_series(series.id) == ()
+            assert uow.occurrences.get(series.id, week_start(1)) is None
+            assert uow.replays.pending(RULE.id) == ()
+            assert uow.cursors.get(RULE.id) is None
+            assert uow.destination_cursors.get(RULE.id) is None
+            assert uow.run_outcomes.latest(RULE.id, RunKind.SYNC) is None
+            assert uow.previews.latest(RULE.id) is None
+            assert uow.observations.get(RULE.id, source) is None
+            assert uow.calendar_names.names([RULE.source]) == {}
+            assert uow.accounts.state(ACCOUNT) is None
+            assert not uow.accounts.authorized(ACCOUNT)
+
+    def test_another_user_reads_only_their_own_records_with_the_same_identifiers(
+        self, harness: PersistenceHarness
+    ) -> None:
+        self._seed_first_user(harness)
+        theirs = replace(RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE)
+        their_theirs = replace(theirs, destination=THEIR_DESTINATION)
+
+        with harness.units(OTHER_USER)() as uow:
+            uow.rules.add(their_theirs)
+            uow.calendar_names.remember(
+                THEIR_SOURCE.connected_account_id, [_calendar("personal-calendar", "Theirs")]
+            )
+            uow.commit()
+
+        with harness.units(OTHER_USER)() as uow:
+            assert uow.rules.list() == (their_theirs,)
+            assert uow.calendar_names.names([THEIR_SOURCE, RULE.source]) == {THEIR_SOURCE: "Theirs"}
+        with harness.unit_of_work() as uow:
+            assert uow.rules.list() == (RULE,)
+
+    def test_another_user_changes_none_of_a_users_records(
+        self, harness: PersistenceHarness
+    ) -> None:
+        series, source = self._seed_first_user(harness)
+        writes: tuple[Callable[[UnitOfWork], object], ...] = (
+            lambda uow: uow.rules.save(RULE.pause()),
+            lambda uow: uow.mappings.save(replace(series, source_revision="theirs")),
+            lambda uow: uow.mappings.save(replace(_mapping("theirs"), rule_id=RULE.id)),
+            lambda uow: uow.occurrences.save(_occurrence(series, week_start(2), "theirs")),
+            lambda uow: uow.replays.add(series.id),
+            lambda uow: uow.cursors.save(RULE.id, "their-cursor"),
+            lambda uow: uow.destination_cursors.save(RULE.id, "their-cursor"),
+            lambda uow: uow.run_outcomes.record(RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, False)),
+            lambda uow: uow.previews.record(RulePreviewSummary(RULE.id, NOW, 9, 9)),
+            lambda uow: uow.observations.save(RULE.id, source, _observation(NOW + DAY), NOW),
+        )
+        for index, write in enumerate(writes):
+            with pytest.raises((KeyError, *harness.refused)):
+                _commit_as(harness, OTHER_USER, write)
+            assert index >= 0
+        with harness.units(OTHER_USER)() as uow:
+            uow.calendar_names.remember(ACCOUNT, [_calendar("personal-calendar", "Renamed")])
+            assert not uow.accounts.lapse(ACCOUNT, attempted_at=NOW + DAY)
+            assert not uow.accounts.clear_lapse(ACCOUNT, requested_before=NOW + DAY)
+            uow.commit()
+
+        self._assert_first_user_unchanged(harness, series, source)
+
+    def test_another_user_deletes_none_of_a_users_records(
+        self, harness: PersistenceHarness
+    ) -> None:
+        series, source = self._seed_first_user(harness)
+        harness.disconnect_account(ACCOUNT)
+
+        with harness.units(OTHER_USER)() as uow:
+            uow.rules.remove(RULE.id)
+            uow.rules.purge(RULE.id)
+            uow.mappings.delete(series)
+            uow.occurrences.delete(_occurrence(series, week_start(1), "1"))
+            uow.replays.remove(series.id)
+            uow.observations.forget_stale(RULE.id, THEIR_SOURCE, NOW + DAY * 365)
+            assert not uow.accounts.delete_disconnected(ACCOUNT)
+            uow.commit()
+
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.state(ACCOUNT) is ConnectedAccountState.DISCONNECTED
+        harness.connect_account(ACCOUNT)
+        with harness.unit_of_work() as uow:
+            uow.accounts.lapse(ACCOUNT, attempted_at=NOW + DAY)
+            uow.commit()
+        self._assert_first_user_unchanged(harness, series, source)
+
+    def test_a_rule_taking_another_users_identifier_or_account_is_refused(
+        self, harness: PersistenceHarness
+    ) -> None:
+        self._seed_first_user(harness)
+        same_identifier = replace(RULE, source=THEIR_SOURCE, destination=THEIR_DESTINATION)
+        their_account = replace(RULE, id=SyncRuleId("their-rule"), destination=THEIR_DESTINATION)
+
+        for refused in (same_identifier, their_account):
+
+            def add(uow: UnitOfWork, rule_: SyncRule = refused) -> None:
+                uow.rules.add(rule_)
+
+            with pytest.raises((DuplicateDirectionalRelationship, KeyError, *harness.refused)):
+                _commit_as(harness, OTHER_USER, add)
+
+        with harness.units(OTHER_USER)() as uow:
+            assert uow.rules.list() == ()

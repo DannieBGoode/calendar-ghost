@@ -156,6 +156,8 @@ async def sync_now(rule_id: str, services: Services) -> SyncResultResponse:
     )
     try:
         result = await asyncio.to_thread(execute_sync_rule.execute, SyncRuleId(rule_id))
+    except RuleNotFound as error:
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     return SyncResultResponse(
@@ -181,6 +183,8 @@ async def reconcile_now(rule_id: str, services: Services) -> ReconcileResultResp
     )
     try:
         reconciled = await asyncio.to_thread(reconcile.execute, SyncRuleId(rule_id))
+    except RuleNotFound as error:
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     result, report = reconciled.sync, reconciled.report
@@ -214,6 +218,8 @@ async def preview_rule(rule_id: str, services: Services) -> RulePreviewResponse:
     )
     try:
         preview = await asyncio.to_thread(preview_sync_rule.execute, SyncRuleId(rule_id))
+    except RuleNotFound as error:
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except RuleNotExecutable as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     except ProviderFailure as error:

@@ -53,6 +53,12 @@ class TestSqliteUnitOfWork(PersistenceContract):
 
         def connect(account_id: ConnectedAccountId, user: UserId) -> None:
             add_account(database, account_id.value, user)
+            with transaction(database) as connection:
+                connection.execute(
+                    "UPDATE connected_accounts SET state = 'connected' "
+                    "WHERE id = ? AND user_id = ?",
+                    (account_id.value, user.value),
+                )
 
         def disconnect(account_id: ConnectedAccountId, user: UserId) -> None:
             with transaction(database) as connection:

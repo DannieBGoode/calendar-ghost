@@ -81,7 +81,7 @@ class SqliteSourceObservationRepository:
             "response": observation.response.value if observation.response else None,
         }
         sealed = self._history.seal(json.dumps(details), _observation_context(rule_id, source))
-        self._connection.execute(
+        cursor = self._connection.execute(
             """
             INSERT INTO source_observations (
                 rule_id, source_account_id, source_calendar_id, source_event_id,
@@ -108,6 +108,11 @@ class SqliteSourceObservationRepository:
                 self._user,
             ),
         )
+        if cursor.rowcount != 1:
+            # The observation the upsert met is another User's, so nothing was written.
+            raise sqlite3.IntegrityError(
+                f"an observation of rule {rule_id.value} is another User's"
+            )
 
     def forget_stale(
         self, rule_id: SyncRuleId, source: CalendarEndpoint, ended_before: datetime

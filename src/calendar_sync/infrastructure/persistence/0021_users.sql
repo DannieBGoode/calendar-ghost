@@ -115,7 +115,11 @@ CREATE TABLE sync_rules_owned (
     unanswered_policy TEXT NOT NULL DEFAULT 'as_tentative',
     awaiting_reauthorization INTEGER NOT NULL DEFAULT 0,
     UNIQUE (id, user_id),
-    UNIQUE (source_account_id, source_calendar_id, destination_account_id, destination_calendar_id),
+    -- Per User, so a rule never reveals that another User's rule joins the same calendars.
+    UNIQUE (
+        user_id, source_account_id, source_calendar_id, destination_account_id,
+        destination_calendar_id
+    ),
     -- A rule and both of its accounts belong to one User (ADR 0030). Checked at commit, so
     -- deleting an account and the rules that use it can happen in either order.
     FOREIGN KEY (source_account_id, user_id) REFERENCES connected_accounts(id, user_id)

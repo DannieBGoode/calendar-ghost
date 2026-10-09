@@ -446,13 +446,19 @@ class SqliteExceptionReplayRepository:
         return tuple(_mapping_from_row(row) for row in rows)
 
     def add(self, series_mapping_id: EventMappingId) -> None:
-        self._connection.execute(
+        # Adding one already pending is a no-op; another User's is refused, not left alone.
+        cursor = self._connection.execute(
             """
             INSERT INTO pending_exception_replays (series_mapping_id, user_id) VALUES (?, ?)
-            ON CONFLICT(series_mapping_id) DO NOTHING
+            ON CONFLICT(series_mapping_id) DO UPDATE SET user_id = excluded.user_id
+            WHERE pending_exception_replays.user_id = excluded.user_id
             """,
             (series_mapping_id.value, self._user),
         )
+        if cursor.rowcount != 1:
+            raise sqlite3.IntegrityError(
+                f"series mapping {series_mapping_id.value} is not this User's"
+            )
 
     def remove(self, series_mapping_id: EventMappingId) -> None:
         self._connection.execute(
@@ -538,6 +544,12 @@ class SqliteOccurrenceMappingRepository:
         )
 
 
+def _require_own(cursor: sqlite3.Cursor, rule_id: SyncRuleId) -> None:
+    """Refuse a write an upsert skipped because the record it met is another User's."""
+    if cursor.rowcount != 1:
+        raise sqlite3.IntegrityError(f"a record of rule {rule_id.value} is another User's")
+
+
 def _serialize_start(value: OccurrenceStart) -> str:
     return value.isoformat()
 
@@ -590,13 +602,16 @@ class SqliteSyncCursorRepository:
 
     def save(self, rule_id: SyncRuleId, cursor: str) -> None:
         # Interpolates only one of the two constant table names.
-        self._connection.execute(
-            f"""
-            INSERT INTO {self._table}(rule_id, cursor, user_id) VALUES (?, ?, ?)
-            ON CONFLICT(rule_id) DO UPDATE SET cursor = excluded.cursor
-            WHERE user_id = excluded.user_id
-            """,  # noqa: S608
-            (rule_id.value, cursor, self._user),
+        _require_own(
+            self._connection.execute(
+                f"""
+                INSERT INTO {self._table}(rule_id, cursor, user_id) VALUES (?, ?, ?)
+                ON CONFLICT(rule_id) DO UPDATE SET cursor = excluded.cursor
+                WHERE user_id = excluded.user_id
+                """,  # noqa: S608
+                (rule_id.value, cursor, self._user),
+            ),
+            rule_id,
         )
 
 
@@ -663,7 +678,7 @@ class SqliteRuleRunOutcomeRepository:
         self._user = user_id.value
 
     def record(self, outcome: RuleRunOutcome) -> None:
-        self._connection.execute(
+        cursor = self._connection.execute(
             """
             INSERT INTO rule_run_outcomes (
                 rule_id, kind, completed_at, succeeded, full_run, created, updated,
@@ -707,6 +722,7 @@ class SqliteRuleRunOutcomeRepository:
                 self._user,
             ),
         )
+        _require_own(cursor, outcome.rule_id)
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:
         row = self._connection.execute(
@@ -745,7 +761,7 @@ class SqliteRulePreviewRepository:
         self._user = user_id.value
 
     def record(self, summary: RulePreviewSummary) -> None:
-        self._connection.execute(
+        cursor = self._connection.execute(
             """
             INSERT INTO rule_previews (
                 rule_id, completed_at, eligible_events, excluded_events, recurring_series,
@@ -769,6 +785,7 @@ class SqliteRulePreviewRepository:
                 self._user,
             ),
         )
+        _require_own(cursor, summary.rule_id)
 
     def latest(self, rule_id: SyncRuleId) -> RulePreviewSummary | None:
         row = self._connection.execute(

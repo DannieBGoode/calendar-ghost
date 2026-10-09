@@ -11,6 +11,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RuleNotExecutable,
+    RuleNotFound,
 )
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
@@ -119,7 +120,7 @@ class ReconcileSyncRule:
         with self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
             if rule is None:
-                raise RuleNotExecutable(f"sync rule {rule_id.value} does not exist")
+                raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
             mappings = uow.mappings.for_rule(rule.id)
             recorded = {mapping.id: uow.occurrences.for_series(mapping.id) for mapping in mappings}
 

@@ -16,8 +16,8 @@ class RuleNotExecutable(ApplicationError):
     """A requested rule cannot currently execute."""
 
 
-class RuleNotFound(ApplicationError):
-    """The requested Directional Sync Rule does not exist."""
+class RuleNotFound(RuleNotExecutable):
+    """The requested Directional Sync Rule does not exist, or is another User's (ADR 0029)."""
 
 
 class DuplicateDirectionalRelationship(ApplicationError):
