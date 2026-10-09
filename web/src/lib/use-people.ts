@@ -1,5 +1,5 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useRef, useState } from "react"
+import { keepPreviousData, useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useState } from "react"
 
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
@@ -19,6 +19,10 @@ const CHANGED: Partial<Record<PersonAction, MessageKey>> = {
   disable: "people.status.disabled",
   enable: "people.status.enabled",
 }
+
+// Every person command shares this key, so the query client, which outlives the People page,
+// knows one is running even after the page that sent it is gone.
+const PERSON_COMMAND = ["person-command"]
 
 async function run({ person, action }: PersonCommand): Promise<Outcome> {
   switch (action) {
@@ -51,9 +55,10 @@ export function usePeoplePage(query: PeopleQuery) {
 }
 
 /**
- * The commands an administrator runs on someone else. One command runs at a time: a second one
- * started before the first answers could undo what the first returned, as a new Password Reset
- * Link revokes the one just shown. Its error is shown beside the person it was for.
+ * The commands an administrator runs on someone else. One command runs at a time, even across
+ * opening the page again: a second one started before the first answers could undo what the
+ * first returned, as a new Password Reset Link revokes the one just shown. Its error is shown
+ * beside the person it was for.
  */
 export function usePersonCommands() {
   const i18n = useI18n()
@@ -61,13 +66,10 @@ export function usePersonCommands() {
   const [message, setMessage] = useState("")
   const [deleting, setDeleting] = useState<string | null>(null)
   const [resetLink, setResetLink] = useState<{ personId: string; link: IssuedLink } | null>(null)
-  // Set the moment a command is sent, so even a second click before the page shows it running waits.
-  const running = useRef(false)
+  const busy = useIsMutating({ mutationKey: PERSON_COMMAND }) > 0
   const command = useMutation({
+    mutationKey: PERSON_COMMAND,
     mutationFn: run,
-    onSettled: () => {
-      running.current = false
-    },
     onSuccess: async (outcome, command) => {
       finish(outcome, command)
       // Whether Only Me is available depends on who is left.
@@ -89,14 +91,18 @@ export function usePersonCommands() {
     if (changed) setMessage(i18n.t(changed, { email: name }))
   }
 
+  // Asks the query client rather than `busy`, so even a second click before the page shows the
+  // first command running waits.
+  function running(): boolean {
+    return queryClient.isMutating({ mutationKey: PERSON_COMMAND }) > 0
+  }
+
   function send(next: PersonCommand) {
-    if (running.current) return
-    running.current = true
-    command.mutate(next)
+    if (!running()) command.mutate(next)
   }
 
   function start(next: PersonCommand) {
-    if (running.current) return
+    if (running()) return
     command.reset()
     setMessage("")
     if (next.action === "delete") setDeleting(next.person.id)
@@ -113,7 +119,7 @@ export function usePersonCommands() {
     return errorFor(person) !== null || deleting === person.id || resetLink?.personId === person.id
   }
 
-  return { command, message, deleting, setDeleting, resetLink, setResetLink, start, send, errorFor, hasDetails }
+  return { command, busy, message, deleting, setDeleting, resetLink, setResetLink, start, send, errorFor, hasDetails }
 }
 
 export type PeopleCommands = ReturnType<typeof usePersonCommands>

@@ -127,23 +127,28 @@ async function wait(milliseconds: number) {
   await settle()
 }
 
-async function renderPeople(i18n: I18n, scenario: Scenario = {}) {
-  page().happyDOM.setURL(`${ORIGIN}/people${scenario.search ?? ""}`)
-  serve(scenario)
-  root = createRoot(container)
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function showPeople(i18n: I18n, queryClient: QueryClient, visit = 0) {
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <PeopleView />
+            <PeopleView key={visit} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
     )
   })
+}
+
+async function renderPeople(i18n: I18n, scenario: Scenario = {}) {
+  page().happyDOM.setURL(`${ORIGIN}/people${scenario.search ?? ""}`)
+  serve(scenario)
+  root = createRoot(container)
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  showPeople(i18n, queryClient)
   await settle()
+  return queryClient
 }
 
 function button(label: string, scope: ParentNode = container): HTMLButtonElement {
@@ -485,6 +490,41 @@ describe("People page", () => {
     expect(personRow("robin@example.test").querySelector("[aria-haspopup='menu']")).not.toBeNull()
     await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
     expect(resetItem().getAttribute("aria-disabled")).toBeNull()
+  })
+
+  it("keeps running one command at a time when the page opens again", async () => {
+    const i18n = testI18n()
+    const queryClient = await renderPeople(i18n)
+    const held: ((response: Response) => void)[] = []
+    const served = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      const path = input instanceof Request ? input.url : String(input)
+      if (init?.method !== "POST" || !path.endsWith("/password-reset-links")) return served(input, init)
+      return new Promise<Response>((resolve) => held.push(resolve))
+    })
+    const resetFor = (number: number) => jsonResponse({ id: `reset-${number}`, token: `reset_${number}`, expires_at: nextWeek }, 201)
+
+    await choose("robin@example.test", "Create password reset link")
+    expect(held).toHaveLength(1)
+
+    // Choosing People again opens a fresh page while the first link is still on its way.
+    showPeople(i18n, queryClient, 1)
+    await settle()
+    await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+    const items = [...personRow("robin@example.test").querySelectorAll<HTMLButtonElement>("[role='menuitem']")]
+    expect(items.map((item) => item.getAttribute("aria-disabled"))).toEqual(["true", "true", "true", "true"])
+    await click(items.find((item) => item.textContent.startsWith("Create password reset link"))!)
+    expect(held).toHaveLength(1)
+
+    // A disabled item leaves the menu open; close it before choosing again.
+    await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
+    act(() => held[0]!(resetFor(1)))
+    await settle()
+    await choose("robin@example.test", "Create password reset link")
+    expect(held).toHaveLength(2)
+    act(() => held[1]!(resetFor(2)))
+    await settle()
+    expect(container.querySelector<HTMLInputElement>(".link-reveal input")!.value).toBe(`${ORIGIN}/password-reset#reset_2`)
   })
 
   it("says plainly what deleting someone removes, and deletes only after confirming", async () => {

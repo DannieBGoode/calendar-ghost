@@ -24,12 +24,12 @@ export function PersonMenu({ person, name, commands }: { person: Person; name: s
  * Someone else's commands: their role, whether they can sign in, a new password, or deletion.
  * They wait while any command runs.
  */
-function personActions({ t }: I18n, person: Person, { command, start }: PeopleCommands): OverflowMenuItem[] {
+function personActions({ t }: I18n, person: Person, { busy, start }: PeopleCommands): OverflowMenuItem[] {
   const item = (id: PersonCommand["action"], label: string, description: string): OverflowMenuItem => ({
     id,
     label,
     description,
-    disabled: command.isPending,
+    disabled: busy,
     onSelect: () => start({ person, action: id }),
   })
   return [
