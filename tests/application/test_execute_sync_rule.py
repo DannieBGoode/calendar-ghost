@@ -866,6 +866,47 @@ def test_run_stops_before_writing_when_its_user_is_disabled_mid_run(tmp_path: Pa
         assert uow.mappings.count_for_rule(rule().id) == 0
 
 
+def test_a_user_disabled_while_the_projection_is_read_gets_no_write() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work.state.rules[rule().id] = rule()
+    source = event(revision="revision-2")
+    destination = replace(
+        event("managed-destination", calendar=rule().destination, title="Edited on destination"),
+        managed_origin=ManagedOrigin(rule().id, source.reference),
+    )
+
+    class DisablingProvider(FakeCalendarProvider):
+        def get_event(self, reference: EventRef) -> CalendarEvent | None:
+            # An Installation Administrator disables the User while the projection is read.
+            unit_of_work.database.disabled.add(USER)
+            return super().get_event(reference)
+
+    provider = DisablingProvider(source)
+    provider.destination = destination
+    unit_of_work.state.mappings[(rule().id, source.reference)] = EventMapping(
+        EventMappingId("mapping-1"),
+        rule().id,
+        source.reference,
+        destination.reference,
+        "revision-1",
+        ProjectionFingerprint("previous-fingerprint"),
+    )
+    fingerprinter = ProjectionFingerprinter()
+    use_case = ExecuteSyncRule(
+        unit_of_work,
+        provider,
+        SyncDecisionService(EventProjector(), fingerprinter),
+        fingerprinter,
+        FixedClock(),
+        UuidRunIdGenerator(),
+    )
+
+    with pytest.raises(RuleNotExecutable):
+        use_case.execute(rule().id)
+
+    assert provider.updated == 0
+
+
 def test_provider_writes_hold_the_rule_write_lock() -> None:
     unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
     unit_of_work.state.rules[rule().id] = rule()

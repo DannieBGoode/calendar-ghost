@@ -616,6 +616,8 @@ class ExecuteSyncRule:
             destination_loaded=destination_loaded,
             actual_destination=actual_destination,
         )
+        # Deciding may read the provider, which takes time; the User may be disabled meanwhile.
+        require_unchanged(run)
         run.count(decision.action, source_event.reference)
         mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
         if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:
