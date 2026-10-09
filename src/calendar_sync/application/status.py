@@ -39,7 +39,7 @@ BLOCKED_CATEGORY = "conflict"
 UNNAMED_CALENDAR = "Unnamed calendar"
 
 
-class InstallationHealth(StrEnum):
+class StatusVerdict(StrEnum):
     STALLED = "stalled"
     STOPPED = "stopped"
     REVIEW = "review"
@@ -49,9 +49,7 @@ class InstallationHealth(StrEnum):
     HEALTHY = "healthy"
 
 
-NEEDS_ATTENTION = frozenset(
-    {InstallationHealth.STALLED, InstallationHealth.STOPPED, InstallationHealth.REVIEW}
-)
+NEEDS_ATTENTION = frozenset({StatusVerdict.STALLED, StatusVerdict.STOPPED, StatusVerdict.REVIEW})
 
 
 class ProblemKind(StrEnum):
@@ -64,12 +62,12 @@ class ProblemKind(StrEnum):
 
 
 _HEALTH_OF = {
-    ProblemKind.STALLED: InstallationHealth.STALLED,
-    ProblemKind.STOPPED: InstallationHealth.STOPPED,
-    ProblemKind.REVIEW: InstallationHealth.REVIEW,
-    ProblemKind.OVERDUE: InstallationHealth.REVIEW,
-    ProblemKind.BLOCKED: InstallationHealth.REVIEW,
-    ProblemKind.WAITING: InstallationHealth.WAITING,
+    ProblemKind.STALLED: StatusVerdict.STALLED,
+    ProblemKind.STOPPED: StatusVerdict.STOPPED,
+    ProblemKind.REVIEW: StatusVerdict.REVIEW,
+    ProblemKind.OVERDUE: StatusVerdict.REVIEW,
+    ProblemKind.BLOCKED: StatusVerdict.REVIEW,
+    ProblemKind.WAITING: StatusVerdict.WAITING,
 }
 
 
@@ -93,7 +91,7 @@ class RuleStatus:
 
 @dataclass(frozen=True, slots=True)
 class InstallationStatus:
-    health: InstallationHealth
+    health: StatusVerdict
     problems: tuple[Problem, ...]
     rules: tuple[RuleStatus, ...]
     open_incidents: tuple[IncidentSummary, ...]
@@ -117,9 +115,9 @@ class InstallationStatus:
             )
             return f"{named}: {first.summary}." if named else f"{first.summary}."
         running = sum(rule.summary.rule.state is SyncRuleState.ENABLED for rule in self.rules)
-        if self.health is InstallationHealth.HEALTHY:
+        if self.health is StatusVerdict.HEALTHY:
             return f"{running} {'rule' if running == 1 else 'rules'} running."
-        if self.health is InstallationHealth.PAUSED:
+        if self.health is StatusVerdict.PAUSED:
             return "Synchronization is paused."
         return "Setup is not finished."
 
@@ -403,21 +401,21 @@ def _health(
     enabled: Sequence[SyncRuleSummary],
     overview: OperationsOverview,
     stalled: bool,
-) -> InstallationHealth:
+) -> StatusVerdict:
     if stalled:
-        return InstallationHealth.STALLED
+        return StatusVerdict.STALLED
     stopped = any(problem.kind is ProblemKind.STOPPED for problem in problems)
     if not overview.accounts:
-        return InstallationHealth.SETUP
+        return StatusVerdict.SETUP
     if overview.connected_accounts == 0 and not stopped and overview.open_incidents == 0:
-        return InstallationHealth.SETUP
+        return StatusVerdict.SETUP
     if problems:
         return _HEALTH_OF[problems[0].kind]
     if not visible:
-        return InstallationHealth.SETUP
+        return StatusVerdict.SETUP
     if not enabled:
-        return InstallationHealth.PAUSED if overview.last_synced_at else InstallationHealth.SETUP
-    return InstallationHealth.HEALTHY
+        return StatusVerdict.PAUSED if overview.last_synced_at else StatusVerdict.SETUP
+    return StatusVerdict.HEALTHY
 
 
 @dataclass(slots=True)

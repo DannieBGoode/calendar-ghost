@@ -11,8 +11,8 @@ ProjectionChoice = Literal["delete", "detach"]
 TentativeChoice = Literal["sync", "mark", "skip"]
 UnansweredChoice = Literal["wait", "as_tentative"]
 PrivacyPolicy = Literal["busy_only", "copy_details"]
-# The values of application.status.InstallationHealth and ProblemKind, so the schema lists them.
-InstallationHealthValue = Literal[
+# The values of application.status.StatusVerdict and ProblemKind, so the schema lists them.
+StatusVerdictValue = Literal[
     "stalled", "stopped", "review", "waiting", "paused", "setup", "healthy"
 ]
 ProblemKindValue = Literal["stalled", "stopped", "review", "overdue", "blocked", "waiting"]
@@ -243,7 +243,7 @@ class ProblemResponse(ApiResponse):
 
 
 class DashboardResponse(ApiResponse):
-    status: InstallationHealthValue
+    status: StatusVerdictValue
     needs_attention: bool
     problems: list[ProblemResponse]
     connected_accounts: int
@@ -476,7 +476,7 @@ class StatusIncidentResponse(ApiResponse):
 
 
 class StatusResponse(ApiResponse):
-    status: InstallationHealthValue
+    status: StatusVerdictValue
     needs_attention: bool
     summary: str
     version: str
