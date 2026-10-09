@@ -323,7 +323,7 @@ describe("OwnAccountSection", () => {
     await renderSection(testI18n())
     queryClient.setQueryData(["rules"], [{ id: "rule-private" }])
     expect(deletionItem().querySelector("p")?.textContent).toBe(
-      "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your own events stay.",
+      "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your Google accounts and your own events stay.",
     )
     await click(button("Delete your account"))
     const confirmation = container.querySelector<HTMLElement>("#own-delete-confirmation")!

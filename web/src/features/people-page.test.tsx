@@ -532,7 +532,7 @@ describe("People page", () => {
     await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
     const item = [...personRow("robin@example.test").querySelectorAll("[role='menuitem']")].at(-1)!
     expect(item.textContent).toBe(
-      "DeleteDeletes their sign-in, rules, and Google connections, and the events their rules wrote. Their own events stay.",
+      "DeleteDeletes their sign-in, rules, and Google connections, and the events their rules wrote. Their Google accounts and their own events stay.",
     )
     await click(item as HTMLElement)
     const confirmation = container.querySelector<HTMLElement>("#delete-person-user-robin")!

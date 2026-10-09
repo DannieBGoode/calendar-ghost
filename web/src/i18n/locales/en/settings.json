@@ -46,7 +46,7 @@
     },
     "delete": {
       "title": "Delete your account",
-      "body": "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your own events stay.",
+      "body": "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your Google accounts and your own events stay.",
       "open": "Delete your account",
       "confirmTitle": "Delete your account permanently?",
       "confirmBody": "This deletes your sign-in, rules, Google connections, tokens, and Activity, and signs you out. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",

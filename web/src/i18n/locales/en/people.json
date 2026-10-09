@@ -71,7 +71,7 @@
     "passwordReset": "Create password reset link",
     "passwordResetHint": "A link they use once to choose a new password.",
     "delete": "Delete",
-    "deleteHint": "Deletes their sign-in, rules, and Google connections, and the events their rules wrote. Their own events stay."
+    "deleteHint": "Deletes their sign-in, rules, and Google connections, and the events their rules wrote. Their Google accounts and their own events stay."
   },
   "status": {
     "administrator": "{email} is now an administrator.",

@@ -362,6 +362,7 @@ diagnostics keep the glossary terms above.
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
+| User Deletion | "Delete your account" for oneself, naming what is deleted (sign-in, rules, Google connections, tokens, Activity, and the events their rules wrote when chosen) and that their Google accounts and own events stay; on People, "Delete" and "Delete {email} permanently?", naming the same and that the events their rules wrote are deleted. "Account deletion" stays out of domain and documentation language |
 
 - The product is named **Calendar Ghost**. "Ghost" is brand language for the mark and tagline;
   the interface and documentation keep this glossary's terms, so a Managed Projection is never
