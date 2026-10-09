@@ -20,6 +20,7 @@ from calendar_sync.bootstrap.container import Container, service_container
 from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.api.problems import install_problem_handlers, problem
 from calendar_sync.interfaces.api.routes import (
+    account,
     accounts,
     activity,
     health,
@@ -31,6 +32,7 @@ from calendar_sync.interfaces.api.routes import (
     storage,
 )
 from calendar_sync.interfaces.mcp.server import (
+    McpIdentity,
     McpNotFound,
     McpServices,
     McpUserServices,
@@ -54,8 +56,16 @@ class UserApiServices(
     """Everything the routers read from one User's services."""
 
 
+class ApiIdentity(
+    session.SignInIdentity, setup.SetupIdentity, account.AccountIdentity, McpIdentity, Protocol
+):
+    """Everything the routers read about who is signed in."""
+
+
 class ApiServices(
     session.SessionServices,
+    setup.SetupServices,
+    account.OwnAccountServices,
     accounts.AuthorizationServices,
     integrations.StatusServices,
     storage.StorageServices,
@@ -64,6 +74,8 @@ class ApiServices(
 ):
     """Everything the routers read from the composed container."""
 
+    @property
+    def identity(self) -> ApiIdentity: ...
     def for_user(self, user_id: UserId) -> UserApiServices: ...
 
 
@@ -102,6 +114,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         health,
         setup,
         session,
+        account,
         activity,
         accounts,
         rules,

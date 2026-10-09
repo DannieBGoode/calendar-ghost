@@ -173,6 +173,26 @@
         "title": "CalendarEndpointPayload",
         "type": "object"
       },
+      "ChangePasswordRequest": {
+        "properties": {
+          "current_password": {
+            "maxLength": 256,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 256,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "ChangePasswordRequest",
+        "type": "object"
+      },
       "ClearActivityRequest": {
         "properties": {
           "older_than_days": {
@@ -1104,21 +1124,6 @@
           "calendar_name"
         ],
         "title": "NamedCalendarEndpointResponse",
-        "type": "object"
-      },
-      "PasswordRequest": {
-        "properties": {
-          "password": {
-            "maxLength": 256,
-            "minLength": 12,
-            "title": "Password",
-            "type": "string"
-          }
-        },
-        "required": [
-          "password"
-        ],
-        "title": "PasswordRequest",
         "type": "object"
       },
       "PreviewItemResponse": {
@@ -2071,12 +2076,70 @@
           "authenticated": {
             "title": "Authenticated",
             "type": "boolean"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignedInUserResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "authenticated"
+          "authenticated",
+          "user"
         ],
         "title": "SessionResponse",
+        "type": "object"
+      },
+      "SetEmailRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "SetEmailRequest",
+        "type": "object"
+      },
+      "SetupRequest": {
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "title": "Email",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 12,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "SetupRequest",
         "type": "object"
       },
       "SetupStatusResponse": {
@@ -2084,12 +2147,95 @@
           "administrator_configured": {
             "title": "Administrator Configured",
             "type": "boolean"
+          },
+          "password_only_sign_in": {
+            "title": "Password Only Sign In",
+            "type": "boolean"
           }
         },
         "required": [
-          "administrator_configured"
+          "administrator_configured",
+          "password_only_sign_in"
         ],
         "title": "SetupStatusResponse",
+        "type": "object"
+      },
+      "SignInRequest": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 320,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "password": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "SignInRequest",
+        "type": "object"
+      },
+      "SignedInUserResponse": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "notify_by_email": {
+            "title": "Notify By Email",
+            "type": "boolean"
+          },
+          "role": {
+            "enum": [
+              "installation_administrator",
+              "user"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "notify_by_email",
+          "language"
+        ],
+        "title": "SignedInUserResponse",
         "type": "object"
       },
       "SourceChangeResponse": {
@@ -2550,6 +2696,113 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/account/email": {
+      "put": {
+        "description": "Add the email the upgraded first User must add, or change one with the password.",
+        "operationId": "set_email_api_v1_account_email_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedInUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Email"
+      }
+    },
+    "/api/v1/account/password": {
+      "put": {
+        "description": "Replace the password; every other session of the User ends.",
+        "operationId": "change_password_api_v1_account_password_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Password"
+      }
+    },
     "/api/v1/accounts": {
       "get": {
         "operationId": "list_accounts_api_v1_accounts_get",
@@ -4166,7 +4419,7 @@
     },
     "/api/v1/session": {
       "delete": {
-        "operationId": "log_out_api_v1_session_delete",
+        "operationId": "sign_out_api_v1_session_delete",
         "parameters": [
           {
             "in": "cookie",
@@ -4200,7 +4453,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Log Out"
+        "summary": "Sign Out"
       },
       "get": {
         "operationId": "session_status_api_v1_session_get",
@@ -4247,12 +4500,12 @@
         "summary": "Session Status"
       },
       "post": {
-        "operationId": "log_in_api_v1_session_post",
+        "operationId": "sign_in_api_v1_session_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PasswordRequest"
+                "$ref": "#/components/schemas/SignInRequest"
               }
             }
           },
@@ -4280,7 +4533,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Log In"
+        "summary": "Sign In"
       }
     },
     "/api/v1/setup": {
@@ -4303,12 +4556,12 @@
     },
     "/api/v1/setup/admin": {
       "post": {
-        "operationId": "create_admin_api_v1_setup_admin_post",
+        "operationId": "set_up_api_v1_setup_admin_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PasswordRequest"
+                "$ref": "#/components/schemas/SetupRequest"
               }
             }
           },
@@ -4336,7 +4589,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Admin"
+        "summary": "Set Up"
       }
     },
     "/api/v1/status": {

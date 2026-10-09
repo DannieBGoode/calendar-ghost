@@ -14,27 +14,20 @@ import type { I18n } from "@/i18n/translator"
 import { api } from "@/lib/api"
 import { LICENSE_URL, PRODUCT_NAME, SOURCE_URL } from "@/lib/brand"
 
-type AuthScreenProps = { mode: "setup" | "login" }
+type AuthScreenProps = {
+  mode: "setup" | "login"
+  /** The upgraded first User has no email yet, so sign-in may leave it empty. */
+  passwordOnly?: boolean
+}
 
-export function AuthScreen({ mode }: AuthScreenProps) {
+export function AuthScreen({ mode, passwordOnly = false }: AuthScreenProps) {
   const i18n = useI18n()
   const { t } = i18n
   const passwordId = useId()
   const confirmationId = useId()
-  const queryClient = useQueryClient()
-  const [password, setPassword] = useState("")
-  const [confirmation, setConfirmation] = useState("")
   const isSetup = mode === "setup"
-
-  const mutation = useMutation({
-    mutationFn: () => (isSetup ? api.createAdmin(password) : api.logIn(password)),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries()
-    },
-  })
-
-  const mismatch = isSetup && confirmation.length > 0 && password !== confirmation
-  const canSubmit = password.length >= 12 && (!isSetup || password === confirmation)
+  const form = useCredentials(isSetup, passwordOnly)
+  const { password, setPassword, confirmation, setConfirmation, mismatch, canSubmit, mutation } = form
 
   function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -50,6 +43,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
 
       <AuthFormPanel isSetup={isSetup}>
         <form onSubmit={submit} className="auth-form">
+          <EmailField value={form.email} required={form.emailRequired} onChange={form.setEmail} />
           <div className="field-stack">
             <Label htmlFor={passwordId}>{t("auth.password")}</Label>
             <Input
@@ -61,7 +55,6 @@ export function AuthScreen({ mode }: AuthScreenProps) {
               aria-describedby={`${passwordId}-hint`}
               required
               minLength={12}
-              autoFocus
             />
             <p id={`${passwordId}-hint`} className="field-hint">{t("auth.passwordHint")}</p>
           </div>
@@ -112,8 +105,8 @@ function AuthFormPanel({ isSetup, children }: { isSetup: boolean; children: Reac
       <div className="form-heading">
         <LockKeyhole aria-hidden="true" />
         <div>
-          <h2>{isSetup ? t("auth.createAdministrator") : t("auth.administratorSignIn")}</h2>
-          <p>{isSetup ? t("auth.setup.passwordNote") : t("auth.login.passwordNote")}</p>
+          <h2>{isSetup ? t("auth.createAdministrator") : t("auth.signInHeading")}</h2>
+          <p>{isSetup ? t("auth.setup.emailNote") : t("auth.login.passwordNote")}</p>
         </div>
       </div>
       {children}
@@ -132,6 +125,58 @@ function AuthFormPanel({ isSetup, children }: { isSetup: boolean; children: Reac
         })}
       </p>
     </section>
+  )
+}
+
+/** What the form holds and whether it may be sent: setup needs every field, sign-in may omit
+ * the email only while the upgraded first User has none. */
+function useCredentials(isSetup: boolean, passwordOnly: boolean) {
+  const queryClient = useQueryClient()
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmation, setConfirmation] = useState("")
+  const emailRequired = isSetup || !passwordOnly
+  const address = email.trim()
+  const mutation = useMutation({
+    mutationFn: () =>
+      isSetup ? api.createAdmin(address, password) : api.logIn(address || null, password),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries()
+    },
+  })
+  const mismatch = isSetup && confirmation.length > 0 && password !== confirmation
+  const complete = password.length >= 12 && (!emailRequired || address.length > 0)
+  const canSubmit = complete && (!isSetup || password === confirmation)
+  return { email, setEmail, password, setPassword, confirmation, setConfirmation, emailRequired, mismatch, canSubmit, mutation }
+}
+
+/** The email a User signs in with; optional only while the upgraded first User has none. */
+function EmailField({
+  value,
+  required,
+  onChange,
+}: {
+  value: string
+  required: boolean
+  onChange: (value: string) => void
+}) {
+  const { t } = useI18n()
+  const id = useId()
+  return (
+    <div className="field-stack">
+      <Label htmlFor={id}>{t("auth.email")}</Label>
+      <Input
+        id={id}
+        type="email"
+        autoComplete="username"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-describedby={required ? undefined : `${id}-hint`}
+        required={required}
+        autoFocus
+      />
+      {!required && <p id={`${id}-hint`} className="field-hint">{t("auth.login.passwordOnlyHint")}</p>}
+    </div>
   )
 }
 

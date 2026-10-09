@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from enum import Enum
 
 from calendar_sync.application.ports import (
-    AdministratorAccess,
     IntegrationTokenAuthentication,
     IntegrationTokenScope,
+    Sessions,
 )
 from calendar_sync.domain.access import UserId
 
@@ -28,7 +28,7 @@ class StatusPrincipal:
 
 def status_access(
     tokens: IntegrationTokenAuthentication,
-    administrator: AdministratorAccess,
+    sessions: Sessions,
     authorization: str | None,
     session: str | None,
 ) -> StatusPrincipal:
@@ -41,7 +41,7 @@ def status_access(
         if summary.scope is not IntegrationTokenScope.STATUS_READ:
             return StatusPrincipal(StatusAccess.FORBIDDEN)
         return StatusPrincipal(StatusAccess.GRANTED, summary.owner)
-    user = administrator.session_user(session) if session is not None else None
+    user = sessions.user_of(session) if session is not None else None
     if user is not None:
         return StatusPrincipal(StatusAccess.GRANTED, user)
     return StatusPrincipal(StatusAccess.UNAUTHENTICATED)

@@ -2,15 +2,26 @@
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.ports import AdministratorAccess, Clock, UnitOfWorkFactory
+from calendar_sync.application.identity import SetUpInstallation
+from calendar_sync.application.ports import (
+    Clock,
+    IdGenerator,
+    PasswordHasher,
+    Sessions,
+    UnitOfWorkFactory,
+    UserDirectory,
+)
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.scheduling import SystemClock
-from calendar_sync.infrastructure.security import HistoryCipher, SqliteAdminAuth
+from calendar_sync.infrastructure.security import HistoryCipher, ScryptPasswords
 from tests.helpers import NOW
 
 USER = UserId("user-1")
@@ -80,27 +91,54 @@ def sqlite_units(
     return SqliteUnitOfWorkFactory(database, clock or SystemClock(), history).for_user(user)
 
 
+ADMIN_EMAIL = "admin@example.test"
 ADMIN_PASSWORD = "correct horse battery staple"
 
 
-def administrator(access: AdministratorAccess) -> UserId:
-    """The installation's first User, created as setup would when there is none yet."""
-    if not access.is_configured():
-        access.create_admin(ADMIN_PASSWORD)
-    session = access.authenticate(ADMIN_PASSWORD)
-    assert session is not None
-    return session.user_id
+class _Adapters(Protocol):
+    """What setting up the first User needs, as `Adapters` provides it."""
+
+    @property
+    def users(self) -> UserDirectory: ...
+    @property
+    def passwords(self) -> PasswordHasher: ...
+    @property
+    def sessions(self) -> Sessions: ...
+    @property
+    def ids(self) -> IdGenerator: ...
+    @property
+    def clock(self) -> Clock: ...
+
+
+def administrator(adapters: _Adapters) -> UserId:
+    """The installation's first User, set up as the Web API would when there is none yet."""
+    if adapters.users.count() == 0:
+        SetUpInstallation(
+            adapters.users, adapters.passwords, adapters.sessions, adapters.ids, adapters.clock
+        ).execute(ADMIN_EMAIL, ADMIN_PASSWORD)
+    return adapters.users.list()[0].id
 
 
 def first_user(database: Path) -> UserId:
-    """The first User of an installation set up through `administrator` or the Web API."""
-    return administrator(SqliteAdminAuth(database))
+    """The first User of an installation, set up through `administrator` or the Web API."""
+    users = SqliteUserDirectory(database)
+    if users.count() == 0:
+        SetUpInstallation(
+            users, ScryptPasswords(), SqliteSessions(database, SystemClock()), _Ids(), SystemClock()
+        ).execute(ADMIN_EMAIL, ADMIN_PASSWORD)
+    return users.list()[0].id
+
+
+class _Ids:
+    def new(self) -> str:
+        return str(uuid4())
 
 
 def sign_in(client: TestClient) -> None:
     """Sign the client in as the first User, setting the installation up if it is not yet."""
+    credentials = {"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
     if client.get("/api/v1/setup").json()["administrator_configured"]:
-        response = client.post("/api/v1/session", json={"password": ADMIN_PASSWORD})
+        response = client.post("/api/v1/session", json=credentials)
     else:
-        response = client.post("/api/v1/setup/admin", json={"password": ADMIN_PASSWORD})
+        response = client.post("/api/v1/setup/admin", json=credentials)
     assert response.status_code == 200, response.text

@@ -5,12 +5,13 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "r
 import { GhostMark } from "@/components/ghost-mark"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AddEmailScreen } from "@/features/add-email-screen"
 import { AuthScreen } from "@/features/auth-screen"
 import { Dashboard } from "@/features/dashboard"
 import { rich } from "@/i18n/rich"
 import { useI18n } from "@/i18n/provider"
 import type { MessageKey } from "@/i18n/types"
-import { api } from "@/lib/api"
+import { api, type SessionStatus, type SetupStatus } from "@/lib/api"
 import { APP_VERSION, HELP_URL, LICENSE_URL, PRODUCT_NAME, SOURCE_URL, documentTitle } from "@/lib/brand"
 import {
   appLocationFromPathname,
@@ -47,8 +48,14 @@ export default function App() {
   if (setup.error || session.error) {
     return <main className="fatal-state"><h1>{t("app.unavailable.title")}</h1><p>{t("app.unavailable.body")}</p><Button onClick={() => window.location.reload()}>{t("app.unavailable.reload")}</Button></main>
   }
-  if (!configured) return <AuthScreen mode="setup" />
-  if (!session.data?.authenticated) return <AuthScreen mode="login" />
+  return <SignInGate setup={setup.data} session={session.data} />
+}
+
+/** Setup, sign-in, or the add-email step, until a User with an email is signed in. */
+function SignInGate({ setup, session }: { setup: SetupStatus; session: SessionStatus | undefined }) {
+  if (!setup.administrator_configured) return <AuthScreen mode="setup" />
+  if (!session?.authenticated) return <AuthScreen mode="login" passwordOnly={setup.password_only_sign_in} />
+  if (session.user?.email === null) return <AddEmailScreen />
   return <AuthenticatedApp />
 }
 function AuthenticatedApp() {

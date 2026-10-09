@@ -6,8 +6,12 @@ from typing import Annotated, Protocol
 
 from fastapi import Cookie, Depends, Header, Request, Response, status
 
-from calendar_sync.application.ports import AdministratorAccess, IntegrationTokenAuthentication
-from calendar_sync.domain.access import UserId
+from calendar_sync.application.ports import (
+    IntegrationTokenAuthentication,
+    Sessions,
+    UserDirectory,
+)
+from calendar_sync.domain.access import User, UserId
 from calendar_sync.interfaces.access import StatusAccess, status_access
 from calendar_sync.interfaces.api.problems import ApiProblem, problem
 
@@ -19,24 +23,40 @@ def app_services(request: Request) -> object:
     return request.app.state.container
 
 
+class Identity(Protocol):
+    @property
+    def users(self) -> UserDirectory: ...
+    @property
+    def sessions(self) -> Sessions: ...
+
+
 class SessionServices(Protocol):
     @property
-    def administrator(self) -> AdministratorAccess: ...
+    def identity(self) -> Identity: ...
 
 
 class UserScopedServices(Protocol):
     def for_user(self, user_id: UserId) -> object: ...
 
 
-def current_user(
+def signed_in_user(
     services: Annotated[SessionServices, Depends(app_services)],
     session: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
-) -> UserId:
-    """The signed-in User; every route but the public ones depends on it."""
-    user = services.administrator.session_user(session)
+) -> User:
+    """The signed-in User, even before they add the email they must add first."""
+    identity = services.identity
+    user_id = identity.sessions.user_of(session)
+    user = identity.users.get(user_id) if user_id is not None else None
     if user is None:
         raise problem(status.HTTP_401_UNAUTHORIZED, "session_required", "a signed-in User required")
     return user
+
+
+def current_user(user: Annotated[User, Depends(signed_in_user)]) -> UserId:
+    """The signed-in User, once they have an email; every route but a few depends on it."""
+    if user.needs_email:
+        raise problem(status.HTTP_403_FORBIDDEN, "email_required", "add your email to continue")
+    return user.id
 
 
 def user_services(
@@ -69,7 +89,7 @@ def status_reader(
 ) -> UserId:
     """The User whose Installation Status a token or session may read."""
     access = status_access(
-        services.token_authentication, services.administrator, authorization, session
+        services.token_authentication, services.identity.sessions, authorization, session
     )
     if access.result is StatusAccess.FORBIDDEN:
         raise problem(

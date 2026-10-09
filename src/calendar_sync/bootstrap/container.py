@@ -16,12 +16,17 @@ from calendar_sync.application.activity import (
     OperationsQueries,
 )
 from calendar_sync.application.health import RuleHealth
+from calendar_sync.application.identity import (
+    ChangeOwnPassword,
+    SetOwnEmail,
+    SetUpInstallation,
+    SignIn,
+)
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
-    AdministratorAccess,
     CalendarProvider,
     Clock,
     ConnectedAccountRepository,
@@ -33,11 +38,15 @@ from calendar_sync.application.ports import (
     IntegrationTokenAuthentication,
     IntegrationTokens,
     LogFiles,
+    PasswordHasher,
     ProviderCallStats,
     RuleHealthRecords,
     RunIdGenerator,
     SchedulerHeartbeat,
+    Sessions,
+    SignInThrottle,
     UnitOfWorkFactory,
+    UserDirectory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.providers import ProviderKind
@@ -95,6 +104,7 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     initialize_database,
 )
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
+from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.providers.routing import (
     RoutingAccountCalendars,
@@ -105,11 +115,8 @@ from calendar_sync.infrastructure.scheduling import (
     SyncScheduler,
     SystemClock,
 )
-from calendar_sync.infrastructure.security import (
-    CredentialCipher,
-    HistoryCipher,
-    SqliteAdminAuth,
-)
+from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher, ScryptPasswords
+from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,12 +158,24 @@ class UserServices:
 
 
 @dataclass(frozen=True, slots=True)
+class IdentityServices:
+    """Who is signed in: setup, sign-in, sessions, and a User's own credentials."""
+
+    users: UserDirectory
+    sessions: Sessions
+    set_up: SetUpInstallation
+    sign_in: SignIn
+    set_own_email: SetOwnEmail
+    change_own_password: ChangeOwnPassword
+
+
+@dataclass(frozen=True, slots=True)
 class Container:
     """What the Web API reads: installation-wide services, and each User's through `for_user`."""
 
     secure_cookies: bool
     google: GoogleConnectionStatus
-    administrator: AdministratorAccess
+    identity: IdentityServices
     token_authentication: IntegrationTokenAuthentication
     storage: StorageAdministration
     authorization: AccountAuthorization | None
@@ -184,7 +203,10 @@ class Adapters:
     clock: Clock
     ids: IdGenerator
     run_ids: RunIdGenerator
-    administrator: AdministratorAccess
+    users: UserDirectory
+    sessions: Sessions
+    passwords: PasswordHasher
+    sign_in_throttle: SignInThrottle
     activity: Callable[[UserId], ActivityQueries]
     operations: Callable[[UserId], OperationsQueries]
     health_records: Callable[[UserId], RuleHealthRecords]
@@ -240,7 +262,10 @@ def build_adapters(settings: Settings) -> Adapters:
         clock=clock,
         ids=ids,
         run_ids=UuidRunIdGenerator(),
-        administrator=SqliteAdminAuth(database, clock, ids),
+        users=SqliteUserDirectory(database),
+        sessions=SqliteSessions(database, clock),
+        passwords=ScryptPasswords(),
+        sign_in_throttle=MemorySignInThrottle(clock),
         activity=lambda user: SqliteActivityQueries(database, user, history),
         operations=lambda user: SqliteOperationsQueries(database, user),
         health_records=lambda user: SqliteRuleHealthRecords(database, user),
@@ -301,7 +326,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             configured=google_configured,
             redirect_uri=settings.google_redirect_uri if google_configured else None,
         ),
-        administrator=adapters.administrator,
+        identity=_identity(adapters),
         token_authentication=adapters.token_authentication,
         storage=StorageAdministration(
             adapters.database_storage, adapters.locks, adapters.clock, adapters.log_files
@@ -310,6 +335,18 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         account_calendars=adapters.account_calendars,
         scheduler=scheduler,
         user_services=user_services,
+    )
+
+
+def _identity(adapters: Adapters) -> IdentityServices:
+    users, passwords, sessions = adapters.users, adapters.passwords, adapters.sessions
+    return IdentityServices(
+        users=users,
+        sessions=sessions,
+        set_up=SetUpInstallation(users, passwords, sessions, adapters.ids, adapters.clock),
+        sign_in=SignIn(users, passwords, sessions, adapters.sign_in_throttle, adapters.clock),
+        set_own_email=SetOwnEmail(users, passwords),
+        change_own_password=ChangeOwnPassword(users, passwords, sessions),
     )
 
 

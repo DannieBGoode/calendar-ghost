@@ -4,7 +4,7 @@ import asyncio
 import json
 import sqlite3
 from collections.abc import Iterator, MutableMapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, cast
 
@@ -36,7 +36,7 @@ def mcp(tmp_path: Path) -> Iterator[tuple[TestClient, str]]:
     settings = Settings(database)
     adapters = build_adapters(settings)
     container = replace(compose(settings, adapters), scheduler=None)
-    user = administrator(adapters.administrator)
+    user = administrator(adapters)
     with sqlite3.connect(database) as connection:
         connection.executemany(
             """
@@ -199,10 +199,20 @@ class _Tokens:
         return _Summary(self.scope)
 
 
+class _NoSessions:
+    def user_of(self, token: str | None) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class _Identity:
+    sessions: _NoSessions = field(default_factory=_NoSessions)
+
+
 @dataclass(frozen=True)
 class _Services:
     token_authentication: _Tokens
-    administrator: None = None
+    identity: _Identity = field(default_factory=_Identity)
 
 
 def _call_gate(scope: object) -> tuple[int, dict[str, object]]:

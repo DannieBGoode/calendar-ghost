@@ -96,7 +96,15 @@ from tests.helpers import (
     series,
     week_start,
 )
-from tests.users import RULE_ACCOUNTS, add_account, administrator, first_user, sign_in
+from tests.users import (
+    ADMIN_EMAIL,
+    ADMIN_PASSWORD,
+    RULE_ACCOUNTS,
+    add_account,
+    administrator,
+    first_user,
+    sign_in,
+)
 
 
 def _google(adapters: Adapters) -> GoogleOAuthService:
@@ -108,7 +116,7 @@ def _google(adapters: Adapters) -> GoogleOAuthService:
 def _account_store(adapters: Adapters) -> SqliteUserConnectedAccounts:
     """The first User's accounts, for seeding them as authorizing them would."""
     assert adapters.accounts is not None
-    accounts = adapters.accounts(administrator(adapters.administrator))
+    accounts = adapters.accounts(administrator(adapters))
     assert isinstance(accounts, SqliteUserConnectedAccounts)
     return accounts
 
@@ -117,15 +125,18 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
     with TestClient(app) as client:
-        assert client.get("/api/v1/setup").json() == {"administrator_configured": False}
+        assert client.get("/api/v1/setup").json() == {
+            "administrator_configured": False,
+            "password_only_sign_in": False,
+        }
         assert client.get("/api/v1/dashboard").status_code == 401
 
         response = client.post(
-            "/api/v1/setup/admin", json={"password": "correct horse battery staple"}
+            "/api/v1/setup/admin", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
         )
 
         assert response.status_code == 200
-        assert response.json() == {"authenticated": True}
+        assert response.json()["authenticated"] is True
         dashboard = client.get("/api/v1/dashboard")
         assert dashboard.status_code == 200
         assert dashboard.json() == {
@@ -261,10 +272,12 @@ def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: P
 
         assert client.delete("/api/v1/session").status_code == 204
         unauthorized = client.get("/api/v1/dashboard")
-        wrong_password = client.post("/api/v1/session", json={"password": "this password is wrong"})
+        wrong_password = client.post(
+            "/api/v1/session", json={"email": ADMIN_EMAIL, "password": "this password is wrong"}
+        )
         assert (
             client.post(
-                "/api/v1/session", json={"password": "correct horse battery staple"}
+                "/api/v1/session", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
             ).status_code
             == 200
         )
@@ -273,7 +286,7 @@ def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: P
     assert unauthorized.status_code == 401
     assert unauthorized.json()["code"] == "session_required"
     assert wrong_password.status_code == 401
-    assert wrong_password.json()["code"] == "incorrect_password"
+    assert wrong_password.json()["code"] == "incorrect_credentials"
 
 
 def test_admin_setup_is_single_use_and_secure_cookie_setting_is_honored(tmp_path: Path) -> None:
@@ -281,10 +294,11 @@ def test_admin_setup_is_single_use_and_secure_cookie_setting_is_honored(tmp_path
 
     with TestClient(app) as client:
         first = client.post(
-            "/api/v1/setup/admin", json={"password": "correct horse battery staple"}
+            "/api/v1/setup/admin", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
         )
         second = client.post(
-            "/api/v1/setup/admin", json={"password": "another correct battery staple"}
+            "/api/v1/setup/admin",
+            json={"email": "other@example.test", "password": "another correct battery staple"},
         )
 
         assert "Secure" in first.headers["set-cookie"]
@@ -1017,7 +1031,7 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
     account = _account_store(adapters).save(
         "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
     )
-    complete = Mock(return_value=AuthorizedAccount(administrator(adapters.administrator), account))
+    complete = Mock(return_value=AuthorizedAccount(administrator(adapters), account))
     monkeypatch.setattr(google, "complete", complete)
     app = create_app(container)
 
@@ -1057,7 +1071,7 @@ def test_reauthorizing_resumes_the_rules_lapsed_authorization_stopped(
     # Completing consent saves the new credentials, as Google's callback does.
     reauthorize = Mock(
         side_effect=lambda *_: AuthorizedAccount(
-            administrator(adapters.administrator),
+            administrator(adapters),
             store.save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE),
         )
     )
@@ -1101,7 +1115,7 @@ def test_reauthorizing_starts_google_consent_with_the_accounts_email(
 
     assert [r.status_code for r in (hinted, unknown, new)] == [302, 302, 302]
     # Consent connects the account for the signed-in User.
-    user = administrator(adapters.administrator)
+    user = administrator(adapters)
     assert [call.args for call in authorization_url.call_args_list] == [
         (user, "work@example.test"),
         (user, None),
@@ -1114,7 +1128,7 @@ def test_google_oauth_denial_returns_to_settings_and_consumes_state(tmp_path: Pa
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     google = _google(adapters)
-    google._states.store("synthetic-state", administrator(adapters.administrator))
+    google._states.store("synthetic-state", administrator(adapters))
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -1137,7 +1151,7 @@ def test_google_oauth_non_permission_error_returns_to_settings(tmp_path: Path) -
         Settings(tmp_path / "test.db", master_key=CredentialCipher.generate_key())
     )
     google = _google(adapters)
-    google._states.store("synthetic-state", administrator(adapters.administrator))
+    google._states.store("synthetic-state", administrator(adapters))
     app = create_app(container)
 
     with TestClient(app) as client:
@@ -1303,7 +1317,10 @@ def _installation(settings: Settings, **substitutes: Any) -> tuple[Container, Ad
 
 def _services(container: Container) -> UserServices:
     """The first User's use cases, as their requests reach them."""
-    return container.for_user(administrator(container.administrator))
+    identity = container.identity
+    if identity.users.count() == 0:
+        identity.set_up.execute(ADMIN_EMAIL, ADMIN_PASSWORD)
+    return container.for_user(identity.users.list()[0].id)
 
 
 def _with_services(container: Container, **changes: Any) -> Container:
@@ -1316,7 +1333,7 @@ def _with_services(container: Container, **changes: Any) -> Container:
 def _units(adapters: Adapters, *accounts: str, rule_accounts: bool = True) -> UnitOfWorkFactory:
     """The first User's units of work, to arrange what that User's requests then read, with
     `accounts` recorded, and unless told otherwise the accounts `rule()` uses."""
-    user = administrator(adapters.administrator)
+    user = administrator(adapters)
     factory = adapters.unit_of_work.__self__  # type: ignore[attr-defined]
     assert isinstance(factory, SqliteUnitOfWorkFactory)
     for account in (*(RULE_ACCOUNTS if rule_accounts else ()), *accounts):
@@ -1335,7 +1352,7 @@ def _ticking(container: Container, adapters: Adapters) -> Container:
         container,
         get_installation_status=GetInstallationStatus(
             _services(container).list_sync_rules,
-            adapters.operations(administrator(adapters.administrator)),
+            adapters.operations(administrator(adapters)),
             adapters.clock,
             RecentSchedulerHeartbeat(adapters.clock),
         ),
@@ -2261,7 +2278,7 @@ def test_activity_event_reports_unavailable_provider(tmp_path: Path) -> None:
             compose(settings, replace(adapters, calendar_provider=cast(CalendarProvider, failing)))
         )
     ) as client:
-        client.post("/api/v1/session", json={"password": "correct horse battery staple"})
+        sign_in(client)
         response = client.get("/api/v1/audit-entries/1/event")
         assert response.status_code == 424
         assert "authentication" in response.json()["detail"]
@@ -2684,7 +2701,6 @@ def test_activity_event_of_a_removed_rule_reports_gone_without_provider_reads(
     ):
         with TestClient(create_app(candidate)) as client:
             sign_in(client)
-            client.post("/api/v1/session", json=PASSWORD)
             response = client.get("/api/v1/audit-entries/1/event")
             assert response.status_code == 410
             assert "removed" in response.json()["detail"]
@@ -2863,7 +2879,7 @@ def test_recovering_a_rule_lapses_the_account_still_unauthorized(
     with _units(adapters)() as uow:
         uow.rules.add(rule(state=SyncRuleState.DEGRADED))
         uow.commit()
-    adapters.incidents(administrator(adapters.administrator)).open(
+    adapters.incidents(administrator(adapters)).open(
         IncidentReport(
             "provider:rule-1",
             SyncRuleId("rule-1"),

@@ -17,9 +17,9 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from calendar_sync import __version__
 from calendar_sync.application.errors import RuleNotFound
 from calendar_sync.application.ports import (
-    AdministratorAccess,
     IntegrationTokenAuthentication,
     RuleRunOutcome,
+    Sessions,
 )
 from calendar_sync.application.rules import GetSyncRuleDetails
 from calendar_sync.application.status import GetInstallationStatus
@@ -59,9 +59,14 @@ class McpUserServices(Protocol):
     def get_sync_rule_details(self) -> GetSyncRuleDetails: ...
 
 
+class McpIdentity(Protocol):
+    @property
+    def sessions(self) -> Sessions: ...
+
+
 class McpServices(Protocol):
     @property
-    def administrator(self) -> AdministratorAccess: ...
+    def identity(self) -> McpIdentity: ...
     @property
     def token_authentication(self) -> IntegrationTokenAuthentication: ...
     def for_user(self, user_id: UserId) -> McpUserServices: ...
@@ -169,7 +174,7 @@ class McpGate:
         access = await run_in_threadpool(
             status_access,
             self._services.token_authentication,
-            self._services.administrator,
+            self._services.identity.sessions,
             Headers(scope=scope).get("authorization"),
             None,
         )

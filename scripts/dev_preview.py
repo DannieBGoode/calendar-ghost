@@ -33,6 +33,7 @@ from typing import Any, NoReturn, cast
 from calendar_sync.application.accounts import DiscoverCalendars, ListConnectedAccounts
 from calendar_sync.application.activity import InspectActivityEvent
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.identity import SetUpInstallation
 from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
@@ -86,6 +87,7 @@ from calendar_sync.infrastructure.security import CredentialCipher, HistoryCiphe
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
+PREVIEW_EMAIL = "preview@example.test"
 PREVIEW_PASSWORD = "preview-password"  # noqa: S105
 MARKER_TABLE = "dev_preview_marker"
 
@@ -402,7 +404,9 @@ def build_preview_container(
         account_calendars=cast(AccountCalendars, google),
         user_services=preview_services,
     )
-    adapters.administrator.create_admin(PREVIEW_PASSWORD)
+    SetUpInstallation(
+        adapters.users, adapters.passwords, adapters.sessions, adapters.ids, adapters.clock
+    ).execute(PREVIEW_EMAIL, PREVIEW_PASSWORD)
     if scenario is not Scenario.SETUP:
         _seed(adapters, path, preview_user(path), moment, scenario)
     return container

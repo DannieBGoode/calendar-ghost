@@ -48,14 +48,18 @@
     "credentials_required": "Sign in again, or use a valid Integration Token.",
     "dependency_failed": "A calendar provider did not respond as expected. Try again shortly.",
     "duplicate_relationship": "A rule from this calendar to that calendar already exists.",
+    "email_required": "Add your email to continue.",
+    "email_taken": "Someone else already signs in with this email.",
     "event_inspection_unavailable": "Looking up events needs a configured calendar provider and the installation master key.",
     "file_logging_off": "File logging is off, so there are no log files to download or delete.",
     "gone": "That item is no longer available.",
+    "incorrect_credentials": "That email and password do not match.",
     "incorrect_password": "That password is incorrect.",
     "insufficient_scope": "This Integration Token is not allowed to read Installation Status.",
     "integration_token_not_found": "This Integration Token no longer exists. Reload to see the current tokens.",
     "invalid_activity_age": "Choose one of the offered ages for clearing Activity.",
     "invalid_authorization_state": "This sign-in link expired or was already used. Start again from Settings.",
+    "invalid_email": "Enter an email address, such as name@example.com.",
     "invalid_integration_token_name": "Give the token a name of 1 to 80 characters, without line breaks or other control characters.",
     "invalid_request": "Some of the information is not valid. Check it and try again.",
     "invalid_request_string_too_long": {
@@ -87,9 +91,11 @@
     "service_unavailable": "This part of Calendar Ghost is not configured yet.",
     "session_required": "Your session ended. Sign in again.",
     "setup_complete": "Calendar Ghost is already set up. Sign in instead.",
+    "sign_in_throttled": "Too many failed attempts. Wait a few minutes, then try again.",
     "source_change_not_found": "This entry recorded no source change.",
     "source_event_not_found": "This entry has no source event to show.",
-    "storage_busy": "Old Activity was cleared, but its space could not be reclaimed while a rule is synchronizing. Try again when it finishes."
+    "storage_busy": "Old Activity was cleared, but its space could not be reclaimed while a rule is synchronizing. Try again when it finishes.",
+    "user_disabled": "An administrator has turned off your access to this Calendar Ghost."
   },
   "provider": {
     "google": "Google Calendar",

@@ -30,14 +30,44 @@ class ApiResponse(BaseModel):
 
 class SetupStatusResponse(ApiResponse):
     administrator_configured: bool
+    password_only_sign_in: bool
+    """Whether the upgraded first User may still sign in by password alone."""
 
 
-class PasswordRequest(BaseModel):
+class SetupRequest(BaseModel):
+    email: str = Field(max_length=320)
     password: str = Field(min_length=12, max_length=256)
+
+
+class SignInRequest(BaseModel):
+    email: str | None = Field(default=None, max_length=320)
+    """Left out only by the upgraded first User, until they add an email."""
+    password: str = Field(min_length=1, max_length=256)
+
+
+class SignedInUserResponse(ApiResponse):
+    id: str
+    email: str | None
+    """None until the upgraded first User adds one, which they must do first."""
+    role: Literal["installation_administrator", "user"]
+    notify_by_email: bool
+    language: str | None
 
 
 class SessionResponse(ApiResponse):
     authenticated: bool
+    user: SignedInUserResponse | None = None
+
+
+class SetEmailRequest(BaseModel):
+    email: str = Field(max_length=320)
+    password: str | None = Field(default=None, max_length=256)
+    """The current password, needed to change an email but not to add the first one."""
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(max_length=256)
+    new_password: str = Field(max_length=256)
 
 
 class CalendarEndpointPayload(BaseModel):

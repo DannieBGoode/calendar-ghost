@@ -10,7 +10,7 @@ from typing import Protocol, Self
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.providers import ProviderKind
-from calendar_sync.domain.access import UserId
+from calendar_sync.domain.access import User, UserId
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -850,27 +850,85 @@ class AccountCalendars(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class AdministratorSession:
-    token: str
+class Session:
+    """A signed-in browser's session; only its token's hash is stored."""
+
+    token: str = field(repr=False)
     expires_at: datetime
     user_id: UserId
-    """The User the session belongs to."""
 
 
-class AdministratorAccess(Protocol):
-    """Users' passwords and sessions."""
+class UserDirectory(Protocol):
+    """Every User of the installation, and their password hashes. Signing in, inviting, and
+    administering Users read it; it holds none of a User's calendars, rules, or activity."""
 
-    def is_configured(self) -> bool: ...
+    def count(self) -> int: ...
 
-    def create_admin(self, password: str) -> None: ...
+    def list(self) -> Sequence[User]:
+        """Every User, the first first."""
+        ...
 
-    def authenticate(self, password: str) -> AdministratorSession | None: ...
+    def get(self, user_id: UserId) -> User | None: ...
 
-    def session_user(self, token: str | None) -> UserId | None:
+    def by_email(self, email: str) -> User | None:
+        """The User who signs in with `email`, already in its normal form."""
+        ...
+
+    def without_email(self) -> User | None:
+        """The upgraded first User, while they have not added an email."""
+        ...
+
+    def add_first(self, user: User, password_hash: str) -> bool:
+        """Add `user` only if there is no User yet, atomically; whether it was added."""
+        ...
+
+    def add(self, user: User, password_hash: str) -> None:
+        """Add a User; raises EmailTaken when another User has the email."""
+        ...
+
+    def save(self, user: User) -> None:
+        """Save a User's email, role, state, and preferences; raises EmailTaken."""
+        ...
+
+    def password_hash(self, user_id: UserId) -> str | None: ...
+
+    def set_password_hash(self, user_id: UserId, password_hash: str) -> None: ...
+
+    def record_sign_in(self, user_id: UserId, at: datetime) -> None: ...
+
+
+class PasswordHasher(Protocol):
+    def hash(self, password: str) -> str: ...
+
+    def verify(self, password: str, hashed: str) -> bool: ...
+
+
+class Sessions(Protocol):
+    def start(self, user_id: UserId) -> Session: ...
+
+    def user_of(self, token: str | None) -> UserId | None:
         """The User a live session belongs to, while they may sign in."""
         ...
 
-    def revoke(self, token: str | None) -> None: ...
+    def end(self, token: str | None) -> None: ...
+
+    def end_all(self, user_id: UserId, *, keep: str | None = None) -> None:
+        """End every session of a User, except `keep`."""
+        ...
+
+
+class SignInThrottle(Protocol):
+    """Failed sign-ins counted per key, such as an email and a client address."""
+
+    def wait(self, keys: tuple[str, ...]) -> float:
+        """Seconds until every key may try again; 0 when they may now."""
+        ...
+
+    def failed(self, keys: tuple[str, ...]) -> None: ...
+
+    def succeeded(self, keys: tuple[str, ...]) -> None:
+        """Forget the failures of the email that signed in; a client's stay counted."""
+        ...
 
 
 class IntegrationTokenScope(StrEnum):

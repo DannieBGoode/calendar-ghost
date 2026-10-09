@@ -43,7 +43,7 @@ def _installation(tmp_path: Path) -> tuple[Container, Adapters]:
     """An installation with its first User, so records can be seeded for them."""
     settings = Settings(tmp_path / "test.db")
     adapters = build_adapters(settings)
-    administrator(adapters.administrator)
+    administrator(adapters)
     return replace(compose(settings, adapters), scheduler=None), adapters
 
 
@@ -84,9 +84,13 @@ def test_tokens_are_managed_only_with_an_administrator_session(tmp_path: Path) -
         )
 
 
-class _RefusingAdministrator:
-    def session_user(self, token: str | None) -> None:
+class _RefusingSessions:
+    def user_of(self, token: str | None) -> None:
         return None
+
+
+class _RefusingIdentity:
+    sessions = _RefusingSessions()
 
 
 class _RefusingTokens:
@@ -95,7 +99,7 @@ class _RefusingTokens:
 
 
 class _RefusingServices:
-    administrator = _RefusingAdministrator()
+    identity = _RefusingIdentity()
     token_authentication = _RefusingTokens()
 
 
@@ -241,7 +245,7 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
             """,
             (SECRETS["account"], SECRETS["email"]),
         )
-    add_account(database, "work-account", administrator(adapters.administrator))
+    add_account(database, "work-account", administrator(adapters))
     seeded = SyncRule(
         id=SyncRuleId("rule-1"),
         source=CalendarEndpoint(
@@ -250,7 +254,7 @@ def test_status_never_contains_identifiers_emails_or_event_content(tmp_path: Pat
         destination=endpoint("work-account", "work-calendar"),
         state=SyncRuleState.DEGRADED,
     )
-    with adapters.unit_of_work(administrator(adapters.administrator))() as uow:
+    with adapters.unit_of_work(administrator(adapters))() as uow:
         uow.rules.add(seeded)
         uow.audit.append(
             AuditEntry(
@@ -347,7 +351,7 @@ def test_counts_never_call_a_stopped_rule_running(tmp_path: Path) -> None:
                 ("work-account", "Work", "work@example.test", "disconnected"),
             ],
         )
-    with adapters.unit_of_work(administrator(adapters.administrator))() as uow:
+    with adapters.unit_of_work(administrator(adapters))() as uow:
         uow.rules.add(rule())
         uow.commit()
     with TestClient(create_app(container)) as client:
@@ -388,7 +392,7 @@ def test_a_problem_from_an_incident_carries_its_message(tmp_path: Path) -> None:
                 ("work-account", "Work", "work@example.test"),
             ],
         )
-    with adapters.unit_of_work(administrator(adapters.administrator))() as uow:
+    with adapters.unit_of_work(administrator(adapters))() as uow:
         uow.rules.add(rule(state=SyncRuleState.DEGRADED))
         uow.commit()
     with sqlite3.connect(tmp_path / "test.db") as connection:

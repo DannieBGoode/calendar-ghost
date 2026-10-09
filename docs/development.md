@@ -38,7 +38,7 @@ To see the Web UI with realistic data without a Google account, run:
 .venv/bin/python scripts/dev_preview.py
 ```
 
-Open `http://127.0.0.1:8001/activity` and sign in with `preview-password`. The preview is for
+Open `http://127.0.0.1:8001/activity` and sign in as `preview@example.test` with `preview-password`. The preview is for
 development only:
 
 - It writes only to `dev-preview.db` in the repository root, which it marks as its own. It refuses

@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/v1/account/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Email
+         * @description Add the email the upgraded first User must add, or change one with the password.
+         */
+        put: operations["set_email_api_v1_account_email_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/account/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change Password
+         * @description Replace the password; every other session of the User ends.
+         */
+        put: operations["change_password_api_v1_account_password_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/accounts": {
         parameters: {
             query?: never;
@@ -430,10 +470,10 @@ export interface paths {
         /** Session Status */
         get: operations["session_status_api_v1_session_get"];
         put?: never;
-        /** Log In */
-        post: operations["log_in_api_v1_session_post"];
-        /** Log Out */
-        delete: operations["log_out_api_v1_session_delete"];
+        /** Sign In */
+        post: operations["sign_in_api_v1_session_post"];
+        /** Sign Out */
+        delete: operations["sign_out_api_v1_session_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -465,8 +505,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Admin */
-        post: operations["create_admin_api_v1_setup_admin_post"];
+        /** Set Up */
+        post: operations["set_up_api_v1_setup_admin_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -630,6 +670,13 @@ export interface components {
             calendar_id: string;
             /** Connected Account Id */
             connected_account_id: string;
+        };
+        /** ChangePasswordRequest */
+        ChangePasswordRequest: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
         };
         /** ClearActivityRequest */
         ClearActivityRequest: {
@@ -946,11 +993,6 @@ export interface components {
             calendar_name: string | null;
             /** Connected Account Id */
             connected_account_id: string;
-        };
-        /** PasswordRequest */
-        PasswordRequest: {
-            /** Password */
-            password: string;
         };
         /** PreviewItemResponse */
         PreviewItemResponse: {
@@ -1277,11 +1319,51 @@ export interface components {
         SessionResponse: {
             /** Authenticated */
             authenticated: boolean;
+            user: components["schemas"]["SignedInUserResponse"] | null;
+        };
+        /** SetEmailRequest */
+        SetEmailRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password?: string | null;
+        };
+        /** SetupRequest */
+        SetupRequest: {
+            /** Email */
+            email: string;
+            /** Password */
+            password: string;
         };
         /** SetupStatusResponse */
         SetupStatusResponse: {
             /** Administrator Configured */
             administrator_configured: boolean;
+            /** Password Only Sign In */
+            password_only_sign_in: boolean;
+        };
+        /** SignInRequest */
+        SignInRequest: {
+            /** Email */
+            email?: string | null;
+            /** Password */
+            password: string;
+        };
+        /** SignedInUserResponse */
+        SignedInUserResponse: {
+            /** Email */
+            email: string | null;
+            /** Id */
+            id: string;
+            /** Language */
+            language: string | null;
+            /** Notify By Email */
+            notify_by_email: boolean;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "installation_administrator" | "user";
         };
         /**
          * SourceChangeResponse
@@ -1442,6 +1524,74 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    set_email_api_v1_account_email_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedInUserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_password_api_v1_account_password_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_accounts_api_v1_accounts_get: {
         parameters: {
             query?: never;
@@ -2399,7 +2549,7 @@ export interface operations {
             };
         };
     };
-    log_in_api_v1_session_post: {
+    sign_in_api_v1_session_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2408,7 +2558,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PasswordRequest"];
+                "application/json": components["schemas"]["SignInRequest"];
             };
         };
         responses: {
@@ -2432,7 +2582,7 @@ export interface operations {
             };
         };
     };
-    log_out_api_v1_session_delete: {
+    sign_out_api_v1_session_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -2481,7 +2631,7 @@ export interface operations {
             };
         };
     };
-    create_admin_api_v1_setup_admin_post: {
+    set_up_api_v1_setup_admin_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2490,7 +2640,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PasswordRequest"];
+                "application/json": components["schemas"]["SetupRequest"];
             };
         };
         responses: {

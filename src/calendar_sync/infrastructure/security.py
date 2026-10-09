@@ -4,22 +4,11 @@ import base64
 import hashlib
 import hmac
 import secrets
-from datetime import datetime, timedelta
-from pathlib import Path
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
-from calendar_sync.application.errors import AdminAlreadyConfigured, PasswordPolicyViolation
-from calendar_sync.application.ports import AdministratorSession, Clock, IdGenerator
-from calendar_sync.domain.access import UserId
-from calendar_sync.infrastructure.identifiers import UuidIdGenerator
-from calendar_sync.infrastructure.persistence.connections import transaction
-from calendar_sync.infrastructure.scheduling import SystemClock
-
-SESSION_LIFETIME = timedelta(days=7)
 
 
 class InvalidMasterKey(ValueError):
@@ -87,89 +76,14 @@ class HistoryCipher:
         return plaintext.decode()
 
 
-class SqliteAdminAuth:
-    """The first User's password and every User's sessions.
+class ScryptPasswords:
+    """Password hashes with scrypt and a random salt; only the hash is stored."""
 
-    Until sign-in by email arrives, the first User, who has no email, signs in by password alone.
-    """
+    def hash(self, password: str) -> str:
+        return hash_password(password)
 
-    def __init__(
-        self, database_path: Path, clock: Clock | None = None, ids: IdGenerator | None = None
-    ) -> None:
-        self._database_path = database_path
-        self._clock = clock or SystemClock()
-        self._ids = ids or UuidIdGenerator()
-
-    def is_configured(self) -> bool:
-        with transaction(self._database_path) as connection:
-            return connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None
-
-    def create_admin(self, password: str) -> None:
-        if len(password) < 12:
-            raise PasswordPolicyViolation("password must contain at least 12 characters")
-        with transaction(self._database_path) as connection:
-            # Held from the check to the insert, so two first-run requests cannot both succeed.
-            connection.execute("BEGIN IMMEDIATE")
-            if connection.execute("SELECT 1 FROM users LIMIT 1").fetchone() is not None:
-                raise AdminAlreadyConfigured("installation administrator already exists")
-            connection.execute(
-                """
-                INSERT INTO users (id, email, password_hash, role, state, created_at)
-                VALUES (?, NULL, ?, 'installation_administrator', 'active', ?)
-                """,
-                (self._ids.new(), hash_password(password), self._clock.now().isoformat()),
-            )
-
-    def authenticate(self, password: str) -> AdministratorSession | None:
-        with transaction(self._database_path) as connection:
-            row = connection.execute(
-                "SELECT id, password_hash FROM users WHERE email IS NULL AND state = 'active'"
-            ).fetchone()
-            if row is None or not _verify_password(password, str(row["password_hash"])):
-                return None
-
-            token = secrets.token_urlsafe(32)
-            now = self._clock.now()
-            expires = now + SESSION_LIFETIME
-            connection.execute(
-                """
-                INSERT INTO user_sessions(token_hash, user_id, created_at, expires_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (token_hash(token), row["id"], now.isoformat(), expires.isoformat()),
-            )
-            connection.execute(
-                "UPDATE users SET last_sign_in_at = ? WHERE id = ?", (now.isoformat(), row["id"])
-            )
-            connection.execute(
-                "DELETE FROM user_sessions WHERE expires_at <= ?", (now.isoformat(),)
-            )
-            return AdministratorSession(token, expires, UserId(str(row["id"])))
-
-    def session_user(self, token: str | None) -> UserId | None:
-        if not token:
-            return None
-        now = self._clock.now()
-        with transaction(self._database_path) as connection:
-            row = connection.execute(
-                """
-                SELECT user_sessions.user_id, user_sessions.expires_at FROM user_sessions
-                JOIN users ON users.id = user_sessions.user_id AND users.state = 'active'
-                WHERE token_hash = ?
-                """,
-                (token_hash(token),),
-            ).fetchone()
-        if row is None or datetime.fromisoformat(str(row["expires_at"])) <= now:
-            return None
-        return UserId(str(row["user_id"]))
-
-    def revoke(self, token: str | None) -> None:
-        if not token:
-            return
-        with transaction(self._database_path) as connection:
-            connection.execute(
-                "DELETE FROM user_sessions WHERE token_hash = ?", (token_hash(token),)
-            )
+    def verify(self, password: str, hashed: str) -> bool:
+        return _verify_password(password, hashed)
 
 
 def hash_password(password: str) -> str:
@@ -179,11 +93,14 @@ def hash_password(password: str) -> str:
 
 
 def _verify_password(password: str, encoded: str) -> bool:
-    algorithm, payload = encoded.split("$", maxsplit=1)
-    if algorithm != "scrypt":
+    algorithm, _, payload = encoded.partition("$")
+    try:
+        raw = base64.urlsafe_b64decode(payload.encode())
+    except ValueError:
         return False
-    raw = base64.urlsafe_b64decode(payload.encode())
     salt, expected = raw[:16], raw[16:]
+    if algorithm != "scrypt" or len(salt) != 16 or not expected:
+        return False
     actual = _derive_password(password, salt)
     return hmac.compare_digest(actual, expected)
 

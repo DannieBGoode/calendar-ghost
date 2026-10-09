@@ -23,7 +23,12 @@ def _client(tmp_path: Path, *, file_logging: bool = True) -> TestClient:
     )
     container = replace(compose(settings, adapters), scheduler=None)
     client = TestClient(create_app(container))
-    assert client.post("/api/v1/setup/admin", json={"password": PASSWORD}).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/setup/admin", json={"email": "admin@example.test", "password": PASSWORD}
+        ).status_code
+        == 200
+    )
     return client
 
 

@@ -11,6 +11,7 @@ from calendar_sync.application.errors import ProviderFailure
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.interfaces.api.app import create_app
 from scripts.dev_preview import (
+    PREVIEW_EMAIL,
     PREVIEW_PASSWORD,
     NotAPreviewDatabase,
     Scenario,
@@ -64,7 +65,10 @@ def test_preview_seeds_only_its_own_database_with_a_read_only_calendar(tmp_path:
         cast(Any, services.inspect_activity_event.provider).create_projection()
     with TestClient(create_app(container)) as client:
         assert (
-            client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD}).status_code == 200
+            client.post(
+                "/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD}
+            ).status_code
+            == 200
         )
         entries = client.get("/api/v1/audit-entries", params={"category": "changed"}).json()
     events = {(item["source_event_id"], item["reason"]): item["event"] for item in entries}
@@ -91,7 +95,7 @@ def test_preview_shows_source_changes_with_their_values(tmp_path: Path) -> None:
     container = build_preview_container(tmp_path / "dev-preview.db", NOW)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
         changed = [
             entry
             for entry in client.get("/api/v1/audit-entries", params={"limit": 200}).json()
@@ -143,7 +147,7 @@ def test_preview_scenarios_seed_each_overview_state(
     container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=scenario)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
         dashboard = client.get("/api/v1/dashboard").json()
 
     assert {key: dashboard[key] for key in expected} == expected
@@ -155,7 +159,7 @@ def test_preview_names_calendars_of_an_account_that_lost_access(tmp_path: Path) 
     container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=Scenario.STOPPED)
 
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
         rules = client.get("/api/v1/rules").json()
 
     personal = next(rule for rule in rules if rule["id"] == "preview-personal-work")
@@ -166,7 +170,7 @@ def test_preview_names_calendars_of_an_account_that_lost_access(tmp_path: Path) 
 def _incident_messages(path: Path, scenario: Scenario) -> dict[str, object]:
     container = build_preview_container(path, NOW, scenario=scenario)
     with TestClient(create_app(container)) as client:
-        client.post("/api/v1/session", json={"password": PREVIEW_PASSWORD})
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
         incidents = client.get("/api/v1/incidents").json()
     return {incident["id"]: incident["message"] for incident in incidents}
 

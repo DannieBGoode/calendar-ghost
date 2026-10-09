@@ -76,7 +76,7 @@ function errorCode(body: unknown): ApiErrorCode {
   return { code, params }
 }
 
-type Method = "get" | "post" | "patch" | "delete"
+type Method = "get" | "post" | "put" | "patch" | "delete"
 /** The methods a path declares in the schema. */
 type MethodOf<P extends keyof paths> = {
   [M in Method]: paths[P][M] extends { responses: unknown } ? M : never
@@ -196,6 +196,10 @@ export type DatabaseUsage = Schemas["DatabaseUsageResponse"]
 export type LogUsage = Schemas["LogUsageResponse"]
 export const STORAGE_LOGS_URL = "/api/v1/storage/logs"
 
+export type SetupStatus = Schemas["SetupStatusResponse"]
+export type SessionStatus = Schemas["SessionResponse"]
+export type SignedInUser = Schemas["SignedInUserResponse"]
+
 export type IntegrationToken = Schemas["IntegrationTokenResponse"]
 export type IssuedIntegrationToken = Schemas["IssuedIntegrationTokenResponse"]
 
@@ -204,8 +208,14 @@ export const ACTIVITY_PAGE_SIZE = 100
 export const api = {
   setup: () => call("/api/v1/setup", "get"),
   session: () => call("/api/v1/session", "get"),
-  createAdmin: (password: string) => call("/api/v1/setup/admin", "post", { body: { password } }),
-  logIn: (password: string) => call("/api/v1/session", "post", { body: { password } }),
+  createAdmin: (email: string, password: string) =>
+    call("/api/v1/setup/admin", "post", { body: { email, password } }),
+  /** A null email signs in the upgraded first User, until they add one. */
+  logIn: (email: string | null, password: string) =>
+    call("/api/v1/session", "post", { body: { email, password } }),
+  /** Adds the email the upgraded first User must add; changing one also needs the password. */
+  setOwnEmail: (email: string, password?: string) =>
+    call("/api/v1/account/email", "put", { body: password === undefined ? { email } : { email, password } }),
   logOut: () => call("/api/v1/session", "delete"),
   dashboard: () => call("/api/v1/dashboard", "get"),
   rules: () => call("/api/v1/rules", "get"),
