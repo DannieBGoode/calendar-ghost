@@ -31,6 +31,7 @@ from calendar_sync.application.administration import (
     ResetPassword,
     RevokeInvitation,
     SetRegistrationPolicy,
+    ShowOwnAccountDeletion,
     ShowRegistration,
 )
 from calendar_sync.application.health import RuleHealth
@@ -224,6 +225,7 @@ class AdministrationServices:
     change_user_state: ChangeUserState
     delete_user: DeleteUser
     delete_own_account: DeleteOwnAccount
+    show_own_account_deletion: ShowOwnAccountDeletion
 
 
 @dataclass(frozen=True, slots=True)
@@ -473,7 +475,10 @@ def _administration(
         change_role=ChangeRole(users),
         change_user_state=ChangeUserState(users, sessions),
         delete_user=DeleteUser(users, sessions, owned),
-        delete_own_account=DeleteOwnAccount(users, passwords, sessions, owned),
+        delete_own_account=DeleteOwnAccount(
+            users, passwords, sessions, owned, settings, invitations, clock
+        ),
+        show_own_account_deletion=ShowOwnAccountDeletion(users),
     )
 
 

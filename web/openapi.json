@@ -1348,6 +1348,24 @@
         "title": "NotificationPreferenceRequest",
         "type": "object"
       },
+      "OwnAccountDeletionResponse": {
+        "properties": {
+          "last_user": {
+            "title": "Last User",
+            "type": "boolean"
+          },
+          "needs_another_administrator": {
+            "title": "Needs Another Administrator",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "needs_another_administrator",
+          "last_user"
+        ],
+        "title": "OwnAccountDeletionResponse",
+        "type": "object"
+      },
       "PendingInvitationResponse": {
         "properties": {
           "created_at": {
@@ -3184,6 +3202,53 @@
           }
         },
         "summary": "Delete Own Account"
+      }
+    },
+    "/api/v1/account/deletion": {
+      "get": {
+        "description": "Whether the User may delete themself now, and whether nobody would remain.",
+        "operationId": "own_account_deletion_api_v1_account_deletion_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnAccountDeletionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Own Account Deletion"
       }
     },
     "/api/v1/account/email": {

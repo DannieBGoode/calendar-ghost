@@ -7,7 +7,11 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Cookie, Depends, Response, status
 
-from calendar_sync.application.administration import DeleteOwnAccount, UserDeletionInterrupted
+from calendar_sync.application.administration import (
+    DeleteOwnAccount,
+    ShowOwnAccountDeletion,
+    UserDeletionInterrupted,
+)
 from calendar_sync.application.errors import (
     EmailTaken,
     IncorrectPassword,
@@ -36,6 +40,7 @@ from calendar_sync.interfaces.api.schemas import (
     ChangePasswordRequest,
     DeleteOwnAccountRequest,
     NotificationPreferenceRequest,
+    OwnAccountDeletionResponse,
     SetEmailRequest,
     SignedInUserResponse,
     UserDeletionResponse,
@@ -45,6 +50,8 @@ from calendar_sync.interfaces.api.schemas import (
 class OwnAccountAdministration(Protocol):
     @property
     def delete_own_account(self) -> DeleteOwnAccount: ...
+    @property
+    def show_own_account_deletion(self) -> ShowOwnAccountDeletion: ...
 
 
 class AccountIdentity(Identity, Protocol):
@@ -113,6 +120,17 @@ def change_password(
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except PasswordPolicyViolation as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
+
+
+@router.get("/api/v1/account/deletion", response_model=OwnAccountDeletionResponse)
+def own_account_deletion(
+    services: Services, user_id: Annotated[UserId, Depends(current_user)]
+) -> OwnAccountDeletionResponse:
+    """Whether the User may delete themself now, and whether nobody would remain."""
+    shown = services.administration.show_own_account_deletion.execute(user_id)
+    return OwnAccountDeletionResponse(
+        needs_another_administrator=shown.needs_another_administrator, last_user=shown.last_user
+    )
 
 
 @router.delete("/api/v1/account", response_model=UserDeletionResponse)

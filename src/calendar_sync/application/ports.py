@@ -936,6 +936,10 @@ class Invitations(Protocol):
         """Whether an invitation still usable at `at` is revoked now."""
         ...
 
+    def revoke_all(self, at: datetime) -> None:
+        """Revoke every invitation still usable at `at`."""
+        ...
+
     def usable(self, token: str, at: datetime) -> bool: ...
 
     def accept(self, token: str, user: User, password_hash: str, at: datetime) -> bool:

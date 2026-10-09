@@ -169,11 +169,6 @@ def test_users_are_deleted_by_an_administrator_or_by_themselves(tmp_path: Path) 
             json={"password": MEMBER["password"], "projections": "detach"},
         )
         listed = admin.get("/api/v1/users").json()
-        last = admin.request(
-            "DELETE",
-            "/api/v1/account",
-            json={"password": ADMIN["password"], "projections": "delete"},
-        )
 
     assert deleted.json() == {"rules": 0, "deleted": 0, "detached": 0, "left": 0}
     assert gone == 401
@@ -181,4 +176,31 @@ def test_users_are_deleted_by_an_administrator_or_by_themselves(tmp_path: Path) 
     assert (wrong.status_code, wrong.json()["code"]) == (403, "incorrect_password")
     assert own.status_code == 200
     assert [user["email"] for user in listed] == ["admin@example.test"]
-    assert (last.status_code, last.json()["code"]) == (409, "last_administrator")
+
+
+def test_the_last_administrator_leaves_only_when_nobody_else_remains(tmp_path: Path) -> None:
+    with _client(tmp_path) as admin, _client(tmp_path) as member:
+        member_id = _set_up_with_member(admin, member)
+        pending = _invite(admin)
+        while_shared = admin.get("/api/v1/account/deletion").json()
+        member_view = member.get("/api/v1/account/deletion").json()
+        admin.delete(f"/api/v1/users/{member_id}")
+        alone = admin.get("/api/v1/account/deletion").json()
+        left = admin.request(
+            "DELETE",
+            "/api/v1/account",
+            json={"password": ADMIN["password"], "projections": "delete"},
+        )
+        setup = member.get("/api/v1/setup").json()
+        joined = member.post("/api/v1/invitations/accept", json={"token": pending, **MEMBER})
+        again = admin.post("/api/v1/setup/admin", json=ADMIN)
+        policy = admin.get("/api/v1/registration").json()["policy"]
+
+    assert while_shared == {"needs_another_administrator": True, "last_user": False}
+    assert member_view == {"needs_another_administrator": False, "last_user": False}
+    assert alone == {"needs_another_administrator": False, "last_user": True}
+    assert left.status_code == 200
+    assert setup["administrator_configured"] is False
+    assert (joined.status_code, joined.json()["code"]) == (410, "link_unusable")
+    assert again.status_code in (200, 201)
+    assert policy == "only_me"

@@ -242,7 +242,7 @@ A person who signs in to an installation. Every Connected Account, Directional S
 _Avoid_: Tenant, customer, member, login
 
 **Installation Administrator**:
-A User who holds the role that operates the installation. The first User holds it, it may be given to other Users, and the last one cannot lose it. It grants installation-wide operational powers, never sight of another User's event content; an Installation Administrator's own rules and accounts are as private as anyone's.
+A User who holds the role that operates the installation. The first User holds it, it may be given to other Users, and the last one cannot lose it while anyone else remains. When the last User deletes themself, the installation returns to setup. It grants installation-wide operational powers, never sight of another User's event content; an Installation Administrator's own rules and accounts are as private as anyone's.
 _Avoid_: Owner, superuser, admin user
 
 **Operator Overview**:

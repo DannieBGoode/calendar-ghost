@@ -86,6 +86,13 @@ class SqliteInvitations:
             )
         return cursor.rowcount == 1
 
+    def revoke_all(self, at: datetime) -> None:
+        with transaction(self._database_path) as connection:
+            connection.execute(
+                f"UPDATE invitations SET revoked_at = ? WHERE {_INVITATION_USABLE}",  # noqa: S608
+                (at.isoformat(), at.isoformat()),
+            )
+
     def usable(self, token: str, at: datetime) -> bool:
         with transaction(self._database_path) as connection:
             row = connection.execute(

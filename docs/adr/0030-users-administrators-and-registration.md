@@ -18,7 +18,10 @@ by a password alone.
   identity; each gets their own Connected Account, and uniqueness is per User so neither can learn
   of the other's.
 - **Installation Administrator is a role**, held first by the first User, grantable to others, and
-  never removable from the last holder. An administrator's own rules are as private as anyone's.
+  never removable from the last holder while anyone else remains. An administrator's own rules are
+  as private as anyone's. The last User, who is always an administrator, may delete themself: the
+  installation then returns to setup, with the Registration Policy back at Only Me and every
+  pending Invitation revoked, so nobody can join an installation without an administrator.
 - **The Operator Overview** shows each User's Installation Status with calendars only by neutral
   labels, plus the User's email, plan, last sign-in, state, and resource use. It is the same on
   every installation, with no setting to reveal more, and every User can see exactly what it shows

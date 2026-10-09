@@ -9,7 +9,9 @@ from calendar_sync.application.administration import (
     DeleteOwnAccount,
     DeleteUser,
     DeletionResult,
+    OwnAccountDeletion,
     OwnedRules,
+    ShowOwnAccountDeletion,
     UserDeletionInterrupted,
 )
 from calendar_sync.application.errors import (
@@ -23,6 +25,7 @@ from calendar_sync.application.ports import ConnectedAccountState, UnitOfWorkFac
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.domain.access import (
     LastAdministrator,
+    RegistrationPolicy,
     Role,
     User,
     UserId,
@@ -41,7 +44,13 @@ from calendar_sync.domain.model import (
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule
-from tests.identity_fakes import MemorySessions, MemoryUsers, PlainPasswords
+from tests.identity_fakes import (
+    MemoryInvitations,
+    MemoryRegistration,
+    MemorySessions,
+    MemoryUsers,
+    PlainPasswords,
+)
 
 PASSWORD = "correct horse battery staple"
 ADMIN = User(
@@ -64,10 +73,18 @@ class Deleter:
 
 
 class Installation:
-    def __init__(self, *, destination_authorized: bool = True, failing: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        destination_authorized: bool = True,
+        failing: bool = False,
+        people: tuple[User, ...] = (ADMIN, MEMBER),
+    ) -> None:
         self.users = MemoryUsers()
-        for user in (ADMIN, MEMBER):
+        for user in people:
             self.users.add(user, f"hashed:{PASSWORD}")
+        self.registration = MemoryRegistration(RegistrationPolicy.INVITATION_ONLY)
+        self.invitations = MemoryInvitations(self.users)
         self.sessions = MemorySessions(NOW)
         self.database = InMemoryUnitOfWorkFactory()
         self.deleter = Deleter(failing)
@@ -101,7 +118,15 @@ class Installation:
         return DeleteUser(self.users, self.sessions, self.owned)
 
     def delete_own(self) -> DeleteOwnAccount:
-        return DeleteOwnAccount(self.users, PlainPasswords(), self.sessions, self.owned)
+        return DeleteOwnAccount(
+            self.users,
+            PlainPasswords(),
+            self.sessions,
+            self.owned,
+            self.registration,
+            self.invitations,
+            FixedClock(),
+        )
 
     def rules_of(self, user_id: UserId) -> tuple[SyncRuleId, ...]:
         with self.database.for_user(user_id)() as uow:
@@ -187,9 +212,35 @@ def test_a_user_who_cannot_reach_their_projections_is_asked_to_choose_again() ->
     assert installation.users.get(MEMBER.id) == MEMBER
 
 
-def test_the_last_administrator_cannot_be_deleted() -> None:
+def test_the_last_administrator_cannot_leave_while_anyone_else_remains() -> None:
+    disabled = replace(MEMBER, state=UserState.DISABLED)
+    for others in ((MEMBER,), (disabled,)):
+        installation = Installation(people=(ADMIN, *others))
+
+        with pytest.raises(LastAdministrator):
+            installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
+        assert installation.users.get(ADMIN.id) == ADMIN
+        assert ShowOwnAccountDeletion(installation.users).execute(ADMIN.id) == (
+            OwnAccountDeletion(needs_another_administrator=True, last_user=False)
+        )
+
+
+def test_the_only_user_may_leave_and_the_installation_returns_to_setup() -> None:
+    installation = Installation(people=(ADMIN,))
+    pending = installation.invitations.issue(ADMIN.id, NOW)
+    shown = ShowOwnAccountDeletion(installation.users).execute(ADMIN.id)
+
+    installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
+
+    assert shown == OwnAccountDeletion(needs_another_administrator=False, last_user=True)
+    assert installation.users.count() == 0
+    assert installation.registration.policy() is RegistrationPolicy.ONLY_ME
+    assert not installation.invitations.usable(pending.token, NOW)
+
+
+def test_anyone_else_may_leave_while_others_remain() -> None:
     installation = Installation()
 
-    with pytest.raises(LastAdministrator):
-        installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
-    assert installation.users.get(ADMIN.id) == ADMIN
+    assert ShowOwnAccountDeletion(installation.users).execute(MEMBER.id) == (
+        OwnAccountDeletion(needs_another_administrator=False, last_user=False)
+    )

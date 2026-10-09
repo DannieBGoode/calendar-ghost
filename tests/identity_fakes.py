@@ -168,6 +168,11 @@ class MemoryInvitations:
         link.revoked_at = at
         return True
 
+    def revoke_all(self, at: datetime) -> None:
+        for link in self.links:
+            if link.usable(at):
+                link.revoked_at = at
+
     def usable(self, token: str, at: datetime) -> bool:
         return any(link.token == token and link.usable(at) for link in self.links)
 

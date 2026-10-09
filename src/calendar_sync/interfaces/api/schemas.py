@@ -586,6 +586,13 @@ class UserDeletionResponse(ApiResponse):
     """Rules whose projections nothing could delete; they stay in their calendars."""
 
 
+class OwnAccountDeletionResponse(ApiResponse):
+    needs_another_administrator: bool
+    """The User is the last Installation Administrator and someone else remains."""
+    last_user: bool
+    """Nobody would remain, so the installation would return to setup."""
+
+
 class InstallationIncidentResponse(ApiResponse):
     kind: Literal["scheduler_stalled"]
     since: str

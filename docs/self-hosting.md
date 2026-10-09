@@ -144,10 +144,14 @@ join and Settings shows nothing about other people. To share it with your househ
 
 From **People** you can also make someone an administrator, disable someone, which signs them out
 and holds their rules until you enable them again, create a password reset link for someone who
-forgot theirs, or delete someone with everything they own. The installation always keeps one
-administrator who can sign in. You may return to **Only me** once you are the only person again.
-Anyone can change their own email and password, turn their incident emails off, or delete their own
-account under **Settings → Your account**.
+forgot theirs, or delete someone with everything they own. While anyone else remains, the
+installation keeps one administrator who can sign in, so the last administrator must make someone
+else an administrator before deleting their own account. You may return to **Only me** once you are
+the only person again. Anyone can change their own email and password, turn their incident emails
+off, or delete their own account under **Settings → Your account**. When the last person deletes
+their own account, Calendar Ghost returns to setup: the next person to open it creates the
+administrator, as on a new installation, and the Google OAuth settings and master key in `.env`
+stay as they were.
 
 ## 5. Use a LAN host or HTTPS
 

@@ -31,6 +31,7 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.domain.access import (
+    LastAdministrator,
     RegistrationPolicy,
     Role,
     User,
@@ -324,14 +325,53 @@ class DeleteUser:
         return result
 
 
+@dataclass(frozen=True, slots=True)
+class OwnAccountDeletion:
+    """Whether a User may delete themself now, and what follows if they do."""
+
+    needs_another_administrator: bool
+    """The User is the last Installation Administrator and someone else remains."""
+    last_user: bool
+    """Nobody would remain, so the installation returns to setup."""
+
+
+def _require_may_leave(users: UserDirectory, user: User) -> None:
+    """The last Installation Administrator may leave only when nobody else remains."""
+    if user.administers and users.count() > 1:
+        require_another_administrator(users.list(), user.id)
+
+
+@dataclass(slots=True)
+class ShowOwnAccountDeletion:
+    users: UserDirectory
+
+    def execute(self, user_id: UserId) -> OwnAccountDeletion:
+        user = _existing(self.users, user_id)
+        try:
+            _require_may_leave(self.users, user)
+        except LastAdministrator:
+            return OwnAccountDeletion(needs_another_administrator=True, last_user=False)
+        return OwnAccountDeletion(
+            needs_another_administrator=False, last_user=self.users.count() == 1
+        )
+
+
 @dataclass(slots=True)
 class DeleteOwnAccount:
-    """A User deletes themself, choosing whether their projections are deleted or kept."""
+    """A User deletes themself, choosing whether their projections are deleted or kept.
+
+    When nobody else remains, the installation returns to setup: the Registration Policy goes back
+    to Only Me and every pending Invitation is revoked first, so nobody joins an installation
+    without an administrator.
+    """
 
     users: UserDirectory
     passwords: PasswordHasher
     sessions: Sessions
     owned: Callable[[UserId], OwnedRules]
+    settings: RegistrationSettings
+    invitations: Invitations
+    clock: Clock
 
     def execute(
         self, user_id: UserId, password: str, handling: ProjectionHandling
@@ -340,8 +380,10 @@ class DeleteOwnAccount:
         hashed = self.users.password_hash(user_id)
         if hashed is None or not self.passwords.verify(password, hashed):
             raise IncorrectPassword("that is not your current password")
-        if user.administers:
-            require_another_administrator(self.users.list(), user.id)
+        _require_may_leave(self.users, user)
+        if self.users.count() == 1:
+            self.settings.set_policy(RegistrationPolicy.ONLY_ME)
+            self.invitations.revoke_all(self.clock.now())
         result = _remove_rules(self.owned(user.id), handling, keep_unreachable=False)
         self.users.delete(user.id)
         return result

@@ -187,6 +187,20 @@ def test_invitations_expire_after_seven_days_and_can_be_revoked(tmp_path: Path) 
     assert not invitations.revoke(first.id, NOW + timedelta(days=8))
 
 
+def test_every_pending_invitation_can_be_revoked_at_once(tmp_path: Path) -> None:
+    database = _database(tmp_path)
+    SqliteUserDirectory(database).add(FIRST, "hash-1")
+    invitations = SqliteInvitations(database, SequentialIds())
+    first = invitations.issue(FIRST.id, NOW)
+    second = invitations.issue(FIRST.id, NOW)
+
+    invitations.revoke_all(NOW + timedelta(hours=1))
+
+    assert invitations.pending(NOW + timedelta(hours=1)) == ()
+    assert not invitations.usable(first.token, NOW + timedelta(hours=1))
+    assert not invitations.usable(second.token, NOW + timedelta(hours=1))
+
+
 def test_a_reset_link_sets_the_password_once_and_a_newer_one_replaces_it(tmp_path: Path) -> None:
     database = _database(tmp_path)
     users = SqliteUserDirectory(database)

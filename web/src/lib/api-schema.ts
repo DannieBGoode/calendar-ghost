@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own Account Deletion
+         * @description Whether the User may delete themself now, and whether nobody would remain.
+         */
+        get: operations["own_account_deletion_api_v1_account_deletion_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/email": {
         parameters: {
             query?: never;
@@ -1336,6 +1356,13 @@ export interface components {
             /** Notify By Email */
             notify_by_email: boolean;
         };
+        /** OwnAccountDeletionResponse */
+        OwnAccountDeletionResponse: {
+            /** Last User */
+            last_user: boolean;
+            /** Needs Another Administrator */
+            needs_another_administrator: boolean;
+        };
         /** PendingInvitationResponse */
         PendingInvitationResponse: {
             /** Created At */
@@ -1975,6 +2002,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserDeletionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    own_account_deletion_api_v1_account_deletion_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnAccountDeletionResponse"];
                 };
             };
             /** @description Validation Error */
