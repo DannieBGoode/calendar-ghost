@@ -502,6 +502,28 @@ def test_an_invitation_under_only_me_is_refused_before_any_password_is_hashed() 
     assert passwords.hashed == 0
 
 
+def test_a_usable_invitation_refused_for_another_reason_still_counts_toward_the_wait() -> None:
+    installation = _installation(MEMBER)
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    link = installation.invite().execute(ADMIN.id)
+    passwords = CountingPasswords()
+    accept = installation.accept(passwords)
+
+    def attempt() -> type[Exception]:
+        try:
+            accept.execute(link.token, "member@example.test", PASSWORD, CLIENT)
+        except (EmailTaken, LinkAttemptsThrottled) as error:
+            return type(error)
+        return type(None)  # type: ignore[return-value]
+
+    # The link stays usable while its email is taken, so only the wait bounds the hashing.
+    outcomes = [attempt() for _ in range(50)]
+
+    assert outcomes[0] is EmailTaken
+    assert outcomes[-1] is LinkAttemptsThrottled
+    assert passwords.hashed < 50
+
+
 def test_a_client_trying_unusable_links_waits_whichever_link_route_it_uses() -> None:
     installation = _installation(MEMBER)
     installation.registration.current = RegistrationPolicy.INVITATION_ONLY

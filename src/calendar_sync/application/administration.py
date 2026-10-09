@@ -9,6 +9,7 @@ from datetime import datetime
 
 from calendar_sync.application.errors import (
     ApplicationError,
+    EmailTaken,
     IncorrectPassword,
     RemovalInterrupted,
     RemovalRequiresAuthorization,
@@ -98,8 +99,13 @@ class LinkAttempts:
             raise LinkAttemptsThrottled(wait)
         usable = check()
         if not usable:
-            self.throttle.failed(keys)
+            self.failed(client)
         return usable
+
+    def failed(self, client: str) -> None:
+        """Count a refusal that came after the password was hashed, such as a taken email, so
+        nobody holding a usable link can make the installation hash without end."""
+        self.throttle.failed((f"client:{client}",))
 
 
 def require_administrator(users: UserDirectory, actor: UserId) -> User:
@@ -230,9 +236,13 @@ class AcceptInvitation:
         if not usable:
             raise LinkUnusable("this invitation was already used, revoked, or has expired")
         hashed = self.passwords.hash(password)
-        joining = self.settings.policy().lets_people_join
-        if not joining or not self.invitations.accept(token, user, hashed, now):
-            raise LinkUnusable("this invitation was already used, revoked, or has expired")
+        try:
+            joining = self.settings.policy().lets_people_join
+            if not joining or not self.invitations.accept(token, user, hashed, now):
+                raise LinkUnusable("this invitation was already used, revoked, or has expired")
+        except (LinkUnusable, EmailTaken):
+            self.attempts.failed(client)
+            raise
         session = start_session(self.sessions, user.id, hashed)
         self.users.record_sign_in(user.id, now)
         return session
