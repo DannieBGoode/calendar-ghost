@@ -26,6 +26,13 @@ describe("the site Worker", () => {
     expect(response.headers.get("cache-control")).toBe("public, max-age=86400")
   })
 
+  it("never caches a failed tracker, so counting resumes as soon as Umami does", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })))
+    const response = await worker.fetch(new Request(`${ORIGIN}${TRACKER_PATH}`), env().env)
+    expect(response.status).toBe(503)
+    expect(response.headers.get("cache-control")).toBe("no-store")
+  })
+
   it("forwards an event with the tracker's headers and the visitor's address, and nothing else", async () => {
     const upstream = vi.fn(async (_url: string, _init: RequestInit) => Response.json({ cache: "token" }))
     vi.stubGlobal("fetch", upstream)

@@ -34,7 +34,7 @@ GitHub. The page loads fast, works without JavaScript for its content, and conta
 - **No star count at launch.** The repository has one star, and a button showing "1" works against
   the page. A later change adds a cached `/api/stars` Worker route when the number helps.
 - **Cookieless analytics, first-party only.** Superseded "No analytics" before launch: visits,
-  referrers, campaigns, and a few clicks (GitHub, the install commands, the guide) are counted with
+  referrers, campaigns, and a few clicks (GitHub, the install commands) are counted with
   Umami Cloud. A small Worker serves Umami's tracker and forwards its events from
   `calendarghost.com`, so the page sets no cookies and makes no third-party request. GitHub's
   Insights → Traffic still shows what happens after the click.

@@ -23,11 +23,16 @@ export default {
   },
 }
 
+// Only a good tracker is cached: a failed response, kept for a day, would stop all counting long
+// after Umami recovered.
 async function tracker(): Promise<Response> {
   const upstream = await fetch(UMAMI_TRACKER)
   return new Response(upstream.body, {
     status: upstream.status,
-    headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "public, max-age=86400" },
+    headers: {
+      "content-type": "text/javascript; charset=utf-8",
+      "cache-control": upstream.ok ? "public, max-age=86400" : "no-store",
+    },
   })
 }
 

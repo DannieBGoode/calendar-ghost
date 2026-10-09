@@ -12,9 +12,10 @@ export const COLLECT_PATH = `${ANALYTICS_PREFIX}/api/send`
 export const ANALYTICS_DOMAIN = "calendarghost.com"
 
 /** The clicks Umami counts, by `data-umami-event` name. A `data-umami-event-place` attribute
- * tells apart the same click in different places on the page. */
+ * tells apart the same click in different places on the page. Only buttons and links that open a
+ * new tab carry one: on a same-tab link, Umami holds the navigation until its event is sent, so a
+ * slow Umami would stall the page. Opening a page on this site counts as its page view anyway. */
 export const ANALYTICS_EVENTS = {
   github: "github-click",
   copyCommands: "copy-commands",
-  guide: "guide-open",
 } as const

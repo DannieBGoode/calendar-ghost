@@ -6,7 +6,6 @@
 import CopyCommand from "../components/CopyCommand.astro"
 import { SELF_HOST_COMMANDS } from "../content/self-host"
 import type { Messages } from "../i18n"
-import { ANALYTICS_EVENTS } from "../lib/analytics"
 import { GUIDE_URL } from "../links"
 
 interface Props {
@@ -25,7 +24,7 @@ const { m } = Astro.props
     <div class="self-host-start">
       <CopyCommand m={m} id="self-host-commands" command={SELF_HOST_COMMANDS.join("\n")} />
       <p class="needs">{m.selfHost.requirements}</p>
-      <a class="btn btn-primary" href={GUIDE_URL} data-umami-event={ANALYTICS_EVENTS.guide} data-umami-event-place="self-host">{m.selfHost.guide}</a>
+      <a class="btn btn-primary" href={GUIDE_URL}>{m.selfHost.guide}</a>
     </div>
   </div>
 </section>

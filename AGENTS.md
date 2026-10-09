@@ -121,8 +121,9 @@ the Docker build context, and has its own `Site` workflow.
 - Visits are counted with Umami Cloud, cookieless, only on `calendarghost.com`, and only when the
   Cloudflare build sets `PUBLIC_UMAMI_WEBSITE_ID`. The site's Worker (`site/worker/index.ts`)
   serves the tracker and forwards its events from the site's own origin
-  (`site/src/lib/analytics.ts`). This covers the landing page only: the application, its Web UI,
-  and self-hosted installations send no analytics or telemetry.
+  (`site/src/lib/analytics.ts`). Click events go only on buttons and new-tab links: on a same-tab
+  link, Umami's tracker holds the navigation until its event is sent. This covers the landing page
+  only: the application, its Web UI, and self-hosted installations send no analytics or telemetry.
 - Self-host commands must match the README's quick start; a unit test compares them.
 - `/docs/<slug>` pages render repository documents at build time (`site/src/docs/pages.ts`), with
   Astro's own Markdown processor. Their headings keep GitHub's anchors; links between rendered
