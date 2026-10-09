@@ -256,10 +256,14 @@ def reset_password(payload: ResetPasswordRequest, request: Request, services: Se
 
 @router.get("/api/v1/users", response_model=UserPageResponse)
 def users(
-    services: Services, actor: Administrator, query: Annotated[PeopleQuery, Query()]
+    services: Services,
+    actor: Administrator,
+    query: Annotated[PeopleQuery, Query()],
+    response: Response,
 ) -> UserPageResponse:
     """One page of the people here, by part of their email, role, state, and Installation
     Status, each with what the Operator Overview shows about them; never their calendars."""
+    response.headers.update(NO_STORE)
     found = services.operator_overview.page(actor, _overview_query(query))
     return UserPageResponse(
         users=[_person(overview) for overview in found.users],

@@ -63,10 +63,33 @@ export function resourceFacts(i18n: I18n, resources: ResourceUse): { kept: strin
 
 type StatusCalendar = UserOverview["status"]["rules"][number]["source"]
 
-/** A calendar as the Operator Overview names it: "Calendar 2" in the reader's language when it is
- * numbered in place of its name, otherwise its name. */
-export function calendarName(i18n: I18n, calendar: StatusCalendar): string {
-  return calendar.number === null ? calendar.calendar : i18n.t("people.overview.calendar", { number: calendar.number })
+/**
+ * A calendar as the Operator Overview names it: "Calendar 2" in the reader's language when it is
+ * numbered in place of its name, otherwise its name. `ownNames` adds the person's own name for each
+ * number, for the person themself only. A server too old to send numbers keeps its own label.
+ */
+export function calendarName(i18n: I18n, calendar: StatusCalendar, ownNames?: ReadonlyMap<number, string>): string {
+  const number: unknown = calendar.number
+  if (typeof number !== "number") return calendar.calendar
+  const own = ownNames?.get(number)
+  return own === undefined
+    ? i18n.t("people.overview.calendar", { number })
+    : i18n.t("people.overview.calendarNamed", { number, name: own })
+}
+
+type ProviderCalls = ResourceUse["provider_calls"][number]
+
+/** A failure share above this reads as many: more than a few retried or not-found answers. */
+const MANY_FAILED = 0.05
+
+/** One line on whether a person's calls look normal, so a count such as "27 failed" means something. */
+export function callsMeaning(i18n: I18n, calls: readonly ProviderCalls[]): string | null {
+  const total = calls.reduce((sum, each) => sum + each.calls, 0)
+  if (total === 0) return null
+  const failed = calls.reduce((sum, each) => sum + each.failed, 0)
+  const limited = calls.reduce((sum, each) => sum + each.rate_limited, 0)
+  if (failed / total > MANY_FAILED) return i18n.t("people.overview.callsMeaning.manyFailed")
+  return i18n.t(limited > 0 ? "people.overview.callsMeaning.limited" : "people.overview.callsMeaning.normal")
 }
 
 /** Who acts on a problem: the person themself in their own Settings, or someone an administrator
@@ -101,4 +124,13 @@ export function nextStep(i18n: I18n, problem: ServerProblem, audience: Audience)
   return audience === "self"
     ? i18n.t(`people.overview.next.${next}.self`)
     : i18n.t(`people.overview.next.${next}.person`, { name: audience.name })
+}
+
+/** Where the person themself goes for a problem's next step, when it is a page of their own. */
+export function ownStepTarget(problem: ServerProblem): "connections" | "rule" | "activity" | null {
+  const next = step(problem)
+  if (next === "reauthorize") return "connections"
+  if ((next === "preview" || next === "overdue") && problem.rule_id) return "rule"
+  if (next === "activity") return "activity"
+  return null
 }

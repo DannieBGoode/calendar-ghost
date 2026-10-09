@@ -365,9 +365,29 @@ describe("People page", () => {
       "Stopped: 1",
       "Not set up: 2",
       "Healthy: 1",
+      "Disabled: 1",
     ])
-    expect(summary.textContent).toContain("1 person is disabled")
+    expect(summary.querySelector("summary")?.textContent).toBe("What each sync status means")
     expect(summary.textContent).not.toContain("robin@example.test")
+  })
+
+  it("shows disabled people from their own count", async () => {
+    await renderPeople(testI18n())
+    const summary = () => container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    await click(button("Disabled: 1", summary()))
+    expect(lastPeopleQuery()).toMatchObject({ state: "disabled" })
+    expect(lastPeopleQuery().verdict).toBeUndefined()
+    expect(button("Disabled: 1", summary()).getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("marks a count pressed whenever the filters show exactly its people, however they were set", async () => {
+    await renderPeople(testI18n())
+    await select("people-verdict", "stopped")
+    const summary = () => container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    // Any state also shows disabled people, whom the count leaves out.
+    expect(button("Stopped: 1", summary()).getAttribute("aria-pressed")).toBe("false")
+    await select("people-state", "active")
+    expect(button("Stopped: 1", summary()).getAttribute("aria-pressed")).toBe("true")
   })
 
   it("filters by a verdict from Installation Health, and shows everyone again", async () => {
@@ -558,6 +578,7 @@ describe("People page", () => {
 
     await click(button("Done", reveal))
     expect(container.querySelector(".link-reveal")).toBeNull()
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for robin@example.test")
   })
 
   it("runs one command at a time, so a second reset link cannot revoke the one shown", async () => {
@@ -666,7 +687,7 @@ describe("People page", () => {
     await renderPeople(testI18n())
     const tabs = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")]
     expect(tabs.map((tab) => [tab.textContent, tab.getAttribute("href")])).toEqual([
-      ["People", "/people"],
+      ["Everyone", "/people"],
       ["Invitations11 waiting", "/people/invitations"],
     ])
     expect(tabs[0]!.getAttribute("aria-current")).toBe("page")
@@ -677,6 +698,22 @@ describe("People page", () => {
     expect(rows()).toHaveLength(0)
     expect(container.querySelector("#invitations-title")?.textContent).toBe("Invitations waiting")
     expect(container.querySelector(".invitation-item h3")?.textContent).toMatch(/^Expires in [67] days$/)
+  })
+
+  it("names the browser tab after the tab shown", async () => {
+    await renderPeople(testI18n(), { path: "/people/invitations" })
+    expect(document.title).toBe("Invitations – People – Calendar Ghost")
+  })
+
+  it("returns to the person you opened when you come back to People", async () => {
+    await renderPeople(testI18n())
+    const link = personRow("robin@example.test").querySelector<HTMLAnchorElement>("a.person-email")!
+    await click(link)
+    act(() => root?.unmount())
+    root = createRoot(container)
+    showPeople(testI18n(), new QueryClient({ defaultOptions: { queries: { retry: false } } }), 1)
+    await settle()
+    expect(document.activeElement?.textContent).toBe("robin@example.test")
   })
 
   it("opens at Invitations from its own address, and says when none are waiting", async () => {
@@ -695,7 +732,12 @@ describe("People page", () => {
     expect(reveal.querySelector<HTMLInputElement>("input")!.value).toBe(`${ORIGIN}/invitation#inv_synthetic`)
     expect(reveal.textContent).toContain("It works once, until")
 
+    await click(button("Done", reveal))
+    // The link is gone, so focus returns to the button that made it.
+    expect(document.activeElement?.id).toBe("invite-someone")
+
     await click(button("Revoke"))
     expect(sent("DELETE", "/api/v1/invitations/inv-1")).toBeDefined()
+    expect(document.activeElement?.id).toBe("invitations-title")
   })
 })

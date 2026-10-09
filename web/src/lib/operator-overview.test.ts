@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "../i18n/testing"
 import type { ResourceUse, ServerProblem } from "./api"
-import { calendarName, nextStep, problemText, resourceFacts, verdictTone, VERDICTS } from "./operator-overview"
+import { calendarName, callsMeaning, nextStep, problemText, resourceFacts, verdictTone, VERDICTS } from "./operator-overview"
 
 const i18n = testI18n()
 
@@ -85,6 +85,33 @@ describe("calendarName", () => {
   it("names a numbered calendar in the reader's language, and a named one by its name", () => {
     expect(calendarName(i18n, { calendar: "Calendar 2", provider: "google", number: 2 })).toBe("Calendar 2")
     expect(calendarName(i18n, { calendar: "Family", provider: "google", number: null })).toBe("Family")
+  })
+
+  it("keeps the server's label when an older server sends no number", () => {
+    const older = { calendar: "Calendar 2", provider: "google" } as unknown as Parameters<typeof calendarName>[1]
+    expect(calendarName(i18n, older)).toBe("Calendar 2")
+  })
+
+  it("adds the person's own name for a number, for their eyes only", () => {
+    const names = new Map([[2, "Family"]])
+    expect(calendarName(i18n, { calendar: "Calendar 2", provider: "google", number: 2 }, names)).toBe(
+      "Calendar 2 (Family)",
+    )
+  })
+})
+
+describe("callsMeaning", () => {
+  const google = (calls: number, rate_limited: number, failed: number) => ({ provider: "google", calls, rate_limited, failed })
+
+  it("says in one line whether the calls look normal", () => {
+    expect(callsMeaning(i18n, [google(1000, 0, 3)])).toBe("These calls look normal.")
+    expect(callsMeaning(i18n, [google(1000, 12, 3)])).toBe(
+      "Google asked Calendar Ghost to slow down a few times, and it tried again later.",
+    )
+    expect(callsMeaning(i18n, [google(1000, 0, 80)])).toBe(
+      "Many calls failed. A Google account usually needs reauthorization, or Google is having trouble.",
+    )
+    expect(callsMeaning(i18n, [])).toBeNull()
   })
 })
 

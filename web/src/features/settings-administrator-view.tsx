@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query"
-import { useRef, useState, type RefObject } from "react"
+import { useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { VerdictBadge } from "@/components/verdict-badge"
-import { UserOverviewDetails } from "@/features/user-overview"
+import { ROWS, UserOverviewDetails, type OwnActions } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
 import { api, type RuleSummary, type UserOverview } from "@/lib/api"
 import { THEMSELF } from "@/lib/operator-overview"
@@ -14,16 +14,17 @@ import { useOverviewSharing } from "@/lib/use-people-access"
 
 /**
  * What the Operator Overview shows Installation Administrators about the signed-in User, from the
- * same answer they read, collapsed to one row until asked for. Under Only me nobody else is here,
- * so it is not shown.
+ * same answer they read, collapsed to one row until asked for. The User also sees their own
+ * calendar names beside each number, which administrators never do. Under Only me nobody else is
+ * here, so it is not shown.
  */
-export function AdministratorViewSection() {
+export function AdministratorViewSection({ actions }: { actions: OwnActions }) {
   const sharing = useOverviewSharing()
   if (sharing !== "shared") return null
-  return <AdministratorView />
+  return <AdministratorView actions={actions} />
 }
 
-function AdministratorView() {
+function AdministratorView({ actions }: { actions: OwnActions }) {
   const { t } = useI18n()
   const overview = useQuery({ queryKey: ["own-overview"], queryFn: api.ownOverview })
   const [open, setOpen] = useState(false)
@@ -51,7 +52,7 @@ function AdministratorView() {
         <div className="settings-list">
           <div className="setting-item">
             <div className="setting-row">
-              <div>
+              <div className="administrator-view-summary">
                 <h3>{t("settings.administratorView.summary")}</h3>
                 <VerdictBadge verdict={overview.data.status.status} />
               </div>
@@ -69,46 +70,40 @@ function AdministratorView() {
           </div>
         </div>
       )}
-      {overview.data && open && <AdministratorViewDetails overview={overview.data} focusTarget={details} />}
+      {overview.data && open && (
+        <div
+          id="administrator-view-details"
+          ref={details}
+          tabIndex={-1}
+          role="group"
+          aria-label={t("settings.administratorView.detailsLabel")}
+          className="administrator-view-details"
+        >
+          <OwnOverview overview={overview.data} actions={actions} />
+        </div>
+      )}
     </section>
   )
 }
 
-function AdministratorViewDetails({
-  overview,
-  focusTarget,
-}: {
-  overview: UserOverview
-  focusTarget: RefObject<HTMLDivElement | null>
-}) {
+function OwnOverview({ overview, actions }: { overview: UserOverview; actions: OwnActions }) {
   const now = useNow()
-  return (
-    <div id="administrator-view-details" ref={focusTarget} tabIndex={-1} className="administrator-view-details">
-      <CalendarKey overview={overview} />
-      <UserOverviewDetails overview={overview} now={now} audience={THEMSELF} headingLevel={3} />
-    </div>
-  )
-}
-
-/** Which of the User's own calendars each number stands for; only they see the names. */
-function CalendarKey({ overview }: { overview: UserOverview }) {
-  const { t } = useI18n()
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
-  const key = calendarKey(overview, rules.data ?? [])
-  if (key.length === 0) return null
   return (
-    <div className="calendar-key">
-      <p>{t("settings.administratorView.keyTitle")}</p>
-      <ul>
-        {key.map(({ number, name }) => (
-          <li key={number}>{t("settings.administratorView.keyItem", { number, name })}</li>
-        ))}
-      </ul>
-    </div>
+    <UserOverviewDetails
+      overview={overview}
+      now={now}
+      audience={THEMSELF}
+      headingLevel={3}
+      layout={ROWS}
+      ownNames={ownCalendarNames(overview, rules.data ?? [])}
+      actions={actions}
+    />
   )
 }
 
-function calendarKey(overview: UserOverview, rules: RuleSummary[]): { number: number; name: string }[] {
+/** Each number's calendar, by the User's own name for it, from their own rules. */
+function ownCalendarNames(overview: UserOverview, rules: RuleSummary[]): Map<number, string> {
   const own = new Map(rules.map((rule) => [rule.id, rule]))
   const names = new Map<number, string>()
   for (const rule of overview.status.rules) {
@@ -118,10 +113,10 @@ function calendarKey(overview: UserOverview, rules: RuleSummary[]): { number: nu
       [rule.source, mine.source],
       [rule.destination, mine.destination],
     ] as const) {
-      if (shown.number !== null && !names.has(shown.number)) {
+      if (typeof shown.number === "number" && !names.has(shown.number)) {
         names.set(shown.number, endpoint.calendar_name ?? endpoint.calendar_id)
       }
     }
   }
-  return [...names].sort(([a], [b]) => a - b).map(([number, name]) => ({ number, name }))
+  return names
 }

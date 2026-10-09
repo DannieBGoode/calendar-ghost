@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
+import { useEffect, useRef } from "react"
 import { ArrowLeft } from "lucide-react"
 
 import { GhostMark } from "@/components/ghost-mark"
@@ -8,9 +9,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DisabledBadge } from "@/components/verdict-badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
-import { UserOverviewDetails } from "@/features/user-overview"
+import { CARDS, UserOverviewDetails } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
 import { api, ApiError, type Person, type UserOverview } from "@/lib/api"
+import { documentTitle } from "@/lib/brand"
 import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
 import { isAdministrator, personName } from "@/lib/people"
 import { useNow } from "@/lib/use-now"
@@ -67,12 +69,20 @@ function PersonContent({
   const commands = usePersonCommands({ onDeleted })
   const person = overview.user
   const name = personName(i18n, person)
+  const heading = useRef<HTMLHeadingElement>(null)
+  // A person's page is a page of its own: it starts at their name, and the tab says whose it is.
+  useEffect(() => {
+    heading.current?.focus({ preventScroll: true })
+  }, [])
+  useEffect(() => {
+    document.title = documentTitle(i18n, t("people.person.documentTitle", { name }))
+  }, [i18n, t, name])
   return (
     <div className="page-section person-page">
       <BackToPeople onBack={onBack} />
       <div className="person-heading">
         <div>
-          <h1>
+          <h1 ref={heading} tabIndex={-1}>
             {name}
             {you && <Badge variant="outline">{t("people.you")}</Badge>}
             {person.state === "disabled" && <DisabledBadge />}
@@ -82,11 +92,10 @@ function PersonContent({
         {!you && <PersonMenu person={person} name={name} commands={commands} />}
       </div>
       {!you && <PersonDetails person={person} name={name} commands={commands} />}
-      {commands.message && <p className="command-result">{commands.message}</p>}
       <p className="sr-only" role="status">
         {commands.message}
       </p>
-      <UserOverviewDetails overview={overview} now={now} audience={{ name }} headingLevel={2} />
+      <UserOverviewDetails overview={overview} now={now} audience={{ name }} headingLevel={2} layout={CARDS} />
       <p className="page-footnote">{t("people.person.intro")}</p>
     </div>
   )

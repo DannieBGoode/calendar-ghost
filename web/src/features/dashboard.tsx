@@ -6,6 +6,7 @@ import { RuleDetailsView } from "@/features/rule-details"
 import { RulesView } from "@/features/rules"
 import { SettingsPage } from "@/features/settings"
 import {
+  activitySearch,
   DEFAULT_PEOPLE_TAB,
   DEFAULT_SETTINGS_TAB,
   type AppLocation,
@@ -71,6 +72,11 @@ export function Dashboard({
   if (view === "settings") {
     return (
       <SettingsPage
+        ownActions={{
+          openRule: onOpenRule,
+          openConnections: () => onOpenSettingsTab("connections"),
+          openActivity: (ruleId) => onViewChange("activity", ruleId ? { search: activitySearch(ruleId) } : {}),
+        }}
         tab={location.settingsTab ?? DEFAULT_SETTINGS_TAB}
         onOpenTab={onOpenSettingsTab}
         onOpenPeople={() => onViewChange("people")}

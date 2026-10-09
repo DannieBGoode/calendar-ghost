@@ -107,6 +107,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 let requested: string[] = []
+let actions: {
+  openRule: ReturnType<typeof vi.fn<(ruleId: string) => void>>
+  openConnections: ReturnType<typeof vi.fn<() => void>>
+  openActivity: ReturnType<typeof vi.fn<(ruleId: string | null) => void>>
+}
 let container: HTMLDivElement
 let root: Root | null = null
 
@@ -132,6 +137,11 @@ async function render(i18n: I18n, session: SessionStatus, policy = "invitation_o
     "/api/v1/rules": jsonResponse(OWN_RULES),
   }
   requested = []
+  actions = {
+    openRule: vi.fn<(ruleId: string) => void>(),
+    openConnections: vi.fn<() => void>(),
+    openActivity: vi.fn<(ruleId: string | null) => void>(),
+  }
   vi.stubGlobal(
     "fetch",
     vi.fn((input: string | URL) => {
@@ -145,7 +155,7 @@ async function render(i18n: I18n, session: SessionStatus, policy = "invitation_o
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <QueryClientProvider client={queryClient}>
-          <AdministratorViewSection />
+          <AdministratorViewSection actions={actions} />
         </QueryClientProvider>
       </StaticI18nProvider>,
     )
@@ -174,38 +184,37 @@ describe("AdministratorViewSection", () => {
   it("is one summary row until asked for, saying what administrators never see", async () => {
     await render(testI18n(), member)
 
-    expect(container.querySelector("h2")?.textContent).toBe("What your administrator can see")
+    expect(container.querySelector("h2")?.textContent).toBe("What administrators can see")
     expect(container.textContent).toContain("never your calendar names, Google account emails, or events.")
     expect(container.querySelector(".setting-row")?.textContent).toContain("Stopped")
     expect(container.querySelector(".user-overview")).toBeNull()
   })
 
-  it("shows exactly what administrators see, with the key to its numbers", async () => {
+  it("shows exactly what administrators see, with the person's own names beside the numbers", async () => {
     await render(testI18n(), member)
     showWhatTheySee()
     await settle()
 
     const text = container.textContent
     expect(container.querySelector("[aria-expanded='true']")?.textContent).toBe("Hide what they see")
-    expect([...container.querySelectorAll(".calendar-key li")].map((item) => item.textContent)).toEqual([
-      "Calendar 1 is Family",
-      "Calendar 2 is Work",
-      "Calendar 3 is Trips",
-    ])
+    expect(text).toContain("Calendar 1 (Family) → Calendar 2 (Work)")
+    expect(text).toContain("Calendar 2 (Work) → Calendar 3 (Trips)")
     expect(text).toContain("A rule stopped syncing and writes nothing until it is fixed.")
     expect(text).toContain("Stopped syncing")
-    for (const name of RULE_NAMES) expect(text).toContain(name)
     expect(text).toContain("2 rules")
     expect(text).toContain("14 Activity entries")
     expect(text).toContain("Google Calendar: 120 calls, 0 refused for too many requests, 1 failed")
     expect(text).toContain("Open the rule and preview it again to restart it.")
+    const open = [...container.querySelectorAll("button")].find((item) => item.textContent === "Open the rule")!
+    act(() => open.click())
+    expect(actions.openRule).toHaveBeenCalledWith("rule-1")
     expect(requested).toContain("/api/v1/account/overview")
   })
 
   it("is shown to an administrator while other people can join", async () => {
     await render(testI18n(), administrator)
 
-    expect(container.querySelector("h2")?.textContent).toBe("What your administrator can see")
+    expect(container.querySelector("h2")?.textContent).toBe("What administrators can see")
   })
 
   it("is not shown under Only me, where nobody else is here", async () => {

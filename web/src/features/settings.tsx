@@ -26,6 +26,7 @@ import { useRegistration } from "@/lib/use-registration"
 import { cn } from "@/lib/utils"
 import { AccountsSection } from "@/features/settings-accounts"
 import { AdministratorViewSection } from "@/features/settings-administrator-view"
+import type { OwnActions } from "@/features/user-overview"
 import { AppearanceSection } from "@/features/settings-appearance"
 import { IntegrationsSection } from "@/features/settings-integrations"
 import { OwnAccountSection } from "@/features/settings-own-account"
@@ -41,10 +42,13 @@ export function SettingsPage({
   tab,
   onOpenTab,
   onOpenPeople,
+  ownActions,
 }: {
   tab: SettingsTab
   onOpenTab: OpenSettingsTab
   onOpenPeople: () => void
+  /** Where the signed-in User goes to act on a problem administrators can see. */
+  ownActions: OwnActions
 }) {
   const { t } = useI18n()
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
@@ -62,6 +66,7 @@ export function SettingsPage({
       tab={tab}
       onOpenTab={onOpenTab}
       onOpenPeople={onOpenPeople}
+      ownActions={ownActions}
     />
   )
 }
@@ -103,9 +108,10 @@ type SettingsViewProps = {
   tab: SettingsTab
   onOpenTab: OpenSettingsTab
   onOpenPeople: () => void
+  ownActions: OwnActions
 }
 
-function SettingsView({ session, tab, onOpenTab, onOpenPeople, ...connections }: SettingsViewProps) {
+function SettingsView({ session, tab, onOpenTab, onOpenPeople, ownActions, ...connections }: SettingsViewProps) {
   const { t } = useI18n()
   const { user } = session
   const administrator = isAdministrator(user)
@@ -122,7 +128,7 @@ function SettingsView({ session, tab, onOpenTab, onOpenPeople, ...connections }:
       {shown === "account" && user && (
         <OwnAccountSection user={user} sendsEmail={session.installation_sends_email} onOpenPeople={onOpenPeople} />
       )}
-      {shown === "account" && <AdministratorViewSection />}
+      {shown === "account" && <AdministratorViewSection actions={ownActions} />}
       {shown === "account" && <AppearanceSection />}
       {shown === "connections" && <ConnectionsTab {...connections} administrator={administrator} />}
       {shown === "administration" && <AdministrationTab />}

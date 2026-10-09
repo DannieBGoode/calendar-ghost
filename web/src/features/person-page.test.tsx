@@ -188,12 +188,25 @@ describe("A person's page", () => {
     expect(text).toContain("robin@example.test finds what happened and what to do in their Activity.")
     expect([...container.querySelectorAll("h2")].map((heading) => heading.textContent)).toEqual([
       "Synchronization",
-      "Rules",
-      "Rules, accounts, and calls",
+      "Accounts, Activity, and calls",
     ])
+    // Each rule carries its own problem, and the calls say whether they look normal.
+    expect(text).toContain("Google asked Calendar Ghost to slow down a few times, and it tried again later.")
     // Health comes before the rules, and the privacy note closes the page.
     expect(container.querySelector(".user-overview > section")?.textContent).toContain("Needs a look")
     expect(container.querySelector(".page-footnote")?.textContent).toContain("never their calendar names")
+  })
+
+  it("starts at the person's name, and names the browser tab after them", async () => {
+    await renderPerson(testI18n())
+    expect(document.activeElement).toBe(container.querySelector("h1"))
+    expect(document.title).toBe("robin@example.test – People – Calendar Ghost")
+  })
+
+  it("shows a command's result once, beside the actions", async () => {
+    await renderPerson(testI18n())
+    await choose("Disable")
+    expect(container.querySelectorAll(".command-result")).toHaveLength(1)
   })
 
   it("has no untranslated text with its actions open", async () => {

@@ -21,7 +21,9 @@ export function InvitationsSection({ commands, now }: { commands: InvitationComm
     <section className="workflow page-card" aria-labelledby="invitations-title">
       <div className="section-heading">
         <div>
-          <h2 id="invitations-title">{t("people.invitations.title")}</h2>
+          <h2 id="invitations-title" tabIndex={-1}>
+            {t("people.invitations.title")}
+          </h2>
           <p>{t("people.invitations.body")}</p>
         </div>
       </div>
@@ -36,7 +38,11 @@ export function InvitationsSection({ commands, now }: { commands: InvitationComm
           body={t("people.invitations.reveal.body", { expires: i18n.format.dateTime(issued.expires_at, LINK_EXPIRY) })}
           label={t("people.invitations.reveal.label")}
           link={invitationLink(window.location.origin, issued.token)}
-          onDone={() => setIssued(null)}
+          onDone={() => {
+            setIssued(null)
+            // The link is gone, so focus returns to the button that made it.
+            document.getElementById("invite-someone")?.focus()
+          }}
         />
       )}
       {invitations.data?.length === 0 && !issued && <NoInvitations />}
@@ -92,7 +98,12 @@ function PendingInvitationItem({
           variant="outline"
           aria-label={t("people.invitations.revokeLabel", { expires })}
           disabled={revoke.isPending}
-          onClick={() => revoke.mutate(invitation.id)}
+          onClick={() =>
+            revoke.mutate(invitation.id, {
+              // The row is gone, so focus returns to the list's heading.
+              onSuccess: () => document.getElementById("invitations-title")?.focus(),
+            })
+          }
         >
           {t("people.invitations.revoke")}
         </Button>

@@ -45,7 +45,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - The Operator Overview. **People** shows everyone first, with Installation Health above them, and
   keeps invitations waiting in an **Invitations** tab that counts them; "Invite someone" sits beside
   the page title. Each person's sync status is a chip with an icon, and the list filters and sorts
-  by it. Each person's page at `/people/{id}`
+  by it. Installation Health's counts, including one for disabled people, set the list's filters,
+  and "What each sync status means" explains every status. Each person's page at `/people/{id}`
   shows their Installation Status, with calendars only as "Calendar 1", "Calendar 2", and their
   resource use: rules, Google accounts, Activity entries, and Google calls over the last 30 days.
   `GET /api/v1/users` now includes each person's `verdict`, `problems`, `last_synced_at`, and
@@ -84,6 +85,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Form fields have borders with enough contrast again: a global reset no longer overrides them.
+  Midnight's primary color is calmer, so a red status draws the eye first.
 - Settings groups share the border, fill, radius, and padding of the app's other cards. "Your
   account" opens with **Sign-in and email**. Cancelling the email or password form forgets what was
   typed.

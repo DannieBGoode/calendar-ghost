@@ -46,7 +46,10 @@ export function OwnAccountSection({
         <IncidentEmailsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
         <SelfDeletionItem onOpenPeople={onOpenPeople} />
       </div>
-      {message && <p role="status">{message}</p>}
+      {/* Always present, so a screen reader announces each message as it arrives. */}
+      <p role="status" className={message ? undefined : "sr-only"}>
+        {message}
+      </p>
     </section>
   )
 }

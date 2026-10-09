@@ -306,20 +306,25 @@ Settings sections run from what the installation depends on to what only this br
 
 People is the Installation Administrator's view of everyone here, laid out like Rules and Activity:
 a Fraunces title with one sentence and "Invite someone" as the page's one primary action, then link
-tabs (People first, then Invitations with a count of those waiting, hidden at zero). The People tab
+tabs (Everyone first, then Invitations with a count of those waiting, hidden at zero). Everyone
 shows Installation Health in a card, then everyone here in one card holding its search, filters,
-table, and pages. A count in Installation Health filters the list to the people it counted. A
-person's sync status is a chip with an icon, text, and its tone (red stopped, ochre needs a look,
-neutral otherwise, moss healthy); Disabled is a neutral chip, because disabling is a choice, not an
-emergency. The list becomes cards when the list itself is narrow, not the window, so longer
-translations never push it past its card. A command's result appears beside the person it changed.
+table, and pages, sorted by when people joined unless asked otherwise. Installation Health is one
+sentence, then quiet pill counts ("Show only: Stopped: 1, …, Disabled: 1") that set the list's Sync
+and State filters to exactly the people counted, and read as pressed whenever the filters say the
+same; "What each sync status means" opens below them. A person's sync status is a chip with an
+icon, text, and its tone (red stopped, ochre needs a look, neutral otherwise, moss healthy);
+Disabled is a neutral chip, because disabling is a choice, not an emergency. Table columns keep
+fixed widths, and the list becomes cards when the list itself is narrow, not the window. A
+command's result appears beside the person it changed.
 
-A person's page leads with their health: a Synchronization card with the verdict, each problem,
-and who takes the next step ("Robin reauthorizes their Google account in their Settings"), then
-cards for their rules and their rules, accounts, and calls. Calendars appear only by number
-("Calendar 1"), in the reader's language. The privacy note closes the page as a footnote. Settings
-shows each person the same cards, collapsed to one summary row, with a key naming their own
-calendars for each number.
+A person's page starts at their name, and the browser tab names them. It leads with a
+Synchronization card: the verdict, then each rule with its status chip and last sync, and under a
+rule its problem with who takes the next step ("Robin reauthorizes their Google account in their
+Settings"). A second card holds their accounts, Activity, and calls, with one line on whether the
+calls look normal. Calendars appear only by number ("Calendar 1"), in the reader's language. The
+privacy note closes the page as a footnote, and coming back to People returns to their row.
+Settings shows each person the same overview as rows in one group, collapsed to one summary row,
+with their own calendar names beside the numbers and a link to act on each of their problems.
 
 ### Destructive and Privacy-Widening Changes
 

@@ -160,3 +160,18 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
 }
 
 export type PeopleCommands = ReturnType<typeof usePersonCommands>
+
+// The person whose page was opened from People, so coming back starts at their row again.
+let openedPerson: string | null = null
+
+/** Remember the person whose page People is about to open. */
+export function rememberOpenedPerson(personId: string): void {
+  openedPerson = personId
+}
+
+/** The person whose page was opened from People, once; later calls answer null. */
+export function takeOpenedPerson(): string | null {
+  const personId = openedPerson
+  openedPerson = null
+  return personId
+}

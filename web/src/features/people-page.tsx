@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { UserPlus } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { PageTabs } from "@/components/page-tabs"
 import { PageSkeleton } from "@/components/page-skeleton"
@@ -9,6 +9,7 @@ import { InvitationsSection } from "@/features/people-invitations"
 import { PeopleRoster } from "@/features/people-roster"
 import { useI18n } from "@/i18n/provider"
 import { api } from "@/lib/api"
+import { documentTitle } from "@/lib/brand"
 import { appPathForPeopleTab, type OpenPerson, type PeopleTab } from "@/lib/navigation"
 import { peopleSearch } from "@/lib/people-query"
 import { useNow } from "@/lib/use-now"
@@ -52,11 +53,16 @@ function PeopleContent({
   notice: string | null
   onOpenPerson: OpenPerson
 }) {
-  const { t } = useI18n()
+  const i18n = useI18n()
+  const { t } = i18n
   const [tab, setTab] = useState(initialTab)
   const [query, update] = usePeopleLocation()
   const invitations = useInvitations()
   const now = useNow()
+  useEffect(() => {
+    const page = tab === "invitations" ? i18n.t("people.tabs.documentTitle") : i18n.t("people.page.title")
+    document.title = documentTitle(i18n, page)
+  }, [i18n, tab])
 
   // Each tab has its own address; switching keeps this page, and what it shows, in place.
   function openTab(next: PeopleTab) {

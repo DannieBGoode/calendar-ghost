@@ -216,7 +216,7 @@ async function renderSettings(i18n: I18n, scenario: Scenario = {}) {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <SettingsPage tab={scenario.tab ?? "connections"} onOpenTab={openTab} onOpenPeople={() => undefined} />
+            <SettingsPage tab={scenario.tab ?? "connections"} onOpenTab={openTab} onOpenPeople={() => undefined} ownActions={{ openRule: () => undefined, openConnections: () => undefined, openActivity: () => undefined }} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,

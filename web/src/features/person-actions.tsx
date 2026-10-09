@@ -65,7 +65,12 @@ export function PersonDetails({ person, name, commands }: { person: Person; name
           body={t("people.reset.body", { expires: i18n.format.dateTime(commands.resetLink.link.expires_at) })}
           label={t("people.reset.label", { email: name })}
           link={passwordResetLink(window.location.origin, commands.resetLink.link.token)}
-          onDone={() => commands.setResetLink(null)}
+          onDone={() => {
+            commands.setResetLink(null)
+            // The link is gone, so focus returns to this person's actions.
+            const label = i18n.t("people.actions.label", { email: name })
+            document.querySelector<HTMLElement>(`[aria-label=${JSON.stringify(label)}]`)?.focus()
+          }}
         />
       )}
     </>

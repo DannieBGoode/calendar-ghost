@@ -145,11 +145,9 @@
     },
     "lastSync": "Last synced {relative}",
     "neverSynced": "Not synced yet",
-    "problemsTitle": "Problems",
     "since": "Since {relative}",
-    "rulesTitle": "Rules",
     "noRules": "No rules yet.",
-    "resourcesTitle": "Rules, accounts, and calls",
+    "resourcesTitle": "Accounts, Activity, and calls",
     "callsTitle": "Calls to calendar providers since {since}",
     "noCalls": "No calls to calendar providers since {since}.",
     "kept": {
@@ -214,7 +212,18 @@
         "person": "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again."
       }
     },
-    "statusTitle": "Synchronization"
+    "statusTitle": "Synchronization",
+    "calendarNamed": "Calendar {number} ({name})",
+    "callsMeaning": {
+      "normal": "These calls look normal.",
+      "limited": "Google asked Calendar Ghost to slow down a few times, and it tried again later.",
+      "manyFailed": "Many calls failed. A Google account usually needs reauthorization, or Google is having trouble."
+    },
+    "go": {
+      "connections": "Open Connections",
+      "rule": "Open the rule",
+      "activity": "Open Activity"
+    }
   },
   "problems": {
     "one": "{count} problem",
@@ -234,12 +243,9 @@
       "setup": "Nobody is synchronizing yet."
     },
     "count": "{verdict}: {count}",
-    "countsLabel": "Show only the people with one sync status",
+    "countsLabel": "Show only",
     "schedulerStalled": "Scheduled synchronization stopped running {relative}.",
-    "disabled": {
-      "one": "{count} person is disabled and not counted.",
-      "other": "{count} people are disabled and not counted."
-    }
+    "meanings": "What each sync status means"
   },
   "person": {
     "back": "People",
@@ -253,15 +259,17 @@
       "title": "Nobody here has this address",
       "body": "This person may have been deleted.",
       "back": "Back to People"
-    }
+    },
+    "documentTitle": "{name} – People"
   },
   "tabs": {
     "label": "People sections",
-    "everyone": "People",
+    "everyone": "Everyone",
     "invitations": "Invitations",
     "waiting": {
       "one": "{count} waiting",
       "other": "{count} waiting"
-    }
+    },
+    "documentTitle": "Invitations – People"
   }
 }

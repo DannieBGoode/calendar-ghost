@@ -1,5 +1,5 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react"
-import { Fragment } from "react"
+import { Fragment, useEffect, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { DisabledBadge, VerdictBadge } from "@/components/verdict-badge"
@@ -9,9 +9,11 @@ import type { MessageKey } from "@/i18n/types"
 import type { PeopleQuery, PeopleSort, PersonRow, SortOrder } from "@/lib/api"
 import { appPathForPerson, isPlainLeftClick, type OpenPerson } from "@/lib/navigation"
 import { lastSignIn, personName } from "@/lib/people"
-import type { PeopleCommands } from "@/lib/use-people"
+import { rememberOpenedPerson, takeOpenedPerson, type PeopleCommands } from "@/lib/use-people"
 
 const COLUMNS = 7
+// Fixed widths, so columns stay put whatever a filter shows.
+const COLUMN_CLASSES = ["col-email", "col-sync", "col-role", "col-state", "col-joined", "col-last", "col-actions"]
 const ARIA_SORT: Record<SortOrder, "ascending" | "descending"> = { asc: "ascending", desc: "descending" }
 const SORT_ICONS = { asc: ArrowUp, desc: ArrowDown }
 
@@ -38,11 +40,23 @@ export function PeopleTable({
   onOpenPerson: OpenPerson
 }) {
   const { t } = useI18n()
+  const table = useRef<HTMLTableElement>(null)
+  // Coming back from a person's page starts at that person's row.
+  useEffect(() => {
+    const personId = takeOpenedPerson()
+    if (personId === null) return
+    table.current?.querySelector<HTMLAnchorElement>(`a[href="${appPathForPerson(personId)}"]`)?.focus()
+  }, [])
   const sortable = (column: PeopleSort, label: MessageKey) => (
     <SortHeader column={column} label={t(label)} query={query} onSort={onSort} />
   )
   return (
-    <table className="people-table" role="table" aria-labelledby="people-list-title">
+    <table ref={table} className="people-table" role="table" aria-labelledby="people-list-title">
+      <colgroup>
+        {COLUMN_CLASSES.map((name) => (
+          <col key={name} className={name} />
+        ))}
+      </colgroup>
       <thead role="rowgroup">
         <tr role="row">
           {sortable("email", "people.table.email")}
@@ -122,6 +136,7 @@ function PersonRows({
             onClick={(event) => {
               if (!isPlainLeftClick(event)) return
               event.preventDefault()
+              rememberOpenedPerson(person.id)
               onOpen(person.id)
             }}
           >

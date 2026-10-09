@@ -168,7 +168,10 @@ def _person_row(page: Any, user: UserId) -> Any:
 def test_people_shows_each_users_verdict_problems_last_sync_and_resource_use(
     installation: Installation,
 ) -> None:
-    page = installation.client.get("/api/v1/users").json()
+    response = installation.client.get("/api/v1/users")
+    page = response.json()
+
+    assert response.headers["cache-control"] == "no-store"
 
     member = _person_row(page, installation.member.user)
     # Without a master key no scheduler runs, so every User with an enabled rule reads stalled.

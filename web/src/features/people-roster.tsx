@@ -8,7 +8,7 @@ import { PeoplePagination } from "@/features/people-pagination"
 import { PeopleTable } from "@/features/people-table"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
-import type { PeoplePage, PeopleQuery, PeopleSort, Verdict } from "@/lib/api"
+import type { PeoplePage, PeopleQuery, PeopleSort } from "@/lib/api"
 import type { OpenPerson } from "@/lib/navigation"
 import { DEFAULT_PEOPLE_QUERY, nextSort, pageRange } from "@/lib/people-query"
 import { usePeoplePage, usePersonCommands, type PeopleCommands } from "@/lib/use-people"
@@ -38,14 +38,13 @@ export function PeopleRoster({
   const people = usePeoplePage(query)
   const commands = usePersonCommands()
 
-  // A count counts people who may sign in, so it shows exactly those people.
-  function showVerdict(verdict: Verdict | "") {
-    update({ verdict, state: verdict ? "active" : "", page: 1 }, "replace")
-  }
-
   return (
     <>
-      <InstallationHealthSummary verdict={query.state === "active" ? query.verdict : ""} now={now} onFilter={showVerdict} />
+      <InstallationHealthSummary
+        filters={query}
+        now={now}
+        onFilter={(next) => update({ ...next, page: 1 }, "replace")}
+      />
       <section className="workflow page-card people-roster" aria-labelledby="people-list-title">
         <div className="section-heading">
           <h2 id="people-list-title" className="people-list-title" tabIndex={-1}>
