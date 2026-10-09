@@ -28,7 +28,11 @@ export function useLinkToken() {
     window.addEventListener("hashchange", follow)
     return () => window.removeEventListener("hashchange", follow)
   }, [])
-  const isCurrent = useCallback((candidate: string) => candidate === current.current, [])
+  const isCurrent = useCallback((candidate: string) => {
+    // The address changes before `hashchange` reaches the page, so it is read here too.
+    const live = linkToken(window.location.hash)
+    return candidate === current.current && (!live || live === candidate)
+  }, [])
   return { token, isCurrent }
 }
 
