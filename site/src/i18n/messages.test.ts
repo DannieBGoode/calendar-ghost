@@ -31,6 +31,19 @@ describe("English copy", () => {
     expect(strings(en).filter(([, text]) => /pre-?alpha/i.test(text))).toEqual([])
   })
 
+  it("distinguishes website analytics from the installed application's no-telemetry promise", () => {
+    expect(en.meta.description).toContain("with no app telemetry")
+    expect(en.meta.description).not.toContain("no trackers")
+    expect(en.footer.privacy).toBe("Website analytics, no app telemetry.")
+    expect(en.footer.privacyBody).toBe(
+      "calendarghost.com uses cookieless Umami Cloud to count visits, referrers, campaigns, and selected clicks. The tracker runs through calendarghost.com and does not follow you across sites. The installed application sends no analytics or telemetry.",
+    )
+    expect(en.trust.cards).toContainEqual({
+      title: "No app telemetry",
+      body: "The installed application talks only to Google and to the notification targets you set up.",
+    })
+  })
+
   it("says in the With details bubble what crossed over and what stayed home", () => {
     expect(en.ghost.crossingBusy).toBe("Dentist? What dentist?")
     expect(en.ghost.crossingDetails).toBe("Title and place came along. The guest list stayed home.")
