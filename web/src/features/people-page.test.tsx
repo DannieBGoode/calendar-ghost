@@ -9,7 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { PendingInvitation, PeoplePage, Person, SessionStatus } from "@/lib/api"
+import type { PendingInvitation, PeoplePage, Person, PersonRow, SessionStatus } from "@/lib/api"
 
 import { PeopleView } from "./people-page"
 
@@ -43,8 +43,16 @@ function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
 
+/** What the Operator Overview says of someone with nothing set up yet. */
+const NOTHING_SET_UP: Omit<PersonRow, keyof Person> = {
+  verdict: "setup",
+  problems: 0,
+  last_synced_at: null,
+  resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-10" },
+}
+
 function onePage(users: Person[], page: Partial<PeoplePage> = {}): PeoplePage {
-  return { users, total: users.length, page: 1, page_size: 50, ...page }
+  return { users: users.map((user) => ({ ...NOTHING_SET_UP, ...user })), total: users.length, page: 1, page_size: 50, ...page }
 }
 
 type Call = { method: string; path: string; query: URLSearchParams; body: unknown }

@@ -32,8 +32,6 @@ from calendar_sync.application.ports import (
     SignInThrottle,
     UnitOfWorkFactory,
     UserDirectory,
-    UserPage,
-    UserQuery,
 )
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.domain.access import (
@@ -305,15 +303,6 @@ class ResetPassword:
         if owner is None:
             raise LinkUnusable("this link was already used, replaced, or has expired")
         self.sessions.end_all(owner)
-
-
-@dataclass(slots=True)
-class ListUsers:
-    users: UserDirectory
-
-    def execute(self, actor: UserId, query: UserQuery) -> UserPage:
-        require_administrator(self.users, actor)
-        return self.users.find(query)
 
 
 @dataclass(slots=True)

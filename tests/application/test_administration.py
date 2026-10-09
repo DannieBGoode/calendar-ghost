@@ -19,7 +19,6 @@ from calendar_sync.application.administration import (
     LinkAttemptsThrottled,
     LinkUnusable,
     ListInvitations,
-    ListUsers,
     RegistrationClosed,
     RegistrationStatus,
     ResetPassword,
@@ -32,7 +31,7 @@ from calendar_sync.application.administration import (
 )
 from calendar_sync.application.errors import EmailTaken, IncorrectCredentials
 from calendar_sync.application.identity import SignIn
-from calendar_sync.application.ports import IssuedLink, UserPage, UserQuery
+from calendar_sync.application.ports import IssuedLink
 from calendar_sync.domain.access import (
     LastAdministrator,
     OnlyMeNeedsOneUser,
@@ -394,19 +393,6 @@ def test_only_an_administrator_issues_a_reset_link_for_a_user_who_exists() -> No
 
 
 # Roles and states
-
-
-def test_an_administrator_lists_every_user() -> None:
-    installation = _installation(MEMBER)
-
-    assert ListUsers(installation.users).execute(ADMIN.id, UserQuery()) == UserPage(
-        (ADMIN, MEMBER), total=2
-    )
-    assert ListUsers(installation.users).execute(ADMIN.id, UserQuery(role=Role.USER)) == UserPage(
-        (MEMBER,), total=1
-    )
-    with pytest.raises(AdministratorRequired):
-        ListUsers(installation.users).execute(MEMBER.id, UserQuery())
 
 
 def test_the_role_is_granted_and_revoked_but_never_from_the_last_administrator() -> None:

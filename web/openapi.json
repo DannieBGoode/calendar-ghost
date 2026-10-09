@@ -1389,6 +1389,102 @@
         "title": "PendingInvitationResponse",
         "type": "object"
       },
+      "PersonResponse": {
+        "description": "A row of People: who the User is, and the Operator Overview's summary of them.",
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_sign_in_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sign In At"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "problems": {
+            "title": "Problems",
+            "type": "integer"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ResourceUseResponse"
+          },
+          "role": {
+            "enum": [
+              "installation_administrator",
+              "user"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "stalled",
+              "stopped",
+              "review",
+              "waiting",
+              "paused",
+              "setup",
+              "healthy"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "state",
+          "created_at",
+          "last_sign_in_at",
+          "verdict",
+          "problems",
+          "last_synced_at",
+          "resources"
+        ],
+        "title": "PersonResponse",
+        "type": "object"
+      },
       "PreviewItemResponse": {
         "properties": {
           "all_day": {
@@ -1526,6 +1622,34 @@
           "message"
         ],
         "title": "ProblemResponse",
+        "type": "object"
+      },
+      "ProviderCallsResponse": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "rate_limited": {
+            "title": "Rate Limited",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "provider",
+          "calls",
+          "rate_limited",
+          "failed"
+        ],
+        "title": "ProviderCallsResponse",
         "type": "object"
       },
       "RecentChangeResponse": {
@@ -1856,6 +1980,43 @@
           "password"
         ],
         "title": "ResetPasswordRequest",
+        "type": "object"
+      },
+      "ResourceUseResponse": {
+        "description": "How much one User uses, in counts; never what their records say.",
+        "properties": {
+          "activity_entries": {
+            "title": "Activity Entries",
+            "type": "integer"
+          },
+          "connected_accounts": {
+            "title": "Connected Accounts",
+            "type": "integer"
+          },
+          "provider_calls": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCallsResponse"
+            },
+            "title": "Provider Calls",
+            "type": "array"
+          },
+          "rules": {
+            "title": "Rules",
+            "type": "integer"
+          },
+          "since": {
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rules",
+          "connected_accounts",
+          "activity_entries",
+          "provider_calls",
+          "since"
+        ],
+        "title": "ResourceUseResponse",
         "type": "object"
       },
       "RoleRequest": {
@@ -3022,6 +3183,27 @@
         "title": "UserDeletionResponse",
         "type": "object"
       },
+      "UserOverviewResponse": {
+        "description": "What the Operator Overview shows about one User, to an administrator and to that User:\ntheir Installation Status with calendars named \"Calendar 1\", \"Calendar 2\", and so on, and\ntheir resource use. Never a calendar's name or identifier, an account's email, or an event.",
+        "properties": {
+          "resources": {
+            "$ref": "#/components/schemas/ResourceUseResponse"
+          },
+          "status": {
+            "$ref": "#/components/schemas/StatusResponse"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponse"
+          }
+        },
+        "required": [
+          "user",
+          "status",
+          "resources"
+        ],
+        "title": "UserOverviewResponse",
+        "type": "object"
+      },
       "UserPageResponse": {
         "properties": {
           "page": {
@@ -3038,7 +3220,7 @@
           },
           "users": {
             "items": {
-              "$ref": "#/components/schemas/UserResponse"
+              "$ref": "#/components/schemas/PersonResponse"
             },
             "title": "Users",
             "type": "array"
@@ -3394,6 +3576,53 @@
           }
         },
         "summary": "Set Notifications"
+      }
+    },
+    "/api/v1/account/overview": {
+      "get": {
+        "description": "What the Operator Overview shows Installation Administrators about the signed-in User,\nexactly as they see it.",
+        "operationId": "own_overview_api_v1_account_overview_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Own Overview"
       }
     },
     "/api/v1/account/password": {
@@ -5988,7 +6217,7 @@
     },
     "/api/v1/users": {
       "get": {
-        "description": "One page of the people here, by part of their email, role, and state; never their data.",
+        "description": "One page of the people here, by part of their email, role, state, and Installation\nStatus, each with what the Operator Overview shows about them; never their calendars.",
         "operationId": "users_api_v1_users_get",
         "parameters": [
           {
@@ -6044,6 +6273,31 @@
           },
           {
             "in": "query",
+            "name": "verdict",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "stalled",
+                    "stopped",
+                    "review",
+                    "waiting",
+                    "paused",
+                    "setup",
+                    "healthy"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Verdict"
+            }
+          },
+          {
+            "in": "query",
             "name": "sort",
             "required": false,
             "schema": {
@@ -6051,7 +6305,8 @@
               "enum": [
                 "joined",
                 "email",
-                "last_sign_in"
+                "last_sign_in",
+                "verdict"
               ],
               "title": "Sort",
               "type": "string"
@@ -6190,6 +6445,62 @@
           }
         },
         "summary": "Delete User"
+      }
+    },
+    "/api/v1/users/{user_id}/overview": {
+      "get": {
+        "description": "What the Operator Overview shows about one User, for an Installation Administrator.\nAnyone else, and an unknown identifier, is answered 404, so nothing is revealed.",
+        "operationId": "user_overview_api_v1_users__user_id__overview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "calendar_sync_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Calendar Sync Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "User Overview"
       }
     },
     "/api/v1/users/{user_id}/password-reset-links": {

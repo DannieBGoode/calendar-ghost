@@ -84,6 +84,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/account/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Own Overview
+         * @description What the Operator Overview shows Installation Administrators about the signed-in User,
+         *     exactly as they see it.
+         */
+        get: operations["own_overview_api_v1_account_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account/password": {
         parameters: {
             query?: never;
@@ -813,7 +834,8 @@ export interface paths {
         };
         /**
          * Users
-         * @description One page of the people here, by part of their email, role, and state; never their data.
+         * @description One page of the people here, by part of their email, role, state, and Installation
+         *     Status, each with what the Operator Overview shows about them; never their calendars.
          */
         get: operations["users_api_v1_users_get"];
         put?: never;
@@ -839,6 +861,27 @@ export interface paths {
          * @description Delete another User and every record they own; their projections are deleted.
          */
         delete: operations["delete_user_api_v1_users__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/users/{user_id}/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * User Overview
+         * @description What the Operator Overview shows about one User, for an Installation Administrator.
+         *     Anyone else, and an unknown identifier, is answered 404, so nothing is revealed.
+         */
+        get: operations["user_overview_api_v1_users__user_id__overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1375,6 +1418,40 @@ export interface components {
             /** Id */
             id: string;
         };
+        /**
+         * PersonResponse
+         * @description A row of People: who the User is, and the Operator Overview's summary of them.
+         */
+        PersonResponse: {
+            /** Created At */
+            created_at: string;
+            /** Email */
+            email: string | null;
+            /** Id */
+            id: string;
+            /** Last Sign In At */
+            last_sign_in_at: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** Problems */
+            problems: number;
+            resources: components["schemas"]["ResourceUseResponse"];
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "installation_administrator" | "user";
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "active" | "disabled";
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy";
+        };
         /** PreviewItemResponse */
         PreviewItemResponse: {
             /** All Day */
@@ -1421,6 +1498,17 @@ export interface components {
             since: string | null;
             /** Summary */
             summary: string;
+        };
+        /** ProviderCallsResponse */
+        ProviderCallsResponse: {
+            /** Calls */
+            calls: number;
+            /** Failed */
+            failed: number;
+            /** Provider */
+            provider: string;
+            /** Rate Limited */
+            rate_limited: number;
         };
         /**
          * RecentChangeResponse
@@ -1548,6 +1636,22 @@ export interface components {
             password: string;
             /** Token */
             token: string;
+        };
+        /**
+         * ResourceUseResponse
+         * @description How much one User uses, in counts; never what their records say.
+         */
+        ResourceUseResponse: {
+            /** Activity Entries */
+            activity_entries: number;
+            /** Connected Accounts */
+            connected_accounts: number;
+            /** Provider Calls */
+            provider_calls: components["schemas"]["ProviderCallsResponse"][];
+            /** Rules */
+            rules: number;
+            /** Since */
+            since: string;
         };
         /** RoleRequest */
         RoleRequest: {
@@ -1932,6 +2036,17 @@ export interface components {
             /** Rules */
             rules: number;
         };
+        /**
+         * UserOverviewResponse
+         * @description What the Operator Overview shows about one User, to an administrator and to that User:
+         *     their Installation Status with calendars named "Calendar 1", "Calendar 2", and so on, and
+         *     their resource use. Never a calendar's name or identifier, an account's email, or an event.
+         */
+        UserOverviewResponse: {
+            resources: components["schemas"]["ResourceUseResponse"];
+            status: components["schemas"]["StatusResponse"];
+            user: components["schemas"]["UserResponse"];
+        };
         /** UserPageResponse */
         UserPageResponse: {
             /** Page */
@@ -1941,7 +2056,7 @@ export interface components {
             /** Total */
             total: number;
             /** Users */
-            users: components["schemas"]["UserResponse"][];
+            users: components["schemas"]["PersonResponse"][];
         };
         /** UserResponse */
         UserResponse: {
@@ -2117,6 +2232,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SignedInUserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    own_overview_api_v1_account_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOverviewResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3755,7 +3901,8 @@ export interface operations {
                 search?: string;
                 role?: ("installation_administrator" | "user") | null;
                 state?: ("active" | "disabled") | null;
-                sort?: "joined" | "email" | "last_sign_in";
+                verdict?: ("stalled" | "stopped" | "review" | "waiting" | "paused" | "setup" | "healthy") | null;
+                sort?: "joined" | "email" | "last_sign_in" | "verdict";
                 order?: "asc" | "desc";
                 page?: number;
                 page_size?: number;
@@ -3808,6 +3955,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserDeletionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    user_overview_api_v1_users__user_id__overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOverviewResponse"];
                 };
             };
             /** @description Validation Error */

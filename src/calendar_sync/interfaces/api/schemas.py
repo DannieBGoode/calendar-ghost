@@ -565,12 +565,68 @@ class UserResponse(ApiResponse):
     last_sign_in_at: str | None
 
 
+class ProviderCallsResponse(ApiResponse):
+    provider: str
+    calls: int
+    rate_limited: int
+    """Calls the provider refused for its rate limit or quota."""
+    failed: int
+    """Calls with no answer, or answered with an error other than a rate limit or not found."""
+
+
+class ResourceUseResponse(ApiResponse):
+    """How much one User uses, in counts; never what their records say."""
+
+    rules: int
+    connected_accounts: int
+    activity_entries: int
+    provider_calls: list[ProviderCallsResponse]
+    """Each provider's calls from `since` on, by provider."""
+    since: str
+    """The first UTC day the provider calls count, as an ISO date."""
+
+
+class PersonResponse(UserResponse):
+    """A row of People: who the User is, and the Operator Overview's summary of them."""
+
+    verdict: StatusVerdictValue
+    """Their Installation Status, as their own Overview shows it."""
+    problems: int
+    last_synced_at: str | None
+    resources: ResourceUseResponse
+
+
+class UserOverviewResponse(ApiResponse):
+    """What the Operator Overview shows about one User, to an administrator and to that User:
+    their Installation Status with calendars named "Calendar 1", "Calendar 2", and so on, and
+    their resource use. Never a calendar's name or identifier, an account's email, or an event."""
+
+    user: UserResponse
+    status: StatusResponse
+    resources: ResourceUseResponse
+
+
 class UserPageResponse(ApiResponse):
-    users: list[UserResponse]
+    users: list[PersonResponse]
     total: int
     """How many people match, across every page."""
     page: int
     page_size: int
+
+
+class PeopleQuery(BaseModel):
+    """Which people one page of People shows, as its address names them."""
+
+    search: str = Field(default="", max_length=200)
+    role: Literal["installation_administrator", "user"] | None = None
+    state: Literal["active", "disabled"] | None = None
+    verdict: StatusVerdictValue | None = None
+    """Only people whose Installation Status has this verdict."""
+    sort: Literal["joined", "email", "last_sign_in", "verdict"] = "joined"
+    """By verdict, the most urgent comes first in ascending order."""
+    order: Literal["asc", "desc"] = "asc"
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=50, ge=1, le=100)
 
 
 class RoleRequest(BaseModel):

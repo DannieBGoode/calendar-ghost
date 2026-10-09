@@ -214,6 +214,8 @@ export type RegistrationPolicy = Registration["policy"]
 export type Person = Schemas["UserResponse"]
 export type PersonRole = Person["role"]
 export type PersonState = Person["state"]
+/** A row of People: the person, their Installation Status verdict, and their resource use. */
+export type PersonRow = Schemas["PersonResponse"]
 /** One page of the people an administrator looks for, and how many match across every page. */
 export type PeoplePage = Schemas["UserPageResponse"]
 type PeopleParams = NonNullable<paths["/api/v1/users"]["get"]["parameters"]["query"]>

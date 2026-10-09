@@ -166,7 +166,9 @@ the Docker build context, and has its own `Site` workflow.
 - Keep every API route behind the signed-in User's session (`current_user` in
   `interfaces/api/dependencies.py`), and Installation Administrator routes behind `administrator`,
   which refuses other Users with 403 before anything is looked up. A route that names another
-  User's record answers 404, never 403, so its existence is not revealed (ADR 0029). Only setup,
+  User's record answers 404, never 403, so its existence is not revealed (ADR 0029); the Operator
+  Overview's route for one User, `/api/v1/users/{user_id}/overview`, also answers 404 to anyone
+  who does not administer, as for an unknown User. Only setup,
   sign-in, the session status and sign-out, the token-protected Invitation and Password Reset Link
   routes (`/api/v1/invitations/check`, `/api/v1/invitations/accept`,
   `/api/v1/password-resets/check`, `/api/v1/password-resets`), static application files, and

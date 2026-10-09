@@ -7,7 +7,7 @@ or to choose a new password, which are public and need the link's token.
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
@@ -25,7 +25,6 @@ from calendar_sync.application.administration import (
     LinkAttemptsThrottled,
     LinkUnusable,
     ListInvitations,
-    ListUsers,
     RegistrationClosed,
     RegistrationStatus,
     ResetPassword,
@@ -43,7 +42,13 @@ from calendar_sync.application.errors import (
     IncorrectCredentials,
     PasswordPolicyViolation,
 )
+from calendar_sync.application.operator_overview import (
+    OperatorOverview,
+    OverviewQuery,
+    UserOverview,
+)
 from calendar_sync.application.ports import IssuedLink, UserQuery, UserSort
+from calendar_sync.application.status import StatusVerdict
 from calendar_sync.domain.access import (
     InvalidEmail,
     LastAdministrator,
@@ -58,6 +63,7 @@ from calendar_sync.interfaces.api.dependencies import (
     Identity,
     administrator,
     app_services,
+    current_user,
     set_session_cookie,
 )
 from calendar_sync.interfaces.api.problems import ApiProblem, problem_from
@@ -68,16 +74,20 @@ from calendar_sync.interfaces.api.schemas import (
     LinkRequest,
     LinkStatusResponse,
     PendingInvitationResponse,
+    PeopleQuery,
+    PersonResponse,
     RegistrationRequest,
     RegistrationResponse,
     ResetPasswordRequest,
     RoleRequest,
     SessionResponse,
     UserDeletionResponse,
+    UserOverviewResponse,
     UserPageResponse,
     UserResponse,
     UserStateRequest,
 )
+from calendar_sync.interfaces.api.status_payload import resource_use_response, status_response
 
 
 class Administration(Protocol):
@@ -102,8 +112,6 @@ class Administration(Protocol):
     @property
     def reset_password(self) -> ResetPassword: ...
     @property
-    def list_users(self) -> ListUsers: ...
-    @property
     def change_role(self) -> ChangeRole: ...
     @property
     def change_user_state(self) -> ChangeUserState: ...
@@ -115,6 +123,8 @@ class AdministrationServices(Protocol):
     @property
     def administration(self) -> Administration: ...
     @property
+    def operator_overview(self) -> OperatorOverview: ...
+    @property
     def identity(self) -> Identity: ...
     @property
     def secure_cookies(self) -> bool: ...
@@ -124,6 +134,7 @@ class AdministrationServices(Protocol):
 
 Services = Annotated[AdministrationServices, Depends(app_services)]
 Administrator = Annotated[UserId, Depends(administrator)]
+SignedIn = Annotated[UserId, Depends(current_user)]
 router = APIRouter()
 NO_STORE = {"Cache-Control": "no-store"}
 
@@ -244,34 +255,31 @@ def reset_password(payload: ResetPasswordRequest, request: Request, services: Se
 
 
 @router.get("/api/v1/users", response_model=UserPageResponse)
-def users(  # noqa: PLR0913
-    services: Services,
-    actor: Administrator,
-    search: Annotated[str, Query(max_length=200)] = "",
-    role: Literal["installation_administrator", "user"] | None = None,
-    state: Literal["active", "disabled"] | None = None,
-    sort: Literal["joined", "email", "last_sign_in"] = "joined",
-    order: Literal["asc", "desc"] = "asc",
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
+def users(
+    services: Services, actor: Administrator, query: Annotated[PeopleQuery, Query()]
 ) -> UserPageResponse:
-    """One page of the people here, by part of their email, role, and state; never their data."""
-    query = UserQuery(
-        search=search.strip(),
-        role=Role(role) if role else None,
-        state=UserState(state) if state else None,
-        sort=UserSort(sort),
-        descending=order == "desc",
-        offset=(page - 1) * page_size,
-        limit=page_size,
-    )
-    found = services.administration.list_users.execute(actor, query)
+    """One page of the people here, by part of their email, role, state, and Installation
+    Status, each with what the Operator Overview shows about them; never their calendars."""
+    found = services.operator_overview.page(actor, _overview_query(query))
     return UserPageResponse(
-        users=[_user(user) for user in found.users],
+        users=[_person(overview) for overview in found.users],
         total=found.total,
-        page=page,
-        page_size=page_size,
+        page=query.page,
+        page_size=query.page_size,
     )
+
+
+@router.get("/api/v1/users/{user_id}/overview", response_model=UserOverviewResponse)
+def user_overview(
+    user_id: str, services: Services, actor: SignedIn, response: Response
+) -> UserOverviewResponse:
+    """What the Operator Overview shows about one User, for an Installation Administrator.
+    Anyone else, and an unknown identifier, is answered 404, so nothing is revealed."""
+    response.headers.update(NO_STORE)
+    try:
+        return user_overview_response(services.operator_overview.of(actor, UserId(user_id)))
+    except UserNotFound as error:
+        raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
 
 
 @router.put("/api/v1/users/{user_id}/role", response_model=UserResponse)
@@ -353,6 +361,43 @@ def _registration(status_: RegistrationStatus) -> RegistrationResponse:
 
 def _link(link: IssuedLink) -> IssuedLinkResponse:
     return IssuedLinkResponse(id=link.id, token=link.token, expires_at=link.expires_at.isoformat())
+
+
+def _overview_query(query: PeopleQuery) -> OverviewQuery:
+    by_verdict = query.sort == "verdict"
+    return OverviewQuery(
+        UserQuery(
+            search=query.search.strip(),
+            role=Role(query.role) if query.role else None,
+            state=UserState(query.state) if query.state else None,
+            # Within a verdict, people keep the order they joined in.
+            sort=UserSort.JOINED if by_verdict else UserSort(query.sort),
+            descending=query.order == "desc",
+            offset=(query.page - 1) * query.page_size,
+            limit=query.page_size,
+        ),
+        verdict=StatusVerdict(query.verdict) if query.verdict else None,
+        by_verdict=by_verdict,
+    )
+
+
+def user_overview_response(overview: UserOverview) -> UserOverviewResponse:
+    return UserOverviewResponse(
+        user=_user(overview.user),
+        status=status_response(overview.status),
+        resources=resource_use_response(overview),
+    )
+
+
+def _person(overview: UserOverview) -> PersonResponse:
+    status_ = overview.status
+    return PersonResponse(
+        **_user(overview.user).model_dump(),
+        verdict=status_.health.value,
+        problems=len(status_.problems),
+        last_synced_at=status_.overview.last_synced_at,
+        resources=resource_use_response(overview),
+    )
 
 
 def _user(user: User) -> UserResponse:
