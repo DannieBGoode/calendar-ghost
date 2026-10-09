@@ -4,7 +4,7 @@ import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from threading import Thread
+from threading import Barrier, Lock, Thread
 from typing import cast
 from unittest.mock import Mock
 
@@ -370,9 +370,80 @@ def test_daily_full_pass_is_due_per_rule_and_survives_a_restart() -> None:
         asyncio.run(scheduler.run_once())
 
     # rule-1 finished today's full pass; rule-2 never did, so only it lists everything again.
-    assert execute.full == [("rule-1", False), ("rule-2", True)] * 2
+    # The two rules run side by side, so either may start first.
+    assert sorted(execute.full) == sorted([("rule-1", False), ("rule-2", True)] * 2)
     # Rule health learns which runs were full passes, where persisting blocks become incidents.
     assert health.full_successes == 2
+
+
+class ConcurrencyRecordingExecuteRule:
+    """Records the most runs in flight at once; each waits until `together` are, or for `hold`."""
+
+    def __init__(self, *, together: int = 1, hold: float = 0.0) -> None:
+        self._barrier = Barrier(together, timeout=5)
+        self._hold = hold
+        self._guard = Lock()
+        self._running = 0
+        self.most_at_once = 0
+        self.ran: list[str] = []
+
+    def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
+        with self._guard:
+            self._running += 1
+            self.most_at_once = max(self.most_at_once, self._running)
+        try:
+            self._barrier.wait()
+            time.sleep(self._hold)
+        finally:
+            with self._guard:
+                self._running -= 1
+                self.ran.append(rule_id.value)
+        return SyncRunResult(rule_id)
+
+
+def _enabled_rules(count: int) -> InMemoryUnitOfWorkFactory:
+    factory = InMemoryUnitOfWorkFactory()
+    with factory() as uow:
+        for number in range(1, count + 1):
+            uow.rules.add(
+                replace(
+                    rule(),
+                    id=SyncRuleId(f"rule-{number}"),
+                    source=endpoint(f"account-{number}", "calendar"),
+                )
+            )
+        uow.commit()
+    return factory
+
+
+def test_a_pass_runs_different_rules_at_the_same_time() -> None:
+    # A rule that waits on a slow provider must not hold up every other rule behind it.
+    execute = ConcurrencyRecordingExecuteRule(together=2)
+    health = RecordingHealth()
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, execute), _enabled_rules(2), cast(RunHealth, health), concurrency=2
+    )
+
+    asyncio.run(scheduler.run_once())
+
+    assert sorted(execute.ran) == ["rule-1", "rule-2"]
+    assert health.failures == []
+    assert health.successes == 2
+
+
+def test_a_pass_runs_no_more_rules_at_once_than_its_concurrency() -> None:
+    # Each run lasts long enough that, unbounded, all four would overlap.
+    execute = ConcurrencyRecordingExecuteRule(hold=0.05)
+    health = RecordingHealth()
+    scheduler = SyncScheduler(
+        cast(ExecuteSyncRule, execute), _enabled_rules(4), cast(RunHealth, health), concurrency=2
+    )
+
+    asyncio.run(scheduler.run_once())
+
+    assert execute.most_at_once == 2
+    assert sorted(execute.ran) == ["rule-1", "rule-2", "rule-3", "rule-4"]
+    assert health.successes == 4
 
 
 def _block(

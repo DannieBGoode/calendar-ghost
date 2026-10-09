@@ -41,12 +41,14 @@ class SyncScheduler:
         health: RunHealth,
         interval_seconds: int = 300,
         clock: Clock | None = None,
+        concurrency: int = 4,
     ) -> None:
         self._execute_rule = execute_rule
         self._unit_of_work = unit_of_work
         self._health = health
         self._interval_seconds = interval_seconds
         self._clock = clock or SystemClock()
+        self._concurrency = concurrency
         # Read from request threads while the event loop writes; each is one attribute store.
         self._running_since = self._clock.now()
         self._pass_started_at: datetime | None = None
@@ -100,8 +102,15 @@ class SyncScheduler:
                 for rule in uow.rules.list()
                 if rule.state is SyncRuleState.ENABLED
             )
-        for rule, full in due:
-            await asyncio.to_thread(self._execute_with_retry, rule, full)
+        # Different rules run side by side, so one waiting on a slow provider does not hold up the
+        # rest; the same rule never does, because each run holds that rule's lock.
+        slots = asyncio.Semaphore(self._concurrency)
+
+        async def run(rule: SyncRule, full: bool) -> None:
+            async with slots:
+                await asyncio.to_thread(self._execute_with_retry, rule, full)
+
+        await asyncio.gather(*(run(rule, full) for rule, full in due))
         return frozenset(rule.id.value for rule, _ in due)
 
     def _execute_with_retry(self, rule: SyncRule, full: bool = False) -> bool:

@@ -198,6 +198,25 @@ def test_compacting_returns_cleared_space_to_the_filesystem(tmp_path: Path) -> N
     assert storage.usage().reclaimable_bytes == 0
 
 
+def test_compacting_while_a_reader_holds_the_log_raises_storage_busy(tmp_path: Path) -> None:
+    # A Web UI request reading through the write-ahead log keeps the checkpoint from emptying it,
+    # so the compacted pages would stay in the log and no space would be returned.
+    path = _database(tmp_path)
+    for day in range(400, 100, -1):
+        _entry(path, day, f"event-{day}", title="x" * 200)
+    storage = SqliteStorage(path, busy_timeout=0.2)
+    storage.clear_activity(CUTOFF)
+    reader = sqlite3.connect(path, isolation_level=None)
+    reader.execute("BEGIN")
+    reader.execute("SELECT COUNT(*) FROM audit_entries").fetchone()
+    try:
+        with pytest.raises(StorageBusy):
+            storage.compact()
+    finally:
+        reader.execute("COMMIT")
+        reader.close()
+
+
 def test_compacting_a_locked_database_raises_storage_busy(tmp_path: Path) -> None:
     path = _database(tmp_path)
     storage = SqliteStorage(path, busy_timeout=0.2)
