@@ -433,7 +433,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         ),
         installation_health=GetInstallationHealth(
             adapters.users,
-            lambda user: statuses.of([user])[user].health,
+            lambda users: {user: status.health for user, status in statuses.of(users).items()},
             scheduler,
             adapters.clock,
         ),

@@ -215,6 +215,18 @@ def test_a_user_sees_exactly_what_an_administrator_sees_about_them(
         "Calendar 2 → Calendar 1",
         "Calendar 1 → Calendar 2",
     ]
+    # Each calendar's number, so the Web UI can name it in the reader's language.
+    assert [
+        (rule["source"]["number"], rule["destination"]["number"])
+        for rule in admin_view["status"]["rules"]
+    ] == [(2, 1), (1, 2)]
+
+
+def test_a_users_own_status_names_calendars_and_numbers_none(installation: Installation) -> None:
+    installation.as_member()
+    rules = installation.client.get("/api/v1/status").json()["rules"]
+
+    assert {rule["source"]["number"] for rule in rules} == {None}
 
 
 def test_nobody_else_learns_whether_a_user_exists(installation: Installation) -> None:

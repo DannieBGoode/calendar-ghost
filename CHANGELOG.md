@@ -50,6 +50,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   `resources`, and accepts `verdict` and `sort=verdict`; `GET /api/v1/users/{id}/overview` answers
   administrators and 404 to anyone else. Administrators never see calendar names, Google account
   emails, or events.
+- Each calendar in Installation Status has a `number`: in the Operator Overview, the number its
+  neutral label carries ("Calendar 2" has 2), so the Web UI can name it in the reader's language;
+  `null` in a User's own status, which names the calendar.
 - **Settings → Your account → What your administrator can see** shows each person exactly what the
   Operator Overview shows about them, from `GET /api/v1/account/overview`.
 - Migration 24 records the order rules were created in, and migration 25 counts each person's

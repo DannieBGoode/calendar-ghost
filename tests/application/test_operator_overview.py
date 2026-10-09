@@ -1,7 +1,8 @@
 """The Operator Overview shows each User's Installation Status with calendars by neutral labels."""
 
+from collections.abc import Collection, Mapping
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -17,8 +18,11 @@ from calendar_sync.application.ports import (
     CalendarAccess,
     ConnectedAccountState,
     DiscoveredCalendar,
+    InstallationUnitOfWork,
+    InstallationUnitOfWorkFactory,
     ProviderCallCounts,
     ProviderCallUse,
+    ResourceUse,
     RuleRunOutcome,
     RunKind,
     UserQuery,
@@ -210,3 +214,34 @@ def test_nobody_else_learns_whether_a_user_exists() -> None:
     ):
         with pytest.raises(UserNotFound):
             overview.of(actor, subject)
+
+
+class CountedResourceReads:
+    """An installation unit factory that records whose resource use was read."""
+
+    def __init__(self, inner: InstallationUnitOfWorkFactory) -> None:
+        self.inner = inner
+        self.read: list[list[UserId]] = []
+
+    def __call__(self) -> InstallationUnitOfWork:
+        unit = self.inner()
+        read = self.read
+        original = unit.resource_use
+
+        def resource_use(users: Collection[UserId], since: date) -> Mapping[UserId, ResourceUse]:
+            read.append(list(users))
+            return original(users, since)
+
+        unit.resource_use = resource_use  # type: ignore[method-assign]
+        return unit
+
+
+def test_sorting_by_verdict_reads_resource_use_only_for_the_page_shown() -> None:
+    overview = _installation()
+    counted = CountedResourceReads(overview.installation)
+    overview.installation = counted
+
+    page = overview.page(ADMIN.id, OverviewQuery(UserQuery(limit=1), by_verdict=True))
+
+    assert [entry.user.id for entry in page.users] == [ALICE.id]
+    assert counted.read == [[ALICE.id]]

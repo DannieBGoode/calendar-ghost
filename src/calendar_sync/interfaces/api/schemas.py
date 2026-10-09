@@ -456,6 +456,9 @@ class StatusCountsResponse(ApiResponse):
 class StatusCalendarResponse(ApiResponse):
     calendar: str
     provider: str | None
+    number: int | None
+    """In the Operator Overview, the calendar's neutral number, as in "Calendar 1", which stands
+    in for its name; None in a User's own status, which names the calendar."""
 
 
 class StatusRuleResponse(ApiResponse):

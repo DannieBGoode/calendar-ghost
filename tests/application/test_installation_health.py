@@ -1,5 +1,6 @@
 """Installation Health: installation incidents and how many Users are in each verdict."""
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
@@ -48,8 +49,24 @@ def _health(
     verdicts: dict[str, StatusVerdict], users: MemoryUsers, progress: SchedulerProgress
 ) -> InstallationHealth:
     return GetInstallationHealth(
-        users, lambda user: verdicts[user.value], Heartbeat(progress), Clock()
+        users,
+        lambda ids: {user: verdicts[user.value] for user in ids},
+        Heartbeat(progress),
+        Clock(),
     ).execute()
+
+
+def test_every_active_users_verdict_is_read_at_once() -> None:
+    users = _users(("a", UserState.ACTIVE), ("b", UserState.DISABLED), ("c", UserState.ACTIVE))
+    asked: list[list[UserId]] = []
+
+    def verdicts(ids: Sequence[UserId]) -> dict[UserId, StatusVerdict]:
+        asked.append(list(ids))
+        return dict.fromkeys(ids, StatusVerdict.HEALTHY)
+
+    GetInstallationHealth(users, verdicts, Heartbeat(TICKING), Clock()).execute()
+
+    assert asked == [[UserId("user-0"), UserId("user-2")]]
 
 
 def test_users_are_counted_by_verdict_and_the_most_urgent_one_leads() -> None:

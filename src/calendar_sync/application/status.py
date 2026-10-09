@@ -98,6 +98,9 @@ class InstallationStatus:
     checked_at: datetime
     providers: Mapping[str, str] = field(default_factory=dict)
     """Each Connected Account's Provider Kind, by account id."""
+    calendar_numbers: Mapping[CalendarEndpoint, int] = field(default_factory=dict)
+    """In the Operator Overview, the number each calendar's neutral label carries; empty when
+    calendars are named."""
 
     @property
     def needs_attention(self) -> bool:

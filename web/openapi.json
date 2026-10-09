@@ -2781,6 +2781,17 @@
             "title": "Calendar",
             "type": "string"
           },
+          "number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Number"
+          },
           "provider": {
             "anyOf": [
               {
@@ -2795,7 +2806,8 @@
         },
         "required": [
           "calendar",
-          "provider"
+          "provider",
+          "number"
         ],
         "title": "StatusCalendarResponse",
         "type": "object"

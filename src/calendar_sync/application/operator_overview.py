@@ -7,7 +7,7 @@ account name, so neither can reach what an Installation Administrator sees.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 
@@ -40,15 +40,23 @@ from calendar_sync.domain.model import CalendarEndpoint, SyncRule
 CALENDAR_LABEL = "Calendar {number}"
 
 
-def calendar_labels(rules: Iterable[SyncRule]) -> dict[CalendarEndpoint, str]:
-    """A neutral label for each calendar the rules use, numbered in the order the rules were
-    created, each rule's source before its destination, so a User's calendars keep their numbers
-    from one visit to the next."""
-    labels: dict[CalendarEndpoint, str] = {}
+def calendar_numbers(rules: Iterable[SyncRule]) -> dict[CalendarEndpoint, int]:
+    """A number for each calendar the rules use, in the order the rules were created, each rule's
+    source before its destination, so a User's calendars keep their numbers from one visit to the
+    next."""
+    numbers: dict[CalendarEndpoint, int] = {}
     for rule in rules:
         for endpoint in (rule.source, rule.destination):
-            labels.setdefault(endpoint, CALENDAR_LABEL.format(number=len(labels) + 1))
-    return labels
+            numbers.setdefault(endpoint, len(numbers) + 1)
+    return numbers
+
+
+def calendar_labels(rules: Iterable[SyncRule]) -> dict[CalendarEndpoint, str]:
+    """The neutral label, "Calendar 1", that stands in for each calendar's name."""
+    return {
+        endpoint: CALENDAR_LABEL.format(number=number)
+        for endpoint, number in calendar_numbers(rules).items()
+    }
 
 
 @dataclass(slots=True)
@@ -71,7 +79,10 @@ class UserStatuses:
     def _assess(
         self, records: StatusRecords, scheduler: SchedulerProgress | None, now: datetime
     ) -> InstallationStatus:
-        labels = calendar_labels(recorded.rule for recorded in records.rules)
+        numbers = calendar_numbers(recorded.rule for recorded in records.rules)
+        labels = {
+            endpoint: CALENDAR_LABEL.format(number=number) for endpoint, number in numbers.items()
+        }
         # In identifier order, as ListSyncRules lists them, so problems of equal urgency come
         # in the order the User's own Overview shows them.
         summaries = [
@@ -84,7 +95,8 @@ class UserStatuses:
             )
             for recorded in sorted(records.rules, key=lambda recorded: recorded.rule.id.value)
         ]
-        return assess_installation(summaries, records.overview, records.incidents, scheduler, now)
+        status = assess_installation(summaries, records.overview, records.incidents, scheduler, now)
+        return replace(status, calendar_numbers=numbers)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,23 +145,22 @@ class OperatorOverview:
         if query.verdict is None and not query.by_verdict:
             found = self.users.find(query.users)
             return OverviewPage(self._overviews(found.users), found.total)
-        # A verdict is computed, not stored, so filtering or sorting by it reads everyone who
-        # matches the rest of the query, then pages.
+        # A verdict is computed, not stored, so filtering or sorting by it reads the status of
+        # everyone who matches the rest of the query, then pages; resource use is read only for
+        # the page shown.
         everyone = self.users.find(
             replace(query.users, offset=0, limit=max(self.users.count(), 1))
         ).users
-        matching = [
-            overview
-            for overview in self._overviews(everyone)
-            if query.verdict in (None, overview.status.health)
-        ]
+        statuses = self.statuses.of([user.id for user in everyone])
+        matching = [user for user in everyone if query.verdict in (None, statuses[user.id].health)]
         if query.by_verdict:
             matching.sort(
-                key=lambda overview: _URGENCY[overview.status.health],
+                key=lambda user: _URGENCY[statuses[user.id].health],
                 reverse=query.users.descending,
             )
         start = query.users.offset
-        return OverviewPage(tuple(matching[start : start + query.users.limit]), len(matching))
+        shown = matching[start : start + query.users.limit]
+        return OverviewPage(self._overviews(shown, statuses), len(matching))
 
     def of(self, actor: UserId, subject: UserId) -> UserOverview:
         """One User's overview, for an Installation Administrator. Anyone else is told, as for
@@ -170,10 +181,13 @@ class OperatorOverview:
             raise UserNotFound(f"user {subject.value} does not exist")
         return self._overviews([user])[0]
 
-    def _overviews(self, users: Sequence[User]) -> tuple[UserOverview, ...]:
+    def _overviews(
+        self, users: Sequence[User], statuses: Mapping[UserId, InstallationStatus] | None = None
+    ) -> tuple[UserOverview, ...]:
+        """What the overview shows about each of `users`, with the statuses already read."""
         ids = [user.id for user in users]
         since = first_counted_day(self.clock.now().astimezone(UTC).date())
-        statuses = self.statuses.of(ids)
+        statuses = statuses if statuses is not None else self.statuses.of(ids)
         with self.installation() as installation:
             resources = installation.resource_use(ids, since)
         return tuple(

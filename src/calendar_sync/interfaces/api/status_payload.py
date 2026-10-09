@@ -123,6 +123,7 @@ def _calendar(
     return StatusCalendarResponse(
         calendar=calendar_display_name(endpoint, rule.summary.names),
         provider=status.providers.get(endpoint.connected_account_id.value),
+        number=status.calendar_numbers.get(endpoint),
     )
 
 

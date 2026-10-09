@@ -415,7 +415,10 @@ def build_preview_container(
         account_calendars=cast(AccountCalendars, google),
         user_services=preview_services,
         installation_health=GetInstallationHealth(
-            adapters.users, lambda user: statuses.of([user])[user].health, None, preview_clock
+            adapters.users,
+            lambda users: {user: status.health for user, status in statuses.of(users).items()},
+            None,
+            preview_clock,
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, preview_clock

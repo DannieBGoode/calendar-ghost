@@ -1904,6 +1904,8 @@ export interface components {
         StatusCalendarResponse: {
             /** Calendar */
             calendar: string;
+            /** Number */
+            number: number | null;
             /** Provider */
             provider: string | null;
         };
