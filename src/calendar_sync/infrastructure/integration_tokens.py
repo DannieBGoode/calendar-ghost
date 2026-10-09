@@ -30,7 +30,8 @@ _COLUMNS = "id, user_id, name, scopes, created_at, last_used_at, revoked_at"
 
 class SqliteIntegrationTokens:
     """Integration Tokens: each User manages their own through `for_user`; authenticating a
-    presented token finds it whoever owns it, and says whose it is."""
+    presented token finds it whoever owns it, and says whose it is. A Disabled User's tokens read
+    nothing until they are enabled again."""
 
     def __init__(self, database_path: Path, clock: Clock, ids: IdGenerator) -> None:
         self._database_path = database_path
@@ -48,7 +49,9 @@ class SqliteIntegrationTokens:
             row = connection.execute(
                 f"""
                 SELECT {_COLUMNS} FROM integration_tokens
-                WHERE token_hash = ? AND revoked_at IS NULL
+                WHERE token_hash = ? AND revoked_at IS NULL AND user_id IN (
+                    SELECT id FROM users WHERE state = 'active'
+                )
                 """,  # noqa: S608
                 (token_hash(token),),
             ).fetchone()

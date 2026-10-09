@@ -187,3 +187,17 @@ def test_a_token_may_also_read_installation_health(tmp_path: Path) -> None:
     assert summary is not None
     assert summary.scopes == both
     assert tokens.for_user(USER).list()[0].scopes == both
+
+
+def test_a_disabled_users_tokens_read_nothing_until_they_are_enabled(tmp_path: Path) -> None:
+    tokens, _, database = _tokens(tmp_path)
+    issued = tokens.for_user(USER).issue("Uptime Kuma")
+
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (USER.value,))
+    refused = tokens.authenticate(issued.token)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE users SET state = 'active' WHERE id = ?", (USER.value,))
+
+    assert refused is None
+    assert tokens.authenticate(issued.token) is not None
