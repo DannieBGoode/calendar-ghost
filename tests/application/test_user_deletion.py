@@ -14,6 +14,7 @@ from calendar_sync.application.administration import (
     OwnedRules,
     ShowOwnAccountDeletion,
     UserDeletionInterrupted,
+    YourOwnDeletion,
 )
 from calendar_sync.application.errors import (
     IncorrectPassword,
@@ -184,6 +185,22 @@ def test_only_an_administrator_deletes_another_user() -> None:
     with pytest.raises(AdministratorRequired):
         installation.delete_user().execute(MEMBER.id, ADMIN.id)
     assert installation.users.count() == 2
+
+
+def test_an_administrator_deletes_themself_only_with_their_password() -> None:
+    second = User(
+        UserId("second-admin"),
+        "second@example.test",
+        Role.INSTALLATION_ADMINISTRATOR,
+        UserState.ACTIVE,
+        NOW,
+    )
+    installation = Installation(people=(ADMIN, second, MEMBER))
+
+    # Deleting oneself here would skip the password the own-account route asks for.
+    with pytest.raises(YourOwnDeletion):
+        installation.delete_user().execute(ADMIN.id, ADMIN.id)
+    assert installation.users.get(ADMIN.id) == ADMIN
 
 
 def test_a_user_deleting_themself_may_keep_their_projections() -> None:

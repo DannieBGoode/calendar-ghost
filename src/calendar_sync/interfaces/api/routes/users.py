@@ -34,6 +34,7 @@ from calendar_sync.application.administration import (
     ShowRegistration,
     UserDeletionInterrupted,
     UserNotFound,
+    YourOwnDeletion,
     YourOwnResetLink,
     YourOwnState,
 )
@@ -331,7 +332,7 @@ async def delete_user(
         result = await asyncio.to_thread(delete.execute, actor, UserId(user_id))
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
-    except (LastAdministrator, UserDeletionInterrupted) as error:
+    except (LastAdministrator, UserDeletionInterrupted, YourOwnDeletion) as error:
         raise problem_from(status.HTTP_409_CONFLICT, error) from error
     except AdministratorRequired as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error

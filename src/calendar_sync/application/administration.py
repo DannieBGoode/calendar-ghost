@@ -66,6 +66,11 @@ class LinkUnusable(ApplicationError):
     """The link was used, revoked, replaced, or has expired, or nobody may join now."""
 
 
+class YourOwnDeletion(ApplicationError):
+    """An Installation Administrator deletes their own account with their password, under Your
+    account, not from People."""
+
+
 class YourOwnResetLink(ApplicationError):
     """An Installation Administrator changes their own password with it, under Your account."""
 
@@ -387,6 +392,9 @@ class DeleteUser:
 
     def execute(self, actor: UserId, user_id: UserId) -> DeletionResult:
         require_administrator(self.users, actor)
+        if user_id == actor:
+            # Deleting oneself here would skip the password DeleteOwnAccount asks for.
+            raise YourOwnDeletion("delete your own account with your password")
         user = _existing(self.users, user_id)
         self.users.set_state(user.id, UserState.DISABLED)
         self.sessions.end_all(user.id)

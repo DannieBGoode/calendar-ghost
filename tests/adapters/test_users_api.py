@@ -257,3 +257,15 @@ def test_an_administrator_cannot_create_a_reset_link_for_themself(tmp_path: Path
         refused = admin.post(f"/api/v1/users/{admin_id}/password-reset-links")
 
     assert (refused.status_code, refused.json()["code"]) == (409, "your_own_reset_link")
+
+
+def test_an_administrator_cannot_delete_themself_through_the_people_route(tmp_path: Path) -> None:
+    with _client(tmp_path) as admin, _client(tmp_path) as member:
+        member_id = _set_up_with_member(admin, member)
+        admin.put(f"/api/v1/users/{member_id}/role", json={"role": "installation_administrator"})
+        admin_id = admin.get("/api/v1/session").json()["user"]["id"]
+        refused = admin.delete(f"/api/v1/users/{admin_id}")
+        still_signed_in = admin.get("/api/v1/dashboard").status_code
+
+    assert (refused.status_code, refused.json()["code"]) == (409, "your_own_deletion")
+    assert still_signed_in == 200
