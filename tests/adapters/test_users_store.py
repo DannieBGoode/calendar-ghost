@@ -423,19 +423,33 @@ def test_invitations_expire_after_seven_days_and_can_be_revoked(tmp_path: Path) 
     assert not invitations.revoke(first.id, NOW + timedelta(days=8))
 
 
-def test_every_pending_invitation_can_be_revoked_at_once(tmp_path: Path) -> None:
+def test_returning_to_setup_chooses_only_me_and_revokes_every_invitation_in_one_step(
+    tmp_path: Path,
+) -> None:
     database = _database(tmp_path)
-    SqliteUserDirectory(database).add(FIRST, "hash-1")
-    SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
+    users = SqliteUserDirectory(database)
+    users.add(FIRST, "hash-1")
+    settings = SqliteRegistrationSettings(database)
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
     invitations = SqliteInvitations(database, SequentialIds())
     first = _issued(invitations, FIRST.id, NOW)
     second = _issued(invitations, FIRST.id, NOW)
+    later = NOW + timedelta(hours=1)
+    users.add(SECOND, "hash-2")
 
-    invitations.revoke_all(NOW + timedelta(hours=1))
+    # Refused while someone else is here, and refused whole: nothing is half done.
+    with pytest.raises(OnlyMeNeedsOneUser):
+        settings.return_to_setup(later)
+    assert settings.policy() is RegistrationPolicy.INVITATION_ONLY
+    assert len(invitations.pending(later)) == 2
 
-    assert invitations.pending(NOW + timedelta(hours=1)) == ()
-    assert not invitations.usable(first.token, NOW + timedelta(hours=1))
-    assert not invitations.usable(second.token, NOW + timedelta(hours=1))
+    users.delete(SECOND.id)
+    settings.return_to_setup(later)
+
+    assert settings.policy() is RegistrationPolicy.ONLY_ME
+    assert invitations.pending(later) == ()
+    assert not invitations.usable(first.token, later)
+    assert not invitations.usable(second.token, later)
 
 
 def test_a_reset_link_sets_the_password_once_and_a_newer_one_replaces_it(tmp_path: Path) -> None:

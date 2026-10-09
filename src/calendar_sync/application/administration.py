@@ -459,7 +459,6 @@ class DeleteOwnAccount:
     sessions: Sessions
     owned: Callable[[UserId], OwnedRules]
     settings: RegistrationSettings
-    invitations: Invitations
     clock: Clock
 
     def execute(
@@ -485,8 +484,7 @@ class DeleteOwnAccount:
         return result
 
     def _return_to_setup(self) -> None:
-        self.settings.set_policy(RegistrationPolicy.ONLY_ME)
-        self.invitations.revoke_all(self.clock.now())
+        self.settings.return_to_setup(self.clock.now())
 
 
 def _remove_rules(

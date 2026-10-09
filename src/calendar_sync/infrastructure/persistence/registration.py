@@ -45,6 +45,20 @@ class SqliteRegistrationSettings:
                 (policy.value,),
             )
 
+    def return_to_setup(self, at: datetime) -> None:
+        with transaction(self._database_path) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            users = connection.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            require_registration_change(RegistrationPolicy.ONLY_ME, int(users))
+            connection.execute(
+                "UPDATE installation_settings SET registration_policy = ? WHERE singleton = 1",
+                (RegistrationPolicy.ONLY_ME.value,),
+            )
+            connection.execute(
+                f"UPDATE invitations SET revoked_at = ? WHERE {_INVITATION_USABLE}",  # noqa: S608
+                (at.isoformat(), at.isoformat()),
+            )
+
 
 def _policy(connection: sqlite3.Connection) -> RegistrationPolicy:
     row = connection.execute(
@@ -111,13 +125,6 @@ class SqliteInvitations:
                 (at.isoformat(), invitation_id, at.isoformat()),
             )
         return cursor.rowcount == 1
-
-    def revoke_all(self, at: datetime) -> None:
-        with transaction(self._database_path) as connection:
-            connection.execute(
-                f"UPDATE invitations SET revoked_at = ? WHERE {_INVITATION_USABLE}",  # noqa: S608
-                (at.isoformat(), at.isoformat()),
-            )
 
     def usable(self, token: str, at: datetime) -> bool:
         with transaction(self._database_path) as connection:

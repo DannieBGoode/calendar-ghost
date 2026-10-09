@@ -480,9 +480,7 @@ def _administration(
         change_role=ChangeRole(users),
         change_user_state=ChangeUserState(users, sessions),
         delete_user=DeleteUser(users, sessions, owned),
-        delete_own_account=DeleteOwnAccount(
-            users, passwords, sessions, owned, settings, invitations, clock
-        ),
+        delete_own_account=DeleteOwnAccount(users, passwords, sessions, owned, settings, clock),
         show_own_account_deletion=ShowOwnAccountDeletion(users),
     )
 

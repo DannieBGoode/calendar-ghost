@@ -213,6 +213,8 @@ class CountingThrottle:
 class MemoryRegistration:
     users: MemoryUsers
     current: RegistrationPolicy = RegistrationPolicy.ONLY_ME
+    links: list[_Link] = field(default_factory=list)
+    """The Invitations' links, shared with MemoryInvitations as SQLite shares one database."""
 
     def policy(self) -> RegistrationPolicy:
         return self.current
@@ -220,6 +222,13 @@ class MemoryRegistration:
     def set_policy(self, policy: RegistrationPolicy) -> None:
         require_registration_change(policy, self.users.count())
         self.current = policy
+
+    def return_to_setup(self, at: datetime) -> None:
+        require_registration_change(RegistrationPolicy.ONLY_ME, self.users.count())
+        self.current = RegistrationPolicy.ONLY_ME
+        for link in self.links:
+            if link.usable(at):
+                link.revoked_at = at
 
 
 @dataclass
@@ -239,7 +248,10 @@ class _Link:
 class MemoryInvitations:
     users: MemoryUsers
     registration: MemoryRegistration
-    links: list[_Link] = field(default_factory=list)
+
+    @property
+    def links(self) -> list[_Link]:
+        return self.registration.links
 
     def issue(self, created_by: UserId, at: datetime) -> IssuedLink | None:
         creator = self.users.get(created_by)
@@ -267,11 +279,6 @@ class MemoryInvitations:
             return False
         link.revoked_at = at
         return True
-
-    def revoke_all(self, at: datetime) -> None:
-        for link in self.links:
-            if link.usable(at):
-                link.revoked_at = at
 
     def usable(self, token: str, at: datetime) -> bool:
         return any(link.token == token and link.usable(at) for link in self.links)

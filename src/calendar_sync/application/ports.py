@@ -980,6 +980,12 @@ class RegistrationSettings(Protocol):
         counted in one step with the change, so nobody joins between the count and the change."""
         ...
 
+    def return_to_setup(self, at: datetime) -> None:
+        """Choose Only Me and revoke every Invitation still usable at `at`, in one step, so a
+        failure between them cannot leave an old Invitation for the next setup. Raises
+        OnlyMeNeedsOneUser, changing nothing, while another User exists."""
+        ...
+
 
 class Invitations(Protocol):
     """Single-use, expiring links that let one person become a User; only hashes are kept."""
@@ -995,10 +1001,6 @@ class Invitations(Protocol):
 
     def revoke(self, invitation_id: str, at: datetime) -> bool:
         """Whether an invitation still usable at `at` is revoked now."""
-        ...
-
-    def revoke_all(self, at: datetime) -> None:
-        """Revoke every invitation still usable at `at`."""
         ...
 
     def usable(self, token: str, at: datetime) -> bool: ...

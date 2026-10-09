@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime
 
 import pytest
 
@@ -126,7 +127,6 @@ class Installation:
             self.sessions,
             self.owned,
             self.registration,
-            self.invitations,
             FixedClock(),
         )
 
@@ -318,14 +318,14 @@ def test_anyone_else_may_leave_while_others_remain() -> None:
 
 def test_someone_joining_while_the_last_user_leaves_keeps_their_administrator() -> None:
     installation = Installation(people=(ADMIN,))
-    set_policy = installation.registration.set_policy
+    return_to_setup = installation.registration.return_to_setup
 
-    def joined_meanwhile(policy: RegistrationPolicy) -> None:
+    def joined_meanwhile(at: datetime) -> None:
         if installation.users.get(MEMBER.id) is None:
             installation.users.add(MEMBER, f"hashed:{PASSWORD}")
-        set_policy(policy)
+        return_to_setup(at)
 
-    installation.registration.set_policy = joined_meanwhile  # type: ignore[method-assign]
+    installation.registration.return_to_setup = joined_meanwhile  # type: ignore[method-assign]
 
     with pytest.raises(LastAdministrator):
         installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
