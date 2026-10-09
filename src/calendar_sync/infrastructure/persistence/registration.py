@@ -58,9 +58,21 @@ class SqliteInvitations:
         self._database_path = database_path
         self._ids = ids
 
-    def issue(self, created_by: UserId, at: datetime) -> IssuedLink:
+    def issue(self, created_by: UserId, at: datetime) -> IssuedLink | None:
         link = IssuedLink(self._ids.new(), secrets.token_urlsafe(32), link_expiry(at))
         with transaction(self._database_path) as connection:
+            # Held from the checks to the insert, so an invitation issued while the last User
+            # leaves is either revoked with the others or never issued.
+            connection.execute("BEGIN IMMEDIATE")
+            administrator = connection.execute(
+                """
+                SELECT 1 FROM users
+                WHERE id = ? AND role = 'installation_administrator' AND state = 'active'
+                """,
+                (created_by.value,),
+            ).fetchone()
+            if administrator is None or not _policy(connection).lets_people_join:
+                return None
             connection.execute(
                 """
                 INSERT INTO invitations (id, token_hash, created_by, created_at, expires_at)

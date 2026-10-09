@@ -32,7 +32,7 @@ from calendar_sync.application.administration import (
 )
 from calendar_sync.application.errors import EmailTaken, IncorrectCredentials
 from calendar_sync.application.identity import SignIn
-from calendar_sync.application.ports import UserPage, UserQuery
+from calendar_sync.application.ports import IssuedLink, UserPage, UserQuery
 from calendar_sync.domain.access import (
     LastAdministrator,
     OnlyMeNeedsOneUser,
@@ -220,6 +220,22 @@ def test_under_only_me_nobody_can_be_invited() -> None:
 
     with pytest.raises(RegistrationClosed):
         installation.invite().execute(ADMIN.id)
+
+
+def test_an_invitation_is_refused_when_only_me_is_chosen_while_it_is_issued() -> None:
+    installation = _installation()
+    installation.registration.current = RegistrationPolicy.INVITATION_ONLY
+    issue = installation.invitations.issue
+
+    def only_me_meanwhile(created_by: UserId, at: datetime) -> IssuedLink | None:
+        installation.registration.current = RegistrationPolicy.ONLY_ME
+        return issue(created_by, at)
+
+    installation.invitations.issue = only_me_meanwhile  # type: ignore[method-assign]
+
+    with pytest.raises(RegistrationClosed):
+        installation.invite().execute(ADMIN.id)
+    assert installation.invitations.pending(installation.clock.now()) == ()
 
 
 def test_an_invited_person_chooses_their_own_email_and_password_and_is_signed_in() -> None:

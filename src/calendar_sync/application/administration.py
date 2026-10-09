@@ -169,7 +169,11 @@ class InviteUser:
         require_administrator(self.users, actor)
         if not self.settings.policy().lets_people_join:
             raise RegistrationClosed("choose Invitation Only before inviting anyone")
-        return self.invitations.issue(actor, self.clock.now())
+        issued = self.invitations.issue(actor, self.clock.now())
+        if issued is None:
+            # The policy or the administrator changed since the check above.
+            raise RegistrationClosed("nobody may join now")
+        return issued
 
 
 @dataclass(slots=True)

@@ -284,6 +284,7 @@ def test_two_last_users_leaving_at_once_return_the_installation_to_setup() -> No
     """Both saw another User before removing their rules; the second to finish is the last."""
     installation = Installation(people=(ADMIN, OTHER_ADMIN))
     pending = installation.invitations.issue(ADMIN.id, NOW)
+    assert pending is not None
     installation.users.meanwhile = lambda users: users.users.pop(OTHER_ADMIN.id)
 
     installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)
@@ -296,6 +297,7 @@ def test_two_last_users_leaving_at_once_return_the_installation_to_setup() -> No
 def test_the_only_user_may_leave_and_the_installation_returns_to_setup() -> None:
     installation = Installation(people=(ADMIN,))
     pending = installation.invitations.issue(ADMIN.id, NOW)
+    assert pending is not None
     shown = ShowOwnAccountDeletion(installation.users).execute(ADMIN.id)
 
     installation.delete_own().execute(ADMIN.id, PASSWORD, ProjectionHandling.DELETE)

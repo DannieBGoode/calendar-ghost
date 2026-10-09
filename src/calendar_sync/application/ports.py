@@ -984,7 +984,10 @@ class RegistrationSettings(Protocol):
 class Invitations(Protocol):
     """Single-use, expiring links that let one person become a User; only hashes are kept."""
 
-    def issue(self, created_by: UserId, at: datetime) -> IssuedLink: ...
+    def issue(self, created_by: UserId, at: datetime) -> IssuedLink | None:
+        """A new Invitation, or None when nobody may join now or `created_by` no longer
+        administers; both are decided in one step with the insert."""
+        ...
 
     def pending(self, at: datetime) -> Sequence[PendingInvitation]:
         """Invitations still usable at `at`, oldest first."""

@@ -241,7 +241,15 @@ class MemoryInvitations:
     registration: MemoryRegistration
     links: list[_Link] = field(default_factory=list)
 
-    def issue(self, created_by: UserId, at: datetime) -> IssuedLink:
+    def issue(self, created_by: UserId, at: datetime) -> IssuedLink | None:
+        creator = self.users.get(created_by)
+        if (
+            creator is None
+            or not creator.administers
+            or creator.state is not UserState.ACTIVE
+            or not self.registration.policy().lets_people_join
+        ):
+            return None
         link = _Link(f"invitation-{len(self.links) + 1}", f"token-{len(self.links) + 1}", at)
         self.links.append(link)
         return IssuedLink(link.id, link.token, link_expiry(at))

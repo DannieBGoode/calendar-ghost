@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.errors import EmailTaken
-from calendar_sync.application.ports import UserPage, UserQuery, UserSort
+from calendar_sync.application.ports import IssuedLink, UserPage, UserQuery, UserSort
 from calendar_sync.domain.access import (
     LastAdministrator,
     OnlyMeNeedsOneUser,
@@ -290,6 +290,12 @@ def _database(tmp_path: Path) -> Path:
     return database
 
 
+def _issued(invitations: SqliteInvitations, created_by: UserId, at: datetime) -> IssuedLink:
+    link = invitations.issue(created_by, at)
+    assert link is not None
+    return link
+
+
 class SequentialIds:
     def __init__(self) -> None:
         self.issued = 0
@@ -327,6 +333,28 @@ def test_only_me_is_refused_in_one_step_with_the_change_while_another_user_exist
     assert settings.policy() is RegistrationPolicy.ONLY_ME
 
 
+def test_no_invitation_is_issued_once_nobody_may_join_or_its_creator_left(
+    tmp_path: Path,
+) -> None:
+    """The policy and the creator are read in one step with the insert, so an invitation issued
+    while the last User leaves cannot outlive the return to setup."""
+    database = _database(tmp_path)
+    users = SqliteUserDirectory(database)
+    users.add(FIRST, "hash-1")
+    users.add(SECOND, "hash-2")
+    settings = SqliteRegistrationSettings(database)
+    invitations = SqliteInvitations(database, SequentialIds())
+
+    closed = invitations.issue(FIRST.id, NOW)
+    settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
+    not_an_administrator = invitations.issue(SECOND.id, NOW)
+    users.delete(SECOND.id)
+    gone = invitations.issue(SECOND.id, NOW)
+
+    assert (closed, not_an_administrator, gone) == (None, None, None)
+    assert invitations.pending(NOW) == ()
+
+
 def test_an_invitation_is_refused_once_nobody_may_join(tmp_path: Path) -> None:
     """The policy is read in one step with the acceptance, so Only Me chosen after the person
     opened their link still stops them."""
@@ -336,7 +364,7 @@ def test_an_invitation_is_refused_once_nobody_may_join(tmp_path: Path) -> None:
     settings = SqliteRegistrationSettings(database)
     settings.set_policy(RegistrationPolicy.INVITATION_ONLY)
     invitations = SqliteInvitations(database, SequentialIds())
-    link = invitations.issue(FIRST.id, NOW)
+    link = _issued(invitations, FIRST.id, NOW)
     settings.set_policy(RegistrationPolicy.ONLY_ME)
 
     assert not invitations.accept(link.token, SECOND, "hash-2", NOW)
@@ -350,7 +378,7 @@ def test_an_invitation_is_refused_once_everyone_left(tmp_path: Path) -> None:
     users.add(FIRST, "hash-1")
     SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
     invitations = SqliteInvitations(database, SequentialIds())
-    link = invitations.issue(FIRST.id, NOW)
+    link = _issued(invitations, FIRST.id, NOW)
     users.delete(FIRST.id)
 
     assert not invitations.accept(link.token, SECOND, "hash-2", NOW)
@@ -363,7 +391,7 @@ def test_an_invitation_adds_one_user_once_and_only_its_hash_is_stored(tmp_path: 
     users.add(FIRST, "hash-1")
     SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
     invitations = SqliteInvitations(database, SequentialIds())
-    link = invitations.issue(FIRST.id, NOW)
+    link = _issued(invitations, FIRST.id, NOW)
 
     assert invitations.usable(link.token, NOW)
     with pytest.raises(EmailTaken):
@@ -383,9 +411,10 @@ def test_an_invitation_adds_one_user_once_and_only_its_hash_is_stored(tmp_path: 
 def test_invitations_expire_after_seven_days_and_can_be_revoked(tmp_path: Path) -> None:
     database = _database(tmp_path)
     SqliteUserDirectory(database).add(FIRST, "hash-1")
+    SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
     invitations = SqliteInvitations(database, SequentialIds())
-    first = invitations.issue(FIRST.id, NOW)
-    second = invitations.issue(FIRST.id, NOW + timedelta(days=1))
+    first = _issued(invitations, FIRST.id, NOW)
+    second = _issued(invitations, FIRST.id, NOW + timedelta(days=1))
 
     assert [pending.id for pending in invitations.pending(NOW + timedelta(days=7))] == [second.id]
     assert invitations.revoke(second.id, NOW + timedelta(days=2))
@@ -397,9 +426,10 @@ def test_invitations_expire_after_seven_days_and_can_be_revoked(tmp_path: Path) 
 def test_every_pending_invitation_can_be_revoked_at_once(tmp_path: Path) -> None:
     database = _database(tmp_path)
     SqliteUserDirectory(database).add(FIRST, "hash-1")
+    SqliteRegistrationSettings(database).set_policy(RegistrationPolicy.INVITATION_ONLY)
     invitations = SqliteInvitations(database, SequentialIds())
-    first = invitations.issue(FIRST.id, NOW)
-    second = invitations.issue(FIRST.id, NOW)
+    first = _issued(invitations, FIRST.id, NOW)
+    second = _issued(invitations, FIRST.id, NOW)
 
     invitations.revoke_all(NOW + timedelta(hours=1))
 
