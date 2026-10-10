@@ -68,14 +68,20 @@ def http_reasons(error: Exception) -> frozenset[str]:
     )
 
 
-def cause_of(error: Exception, status: int | None) -> Cause:
-    """Why Google refused, from its reason code and status; `unknown` for anything else."""
+def cause_of(error: Exception, status: int | None, *, event_scoped: bool = False) -> Cause:
+    """Why Google refused, from its reason code and status; `unknown` for anything else.
+
+    `event_scoped` says the request named one event in a calendar that answered just before, so
+    a not-found means the event, not the calendar, is gone: no Cause the adapter knows.
+    """
     if isinstance(error, TransportError):
         return Cause.TEMPORARY
     if isinstance(error, RefreshError):
         return _refresh_cause(error)
     reasons = http_reasons(error)
     cause = _http_cause(reasons, status)
+    if event_scoped and cause is Cause.CALENDAR_NOT_FOUND:
+        return Cause.UNKNOWN
     # Without a status Google never answered, so there is no reason to name.
     if cause is Cause.UNKNOWN and status is not None:
         _log_unrecognized(sorted(reasons)[0] if reasons else None, status)

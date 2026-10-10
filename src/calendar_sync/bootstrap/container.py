@@ -612,13 +612,14 @@ def _compose_user(
 
 
 def public_address(settings: Settings) -> str | None:
-    """Where people reach the Web UI, for links in email: an http or https address with no
-    query or fragment, without its trailing slash. Anything else gives no link."""
+    """Where people reach the Web UI, for links in email: an http or https address at the root
+    of its host, with no path, query, or fragment, without its trailing slash. The Web UI is
+    served at the root of its address, so anything else gives no link."""
     configured = settings.public_url.strip()
     parsed = urlsplit(configured)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         return None
-    if parsed.query or parsed.fragment:
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         return None
     return configured.rstrip("/")
 

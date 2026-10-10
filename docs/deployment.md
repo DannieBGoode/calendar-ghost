@@ -312,8 +312,8 @@ holding that person's next step for its Cause
 ([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md)): their Google connections to
 reauthorize, the rule to choose another calendar or try again, or the Overview when there is nothing
 for them to do. The link names a page and at most a rule's internal identifier, never a calendar,
-account, or event. Only an `http` or `https` address without a query is used; without one, email is
-sent without a link, as before.
+account, or event. Only an `http` or `https` address at the root of its host, with no path or query, is used, because
+the Web UI is served at the root of its address; otherwise email is sent without a link, as before.
 
 The installation's own channels hear only of incidents about the installation itself, which affect
 every User; the first is a scheduler that stopped completing passes. Set

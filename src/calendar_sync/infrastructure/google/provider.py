@@ -230,7 +230,9 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, destination.calendar)
         except Exception as error:
-            raise self._failure(error, destination.calendar.connected_account_id) from error
+            raise self._failure(
+                error, destination.calendar.connected_account_id, event_scoped=True
+            ) from error
 
     def delete_projection(
         self,
@@ -506,7 +508,9 @@ class GoogleCalendarProvider:
             )
             return to_domain_event(payload, destination_series.calendar)
         except Exception as error:
-            raise self._failure(error, destination_series.calendar.connected_account_id) from error
+            raise self._failure(
+                error, destination_series.calendar.connected_account_id, event_scoped=True
+            ) from error
 
     def cancel_occurrence(
         self,
@@ -539,14 +543,17 @@ class GoogleCalendarProvider:
                     error, destination_series.calendar.connected_account_id
                 ) from error
 
-    def _failure(self, error: Exception, account: ConnectedAccountId) -> ProviderFailure:
+    def _failure(
+        self, error: Exception, account: ConnectedAccountId, *, event_scoped: bool = False
+    ) -> ProviderFailure:
         # The clock turns a Retry-After date into the seconds the retry helper waits. The account
         # names whose access to renew when Google rejected its credentials, and when the request
         # read them tells whether a Reauthorization has replaced them since.
         now = self._clock.now()
         read: dict[ConnectedAccountId, datetime] = self._credentials_read.__dict__.get("at", {})
         return replace(
-            _provider_failure(error, now),
+            # A write to one event its calendar just listed or returned names that event alone.
+            _provider_failure(error, now, event_scoped),
             account_id=account,
             provider=ProviderKind.GOOGLE,
             attempted_at=read.get(account, now),
@@ -589,12 +596,12 @@ def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) 
     return origin is not None and origin.rule_id == rule_id and origin.source == source
 
 
-def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
+def _provider_failure(error: Exception, now: datetime, event_scoped: bool) -> ProviderFailure:
     # Refreshing the access token fails before any request is sent, so it carries no status. A
     # revoked or expired grant needs reauthorization; google-auth marks token-endpoint outages
     # retryable. Their text can quote the token endpoint's response, so it is not kept.
     status = _status_code(error)
-    cause = cause_of(error, status)
+    cause = cause_of(error, status, event_scoped=event_scoped)
     if isinstance(error, RefreshError):
         if error.retryable:
             return ProviderFailure(

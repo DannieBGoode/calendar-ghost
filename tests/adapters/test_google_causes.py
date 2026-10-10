@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -18,7 +19,17 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.domain.model import (
+    CalendarEvent,
+    ConnectedAccountId,
+    EventId,
+    EventProjection,
+    EventRef,
+    EventStatus,
+    ManagedOrigin,
+    SyncRuleId,
+    TimedInterval,
+)
 from calendar_sync.infrastructure.google.oauth import (
     GoogleOAuthService,
     OAuthClientConfig,
@@ -31,7 +42,7 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.fake_google_calendar_api import GoogleResponse
-from tests.helpers import endpoint
+from tests.helpers import NOW, endpoint
 from tests.users import add_user
 
 DESTINATION = endpoint("work-account", "work-calendar")
@@ -291,3 +302,44 @@ def test_a_calendar_the_account_may_not_change_stops_its_rule_not_the_account(re
     assert failure.cause is Cause.CALENDAR_FORBIDDEN
     assert failure.kind is ProviderFailureKind.PERMANENT
     assert not failure.requires_authorization
+
+
+def test_an_event_gone_between_reading_and_writing_it_is_not_a_missing_calendar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The calendar still exists; only the one event vanished, so choosing another calendar would
+    # be the wrong step. Its Cause is unknown, and the person tries again.
+    destination = EventRef(DESTINATION, EventId("projection-1"))
+    source = EventRef(endpoint("personal-account", "personal-calendar"), EventId("source-1"))
+    rule_id = SyncRuleId("rule-1")
+    owned = CalendarEvent(
+        reference=destination,
+        revision="r1",
+        status=EventStatus.CONFIRMED,
+        time=TimedInterval(NOW, NOW + timedelta(hours=1)),
+        title="Busy",
+        managed_origin=ManagedOrigin(rule_id, source),
+    )
+    request = MagicMock()
+    request.execute.side_effect = google_error(404, "notFound")
+    events_api = MagicMock()
+    events_api.update.return_value = request
+    service = MagicMock()
+    service.events.return_value = events_api
+    provider = GoogleCalendarProvider(lambda _account: service)
+    monkeypatch.setattr(provider, "get_event", lambda _reference: owned)
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.update_projection(
+            destination,
+            source,
+            rule_id,
+            EventProjection(TimedInterval(NOW, NOW + timedelta(hours=1)), "Busy"),
+            "operation-key",
+        )
+
+    assert raised.value.cause is Cause.UNKNOWN
+
+
+def test_a_calendar_listing_that_finds_no_calendar_is_a_missing_calendar() -> None:
+    assert _failure_of(google_error(404, "notFound")).cause is Cause.CALENDAR_NOT_FOUND

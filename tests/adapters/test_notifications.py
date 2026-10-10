@@ -291,7 +291,9 @@ def test_without_a_public_address_an_incident_email_has_no_link(
     ("configured", "used"),
     [
         ("https://ghost.example.test", "https://ghost.example.test"),
-        ("https://ghost.example.test/calendar/", "https://ghost.example.test/calendar"),
+        ("https://ghost.example.test/", "https://ghost.example.test"),
+        # The Web UI is served at the root of its address, so a path would lead nowhere.
+        ("https://ghost.example.test/calendar/", None),
         ("http://192.168.1.50:8000", "http://192.168.1.50:8000"),
         ("", None),
         ("ghost.example.test", None),
