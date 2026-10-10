@@ -6,6 +6,7 @@ import pytest
 
 from calendar_sync.application.causes import Cause
 from calendar_sync.application.installation_hints import (
+    ADMINISTRATOR_CAUSE_USERS,
     HINT_WINDOW,
     HINTED_USERS,
     TESTING_MODE_GRANT_LIFETIME,
@@ -32,7 +33,9 @@ def seen(
     return CauseSighting(user, cause, NOW - ago, open_, authorized_for)
 
 
-def test_the_thresholds_are_two_users_a_day_and_about_seven_days() -> None:
+def test_the_thresholds_are_one_user_for_the_administrators_two_for_a_pattern() -> None:
+    # Only the administrator can fix their Cause, so one person meeting it is enough to say so.
+    assert ADMINISTRATOR_CAUSE_USERS == 1
     assert HINTED_USERS == 2
     assert timedelta(hours=24) == HINT_WINDOW
     assert timedelta(days=7) == TESTING_MODE_GRANT_LIFETIME
@@ -55,11 +58,18 @@ def test_an_administrators_cause_two_users_share_is_a_hint(cause: Cause) -> None
     )
 
 
-def test_an_administrators_cause_of_one_user_is_no_hint() -> None:
-    # Below the threshold, however often that one User failed.
+def test_an_administrators_cause_of_one_user_is_a_hint_counting_them_once() -> None:
     sightings = [seen(ROBIN, Cause.API_DISABLED), seen(ROBIN, Cause.API_DISABLED, ago=timedelta())]
 
-    assert installation_hints(sightings, NOW) == ()
+    assert installation_hints(sightings, NOW) == (
+        InstallationHint(
+            HintKind.SHARED_CAUSE, Cause.API_DISABLED, 1, "the-google-calendar-api-is-turned-off"
+        ),
+    )
+
+
+def test_without_an_administrators_cause_there_is_no_hint_for_it() -> None:
+    assert installation_hints([seen(ROBIN, Cause.ACCESS_REVOKED)], NOW) == ()
 
 
 def test_a_hint_counts_everyone_who_shares_the_cause() -> None:
@@ -75,11 +85,8 @@ def test_a_hint_counts_everyone_who_shares_the_cause() -> None:
 
 
 def test_a_failure_exactly_a_day_old_counts_and_an_older_one_does_not() -> None:
-    at_edge = [seen(ROBIN, Cause.API_DISABLED), seen(SAM, Cause.API_DISABLED, ago=HINT_WINDOW)]
-    beyond = [
-        seen(ROBIN, Cause.API_DISABLED),
-        seen(SAM, Cause.API_DISABLED, ago=HINT_WINDOW + timedelta(seconds=1)),
-    ]
+    at_edge = [seen(SAM, Cause.API_DISABLED, ago=HINT_WINDOW)]
+    beyond = [seen(SAM, Cause.API_DISABLED, ago=HINT_WINDOW + timedelta(seconds=1))]
 
     assert len(installation_hints(at_edge, NOW)) == 1
     assert installation_hints(beyond, NOW) == ()
@@ -87,10 +94,7 @@ def test_a_failure_exactly_a_day_old_counts_and_an_older_one_does_not() -> None:
 
 def test_an_incident_still_open_counts_however_long_ago_it_failed() -> None:
     # A rule the Cause stopped tries no more, so its last failure ages while it stays stopped.
-    sightings = [
-        seen(ROBIN, Cause.API_DISABLED),
-        seen(SAM, Cause.API_DISABLED, ago=timedelta(days=3), open_=True),
-    ]
+    sightings = [seen(SAM, Cause.API_DISABLED, ago=timedelta(days=3), open_=True)]
 
     assert len(installation_hints(sightings, NOW)) == 1
 

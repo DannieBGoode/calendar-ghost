@@ -79,7 +79,10 @@ describe("hintText", () => {
 
   it("says each pattern in one sentence with how many people it affects", () => {
     expect(hintText(i18n, hint("shared_cause", "api_disabled"))).toBe(
-      "3 people stopped for the same likely cause: the Google Calendar API is turned off for this installation.",
+      "3 people are affected because the Google Calendar API is turned off for this installation.",
+    )
+    expect(hintText(i18n, { ...hint("shared_cause", "api_disabled"), users: 1 })).toBe(
+      "1 person is affected because the Google Calendar API is turned off for this installation.",
     )
     expect(hintText(i18n, hint("testing_mode", "access_revoked"))).toBe(
       "3 people lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode.",

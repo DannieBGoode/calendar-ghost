@@ -313,9 +313,12 @@ People is the Installation Administrator's view of everyone here, laid out like 
 a Fraunces title with one sentence and "Invite someone" as the page's one primary action, then link
 tabs (Everyone first, then Invitations with a count of those waiting, hidden at zero). Everyone
 shows Installation Health in a card, then everyone here in one card holding its search, filters,
-table, and pages, sorted by when people joined unless asked otherwise. Installation Health is one
-sentence that adds to its badge by saying how many of everyone it concerns ("1 of 4 people need a
-look"), then quiet pill counts ("Show only: Stopped: 1, …, Disabled: 1") that set the list's Sync
+table, and pages, sorted by when people joined unless asked otherwise. Installation Health leads with what
+the administrator must do: "Needs you" in Destructive Red with the likely causes only they can fix,
+or "Nothing needs you" in Healthy Moss with one quiet sentence on how many people have something
+of their own to fix ("1 of 4 people has something to fix on their own dashboard"). While something
+needs them, a small red dot sits beside People in the navigation, read as "needs you". Then quiet
+pill counts ("Show only: Stopped: 1, …, Disabled: 1") that set the list's Sync
 and State filters to exactly the people counted, and read as pressed whenever the filters say the
 same; "What each sync status means" opens below them. A person's sync status is a chip with an
 icon, text, and its tone (red stopped, ochre needs a look, neutral otherwise, moss healthy);
@@ -327,7 +330,7 @@ A person's page starts at their name, and the browser tab names them. It leads w
 Synchronization card: the verdict with how many rules run, then a problem several rules share,
 such as a lapsed Google account, said once with the rules it stops, then each rule with its status
 chip and last sync, and under a rule its own problems with who takes the next step: "Robin can fix this from their dashboard" for any
-problem the person fixes themself, "You fix this as the administrator" with "How to fix" for the
+problem the person fixes themself, with a muted "If they ask for help: …" saying what they do, "You fix this as the administrator" with "How to fix" for the
 installation's own, and nothing for the administrator to do otherwise. On their own page an
 administrator reads the steps as their own, with a link to take each one, and their calendars by
 name. With problems, a second card holds their accounts, Activity, and calls, with one line on
@@ -338,7 +341,8 @@ Settings does not show a person what administrators see about them.
 
 A problem a provider refused carries its likely cause as a muted line under it ("Likely cause: the
 Google Calendar API is turned off for this installation."), unless the problem already says it, as
-"needs reauthorization" and "Waiting for Google" do. Who acts follows the Cause's owner. For
+"needs reauthorization" and "Waiting for Google" do. A problem only the administrator can fix sits on
+Attention Ochre with its full border instead of the quiet well. Who acts follows the Cause's owner. For
 an administrator's Cause, an administrator reads that the fix is theirs, with "How to fix" opening
 the troubleshooting guide's section in a new tab, and the person reads only "Temporarily
 unavailable", with no likely-cause line, no mention of the administrator, and no step only an

@@ -65,10 +65,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   requests or failed for a moment, or a reason Calendar Ghost does not recognize, which the person
   handles from their own dashboard. Problems and incidents in `GET /api/v1/status`,
   `GET /api/v1/dashboard`, and `GET /api/v1/incidents` carry `cause`, problems say when they were
-  last tried, and the status and dashboard say when the scheduler next tries. **People** suggests
-  likely causes when two or more people share an administrator's Cause or an unrecognized one
-  within a day, or lose Google about 7 days after connecting (an OAuth app in Testing mode), each
-  with **How to fix**; `GET /api/v1/installation/health` returns them as `hints`. A person's page
+  last tried, and the status and dashboard say when the scheduler next tries. **People** says
+  **Needs you** and is marked in the navigation when anyone meets an administrator's Cause, or two
+  or more people fail for an unrecognized reason or lose Google about 7 days after connecting (an
+  OAuth app in Testing mode), each with **How to fix**; people's own problems are not flagged, and
+  their page says what they do if they ask for help; `GET /api/v1/installation/health` returns them as `hints`. A person's page
   says each problem's likely cause. For an administrator's Cause, each person's Overview says
   only "Temporarily unavailable", naming neither the cause nor the administrator; otherwise they
   give its one step. Administrators

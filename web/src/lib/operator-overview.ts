@@ -220,3 +220,16 @@ export function ownStepTarget(problem: ServerProblem): OwnTarget | null {
   const onRule = next === "preview" || next === "overdue" || next === "calendar"
   return onRule && problem.rule_id ? "rule" : null
 }
+
+/** Steps a person takes themself, which the administrator can repeat to them if they ask. */
+const SUPPORT_STEPS = ["reauthorize", "preview", "activity", "overdue", "calendar"] as const
+
+/**
+ * What a person does about their own problem, in the third person, for an administrator to repeat
+ * if they ask for help; none for what only the administrator fixes, or what fixes itself.
+ */
+export function supportHint(i18n: I18n, problem: ServerProblem): string | null {
+  const next = step(problem)
+  const known = SUPPORT_STEPS.find((each) => each === next)
+  return known ? i18n.t(`people.overview.ifTheyAsk.${known}`) : null
+}

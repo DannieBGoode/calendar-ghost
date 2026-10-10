@@ -175,8 +175,8 @@ def test_hints_come_from_failures_of_users_who_may_sign_in() -> None:
         shared,
     ).execute()
 
-    # A disabled User's rules do not run, so their old failures suggest nothing.
-    assert lone.hints == ()
+    # A disabled User's rules do not run, so only the active User's failure counts.
+    assert [(hint.cause, hint.users) for hint in lone.hints] == [(Cause.API_DISABLED, 1)]
     assert [(hint.cause, hint.users) for hint in health.hints] == [(Cause.API_DISABLED, 2)]
     assert asked[0] == NOW - HINT_WINDOW
 

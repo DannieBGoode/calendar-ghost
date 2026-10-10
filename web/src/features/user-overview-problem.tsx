@@ -1,8 +1,8 @@
 import { HowToFixLink } from "@/components/how-to-fix-link"
 import { useI18n } from "@/i18n/provider"
 import type { ServerProblem, UserOverview } from "@/lib/api"
-import { causeAddsToProblem, causeOf, causeText, howToFixUrl, retryTiming } from "@/lib/causes"
-import { nextStep, ownStepTarget, problemText, type Audience } from "@/lib/operator-overview"
+import { causeAddsToProblem, causeOf, causeText, howToFixUrl, isAdministratorCause, retryTiming } from "@/lib/causes"
+import { nextStep, ownStepTarget, problemText, supportHint, type Audience } from "@/lib/operator-overview"
 
 type Status = UserOverview["status"]
 
@@ -38,11 +38,12 @@ export function ProblemDetail({
   const cause = causeOf(problem)
   const timing = retryTiming(i18n, problem, status.scheduler.next_pass_at ?? null, options.now)
   return (
-    <div className="user-overview-problem">
+    <div className="user-overview-problem" data-owner={cause ? (isAdministratorCause(cause) ? "administrator" : "user") : undefined}>
       <p className="user-overview-problem-text">{problemText(i18n, problem, status.counts.blocked_events)}</p>
       {stops && <p className="user-overview-muted">{stops}</p>}
       {causeAddsToProblem(cause) && <p className="user-overview-muted">{causeText(i18n, cause)}</p>}
       <ProblemStep problem={problem} options={options} />
+      {typeof options.audience === "object" && <SupportHint problem={problem} />}
       {timing && <p className="user-overview-muted">{timing}</p>}
       {problem.since && (
         <p className="user-overview-muted">
@@ -86,4 +87,11 @@ function OwnStep({ problem, own }: { problem: ServerProblem; own: OwnPage }) {
       </button>
     </>
   )
+}
+
+/** Quietly, what the person does about their own problem, should they ask the administrator. */
+function SupportHint({ problem }: { problem: ServerProblem }) {
+  const i18n = useI18n()
+  const hint = supportHint(i18n, problem)
+  return hint ? <p className="user-overview-muted">{hint}</p> : null
 }

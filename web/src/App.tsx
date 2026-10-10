@@ -29,6 +29,7 @@ import {
   withSettingsTab,
 } from "@/lib/navigation"
 import { publicPageAt } from "@/lib/public-links"
+import { useAdministratorFlag } from "@/lib/use-administrator-flag"
 import { usePeopleAccess } from "@/lib/use-people-access"
 import { useUserScopedCache } from "@/lib/use-user-cache"
 import { cn } from "@/lib/utils"
@@ -93,6 +94,8 @@ function AuthenticatedApp() {
   const location: AppLocation = peopleClosed ? { view: "overview", ruleId: null } : requested
   const view = location.view
   const shownNavItems = navItems.filter((item) => item.id !== "people" || peopleAccess === "open")
+  // Only what the administrator must fix raises it; people's own problems stay on People quietly.
+  const administratorFlag = useAdministratorFlag(peopleAccess === "open")
   const [mobileNav, setMobileNav] = useState(false)
   const [arrival, setArrival] = useState<ViewOptions>({})
   // Counts arrivals so views that read the address, such as Activity's filters, start fresh on
@@ -206,7 +209,8 @@ function AuthenticatedApp() {
         <nav id="primary-nav" className={cn("primary-nav", mobileNav && "open")} aria-label={t("app.nav.primaryLabel")}>
           {shownNavItems.map((item) => {
             const Icon = item.icon
-            return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{t(item.labelKey)}</span></a>
+            const flag = item.id === "people" && administratorFlag
+            return <a key={item.id} href={appPathForView(item.id)} className={cn("nav-item", view === item.id && "active")} onClick={(event) => followSectionLink(event, item.id)} aria-current={view === item.id ? "page" : undefined}><Icon /><span>{t(item.labelKey)}</span>{flag && <><span className="nav-flag" aria-hidden="true" /><span className="sr-only">{t("app.nav.needsYou")}</span></>}</a>
           })}
         </nav>
         <div className="topbar-actions">

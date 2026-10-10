@@ -238,8 +238,8 @@ or calendars, so only an Installation Administrator can fix them. Calendar Ghost
 refused from its reason code, never its message, and records it as a Cause. Each person's own
 Overview says only that Google Calendar is temporarily unavailable, without the cause or a mention
 of you, so people are not prompted to contact you. On
-**People**, **Installation health** suggests the likely cause when two or more people show the same
-one within a day, with **How to fix** linking to the section below; a person's page shows the
+**People**, **Installation health** says **Needs you**, People is marked in the navigation, and the
+likely cause is shown as soon as anyone meets it, with **How to fix** linking to the section below; a person's page shows the
 likely cause of each of their problems. Administrators never need to contact anyone: once the
 project is fixed, each person's dashboard tells them what, if anything, is left for them.
 

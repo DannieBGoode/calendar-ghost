@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
-import { ChevronDown, CircleHelp, Lightbulb, UserX } from "lucide-react"
+import { CheckCircle2, ChevronDown, CircleHelp, Lightbulb, ShieldAlert, UserX } from "lucide-react"
 
 import { HowToFixLink } from "@/components/how-to-fix-link"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { VerdictBadge, VerdictIcon } from "@/components/verdict-badge"
@@ -69,10 +70,7 @@ function HealthReport({
   const { t } = i18n
   return (
     <>
-      <div className="user-overview-verdict">
-        <VerdictBadge verdict={report.status} />
-        <p>{healthSentence(i18n, report)}</p>
-      </div>
+      <HealthLead report={report} />
       {report.incidents.map((incident) => (
         <p key={incident.kind} className="user-overview-muted">
           {t("people.health.schedulerStalled", { relative: i18n.format.relative(incident.since, now) })}
@@ -114,17 +112,53 @@ function Hints({ hints }: { hints: InstallationHint[] }) {
 }
 
 /**
- * The installation's verdict in a sentence that adds to its badge: how many of everyone who may
- * sign in it describes. A stalled scheduler, paused rules, and setup concern everyone alike.
+ * What the administrator must do, first. A stalled scheduler, or a likely cause only they can fix,
+ * needs them; people's own problems do not, so they are one quiet line: each person sees their
+ * own step on their dashboard, and the administrator finds it on their page if they ask.
  */
-function healthSentence(i18n: I18n, report: InstallationHealthReport): string {
-  const total = Object.values(report.users).reduce((sum, count) => sum + count, 0)
-  const status = report.status
-  if (status === "stalled" || status === "paused" || status === "setup") {
-    return i18n.t(`people.health.summary.${status}`)
+function HealthLead({ report }: { report: InstallationHealthReport }) {
+  const i18n = useI18n()
+  const { t } = i18n
+  if (report.status === "stalled") {
+    return (
+      <div className="user-overview-verdict installation-health-lead">
+        <VerdictBadge verdict={report.status} />
+        <p>{t("people.health.summary.stalled")}</p>
+      </div>
+    )
   }
-  const count = status === "healthy" ? total : (report.users[status] ?? 0)
-  return i18n.t(`people.health.summary.${status}`, { count, total })
+  if (report.hints.length > 0) {
+    return (
+      <div className="user-overview-verdict installation-health-lead">
+        <Badge variant="stopped">
+          <ShieldAlert aria-hidden="true" />
+          {t("people.health.needsYou")}
+        </Badge>
+        <p>{t("people.health.needsYouDetail")}</p>
+      </div>
+    )
+  }
+  return (
+    <div className="user-overview-verdict installation-health-lead">
+      <Badge variant="healthy">
+        <CheckCircle2 aria-hidden="true" />
+        {t("people.health.nothingNeedsYou")}
+      </Badge>
+      <p>{quietSentence(i18n, report)}</p>
+    </div>
+  )
+}
+
+/** Verdicts that mean a person has something to do, or to wait for, on their own dashboard. */
+const OWN_TROUBLE = ["stopped", "review", "waiting"] as const
+
+/** With nothing for the administrator to do: how many people have something of their own. */
+function quietSentence(i18n: I18n, report: InstallationHealthReport): string {
+  const total = Object.values(report.users).reduce((sum, count) => sum + count, 0)
+  const count = OWN_TROUBLE.reduce((sum, verdict) => sum + (report.users[verdict] ?? 0), 0)
+  if (count > 0) return i18n.t("people.health.ownFixes", { count, total })
+  if (report.status === "paused" || report.status === "setup") return i18n.t(`people.health.summary.${report.status}`)
+  return i18n.t("people.health.summary.healthy", { count: total })
 }
 
 function HealthCounts({

@@ -1884,6 +1884,13 @@ p {
   font-weight: 550;
 }
 
+/* Only the administrator can fix it, so it stands out in Attention Ochre; a person's own problem
+   stays on the quiet well. */
+.user-overview-problem[data-owner="administrator"] {
+  border: 1px solid var(--warning-border);
+  background: var(--warning-surface);
+}
+
 .user-overview-problem .user-overview-next {
   margin-top: 0.125rem;
 }
@@ -1993,6 +2000,16 @@ p {
   border-color: var(--primary);
   background: var(--primary-soft);
   color: var(--foreground);
+}
+
+/* A small Destructive Red dot beside People while something only the administrator can fix needs
+   them; screen readers hear "needs you". */
+.nav-flag {
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: 0.125rem;
+  border-radius: 999px;
+  background: var(--destructive);
 }
 
 /* Likely causes from patterns across people: Attention Ochre asks the administrator to take a

@@ -248,6 +248,8 @@ describe("A person's page", () => {
     const text = container.textContent
     expect(text).toContain("Likely cause: the Google Calendar API is turned off for this installation.")
     expect(text).toContain("You fix this as the administrator, in Google Cloud. robin@example.test has nothing to do.")
+    // Only the administrator can fix it, so it stands out.
+    expect(container.querySelector(".user-overview-problem")?.getAttribute("data-owner")).toBe("administrator")
     const howToFix = [...container.querySelectorAll<HTMLAnchorElement>("a")].find((link) => link.textContent.startsWith("How to fix"))
     expect(howToFix?.href).toBe("https://calendarghost.com/docs/troubleshooting#the-google-calendar-api-is-turned-off")
     expect(howToFix?.target).toBe("_blank")
@@ -270,6 +272,9 @@ describe("A person's page", () => {
     // The problem already says the account needs reauthorization; the cause would only repeat it.
     expect(text).not.toContain("Likely cause")
     expect(text).toContain("robin@example.test can fix this from their dashboard.")
+    // Quietly, the answer in case they ask for help.
+    expect(text).toContain("If they ask for help: they reauthorize their Google account in Settings, under Connections.")
+    expect(container.querySelector(".user-overview-problem")?.getAttribute("data-owner")).toBe("user")
     expect(text).not.toContain("How to fix")
     expect(container.querySelector(".user-overview-problem button, .user-overview-problem a")).toBeNull()
   })

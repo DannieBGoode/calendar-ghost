@@ -256,13 +256,14 @@ failure; whether a rule retries, stops, or lapses its account still follows the 
 _Avoid_: Error reason, root cause, error message
 
 **Installation Hint**:
-A likely cause Installation Health suggests to Installation Administrators from a pattern across
-Users, never from one User's content: the same administrator's Cause for two or more Users within a
-day; Google refusing two or more Users' grants about 7 days after they authorized, which an OAuth app
+A likely cause Installation Health suggests to Installation Administrators, never from one User's
+content: an administrator's Cause any User met within a day, since only the administrator can fix
+it; and, as patterns across Users, Google refusing two or more Users' grants about 7 days after they authorized, which an OAuth app
 in Testing mode does; or two or more Users failing within a day for a reason Calendar Ghost does not
 recognize (`unknown`), which the service logs name by Google's reason code. Each names its Cause, how
 many Users show it, and the troubleshooting section that explains the fix. It names no User, rule,
-calendar, or account.
+calendar, or account. Hints are what People flags; a User's own problems are not flagged, and the
+administrator finds them, with what the User does, on that User's page.
 _Avoid_: Diagnosis, alert, recommendation
 
 ## Access

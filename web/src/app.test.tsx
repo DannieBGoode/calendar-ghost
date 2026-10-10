@@ -456,7 +456,7 @@ describe("People", () => {
     page.happyDOM.setURL(address)
   })
 
-  function serveAs(role: string, policy: "only_me" | "invitation_only") {
+  function serveAs(role: string, policy: "only_me" | "invitation_only", hints: unknown[] = []) {
     requested = []
     const answers: Record<string, unknown> = {
       ...RESPONSES,
@@ -486,7 +486,7 @@ describe("People", () => {
         users: { setup: 1 },
         disabled_users: 0,
         checked_at: "2026-10-01T09:00:00Z",
-        hints: [],
+        hints,
       },
       [`/api/v1/users/${administrator.id}/overview`]: { ...NOTHING_SET_UP, user: { ...NOTHING_SET_UP.user, id: administrator.id } },
       "/api/v1/invitations": [],
@@ -522,6 +522,28 @@ describe("People", () => {
     expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
     expect(document.title).toBe("People – Calendar Ghost")
     expect(requested).toContain("/api/v1/users")
+  })
+
+  it("flags People when something only the administrator can fix needs them", async () => {
+    page.happyDOM.setURL("http://localhost:8000/overview")
+    serveAs("installation_administrator", "invitation_only", [
+      { kind: "shared_cause", cause: "api_disabled", users: 1, anchor: "the-google-calendar-api-is-turned-off" },
+    ])
+    const { container } = await renderApp(testI18n())
+
+    const link = [...container.querySelectorAll<HTMLAnchorElement>("#primary-nav a")].find((item) =>
+      item.textContent.startsWith("People"),
+    )!
+    expect(link.querySelector(".nav-flag")).not.toBeNull()
+    expect(link.textContent).toBe("People (needs you)")
+  })
+
+  it("does not flag People for what people fix themselves", async () => {
+    page.happyDOM.setURL("http://localhost:8000/overview")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+
+    expect(container.querySelector("#primary-nav .nav-flag")).toBeNull()
   })
 
   it("opens a person's page at its own address, and returns to People", async () => {

@@ -12,7 +12,8 @@
     "settings": "Settings",
     "primaryLabel": "Primary navigation",
     "open": "Open navigation",
-    "close": "Close navigation"
+    "close": "Close navigation",
+    "needsYou": " (needs you)"
   },
   "unavailable": {
     "title": "Calendar Ghost is unavailable",

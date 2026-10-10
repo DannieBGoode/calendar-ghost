@@ -58,9 +58,12 @@ User's calendars.
   nullable column. Rows recorded before this decision read as `unknown`. Installation Status shows
   each problem's Cause, and the status API returns it.
 - **Installation Health derives Installation Hints from patterns across Users**, never from one
-  User's content: the same administrator's Cause for two or more Users within 24 hours; `unknown`
-  for two or more Users within 24 hours; and `access_revoked` about 7 days after authorizing for two
-  or more Users, which is how Google expires grants of an OAuth app in Testing mode. A hint carries
+  User's content: an administrator's Cause that any User met within 24 hours, since only the
+  administrator can fix it; and, as patterns, `unknown` for two or more Users within 24 hours and
+  `access_revoked` about 7 days after authorizing for two or more Users, which is how Google expires
+  grants of an OAuth app in Testing mode. Hints flag People and its navigation link; a User's own
+  problems never do, and the administrator finds them, with what the User does if they ask for
+  help, on that User's page. A hint carries
   its Cause, a count of Users, and an anchor in `docs/troubleshooting.md`. It names no User, rule,
   calendar, or account. The thresholds are named constants. Hints and their "How to fix" links are
   for administrators' Causes and these patterns only, never for one User's own Cause.

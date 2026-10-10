@@ -15,8 +15,11 @@ from calendar_sync.application.causes import ADMINISTRATOR_CAUSES, Cause
 from calendar_sync.application.ports import CauseSighting
 from calendar_sync.domain.access import UserId
 
+ADMINISTRATOR_CAUSE_USERS = 1
+"""Only the administrator can fix their own Cause, so one User meeting it is enough to say so."""
 HINTED_USERS = 2
-"""How many Users must show a pattern before it is a hint rather than one person's trouble."""
+"""How many Users must show a pattern, such as Testing mode, before it is a hint rather than one
+person's trouble."""
 HINT_WINDOW = timedelta(hours=24)
 """How recent a failure must be to count, unless its Incident is still open."""
 TESTING_MODE_GRANT_LIFETIME = timedelta(days=7)
@@ -63,7 +66,8 @@ def installation_hints(
     hints = [
         InstallationHint(HintKind.SHARED_CAUSE, cause, count, CAUSE_ANCHORS[cause])
         for cause in sorted(ADMINISTRATOR_CAUSES)
-        if (count := _users(seen for seen in current if seen.cause is cause)) >= HINTED_USERS
+        if (count := _users(seen for seen in current if seen.cause is cause))
+        >= ADMINISTRATOR_CAUSE_USERS
     ]
     testing = _users(seen for seen in current if _lapsed_like_testing_mode(seen))
     if testing >= HINTED_USERS:
