@@ -95,7 +95,8 @@ PREVIEW_EMAIL = "preview@preview.com"
 # Simple to type, and long enough for the password policy.
 PREVIEW_PASSWORD = "previewpreview"  # noqa: S105
 ROBIN_EMAIL = "robin@example.test"
-"""A second, ordinary User in the scenarios that show a Cause two people share."""
+"""A second, ordinary User in every scenario but setup: healthy, unless his Google account lapsed
+for the Cause Sam's did."""
 MARKER_TABLE = "dev_preview_marker"
 
 
@@ -395,7 +396,7 @@ def build_preview_container(
     google = PreviewGoogle()
     composed = compose(settings, adapters)
     sams = PreviewAccounts(_scenario_accounts(scenario, moment))
-    robins = PreviewAccounts(_robin_accounts(moment))
+    robins = PreviewAccounts(_robin_accounts(moment, lapsed=scenario in _SHARED))
 
     def preview_services(user: UserId) -> UserServices:
         services = composed.for_user(user)
@@ -452,8 +453,11 @@ def build_preview_container(
     ).execute(PREVIEW_EMAIL, PREVIEW_PASSWORD)
     if scenario is not Scenario.SETUP:
         _seed(adapters, path, preview_user(path), moment, scenario)
-    if scenario in _SHARED:
-        _seed_robin(adapters, path, moment, _LAPSE_CAUSES[scenario])
+    # A new installation has only its first User.
+    if scenario is not Scenario.SETUP:
+        _seed_robin(
+            adapters, path, moment, _LAPSE_CAUSES[scenario] if scenario in _SHARED else None
+        )
     return container
 
 
@@ -480,7 +484,7 @@ ROBIN_RULE = SyncRule(
     source=CalendarEndpoint(ROBIN_PERSONAL, CalendarId("robin@personal.example")),
     destination=CalendarEndpoint(ROBIN_WORK, CalendarId("robin@work.example")),
     state=SyncRuleState.ENABLED,
-).degrade(awaiting_reauthorization=True)
+)
 ROBIN_CALENDARS = {
     ROBIN_PERSONAL: DiscoveredCalendar(
         "robin@personal.example", "Robin", access=CalendarAccess.OWNER, primary=True
@@ -493,8 +497,8 @@ ROBIN_CALENDARS = {
 ROBIN_AUTHORIZED_BEFORE = timedelta(days=7, hours=1)
 
 
-def _robin_accounts(now: datetime) -> tuple[ConnectedAccount, ...]:
-    lapsed_at = (now - timedelta(minutes=50)).isoformat()
+def _robin_accounts(now: datetime, *, lapsed: bool) -> tuple[ConnectedAccount, ...]:
+    lapsed_at = (now - timedelta(minutes=50)).isoformat() if lapsed else None
     return tuple(
         ConnectedAccount(
             account,
@@ -508,8 +512,8 @@ def _robin_accounts(now: datetime) -> tuple[ConnectedAccount, ...]:
     )
 
 
-def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause) -> None:
-    """Robin, an ordinary User whose Personal account lapsed for the same Cause as Sam's."""
+def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause | None) -> None:
+    """Robin, an ordinary User, whose Personal account lapsed for `cause` when there is one."""
     adapters.users.add(
         User(ROBIN, ROBIN_EMAIL, Role.USER, UserState.ACTIVE, now - timedelta(days=20)),
         adapters.passwords.hash(PREVIEW_PASSWORD),
@@ -539,17 +543,21 @@ def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause) -> 
                     authorized,
                     account.authorization_lapsed_at,
                 )
-                for account in _robin_accounts(now)
+                for account in _robin_accounts(now, lapsed=cause is not None)
             ],
         )
     with adapters.unit_of_work(ROBIN)() as uow:
-        uow.rules.add(ROBIN_RULE)
+        uow.rules.add(
+            ROBIN_RULE if cause is None else ROBIN_RULE.degrade(awaiting_reauthorization=True)
+        )
         uow.run_outcomes.record(
             RuleRunOutcome(ROBIN_RULE.id, RunKind.SYNC, now - timedelta(hours=2), succeeded=True)
         )
         for account, calendar in ROBIN_CALENDARS.items():
             uow.calendar_names.remember(account, [calendar])
         uow.commit()
+    if cause is None:
+        return
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute(
             """

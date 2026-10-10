@@ -77,7 +77,10 @@ def test_preview_seeds_only_its_own_database_with_a_read_only_calendar(tmp_path:
     assert events["flight", "destination_drift_repaired"]["renamed_from"] is None
     assert events["dinner", "source_cancelled"]["title"] == "Dinner at Marta's"
     with closing(sqlite3.connect(database)) as connection:
-        rules = connection.execute("SELECT COUNT(*) FROM sync_rules").fetchone()[0]
+        rules = connection.execute(
+            "SELECT COUNT(*) FROM sync_rules WHERE user_id = ?", (preview_user(database).value,)
+        ).fetchone()[0]
+        # Sam's three rules; Robin keeps his own.
         assert rules == 3
 
 
@@ -167,7 +170,10 @@ def test_preview_people_show_each_users_own_verdict(tmp_path: Path, scenario: Sc
         health = client.get("/api/v1/installation/health").json()["users"]
 
     assert overview == own == scenario.value
-    assert health == {scenario.value: 1}
+    # Robin is here too, healthy unless the scenario breaks his rule.
+    expected = {scenario.value: 1, "healthy": 1}
+    expected[scenario.value] = 2 if scenario is Scenario.HEALTHY else 1
+    assert health == expected
 
 
 def test_preview_names_calendars_of_an_account_that_lost_access(tmp_path: Path) -> None:
@@ -245,3 +251,31 @@ def test_preview_signs_in_with_a_simple_local_login(tmp_path: Path) -> None:
     # Long enough for the password policy, so the preview sets up like any installation.
     assert (PREVIEW_EMAIL, PREVIEW_PASSWORD) == ("preview@preview.com", "previewpreview")
     assert signed_in.status_code == 200
+
+
+@pytest.mark.parametrize("scenario", [s for s in Scenario if s is not Scenario.SETUP])
+def test_robin_signs_in_to_every_scenario_but_a_new_installation(
+    tmp_path: Path, scenario: Scenario
+) -> None:
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=scenario)
+
+    with TestClient(create_app(container)) as client:
+        signed_in = client.post(
+            "/api/v1/session", json={"email": ROBIN_EMAIL, "password": PREVIEW_PASSWORD}
+        )
+        robins = client.get("/api/v1/status").json()["status"]
+
+    assert signed_in.status_code == 200
+    shared = scenario in {Scenario.API_DISABLED, Scenario.ACCESS_REVOKED}
+    assert robins == ("stopped" if shared else "healthy")
+
+
+def test_a_new_installation_has_only_its_first_user(tmp_path: Path) -> None:
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=Scenario.SETUP)
+
+    with TestClient(create_app(container)) as client:
+        refused = client.post(
+            "/api/v1/session", json={"email": ROBIN_EMAIL, "password": PREVIEW_PASSWORD}
+        )
+
+    assert refused.status_code == 401

@@ -38,8 +38,9 @@ To see the Web UI with realistic data without a Google account, run:
 .venv/bin/python scripts/dev_preview.py
 ```
 
-Open `http://127.0.0.1:8001/activity` and sign in as `preview@preview.com` with `previewpreview`. In `api-disabled` and
-`access-revoked`, `robin@example.test` signs in with the same password as an ordinary User. The preview is for
+Open `http://127.0.0.1:8001/activity` and sign in as `preview@preview.com` with `previewpreview`. In every scenario but `setup`,
+`robin@example.test` signs in with the same password as an ordinary User, healthy unless the
+scenario breaks his rule, so People is on. The preview is for
 development only:
 
 - It writes only to `dev-preview.db` in the repository root, which it marks as its own. It refuses
