@@ -5,6 +5,7 @@ from contextlib import nullcontext, suppress
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
@@ -160,20 +161,28 @@ class ExecuteSyncRule:
             raise
         except ProviderFailure as failure:
             log.failed(failure.kind.value)
-            self._record_failure(rule_id, full, failure.kind.value)
+            self._record_failure(rule_id, full, failure.kind.value, failure.cause)
             raise
         except Exception:
             log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
-            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value)
+            self._record_failure(
+                rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value, Cause.UNKNOWN
+            )
             raise
 
-    def _record_failure(self, rule_id: SyncRuleId, full: bool, kind: str) -> None:
+    def _record_failure(self, rule_id: SyncRuleId, full: bool, kind: str, cause: Cause) -> None:
         # Recording evidence must never replace the failure the scheduler classifies.
         with suppress(Exception), self.unit_of_work() as uow:
             if uow.rules.get(rule_id) is not None:
                 uow.run_outcomes.record(
                     RuleRunOutcome(
-                        rule_id, RunKind.SYNC, self.clock.now(), False, full, failure_kind=kind
+                        rule_id,
+                        RunKind.SYNC,
+                        self.clock.now(),
+                        False,
+                        full,
+                        failure_kind=kind,
+                        failure_cause=cause,
                     )
                 )
                 uow.commit()

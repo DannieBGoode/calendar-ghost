@@ -7,6 +7,7 @@ from datetime import date, datetime
 from types import TracebackType
 from typing import Self
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AccountStanding,
@@ -431,7 +432,10 @@ class InMemoryRuleRunOutcomeRepository:
             else None
         )
         self._state.outcomes[(outcome.rule_id, outcome.kind)] = replace(
-            outcome, last_succeeded_at=succeeded_at, last_full_succeeded_at=full_at
+            outcome,
+            failure_cause=None if outcome.succeeded else outcome.failure_cause or Cause.UNKNOWN,
+            last_succeeded_at=succeeded_at,
+            last_full_succeeded_at=full_at,
         )
 
     def latest(self, rule_id: SyncRuleId, kind: RunKind) -> RuleRunOutcome | None:

@@ -8,6 +8,7 @@ from enum import StrEnum
 from types import TracebackType
 from typing import Literal, Protocol, Self
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
@@ -369,6 +370,9 @@ class RuleRunOutcome:
     checked_mappings: int = 0
     drift: int = 0
     failure_kind: str | None = None
+    failure_cause: Cause | None = None
+    """Why a failed run failed (ADR 0031); None for a success. A failure recorded without one
+    reads as unknown."""
     # When the most recent successful run of this kind completed. The repository keeps it across
     # later failures, so a failed run never erases evidence that calendars were once current.
     last_succeeded_at: datetime | None = None
@@ -793,6 +797,9 @@ class IncidentSummary:
     """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
     message: IncidentMessage | None = None
     """The summary as a code and parameters, when it was recorded (ADR 0026)."""
+    cause: Cause | None = None
+    """Why the provider failure behind it happened (ADR 0031); unknown when that was not recorded,
+    and None for an Incident no provider failure opened, such as events still blocked."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -809,6 +816,8 @@ class IncidentReport:
     """The Connected Account whose failure opened or last refreshed the Incident, if known."""
     message: IncidentMessage | None = None
     """The summary as a code and parameters; the English `summary` stays for email and logs."""
+    cause: Cause | None = None
+    """Why the provider failure behind it happened, when one did (ADR 0031)."""
 
 
 class IncidentResolution(StrEnum):

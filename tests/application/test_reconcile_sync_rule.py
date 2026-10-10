@@ -2,12 +2,17 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from threading import Thread
 
+import pytest
+
+from calendar_sync.application.causes import Cause
+from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import AuditAction, AuditOutcome, Clock, RunKind
 from calendar_sync.application.reconciliation import ReconcileSyncRule
 from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
+    CalendarEvent,
     DriftKind,
     EventId,
     EventMapping,
@@ -97,6 +102,31 @@ def test_reconciliation_records_its_outcome() -> None:
     assert outcome.succeeded is True
     assert outcome.checked_mappings == report.checked_mappings
     assert outcome.drift == len(report.drift)
+
+
+def test_a_failed_reconciliation_records_why_the_provider_refused() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work.state.rules[rule().id] = rule()
+    provider = FakeCalendarProvider(event())
+    refused = ProviderFailure(ProviderFailureKind.PERMANENT, "404", cause=Cause.CALENDAR_NOT_FOUND)
+
+    def list_events(*_: object) -> list[CalendarEvent]:
+        raise refused
+
+    provider.list_events = list_events  # type: ignore[method-assign,assignment]
+
+    with pytest.raises(ProviderFailure):
+        ReconcileSyncRule(
+            unit_of_work,
+            provider,
+            EventProjector(),
+            ReconciliationService(ProjectionFingerprinter()),
+            FixedClock(),
+            UuidRunIdGenerator(),
+        ).execute(rule().id)
+
+    outcome = unit_of_work.state.outcomes[(rule().id, RunKind.RECONCILIATION)]
+    assert outcome.failure_cause is Cause.CALENDAR_NOT_FOUND
 
 
 def test_reconciliation_waits_for_the_rule_lock_held_by_removal_or_sync() -> None:

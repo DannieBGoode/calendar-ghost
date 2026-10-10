@@ -151,6 +151,7 @@ class ReconcileSyncRule:
                     False,
                     full_run=True,
                     failure_kind=failure.kind.value,
+                    failure_cause=failure.cause,
                 )
             )
             raise

@@ -7,6 +7,7 @@ from threading import Barrier, Thread
 
 import pytest
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import (
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
@@ -49,6 +50,7 @@ from calendar_sync.domain.model import (
     UnansweredInvitationPolicy,
 )
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
+from calendar_sync.infrastructure.persistence.activity_queries import SqliteOperationsQueries
 from calendar_sync.infrastructure.persistence.health import SqliteIncidentRepository
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUnitOfWorkFactory,
@@ -367,7 +369,10 @@ def test_run_outcomes_keep_the_latest_per_kind(tmp_path: Path) -> None:
 
     with factory() as uow:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
-        assert latest == replace(second, last_succeeded_at=first.completed_at)
+        # A failure recorded without its Cause reads as unknown.
+        assert latest == replace(
+            second, last_succeeded_at=first.completed_at, failure_cause=Cause.UNKNOWN
+        )
         assert uow.run_outcomes.latest(rule().id, RunKind.RECONCILIATION) is None
 
 
@@ -1335,3 +1340,73 @@ def test_migration_24_numbers_existing_rules_in_the_order_the_database_holds_the
         records = installation.status_records([USER])[USER]
 
     assert [recorded.rule.id.value for recorded in records.rules] == ["rule-b", "rule-a", "rule-0"]
+
+
+def test_an_incident_keeps_the_cause_of_its_latest_failure(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    user = add_user(database)
+    incidents = SqliteIncidentRepository(database, user)
+    report = IncidentReport(
+        "provider:rule-1",
+        SyncRuleId("rule-1"),
+        "authorization",
+        "denied",
+        cause=Cause.CALENDAR_FORBIDDEN,
+    )
+    blocked = IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), "conflict", "blocked")
+
+    incidents.open(report, NOW)
+    incidents.open(blocked, NOW)
+    first = {i.category: i.cause for i in SqliteOperationsQueries(database, user).incidents()}
+    incidents.open(replace(report, cause=Cause.API_DISABLED), NOW)
+    refreshed = SqliteOperationsQueries(database, user).incidents()
+
+    assert first == {"authorization": Cause.CALENDAR_FORBIDDEN, "conflict": None}
+    assert {i.category: i.cause for i in refreshed}["authorization"] is Cause.API_DISABLED
+
+
+def test_migration_26_reads_earlier_failures_as_unknown(tmp_path: Path) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    user = add_user(database)
+    with sqlite_units(database)() as uow:
+        uow.rules.add(rule())
+        uow.commit()
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE incidents DROP COLUMN cause")
+        connection.execute("ALTER TABLE rule_run_outcomes DROP COLUMN failure_cause")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 26")
+        connection.executemany(
+            """
+            INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
+                summary, opened_at, updated_at, user_id)
+            VALUES (?, ?, 'rule-1', ?, 'open', 's', 't', 't', ?)
+            """,
+            [
+                ("i-1", "provider:rule-1", "authorization", user.value),
+                ("i-2", "blocked:rule-1", "conflict", user.value),
+            ],
+        )
+        connection.execute(
+            """
+            INSERT INTO rule_run_outcomes (rule_id, kind, completed_at, succeeded, failure_kind,
+                user_id)
+            VALUES ('rule-1', 'sync', ?, 0, 'authorization', ?)
+            """,
+            (NOW.isoformat(), user.value),
+        )
+
+    initialize_database(database)
+    initialize_database(database)
+
+    with sqlite3.connect(database) as connection:
+        versions = [row[0] for row in connection.execute("SELECT version FROM schema_migrations")]
+    causes = {i.category: i.cause for i in SqliteOperationsQueries(database, user).incidents()}
+    with sqlite_units(database)() as uow:
+        outcome = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
+    # Why an earlier release's failure happened was never recorded.
+    assert versions.count(26) == 1
+    assert causes == {"authorization": Cause.UNKNOWN, "conflict": None}
+    assert outcome is not None
+    assert outcome.failure_cause is Cause.UNKNOWN

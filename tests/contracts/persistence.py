@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AccountStanding,
@@ -455,6 +456,56 @@ class PersistenceContract:
         assert not latest.succeeded
         assert latest.last_succeeded_at == incremental.completed_at
         assert latest.last_full_succeeded_at == full.completed_at
+
+    def test_a_failed_run_keeps_its_cause_and_a_success_has_none(
+        self, harness: PersistenceHarness
+    ) -> None:
+        failed = RuleRunOutcome(
+            RULE.id,
+            RunKind.SYNC,
+            NOW,
+            False,
+            failure_kind="authorization",
+            failure_cause=Cause.API_DISABLED,
+        )
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.run_outcomes.record(failed)
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            kept = uow.run_outcomes.latest(RULE.id, RunKind.SYNC)
+            uow.run_outcomes.record(
+                replace(
+                    failed,
+                    completed_at=NOW + DAY,
+                    succeeded=True,
+                    failure_kind=None,
+                    failure_cause=None,
+                )
+            )
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            succeeded = uow.run_outcomes.latest(RULE.id, RunKind.SYNC)
+
+        assert kept is not None
+        assert kept.failure_cause is Cause.API_DISABLED
+        assert succeeded is not None
+        assert succeeded.failure_cause is None
+
+    def test_a_failed_run_recorded_without_a_cause_reads_as_unknown(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.run_outcomes.record(
+                RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, False, failure_kind="temporary")
+            )
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            latest = uow.run_outcomes.latest(RULE.id, RunKind.SYNC)
+
+        assert latest is not None
+        assert latest.failure_cause is Cause.UNKNOWN
 
     def test_the_latest_preview_replaces_the_previous(self, harness: PersistenceHarness) -> None:
         later = RulePreviewSummary(RULE.id, NOW + timedelta(hours=1), 5, 2, 1, 3)

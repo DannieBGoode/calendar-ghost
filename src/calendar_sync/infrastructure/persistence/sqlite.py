@@ -10,6 +10,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AuditEntry,
@@ -102,6 +103,7 @@ _FORWARD_MIGRATIONS = (
     (23, "0023_token_scopes.sql"),
     (24, "0024_rule_creation_order.sql"),
     (25, "0025_provider_calls.sql"),
+    (26, "0026_failure_causes.sql"),
 )
 _CHECKED_FROM = 21
 """Migrations from here on prove every reference before committing. Earlier ones ran before
@@ -697,9 +699,9 @@ class SqliteRuleRunOutcomeRepository:
             """
             INSERT INTO rule_run_outcomes (
                 rule_id, kind, completed_at, succeeded, full_run, created, updated,
-                deleted, conflicts, checked_mappings, drift, failure_kind, last_succeeded_at,
-                last_full_succeeded_at, user_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                deleted, conflicts, checked_mappings, drift, failure_kind, failure_cause,
+                last_succeeded_at, last_full_succeeded_at, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id, kind) DO UPDATE SET
                 last_succeeded_at = CASE WHEN excluded.succeeded
                     THEN excluded.completed_at ELSE rule_run_outcomes.last_succeeded_at END,
@@ -714,7 +716,8 @@ class SqliteRuleRunOutcomeRepository:
                 conflicts = excluded.conflicts,
                 checked_mappings = excluded.checked_mappings,
                 drift = excluded.drift,
-                failure_kind = excluded.failure_kind
+                failure_kind = excluded.failure_kind,
+                failure_cause = excluded.failure_cause
             WHERE rule_run_outcomes.user_id = excluded.user_id
             """,
             (
@@ -730,6 +733,7 @@ class SqliteRuleRunOutcomeRepository:
                 outcome.checked_mappings,
                 outcome.drift,
                 outcome.failure_kind,
+                None if outcome.succeeded else (outcome.failure_cause or Cause.UNKNOWN).value,
                 outcome.completed_at.isoformat() if outcome.succeeded else None,
                 outcome.completed_at.isoformat()
                 if outcome.succeeded and outcome.full_run
@@ -761,6 +765,7 @@ def _outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
         checked_mappings=int(row["checked_mappings"]),
         drift=int(row["drift"]),
         failure_kind=None if row["failure_kind"] is None else str(row["failure_kind"]),
+        failure_cause=None if row["succeeded"] else Cause.read(row["failure_cause"]),
         last_succeeded_at=_optional_time(row["last_succeeded_at"]),
         last_full_succeeded_at=_optional_time(row["last_full_succeeded_at"]),
     )

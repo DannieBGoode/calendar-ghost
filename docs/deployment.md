@@ -199,6 +199,14 @@ pass discards days older than 30, so the table stays small, and User Deletion re
 counts with them. The Operator Overview shows these counts. Rolling back is safe: earlier releases
 ignore the table, and its counts stop growing until the next upgrade.
 
+Migration 26 adds the nullable `incidents.cause` and `rule_run_outcomes.failure_cause` columns:
+why each failure happened, as a Cause read from Google's reason code, never its message
+([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md)). No row is rewritten: failures
+recorded earlier read as `unknown`, and Incidents about blocked events have no Cause. Rolling back
+works with the same database: earlier releases ignore the columns. An earlier release that refreshes
+an open Incident or records a failed run leaves the Cause it found, so after upgrading again that
+Incident or run can show a stale Cause until it fails again.
+
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
 the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's

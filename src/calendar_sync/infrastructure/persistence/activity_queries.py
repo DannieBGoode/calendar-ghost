@@ -25,6 +25,7 @@ from calendar_sync.application.activity import (
     RecordedTime,
     activity_category,
 )
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.ports import (
     AccountStanding,
     IncidentMessage,
@@ -32,6 +33,7 @@ from calendar_sync.application.ports import (
     OpenBlock,
     OperationsOverview,
 )
+from calendar_sync.application.status import BLOCKED_CATEGORY
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncAction, SyncReason
@@ -406,7 +408,7 @@ def _open_blocks_of(
 
 
 _INCIDENT_COLUMNS = """id, rule_id, account_id, category, state, summary, opened_at, updated_at,
-    resolved_at, resolution, message_code, message_params"""
+    resolved_at, resolution, message_code, message_params, cause"""
 
 
 def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
@@ -422,6 +424,8 @@ def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
         resolution=row["resolution"],
         account_id=row["account_id"],
         message=_incident_message(row["message_code"], row["message_params"]),
+        # Every Incident but blocked events follows a provider failure; earlier ones are unknown.
+        cause=None if row["category"] == BLOCKED_CATEGORY else Cause.read(row["cause"]),
     )
 
 

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.health import (
     PROVIDER_INCIDENT_THRESHOLD,
@@ -60,6 +61,7 @@ def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
         RuleHealthPolicy.summary(failure),
         account_id=failure.account_id,
         message=IncidentMessage("provider_failure", {"kind": kind.value, "provider": None}),
+        cause=Cause.UNKNOWN,
     )
     assert response.lapsed is None
 
@@ -146,6 +148,7 @@ def test_a_blocked_removal_names_its_cause() -> None:
         "Rule Removal stopped: Access to the calendar provider was denied",
         account_id=ACCOUNT,
         message=IncidentMessage("removal_stopped", {"kind": "authorization", "provider": None}),
+        cause=Cause.UNKNOWN,
     )
 
 
@@ -382,3 +385,19 @@ def test_a_refusal_of_a_request_made_after_reauthorization_lapses_its_account() 
 
     assert unit_of_work.state.lapsed == {ACCOUNT: NOW + timedelta(seconds=1)}
     assert unit_of_work.state.rules[RULE].awaiting_reauthorization
+
+
+def test_every_incident_of_a_failure_names_its_cause() -> None:
+    policy = RuleHealthPolicy()
+    failure = replace(_failure(ProviderFailureKind.PERMANENT), cause=Cause.CALENDAR_NOT_FOUND)
+
+    stopped = policy.after_failure(RULE, failure, consecutive_failures=1).incident
+    removal = policy.removal_blocked(RULE, failure)
+    blocked = policy.after_full_pass(RULE, 2)
+
+    assert stopped is not None
+    assert stopped.cause is Cause.CALENDAR_NOT_FOUND
+    assert removal.cause is Cause.CALENDAR_NOT_FOUND
+    # Blocked events follow no provider failure, so they have no Cause.
+    assert blocked is not None
+    assert blocked.cause is None
