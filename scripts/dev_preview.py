@@ -91,7 +91,7 @@ from calendar_sync.infrastructure.security import CredentialCipher, HistoryCiphe
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
-PREVIEW_EMAIL = "preview@preview.com"
+PREVIEW_EMAIL = "preview@preview.test"
 # Simple to type, and long enough for the password policy.
 PREVIEW_PASSWORD = "previewpreview"  # noqa: S105
 ROBIN_EMAIL = "robin@example.test"

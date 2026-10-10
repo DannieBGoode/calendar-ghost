@@ -247,11 +247,11 @@ def test_preview_signs_in_with_a_simple_local_login(tmp_path: Path) -> None:
     with TestClient(create_app(container)) as client:
         signed_in = client.post(
             "/api/v1/session",
-            json={"email": "preview@preview.com", "password": "previewpreview"},
+            json={"email": "preview@preview.test", "password": "previewpreview"},
         )
 
     # Long enough for the password policy, so the preview sets up like any installation.
-    assert (PREVIEW_EMAIL, PREVIEW_PASSWORD) == ("preview@preview.com", "previewpreview")
+    assert (PREVIEW_EMAIL, PREVIEW_PASSWORD) == ("preview@preview.test", "previewpreview")
     assert signed_in.status_code == 200
 
 
