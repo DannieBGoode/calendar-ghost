@@ -161,15 +161,19 @@ export function nextStep(i18n: I18n, problem: ServerProblem, audience: Audience)
   const next = step(problem)
   if (next === "waiting") return i18n.t("people.overview.next.waiting")
   if (next === "administrator") return administratorStep(i18n, problem, audience)
-  const cause = causeOf(problem)
-  if (typeof audience === "object") {
-    if (cause === "unknown") return i18n.t("people.overview.next.ownCause.unknown", { name: audience.name })
-    if (cause !== null) return i18n.t("people.overview.next.ownCause.person", { name: audience.name })
-    return i18n.t(`people.overview.next.${next as Exclude<Step, "waiting" | "administrator" | "calendar">}.person`, {
-      name: audience.name,
-    })
-  }
+  if (typeof audience === "object") return personStep(i18n, problem, next, audience.name)
   return i18n.t(`people.overview.next.${next}.self`)
+}
+
+/**
+ * The next step, to an administrator looking at someone else. A stalled scheduler is theirs to
+ * restart; every other problem the person fixes from their own dashboard, so the administrator is
+ * offered nothing to do (ADR 0031).
+ */
+function personStep(i18n: I18n, problem: ServerProblem, next: Step, name: string): string {
+  if (next === "stalled") return i18n.t("people.overview.next.stalled.person")
+  if (causeOf(problem) === "unknown") return i18n.t("people.overview.next.ownCause.unknown", { name })
+  return i18n.t("people.overview.next.ownCause.person", { name })
 }
 
 /** Where the person themself goes for a problem's next step, when it is a page of their own. */

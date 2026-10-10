@@ -191,20 +191,16 @@
     "calendar": "Calendar {number}",
     "next": {
       "reauthorize": {
-        "self": "Reauthorize your Google account in Settings, under Connections.",
-        "person": "{name} reauthorizes their Google account in their Settings, under Connections."
+        "self": "Reauthorize your Google account in Settings, under Connections."
       },
       "preview": {
-        "self": "Open the rule and preview it again to restart it.",
-        "person": "{name} previews the rule again on their Rules page to restart it."
+        "self": "Open the rule and preview it again to restart it."
       },
       "activity": {
-        "self": "Activity explains what happened and what to do.",
-        "person": "{name} finds what happened and what to do in their Activity."
+        "self": "Activity explains what happened and what to do."
       },
       "overdue": {
-        "self": "Choose Sync now on the rule, or check Activity.",
-        "person": "{name} can choose Sync now on the rule, or check their Activity."
+        "self": "Choose Sync now on the rule, or check Activity."
       },
       "waiting": "Nothing to do: Calendar Ghost retries by itself.",
       "stalled": {

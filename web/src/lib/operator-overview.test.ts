@@ -135,13 +135,14 @@ describe("nextStep", () => {
   const robin = { name: "robin@example.test" }
 
   it("says who acts on each problem, and how", () => {
-    expect(nextStep(i18n, lapsed, robin)).toBe(
-      "robin@example.test reauthorizes their Google account in their Settings, under Connections.",
-    )
+    // The person fixes their own problems; the administrator is offered nothing to do.
+    expect(nextStep(i18n, lapsed, robin)).toBe("robin@example.test can fix this from their dashboard.")
     expect(nextStep(i18n, lapsed, "self")).toBe("Reauthorize your Google account in Settings, under Connections.")
     expect(nextStep(i18n, problem("stopped", "Stopped syncing"), robin)).toBe(
-      "robin@example.test previews the rule again on their Rules page to restart it.",
+      "robin@example.test can fix this from their dashboard.",
     )
+    expect(nextStep(i18n, problem("blocked", "2 events"), robin)).toBe("robin@example.test can fix this from their dashboard.")
+    expect(nextStep(i18n, problem("overdue", "late"), robin)).toBe("robin@example.test can fix this from their dashboard.")
     expect(nextStep(i18n, problem("blocked", "2 events"), "self")).toBe("Activity explains what happened and what to do.")
     expect(nextStep(i18n, problem("waiting", "busy"), robin)).toBe("Nothing to do: Calendar Ghost retries by itself.")
     expect(nextStep(i18n, problem("stalled", "stopped running"), robin)).toBe(

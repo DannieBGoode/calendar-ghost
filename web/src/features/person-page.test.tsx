@@ -185,7 +185,7 @@ describe("A person's page", () => {
     expect(text).toContain("40 Activity entries")
     expect(text).toContain("Google Calendar: 75 calls, 1 refused for too many requests, 0 failed")
     // Who acts on the problem, and how.
-    expect(text).toContain("robin@example.test finds what happened and what to do in their Activity.")
+    expect(text).toContain("robin@example.test can fix this from their dashboard.")
     expect([...container.querySelectorAll("h2")].map((heading) => heading.textContent)).toEqual([
       "Synchronization",
       "Accounts, Activity, and calls",
@@ -223,7 +223,7 @@ describe("A person's page", () => {
 
     const text = container.textContent
     expect(text).toContain("A Google Calendar account needs reauthorization")
-    expect(text).toContain("robin@example.test reauthorizes their Google account in their Settings, under Connections.")
+    expect(text).toContain("robin@example.test can fix this from their dashboard.")
     expect(text).toContain("3 events couldn't be synced")
   })
 
@@ -266,6 +266,14 @@ describe("A person's page", () => {
     expect(text).toContain("robin@example.test can fix this from their dashboard.")
     expect(text).not.toContain("How to fix")
     expect(container.querySelector(".user-overview-problem button, .user-overview-problem a")).toBeNull()
+  })
+
+  it("speaks to you on your own page, as the administrator you are", async () => {
+    await renderPerson(testI18n(), "user-dana")
+
+    const text = container.textContent
+    expect(text).toContain("Activity explains what happened and what to do.")
+    expect(text).not.toContain("dana@example.test can fix this")
   })
 
   it("has no untranslated text with its actions open", async () => {

@@ -14,6 +14,7 @@ import { useI18n } from "@/i18n/provider"
 import { api, ApiError, type Person, type UserOverview } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
+import { AS_ADMINISTRATOR } from "@/lib/operator-overview"
 import { isAdministrator, personName } from "@/lib/people"
 import { useNow } from "@/lib/use-now"
 import { peopleReturnSearch, usePersonCommands } from "@/lib/use-people"
@@ -95,7 +96,14 @@ function PersonContent({
       <p className="sr-only" role="status">
         {commands.message}
       </p>
-      <UserOverviewDetails overview={overview} now={now} audience={{ name }} headingLevel={2} layout={CARDS} />
+      {/* Only administrators see People, so on their own page they read as the administrator they are. */}
+      <UserOverviewDetails
+        overview={overview}
+        now={now}
+        audience={you ? AS_ADMINISTRATOR : { name }}
+        headingLevel={2}
+        layout={CARDS}
+      />
       <p className="page-footnote">{t("people.person.intro")}</p>
     </div>
   )

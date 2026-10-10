@@ -324,8 +324,10 @@ command's result appears beside the person it changed.
 
 A person's page starts at their name, and the browser tab names them. It leads with a
 Synchronization card: the verdict, then each rule with its status chip and last sync, and under a
-rule its problem with who takes the next step ("Robin reauthorizes their Google account in their
-Settings"). A second card holds their accounts, Activity, and calls, with one line on whether the
+rule its problem with who takes the next step: "Robin can fix this from their dashboard" for any
+problem the person fixes themself, "You fix this as the administrator" with "How to fix" for the
+installation's own, and nothing for the administrator to do otherwise. On their own page an
+administrator reads the steps as their own. A second card holds their accounts, Activity, and calls, with one line on whether the
 calls look normal. Calendars appear only by number ("Calendar 1"), in the reader's language. The
 privacy note closes the page as a footnote, and coming back to People returns to their row.
 Settings shows each person the same overview as rows in one group, collapsed to one summary row,
