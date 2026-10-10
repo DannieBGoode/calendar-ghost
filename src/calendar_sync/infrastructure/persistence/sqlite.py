@@ -16,6 +16,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
     CalendarNameRepository,
+    CauseSighting,
     Clock,
     ConnectedAccountRecords,
     ConnectedAccountState,
@@ -771,6 +772,18 @@ def _outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
     )
 
 
+def _cause_sighting(row: sqlite3.Row) -> CauseSighting:
+    opened, authorized = _optional_time(row["opened_at"]), _optional_time(row["authorized_at"])
+    lived = opened - authorized if row["open"] and opened and authorized else None
+    return CauseSighting(
+        UserId(str(row["user_id"])),
+        Cause.read(row["cause"]),
+        datetime.fromisoformat(str(row["at"])),
+        bool(row["open"]),
+        lived,
+    )
+
+
 def _optional_time(value: object) -> datetime | None:
     return None if value is None else datetime.fromisoformat(str(value))
 
@@ -1078,6 +1091,34 @@ class SqliteInstallationUnitOfWork:
     def forget_provider_calls(self, before: date) -> None:
         assert self._connection is not None
         self._connection.execute("DELETE FROM provider_calls WHERE day < ?", (before.isoformat(),))
+
+    def failure_causes(self, since: datetime) -> list[CauseSighting]:
+        assert self._connection is not None
+        # A lapsed account's Incident is joined to the account, whose last authorization time
+        # tells how long its grant lived; only that time is read, never who the account is.
+        rows = self._connection.execute(
+            """
+            SELECT user_id, failure_cause AS cause, completed_at AS at, 0 AS open,
+                NULL AS opened_at, NULL AS authorized_at
+            FROM rule_run_outcomes
+            WHERE succeeded = 0 AND failure_cause IS NOT NULL AND completed_at >= ?
+            UNION ALL
+            SELECT incident.user_id, incident.cause, incident.updated_at,
+                incident.state = 'open', incident.opened_at, account.updated_at
+            FROM incidents incident
+            LEFT JOIN connected_accounts account
+                ON incident.rule_id IS NULL
+                AND account.id = incident.account_id
+                AND account.user_id = incident.user_id
+                AND account.state = 'connected'
+                AND account.authorization_lapsed_at IS NOT NULL
+            WHERE incident.cause IS NOT NULL
+                AND (incident.state = 'open' OR incident.updated_at >= ?)
+            ORDER BY user_id, at
+            """,
+            (since.isoformat(), since.isoformat()),
+        ).fetchall()
+        return [_cause_sighting(row) for row in rows]
 
     def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
         assert self._connection is not None

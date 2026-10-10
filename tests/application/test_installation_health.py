@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.installation_health import (
     GetInstallationHealth,
     InstallationHealth,
@@ -11,7 +12,8 @@ from calendar_sync.application.installation_health import (
     InstallationIncidentKind,
     installation_incidents,
 )
-from calendar_sync.application.ports import SchedulerProgress
+from calendar_sync.application.installation_hints import HINT_WINDOW
+from calendar_sync.application.ports import CauseSighting, SchedulerProgress
 from calendar_sync.application.status import StatusVerdict
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from tests.identity_fakes import MemoryUsers
@@ -143,3 +145,43 @@ def test_nothing_needing_attention_reads_healthy_before_paused_and_setup() -> No
     assert _health({**verdicts, "user-2": StatusVerdict.SETUP}, users, TICKING).status is (
         StatusVerdict.PAUSED
     )
+
+
+def test_hints_come_from_failures_of_users_who_may_sign_in() -> None:
+    users = _users(("a", UserState.ACTIVE), ("b", UserState.ACTIVE), ("c", UserState.DISABLED))
+    asked: list[datetime] = []
+
+    def sightings(since: datetime) -> list[CauseSighting]:
+        asked.append(since)
+        return [CauseSighting(UserId(f"user-{n}"), Cause.API_DISABLED, NOW, False) for n in (0, 2)]
+
+    lone = GetInstallationHealth(
+        users,
+        lambda ids: dict.fromkeys(ids, StatusVerdict.STOPPED),
+        Heartbeat(TICKING),
+        Clock(),
+        sightings,
+    ).execute()
+    users.add(User(UserId("user-3"), "u3@example.test", Role.USER, UserState.ACTIVE, NOW), "hash")
+
+    def shared(since: datetime) -> list[CauseSighting]:
+        return [*sightings(since), CauseSighting(UserId("user-3"), Cause.API_DISABLED, NOW, False)]
+
+    health = GetInstallationHealth(
+        users,
+        lambda ids: dict.fromkeys(ids, StatusVerdict.STOPPED),
+        Heartbeat(TICKING),
+        Clock(),
+        shared,
+    ).execute()
+
+    # A disabled User's rules do not run, so their old failures suggest nothing.
+    assert lone.hints == ()
+    assert [(hint.cause, hint.users) for hint in health.hints] == [(Cause.API_DISABLED, 2)]
+    assert asked[0] == NOW - HINT_WINDOW
+
+
+def test_without_failures_there_are_no_hints() -> None:
+    users = _users(("a", UserState.ACTIVE))
+
+    assert _health({"user-0": StatusVerdict.HEALTHY}, users, TICKING).hints == ()

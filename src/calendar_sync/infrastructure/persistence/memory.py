@@ -14,6 +14,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditRepository,
     CalendarNameRepository,
+    CauseSighting,
     ConnectedAccountRecords,
     ConnectedAccountState,
     DiscoveredCalendar,
@@ -661,6 +662,20 @@ class InMemoryInstallationUnitOfWork:
             state.provider_calls = {
                 key: counts for key, counts in state.provider_calls.items() if key[1] >= before
             }
+
+    def failure_causes(self, since: datetime) -> list[CauseSighting]:
+        """Failed runs since `since`; this store keeps no Incidents."""
+        return sorted(
+            (
+                CauseSighting(owner, outcome.failure_cause, outcome.completed_at, False)
+                for owner, state in self._database.partitions.items()
+                for outcome in state.outcomes.values()
+                if not outcome.succeeded
+                and outcome.failure_cause is not None
+                and outcome.completed_at >= since
+            ),
+            key=lambda seen: (seen.user.value, seen.at),
+        )
 
     def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
         return {user: _status_records(self._database.partitions.get(user)) for user in users}

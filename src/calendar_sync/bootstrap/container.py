@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 
 from calendar_sync.application.accounts import (
     CheckAccountAccess,
@@ -53,6 +54,7 @@ from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
     CalendarProvider,
+    CauseSighting,
     Clock,
     ConnectedAccountRepository,
     DatabaseStorage,
@@ -436,6 +438,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             lambda users: {user: status.health for user, status in statuses.of(users).items()},
             scheduler,
             adapters.clock,
+            _failure_causes(adapters.installation_units),
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, adapters.clock
@@ -443,6 +446,18 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         sends_email=adapters.sends_email,
         user_services=user_services,
     )
+
+
+def _failure_causes(
+    installation: InstallationUnitOfWorkFactory,
+) -> Callable[[datetime], Sequence[CauseSighting]]:
+    """Every User's failures with a Cause from a time on, for Installation Hints."""
+
+    def read(since: datetime) -> Sequence[CauseSighting]:
+        with installation() as reading:
+            return reading.failure_causes(since)
+
+    return read
 
 
 def _identity(adapters: Adapters) -> IdentityServices:

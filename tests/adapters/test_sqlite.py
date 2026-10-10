@@ -1,6 +1,6 @@
 import sqlite3
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from importlib.resources import files
 from pathlib import Path
 from threading import Barrier, Thread
@@ -17,6 +17,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditOutcome,
     CalendarAccess,
+    CauseSighting,
     ConnectedAccountState,
     DiscoveredCalendar,
     IncidentReport,
@@ -1410,3 +1411,51 @@ def test_migration_26_reads_earlier_failures_as_unknown(tmp_path: Path) -> None:
     assert causes == {"authorization": Cause.UNKNOWN, "conflict": None}
     assert outcome is not None
     assert outcome.failure_cause is Cause.UNKNOWN
+
+
+def test_failure_causes_read_incidents_open_or_recent_and_how_long_a_lapsed_grant_lived(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    user = add_user(database)
+    work = store.for_user(user).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    _lapse(database, work.id)
+    authorized = NOW - timedelta(days=9)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE connected_accounts SET updated_at = ? WHERE id = ?",
+            (authorized.isoformat(), work.id.value),
+        )
+    incidents = SqliteIncidentRepository(database, user)
+    lapse = IncidentReport(
+        f"authorization:{work.id.value}",
+        None,
+        "authentication",
+        "expired",
+        account_id=work.id,
+        cause=Cause.ACCESS_REVOKED,
+    )
+    incidents.open(lapse, NOW - timedelta(days=2))
+    old = IncidentReport(
+        "provider:rule-1",
+        SyncRuleId("rule-1"),
+        "authorization",
+        "denied",
+        cause=Cause.API_DISABLED,
+    )
+    incidents.open(old, NOW - timedelta(days=3))
+    incidents.resolve("provider:rule-1", NOW - timedelta(days=3), IncidentResolution.SYNC_SUCCEEDED)
+    incidents.open(IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), "conflict", "b"), NOW)
+
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        seen = list(installation.failure_causes(NOW - timedelta(days=1)))
+
+    # The lapse is still open, so it counts however old; the resolved one is too old, and
+    # blocked events have no Cause. The lapse came 7 days after the account was authorized.
+    assert seen == [
+        CauseSighting(user, Cause.ACCESS_REVOKED, NOW - timedelta(days=2), True, timedelta(days=7))
+    ]

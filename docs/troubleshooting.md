@@ -100,6 +100,13 @@ means Google is slowing the run down and it will finish later. If no `run progre
 several minutes and no `run finished` or `run failed` follows, the run is waiting on a single Google
 call; look for `slow provider call` warnings, or turn on debug logging.
 
+`unrecognized provider reason provider=google status=403 reason=someNewReason` (WARNING): Google
+refused a request for a reason Calendar Ghost does not recognize, so its Cause is `unknown`. The
+line names only Google's short reason code, never its message, and says `reason=unreadable` when
+the code is not a short token. When **Installation health** says that two or more people fail for
+a reason Calendar Ghost does not recognize, look for these lines, and include the reason code when
+you report it so a later release can recognize it.
+
 Set `CALENDAR_SYNC_LOG_LEVEL=DEBUG` in `.env` and run `docker compose up -d` to also log every
 provider call as `provider call provider=google op=events.get status=200 took=84ms`. Debug logging
 is verbose; set it back to
@@ -222,6 +229,79 @@ its mappings and last successful incremental positions, and writes nothing while
 To recover the rule, open it, choose **Preview to restart**, inspect the preview, and choose **Start
 syncing**. Its next run repairs drift before advancing either cursor. The next successful scheduled
 run, within five minutes, resolves the incident; **Sync Now** and **Reconcile Now** do not.
+
+## Problems only an administrator can fix
+
+Some failures come from the installation's Google Cloud project, not from anyone's Google account
+or calendars, so only an Installation Administrator can fix them. Calendar Ghost reads why Google
+refused from its reason code, never its message, and records it as a Cause. Each person's own
+Overview then says "Your administrator needs to fix this" and offers them nothing to do. On
+**People**, **Installation health** suggests the likely cause when two or more people show the same
+one within a day, with **How to fix** linking to the section below; a person's page shows the
+likely cause of each of their problems. Administrators never need to contact anyone: once the
+project is fixed, each person's dashboard tells them what, if anything, is left for them.
+
+### The Google Calendar API is turned off
+
+**Symptom.** Rules stop with "Access to Google Calendar was denied" for several people at once, and
+the likely cause reads "the Google Calendar API is turned off for this installation". Check access
+fails the same way for every account.
+
+**Confirm.** In the [Google Cloud Console](https://console.cloud.google.com/), select the project
+that owns the OAuth client in `CALENDAR_SYNC_GOOGLE_CLIENT_ID`, open **APIs & Services → Enabled
+APIs & services**, and look for **Google Calendar API**. If it is missing, or its page offers
+**Enable**, it is off. A project that was suspended or marked for deletion answers the same way.
+
+**Fix.** Choose **Enable** on the Google Calendar API page, and wait a few minutes for Google to
+apply it. Google refused each affected account while the API was off, so their rules stay stopped
+until each account is checked again: each person's Overview tells them to choose **Check access**
+on their Google account in **Settings → Connections** once it is fixed, and a check that passes
+restarts every rule it stopped, with no preview.
+
+### The Google Cloud project's daily quota is used up
+
+**Symptom.** Several people's rules wait on Google, and the likely cause reads "this installation's
+daily quota of Google requests is used up". Nobody's rules stop; they retry by themselves.
+
+**Confirm.** In the Google Cloud Console, open **APIs & Services → Google Calendar API → Quotas &
+System Limits** for the project that owns the OAuth client, and compare the requests per day with
+the limit.
+
+**Fix.** Google resets the daily quota at midnight Pacific Time, and rules catch up on their own
+after it. If it runs out again, request a higher limit on the same page, or reduce how much
+Calendar Ghost asks for: fewer rules, or rules over smaller calendars.
+
+### Google no longer accepts the OAuth client
+
+**Symptom.** Every person's Google accounts stop at the same time, the likely cause reads "Google
+no longer accepts this installation's OAuth client", and reauthorizing fails too.
+
+**Confirm.** In the Google Cloud Console, open **Google Auth Platform → Clients** (older consoles:
+**APIs & Services → Credentials**) and find the OAuth 2.0 client whose ID is
+`CALENDAR_SYNC_GOOGLE_CLIENT_ID`. It may have been deleted, or its secret reset, so that
+`CALENDAR_SYNC_GOOGLE_CLIENT_SECRET` no longer matches. Do not post either value publicly.
+
+**Fix.** Put the client's current ID and secret in `.env` and run `docker compose up -d`. Each
+person's Overview then tells them to choose **Check access** on their Google account, which restarts
+their rules. If you had to create a new client, Google's grants to the old one do not carry over:
+each person's dashboard asks them to choose **Reauthorize account** once.
+
+### Google accounts stop working 7 days after connecting
+
+**Symptom.** People's Google accounts need reauthorization about a week after they connected or
+last reauthorized them, again and again. **Installation health** says so when it happens to two or
+more people.
+
+**Confirm.** Google gives a refresh token that expires after 7 days to an OAuth app whose user
+type is External and whose publishing status is **Testing**. In the Google Cloud Console, open
+**Google Auth Platform → Audience** (older consoles: **APIs & Services → OAuth consent screen**) and
+read **Publishing status**.
+
+**Fix.** Choose **Publish app** to move it to **In production**. Google may show people an
+"unverified app" warning until the app is verified; a household installation can continue past
+it. Grants given while the app was in Testing still expire, so each affected person reauthorizes
+once from their own dashboard; after that their access lasts. A Google Workspace organization can
+instead set the user type to **Internal**, which has no 7-day limit.
 
 ## A Google account was disconnected
 

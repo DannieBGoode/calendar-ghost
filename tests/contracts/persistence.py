@@ -20,6 +20,7 @@ from calendar_sync.application.ports import (
     AuditEntry,
     AuditOutcome,
     CalendarAccess,
+    CauseSighting,
     ConnectedAccountState,
     DiscoveredCalendar,
     InstallationUnitOfWorkFactory,
@@ -506,6 +507,40 @@ class PersistenceContract:
 
         assert latest is not None
         assert latest.failure_cause is Cause.UNKNOWN
+
+    def test_failure_causes_name_each_users_failed_runs_since_a_time(
+        self, harness: PersistenceHarness
+    ) -> None:
+        failed = RuleRunOutcome(
+            RULE.id,
+            RunKind.SYNC,
+            NOW,
+            False,
+            failure_kind="authorization",
+            failure_cause=Cause.API_DISABLED,
+        )
+        older = replace(failed, rule_id=OTHER_RULE.id, completed_at=NOW - DAY)
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.add(OTHER_RULE)
+            uow.run_outcomes.record(failed)
+            uow.run_outcomes.record(older)
+            uow.commit()
+        theirs = replace(
+            RULE, id=SyncRuleId("their-rule"), source=THEIR_SOURCE, destination=THEIR_DESTINATION
+        )
+        for account in (THEIR_SOURCE, THEIR_DESTINATION):
+            harness.connect_account(account.connected_account_id, OTHER_USER)
+        with harness.units(OTHER_USER)() as uow:
+            uow.rules.add(theirs)
+            uow.run_outcomes.record(RuleRunOutcome(theirs.id, RunKind.SYNC, NOW, True))
+            uow.commit()
+
+        with harness.installation() as installation:
+            seen = installation.failure_causes(NOW - timedelta(hours=1))
+
+        # Only who and why: never which rule, calendar, or account.
+        assert list(seen) == [CauseSighting(USER, Cause.API_DISABLED, NOW, False)]
 
     def test_the_latest_preview_replaces_the_previous(self, harness: PersistenceHarness) -> None:
         later = RulePreviewSummary(RULE.id, NOW + timedelta(hours=1), 5, 2, 1, 3)

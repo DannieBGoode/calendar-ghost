@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from types import TracebackType
 from typing import Literal, Protocol, Self
@@ -561,6 +561,22 @@ class ResourceUse:
     """Each provider's calls since the day asked for, by provider."""
 
 
+@dataclass(frozen=True, slots=True)
+class CauseSighting:
+    """One User's failure with its Cause, as Installation Hints read it (ADR 0031). It says who
+    and why, never which rule, calendar, or account."""
+
+    user: UserId
+    cause: Cause
+    at: datetime
+    """When the failure was last recorded."""
+    open: bool
+    """Whether it is an Incident still open, which a stopped rule keeps open while it waits."""
+    authorized_for: timedelta | None = None
+    """For a lapsed account's open Incident, how long after the account was last authorized it
+    lapsed; None otherwise."""
+
+
 class InstallationUnitOfWork(Protocol):
     """What reaches across Users. Only the scheduler, migrations, and the Operator Overview
     receive it, so crossing Users is visible in a type (ADR 0029)."""
@@ -591,6 +607,11 @@ class InstallationUnitOfWork(Protocol):
 
     def forget_provider_calls(self, before: date) -> None:
         """Discard every User's provider call counts of days before `before`."""
+        ...
+
+    def failure_causes(self, since: datetime) -> Sequence[CauseSighting]:
+        """Every User's failures with a recorded Cause: failed runs completed from `since` on,
+        and provider-failure Incidents still open or updated from `since` on."""
         ...
 
     def status_records(self, users: Collection[UserId]) -> Mapping[UserId, StatusRecords]:
