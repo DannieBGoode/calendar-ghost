@@ -136,7 +136,7 @@ function PersonRows({
             onClick={(event) => {
               if (!isPlainLeftClick(event)) return
               event.preventDefault()
-              rememberOpenedPerson(person.id)
+              rememberOpenedPerson(person.id, window.location.search)
               onOpen(person.id)
             }}
           >

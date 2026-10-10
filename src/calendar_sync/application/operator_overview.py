@@ -148,9 +148,9 @@ class OperatorOverview:
         # A verdict is computed, not stored, so filtering or sorting by it reads the status of
         # everyone who matches the rest of the query, then pages; resource use is read only for
         # the page shown.
-        everyone = self.users.find(
-            replace(query.users, offset=0, limit=max(self.users.count(), 1))
-        ).users
+        # Every match in one read, so someone who joins meanwhile is neither missed nor counted
+        # without being assessed.
+        everyone = self.users.find(replace(query.users, offset=0, limit=None)).users
         statuses = self.statuses.of([user.id for user in everyone])
         matching = [user for user in everyone if query.verdict in (None, statuses[user.id].health)]
         if query.by_verdict:
@@ -159,7 +159,8 @@ class OperatorOverview:
                 reverse=query.users.descending,
             )
         start = query.users.offset
-        shown = matching[start : start + query.users.limit]
+        end = None if query.users.limit is None else start + query.users.limit
+        shown = matching[start:end]
         return OverviewPage(self._overviews(shown, statuses), len(matching))
 
     def of(self, actor: UserId, subject: UserId) -> UserOverview:

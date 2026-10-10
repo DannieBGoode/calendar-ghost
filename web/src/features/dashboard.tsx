@@ -5,6 +5,7 @@ import { PersonView } from "@/features/person-page"
 import { RuleDetailsView } from "@/features/rule-details"
 import { RulesView } from "@/features/rules"
 import { SettingsPage } from "@/features/settings"
+import { peopleReturnSearch } from "@/lib/use-people"
 import {
   activitySearch,
   DEFAULT_PEOPLE_TAB,
@@ -105,8 +106,8 @@ function PeopleRoute({
       <PersonView
         key={personId}
         personId={personId}
-        onBack={() => onViewChange("people")}
-        onDeleted={(deleted) => onViewChange("people", { notice: deleted })}
+        onBack={() => onViewChange("people", { search: peopleReturnSearch(personId) })}
+        onDeleted={(deleted) => onViewChange("people", { notice: deleted, search: peopleReturnSearch(personId) })}
       />
     )
   }

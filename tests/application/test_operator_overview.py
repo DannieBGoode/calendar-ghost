@@ -245,3 +245,22 @@ def test_sorting_by_verdict_reads_resource_use_only_for_the_page_shown() -> None
 
     assert [entry.user.id for entry in page.users] == [ALICE.id]
     assert counted.read == [[ALICE.id]]
+
+
+def test_filtering_by_verdict_reads_everyone_who_matches_whatever_the_count_said() -> None:
+    """A person who joins between counting and reading is still assessed (review on PR 68)."""
+    overview = _installation()
+    users = overview.users
+    assert isinstance(users, MemoryUsers)
+
+    class StaleCount(MemoryUsers):
+        def count(self) -> int:
+            return 1
+
+    stale = StaleCount(users.users, users.hashes)
+    overview.users = stale
+
+    page = overview.page(ADMIN.id, OverviewQuery(by_verdict=True))
+
+    assert page.total == 3
+    assert [entry.user.id for entry in page.users] == [ALICE.id, ADMIN.id, BOB.id]

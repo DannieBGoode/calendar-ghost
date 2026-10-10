@@ -294,11 +294,15 @@ class SqliteOperationsQueries:
             rows = connection.execute(
                 f"""
                 SELECT {_INCIDENT_COLUMNS} FROM incidents WHERE user_id = ?
-                ORDER BY state ASC, updated_at DESC LIMIT 100
+                ORDER BY state ASC, updated_at DESC LIMIT ?
                 """,  # noqa: S608
-                (self._user,),
+                (self._user, INCIDENTS_READ),
             ).fetchall()
         return [_incident_summary(row) for row in rows]
+
+
+INCIDENTS_READ = 100
+"""How many of a User's incidents Installation Status reads, the most recently updated first."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -358,12 +362,14 @@ def operations_of(
             OperationsOverview(
                 connected_accounts=sum(a.state == "connected" for a in accounts[user]),
                 disconnected_accounts=sum(a.state == "disconnected" for a in accounts[user]),
+                # Every open incident counts, though only the most recent are read, as in
+                # `SqliteOperationsQueries`, so both readers assess the same ones.
                 open_incidents=len(incidents[user]),
                 last_synced_at=last_synced.get(user),
                 open_blocks=tuple(blocks.get(user, ())),
                 accounts=tuple(accounts[user]),
             ),
-            tuple(incidents[user]),
+            tuple(incidents[user][:INCIDENTS_READ]),
         )
         for user in users
     }

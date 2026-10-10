@@ -16,7 +16,7 @@ import { documentTitle } from "@/lib/brand"
 import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
 import { isAdministrator, personName } from "@/lib/people"
 import { useNow } from "@/lib/use-now"
-import { usePersonCommands } from "@/lib/use-people"
+import { peopleReturnSearch, usePersonCommands } from "@/lib/use-people"
 
 /**
  * One person under People, for an Installation Administrator: who they are, what the Operator
@@ -79,7 +79,7 @@ function PersonContent({
   }, [i18n, t, name])
   return (
     <div className="page-section person-page">
-      <BackToPeople onBack={onBack} />
+      <BackToPeople href={`${appPathForView("people")}${peopleReturnSearch(person.id)}`} onBack={onBack} />
       <div className="person-heading">
         <div>
           <h1 ref={heading} tabIndex={-1}>
@@ -101,12 +101,13 @@ function PersonContent({
   )
 }
 
-function BackToPeople({ onBack }: { onBack: () => void }) {
+/** Back to People as it was when this person was opened: the same search, filters, and page. */
+function BackToPeople({ href, onBack }: { href: string; onBack: () => void }) {
   const { t } = useI18n()
   return (
     <a
       className="person-back text-link"
-      href={appPathForView("people")}
+      href={href}
       onClick={(event) => {
         if (!isPlainLeftClick(event)) return
         event.preventDefault()

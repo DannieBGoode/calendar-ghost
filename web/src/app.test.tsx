@@ -541,6 +541,25 @@ describe("People", () => {
     expect(container.querySelector("main h1")?.textContent).toBe("People")
   })
 
+  it("returns from a person to the same filtered list and their row (review on PR 68)", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people?state=active&sort=email")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    const click = (element: Element) =>
+      act(() => {
+        element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+      })
+    click(container.querySelector("a.person-email")!)
+    await settle()
+    expect(window.location.pathname).toBe(`/people/${administrator.id}`)
+    expect(container.querySelector("a.person-back")?.getAttribute("href")).toBe("/people?state=active&sort=email")
+
+    click(container.querySelector("a.person-back")!)
+    await settle()
+    expect(`${window.location.pathname}${window.location.search}`).toBe("/people?state=active&sort=email")
+    expect(document.activeElement?.getAttribute("href")).toBe(`/people/${administrator.id}`)
+  })
+
   it.each([
     ["someone who is not an administrator", "user", "invitation_only"],
     ["an administrator under Only me", "installation_administrator", "only_me"],

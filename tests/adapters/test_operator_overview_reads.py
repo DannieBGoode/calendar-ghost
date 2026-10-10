@@ -159,3 +159,33 @@ def test_a_page_of_users_is_read_in_as_many_queries_however_many_rules_they_have
     _seed(database, THIRD_USER, 12)
 
     assert queries([USER, OTHER_USER, THIRD_USER]) == few
+
+
+def test_a_user_with_more_than_100_open_incidents_reads_the_same_in_both_paths(
+    database: Path,
+) -> None:
+    """Both readers keep the 100 most recent open incidents and count them all (review on PR 68)."""
+    with transaction(database) as connection:
+        for number in range(101):
+            connection.execute(
+                """
+                INSERT INTO incidents (id, deduplication_key, rule_id, category, state, summary,
+                    opened_at, updated_at, user_id)
+                VALUES (?, ?, NULL, 'temporary', 'open', 'Google is temporarily unavailable',
+                    '2026-09-28', ?, ?)
+                """,
+                (
+                    f"many-{number}",
+                    f"many-{number}",
+                    f"2026-09-28T00:{number // 60:02d}:{number % 60:02d}",
+                    USER.value,
+                ),
+            )
+
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        records = installation.status_records([USER])[USER]
+    own = SqliteOperationsQueries(database, USER)
+
+    assert records.incidents == tuple(i for i in own.incidents() if i.state == "open")
+    assert len(records.incidents) == 100
+    assert records.overview.open_incidents == own.overview().open_incidents == 102

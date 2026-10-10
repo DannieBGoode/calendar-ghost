@@ -1020,7 +1020,8 @@ class UserQuery:
     sort: UserSort = UserSort.JOINED
     descending: bool = False
     offset: int = 0
-    limit: int = 50
+    limit: int | None = 50
+    """How many to return; None returns every match, read in the same step as the total."""
 
 
 @dataclass(frozen=True, slots=True)

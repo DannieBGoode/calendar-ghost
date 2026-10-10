@@ -161,17 +161,23 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
 
 export type PeopleCommands = ReturnType<typeof usePersonCommands>
 
-// The person whose page was opened from People, so coming back starts at their row again.
-let openedPerson: string | null = null
+// The person whose page was opened from People, and the list's address then, so coming back
+// restores the same search, filters, sort, and page, and starts at that person's row again.
+let opened: { personId: string; search: string } | null = null
 
-/** Remember the person whose page People is about to open. */
-export function rememberOpenedPerson(personId: string): void {
-  openedPerson = personId
+/** Remember the person whose page People is about to open, and the list's search then. */
+export function rememberOpenedPerson(personId: string, search: string): void {
+  opened = { personId, search }
+}
+
+/** The list's address search to return to from this person's page; empty when opened elsewhere. */
+export function peopleReturnSearch(personId: string): string {
+  return opened?.personId === personId ? opened.search : ""
 }
 
 /** The person whose page was opened from People, once; later calls answer null. */
 export function takeOpenedPerson(): string | null {
-  const personId = openedPerson
-  openedPerson = null
+  const personId = opened?.personId ?? null
+  opened = null
   return personId
 }
