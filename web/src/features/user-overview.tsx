@@ -117,7 +117,11 @@ function lastSync(i18n: I18n, at: string | null, now: number): string {
 function SyncBlock({ status, options }: { status: Status; options: Options }) {
   const i18n = useI18n()
   const { t } = i18n
-  const byRule = new Map(status.problems.filter((p) => p.rule_id).map((p) => [p.rule_id, p]))
+  // A rule can have several problems at once, such as a lapsed account and blocked events.
+  const byRule = new Map<string, ServerProblem[]>()
+  for (const problem of status.problems) {
+    if (problem.rule_id) byRule.set(problem.rule_id, [...(byRule.get(problem.rule_id) ?? []), problem])
+  }
   const unattached = status.problems.filter((p) => !p.rule_id || !status.rules.some((rule) => rule.id === p.rule_id))
   return (
     <Block options={options} title={t("people.overview.statusTitle")} className="user-overview-health">
@@ -133,7 +137,7 @@ function SyncBlock({ status, options }: { status: Status; options: Options }) {
             </li>
           ))}
           {status.rules.map((rule) => (
-            <RuleItem key={rule.id} rule={rule} problem={byRule.get(rule.id)} status={status} options={options} />
+            <RuleItem key={rule.id} rule={rule} problems={byRule.get(rule.id) ?? []} status={status} options={options} />
           ))}
         </ul>
       )}
@@ -144,12 +148,12 @@ function SyncBlock({ status, options }: { status: Status; options: Options }) {
 
 function RuleItem({
   rule,
-  problem,
+  problems,
   status,
   options,
 }: {
   rule: StatusRule
-  problem: ServerProblem | undefined
+  problems: ServerProblem[]
   status: Status
   options: Options
 }) {
@@ -161,7 +165,9 @@ function RuleItem({
         <RuleStatusBadge state={rule.state} stopped={rule.problem?.kind === "stopped"} />
       </div>
       <p className="user-overview-muted">{lastSync(i18n, rule.last_succeeded_at, options.now)}</p>
-      {problem && <ProblemDetail problem={problem} status={status} options={options} />}
+      {problems.map((problem) => (
+        <ProblemDetail key={`${problem.kind}:${problem.summary}`} problem={problem} status={status} options={options} />
+      ))}
     </li>
   )
 }

@@ -93,7 +93,6 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
       setDeleting(null)
       setMessage(deleted)
       setDeletedMessage(deleted)
-      onDeleted?.(deleted)
     }
     if (changed) {
       const text = i18n.t(changed, { email: name })
@@ -109,7 +108,15 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
   }
 
   function send(next: PersonCommand) {
-    if (!running()) command.mutate(next)
+    if (running()) return
+    // A callback given to this one call runs only while the page that sent it is still shown,
+    // so a deletion that finishes after leaving it never navigates from wherever the
+    // administrator went.
+    command.mutate(next, {
+      onSuccess: ({ deletion }) => {
+        if (deletion && onDeleted) onDeleted(deletionMessage(i18n, personName(i18n, next.person), deletion))
+      },
+    })
   }
 
   function start(next: PersonCommand) {
@@ -162,12 +169,16 @@ export function usePersonCommands({ onDeleted }: { onDeleted?: (message: string)
 export type PeopleCommands = ReturnType<typeof usePersonCommands>
 
 // The person whose page was opened from People, and the list's address then, so coming back
-// restores the same search, filters, sort, and page, and starts at that person's row again.
+// restores the same search, filters, sort, and page. The address lasts until someone else is
+// opened, so Back then Forward to their page still leads to the same list; focusing their row
+// on return happens once.
 let opened: { personId: string; search: string } | null = null
+let focusTarget: string | null = null
 
 /** Remember the person whose page People is about to open, and the list's search then. */
 export function rememberOpenedPerson(personId: string, search: string): void {
   opened = { personId, search }
+  focusTarget = personId
 }
 
 /** The list's address search to return to from this person's page; empty when opened elsewhere. */
@@ -175,9 +186,9 @@ export function peopleReturnSearch(personId: string): string {
   return opened?.personId === personId ? opened.search : ""
 }
 
-/** The person whose page was opened from People, once; later calls answer null. */
+/** The person whose row People focuses on return, once; later calls answer null. */
 export function takeOpenedPerson(): string | null {
-  const personId = opened?.personId ?? null
-  opened = null
+  const personId = focusTarget
+  focusTarget = null
   return personId
 }

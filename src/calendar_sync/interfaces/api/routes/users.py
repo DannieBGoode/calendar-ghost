@@ -59,6 +59,7 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
 )
+from calendar_sync.domain.errors import DomainValidationError
 from calendar_sync.interfaces.api.dependencies import (
     Identity,
     administrator,
@@ -280,8 +281,9 @@ def user_overview(
     """What the Operator Overview shows about one User, for an Installation Administrator.
     Anyone else, and an unknown identifier, is answered 404, so nothing is revealed."""
     response.headers.update(NO_STORE)
+    subject = _named_user(user_id)
     try:
-        return user_overview_response(services.operator_overview.of(actor, UserId(user_id)))
+        return user_overview_response(services.operator_overview.of(actor, subject))
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
 
@@ -292,7 +294,7 @@ def change_role(
 ) -> UserResponse:
     try:
         changed = services.administration.change_role.execute(
-            actor, UserId(user_id), Role(payload.role)
+            actor, _named_user(user_id), Role(payload.role)
         )
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
@@ -307,7 +309,7 @@ def change_state(
 ) -> UserResponse:
     try:
         changed = services.administration.change_user_state.execute(
-            actor, UserId(user_id), UserState(payload.state)
+            actor, _named_user(user_id), UserState(payload.state)
         )
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
@@ -326,7 +328,9 @@ def issue_password_reset(
 ) -> IssuedLinkResponse:
     response.headers.update(NO_STORE)
     try:
-        return _link(services.administration.issue_password_reset.execute(actor, UserId(user_id)))
+        return _link(
+            services.administration.issue_password_reset.execute(actor, _named_user(user_id))
+        )
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except YourOwnResetLink as error:
@@ -339,9 +343,10 @@ async def delete_user(
 ) -> UserDeletionResponse:
     """Delete another User and every record they own; their projections are deleted."""
     delete = services.administration.delete_user
+    subject = _named_user(user_id)
     try:
         # Rule Removal waits on the calendar provider, so it runs off the event loop.
-        result = await asyncio.to_thread(delete.execute, actor, UserId(user_id))
+        result = await asyncio.to_thread(delete.execute, actor, subject)
     except UserNotFound as error:
         raise problem_from(status.HTTP_404_NOT_FOUND, error) from error
     except (LastAdministrator, UserDeletionInterrupted, YourOwnDeletion) as error:
@@ -349,6 +354,16 @@ async def delete_user(
     except AdministratorRequired as error:
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     return deletion_response(result)
+
+
+def _named_user(user_id: str) -> UserId:
+    """The User a path names; a malformed identifier names nobody, so it is answered 404 as an
+    unknown User is, never as a server error."""
+    try:
+        return UserId(user_id)
+    except DomainValidationError as error:
+        missing = UserNotFound(f"user {user_id} does not exist")
+        raise problem_from(status.HTTP_404_NOT_FOUND, missing) from error
 
 
 def deletion_response(result: DeletionResult) -> UserDeletionResponse:

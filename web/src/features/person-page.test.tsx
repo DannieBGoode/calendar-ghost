@@ -209,6 +209,24 @@ describe("A person's page", () => {
     expect(container.querySelectorAll(".command-result")).toHaveLength(1)
   })
 
+  it("shows every problem of one rule, so a reauthorization step is never hidden (review on PR 68)", async () => {
+    const lapsed = {
+      kind: "stopped" as const,
+      rule_id: "rule-1",
+      summary: "A calendar account needs reauthorization",
+      since: null,
+      message: { code: "authorization_lapsed", params: { provider: "google" } },
+    }
+    const blocked = { ...robin.status.problems[0]!, rule_id: "rule-1" }
+    const both = { ...robin, status: { ...robin.status, status: "stopped" as const, problems: [lapsed, blocked] } }
+    await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(both) })
+
+    const text = container.textContent
+    expect(text).toContain("A Google Calendar account needs reauthorization")
+    expect(text).toContain("robin@example.test reauthorizes their Google account in their Settings, under Connections.")
+    expect(text).toContain("3 events couldn't be synced")
+  })
+
   it("has no untranslated text with its actions open", async () => {
     await renderPerson(pseudoI18n())
     await click(container.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
@@ -240,6 +258,27 @@ describe("A person's page", () => {
     await click(button("Delete permanently"))
     expect(calls.some((call) => call.method === "DELETE")).toBe(true)
     expect(deleted).toHaveBeenCalledWith("robin@example.test was deleted. 4 events their rules wrote were deleted.")
+  })
+
+  it("stays wherever you went if a deletion finishes after you left the page (review on PR 68)", async () => {
+    await renderPerson(testI18n())
+    let answer: (response: Response) => void = () => undefined
+    const served = vi.mocked(fetch).getMockImplementation()!
+    vi.mocked(fetch).mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "DELETE") return new Promise<Response>((resolve) => (answer = resolve))
+      return served(input, init)
+    })
+    await choose("Delete")
+    await click(button("Delete permanently"))
+
+    act(() => root?.unmount())
+    root = null
+    await act(async () => {
+      answer(jsonResponse({ rules: 1, deleted: 4, detached: 0, left: 0 }))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(deleted).not.toHaveBeenCalled()
   })
 
   it("offers no actions on your own page", async () => {

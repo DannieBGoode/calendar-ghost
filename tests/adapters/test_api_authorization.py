@@ -119,6 +119,23 @@ def test_every_non_public_api_route_requires_a_signed_in_user(tmp_path: Path) ->
     assert administered == ADMINISTRATOR_ROUTES
 
 
+def test_an_administrator_naming_a_malformed_user_is_told_nobody_has_it(tmp_path: Path) -> None:
+    """A blank identifier names nobody: 404, never a server error (review on PR 68)."""
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+    with TestClient(app) as client:
+        sign_in(client)
+        answers = {
+            (method, path): client.request(
+                method, path.replace("{user_id}", "%20"), json={"role": "user", "state": "active"}
+            ).status_code
+            for method, path in ADMINISTRATOR_ROUTES | USER_NAMING_ADMINISTRATOR_ROUTES
+            if "{user_id}" in path
+        }
+
+    assert len(answers) == 5
+    assert set(answers.values()) == {404}, answers
+
+
 def test_a_user_who_does_not_administer_is_refused_every_administrator_route(
     tmp_path: Path,
 ) -> None:
@@ -171,16 +188,18 @@ def test_a_user_who_does_not_administer_finds_no_user_through_an_administrator_r
     with TestClient(app) as client:
         sign_in(client)
         administrator_id = client.get("/api/v1/session").json()["user"]["id"]
+        # A malformed identifier, such as a blank one, is as unknown as a missing User.
         unknown_to_administrator = {
-            path: client.get(path.format(user_id="nobody")).status_code
+            (path, user): client.get(path.format(user_id=user)).status_code
             for _, path in USER_NAMING_ADMINISTRATOR_ROUTES
+            for user in ("nobody", "%20")
         }
         add_user(database, OTHER_USER, role="user")
         client.cookies.set(SESSION_COOKIE, session_for(database, OTHER_USER))
         answers = {
             (path, user): client.get(path.format(user_id=user)).status_code
             for _, path in USER_NAMING_ADMINISTRATOR_ROUTES
-            for user in (administrator_id, OTHER_USER.value, "nobody")
+            for user in (administrator_id, OTHER_USER.value, "nobody", "%20")
         }
 
     assert set(unknown_to_administrator.values()) == {404}
