@@ -493,9 +493,10 @@ class PersistenceContract:
         assert succeeded is not None
         assert succeeded.failure_cause is None
 
-    def test_a_failed_run_recorded_without_a_cause_reads_as_unknown(
+    def test_a_failed_run_recorded_without_a_cause_has_none_and_suggests_nothing(
         self, harness: PersistenceHarness
     ) -> None:
+        # Such as a failure the adapter raised itself, which no provider answer explains.
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
             uow.run_outcomes.record(
@@ -504,9 +505,12 @@ class PersistenceContract:
             uow.commit()
         with harness.unit_of_work() as uow:
             latest = uow.run_outcomes.latest(RULE.id, RunKind.SYNC)
+        with harness.installation() as installation:
+            seen = installation.failure_causes(NOW - timedelta(hours=1))
 
         assert latest is not None
-        assert latest.failure_cause is Cause.UNKNOWN
+        assert latest.failure_cause is None
+        assert list(seen) == []
 
     def test_failure_causes_name_each_users_failed_runs_since_a_time(
         self, harness: PersistenceHarness

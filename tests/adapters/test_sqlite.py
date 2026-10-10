@@ -370,10 +370,7 @@ def test_run_outcomes_keep_the_latest_per_kind(tmp_path: Path) -> None:
 
     with factory() as uow:
         latest = uow.run_outcomes.latest(rule().id, RunKind.SYNC)
-        # A failure recorded without its Cause reads as unknown.
-        assert latest == replace(
-            second, last_succeeded_at=first.completed_at, failure_cause=Cause.UNKNOWN
-        )
+        assert latest == replace(second, last_succeeded_at=first.completed_at)
         assert uow.run_outcomes.latest(rule().id, RunKind.RECONCILIATION) is None
 
 
@@ -1474,6 +1471,24 @@ def test_a_local_failures_incident_has_no_cause_even_from_an_earlier_release(
     with sqlite3.connect(database) as connection:
         # As an earlier release, or a write that went wrong, might have left it.
         connection.execute("UPDATE incidents SET cause = 'unknown'")
+
+    (incident,) = SqliteOperationsQueries(database, user).incidents()
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        seen = list(installation.failure_causes(NOW - timedelta(days=1)))
+
+    assert incident.cause is None
+    assert seen == []
+
+
+def test_an_incident_recorded_with_no_cause_has_none(tmp_path: Path) -> None:
+    # A failure the adapter raised itself names no provider reason; one recorded before Causes,
+    # with nothing stored, is unknown instead (see migration 26).
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    user = add_user(database)
+    SqliteIncidentRepository(database, user).open(
+        IncidentReport("provider:rule-1", SyncRuleId("rule-1"), "permanent", "rejected"), NOW
+    )
 
     (incident,) = SqliteOperationsQueries(database, user).incidents()
     with SqliteInstallationUnitOfWorkFactory(database)() as installation:

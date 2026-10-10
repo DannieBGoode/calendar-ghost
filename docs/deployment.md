@@ -202,7 +202,8 @@ ignore the table, and its counts stop growing until the next upgrade.
 Migration 26 adds the nullable `incidents.cause` and `rule_run_outcomes.failure_cause` columns:
 why each failure happened, as a Cause read from Google's reason code, never its message
 ([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md)). No row is rewritten: failures
-recorded earlier read as `unknown`, and Incidents about blocked events have no Cause. Rolling back
+recorded earlier read as `unknown`. A failure no provider answer explains, such as one inside
+Calendar Ghost, is stored as `none` and has no Cause, as Incidents about blocked events do. Rolling back
 works with the same database: earlier releases ignore the columns. An earlier release that refreshes
 an open Incident or records a failed run leaves the Cause it found, so after upgrading again that
 Incident or run can show a stale Cause until it fails again.

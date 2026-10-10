@@ -7,7 +7,7 @@ from datetime import date, datetime
 from types import TracebackType
 from typing import Self
 
-from calendar_sync.application.causes import WITHOUT_CAUSE, Cause
+from calendar_sync.application.causes import WITHOUT_CAUSE
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AccountStanding,
@@ -436,7 +436,7 @@ class InMemoryRuleRunOutcomeRepository:
             outcome,
             failure_cause=None
             if outcome.succeeded or outcome.failure_kind in WITHOUT_CAUSE
-            else outcome.failure_cause or Cause.UNKNOWN,
+            else outcome.failure_cause,
             last_succeeded_at=succeeded_at,
             last_full_succeeded_at=full_at,
         )

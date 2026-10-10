@@ -61,8 +61,8 @@ def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
         RuleHealthPolicy.summary(failure),
         account_id=failure.account_id,
         message=IncidentMessage("provider_failure", {"kind": kind.value, "provider": None}),
-        # A local failure has no Cause; any other failure without a reason is unknown.
-        cause=None if kind is ProviderFailureKind.INFRASTRUCTURE else Cause.UNKNOWN,
+        # These synthetic failures carry no provider reason, so none is recorded.
+        cause=None,
     )
     assert response.lapsed is None
 
@@ -149,7 +149,7 @@ def test_a_blocked_removal_names_its_cause() -> None:
         "Rule Removal stopped: Access to the calendar provider was denied",
         account_id=ACCOUNT,
         message=IncidentMessage("removal_stopped", {"kind": "authorization", "provider": None}),
-        cause=Cause.UNKNOWN,
+        cause=None,
     )
 
 

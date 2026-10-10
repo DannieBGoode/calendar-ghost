@@ -423,9 +423,10 @@ def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
         resolution=row["resolution"],
         account_id=row["account_id"],
         message=_incident_message(row["message_code"], row["message_params"]),
-        # A provider failure's Incident has a Cause, unknown when an earlier release recorded none;
-        # blocked events and local failures have none.
-        cause=None if row["category"] in WITHOUT_CAUSE else Cause.read(row["cause"]),
+        # A provider failure's Incident has its Cause, none when it was recorded without one, and
+        # unknown when an earlier release recorded nothing; blocked events and local failures
+        # have none.
+        cause=None if row["category"] in WITHOUT_CAUSE else Cause.recorded(row["cause"]),
     )
 
 

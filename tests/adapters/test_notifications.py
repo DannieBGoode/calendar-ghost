@@ -299,6 +299,8 @@ def test_without_a_public_address_an_incident_email_has_no_link(
         ("ghost.example.test", None),
         ("javascript:alert(1)", None),
         ("https://ghost.example.test/?q=1", None),
+        # Not even parseable: as if unset, so email still goes out without a link.
+        ("https://[", None),
     ],
 )
 def test_only_an_http_address_is_used_as_the_public_address(

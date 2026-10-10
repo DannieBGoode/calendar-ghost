@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+from calendar_sync.application.causes import NO_CAUSE
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.ports import IdGenerator, IncidentReport, IncidentResolution
 from calendar_sync.domain.access import UserId
@@ -159,7 +160,7 @@ class SqliteIncidentRepository:
                     json.dumps(dict(incident.message.params), sort_keys=True)
                     if incident.message
                     else None,
-                    incident.cause.value if incident.cause else None,
+                    incident.cause.value if incident.cause else NO_CAUSE,
                     self._user,
                     account_only.value if account_only else None,
                     account_only.value if account_only else None,

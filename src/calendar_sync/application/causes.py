@@ -34,6 +34,12 @@ class Cause(StrEnum):
         return CauseOwner.ADMINISTRATOR if self in ADMINISTRATOR_CAUSES else CauseOwner.USER
 
     @classmethod
+    def recorded(cls, value: object) -> Cause | None:
+        """A stored Cause: none where a failure was recorded with no Cause, and unknown where
+        nothing was stored, as before Causes, or a later release stored one this does not know."""
+        return None if value == NO_CAUSE else cls.read(value)
+
+    @classmethod
     def read(cls, value: object) -> Cause:
         """A recorded Cause; one recorded before Causes, or by a later release, is unknown."""
         if isinstance(value, str):
@@ -43,6 +49,9 @@ class Cause(StrEnum):
                 return cls.UNKNOWN
         return cls.UNKNOWN
 
+
+NO_CAUSE = "none"
+"""What storage records for a failure no provider answer explains, apart from nothing at all."""
 
 ADMINISTRATOR_CAUSES = frozenset(
     {Cause.API_DISABLED, Cause.QUOTA_EXCEEDED, Cause.OAUTH_CLIENT_INVALID}

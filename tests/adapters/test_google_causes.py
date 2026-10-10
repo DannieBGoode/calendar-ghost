@@ -343,3 +343,11 @@ def test_an_event_gone_between_reading_and_writing_it_is_not_a_missing_calendar(
 
 def test_a_calendar_listing_that_finds_no_calendar_is_a_missing_calendar() -> None:
     assert _failure_of(google_error(404, "notFound")).cause is Cause.CALENDAR_NOT_FOUND
+
+
+def test_a_failure_the_adapter_raises_itself_has_no_cause() -> None:
+    # Google refused nothing: it is the adapter's own conclusion, such as missing ownership.
+    failure = ProviderFailure(ProviderFailureKind.PERMANENT, "occurrence lacks ownership metadata")
+
+    assert failure.cause is None
+    assert failure.provider_cause is None

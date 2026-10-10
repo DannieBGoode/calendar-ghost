@@ -76,8 +76,10 @@ class ProviderFailure(ApplicationError):
     attempted_at: datetime | None = None
     """When the failed request read the account's credentials, when the adapter knows it, so a
     refusal of credentials since replaced is told apart from one of the current ones (ADR 0027)."""
-    cause: Cause = Cause.UNKNOWN
-    """Why the provider refused, from its reason code, so its owner can be told (ADR 0031)."""
+    cause: Cause | None = None
+    """Why the provider refused, from its reason code, so its owner can be told (ADR 0031); set
+    only from a provider's answer, so a failure an adapter or Calendar Ghost raises itself has
+    none."""
 
     @property
     def provider_cause(self) -> Cause | None:
@@ -227,7 +229,7 @@ class AccountAccessCheckFailed(ApplicationError):
         self,
         detail: str,
         kind: ProviderFailureKind = ProviderFailureKind.PERMANENT,
-        cause: Cause = Cause.UNKNOWN,
+        cause: Cause | None = None,
     ) -> None:
         super().__init__(detail)
         self.kind = kind
