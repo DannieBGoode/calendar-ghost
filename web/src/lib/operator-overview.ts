@@ -99,6 +99,9 @@ export type Audience = "self" | { name: string }
 /** The person themself, reading what administrators see about them. */
 export const THEMSELF: Audience = "self"
 
+/** The signed-in User's own overview; every change to their rules, accounts, or Activity refreshes it. */
+export const OWN_OVERVIEW_QUERY = ["own-overview"] as const
+
 const REAUTHORIZE_KINDS = new Set(["authentication", "authorization"])
 
 function step(problem: ServerProblem): "reauthorize" | "preview" | "activity" | "overdue" | "waiting" | "stalled" {

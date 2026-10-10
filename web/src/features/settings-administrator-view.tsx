@@ -7,7 +7,7 @@ import { VerdictBadge } from "@/components/verdict-badge"
 import { ROWS, UserOverviewDetails, type OwnActions } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
 import { api, type RuleSummary, type UserOverview } from "@/lib/api"
-import { THEMSELF } from "@/lib/operator-overview"
+import { OWN_OVERVIEW_QUERY, THEMSELF } from "@/lib/operator-overview"
 import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
 import { useNow } from "@/lib/use-now"
 import { useOverviewSharing } from "@/lib/use-people-access"
@@ -26,7 +26,7 @@ export function AdministratorViewSection({ actions }: { actions: OwnActions }) {
 
 function AdministratorView({ actions }: { actions: OwnActions }) {
   const { t } = useI18n()
-  const overview = useQuery({ queryKey: ["own-overview"], queryFn: api.ownOverview })
+  const overview = useQuery({ queryKey: OWN_OVERVIEW_QUERY, queryFn: api.ownOverview })
   const [open, setOpen] = useState(false)
   const toggle = useRef<HTMLButtonElement>(null)
   const details = useRef<HTMLDivElement>(null)
