@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from calendar_sync.application.accounts import (
     CheckAccountAccess,
@@ -357,7 +358,9 @@ def build_adapters(settings: Settings) -> Adapters:
         database_storage=SqliteStorage(database),
         integration_tokens=tokens.for_user,
         token_authentication=tokens,
-        notifications=lambda owner: OwnerNotifier(users, owner, mail) if mail else None,
+        notifications=lambda owner: (
+            OwnerNotifier(users, owner, mail, public_address(settings)) if mail else None
+        ),
         installation_notifications=_installation_notifier(settings, mail),
         sends_email=mail is not None,
     )
@@ -606,6 +609,18 @@ def _compose_user(
         preview_sync_rule=preview_sync_rule,
         reconcile_now=reconcile_now,
     )
+
+
+def public_address(settings: Settings) -> str | None:
+    """Where people reach the Web UI, for links in email: an http or https address with no
+    query or fragment, without its trailing slash. Anything else gives no link."""
+    configured = settings.public_url.strip()
+    parsed = urlsplit(configured)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    if parsed.query or parsed.fragment:
+        return None
+    return configured.rstrip("/")
 
 
 def _mail_server(settings: Settings) -> SmtpServer | None:

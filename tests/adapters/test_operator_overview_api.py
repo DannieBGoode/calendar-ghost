@@ -35,6 +35,7 @@ from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.scheduling import SchedulerWatch, SystemClock
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
+from tests.adapters.test_notifications import RecordingSmtp
 from tests.helpers import endpoint, rule
 from tests.users import OTHER_USER, add_user, administrator, session_for, sqlite_units
 
@@ -174,9 +175,17 @@ class Installation:
 
 
 @pytest.fixture
-def installation(tmp_path: Path) -> Iterator[Installation]:
+def installation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Installation]:
+    RecordingSmtp.sent = []
+    monkeypatch.setattr("calendar_sync.infrastructure.notifications.smtplib.SMTP", RecordingSmtp)
     database = tmp_path / "test.db"
-    settings = Settings(database)
+    # The installation sends email, linking each person to their next step.
+    settings = Settings(
+        database,
+        smtp_host="smtp.example.test",
+        smtp_sender="ghost@example.test",
+        public_url="https://ghost.example.test",
+    )
     adapters = build_adapters(settings)
     admin = Person(administrator(adapters), "alpha")
     member = Person(add_user(database, OTHER_USER, role="user", email=MEMBER_EMAIL), "bravo")
@@ -297,12 +306,17 @@ def test_no_calendar_account_or_event_reaches_the_overview_health_notifications_
     SchedulerWatch(Stalled(), notifications, SystemClock()).check()
     shown.append(repr(notifications.sent))
     shown.append("\n".join(record.getMessage() for record in caplog.records))
+    emails = [message.get_content() for message in RecordingSmtp.sent]
+    shown.extend(emails)
 
     assert notifications.sent
     for marker in (*installation.admin.markers, *installation.member.markers):
         for text in shown:
             assert marker not in text
     assert MEMBER_EMAIL in shown[0]
+    # Each person heard of their own lapse, with a link to their dashboard and nothing more.
+    assert len(emails) == 2
+    assert all("What to do next: https://ghost.example.test/" in email for email in emails)
     for text in own:
         assert installation.member.google_message not in text
         assert '"cause":"api_disabled"' in text

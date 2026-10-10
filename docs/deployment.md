@@ -306,6 +306,15 @@ installation sends email: each User then also receives their own rules' and acco
 Notifications at their email, unless they turn them off in **Settings → Your account**. No User
 receives another User's incidents.
 
+Set `CALENDAR_SYNC_PUBLIC_URL` to the address people open Calendar Ghost at, such as
+`https://calendar.example.com` or `http://192.168.1.50:8000`, and each email links to the page
+holding that person's next step for its Cause
+([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md)): their Google connections to
+reauthorize, the rule to choose another calendar or try again, or the Overview when there is nothing
+for them to do. The link names a page and at most a rule's internal identifier, never a calendar,
+account, or event. Only an `http` or `https` address without a query is used; without one, email is
+sent without a link, as before.
+
 The installation's own channels hear only of incidents about the installation itself, which affect
 every User; the first is a scheduler that stopped completing passes. Set
 `CALENDAR_SYNC_SMTP_RECIPIENT` to email them to an operator, and
