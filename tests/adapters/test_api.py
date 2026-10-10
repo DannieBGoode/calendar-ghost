@@ -158,6 +158,7 @@ def test_first_run_admin_and_protected_dashboard(tmp_path: Path) -> None:
             "blocked_events": 0,
             "blocked_entry_id": None,
             "blocked_rule_id": None,
+            "next_pass_at": None,
         }
 
 

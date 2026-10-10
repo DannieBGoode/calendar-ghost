@@ -333,6 +333,8 @@ def test_the_dashboard_carries_the_server_verdict(tmp_path: Path) -> None:
     assert body["needs_attention"] is False
     assert body["problems"] == []
     assert "health" not in body
+    # Without a scheduler there is no next pass to wait for.
+    assert body["next_pass_at"] is None
 
 
 def test_counts_never_call_a_stopped_rule_running(tmp_path: Path) -> None:

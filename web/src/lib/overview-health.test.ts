@@ -21,6 +21,7 @@ const healthy: Dashboard = {
   blocked_events: 0,
   blocked_entry_id: null,
   blocked_rule_id: null,
+  next_pass_at: null,
 }
 
 const names: Record<string, string> = {

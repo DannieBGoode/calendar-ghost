@@ -62,6 +62,7 @@ def dashboard(services: Services) -> DashboardResponse:
     # One read: the counts come from the same rules and overview the verdict was decided on.
     verdict = services.get_installation_status.execute()
     summary = Dashboard.of([rule.summary.rule.state for rule in verdict.rules], verdict.overview)
+    next_pass = verdict.scheduler.next_pass_at if verdict.scheduler else None
     return DashboardResponse(
         status=verdict.health.value,
         needs_attention=verdict.needs_attention,
@@ -77,6 +78,7 @@ def dashboard(services: Services) -> DashboardResponse:
         blocked_events=summary.blocked_events,
         blocked_entry_id=summary.blocked_entry_id,
         blocked_rule_id=summary.blocked_rule_id,
+        next_pass_at=next_pass.isoformat() if next_pass else None,
     )
 
 

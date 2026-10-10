@@ -279,6 +279,8 @@ class DashboardResponse(ApiResponse):
     """Events of existing rules whose latest decision was a block."""
     blocked_entry_id: int | None = None
     blocked_rule_id: str | None = None
+    next_pass_at: str | None = None
+    """When the scheduler next tries every rule, so waiting on Google says when it tries again."""
 
 
 class GoogleConfigurationResponse(ApiResponse):

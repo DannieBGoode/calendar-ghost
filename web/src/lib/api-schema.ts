@@ -1113,6 +1113,8 @@ export interface components {
             last_synced_at: string | null;
             /** Needs Attention */
             needs_attention: boolean;
+            /** Next Pass At */
+            next_pass_at: string | null;
             /** Open Incidents */
             open_incidents: number;
             /** Problems */

@@ -451,6 +451,17 @@
             "title": "Needs Attention",
             "type": "boolean"
           },
+          "next_pass_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Pass At"
+          },
           "open_incidents": {
             "title": "Open Incidents",
             "type": "integer"
@@ -498,7 +509,8 @@
           "last_synced_at",
           "blocked_events",
           "blocked_entry_id",
-          "blocked_rule_id"
+          "blocked_rule_id",
+          "next_pass_at"
         ],
         "title": "DashboardResponse",
         "type": "object"
