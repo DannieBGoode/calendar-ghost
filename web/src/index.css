@@ -1411,9 +1411,20 @@ p {
   padding: 0 var(--panel-padding);
 }
 
-.account-group,
 .settings-group {
   overflow: hidden;
+}
+
+/* Connected accounts keep their rounded corners by rounding their own first and last parts, not
+   by clipping, so an account's "More actions" menu can open past the group's edge. */
+.account-group > :first-child {
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+}
+
+.account-group > :last-child {
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
 }
 
 .account-group .account-list,
