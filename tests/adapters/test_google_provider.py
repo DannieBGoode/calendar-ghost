@@ -254,7 +254,7 @@ def test_google_403_quota_limit_is_retryable_but_permission_denial_is_not() -> N
     rate_limited_api = MagicMock()
     rate_limited_api.get.return_value = request_raising(403, reason="userRateLimitExceeded")
     denied_api = MagicMock()
-    denied_api.get.return_value = request_raising(403, reason="forbidden")
+    denied_api.get.return_value = request_raising(403, reason="authError")
 
     with pytest.raises(ProviderFailure) as rate_limited:
         provider_with_events_api(rate_limited_api).get_event(event().reference)

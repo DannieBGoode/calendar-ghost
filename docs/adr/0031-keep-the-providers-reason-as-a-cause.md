@@ -50,10 +50,14 @@ User's calendars.
   page and at most a rule's internal identifier, never a calendar, account, or event. Without the
   setting the email has no link, as before.
 - **A Cause says who fixes a failure, not what Calendar Ghost does about it.** The failure kind
-  still decides retrying, stopping, and Lapsed Authorization. The one reclassification is Google's
-  `dailyLimitExceeded`, which earlier releases treated as an authorization refusal and so lapsed
-  the account: it is now a rate limit, retried with backoff, because a quota resets by itself and
-  reauthorizing never helped.
+  still decides retrying, stopping, and Lapsed Authorization. Two reclassifications follow from
+  the Cause, both 403s that earlier releases treated as an authorization refusal and so lapsed the
+  whole account. Google's `dailyLimitExceeded` is now a rate limit, retried with backoff, because
+  a quota resets by itself. `calendar_forbidden` (`requiredAccessLevel`, `forbidden`,
+  `forbiddenForNonOrganizer`) is now a permanent failure of its rule, which stops for another
+  calendar while the account and its other calendars keep working. Reauthorizing helped neither.
+- **Installation Health needs attention when it has a hint**, as well as when a verdict needs it,
+  so monitors hear of a Cause only the administrator can fix even while every rule merely waits.
 - **Incidents and run outcomes record the Cause** where they already record the failure kind, in a
   nullable column. Rows recorded before this decision read as `unknown`. Installation Status shows
   each problem's Cause, and the status API returns it.

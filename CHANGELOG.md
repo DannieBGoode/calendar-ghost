@@ -78,8 +78,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   Web UI. The link names no calendar, account, or event.
 - Migration 26 adds `incidents.cause` and `rule_run_outcomes.failure_cause`. Earlier failures read
   as unknown. Rolling back is safe.
-- Google's `dailyLimitExceeded` is now retried as a rate limit; earlier it lapsed the account as if
-  its authorization had been refused.
+- Google's `dailyLimitExceeded` is now retried as a rate limit, and a calendar the account may not
+  change (`requiredAccessLevel`, `forbidden`, `forbiddenForNonOrganizer`) now stops only its rule;
+  earlier both lapsed the whole account as if its authorization had been refused.
+- `GET /api/v1/installation/health` reports `needs_attention` while it has a hint, even when every
+  rule is only waiting.
 
 - Migration 24 records the order rules were created in, and migration 25 counts each person's
   calendar provider calls per day, kept for 30 days. Rolling back past either is safe.

@@ -185,3 +185,23 @@ def test_without_failures_there_are_no_hints() -> None:
     users = _users(("a", UserState.ACTIVE))
 
     assert _health({"user-0": StatusVerdict.HEALTHY}, users, TICKING).hints == ()
+
+
+def test_a_hint_needs_attention_whatever_the_verdicts() -> None:
+    # A used-up daily quota leaves rules waiting, which alone needs no one; only its administrator
+    # can raise the quota, so monitors must hear of it.
+    users = _users(("a", UserState.ACTIVE))
+
+    def quota(_since: datetime) -> list[CauseSighting]:
+        return [CauseSighting(UserId("user-0"), Cause.QUOTA_EXCEEDED, NOW, False)]
+
+    health = GetInstallationHealth(
+        users,
+        lambda ids: dict.fromkeys(ids, StatusVerdict.WAITING),
+        Heartbeat(TICKING),
+        Clock(),
+        quota,
+    ).execute()
+
+    assert health.status is StatusVerdict.WAITING
+    assert health.needs_attention

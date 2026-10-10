@@ -174,6 +174,7 @@ def test_a_used_up_daily_quota_is_retried_rather_than_lapsing_the_account() -> N
         (google_error(403, "accessNotConfigured"), ProviderFailureKind.AUTHORIZATION),
         (token_error("invalid_client"), ProviderFailureKind.AUTHENTICATION),
         (google_error(404, "notFound"), ProviderFailureKind.PERMANENT),
+        (google_error(403, "someNewReason"), ProviderFailureKind.AUTHORIZATION),
     ],
 )
 def test_a_cause_does_not_change_what_the_failure_kind_decides(
@@ -279,3 +280,14 @@ def test_check_access_says_why_google_refused(
 
     assert raised.value.cause is cause
     assert GOOGLE_MESSAGE not in str(raised.value)
+
+
+@pytest.mark.parametrize("reason", ["requiredAccessLevel", "forbidden", "forbiddenForNonOrganizer"])
+def test_a_calendar_the_account_may_not_change_stops_its_rule_not_the_account(reason: str) -> None:
+    # Reauthorizing cannot give an account permission on one calendar, and its other calendars
+    # still work: so the rule stops for another calendar, and the account does not lapse.
+    failure = _failure_of(google_error(403, reason))
+
+    assert failure.cause is Cause.CALENDAR_FORBIDDEN
+    assert failure.kind is ProviderFailureKind.PERMANENT
+    assert not failure.requires_authorization

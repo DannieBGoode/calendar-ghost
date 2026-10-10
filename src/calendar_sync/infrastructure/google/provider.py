@@ -11,6 +11,7 @@ from typing import Any
 
 from google.auth.exceptions import RefreshError, TransportError
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
@@ -617,6 +618,10 @@ def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
         kind = ProviderFailureKind.AUTHENTICATION
     elif status == 403 and _is_rate_limit_error(error):
         kind = ProviderFailureKind.RATE_LIMIT
+    elif status == 403 and cause is Cause.CALENDAR_FORBIDDEN:
+        # One calendar the account may not change: its rule stops for another calendar, while the
+        # account and its other calendars keep working; reauthorizing would not help (ADR 0031).
+        kind = ProviderFailureKind.PERMANENT
     elif status == 403:
         kind = ProviderFailureKind.AUTHORIZATION
     elif status == 429:

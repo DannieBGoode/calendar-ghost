@@ -86,7 +86,9 @@ class InstallationHealth:
 
     @property
     def needs_attention(self) -> bool:
-        return self.status in NEEDS_ATTENTION
+        """Whether someone must act: a verdict that needs it, or a hint only the administrator
+        can act on, such as a used-up quota while every rule merely waits (ADR 0031)."""
+        return self.status in NEEDS_ATTENTION or bool(self.hints)
 
 
 @dataclass(slots=True)
