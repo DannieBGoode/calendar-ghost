@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import threading
 import time
@@ -30,6 +29,12 @@ from calendar_sync.domain.model import (
     OccurrenceStart,
     SyncRuleId,
     TransformationPolicy,
+)
+from calendar_sync.infrastructure.google.causes import (
+    QUOTA_REASONS,
+    RATE_LIMIT_REASONS,
+    cause_of,
+    http_reasons,
 )
 from calendar_sync.infrastructure.google.translation import (
     OPERATION_PROPERTY,
@@ -587,19 +592,26 @@ def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
     # Refreshing the access token fails before any request is sent, so it carries no status. A
     # revoked or expired grant needs reauthorization; google-auth marks token-endpoint outages
     # retryable. Their text can quote the token endpoint's response, so it is not kept.
+    status = _status_code(error)
+    cause = cause_of(error, status)
     if isinstance(error, RefreshError):
         if error.retryable:
             return ProviderFailure(
-                ProviderFailureKind.TEMPORARY, "Google could not refresh access right now"
+                ProviderFailureKind.TEMPORARY,
+                "Google could not refresh access right now",
+                cause=cause,
             )
         return ProviderFailure(
-            ProviderFailureKind.AUTHENTICATION, "Google no longer accepts this account's access"
+            ProviderFailureKind.AUTHENTICATION,
+            "Google no longer accepts this account's access",
+            cause=cause,
         )
     if isinstance(error, TransportError):
         return ProviderFailure(
-            ProviderFailureKind.TEMPORARY, "Google could not be reached to refresh access"
+            ProviderFailureKind.TEMPORARY,
+            "Google could not be reached to refresh access",
+            cause=cause,
         )
-    status = _status_code(error)
     detail = str(error) or error.__class__.__name__
     if status == 401:
         kind = ProviderFailureKind.AUTHENTICATION
@@ -613,7 +625,7 @@ def _provider_failure(error: Exception, now: datetime) -> ProviderFailure:
         kind = ProviderFailureKind.TEMPORARY
     else:
         kind = ProviderFailureKind.PERMANENT
-    return ProviderFailure(kind, detail, _retry_after_seconds(error, now))
+    return ProviderFailure(kind, detail, _retry_after_seconds(error, now), cause=cause)
 
 
 # Instances are read only for their status and start, so one page covers most series.
@@ -667,29 +679,5 @@ def _status_code(error: Exception) -> int | None:
 
 
 def _is_rate_limit_error(error: Exception) -> bool:
-    content = getattr(error, "content", b"")
-    if isinstance(content, bytes):
-        try:
-            payload = json.loads(content.decode())
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            return False
-    elif isinstance(content, str):
-        try:
-            payload = json.loads(content)
-        except json.JSONDecodeError:
-            return False
-    else:
-        return False
-    reasons = {
-        item.get("reason")
-        for item in payload.get("error", {}).get("errors", [])
-        if isinstance(item, dict)
-    }
-    return bool(
-        reasons
-        & {
-            "rateLimitExceeded",
-            "userRateLimitExceeded",
-            "quotaExceeded",
-        }
-    )
+    # A used-up daily quota resets by itself, so it is retried like a rate limit (ADR 0031).
+    return bool(http_reasons(error) & (RATE_LIMIT_REASONS | QUOTA_REASONS))

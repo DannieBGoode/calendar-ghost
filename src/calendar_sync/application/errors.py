@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 
@@ -75,6 +76,8 @@ class ProviderFailure(ApplicationError):
     attempted_at: datetime | None = None
     """When the failed request read the account's credentials, when the adapter knows it, so a
     refusal of credentials since replaced is told apart from one of the current ones (ADR 0027)."""
+    cause: Cause = Cause.UNKNOWN
+    """Why the provider refused, from its reason code, so its owner can be told (ADR 0031)."""
 
     @property
     def retryable(self) -> bool:
@@ -215,11 +218,16 @@ class AccountAccessCheckFailed(ApplicationError):
     """The provider did not confirm a Connected Account's calendar access."""
 
     def __init__(
-        self, detail: str, kind: ProviderFailureKind = ProviderFailureKind.PERMANENT
+        self,
+        detail: str,
+        kind: ProviderFailureKind = ProviderFailureKind.PERMANENT,
+        cause: Cause = Cause.UNKNOWN,
     ) -> None:
         super().__init__(detail)
         self.kind = kind
         """How the provider refused, so an authorization refusal can lapse the account."""
+        self.cause = cause
+        """Why the provider refused, so the lapse it records says who fixes it (ADR 0031)."""
 
 
 class ActivityEventNotFound(ApplicationError):
