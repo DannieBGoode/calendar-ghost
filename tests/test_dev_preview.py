@@ -233,14 +233,15 @@ def test_preview_shows_a_cause_two_people_share(
     assert {p["cause"] for p in robins["problems"] if p["kind"] == "stopped"} == {cause}
 
 
-def test_preview_signs_in_with_a_short_local_login(tmp_path: Path) -> None:
+def test_preview_signs_in_with_a_simple_local_login(tmp_path: Path) -> None:
     container = build_preview_container(tmp_path / "dev-preview.db", NOW)
 
     with TestClient(create_app(container)) as client:
         signed_in = client.post(
-            "/api/v1/session", json={"email": "preview@preview.com", "password": "preview"}
+            "/api/v1/session",
+            json={"email": "preview@preview.com", "password": "previewpreview"},
         )
 
-    # Only the preview seeds this; real installations keep their 12-character minimum.
-    assert (PREVIEW_EMAIL, PREVIEW_PASSWORD) == ("preview@preview.com", "preview")
+    # Long enough for the password policy, so the preview sets up like any installation.
+    assert (PREVIEW_EMAIL, PREVIEW_PASSWORD) == ("preview@preview.com", "previewpreview")
     assert signed_in.status_code == 200

@@ -38,8 +38,7 @@ To see the Web UI with realistic data without a Google account, run:
 .venv/bin/python scripts/dev_preview.py
 ```
 
-Open `http://127.0.0.1:8001/activity` and sign in as `preview@preview.com` with `preview`. The preview
-seeds this short password itself; real installations keep their 12-character minimum. In `api-disabled` and
+Open `http://127.0.0.1:8001/activity` and sign in as `preview@preview.com` with `previewpreview`. In `api-disabled` and
 `access-revoked`, `robin@example.test` signs in with the same password as an ordinary User. The preview is for
 development only:
 
