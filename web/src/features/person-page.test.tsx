@@ -227,6 +227,47 @@ describe("A person's page", () => {
     expect(text).toContain("3 events couldn't be synced")
   })
 
+  it("says each problem's likely cause, and that an administrator's Cause is the reader's to fix", async () => {
+    const lapsed = {
+      kind: "stopped" as const,
+      rule_id: "rule-1",
+      summary: "A calendar account needs reauthorization",
+      since: null,
+      message: { code: "authorization_lapsed", params: { provider: "google" } },
+      cause: "api_disabled" as const,
+      last_tried_at: justNow,
+    }
+    const stopped = { ...robin, status: { ...robin.status, status: "stopped" as const, problems: [lapsed] } }
+    await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(stopped) })
+
+    const text = container.textContent
+    expect(text).toContain("Likely cause: the Google Calendar API is turned off for this installation.")
+    expect(text).toContain("You fix this as the administrator, in Google Cloud. robin@example.test has nothing to do.")
+    const howToFix = [...container.querySelectorAll<HTMLAnchorElement>("a")].find((link) => link.textContent.startsWith("How to fix"))
+    expect(howToFix?.href).toBe("https://calendarghost.com/docs/troubleshooting#the-google-calendar-api-is-turned-off")
+    expect(howToFix?.target).toBe("_blank")
+  })
+
+  it("says a person fixes their own Cause from their dashboard, and offers the administrator nothing to do", async () => {
+    const lapsed = {
+      kind: "stopped" as const,
+      rule_id: "rule-1",
+      summary: "A calendar account needs reauthorization",
+      since: null,
+      message: { code: "authorization_lapsed", params: { provider: "google" } },
+      cause: "access_revoked" as const,
+      last_tried_at: justNow,
+    }
+    const stopped = { ...robin, status: { ...robin.status, status: "stopped" as const, problems: [lapsed] } }
+    await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(stopped) })
+
+    const text = container.textContent
+    expect(text).toContain("Likely cause: Google no longer accepts this Google account's permission.")
+    expect(text).toContain("robin@example.test can fix this from their dashboard.")
+    expect(text).not.toContain("How to fix")
+    expect(container.querySelector(".user-overview-problem button, .user-overview-problem a")).toBeNull()
+  })
+
   it("has no untranslated text with its actions open", async () => {
     await renderPerson(pseudoI18n())
     await click(container.querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)

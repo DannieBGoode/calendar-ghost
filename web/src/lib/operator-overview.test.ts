@@ -2,7 +2,17 @@ import { describe, expect, it } from "vitest"
 
 import { testI18n } from "../i18n/testing"
 import type { ResourceUse, ServerProblem } from "./api"
-import { calendarName, callsMeaning, nextStep, problemText, resourceFacts, verdictTone, VERDICTS } from "./operator-overview"
+import {
+  AS_ADMINISTRATOR,
+  calendarName,
+  callsMeaning,
+  nextStep,
+  ownStepTarget,
+  problemText,
+  resourceFacts,
+  verdictTone,
+  VERDICTS,
+} from "./operator-overview"
 
 const i18n = testI18n()
 
@@ -137,5 +147,69 @@ describe("nextStep", () => {
     expect(nextStep(i18n, problem("stalled", "stopped running"), robin)).toBe(
       "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again.",
     )
+  })
+})
+
+describe("nextStep by Cause", () => {
+  const robin = { name: "robin@example.test" }
+  const lapse = (cause: ServerProblem["cause"]): ServerProblem => ({
+    ...problem("stopped", "A calendar account needs reauthorization"),
+    message: { code: "authorization_lapsed", params: { provider: "google" } },
+    cause,
+  })
+  const failed = (kind: ServerProblem["kind"], cause: ServerProblem["cause"]): ServerProblem => ({
+    ...problem(kind, "failed"),
+    cause,
+  })
+
+  it("tells the User an administrator's Cause is not theirs to fix", () => {
+    expect(nextStep(i18n, lapse("api_disabled"), "self")).toBe(
+      "Your administrator needs to fix this. Once they have, choose Check access on your Google account in Settings, under Connections.",
+    )
+    expect(nextStep(i18n, failed("waiting", "quota_exceeded"), "self")).toBe(
+      "Your administrator needs to fix this. Calendar Ghost tries again by itself.",
+    )
+    expect(ownStepTarget(lapse("api_disabled"))).toBe("connections")
+    expect(ownStepTarget(failed("waiting", "quota_exceeded"))).toBeNull()
+  })
+
+  it("tells an administrator the fix is theirs, wherever they read it", () => {
+    expect(nextStep(i18n, lapse("oauth_client_invalid"), robin)).toBe(
+      "You fix this as the administrator, in Google Cloud. robin@example.test has nothing to do.",
+    )
+    expect(nextStep(i18n, lapse("oauth_client_invalid"), AS_ADMINISTRATOR)).toBe(
+      "You fix this as the administrator, in Google Cloud.",
+    )
+    expect(ownStepTarget(lapse("oauth_client_invalid"), AS_ADMINISTRATOR)).toBeNull()
+  })
+
+  it("gives the User one step of their own for their Cause", () => {
+    expect(nextStep(i18n, lapse("access_revoked"), "self")).toBe(
+      "Reauthorize your Google account in Settings, under Connections.",
+    )
+    expect(ownStepTarget(lapse("access_revoked"))).toBe("connections")
+    for (const cause of ["calendar_forbidden", "calendar_not_found"] as const) {
+      expect(nextStep(i18n, failed("stopped", cause), "self")).toBe(
+        "Open the rule to choose another calendar, or remove the rule.",
+      )
+      expect(ownStepTarget(failed("stopped", cause))).toBe("rule")
+    }
+    for (const cause of ["rate_limited", "temporary"] as const) {
+      expect(nextStep(i18n, failed("waiting", cause), "self")).toBe("Nothing to do: Calendar Ghost retries by itself.")
+      expect(ownStepTarget(failed("waiting", cause))).toBeNull()
+    }
+    // Calendar Ghost does not know the fix, so the usual step is offered as trying again.
+    expect(nextStep(i18n, failed("stopped", "unknown"), "self")).toBe("Open the rule and preview it again to restart it.")
+  })
+
+  it("tells an administrator the User fixes their own Cause, and offers them nothing to do", () => {
+    expect(nextStep(i18n, lapse("access_revoked"), robin)).toBe("robin@example.test can fix this from their dashboard.")
+    expect(nextStep(i18n, failed("stopped", "calendar_not_found"), robin)).toBe(
+      "robin@example.test can fix this from their dashboard.",
+    )
+    expect(nextStep(i18n, failed("stopped", "unknown"), robin)).toBe(
+      "robin@example.test can try again from their dashboard.",
+    )
+    expect(nextStep(i18n, failed("waiting", "rate_limited"), robin)).toBe("Nothing to do: Calendar Ghost retries by itself.")
   })
 })

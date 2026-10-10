@@ -1973,6 +1973,58 @@ p {
   color: var(--foreground);
 }
 
+/* Likely causes from patterns across people: Attention Ochre asks the administrator to take a
+   look, and each hint ends with the guide's fix. */
+.installation-hints {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.installation-hints h3 {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.installation-hints ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 0.5rem;
+  list-style: none;
+}
+
+.installation-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background: var(--warning-surface);
+  color: var(--warning-foreground);
+}
+
+.installation-hint > svg {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.2rem;
+}
+
+.installation-hint p {
+  margin: 0 0 0.25rem;
+  color: var(--foreground);
+}
+
+.how-to-fix svg {
+  display: inline;
+  width: 0.8125rem;
+  height: 0.8125rem;
+  margin-left: 0.25rem;
+  vertical-align: -0.0625rem;
+}
+
 .status-meanings dl {
   display: grid;
   margin: 0.75rem 0 0;

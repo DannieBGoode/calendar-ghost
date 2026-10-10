@@ -129,11 +129,11 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function render(i18n: I18n, session: SessionStatus, policy = "invitation_only") {
+async function render(i18n: I18n, session: SessionStatus, policy = "invitation_only", own: UserOverview = overview) {
   const answers: Record<string, Response> = {
     "/api/v1/session": jsonResponse(session),
     "/api/v1/registration": jsonResponse({ policy, only_me_available: policy === "only_me" }),
-    "/api/v1/account/overview": jsonResponse(overview),
+    "/api/v1/account/overview": jsonResponse(own),
     "/api/v1/rules": jsonResponse(OWN_RULES),
   }
   requested = []
@@ -222,6 +222,54 @@ describe("AdministratorViewSection", () => {
 
     expect(container.textContent).toBe("")
     expect(requested).not.toContain("/api/v1/account/overview")
+  })
+
+  describe("with an administrator's Cause", () => {
+    const apiOff: UserOverview = {
+      ...overview,
+      status: {
+        ...overview.status,
+        problems: [
+          {
+            kind: "stopped",
+            rule_id: "rule-1",
+            summary: "A calendar account needs reauthorization",
+            since: null,
+            message: { code: "authorization_lapsed", params: { provider: "google" } },
+            cause: "api_disabled",
+            last_tried_at: null,
+          },
+        ],
+      },
+    }
+
+    it("tells the person it is not theirs to fix, and offers only what they can do", async () => {
+      await render(testI18n(), member, "invitation_only", apiOff)
+      showWhatTheySee()
+      await settle()
+
+      const text = container.textContent
+      expect(text).toContain("Likely cause: the Google Calendar API is turned off for this installation.")
+      expect(text).toContain(
+        "Your administrator needs to fix this. Once they have, choose Check access on your Google account in Settings, under Connections.",
+      )
+      expect(text).not.toContain("How to fix")
+      const open = [...container.querySelectorAll("button")].find((item) => item.textContent === "Open Connections")!
+      act(() => open.click())
+      expect(actions.openConnections).toHaveBeenCalled()
+    })
+
+    it("tells an administrator the fix is theirs, with the guide's section", async () => {
+      await render(testI18n(), administrator, "invitation_only", apiOff)
+      showWhatTheySee()
+      await settle()
+
+      expect(container.textContent).toContain("You fix this as the administrator, in Google Cloud.")
+      expect(container.querySelector<HTMLAnchorElement>("a.how-to-fix")?.href).toBe(
+        "https://calendarghost.com/docs/troubleshooting#the-google-calendar-api-is-turned-off",
+      )
+      expect([...container.querySelectorAll("button")].some((item) => item.textContent === "Open Connections")).toBe(false)
+    })
   })
 
   it("has no untranslated text", async () => {

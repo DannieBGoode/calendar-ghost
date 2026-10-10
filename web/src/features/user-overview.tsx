@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from "react"
 
+import { HowToFixLink } from "@/components/how-to-fix-link"
 import { RuleStatusBadge } from "@/components/rule-commands"
 import { VerdictBadge } from "@/components/verdict-badge"
 import { useI18n } from "@/i18n/provider"
@@ -12,8 +13,10 @@ import {
   ownStepTarget,
   problemText,
   resourceFacts,
+  THEMSELF,
   type Audience,
 } from "@/lib/operator-overview"
+import { causeOf, causeText, howToFixUrl, retryTiming } from "@/lib/causes"
 
 type Status = UserOverview["status"]
 type StatusRule = Status["rules"][number]
@@ -172,16 +175,17 @@ function RuleItem({
   )
 }
 
-/** What went wrong, who takes the next step and how, and since when. */
+/** What went wrong and its likely cause, who takes the next step and how, and since when. */
 function ProblemDetail({ problem, status, options }: { problem: ServerProblem; status: Status; options: Options }) {
   const i18n = useI18n()
+  const cause = causeOf(problem)
+  const timing = retryTiming(i18n, problem, status.scheduler.next_pass_at ?? null, options.now)
   return (
     <div className="user-overview-problem">
       <p className="user-overview-problem-text">{problemText(i18n, problem, status.counts.blocked_events)}</p>
-      <p className="user-overview-next">
-        {nextStep(i18n, problem, options.audience)}
-        {options.actions && <OwnStep problem={problem} actions={options.actions} />}
-      </p>
+      {cause && <p className="user-overview-muted">{causeText(i18n, cause)}</p>}
+      <ProblemStep problem={problem} options={options} />
+      {timing && <p className="user-overview-muted">{timing}</p>}
       {problem.since && (
         <p className="user-overview-muted">
           {i18n.t("people.overview.since", { relative: i18n.format.relative(problem.since, options.now) })}
@@ -191,10 +195,32 @@ function ProblemDetail({ problem, status, options }: { problem: ServerProblem; s
   )
 }
 
+/**
+ * Who takes the next step and how. An administrator reading an administrator's Cause gets the
+ * guide's fix; the person themself gets a link to their own step, and never one only an
+ * administrator can take.
+ */
+function ProblemStep({ problem, options }: { problem: ServerProblem; options: Options }) {
+  const i18n = useI18n()
+  const fix = options.audience === THEMSELF ? null : howToFixUrl(causeOf(problem))
+  return (
+    <p className="user-overview-next">
+      {nextStep(i18n, problem, options.audience)}
+      {fix && (
+        <>
+          {" "}
+          <HowToFixLink href={fix} />
+        </>
+      )}
+      {options.actions && <OwnStep problem={problem} audience={options.audience} actions={options.actions} />}
+    </p>
+  )
+}
+
 /** The person's own way to the step: their rule, their Google connections, or their Activity. */
-function OwnStep({ problem, actions }: { problem: ServerProblem; actions: OwnActions }) {
+function OwnStep({ problem, audience, actions }: { problem: ServerProblem; audience: Audience; actions: OwnActions }) {
   const { t } = useI18n()
-  const target = ownStepTarget(problem)
+  const target = ownStepTarget(problem, audience)
   if (target === null) return null
   const rule = problem.rule_id
   const open = {

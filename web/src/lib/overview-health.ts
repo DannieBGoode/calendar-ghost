@@ -1,6 +1,7 @@
 import { incidentText } from "@/i18n/incident-text"
 import type { I18n } from "@/i18n/translator"
 import { activitySearch } from "@/lib/activity-location"
+import { causeOf, causeText, isAdministratorCause, retryTiming, type Cause } from "@/lib/causes"
 import type { Dashboard, InstallationHealth, RunningWork, ServerProblem } from "@/lib/api"
 import type { AppView, SettingsTab } from "@/lib/navigation"
 
@@ -69,20 +70,39 @@ export function overviewRules<T extends { id: string; state: string; running: Ru
  * A rule-level problem the Overview can name: stopped until the administrator acts, waiting on
  * Google, or another open incident to review. Blocked events come from the dashboard instead.
  */
-export type RuleProblem = { ruleId: string; name: string; detail: string; kind: "stopped" | "waiting" | "review" }
+export type RuleProblem = {
+  ruleId: string
+  name: string
+  detail: string
+  kind: "stopped" | "waiting" | "review"
+  /** Why the provider failed, when it did (ADR 0031). */
+  cause: Cause | null
+  /** When a Cause that fixes itself was last and will next be tried, as far as is known. */
+  timing: string | null
+}
 
 /** The server's per-rule problems in the Overview's words. */
 export function ruleProblemsOf(
   i18n: I18n,
-  problems: ServerProblem[],
+  dashboard: Pick<Dashboard, "problems" | "next_pass_at">,
   ruleName: (ruleId: string) => string | null,
   now: number,
 ): RuleProblem[] {
-  return problems.flatMap((problem): RuleProblem[] => {
+  const nextPassAt = dashboard.next_pass_at ?? null
+  return dashboard.problems.flatMap((problem): RuleProblem[] => {
     if (problem.rule_id === null || problem.kind === "blocked" || problem.kind === "stalled") return []
     const name = ruleName(problem.rule_id) ?? ""
     const kind = problem.kind === "overdue" ? "review" : problem.kind
-    return [{ ruleId: problem.rule_id, name, detail: problemDetail(i18n, problem, now), kind }]
+    return [
+      {
+        ruleId: problem.rule_id,
+        name,
+        detail: problemDetail(i18n, problem, now),
+        kind,
+        cause: causeOf(problem),
+        timing: retryTiming(i18n, problem, nextPassAt, now),
+      },
+    ]
   })
 }
 
@@ -96,6 +116,12 @@ function problemDetail(i18n: I18n, problem: ServerProblem, now: number): string 
 }
 
 type Problem = Omit<OverviewHealth, "facts" | "others"> & { summary: string }
+
+/** Who reads the Overview: an administrator fixes the installation's own Causes. */
+type Reader = { administrator: boolean }
+
+/** What the Overview knows beyond the dashboard: its rules' names, and whether its reader administers. */
+export type OverviewContext = { ruleName?: (ruleId: string) => string | null; administrator?: boolean }
 
 function reauthorizeInSettings(i18n: I18n): HealthAction {
   return { label: i18n.t("overview.health.action.reauthorizeInSettings"), view: "settings", settingsTab: "connections" }
@@ -127,10 +153,47 @@ function stalledProblem(i18n: I18n, dashboard: Dashboard): Problem | null {
   }
 }
 
-function stoppedProblem(i18n: I18n, dashboard: Dashboard, of: ProblemsByKind): Problem | null {
+/** The administrator's Cause every one of these problems shares, if they share one. */
+function administratorCause(problems: RuleProblem[]): Cause | null {
+  const [first] = problems
+  if (!first || !isAdministratorCause(first.cause)) return null
+  return problems.every((problem) => problem.cause === first.cause) ? first.cause : null
+}
+
+/**
+ * Rules an administrator's Cause stopped. The User is told it is not theirs to fix and offered
+ * only Check access, for once it is; an administrator is sent to People, where the fix is.
+ */
+function administratorStopped(i18n: I18n, headline: string, cause: Cause, reader: Reader): Problem {
+  const likely = causeText(i18n, cause)
+  if (reader.administrator) {
+    const title = i18n.t("overview.health.administratorCause.administratorTitle")
+    return {
+      tone: "stopped",
+      headline,
+      title,
+      detail: i18n.t("overview.health.administratorCause.administratorDetail", { cause: likely }),
+      action: { label: i18n.t("overview.health.action.openPeople"), view: "people" },
+      summary: title,
+    }
+  }
+  const title = i18n.t("overview.health.administratorCause.title")
+  return {
+    tone: "stopped",
+    headline,
+    title,
+    detail: i18n.t("overview.health.administratorCause.detail", { cause: likely }),
+    action: { label: i18n.t("overview.health.action.checkAccess"), view: "settings", settingsTab: "connections" },
+    summary: title,
+  }
+}
+
+function stoppedProblem(i18n: I18n, dashboard: Dashboard, of: ProblemsByKind, reader: Reader): Problem | null {
   const stopped = of("stopped")
   if (stopped.length === 0) return null
   const headline = i18n.t("overview.health.stoppedHeadline", { count: stopped.length })
+  const byAdministrator = administratorCause(stopped)
+  if (byAdministrator) return administratorStopped(i18n, headline, byAdministrator, reader)
   // Disconnected, or no longer accepted by Google: either way the fix is to reauthorize.
   const unauthorized = dashboard.disconnected_accounts + dashboard.lapsed_accounts
   if (unauthorized > 0) {
@@ -159,7 +222,12 @@ function stoppedProblem(i18n: I18n, dashboard: Dashboard, of: ProblemsByKind): P
     tone: "stopped",
     headline,
     title: named.name,
-    detail: i18n.t("overview.health.stoppedNamedDetail", { detail: named.detail }),
+    detail: [
+      i18n.t("overview.health.stoppedNamedDetail", { detail: named.detail }),
+      ...(named.cause === "calendar_forbidden" || named.cause === "calendar_not_found"
+        ? [i18n.t("overview.health.chooseAnotherCalendar")]
+        : []),
+    ].join(" "),
     action: ruleAction(i18n, named),
     summary: i18n.t("overview.health.ruleStoppedSyncing", { name: named.name }),
   }
@@ -205,6 +273,15 @@ function blockedProblem(i18n: I18n, dashboard: Dashboard): Problem | null {
   }
 }
 
+/** Why one rule waits: Google, said with when it was tried, or a quota only an administrator raises. */
+function waitingDetail(i18n: I18n, named: RuleProblem): string {
+  if (named.cause && isAdministratorCause(named.cause)) {
+    return i18n.t("overview.health.administratorCause.waiting", { cause: causeText(i18n, named.cause) })
+  }
+  const detail = i18n.t("overview.health.waitingDetailNamed", { detail: named.detail })
+  return named.timing ? `${detail} ${named.timing}` : detail
+}
+
 function waitingProblem(i18n: I18n, of: ProblemsByKind): Problem | null {
   const waiting = of("waiting")
   if (waiting.length === 0) return null
@@ -213,9 +290,7 @@ function waitingProblem(i18n: I18n, of: ProblemsByKind): Problem | null {
     tone: "waiting",
     headline: i18n.t("overview.health.waitingHeadline"),
     title: named?.name ?? "",
-    detail: named
-      ? i18n.t("overview.health.waitingDetailNamed", { detail: named.detail })
-      : i18n.t("overview.health.waitingDetailGeneric", { count: waiting.length }),
+    detail: named ? waitingDetail(i18n, named) : i18n.t("overview.health.waitingDetailGeneric", { count: waiting.length }),
     action: null,
     summary: named
       ? i18n.t("overview.health.ruleWaitingForGoogle", { name: named.name })
@@ -236,11 +311,11 @@ function openIncidentsProblem(i18n: I18n, dashboard: Dashboard): Problem {
 }
 
 /** Every current problem, most urgent first. */
-function problemsOf(i18n: I18n, dashboard: Dashboard, ruleProblems: RuleProblem[]): Problem[] {
+function problemsOf(i18n: I18n, dashboard: Dashboard, ruleProblems: RuleProblem[], reader: Reader): Problem[] {
   const of: ProblemsByKind = (kind) => ruleProblems.filter((problem) => problem.kind === kind)
   const problems = [
     stalledProblem(i18n, dashboard),
-    stoppedProblem(i18n, dashboard, of),
+    stoppedProblem(i18n, dashboard, of, reader),
     reviewProblem(i18n, of),
     blockedProblem(i18n, dashboard),
     waitingProblem(i18n, of),
@@ -354,13 +429,15 @@ export function overviewHealth(
   i18n: I18n,
   dashboard: Dashboard,
   now: number = Date.now(),
-  ruleName: (ruleId: string) => string | null = () => null,
+  { ruleName = () => null, administrator = false }: OverviewContext = {},
 ): OverviewHealth {
+  const reader: Reader = { administrator }
   const tone = TONE_OF[dashboard.status]
   const setup = accountSetupHealth(i18n, dashboard, tone)
   if (setup) return setup
   const facts = healthFacts(i18n, dashboard, now)
-  const [main, ...rest] = problemsOf(i18n, dashboard, ruleProblemsOf(i18n, dashboard.problems, ruleName, now))
+  const ruleProblems = ruleProblemsOf(i18n, dashboard, ruleName, now)
+  const [main, ...rest] = problemsOf(i18n, dashboard, ruleProblems, reader)
   if (main) {
     return {
       tone,

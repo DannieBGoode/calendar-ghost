@@ -2,6 +2,7 @@ import { providerName } from "@/i18n/api-errors"
 import { incidentText } from "@/i18n/incident-text"
 import type { I18n } from "@/i18n/translator"
 import type { ResourceUse, ServerProblem, UserOverview, Verdict } from "@/lib/api"
+import { causeOf, fixesItself, isAdministratorCause, type Cause } from "@/lib/causes"
 
 /** Every Installation Status verdict, most urgent first, as CONTEXT.md lists them. */
 export const VERDICTS: readonly Verdict[] = ["stalled", "stopped", "review", "waiting", "paused", "setup", "healthy"]
@@ -92,26 +93,49 @@ export function callsMeaning(i18n: I18n, calls: readonly ProviderCalls[]): strin
   return i18n.t(limited > 0 ? "people.overview.callsMeaning.limited" : "people.overview.callsMeaning.normal")
 }
 
-/** Who acts on a problem: the person themself in their own Settings, or someone an administrator
- * is looking at, by name. */
-export type Audience = "self" | { name: string }
+/**
+ * Who reads a problem: the person themself, the person themself when they administer the
+ * installation, or an administrator looking at someone else, by name.
+ */
+export type Audience = "self" | "administrator" | { name: string }
 
 /** The person themself, reading what administrators see about them. */
 export const THEMSELF: Audience = "self"
+
+/** The person themself, who also administers the installation and so fixes its Causes. */
+export const AS_ADMINISTRATOR: Audience = "administrator"
 
 /** The signed-in User's own overview; every change to their rules, accounts, or Activity refreshes it. */
 export const OWN_OVERVIEW_QUERY = ["own-overview"] as const
 
 const REAUTHORIZE_KINDS = new Set(["authentication", "authorization"])
 
-function step(problem: ServerProblem): "reauthorize" | "preview" | "activity" | "overdue" | "waiting" | "stalled" {
+type Step = "reauthorize" | "preview" | "activity" | "overdue" | "waiting" | "stalled" | "administrator" | "calendar"
+
+/** Whether a stopped problem is an account's Lapsed Authorization. */
+function lapsed(problem: ServerProblem): boolean {
+  const message = problem.message
+  return (
+    problem.kind === "stopped" &&
+    (message?.code === "authorization_lapsed" || REAUTHORIZE_KINDS.has(String(message?.params.kind)))
+  )
+}
+
+/** The step a problem's Cause gives, when its Cause decides it (ADR 0031). */
+function causeStep(cause: Cause | null): Step | null {
+  if (isAdministratorCause(cause)) return "administrator"
+  if (fixesItself(cause)) return "waiting"
+  if (cause === "access_revoked") return "reauthorize"
+  if (cause === "calendar_forbidden" || cause === "calendar_not_found") return "calendar"
+  return null
+}
+
+function step(problem: ServerProblem): Step {
+  const byCause = causeStep(causeOf(problem))
+  if (byCause !== null) return byCause
   switch (problem.kind) {
-    case "stopped": {
-      const message = problem.message
-      const lapsed =
-        message?.code === "authorization_lapsed" || REAUTHORIZE_KINDS.has(String(message?.params.kind))
-      return lapsed ? "reauthorize" : "preview"
-    }
+    case "stopped":
+      return lapsed(problem) ? "reauthorize" : "preview"
     case "review":
     case "blocked":
       return "activity"
@@ -120,20 +144,51 @@ function step(problem: ServerProblem): "reauthorize" | "preview" | "activity" | 
   }
 }
 
-/** The one next step for a problem, saying who takes it, in calendar language. */
+/** The administrator's Cause, to whoever reads it: theirs to fix, or not the User's. */
+function administratorStep(i18n: I18n, problem: ServerProblem, audience: Audience): string {
+  if (audience === "administrator") return i18n.t("people.overview.next.administrator.administrator")
+  if (audience !== "self") return i18n.t("people.overview.next.administrator.person", { name: audience.name })
+  return lapsed(problem)
+    ? i18n.t("people.overview.next.administrator.selfLapsed")
+    : i18n.t("people.overview.next.administrator.self")
+}
+
+/**
+ * The one next step for a problem, saying who takes it, in calendar language. An administrator
+ * never acts on a User's own Cause: they read that the User fixes it from their dashboard.
+ */
 export function nextStep(i18n: I18n, problem: ServerProblem, audience: Audience): string {
   const next = step(problem)
   if (next === "waiting") return i18n.t("people.overview.next.waiting")
-  return audience === "self"
-    ? i18n.t(`people.overview.next.${next}.self`)
-    : i18n.t(`people.overview.next.${next}.person`, { name: audience.name })
+  if (next === "administrator") return administratorStep(i18n, problem, audience)
+  const cause = causeOf(problem)
+  if (typeof audience === "object") {
+    if (cause === "unknown") return i18n.t("people.overview.next.ownCause.unknown", { name: audience.name })
+    if (cause !== null) return i18n.t("people.overview.next.ownCause.person", { name: audience.name })
+    return i18n.t(`people.overview.next.${next as Exclude<Step, "waiting" | "administrator" | "calendar">}.person`, {
+      name: audience.name,
+    })
+  }
+  return i18n.t(`people.overview.next.${next}.self`)
 }
 
 /** Where the person themself goes for a problem's next step, when it is a page of their own. */
-export function ownStepTarget(problem: ServerProblem): "connections" | "rule" | "activity" | null {
+export function ownStepTarget(problem: ServerProblem, audience: Audience = THEMSELF): OwnTarget | null {
   const next = step(problem)
-  if (next === "reauthorize") return "connections"
-  if ((next === "preview" || next === "overdue") && problem.rule_id) return "rule"
-  if (next === "activity") return "activity"
-  return null
+  // Once an administrator fixes their Cause, Check access restarts what the lapse stopped.
+  if (next === "administrator") return audience === "self" && lapsed(problem) ? "connections" : null
+  return problem.rule_id || !RULE_STEPS.has(next) ? (STEP_TARGETS[next] ?? null) : null
 }
+
+type OwnTarget = "connections" | "rule" | "activity"
+
+const STEP_TARGETS: Partial<Record<Step, OwnTarget>> = {
+  reauthorize: "connections",
+  preview: "rule",
+  overdue: "rule",
+  calendar: "rule",
+  activity: "activity",
+}
+
+/** Steps taken on the problem's own rule, so only a problem naming one has them. */
+const RULE_STEPS: ReadonlySet<Step> = new Set(["preview", "overdue", "calendar"])

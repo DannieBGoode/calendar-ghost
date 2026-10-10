@@ -414,6 +414,40 @@ describe("People page", () => {
     expect(summary.textContent).toContain("Scheduled synchronization stopped running just now.")
   })
 
+  it("suggests each likely cause people share, with how to fix it", async () => {
+    const hinted = {
+      ...health,
+      hints: [
+        { kind: "shared_cause", cause: "api_disabled", users: 2, anchor: "the-google-calendar-api-is-turned-off" },
+        {
+          kind: "testing_mode",
+          cause: "access_revoked",
+          users: 3,
+          anchor: "google-accounts-stop-working-7-days-after-connecting",
+        },
+      ],
+    }
+    await renderPeople(testI18n(), { answers: { "GET /api/v1/installation/health": jsonResponse(hinted) } })
+    const summary = container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+
+    const hints = [...summary.querySelectorAll("li.installation-hint")]
+    expect(hints.map((hint) => hint.querySelector("p")?.textContent)).toEqual([
+      "2 people stopped for the same likely cause: the Google Calendar API is turned off for this installation.",
+      "3 people lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode.",
+    ])
+    expect(hints.map((hint) => hint.querySelector("a")?.getAttribute("href"))).toEqual([
+      "https://calendarghost.com/docs/troubleshooting#the-google-calendar-api-is-turned-off",
+      "https://calendarghost.com/docs/troubleshooting#google-accounts-stop-working-7-days-after-connecting",
+    ])
+    // Each link says which hint it fixes, so a screen reader can tell them apart.
+    expect(hints[0]?.querySelector("a")?.getAttribute("aria-label")).toContain("How to fix: 2 people stopped")
+  })
+
+  it("shows no hints when nothing suggests one", async () => {
+    await renderPeople(testI18n())
+    expect(container.querySelector(".installation-hints")).toBeNull()
+  })
+
   it("filters and sorts by sync status, kept in the address", async () => {
     await renderPeople(testI18n())
     await select("people-verdict", "review")

@@ -7,7 +7,8 @@ import { VerdictBadge } from "@/components/verdict-badge"
 import { ROWS, UserOverviewDetails, type OwnActions } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
 import { api, type RuleSummary, type UserOverview } from "@/lib/api"
-import { OWN_OVERVIEW_QUERY, THEMSELF } from "@/lib/operator-overview"
+import { AS_ADMINISTRATOR, OWN_OVERVIEW_QUERY, THEMSELF } from "@/lib/operator-overview"
+import { isAdministrator } from "@/lib/people"
 import { useDisclosureFocus } from "@/lib/use-disclosure-focus"
 import { useNow } from "@/lib/use-now"
 import { useOverviewSharing } from "@/lib/use-people-access"
@@ -89,11 +90,14 @@ function AdministratorView({ actions }: { actions: OwnActions }) {
 function OwnOverview({ overview, actions }: { overview: UserOverview; actions: OwnActions }) {
   const now = useNow()
   const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session })
+  // An administrator fixes the installation's own Causes; everyone else is told it is not theirs.
+  const audience = isAdministrator(session.data?.user) ? AS_ADMINISTRATOR : THEMSELF
   return (
     <UserOverviewDetails
       overview={overview}
       now={now}
-      audience={THEMSELF}
+      audience={audience}
       headingLevel={3}
       layout={ROWS}
       ownNames={ownCalendarNames(overview, rules.data ?? [])}

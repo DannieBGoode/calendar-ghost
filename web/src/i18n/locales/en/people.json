@@ -210,6 +210,19 @@
       "stalled": {
         "self": "Your administrator restarts Calendar Ghost. Nothing synchronizes until it runs again.",
         "person": "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again."
+      },
+      "calendar": {
+        "self": "Open the rule to choose another calendar, or remove the rule."
+      },
+      "administrator": {
+        "self": "Your administrator needs to fix this. Calendar Ghost tries again by itself.",
+        "selfLapsed": "Your administrator needs to fix this. Once they have, choose Check access on your Google account in Settings, under Connections.",
+        "administrator": "You fix this as the administrator, in Google Cloud.",
+        "person": "You fix this as the administrator, in Google Cloud. {name} has nothing to do."
+      },
+      "ownCause": {
+        "person": "{name} can fix this from their dashboard.",
+        "unknown": "{name} can try again from their dashboard."
       }
     },
     "statusTitle": "Synchronization",
@@ -245,7 +258,24 @@
     "count": "{verdict}: {count}",
     "countsLabel": "Show only",
     "schedulerStalled": "Scheduled synchronization stopped running {relative}.",
-    "meanings": "What each sync status means"
+    "meanings": "What each sync status means",
+    "hints": {
+      "title": "Likely causes",
+      "shared": {
+        "one": "{count} person stopped for the same likely cause: {cause}.",
+        "other": "{count} people stopped for the same likely cause: {cause}."
+      },
+      "testingMode": {
+        "one": "{count} person lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode.",
+        "other": "{count} people lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode."
+      },
+      "unrecognized": {
+        "one": "{count} person failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason.",
+        "other": "{count} people failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason."
+      },
+      "howToFix": "How to fix",
+      "howToFixLabel": "How to fix: {hint}"
+    }
   },
   "person": {
     "back": "People",
@@ -271,5 +301,20 @@
       "other": "{count} waiting"
     },
     "documentTitle": "Invitations – People"
+  },
+  "cause": {
+    "label": "Likely cause: {cause}.",
+    "api_disabled": "the Google Calendar API is turned off for this installation",
+    "quota_exceeded": "this installation's daily quota of Google requests is used up",
+    "oauth_client_invalid": "Google no longer accepts this installation's OAuth client",
+    "access_revoked": "Google no longer accepts this Google account's permission",
+    "calendar_forbidden": "the Google account may not change this calendar",
+    "calendar_not_found": "the calendar no longer exists, or is no longer shared with the account",
+    "rate_limited": "Google asked Calendar Ghost to slow down",
+    "temporary": "Google failed for a moment",
+    "unknown": "Google refused for a reason Calendar Ghost does not recognize",
+    "lastTried": "Last tried {relative}.",
+    "triesAgain": "Tries again {relative}.",
+    "howToFix": "How to fix"
   }
 }

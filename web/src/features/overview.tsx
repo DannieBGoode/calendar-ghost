@@ -25,6 +25,7 @@ import {
 } from "@/lib/navigation"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
 import { overviewHealth } from "@/lib/overview-health"
+import { isAdministrator } from "@/lib/people"
 import { workRefreshInterval } from "@/lib/rule-work"
 import { useNow } from "@/lib/use-now"
 import { useRuleEndpoints, type RuleEndpoints } from "@/lib/use-rule-endpoints"
@@ -43,21 +44,27 @@ function useOverviewData() {
     refetchInterval: (query) => workRefreshInterval(query.state.data, REFRESH_INTERVAL),
   })
   const google = useQuery({ queryKey: ["google-configuration"], queryFn: api.googleConfiguration })
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session })
   const { endpoints } = useRuleEndpoints(rules.data ?? [])
-  return { dashboard, rules, google, endpoints }
+  // An administrator fixes the installation's own Causes; everyone else is told it is not theirs.
+  const administrator = isAdministrator(session.data?.user)
+  return { dashboard, rules, google, endpoints, administrator }
 }
 
 export function OverviewView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
   const i18n = useI18n()
   const { t } = i18n
   const now = useNow()
-  const { dashboard, rules, google, endpoints } = useOverviewData()
+  const { dashboard, rules, google, endpoints, administrator } = useOverviewData()
 
   if (dashboard.isPending || rules.isPending || google.isPending) return <PageSkeleton label={t("overview.loading")} />
   if (dashboard.error || rules.error || google.error) return <LoadFailure title={t("overview.loadFailure")} />
 
   const ruleNames = new Map(rules.data.map((rule) => [rule.id, ruleName(i18n, endpoints(rule))]))
-  const health = overviewHealth(i18n, dashboard.data, now, (ruleId) => ruleNames.get(ruleId) ?? null)
+  const health = overviewHealth(i18n, dashboard.data, now, {
+    ruleName: (ruleId) => ruleNames.get(ruleId) ?? null,
+    administrator,
+  })
 
   return (
     <div className="page-section overview-page">

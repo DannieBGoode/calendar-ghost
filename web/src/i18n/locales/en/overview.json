@@ -26,7 +26,17 @@
       "reviewThisRule": "Review this rule",
       "reviewRules": "Review rules",
       "createRule": "Create a rule",
-      "openActivity": "Open Activity"
+      "openActivity": "Open Activity",
+      "checkAccess": "Check access in Settings",
+      "openPeople": "Open People"
+    },
+    "chooseAnotherCalendar": "Choose another calendar, or remove the rule.",
+    "administratorCause": {
+      "title": "Your administrator needs to fix this",
+      "detail": "{cause} Once they have fixed it, choose Check access on your Google account in Settings to restart your rules.",
+      "administratorTitle": "You fix this as the administrator",
+      "administratorDetail": "{cause} People shows how to fix it in Google Cloud.",
+      "waiting": "{cause} Your administrator needs to fix this; Calendar Ghost tries again by itself."
     },
     "setup": {
       "title": "Set up your first synchronization",

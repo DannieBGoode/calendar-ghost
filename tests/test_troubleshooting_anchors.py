@@ -36,3 +36,13 @@ def test_every_hint_links_to_a_section_of_the_guide() -> None:
     linked = {*CAUSE_ANCHORS.values(), TESTING_MODE_ANCHOR, UNRECOGNIZED_ANCHOR}
 
     assert linked <= anchors, linked - anchors
+
+
+def test_every_how_to_fix_link_in_the_web_ui_reaches_a_section_of_the_guide() -> None:
+    causes = Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "causes.ts"
+    block = causes.read_text().split("const ADMINISTRATOR_ANCHORS", 1)[1].split("}", 1)[0]
+    linked = dict(re.findall(r"(\w+): \"([a-z0-9-]+)\"", block))
+
+    # The Web UI links each administrator's Cause where Installation Hints do.
+    assert linked == {cause.value: anchor for cause, anchor in CAUSE_ANCHORS.items()}
+    assert set(linked.values()) <= guide_anchors()

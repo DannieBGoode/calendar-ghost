@@ -487,6 +487,7 @@ describe("People", () => {
         users: { setup: 1 },
         disabled_users: 0,
         checked_at: "2026-10-01T09:00:00Z",
+        hints: [],
       },
       [`/api/v1/users/${administrator.id}/overview`]: { ...NOTHING_SET_UP, user: { ...NOTHING_SET_UP.user, id: administrator.id } },
       "/api/v1/invitations": [],

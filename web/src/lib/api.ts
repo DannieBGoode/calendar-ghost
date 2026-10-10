@@ -218,6 +218,7 @@ export type PersonState = Person["state"]
 export type PersonRow = Schemas["PersonResponse"]
 /** The whole installation's verdict, and how many Users are in each; it names nobody. */
 export type InstallationHealthReport = Schemas["InstallationHealthResponse"]
+export type InstallationHint = Schemas["InstallationHintResponse"]
 /** An Installation Status verdict, as People filters and sorts by it. */
 export type Verdict = PersonRow["verdict"]
 /** How much one User uses: counts only, never what their records say. */

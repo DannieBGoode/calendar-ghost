@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query"
-import { ChevronDown, CircleHelp, UserX } from "lucide-react"
+import { ChevronDown, CircleHelp, Lightbulb, UserX } from "lucide-react"
 
+import { HowToFixLink } from "@/components/how-to-fix-link"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { VerdictBadge, VerdictIcon } from "@/components/verdict-badge"
 import { useI18n } from "@/i18n/provider"
-import { api, type InstallationHealthReport, type PeopleQuery } from "@/lib/api"
+import { api, type InstallationHealthReport, type InstallationHint, type PeopleQuery } from "@/lib/api"
+import { hintText, troubleshootingUrl } from "@/lib/causes"
 import { VERDICTS } from "@/lib/operator-overview"
 
 const REFRESH_INTERVAL = 60_000
@@ -75,9 +77,38 @@ function HealthReport({
           {t("people.health.schedulerStalled", { relative: i18n.format.relative(incident.since, now) })}
         </p>
       ))}
+      <Hints hints={report.hints} />
       <HealthCounts report={report} filters={filters} onFilter={onFilter} />
       <StatusMeanings />
     </>
+  )
+}
+
+/** Likely causes from patterns across people, each with the guide's section on its fix. */
+function Hints({ hints }: { hints: InstallationHint[] }) {
+  const i18n = useI18n()
+  if (hints.length === 0) return null
+  return (
+    <section className="installation-hints" aria-labelledby="installation-hints-title">
+      <h3 id="installation-hints-title">{i18n.t("people.health.hints.title")}</h3>
+      <ul>
+        {hints.map((hint) => {
+          const text = hintText(i18n, hint)
+          return (
+            <li key={`${hint.kind}:${hint.cause}`} className="installation-hint">
+              <Lightbulb aria-hidden="true" />
+              <div>
+                <p>{text}</p>
+                <HowToFixLink
+                  href={troubleshootingUrl(hint.anchor)}
+                  label={i18n.t("people.health.hints.howToFixLabel", { hint: text })}
+                />
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
 
