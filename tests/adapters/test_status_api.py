@@ -373,6 +373,7 @@ def test_the_scheduler_block_says_whether_a_scheduler_is_configured(tmp_path: Pa
         "configured": False,
         "last_pass_completed_at": None,
         "current_pass_started_at": None,
+        "next_pass_at": None,
     }
 
 

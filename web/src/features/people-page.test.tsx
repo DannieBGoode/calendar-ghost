@@ -76,6 +76,7 @@ const health: InstallationHealthReport = {
   users: { stopped: 1, healthy: 1, setup: 2 },
   disabled_users: 1,
   checked_at: justNow,
+  hints: [],
 }
 
 type Call = { method: string; path: string; query: URLSearchParams; body: unknown }

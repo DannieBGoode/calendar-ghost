@@ -1265,6 +1265,8 @@ export interface components {
             account_id: string | null;
             /** Category */
             category: string;
+            /** Cause */
+            cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /** Id */
             id: string;
             message: components["schemas"]["IncidentMessageResponse"] | null;
@@ -1295,6 +1297,8 @@ export interface components {
             checked_at: string;
             /** Disabled Users */
             disabled_users: number;
+            /** Hints */
+            hints: components["schemas"]["InstallationHintResponse"][];
             /** Incidents */
             incidents: components["schemas"]["InstallationIncidentResponse"][];
             /** Needs Attention */
@@ -1308,6 +1312,26 @@ export interface components {
             users: {
                 [key: string]: number;
             };
+        };
+        /**
+         * InstallationHintResponse
+         * @description A likely cause from a pattern across Users; it names none of them (ADR 0031).
+         */
+        InstallationHintResponse: {
+            /** Anchor */
+            anchor: string;
+            /**
+             * Cause
+             * @enum {string}
+             */
+            cause: "api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "shared_cause" | "testing_mode" | "unrecognized";
+            /** Users */
+            users: number;
         };
         /** InstallationIncidentResponse */
         InstallationIncidentResponse: {
@@ -1486,11 +1510,15 @@ export interface components {
         };
         /** ProblemResponse */
         ProblemResponse: {
+            /** Cause */
+            cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /**
              * Kind
              * @enum {string}
              */
             kind: "stalled" | "stopped" | "review" | "overdue" | "blocked" | "waiting";
+            /** Last Tried At */
+            last_tried_at: string | null;
             message: components["schemas"]["IncidentMessageResponse"] | null;
             /** Rule Id */
             rule_id: string | null;
@@ -1832,6 +1860,8 @@ export interface components {
             current_pass_started_at: string | null;
             /** Last Pass Completed At */
             last_pass_completed_at: string | null;
+            /** Next Pass At */
+            next_pass_at: string | null;
         };
         /** SessionResponse */
         SessionResponse: {
@@ -1934,6 +1964,8 @@ export interface components {
         StatusIncidentResponse: {
             /** Category */
             category: string;
+            /** Cause */
+            cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /** Opened At */
             opened_at: string;
             /** Rule Id */

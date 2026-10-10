@@ -34,7 +34,7 @@ const robin: UserOverview = {
     version: "0.1.1",
     checked_at: justNow,
     last_synced_at: justNow,
-    scheduler: { configured: true, last_pass_completed_at: justNow, current_pass_started_at: null },
+    scheduler: { configured: true, last_pass_completed_at: justNow, current_pass_started_at: null, next_pass_at: null },
     counts: {
       rules: 1,
       running: 1,
@@ -46,7 +46,7 @@ const robin: UserOverview = {
       disconnected_accounts: 0,
       lapsed_accounts: 0,
     },
-    problems: [{ kind: "blocked", rule_id: "rule-1", summary: "3 events couldn't be synced", since: null, message: null }],
+    problems: [{ kind: "blocked", rule_id: "rule-1", summary: "3 events couldn't be synced", since: null, message: null, cause: null, last_tried_at: null }],
     rules: [
       {
         id: "rule-1",

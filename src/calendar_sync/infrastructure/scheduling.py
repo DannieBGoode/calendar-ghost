@@ -5,7 +5,7 @@ import logging
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from itertools import zip_longest
 
 from calendar_sync.application.errors import (
@@ -71,6 +71,8 @@ class SyncScheduler:
         self._pass_started_at: datetime | None = None
         self._last_completed_at: datetime | None = None
         self._last_pass_rule_ids: frozenset[str] = frozenset()
+        # The first pass begins as soon as the loop starts.
+        self._next_pass_at: datetime | None = self._running_since
 
     async def run_forever(self) -> None:
         while True:
@@ -81,9 +83,11 @@ class SyncScheduler:
                 await self.run_once()
             except Exception:
                 logger.exception("Scheduled pass failed; trying again at the next interval")
+            self._next_pass_at = self._clock.now() + timedelta(seconds=self._interval_seconds)
             await asyncio.sleep(self._interval_seconds)
 
     async def run_once(self) -> None:
+        self._next_pass_at = None
         self._pass_started_at = self._clock.now()
         try:
             listed = await self._run_pass()
@@ -102,6 +106,7 @@ class SyncScheduler:
             self._pass_started_at,
             self._last_completed_at,
             self._last_pass_rule_ids,
+            self._next_pass_at,
         )
 
     async def _run_pass(self) -> frozenset[str]:

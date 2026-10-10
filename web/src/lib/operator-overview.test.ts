@@ -12,6 +12,8 @@ const problem = (kind: ServerProblem["kind"], summary: string): ServerProblem =>
   summary,
   since: null,
   message: null,
+  cause: null,
+  last_tried_at: null,
 })
 
 describe("verdictTone", () => {

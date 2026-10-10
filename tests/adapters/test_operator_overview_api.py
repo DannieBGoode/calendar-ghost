@@ -10,6 +10,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from calendar_sync.application.causes import Cause
+from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.installation_health import (
     InstallationIncident,
     InstallationNotifications,
@@ -26,7 +28,7 @@ from calendar_sync.application.ports import (
 )
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.bootstrap.config import Settings
-from calendar_sync.bootstrap.container import build_adapters, compose
+from calendar_sync.bootstrap.container import Container, build_adapters, compose
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.connections import transaction
@@ -57,7 +59,13 @@ class Person:
             *(self.email(account) for account in self.accounts),
             f"{self.marker}-calendar-id",
             f"{self.marker}-event-title",
+            self.google_message,
         )
+
+    @property
+    def google_message(self) -> str:
+        """What Google's own message might say, quoting the request: never repeated anywhere."""
+        return f"{self.marker}-google-message about {self.marker}-calendar-id"
 
     def email(self, account: str) -> str:
         return f"{account}-email@mail.example"
@@ -117,6 +125,25 @@ def _seed(database: Path, person: Person) -> None:
         uow.commit()
 
 
+def _fail(container: Container, person: Person) -> None:
+    """Google refused the person's work account because the Calendar API is turned off, with a
+    message that quotes their calendar."""
+    services = container.for_user(person.user)
+    with services.rule_health.unit_of_work() as uow:
+        stopped = uow.rules.get(SyncRuleId(f"{person.marker}-other-rule"))
+    assert stopped is not None
+    services.rule_health.record_failure(
+        stopped,
+        ProviderFailure(
+            ProviderFailureKind.AUTHORIZATION,
+            f"<HttpError 403 returned {person.google_message!r}>",
+            account_id=ConnectedAccountId(person.accounts[1]),
+            provider=ProviderKind.GOOGLE,
+            cause=Cause.API_DISABLED,
+        ),
+    )
+
+
 @dataclass
 class RecordingNotifications(InstallationNotifications):
     sent: list[InstallationIncident] = field(default_factory=list)
@@ -155,7 +182,10 @@ def installation(tmp_path: Path) -> Iterator[Installation]:
     member = Person(add_user(database, OTHER_USER, role="user", email=MEMBER_EMAIL), "bravo")
     for person in (admin, member):
         _seed(database, person)
-    with TestClient(create_app(compose(settings, adapters))) as client:
+    container = compose(settings, adapters)
+    for person in (admin, member):
+        _fail(container, person)
+    with TestClient(create_app(container)) as client:
         yielded = Installation(database, admin, member, client)
         yielded.as_admin()
         yield yielded
@@ -174,8 +204,8 @@ def test_people_shows_each_users_verdict_problems_last_sync_and_resource_use(
     assert response.headers["cache-control"] == "no-store"
 
     member = _person_row(page, installation.member.user)
-    # Without a master key no scheduler runs, so every User with an enabled rule reads stalled.
-    assert member["verdict"] == "stalled"
+    # Google refused one of each User's accounts, which stopped both of their rules.
+    assert member["verdict"] == "stopped"
     assert member["problems"] >= 2
     assert member["last_synced_at"] is None
     assert member["resources"] == {
@@ -190,11 +220,11 @@ def test_people_shows_each_users_verdict_problems_last_sync_and_resource_use(
 def test_people_filter_and_sort_by_verdict(installation: Installation) -> None:
     client = installation.client
 
-    stalled = client.get("/api/v1/users", params={"verdict": "stalled"}).json()
+    stopped = client.get("/api/v1/users", params={"verdict": "stopped"}).json()
     healthy = client.get("/api/v1/users", params={"verdict": "healthy"}).json()
     sorted_page = client.get("/api/v1/users", params={"sort": "verdict", "page_size": 1}).json()
 
-    assert stalled["total"] == 2
+    assert stopped["total"] == 2
     assert (healthy["total"], healthy["users"]) == (0, [])
     assert (sorted_page["total"], len(sorted_page["users"])) == (2, 1)
 
@@ -261,6 +291,8 @@ def test_no_calendar_account_or_event_reaches_the_overview_health_notifications_
     ]
     installation.as_member()
     shown.append(client.get("/api/v1/account/overview").text)
+    # A User's own status names their own calendars, but never repeats what Google said.
+    own = [client.get(path).text for path in ("/api/v1/status", "/api/v1/incidents")]
     notifications = RecordingNotifications()
     SchedulerWatch(Stalled(), notifications, SystemClock()).check()
     shown.append(repr(notifications.sent))
@@ -271,3 +303,45 @@ def test_no_calendar_account_or_event_reaches_the_overview_health_notifications_
         for text in shown:
             assert marker not in text
     assert MEMBER_EMAIL in shown[0]
+    for text in own:
+        assert installation.member.google_message not in text
+        assert '"cause":"api_disabled"' in text
+    # The Cause and its hint reached them, without what Google said.
+    assert '"cause":"api_disabled"' in shown[3]
+    assert '"anchor":"the-google-calendar-api-is-turned-off"' in shown[4]
+
+
+def test_installation_health_hints_a_cause_people_share_without_naming_them(
+    installation: Installation,
+) -> None:
+    health = installation.client.get("/api/v1/installation/health").json()
+
+    assert health["hints"] == [
+        {
+            "kind": "shared_cause",
+            "cause": "api_disabled",
+            "users": 2,
+            "anchor": "the-google-calendar-api-is-turned-off",
+        }
+    ]
+
+
+def test_each_problem_says_its_cause_and_when_it_was_last_tried(
+    installation: Installation,
+) -> None:
+    client = installation.client
+    seen_by_admin = client.get(f"/api/v1/users/{installation.member.user.value}/overview").json()
+    installation.as_member()
+    status = client.get("/api/v1/status").json()
+    incidents = client.get("/api/v1/incidents").json()
+
+    lapsed = [p for p in seen_by_admin["status"]["problems"] if p["kind"] == "stopped"]
+    assert lapsed
+    assert {problem["cause"] for problem in lapsed} == {"api_disabled"}
+    assert all(problem["last_tried_at"] for problem in lapsed)
+    assert {p["cause"] for p in status["problems"] if p["kind"] == "stopped"} == {"api_disabled"}
+    assert {incident["cause"] for incident in status["incidents"]} == {"api_disabled"}
+    assert {incident["cause"] for incident in incidents} == {"api_disabled"}
+    # Problems no provider failure explains name no Cause.
+    assert {p["cause"] for p in status["problems"] if p["kind"] == "blocked"} == {None}
+    assert "next_pass_at" in status["scheduler"]

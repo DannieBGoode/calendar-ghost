@@ -887,6 +887,28 @@
             "title": "Category",
             "type": "string"
           },
+          "cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "api_disabled",
+                  "quota_exceeded",
+                  "oauth_client_invalid",
+                  "access_revoked",
+                  "calendar_forbidden",
+                  "calendar_not_found",
+                  "rate_limited",
+                  "temporary",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -972,7 +994,8 @@
           "resolved_at",
           "resolution",
           "account_id",
-          "message"
+          "message",
+          "cause"
         ],
         "title": "IncidentResponse",
         "type": "object"
@@ -987,6 +1010,13 @@
           "disabled_users": {
             "title": "Disabled Users",
             "type": "integer"
+          },
+          "hints": {
+            "items": {
+              "$ref": "#/components/schemas/InstallationHintResponse"
+            },
+            "title": "Hints",
+            "type": "array"
           },
           "incidents": {
             "items": {
@@ -1037,9 +1067,55 @@
           "incidents",
           "users",
           "disabled_users",
-          "checked_at"
+          "checked_at",
+          "hints"
         ],
         "title": "InstallationHealthResponse",
+        "type": "object"
+      },
+      "InstallationHintResponse": {
+        "description": "A likely cause from a pattern across Users; it names none of them (ADR 0031).",
+        "properties": {
+          "anchor": {
+            "title": "Anchor",
+            "type": "string"
+          },
+          "cause": {
+            "enum": [
+              "api_disabled",
+              "quota_exceeded",
+              "oauth_client_invalid",
+              "access_revoked",
+              "calendar_forbidden",
+              "calendar_not_found",
+              "rate_limited",
+              "temporary",
+              "unknown"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "shared_cause",
+              "testing_mode",
+              "unrecognized"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "users": {
+            "title": "Users",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "cause",
+          "users",
+          "anchor"
+        ],
+        "title": "InstallationHintResponse",
         "type": "object"
       },
       "InstallationIncidentResponse": {
@@ -1565,6 +1641,28 @@
       },
       "ProblemResponse": {
         "properties": {
+          "cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "api_disabled",
+                  "quota_exceeded",
+                  "oauth_client_invalid",
+                  "access_revoked",
+                  "calendar_forbidden",
+                  "calendar_not_found",
+                  "rate_limited",
+                  "temporary",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
           "kind": {
             "enum": [
               "stalled",
@@ -1576,6 +1674,17 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "last_tried_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Tried At"
           },
           "message": {
             "anyOf": [
@@ -1619,7 +1728,9 @@
           "rule_id",
           "summary",
           "since",
-          "message"
+          "message",
+          "cause",
+          "last_tried_at"
         ],
         "title": "ProblemResponse",
         "type": "object"
@@ -2562,12 +2673,24 @@
               }
             ],
             "title": "Last Pass Completed At"
+          },
+          "next_pass_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Pass At"
           }
         },
         "required": [
           "configured",
           "last_pass_completed_at",
-          "current_pass_started_at"
+          "current_pass_started_at",
+          "next_pass_at"
         ],
         "title": "SchedulerResponse",
         "type": "object"
@@ -2871,6 +2994,28 @@
             "title": "Category",
             "type": "string"
           },
+          "cause": {
+            "anyOf": [
+              {
+                "enum": [
+                  "api_disabled",
+                  "quota_exceeded",
+                  "oauth_client_invalid",
+                  "access_revoked",
+                  "calendar_forbidden",
+                  "calendar_not_found",
+                  "rate_limited",
+                  "temporary",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cause"
+          },
           "opened_at": {
             "title": "Opened At",
             "type": "string"
@@ -2895,7 +3040,8 @@
           "rule_id",
           "category",
           "summary",
-          "opened_at"
+          "opened_at",
+          "cause"
         ],
         "title": "StatusIncidentResponse",
         "type": "object"

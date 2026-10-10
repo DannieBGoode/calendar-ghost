@@ -42,7 +42,7 @@ const NOTHING_SET_UP: UserOverview = {
     version: "0.1.1",
     checked_at: "2026-09-01T00:00:00Z",
     last_synced_at: null,
-    scheduler: { configured: true, last_pass_completed_at: null, current_pass_started_at: null },
+    scheduler: { configured: true, last_pass_completed_at: null, current_pass_started_at: null, next_pass_at: null },
     counts: { rules: 0, running: 0, stopped: 0, paused: 0, overdue: 0, open_incidents: 0, blocked_events: 0, disconnected_accounts: 0, lapsed_accounts: 0 },
     problems: [],
     rules: [],

@@ -1389,3 +1389,28 @@ def test_the_installation_hears_once_when_the_scheduler_stalls_and_again_after_i
         ]
         * 2
     )
+
+
+def test_the_scheduler_says_when_its_next_pass_begins(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = FixedClock()
+    scheduler = SyncScheduler(
+        InMemoryUnitOfWorkFactory().installation(),
+        lambda _owner: cast(ScheduledServices, None),
+        interval_seconds=300,
+        clock=clock,
+    )
+    resting: list[SchedulerProgress] = []
+
+    async def sleep(_seconds: float) -> None:
+        resting.append(scheduler.progress())
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr("calendar_sync.infrastructure.scheduling.asyncio.sleep", sleep)
+
+    before = scheduler.progress()
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(scheduler.run_forever())
+
+    # Before its first pass it is about to run; between passes it rests for the interval.
+    assert before.next_pass_at == clock.now()
+    assert [progress.next_pass_at for progress in resting] == [clock.now() + timedelta(seconds=300)]

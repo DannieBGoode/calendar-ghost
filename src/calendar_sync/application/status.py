@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from calendar_sync.application.activity import OperationsQueries
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.locking import RuleWorkKind
 from calendar_sync.application.ports import (
@@ -78,6 +79,11 @@ class Problem:
     since: datetime | None = None
     message: IncidentMessage | None = None
     """The message of the Incident behind this problem, for the Web UI to translate (ADR 0026)."""
+    cause: Cause | None = None
+    """Why the provider failure behind it happened, so its owner is told (ADR 0031); None when
+    no provider failure explains it."""
+    last_tried_at: datetime | None = None
+    """When the failure behind it last happened, which is when the rule was last tried."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,7 +167,12 @@ def assess_installation(
         problems.append(
             Problem(ProblemKind.STALLED, None, "Scheduled synchronization stopped running")
         )
-    stopped = _stopped(visible, open_incidents, disconnected, lapsed, now)
+    lapses = {
+        incident.account_id: incident
+        for incident in open_incidents
+        if incident.rule_id is None and incident.account_id is not None
+    }
+    stopped = _stopped(visible, open_incidents, disconnected, lapsed, lapses, now)
     problems.extend(stopped)
     named: set[str | None] = {problem.rule_id for problem in problems if problem.rule_id}
     # A lapsed account's Incident is covered by the Stopped problems of the rules it stopped.
@@ -248,12 +259,13 @@ def _stopped(
     incidents: Sequence[IncidentSummary],
     disconnected: set[str],
     lapsed: Mapping[str, str],
+    lapses: Mapping[str, IncidentSummary],
     now: datetime,
 ) -> list[Problem]:
     problems = []
     for summary in visible:
         rule = summary.rule
-        lapse = _lapse_problem(summary, lapsed)
+        lapse = _lapse_problem(summary, lapsed, lapses)
         if lapse is not None:
             problems.append(lapse)
             continue
@@ -269,15 +281,7 @@ def _stopped(
         ]
         incident = _primary_incident(candidates, now) if candidates else None
         if incident is not None:
-            problems.append(
-                Problem(
-                    ProblemKind.STOPPED,
-                    rule.id.value,
-                    incident.summary,
-                    datetime.fromisoformat(incident.opened_at),
-                    incident.message,
-                )
-            )
+            problems.append(_incident_problem(ProblemKind.STOPPED, incident, rule.id.value))
         elif lost_account:
             problems.append(
                 Problem(
@@ -289,18 +293,37 @@ def _stopped(
     return problems
 
 
-def _lapse_problem(summary: SyncRuleSummary, lapsed: Mapping[str, str]) -> Problem | None:
-    """A running or stopped rule an account's Lapsed Authorization stops, naming no account."""
+def _lapse_problem(
+    summary: SyncRuleSummary, lapsed: Mapping[str, str], lapses: Mapping[str, IncidentSummary]
+) -> Problem | None:
+    """A running or stopped rule an account's Lapsed Authorization stops, naming no account, with
+    why the provider refused from the account's Incident."""
     if summary.rule.state not in {SyncRuleState.ENABLED, SyncRuleState.DEGRADED}:
         return None
     account = next((a for a in sorted(_rule_accounts(summary)) if a in lapsed), None)
     if account is None:
         return None
+    incident = lapses.get(account)
     return Problem(
         ProblemKind.STOPPED,
         summary.rule.id.value,
         "A calendar account needs reauthorization",
         message=IncidentMessage("authorization_lapsed", {"provider": lapsed[account]}),
+        cause=incident.cause if incident is not None else Cause.UNKNOWN,
+        last_tried_at=datetime.fromisoformat(incident.updated_at) if incident else None,
+    )
+
+
+def _incident_problem(kind: ProblemKind, incident: IncidentSummary, rule_id: str | None) -> Problem:
+    """A problem an Incident explains: its message, its Cause, and when it last failed."""
+    return Problem(
+        kind,
+        rule_id,
+        incident.summary,
+        datetime.fromisoformat(incident.opened_at),
+        incident.message,
+        incident.cause,
+        datetime.fromisoformat(incident.updated_at),
     )
 
 
@@ -351,13 +374,8 @@ def _incident_problems(
     for group in _group_incidents(incidents, named, block_rule_ids):
         incident = _primary_incident(group, now)
         waiting = _is_waiting(incident, now)
-        problem = Problem(
-            ProblemKind.WAITING if waiting else ProblemKind.REVIEW,
-            incident.rule_id,
-            incident.summary,
-            datetime.fromisoformat(incident.opened_at),
-            incident.message,
-        )
+        kind = ProblemKind.WAITING if waiting else ProblemKind.REVIEW
+        problem = _incident_problem(kind, incident, incident.rule_id)
         if waiting:
             waits.append(problem)
         else:
