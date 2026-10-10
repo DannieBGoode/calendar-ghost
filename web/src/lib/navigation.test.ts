@@ -6,6 +6,8 @@ import {
   appLocationFromPathname,
   appLocationFromUrl,
   appPathForLocation,
+  appPathForPeopleTab,
+  appPathForPerson,
   appPathForRule,
   appPathForSettingsTab,
   appPathForView,
@@ -34,6 +36,30 @@ describe("application section URLs", () => {
     expect(appLocationFromPathname("/").view).toBe("overview")
     expect(appLocationFromPathname("/unknown").view).toBe("overview")
     expect(isKnownAppPath("/unknown")).toBe(false)
+  })
+})
+
+describe("person URLs", () => {
+  it("round-trips one person's page under People", () => {
+    expect(appPathForPerson("user 1")).toBe("/people/user%201")
+    expect(appLocationFromPathname("/people/user%201/")).toEqual({ view: "people", ruleId: null, personId: "user 1" })
+    expect(appPathForLocation({ view: "people", ruleId: null, personId: "user 1" })).toBe("/people/user%201")
+    expect(isKnownAppPath("/people/user%201")).toBe(true)
+    expect(appLocationFromPathname("/people/%E0").view).toBe("overview")
+  })
+})
+
+describe("People tab URLs", () => {
+  it("opens Invitations at its own address, and People at /people", () => {
+    expect(appPathForPeopleTab("invitations")).toBe("/people/invitations")
+    expect(appPathForPeopleTab("everyone")).toBe("/people")
+    expect(appLocationFromPathname("/people/invitations")).toEqual({
+      view: "people",
+      ruleId: null,
+      peopleTab: "invitations",
+    })
+    expect(appPathForLocation({ view: "people", ruleId: null, peopleTab: "invitations" })).toBe("/people/invitations")
+    expect(isKnownAppPath("/people/invitations")).toBe(true)
   })
 })
 

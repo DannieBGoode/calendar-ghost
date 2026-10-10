@@ -20,6 +20,7 @@ from calendar_sync.application.ports import (
     CalendarProvider,
     Clock,
     ProviderCallStats,
+    ProviderCallTally,
     ProviderChangeSet,
     RecordedEvent,
     RuleRunOutcome,
@@ -28,6 +29,7 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.resource_use import record_provider_calls
 from calendar_sync.application.run_log import UntalliedProviderCalls
 from calendar_sync.application.sync_run import (
     SOURCE_CHANGE_RETENTION,
@@ -142,21 +144,28 @@ class ExecuteSyncRule:
             reported or self.locks.working(rule_id, work),
             self.call_stats.measure() as calls,
         ):
-            log = SyncRunLog(rule_id, self.clock, calls, work.started_at)
             try:
-                result = self._execute_serialized(rule_id, full=full, log=log, work=work)
-            except RuleNotExecutable:
-                log.stopped()
-                raise
-            except ProviderFailure as failure:
-                log.failed(failure.kind.value)
-                self._record_failure(rule_id, full, failure.kind.value)
-                raise
-            except Exception:
-                log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
-                self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value)
-                raise
-            return result
+                return self._execute_measured(rule_id, full, work, calls)
+            finally:
+                record_provider_calls(self.unit_of_work, self.clock, calls)
+
+    def _execute_measured(
+        self, rule_id: SyncRuleId, full: bool, work: RuleWork, calls: ProviderCallTally
+    ) -> SyncRunResult:
+        log = SyncRunLog(rule_id, self.clock, calls, work.started_at)
+        try:
+            return self._execute_serialized(rule_id, full=full, log=log, work=work)
+        except RuleNotExecutable:
+            log.stopped()
+            raise
+        except ProviderFailure as failure:
+            log.failed(failure.kind.value)
+            self._record_failure(rule_id, full, failure.kind.value)
+            raise
+        except Exception:
+            log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
+            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value)
+            raise
 
     def _record_failure(self, rule_id: SyncRuleId, full: bool, kind: str) -> None:
         # Recording evidence must never replace the failure the scheduler classifies.

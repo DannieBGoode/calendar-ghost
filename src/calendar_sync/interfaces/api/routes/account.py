@@ -1,4 +1,5 @@
-"""The signed-in User's own account: their email and password."""
+"""The signed-in User's own account: their email and password, and what the Operator Overview
+shows about them."""
 
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ from calendar_sync.application.identity import (
     SetNotificationEmail,
     SetOwnEmail,
 )
+from calendar_sync.application.operator_overview import OperatorOverview
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, User, UserId
 from calendar_sync.domain.model import ProjectionHandling
 from calendar_sync.interfaces.api.dependencies import (
@@ -35,7 +37,7 @@ from calendar_sync.interfaces.api.dependencies import (
 )
 from calendar_sync.interfaces.api.problems import problem_from
 from calendar_sync.interfaces.api.routes.session import user_response
-from calendar_sync.interfaces.api.routes.users import deletion_response
+from calendar_sync.interfaces.api.routes.users import deletion_response, user_overview_response
 from calendar_sync.interfaces.api.schemas import (
     ChangePasswordRequest,
     DeleteOwnAccountRequest,
@@ -44,6 +46,7 @@ from calendar_sync.interfaces.api.schemas import (
     SetEmailRequest,
     SignedInUserResponse,
     UserDeletionResponse,
+    UserOverviewResponse,
 )
 
 
@@ -68,10 +71,13 @@ class OwnAccountServices(Protocol):
     def identity(self) -> AccountIdentity: ...
     @property
     def administration(self) -> OwnAccountAdministration: ...
+    @property
+    def operator_overview(self) -> OperatorOverview: ...
 
 
 Services = Annotated[OwnAccountServices, Depends(app_services)]
 SignedIn = Annotated[User, Depends(signed_in_user)]
+CurrentUser = Annotated[UserId, Depends(current_user)]
 router = APIRouter()
 
 
@@ -120,6 +126,14 @@ def change_password(
         raise problem_from(status.HTTP_403_FORBIDDEN, error) from error
     except PasswordPolicyViolation as error:
         raise problem_from(status.HTTP_422_UNPROCESSABLE_CONTENT, error) from error
+
+
+@router.get("/api/v1/account/overview", response_model=UserOverviewResponse)
+def own_overview(user: CurrentUser, services: Services, response: Response) -> UserOverviewResponse:
+    """What the Operator Overview shows Installation Administrators about the signed-in User,
+    exactly as they see it."""
+    response.headers["Cache-Control"] = "no-store"
+    return user_overview_response(services.operator_overview.own(user))
 
 
 @router.get("/api/v1/account/deletion", response_model=OwnAccountDeletionResponse)

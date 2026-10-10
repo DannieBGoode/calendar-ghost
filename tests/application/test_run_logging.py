@@ -383,14 +383,18 @@ class Connected:
         return True
 
 
-def removal(factory: InMemoryUserUnitOfWorkFactory, calendars: ProjectionDeleter) -> RemoveSyncRule:
+def removal(
+    factory: InMemoryUserUnitOfWorkFactory,
+    calendars: ProjectionDeleter,
+    calls: CountedCalls | None = None,
+) -> RemoveSyncRule:
     return RemoveSyncRule(
         factory,
         calendars,
         Connected(),
         SteppedClock(),
         RuleLocks(),
-        call_stats=CountedCalls(ProviderCallTally(calls=3)),
+        call_stats=calls or CountedCalls(ProviderCallTally(calls=3)),
         sleep=lambda _: None,
     )
 

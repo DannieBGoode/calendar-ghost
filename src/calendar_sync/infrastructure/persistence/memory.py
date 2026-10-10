@@ -3,12 +3,13 @@ from __future__ import annotations
 from collections.abc import Collection, Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
-from datetime import datetime
+from datetime import date, datetime
 from types import TracebackType
 from typing import Self
 
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
+    AccountStanding,
     AuditEntry,
     AuditRepository,
     CalendarNameRepository,
@@ -19,6 +20,12 @@ from calendar_sync.application.ports import (
     ExceptionReplayRepository,
     InstallationUnitOfWork,
     OccurrenceMappingRepository,
+    OperationsOverview,
+    ProviderCallCounts,
+    ProviderCallRepository,
+    ProviderCallUse,
+    RecordedRule,
+    ResourceUse,
     RulePreviewRepository,
     RulePreviewSummary,
     RuleRunOutcome,
@@ -26,10 +33,12 @@ from calendar_sync.application.ports import (
     RunKind,
     ScheduledRule,
     SourceObservationRepository,
+    StatusRecords,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
@@ -72,6 +81,9 @@ class MemoryState:
     )
     change_values_forgotten_before: datetime | None = None
     """Entries keep their changes in memory; this records the cutoff SQLite would apply."""
+    provider_calls: dict[tuple[ProviderKind, date], ProviderCallCounts] = field(
+        default_factory=dict
+    )
 
 
 def _require_rule(state: MemoryState, rule_id: SyncRuleId) -> None:
@@ -459,6 +471,17 @@ class InMemoryCalendarNameRepository:
         }
 
 
+class InMemoryProviderCallRepository:
+    def __init__(self, state: MemoryState) -> None:
+        self._state = state
+
+    def add(self, day: date, provider: ProviderKind, counts: ProviderCallCounts) -> None:
+        total = self._state.provider_calls.setdefault((provider, day), ProviderCallCounts())
+        total.calls += counts.calls
+        total.rate_limited += counts.rate_limited
+        total.failed += counts.failed
+
+
 class InMemoryUnitOfWork:
     """One User's records, like SQLite's unit of work: they live in that User's partition."""
 
@@ -474,6 +497,7 @@ class InMemoryUnitOfWork:
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
     calendar_names: CalendarNameRepository
+    provider_calls: ProviderCallRepository
 
     def __init__(self, database: MemoryDatabase, user_id: UserId) -> None:
         self._database = database
@@ -499,6 +523,7 @@ class InMemoryUnitOfWork:
         self.run_outcomes = InMemoryRuleRunOutcomeRepository(working)
         self.previews = InMemoryRulePreviewRepository(working)
         self.calendar_names = InMemoryCalendarNameRepository(working)
+        self.provider_calls = InMemoryProviderCallRepository(working)
         return self
 
     def __exit__(
@@ -623,6 +648,76 @@ class InMemoryInstallationUnitOfWork:
     def forget_change_values(self, before: datetime) -> None:
         for state in self._database.partitions.values():
             state.change_values_forgotten_before = before
+
+    def resource_use(self, users: Collection[UserId], since: date) -> dict[UserId, ResourceUse]:
+        return {user: _resource_use(self._database.partitions.get(user), since) for user in users}
+
+    def forget_provider_calls(self, before: date) -> None:
+        for state in self._database.partitions.values():
+            state.provider_calls = {
+                key: counts for key, counts in state.provider_calls.items() if key[1] >= before
+            }
+
+    def status_records(self, users: Collection[UserId]) -> dict[UserId, StatusRecords]:
+        return {user: _status_records(self._database.partitions.get(user)) for user in users}
+
+
+def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:
+    state = state or MemoryState()
+    calls: dict[ProviderKind, ProviderCallCounts] = {}
+    for (provider, day), counts in state.provider_calls.items():
+        if day >= since:
+            total = calls.setdefault(provider, ProviderCallCounts())
+            total.calls += counts.calls
+            total.rate_limited += counts.rate_limited
+            total.failed += counts.failed
+    return ResourceUse(
+        rules=len(state.rules),
+        connected_accounts=len(state.accounts),
+        activity_entries=len(state.audit),
+        provider_calls=tuple(
+            ProviderCallUse(provider, total.calls, total.rate_limited, total.failed)
+            for provider, total in sorted(calls.items(), key=lambda item: item[0].value)
+        ),
+    )
+
+
+def _status_records(state: MemoryState | None) -> StatusRecords:
+    """A User's records as Installation Status reads them. This store keeps no Incidents or
+    Activity blocks, and every account it records is a Google account."""
+    state = state or MemoryState()
+    accounts = tuple(
+        AccountStanding(
+            account.value,
+            standing.value,
+            ProviderKind.GOOGLE.value,
+            lapsed=standing is ConnectedAccountState.CONNECTED and account in state.lapsed,
+        )
+        for account, standing in sorted(state.accounts.items(), key=lambda item: item[0].value)
+    )
+    succeeded = [
+        outcome.last_succeeded_at
+        for (_, kind), outcome in state.outcomes.items()
+        if kind is RunKind.SYNC and outcome.last_succeeded_at is not None
+    ]
+    return StatusRecords(
+        # Rules keep the order they were added in, as a dictionary keeps its keys'.
+        rules=tuple(
+            RecordedRule(
+                rule, state.outcomes.get((rule.id, RunKind.SYNC)), state.previews.get(rule.id)
+            )
+            for rule in state.rules.values()
+        ),
+        overview=OperationsOverview(
+            connected_accounts=sum(a.state == "connected" for a in accounts),
+            disconnected_accounts=sum(a.state == "disconnected" for a in accounts),
+            open_incidents=0,
+            last_synced_at=max(succeeded).isoformat() if succeeded else None,
+            open_blocks=(),
+            accounts=accounts,
+        ),
+        incidents=(),
+    )
 
 
 def _last_full_sync(state: MemoryState, rule_id: SyncRuleId) -> datetime | None:

@@ -185,6 +185,20 @@ token issued before the upgrade keeps `status:read` and gains `installation:read
 monitor keeps receiving the answer it received before. Rolling back past either means restoring the
 backup taken before the upgrade, as for migration 21.
 
+Migration 24 adds `sync_rules.creation_order`, the order each User's rules were created in, so the
+Operator Overview numbers a User's calendars the same way on every visit ("Calendar 1",
+"Calendar 2"). Rules that existed before the upgrade are numbered in the order the database holds
+them, which is the order they were created unless the database was compacted since. Rolling back is
+safe: earlier releases ignore the column. A rule an earlier release creates has no place in that
+order, so after upgrading again its calendars are numbered first, and the other labels move up.
+
+Migration 25 adds `provider_calls`: for each User, calendar provider, and UTC day, how many calls
+their Sync Runs, reconciliations, and Rule Removals made, how many the provider refused for its
+rate limit, and how many failed. It holds counts only, never what a call asked for. Each scheduler
+pass discards days older than 30, so the table stays small, and User Deletion removes a User's
+counts with them. The Operator Overview shows these counts. Rolling back is safe: earlier releases
+ignore the table, and its counts stop growing until the next upgrade.
+
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
 the oldest failure leaves the window. Behind a reverse proxy every request comes from the proxy's

@@ -28,7 +28,8 @@ Each phase can be released alone and keeps existing installations working.
      `installation:read` scope and Installation Health, a scheduler-stalled installation incident for
      the installation's SMTP recipient and webhook, Disabled Users, and User Deletion.
 2. **Operator Overview.** The administrator's view, each User's page showing what the overview shows
-   about them, and provider calls and storage counted per User.
+   about them, and provider calls and storage counted per User. Storage is counted in records (rules,
+   Connected Accounts, Activity entries), not bytes.
 3. **Plans.** Plan definitions and assignment, the four limits, a per-User sync interval in the
    scheduler, and Plan Hold.
 4. **Open registration.** The Open Registration Policy, the sign-up page, email verification,

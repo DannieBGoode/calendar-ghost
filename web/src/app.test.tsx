@@ -11,7 +11,7 @@ import { StaticI18nProvider } from "@/i18n/provider"
 import { pseudoI18n, testI18n } from "@/i18n/testing"
 import { untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { Dashboard } from "@/lib/api"
+import type { Dashboard, UserOverview } from "@/lib/api"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -32,6 +32,25 @@ const dashboard: Dashboard = {
   blocked_rule_id: null,
 }
 
+/** What the Operator Overview shows about someone with nothing set up yet. */
+const NOTHING_SET_UP: UserOverview = {
+  user: { id: "user-dana", email: "dana@example.test", role: "user", state: "active", created_at: "2026-09-01T00:00:00Z", last_sign_in_at: null },
+  status: {
+    status: "setup",
+    needs_attention: false,
+    summary: "Setup is not finished.",
+    version: "0.1.1",
+    checked_at: "2026-09-01T00:00:00Z",
+    last_synced_at: null,
+    scheduler: { configured: true, last_pass_completed_at: null, current_pass_started_at: null },
+    counts: { rules: 0, running: 0, stopped: 0, paused: 0, overdue: 0, open_incidents: 0, blocked_events: 0, disconnected_accounts: 0, lapsed_accounts: 0 },
+    problems: [],
+    rules: [],
+    incidents: [],
+  },
+  resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-01" },
+}
+
 const RESPONSES: Record<string, unknown> = {
   "/api/v1/setup": { administrator_configured: true },
   "/api/v1/session": { authenticated: true },
@@ -41,6 +60,7 @@ const RESPONSES: Record<string, unknown> = {
   "/api/v1/google/configuration": { configured: false, redirect_uri: null },
   "/api/v1/recent-changes": [],
   "/api/v1/integration-tokens": [],
+  "/api/v1/account/overview": NOTHING_SET_UP,
 }
 
 function jsonResponse(body: unknown): Response {
@@ -154,13 +174,13 @@ describe("App", () => {
     try {
       const { container } = await renderApp(testI18n())
       expect(container.querySelector(".oauth-feedback h2")?.textContent).toBe("Google account connected")
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Connections")
       expect(container.querySelector("[aria-labelledby='accounts-title']")).not.toBeNull()
       expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("Settings")
       // The address stays at Settings; only the outcome is dropped so a reload does not repeat it.
       expect(`${window.location.pathname}${window.location.search}`).toBe(settled)
       // Dropping the outcome does not move Settings to another tab.
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Connections")
     } finally {
       page.happyDOM.setURL(address)
     }
@@ -172,15 +192,15 @@ describe("App", () => {
     page.happyDOM.setURL("http://localhost:8000/settings")
     try {
       const { container } = await renderApp(testI18n())
-      expect([...container.querySelectorAll("nav.settings-tabs a")].map((tab) => tab.textContent)).toEqual([
+      expect([...container.querySelectorAll("nav.page-tabs a")].map((tab) => tab.textContent)).toEqual([
         "Your account",
         "Connections",
       ])
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Your account")
       expect(container.querySelector("[aria-labelledby='appearance-title']")).not.toBeNull()
 
       const header = container.querySelector("header")
-      const tab = [...container.querySelectorAll<HTMLAnchorElement>("nav.settings-tabs a")].find(
+      const tab = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")].find(
         (link) => link.textContent === "Connections",
       )!
       const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })
@@ -192,7 +212,7 @@ describe("App", () => {
       expect(click.defaultPrevented).toBe(true)
       expect(window.location.pathname).toBe("/settings/connections")
       expect(container.querySelector("header")).toBe(header)
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Connections")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Connections")
       expect(container.querySelector("[aria-labelledby='accounts-title']")).not.toBeNull()
       expect(container.querySelector("[aria-labelledby='appearance-title']")).toBeNull()
 
@@ -201,7 +221,7 @@ describe("App", () => {
         window.dispatchEvent(new PopStateEvent("popstate"))
       })
       await settle()
-      expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
+      expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Your account")
     } finally {
       page.happyDOM.setURL(address)
     }
@@ -442,7 +462,32 @@ describe("People", () => {
       ...RESPONSES,
       "/api/v1/session": { authenticated: true, installation_sends_email: false, user: { ...administrator, role } },
       "/api/v1/registration": { policy, only_me_available: policy === "only_me" },
-      "/api/v1/users": { users: [{ ...administrator, state: "active", created_at: "2026-10-01T09:00:00Z", last_sign_in_at: null }], total: 1, page: 1, page_size: 50 },
+      "/api/v1/users": {
+        users: [
+          {
+            ...administrator,
+            state: "active",
+            created_at: "2026-10-01T09:00:00Z",
+            last_sign_in_at: null,
+            verdict: "setup",
+            problems: 0,
+            last_synced_at: null,
+            resources: NOTHING_SET_UP.resources,
+          },
+        ],
+        total: 1,
+        page: 1,
+        page_size: 50,
+      },
+      "/api/v1/installation/health": {
+        status: "setup",
+        needs_attention: false,
+        incidents: [],
+        users: { setup: 1 },
+        disabled_users: 0,
+        checked_at: "2026-10-01T09:00:00Z",
+      },
+      [`/api/v1/users/${administrator.id}/overview`]: { ...NOTHING_SET_UP, user: { ...NOTHING_SET_UP.user, id: administrator.id } },
       "/api/v1/invitations": [],
     }
     vi.stubGlobal(
@@ -476,6 +521,43 @@ describe("People", () => {
     expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
     expect(document.title).toBe("People – Calendar Ghost")
     expect(requested).toContain("/api/v1/users")
+  })
+
+  it("opens a person's page at its own address, and returns to People", async () => {
+    page.happyDOM.setURL(`http://localhost:8000/people/${administrator.id}`)
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    expect(container.querySelector("main h1")?.textContent).toBe(`${administrator.email}You`)
+    expect(container.querySelector("#primary-nav [aria-current='page']")?.textContent).toBe("People")
+    expect(requested).toContain(`/api/v1/users/${administrator.id}/overview`)
+
+    act(() => {
+      container
+        .querySelector<HTMLAnchorElement>("a.person-back")!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+    })
+    await settle()
+    expect(window.location.pathname).toBe("/people")
+    expect(container.querySelector("main h1")?.textContent).toBe("People")
+  })
+
+  it("returns from a person to the same filtered list and their row (review on PR 68)", async () => {
+    page.happyDOM.setURL("http://localhost:8000/people?state=active&sort=email")
+    serveAs("installation_administrator", "invitation_only")
+    const { container } = await renderApp(testI18n())
+    const click = (element: Element) =>
+      act(() => {
+        element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }))
+      })
+    click(container.querySelector("a.person-email")!)
+    await settle()
+    expect(window.location.pathname).toBe(`/people/${administrator.id}`)
+    expect(container.querySelector("a.person-back")?.getAttribute("href")).toBe("/people?state=active&sort=email")
+
+    click(container.querySelector("a.person-back")!)
+    await settle()
+    expect(`${window.location.pathname}${window.location.search}`).toBe("/people?state=active&sort=email")
+    expect(document.activeElement?.getAttribute("href")).toBe(`/people/${administrator.id}`)
   })
 
   it.each([

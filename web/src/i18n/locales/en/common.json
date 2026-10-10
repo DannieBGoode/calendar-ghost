@@ -127,5 +127,6 @@
     },
     "removalStopped": "Rule Removal stopped: {reason}",
     "authorizationLapsed": "A {provider} account needs reauthorization"
-  }
+  },
+  "opensInNewTab": " (opens in a new tab)"
 }

@@ -59,7 +59,8 @@ class MemoryUsers:
         known = [user for user in matching if _sort_value(user, query.sort) is not None]
         known.sort(key=lambda user: str(_sort_value(user, query.sort)), reverse=query.descending)
         ordered = known + [user for user in matching if _sort_value(user, query.sort) is None]
-        page = ordered[query.offset : query.offset + query.limit]
+        end = None if query.limit is None else query.offset + query.limit
+        page = ordered[query.offset : end]
         return UserPage(tuple(page), len(matching))
 
     def get(self, user_id: UserId) -> User | None:

@@ -155,6 +155,20 @@ def test_preview_scenarios_seed_each_overview_state(
         assert dashboard["last_synced_at"] is not None
 
 
+@pytest.mark.parametrize("scenario", [Scenario.HEALTHY, Scenario.STOPPED, Scenario.WAITING])
+def test_preview_people_show_each_users_own_verdict(tmp_path: Path, scenario: Scenario) -> None:
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=scenario)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
+        own = client.get("/api/v1/status").json()["status"]
+        overview = client.get("/api/v1/account/overview").json()["status"]["status"]
+        health = client.get("/api/v1/installation/health").json()["users"]
+
+    assert overview == own == scenario.value
+    assert health == {scenario.value: 1}
+
+
 def test_preview_names_calendars_of_an_account_that_lost_access(tmp_path: Path) -> None:
     container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=Scenario.STOPPED)
 

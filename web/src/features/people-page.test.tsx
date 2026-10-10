@@ -9,7 +9,14 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { PendingInvitation, PeoplePage, Person, SessionStatus } from "@/lib/api"
+import type {
+  InstallationHealthReport,
+  PendingInvitation,
+  PeoplePage,
+  Person,
+  PersonRow,
+  SessionStatus,
+} from "@/lib/api"
 
 import { PeopleView } from "./people-page"
 
@@ -43,13 +50,39 @@ function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
 
+/** What the Operator Overview says of someone with nothing set up yet. */
+const NOTHING_SET_UP: Omit<PersonRow, keyof Person> = {
+  verdict: "setup",
+  problems: 0,
+  last_synced_at: null,
+  resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-10" },
+}
+
+/** What the Operator Overview says of people who have more than nothing set up. */
+const OVERVIEWS: Record<string, Partial<PersonRow>> = {
+  "user-robin": { verdict: "stopped", problems: 2 },
+  "user-sam": { verdict: "healthy" },
+}
+
 function onePage(users: Person[], page: Partial<PeoplePage> = {}): PeoplePage {
-  return { users, total: users.length, page: 1, page_size: 50, ...page }
+  const rows = users.map((user) => ({ ...NOTHING_SET_UP, ...OVERVIEWS[user.id], ...user }))
+  return { users: rows, total: users.length, page: 1, page_size: 50, ...page }
+}
+
+const health: InstallationHealthReport = {
+  status: "stopped",
+  needs_attention: true,
+  incidents: [],
+  users: { stopped: 1, healthy: 1, setup: 2 },
+  disabled_users: 1,
+  checked_at: justNow,
 }
 
 type Call = { method: string; path: string; query: URLSearchParams; body: unknown }
 type Scenario = {
-  /** The address the page opens at, after `/people`. */
+  /** The page's path, `/people` unless given. */
+  path?: string
+  /** The address the page opens at, after the path. */
   search?: string
   /** Answers GET /api/v1/users from what it was asked for. */
   people?: (query: URLSearchParams) => Response
@@ -64,6 +97,7 @@ function serve({ people = () => jsonResponse(onePage([me, robin, sam])), answers
     "GET /api/v1/session": jsonResponse(session),
     "GET /api/v1/registration": jsonResponse({ policy: "invitation_only", only_me_available: false }),
     "GET /api/v1/invitations": jsonResponse([invitation]),
+    "GET /api/v1/installation/health": jsonResponse(health),
     "POST /api/v1/invitations": jsonResponse({ id: "inv-2", token: "inv_synthetic", expires_at: nextWeek }, 201),
     "DELETE /api/v1/invitations/inv-1": { ok: true, status: 204, json: () => Promise.resolve(null) } as Response,
     "POST /api/v1/users/user-robin/password-reset-links": jsonResponse(
@@ -91,6 +125,7 @@ function serve({ people = () => jsonResponse(onePage([me, robin, sam])), answers
 let container: HTMLDivElement
 let root: Root | null = null
 let address: string
+let openPerson: ReturnType<typeof vi.fn<(personId: string) => void>>
 
 function page() {
   return window as typeof window & { happyDOM: { setURL: (url: string) => void } }
@@ -128,12 +163,13 @@ async function wait(milliseconds: number) {
 }
 
 function showPeople(i18n: I18n, queryClient: QueryClient, visit = 0) {
+  const tab = window.location.pathname === "/people/invitations" ? "invitations" : "everyone"
   act(() => {
     root?.render(
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <PeopleView key={visit} />
+            <PeopleView key={visit} tab={tab} notice={null} onOpenPerson={openPerson} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -142,8 +178,9 @@ function showPeople(i18n: I18n, queryClient: QueryClient, visit = 0) {
 }
 
 async function renderPeople(i18n: I18n, scenario: Scenario = {}) {
-  page().happyDOM.setURL(`${ORIGIN}/people${scenario.search ?? ""}`)
+  page().happyDOM.setURL(`${ORIGIN}${scenario.path ?? "/people"}${scenario.search ?? ""}`)
   serve(scenario)
+  openPerson = vi.fn<(personId: string) => void>()
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   showPeople(i18n, queryClient)
@@ -223,18 +260,21 @@ function peopleRequests(): number {
   return calls.filter((item) => item.method === "GET" && item.path === "/api/v1/users").length
 }
 
+/** What the last command on someone said, as screen readers hear it. */
 function status(): string | undefined {
-  return container.querySelector("[aria-labelledby='people-list-title'] p[role='status']:not(.sr-only)")?.textContent
+  return container.querySelector(".people-command-status")?.textContent
 }
 
 describe("People page", () => {
   it("has no untranslated text with people, invitations, menus, and links to pass on", async () => {
     await renderPeople(pseudoI18n(), { people: () => jsonResponse(onePage([me, robin, sam, firstUser])) })
-    await click(container.querySelector<HTMLButtonElement>("#invite-someone")!)
     await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
     expect(container.querySelector("[role='menu']")).not.toBeNull()
-    expect(container.querySelector(".link-reveal")).not.toBeNull()
     const fixtures = [me.email!, robin.email!, sam.email!, `${ORIGIN}/invitation#inv_synthetic`, ...dateWords()]
+    expect(untranslatedText(container, fixtures)).toEqual([])
+
+    await click(container.querySelector<HTMLButtonElement>("#invite-someone")!)
+    expect(container.querySelector(".link-reveal")).not.toBeNull()
     expect(untranslatedText(container, fixtures)).toEqual([])
   })
 
@@ -247,6 +287,7 @@ describe("People page", () => {
     await renderPeople(testI18n(), { people: () => jsonResponse(onePage([me, robin, sam, firstUser])) })
     expect([...container.querySelectorAll("thead th")].map((cell) => cell.textContent.trim())).toEqual([
       "Email",
+      "Sync",
       "Role",
       "State",
       "Joined",
@@ -255,6 +296,7 @@ describe("People page", () => {
     ])
     expect(cells(personRow("dana@example.test"))).toEqual([
       "dana@example.testYou",
+      "Not set up",
       "Administrator",
       "Active",
       "just now",
@@ -262,8 +304,14 @@ describe("People page", () => {
       "",
     ])
     expect(personRow("dana@example.test").querySelector("[aria-haspopup='menu']")).toBeNull()
-    expect(cells(personRow("robin@example.test")).slice(1, 5)).toEqual(["User", "Active", "just now", "Never"])
-    expect(cells(personRow("sam@example.test"))[2]).toBe("Disabled")
+    expect(cells(personRow("robin@example.test")).slice(1, 6)).toEqual([
+      "Stopped2 problems",
+      "User",
+      "Active",
+      "just now",
+      "Never",
+    ])
+    expect(cells(personRow("sam@example.test")).slice(1, 4)).toEqual(["Healthy", "User", "Disabled"])
     expect(personRow("No email yet").querySelector("[aria-haspopup='menu']")).not.toBeNull()
     expect(personRow("robin@example.test").querySelector("[aria-haspopup='menu']")?.getAttribute("aria-label")).toBe(
       "Actions for robin@example.test",
@@ -272,18 +320,20 @@ describe("People page", () => {
 
   it("restores the search, filters, sort, and page from the address", async () => {
     await renderPeople(testI18n(), {
-      search: "?search=rob&role=user&state=disabled&sort=email&order=desc&page=2",
+      search: "?search=rob&role=user&state=disabled&verdict=stopped&sort=email&order=desc&page=2",
       people: () => jsonResponse(onePage([robin], { page: 2, total: 51 })),
     })
     expect(lastPeopleQuery()).toEqual({
       search: "rob",
       role: "user",
       state: "disabled",
+      verdict: "stopped",
       sort: "email",
       order: "desc",
       page: "2",
       page_size: "50",
     })
+    expect(container.querySelector<HTMLSelectElement>("#people-verdict")!.value).toBe("stopped")
     expect(container.querySelector<HTMLInputElement>("#people-search")!.value).toBe("rob")
     expect(container.querySelector<HTMLSelectElement>("#people-role")!.value).toBe("user")
     expect(container.querySelector<HTMLSelectElement>("#people-state")!.value).toBe("disabled")
@@ -304,6 +354,81 @@ describe("People page", () => {
     expect(`${window.location.pathname}${window.location.search}`).toBe("/people?search=rob")
     // Typing replaces the address rather than adding a history entry for each pause.
     expect(window.history.length).toBe(length)
+  })
+
+  it("shows how everyone's synchronization is doing above the list, naming nobody", async () => {
+    await renderPeople(testI18n())
+    const summary = container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    expect(summary.querySelector("h2")?.textContent).toBe("Installation health")
+    expect(summary.textContent).toContain("Someone's rules stopped syncing.")
+    expect([...summary.querySelectorAll("button")].map((item) => item.textContent)).toEqual([
+      "Stopped: 1",
+      "Not set up: 2",
+      "Healthy: 1",
+      "Disabled: 1",
+    ])
+    expect(summary.querySelector("summary")?.textContent).toBe("What each sync status means")
+    expect(summary.textContent).not.toContain("robin@example.test")
+  })
+
+  it("shows disabled people from their own count", async () => {
+    await renderPeople(testI18n())
+    const summary = () => container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    await click(button("Disabled: 1", summary()))
+    expect(lastPeopleQuery()).toMatchObject({ state: "disabled" })
+    expect(lastPeopleQuery().verdict).toBeUndefined()
+    expect(button("Disabled: 1", summary()).getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("marks a count pressed whenever the filters show exactly its people, however they were set", async () => {
+    await renderPeople(testI18n())
+    await select("people-verdict", "stopped")
+    const summary = () => container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    // Any state also shows disabled people, whom the count leaves out.
+    expect(button("Stopped: 1", summary()).getAttribute("aria-pressed")).toBe("false")
+    await select("people-state", "active")
+    expect(button("Stopped: 1", summary()).getAttribute("aria-pressed")).toBe("true")
+  })
+
+  it("filters by a verdict from Installation Health, and shows everyone again", async () => {
+    await renderPeople(testI18n(), { search: "?page=2", people: () => jsonResponse(onePage([robin], { total: 60 })) })
+    const summary = () => container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    await click(button("Stopped: 1", summary()))
+    expect(lastPeopleQuery()).toMatchObject({ verdict: "stopped", page: "1" })
+    // The count leaves out disabled people, so it shows only people who may sign in.
+    expect(lastPeopleQuery()).toMatchObject({ state: "active" })
+    expect(window.location.search).toBe("?state=active&verdict=stopped")
+    expect(button("Stopped: 1", summary()).getAttribute("aria-pressed")).toBe("true")
+
+    await click(button("Stopped: 1", summary()))
+    expect(lastPeopleQuery().verdict).toBeUndefined()
+    expect(lastPeopleQuery().state).toBeUndefined()
+    expect(window.location.search).toBe("")
+  })
+
+  it("says when the installation itself stopped synchronizing", async () => {
+    const stalled = { ...health, status: "stalled", incidents: [{ kind: "scheduler_stalled", since: justNow }] }
+    await renderPeople(testI18n(), { answers: { "GET /api/v1/installation/health": jsonResponse(stalled) } })
+    const summary = container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
+    expect(summary.textContent).toContain("Scheduled synchronization stopped running just now.")
+  })
+
+  it("filters and sorts by sync status, kept in the address", async () => {
+    await renderPeople(testI18n())
+    await select("people-verdict", "review")
+    expect(lastPeopleQuery()).toMatchObject({ verdict: "review", page: "1" })
+    await click(header("Sync").querySelector("button")!)
+    expect(lastPeopleQuery()).toMatchObject({ verdict: "review", sort: "verdict", order: "asc" })
+    expect(header("Sync").getAttribute("aria-sort")).toBe("ascending")
+    expect(window.location.search).toBe("?verdict=review&sort=verdict")
+  })
+
+  it("opens a person's page from their email", async () => {
+    await renderPeople(testI18n())
+    const link = personRow("robin@example.test").querySelector<HTMLAnchorElement>("a.person-email")!
+    expect(link.getAttribute("href")).toBe("/people/user-robin")
+    await click(link)
+    expect(openPerson).toHaveBeenCalledWith("user-robin")
   })
 
   it("filters by role and state from the first page", async () => {
@@ -356,12 +481,18 @@ describe("People page", () => {
     expect(button("Previous", pages).disabled).toBe(true)
   })
 
-  it("disables Next on the last page", async () => {
+  it("offers no other page when everyone fits on one", async () => {
     const full = Array.from({ length: 50 }, (_, index) => ({ ...robin, id: `user-${index}`, email: `p${index}@example.test` }))
     await renderPeople(testI18n(), { people: () => jsonResponse(onePage(full, { total: 50 })) })
     const pages = container.querySelector<HTMLElement>("nav[aria-label='Pages of people']")!
-    expect(pages.textContent).toContain("Showing 1 to 50 of 50 people")
-    expect(button("Previous", pages).disabled).toBe(true)
+    expect(pages.textContent).toBe("Showing 1 to 50 of 50 people")
+    expect(pages.querySelector("button")).toBeNull()
+  })
+
+  it("disables Next on the last page", async () => {
+    await renderPeople(testI18n(), { search: "?page=2", people: () => jsonResponse(onePage([robin], { page: 2, total: 51 })) })
+    const pages = container.querySelector<HTMLElement>("nav[aria-label='Pages of people']")!
+    expect(button("Previous", pages).disabled).toBe(false)
     expect(button("Next", pages).disabled).toBe(true)
   })
 
@@ -370,7 +501,7 @@ describe("People page", () => {
       search: "?search=zz&role=user&state=disabled",
       people: (query) => jsonResponse(onePage(query.has("search") ? [] : [me, robin])),
     })
-    expect(container.querySelector(".empty-panel h2")?.textContent).toBe("Nobody matches")
+    expect(container.querySelector(".empty-panel h3")?.textContent).toBe("Nobody matches")
     expect(container.querySelector("table")).toBeNull()
     await click(button("Clear filters"))
     expect(lastPeopleQuery()).toEqual({ sort: "joined", order: "asc", page: "1", page_size: "50" })
@@ -383,7 +514,7 @@ describe("People page", () => {
       search: "?page=9",
       people: (query) => jsonResponse(onePage(query.get("page") === "9" ? [] : [me], { total: 1 })),
     })
-    expect(container.querySelector(".empty-panel h2")?.textContent).toBe("This page is empty")
+    expect(container.querySelector(".empty-panel h3")?.textContent).toBe("This page is empty")
     await click(button("Go to the first page"))
     expect(lastPeopleQuery()).toMatchObject({ page: "1" })
     expect(rows()).toHaveLength(1)
@@ -405,6 +536,10 @@ describe("People page", () => {
     await choose("robin@example.test", "Make administrator")
     expect(sent("PUT", "/api/v1/users/user-robin/role")?.body).toEqual({ role: "installation_administrator" })
     expect(status()).toBe("robin@example.test is now an administrator.")
+    // Shown beside the person it changed, not below the whole list.
+    expect(personRow("robin@example.test").nextElementSibling?.querySelector(".command-result")?.textContent).toBe(
+      "robin@example.test is now an administrator.",
+    )
   })
 
   it("disables and enables a person", async () => {
@@ -443,6 +578,7 @@ describe("People page", () => {
 
     await click(button("Done", reveal))
     expect(container.querySelector(".link-reveal")).toBeNull()
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Actions for robin@example.test")
   })
 
   it("runs one command at a time, so a second reset link cannot revoke the one shown", async () => {
@@ -532,7 +668,7 @@ describe("People page", () => {
     await click(personRow("robin@example.test").querySelector<HTMLButtonElement>("[aria-haspopup='menu']")!)
     const item = [...personRow("robin@example.test").querySelectorAll("[role='menuitem']")].at(-1)!
     expect(item.textContent).toBe(
-      "DeleteDeletes their sign-in, rules, and Google connections, and the events their rules wrote. Their own events stay.",
+      "DeleteDeletes their sign-in, rules, and Google connections, and the events their rules wrote. Their Google accounts and their own events stay.",
     )
     await click(item as HTMLElement)
     const confirmation = container.querySelector<HTMLElement>("#delete-person-user-robin")!
@@ -547,15 +683,61 @@ describe("People page", () => {
     expect(status()).toBe("robin@example.test was deleted. 5 events their rules wrote were deleted.")
   })
 
+  it("shows People first, with Invitations a tab away that counts those waiting", async () => {
+    await renderPeople(testI18n())
+    const tabs = [...container.querySelectorAll<HTMLAnchorElement>("nav.page-tabs a")]
+    expect(tabs.map((tab) => [tab.textContent, tab.getAttribute("href")])).toEqual([
+      ["Everyone", "/people"],
+      ["Invitations11 waiting", "/people/invitations"],
+    ])
+    expect(tabs[0]!.getAttribute("aria-current")).toBe("page")
+    expect(rows()).toHaveLength(3)
+
+    await click(tabs[1]!)
+    expect(window.location.pathname).toBe("/people/invitations")
+    expect(rows()).toHaveLength(0)
+    expect(container.querySelector("#invitations-title")?.textContent).toBe("Invitations waiting")
+    expect(container.querySelector(".invitation-item h3")?.textContent).toMatch(/^Expires in [67] days$/)
+  })
+
+  it("names the browser tab after the tab shown", async () => {
+    await renderPeople(testI18n(), { path: "/people/invitations" })
+    expect(document.title).toBe("Invitations – People – Calendar Ghost")
+  })
+
+  it("returns to the person you opened when you come back to People", async () => {
+    await renderPeople(testI18n())
+    const link = personRow("robin@example.test").querySelector<HTMLAnchorElement>("a.person-email")!
+    await click(link)
+    act(() => root?.unmount())
+    root = createRoot(container)
+    showPeople(testI18n(), new QueryClient({ defaultOptions: { queries: { retry: false } } }), 1)
+    await settle()
+    expect(document.activeElement?.textContent).toBe("robin@example.test")
+  })
+
+  it("opens at Invitations from its own address, and says when none are waiting", async () => {
+    await renderPeople(testI18n(), { path: "/people/invitations", answers: { "GET /api/v1/invitations": jsonResponse([]) } })
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Invitations")
+    expect(container.querySelector(".empty-panel h3")?.textContent).toBe("No invitations are waiting")
+  })
+
   it("invites someone with a link shown once, and revokes a waiting invitation", async () => {
     await renderPeople(testI18n())
     await click(button("Invite someone"))
     expect(sent("POST", "/api/v1/invitations")).toBeDefined()
+    // Creating one opens Invitations, where the link is.
+    expect(window.location.pathname).toBe("/people/invitations")
     const reveal = container.querySelector(".link-reveal")!
     expect(reveal.querySelector<HTMLInputElement>("input")!.value).toBe(`${ORIGIN}/invitation#inv_synthetic`)
     expect(reveal.textContent).toContain("It works once, until")
 
+    await click(button("Done", reveal))
+    // The link is gone, so focus returns to the button that made it.
+    expect(document.activeElement?.id).toBe("invite-someone")
+
     await click(button("Revoke"))
     expect(sent("DELETE", "/api/v1/invitations/inv-1")).toBeDefined()
+    expect(document.activeElement?.id).toBe("invitations-title")
   })
 })

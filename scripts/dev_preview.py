@@ -34,6 +34,8 @@ from calendar_sync.application.accounts import DiscoverCalendars, ListConnectedA
 from calendar_sync.application.activity import InspectActivityEvent
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.identity import SetUpInstallation
+from calendar_sync.application.installation_health import GetInstallationHealth
+from calendar_sync.application.operator_overview import OperatorOverview, UserStatuses
 from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
@@ -398,11 +400,29 @@ def build_preview_container(
             ),
         )
 
+    # The Operator Overview reads every User's status with the same heartbeat and pinned clock,
+    # so People shows each preview User's health as their own Overview does.
+    preview_clock = _FixedClock(moment)
+    statuses = UserStatuses(
+        adapters.installation_units,
+        adapters.locks,
+        preview_clock,
+        _RecentSchedulerHeartbeat(preview_clock, _enabled_rule_ids(scenario)),
+    )
     container = replace(
         composed,
         authorization=cast(AccountAuthorization, google),
         account_calendars=cast(AccountCalendars, google),
         user_services=preview_services,
+        installation_health=GetInstallationHealth(
+            adapters.users,
+            lambda users: {user: status.health for user, status in statuses.of(users).items()},
+            None,
+            preview_clock,
+        ),
+        operator_overview=OperatorOverview(
+            adapters.users, statuses, adapters.installation_units, preview_clock
+        ),
     )
     SetUpInstallation(
         adapters.users, adapters.passwords, adapters.sessions, adapters.ids, adapters.clock

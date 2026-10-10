@@ -64,6 +64,9 @@ ADMINISTRATOR_ROUTES = {
     ("GET", "/api/v1/storage/logs"),
     ("DELETE", "/api/v1/storage/logs"),
 }
+# An Installation Administrator's routes that name a User. Anyone else is answered 404, as for a
+# User who does not exist, so neither the route nor the User is revealed (ADR 0029).
+USER_NAMING_ADMINISTRATOR_ROUTES = {("GET", "/api/v1/users/{user_id}/overview")}
 # Readable with a session or an Integration Token (ADR 0024); Installation Health only by an
 # Installation Administrator's session or installation:read token (ADR 0030).
 STATUS_READER_ROUTES = {("GET", "/api/v1/status")}
@@ -116,6 +119,23 @@ def test_every_non_public_api_route_requires_a_signed_in_user(tmp_path: Path) ->
     assert administered == ADMINISTRATOR_ROUTES
 
 
+def test_an_administrator_naming_a_malformed_user_is_told_nobody_has_it(tmp_path: Path) -> None:
+    """A blank identifier names nobody: 404, never a server error (review on PR 68)."""
+    app = create_app(build_container(Settings(tmp_path / "test.db")))
+    with TestClient(app) as client:
+        sign_in(client)
+        answers = {
+            (method, path): client.request(
+                method, path.replace("{user_id}", "%20"), json={"role": "user", "state": "active"}
+            ).status_code
+            for method, path in ADMINISTRATOR_ROUTES | USER_NAMING_ADMINISTRATOR_ROUTES
+            if "{user_id}" in path
+        }
+
+    assert len(answers) == 5
+    assert set(answers.values()) == {404}, answers
+
+
 def test_a_user_who_does_not_administer_is_refused_every_administrator_route(
     tmp_path: Path,
 ) -> None:
@@ -160,6 +180,32 @@ def test_an_integration_token_is_refused_by_every_other_api_route(tmp_path: Path
     assert {status for _, _, status in refused} == {401}, refused
 
 
+def test_a_user_who_does_not_administer_finds_no_user_through_an_administrator_route(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "test.db"
+    app = create_app(build_container(Settings(database)))
+    with TestClient(app) as client:
+        sign_in(client)
+        administrator_id = client.get("/api/v1/session").json()["user"]["id"]
+        # A malformed identifier, such as a blank one, is as unknown as a missing User.
+        unknown_to_administrator = {
+            (path, user): client.get(path.format(user_id=user)).status_code
+            for _, path in USER_NAMING_ADMINISTRATOR_ROUTES
+            for user in ("nobody", "%20")
+        }
+        add_user(database, OTHER_USER, role="user")
+        client.cookies.set(SESSION_COOKIE, session_for(database, OTHER_USER))
+        answers = {
+            (path, user): client.get(path.format(user_id=user)).status_code
+            for _, path in USER_NAMING_ADMINISTRATOR_ROUTES
+            for user in (administrator_id, OTHER_USER.value, "nobody", "%20")
+        }
+
+    assert set(unknown_to_administrator.values()) == {404}
+    assert set(answers.values()) == {404}, answers
+
+
 RULE_POLICY = {
     "privacy_policy": "busy_only",
     "sync_all_day_events": True,
@@ -199,6 +245,7 @@ def test_every_route_answers_another_users_record_as_not_found(tmp_path: Path) -
         "account_id": "personal-account",
         "entry_id": entry,
         "token_id": token,
+        "user_id": owner.value,
     }
     add_user(database, OTHER_USER, role="user")
     # No scheduler, so nothing but the requests below touches the first User's rule.

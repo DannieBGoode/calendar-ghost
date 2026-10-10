@@ -100,6 +100,7 @@ machine and creates only the destination representation selected by each rule.
 | Incidents | Each person's Activity view, deduplication, optional email to each person, and the installation's SMTP recipient and webhook for installation incidents |
 | Monitoring | Each person's Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, and Installation Health for administrators, authorized with Integration Tokens issued in Settings |
 | Access | People sign in with email and password; Only me by default, or Invitation only, with single-use invitation and password reset links; an administrator role; encrypted Google OAuth credentials |
+| Operator Overview | Administrators see on **People** whether each person's synchronization works and why not, with calendars only as "Calendar 1", "Calendar 2", and each person's rules, accounts, Activity, and Google calls counted; each person sees the same about themself in Settings |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
 | Deployment | One Docker image and Compose service for `linux/amd64` and `linux/arm64` |
@@ -219,7 +220,10 @@ can be bookmarked and browser back/forward navigation works as expected. Setting
 each at its own URL: **Your account** (`/settings/account`, where `/settings` opens),
 **Connections** (`/settings/connections`, where Google returns after you connect an account), and,
 for administrators, **Administration** (`/settings/administration`). Administrators who let other
-people join also get **People** at `/people`.
+people join also get **People** at `/people`, with Installation Health above everyone and each
+person's sync status, and each person's page at `/people/{id}`. They never see anyone's calendar
+names, Google account emails, or events; each person can see exactly what they see under
+**Settings → Your account**.
 
 Open **View details** on a rule (`/rules/{id}`) to see its calendars, policy, projection count, and
 latest runs. Changing any of its policies pauses the rule until it passes a new preview,

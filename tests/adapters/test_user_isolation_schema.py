@@ -11,9 +11,10 @@ from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 INSTALLATION_TABLES = {"schema_migrations", "users", "installation_settings", "invitations"}
 SOURCE = Path(__file__).resolve().parents[2] / "src" / "calendar_sync"
 # Only these may receive the installation-wide unit of work: the ports that declare it, the
-# adapters that implement it and run migrations, the scheduler, and the composition root that
-# hands it to the scheduler. The Operator Overview joins them when it is built.
+# adapters that implement it and run migrations, the scheduler, the Operator Overview, and the
+# composition root that hands it to both.
 INSTALLATION_UNIT_RECEIVERS = {
+    "application/operator_overview.py",
     "application/ports.py",
     "bootstrap/container.py",
     "infrastructure/persistence/memory.py",
@@ -67,7 +68,7 @@ def test_every_owned_table_carries_its_user_and_a_reference_through_it(tmp_path:
                     )
 
 
-def test_only_the_scheduler_and_migrations_receive_the_installation_unit_of_work() -> None:
+def test_only_the_scheduler_overview_and_migrations_get_the_installation_unit() -> None:
     receivers = set()
     for module in SOURCE.rglob("*.py"):
         tree = ast.parse(module.read_text(encoding="utf-8"))
@@ -89,3 +90,4 @@ def test_only_the_scheduler_and_migrations_receive_the_installation_unit_of_work
 
     assert receivers <= INSTALLATION_UNIT_RECEIVERS, receivers - INSTALLATION_UNIT_RECEIVERS
     assert "infrastructure/scheduling.py" in receivers
+    assert "application/operator_overview.py" in receivers

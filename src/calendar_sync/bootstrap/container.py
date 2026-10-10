@@ -27,7 +27,6 @@ from calendar_sync.application.administration import (
     IssuePasswordReset,
     LinkAttempts,
     ListInvitations,
-    ListUsers,
     OwnedRules,
     ResetPassword,
     RevokeInvitation,
@@ -49,6 +48,7 @@ from calendar_sync.application.installation_health import (
 )
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
+from calendar_sync.application.operator_overview import OperatorOverview, UserStatuses
 from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
@@ -221,7 +221,6 @@ class AdministrationServices:
     issue_password_reset: IssuePasswordReset
     check_password_reset: CheckPasswordReset
     reset_password: ResetPassword
-    list_users: ListUsers
     change_role: ChangeRole
     change_user_state: ChangeUserState
     delete_user: DeleteUser
@@ -245,6 +244,8 @@ class Container:
     scheduler_watch: SchedulerWatch | None
     """Tells the installation's channels when the scheduler stops completing passes."""
     installation_health: GetInstallationHealth
+    operator_overview: OperatorOverview
+    """Every User's health for administrators, and what it shows about each User to them."""
     sends_email: bool
     """Whether Incident Notifications can also reach each User by email."""
     user_services: Callable[[UserId], UserServices]
@@ -264,7 +265,7 @@ class Adapters:
 
     unit_of_work: Callable[[UserId], UnitOfWorkFactory]
     installation_units: InstallationUnitOfWorkFactory
-    """Only the scheduler reads across Users (ADR 0029)."""
+    """Only the scheduler and the Operator Overview read across Users (ADR 0029)."""
     locks: RuleLocks
     clock: Clock
     ids: IdGenerator
@@ -400,6 +401,8 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         if adapters.calendar_provider is not None and adapters.accounts is not None
         else None
     )
+    # Installation Health counts the verdicts People shows, so the two never disagree.
+    statuses = UserStatuses(adapters.installation_units, adapters.locks, adapters.clock, scheduler)
     google_configured = bool(
         adapters.authorization and settings.google_client_id and settings.google_client_secret
     )
@@ -430,9 +433,12 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         ),
         installation_health=GetInstallationHealth(
             adapters.users,
-            lambda user: user_services(user).get_installation_status.execute().health,
+            lambda users: {user: status.health for user, status in statuses.of(users).items()},
             scheduler,
             adapters.clock,
+        ),
+        operator_overview=OperatorOverview(
+            adapters.users, statuses, adapters.installation_units, adapters.clock
         ),
         sends_email=adapters.sends_email,
         user_services=user_services,
@@ -476,7 +482,6 @@ def _administration(
         issue_password_reset=IssuePasswordReset(users, resets, clock),
         check_password_reset=CheckPasswordReset(resets, clock, attempts),
         reset_password=ResetPassword(resets, passwords, sessions, clock, attempts),
-        list_users=ListUsers(users),
         change_role=ChangeRole(users),
         change_user_state=ChangeUserState(users, sessions),
         delete_user=DeleteUser(users, sessions, owned),

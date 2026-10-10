@@ -10,6 +10,7 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { codeTag, rich } from "@/i18n/rich"
 import { ApiError, type LogUsage, STORAGE_LOGS_URL, api } from "@/lib/api"
+import { OWN_OVERVIEW_QUERY } from "@/lib/operator-overview"
 import {
   activitySummary,
   canClearActivity,
@@ -42,6 +43,7 @@ function useStorageCommands() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["storage"] }),
         queryClient.invalidateQueries({ queryKey: ["activity"] }),
+        queryClient.invalidateQueries({ queryKey: OWN_OVERVIEW_QUERY }),
       ])
     },
     onError: async (error) => {

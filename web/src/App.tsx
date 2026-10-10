@@ -183,6 +183,10 @@ function AuthenticatedApp() {
     navigate({ view: "rules", ruleId }, options)
   }
 
+  function openPerson(personId: string) {
+    navigate({ view: "people", ruleId: null, personId })
+  }
+
   function openSettingsTab(settingsTab: SettingsTab) {
     navigate({ view: "settings", ruleId: null, settingsTab })
   }
@@ -211,7 +215,7 @@ function AuthenticatedApp() {
           <Button ref={menuButton} className="menu-button" variant="ghost" size="icon" onClick={() => setMobileNav((open) => !open)} aria-expanded={mobileNav} aria-controls="primary-nav" aria-label={mobileNav ? t("app.nav.close") : t("app.nav.open")}>{mobileNav ? <X /> : <Menu />}</Button>
         </div>
       </header>
-      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenSettingsTab={openSettingsTab} /></main>
+      <main className="app-main" ref={main} tabIndex={-1}><Dashboard location={location} arrival={arrival} visit={visit} onViewChange={changeView} onOpenRule={openRule} onOpenSettingsTab={openSettingsTab} onOpenPerson={openPerson} /></main>
       <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
       <AppFooter />
     </div>

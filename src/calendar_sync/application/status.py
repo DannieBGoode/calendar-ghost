@@ -7,16 +7,14 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from calendar_sync.application.activity import (
-    IncidentSummary,
-    OperationsOverview,
-    OperationsQueries,
-)
+from calendar_sync.application.activity import OperationsQueries
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.locking import RuleWorkKind
 from calendar_sync.application.ports import (
     Clock,
     IncidentMessage,
+    IncidentSummary,
+    OperationsOverview,
     SchedulerHeartbeat,
     SchedulerProgress,
 )
@@ -100,6 +98,9 @@ class InstallationStatus:
     checked_at: datetime
     providers: Mapping[str, str] = field(default_factory=dict)
     """Each Connected Account's Provider Kind, by account id."""
+    calendar_numbers: Mapping[CalendarEndpoint, int] = field(default_factory=dict)
+    """In the Operator Overview, the number each calendar's neutral label carries; empty when
+    calendars are named."""
 
     @property
     def needs_attention(self) -> bool:

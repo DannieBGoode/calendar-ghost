@@ -103,6 +103,9 @@ def test_users_are_searched_filtered_sorted_and_paged(tmp_path: Path) -> None:
         return [user.email for user in users.find(query).users]
 
     assert users.find(UserQuery(limit=2)) == UserPage((FIRST, SECOND), total=5)
+    # No limit reads every match, with its total, in one step.
+    everyone = users.find(UserQuery(offset=1, limit=None))
+    assert (len(everyone.users), everyone.total) == (4, 5)
     assert users.find(UserQuery(search="robin")).users == (people[2],)
     assert emails(UserQuery(offset=4)) == ["under_score@example.test"]
     assert emails(UserQuery(search="EXAMPLE")) == [

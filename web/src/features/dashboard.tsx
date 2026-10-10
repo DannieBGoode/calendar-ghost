@@ -1,12 +1,17 @@
 import { ActivityView } from "@/features/activity"
 import { OverviewView } from "@/features/overview"
 import { PeopleView } from "@/features/people-page"
+import { PersonView } from "@/features/person-page"
 import { RuleDetailsView } from "@/features/rule-details"
 import { RulesView } from "@/features/rules"
 import { SettingsPage } from "@/features/settings"
+import { peopleReturnSearch } from "@/lib/use-people"
 import {
+  activitySearch,
+  DEFAULT_PEOPLE_TAB,
   DEFAULT_SETTINGS_TAB,
   type AppLocation,
+  type OpenPerson,
   type OpenRule,
   type OpenSettingsTab,
   type ViewChange,
@@ -21,6 +26,7 @@ export function Dashboard({
   onViewChange,
   onOpenRule,
   onOpenSettingsTab,
+  onOpenPerson,
 }: {
   location: AppLocation
   arrival: ViewOptions
@@ -28,6 +34,7 @@ export function Dashboard({
   onViewChange: ViewChange
   onOpenRule: OpenRule
   onOpenSettingsTab: OpenSettingsTab
+  onOpenPerson: OpenPerson
 }) {
   const view = location.view
   if (view === "rules" && location.ruleId !== null) {
@@ -52,11 +59,25 @@ export function Dashboard({
   }
   // Remounted on every arrival so its filters always match the address it was opened at.
   if (view === "activity") return <ActivityView key={visit} onViewChange={onViewChange} onOpenRule={onOpenRule} />
-  // Remounted on every arrival so its search, filters, and page match the address.
-  if (view === "people") return <PeopleView key={visit} />
+  if (view === "people") {
+    return (
+      <PeopleRoute
+        location={location}
+        arrival={arrival}
+        visit={visit}
+        onViewChange={onViewChange}
+        onOpenPerson={onOpenPerson}
+      />
+    )
+  }
   if (view === "settings") {
     return (
       <SettingsPage
+        ownActions={{
+          openRule: onOpenRule,
+          openConnections: () => onOpenSettingsTab("connections"),
+          openActivity: (ruleId) => onViewChange("activity", ruleId ? { search: activitySearch(ruleId) } : {}),
+        }}
         tab={location.settingsTab ?? DEFAULT_SETTINGS_TAB}
         onOpenTab={onOpenSettingsTab}
         onOpenPeople={() => onViewChange("people")}
@@ -64,4 +85,32 @@ export function Dashboard({
     )
   }
   return <OverviewView onViewChange={onViewChange} onOpenRule={onOpenRule} />
+}
+
+/** People, or one person's page under it. */
+function PeopleRoute({
+  location: { personId, peopleTab },
+  arrival: { notice },
+  visit,
+  onViewChange,
+  onOpenPerson,
+}: {
+  location: AppLocation
+  arrival: ViewOptions
+  visit: number
+  onViewChange: ViewChange
+  onOpenPerson: OpenPerson
+}) {
+  if (personId) {
+    return (
+      <PersonView
+        key={personId}
+        personId={personId}
+        onBack={() => onViewChange("people", { search: peopleReturnSearch(personId) })}
+        onDeleted={(deleted) => onViewChange("people", { notice: deleted, search: peopleReturnSearch(personId) })}
+      />
+    )
+  }
+  // Remounted on every arrival so its search, filters, and page match the address.
+  return <PeopleView key={visit} tab={peopleTab ?? DEFAULT_PEOPLE_TAB} notice={notice ?? null} onOpenPerson={onOpenPerson} />
 }

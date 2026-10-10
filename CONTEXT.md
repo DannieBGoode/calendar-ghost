@@ -246,8 +246,12 @@ A User who holds the role that operates the installation. The first User holds i
 _Avoid_: Owner, superuser, admin user
 
 **Operator Overview**:
-The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels, plus the User's email, plan, last sign-in, state, and resource use. It is the same on every installation, never shows calendar names, account emails, or event content, and every User can see exactly what it shows about them.
+The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, and Resource Use. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content, and every User can see exactly what it shows about them, in Settings.
 _Avoid_: Admin dashboard, user management, support view
+
+**Resource Use**:
+How much of the installation one User uses, as counts only: their rules, Connected Accounts, and Activity entries, and, per calendar provider, the calls their runs made over the last 30 UTC days, how many the provider refused for its rate limit, and how many failed. It never says what a call asked for.
+_Avoid_: Usage, consumption
 
 **Disabled User**:
 A User an Installation Administrator has stopped from signing in. Their rules are held and resume by themselves when the User is enabled again; nothing they own is removed.
@@ -362,6 +366,9 @@ diagnostics keep the glossary terms above.
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
+| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them; to each User, "What your administrator can see" in Settings |
+| Installation Status verdict, on People | "Not running" (stalled), "Stopped", "Needs a look" (review), "Waiting for Google", "Paused", "Not set up" (setup), "Healthy" |
+| User Deletion | "Delete your account" for oneself, naming what is deleted (sign-in, rules, Google connections, tokens, Activity, and the events their rules wrote when chosen) and that their Google accounts and own events stay; on People, "Delete" and "Delete {email} permanently?", naming the same and that the events their rules wrote are deleted. "Account deletion" stays out of domain and documentation language |
 
 - The product is named **Calendar Ghost**. "Ghost" is brand language for the mark and tagline;
   the interface and documentation keep this glossary's terms, so a Managed Projection is never

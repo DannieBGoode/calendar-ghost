@@ -61,7 +61,8 @@ class SqliteUserDirectory:
                 ORDER BY {column} IS NULL, {column} {direction}, created_at, rowid
                 LIMIT ? OFFSET ?
                 """,  # noqa: S608
-                (*parameters, query.limit, query.offset),
+                # SQLite reads a negative limit as no limit.
+                (*parameters, -1 if query.limit is None else query.limit, query.offset),
             ).fetchall()
         return UserPage(tuple(_user(row) for row in rows), int(total))
 

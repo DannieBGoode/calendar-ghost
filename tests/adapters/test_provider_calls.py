@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from calendar_sync.application.errors import ProviderFailure
-from calendar_sync.application.ports import ProviderCallTally
+from calendar_sync.application.ports import ProviderCallCounts, ProviderCallTally
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import EventId, EventRef
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
@@ -71,6 +71,18 @@ def test_a_measured_run_tallies_its_calls_and_how_they_went() -> None:
     assert tally.slowest_seconds == pytest.approx(1.3)
     assert tally.rate_limited == 2
     assert tally.server_errors == 1
+    # Not found is an answer; a refusal other than the rate limit, and a server error, failed.
+    assert tally.providers == {
+        ProviderKind.GOOGLE: ProviderCallCounts(calls=6, rate_limited=2, failed=2)
+    }
+
+
+def test_a_call_that_got_no_answer_failed() -> None:
+    with ContextProviderCallStats().measure() as tally:
+        record_call(ProviderKind.GOOGLE, "events.get", None, 0.1, rate_limited=False)
+        record_call(ProviderKind.GOOGLE, "events.get", 410, 0.1, rate_limited=False)
+
+    assert tally.providers == {ProviderKind.GOOGLE: ProviderCallCounts(calls=2, failed=1)}
 
 
 def test_calls_outside_a_measured_run_are_not_tallied() -> None:
@@ -83,7 +95,9 @@ def test_calls_outside_a_measured_run_are_not_tallied() -> None:
         record_call(ProviderKind.GOOGLE, "events.get", 200, 0.1, rate_limited=False)
 
     record_call(ProviderKind.GOOGLE, "events.get", 200, 0.1, rate_limited=False)
-    assert tally == ProviderCallTally(1, 0.1, 0.1, 0, 0, 1)
+    assert tally == ProviderCallTally(
+        1, 0.1, 0.1, 0, 0, 1, providers={ProviderKind.GOOGLE: ProviderCallCounts(calls=1)}
+    )
 
 
 def test_token_refreshes_count_toward_the_run_that_needed_them() -> None:

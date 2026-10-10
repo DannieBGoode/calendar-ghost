@@ -11,6 +11,7 @@ from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.sqlite import (
+    SqliteInstallationUnitOfWorkFactory,
     SqliteUnitOfWorkFactory,
     initialize_database,
 )
@@ -39,6 +40,7 @@ class TestInMemoryUnitOfWork(PersistenceContract):
             disconnect=disconnect,
             disable=database.database.disabled.add,
             refused=(KeyError, ValueError),
+            installation=database.installation(),
         )
 
 
@@ -84,4 +86,5 @@ class TestSqliteUnitOfWork(PersistenceContract):
             disconnect=disconnect,
             disable=disable,
             refused=(sqlite3.IntegrityError,),
+            installation=SqliteInstallationUnitOfWorkFactory(database),
         )

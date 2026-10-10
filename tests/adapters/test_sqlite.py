@@ -1303,3 +1303,35 @@ def test_the_installation_unit_lists_every_users_enabled_rules_and_holds_disable
         (USER, "rule-1", NOW),
         (OTHER_USER, "theirs", None),
     ]
+
+
+def test_migration_24_numbers_existing_rules_in_the_order_the_database_holds_them(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    sqlite_units(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE sync_rules DROP COLUMN creation_order")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 24")
+        # Added before identifiers would sort them, so the order is the database's own.
+        for rule_id, calendar in (("rule-b", "first"), ("rule-a", "second")):
+            connection.execute(
+                """
+                INSERT INTO sync_rules (id, user_id, source_account_id, source_calendar_id,
+                    destination_account_id, destination_calendar_id, privacy_policy,
+                    all_day_policy, busy_title, initial_lookback_days, state)
+                VALUES (?, ?, 'personal-account', ?, 'work-account', 'work-calendar',
+                    'busy_only', 'include', 'Busy', 30, 'enabled')
+                """,
+                (rule_id, USER.value, calendar),
+            )
+
+    initialize_database(database)
+    with sqlite_units(database)() as uow:
+        uow.rules.add(replace(rule(), id=SyncRuleId("rule-0")))
+        uow.commit()
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        records = installation.status_records([USER])[USER]
+
+    assert [recorded.rule.id.value for recorded in records.rules] == ["rule-b", "rule-a", "rule-0"]

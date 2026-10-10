@@ -46,7 +46,10 @@ export function OwnAccountSection({
         <IncidentEmailsItem user={user} sendsEmail={sendsEmail} onDone={setMessage} />
         <SelfDeletionItem onOpenPeople={onOpenPeople} />
       </div>
-      {message && <p role="status">{message}</p>}
+      {/* Always present, so a screen reader announces each message as it arrives. */}
+      <p role="status" className={message ? undefined : "sr-only"}>
+        {message}
+      </p>
     </section>
   )
 }
@@ -74,6 +77,14 @@ function EmailItem({ email, onDone }: { email: string | null; onDone: Announce }
   function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
     if (next.trim() && password) save.mutate()
+  }
+
+  // Cancelling forgets what was typed and any refusal, so the form opens fresh.
+  function cancel() {
+    setOpen(false)
+    setNext("")
+    setPassword("")
+    save.reset()
   }
 
   return (
@@ -113,7 +124,7 @@ function EmailItem({ email, onDone }: { email: string | null; onDone: Announce }
             <Button type="submit" disabled={!next.trim() || !password || save.isPending}>
               {save.isPending ? t("auth.pleaseWait") : t("settings.ownAccount.email.save")}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+            <Button type="button" variant="ghost" onClick={cancel}>
               {t("settings.ownAccount.cancel")}
             </Button>
           </div>
@@ -146,6 +157,13 @@ function PasswordItem({ onDone }: { onDone: Announce }) {
   function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault()
     if (ready) save.mutate()
+  }
+
+  function cancel() {
+    setOpen(false)
+    setCurrent("")
+    setPasswords({ password: "", confirmation: "" })
+    save.reset()
   }
 
   return (
@@ -181,7 +199,7 @@ function PasswordItem({ onDone }: { onDone: Announce }) {
             <Button type="submit" disabled={!ready || save.isPending}>
               {save.isPending ? t("auth.pleaseWait") : t("settings.ownAccount.password.save")}
             </Button>
-            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+            <Button type="button" variant="ghost" onClick={cancel}>
               {t("settings.ownAccount.cancel")}
             </Button>
           </div>
@@ -224,6 +242,7 @@ function IncidentEmailsUnavailable({ user }: { user: SignedInUser }) {
         {administrator && (
           <a className="text-link" href={INCIDENT_EMAIL_HELP_URL} target="_blank" rel="noreferrer">
             {t("settings.ownAccount.notifications.setUpEmail")}
+            <span className="sr-only">{t("common.opensInNewTab")}</span>
           </a>
         )}
       </div>

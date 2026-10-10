@@ -7,7 +7,7 @@ and how many Users are in each Installation Status verdict. It names no rule, ca
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -83,8 +83,8 @@ class InstallationHealth:
 @dataclass(slots=True)
 class GetInstallationHealth:
     users: UserDirectory
-    verdict_of: Callable[[UserId], StatusVerdict]
-    """Each User's Installation Status verdict, as their own Overview shows it."""
+    verdicts: Callable[[Sequence[UserId]], Mapping[UserId, StatusVerdict]]
+    """The Users' Installation Status verdicts, as their own Overviews show them, read at once."""
     scheduler: SchedulerHeartbeat | None
     clock: Clock
 
@@ -92,7 +92,7 @@ class GetInstallationHealth:
         now = self.clock.now()
         everyone = self.users.list()
         active = [user for user in everyone if user.state is UserState.ACTIVE]
-        counts = Counter(self.verdict_of(user.id) for user in active)
+        counts = Counter(self.verdicts([user.id for user in active]).values())
         incidents = installation_incidents(
             self.scheduler.progress() if self.scheduler is not None else None, now
         )

@@ -13,7 +13,7 @@
     "administration": "Administration"
   },
   "ownAccount": {
-    "title": "Your account",
+    "title": "Sign-in and email",
     "intro": "How you sign in to Calendar Ghost, and the email it sends you.",
     "cancel": "Cancel",
     "currentPassword": "Current password",
@@ -46,7 +46,7 @@
     },
     "delete": {
       "title": "Delete your account",
-      "body": "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your own events stay.",
+      "body": "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your Google accounts and your own events stay.",
       "open": "Delete your account",
       "confirmTitle": "Delete your account permanently?",
       "confirmBody": "This deletes your sign-in, rules, Google connections, tokens, and Activity, and signs you out. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
@@ -418,5 +418,15 @@
       "twilight": "Twilight (indigo)",
       "midnight": "Midnight (blue)"
     }
+  },
+  "administratorView": {
+    "title": "What administrators can see",
+    "intro": "Administrators see whether your synchronization works, never your calendar names, Google account emails, or events. Your calendars appear to them only by number.",
+    "summary": "Your sync status",
+    "show": "Show what they see",
+    "hide": "Hide what they see",
+    "loadFailure": "What your administrator can see could not load.",
+    "tryAgain": "Try again",
+    "detailsLabel": "What administrators see about you"
   }
 }

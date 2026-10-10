@@ -2,7 +2,7 @@ import asyncio
 import sqlite3
 import time
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from threading import Barrier, Lock, Thread
 from typing import Any, cast
@@ -31,6 +31,7 @@ from calendar_sync.application.ports import (
     IncidentResolution,
     InstallationUnitOfWork,
     InstallationUnitOfWorkFactory,
+    ProviderCallCounts,
     RuleRunOutcome,
     RunKind,
     ScheduledRule,
@@ -976,6 +977,31 @@ def test_each_scheduler_pass_forgets_change_values_of_every_rule() -> None:
 
     # Paused and removed rules never run, so their values expire here rather than in a run.
     assert unit_of_work.state.change_values_forgotten_before == now - SOURCE_CHANGE_RETENTION
+
+
+def test_each_scheduler_pass_forgets_provider_calls_older_than_30_days() -> None:
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    today = date(2026, 9, 30)
+    for days_ago in (0, 29, 30):
+        unit_of_work.state.provider_calls[(ProviderKind.GOOGLE, today - timedelta(days_ago))] = (
+            ProviderCallCounts(days_ago + 1)
+        )
+
+    class LateClock:
+        def now(self) -> datetime:
+            # Still the 29th west of UTC, already the 30th in UTC.
+            return datetime(2026, 9, 29, 22, tzinfo=timezone(timedelta(hours=-5)))
+
+    scheduler = _scheduler(
+        RecordingExecuteRule([]), unit_of_work, RecordingHealth(), clock=LateClock()
+    )
+
+    asyncio.run(scheduler.run_once())
+
+    assert sorted(day for _, day in unit_of_work.state.provider_calls) == [
+        today - timedelta(29),
+        today,
+    ]
 
 
 def test_a_failed_pass_is_logged_and_the_next_interval_runs_again(

@@ -9,7 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
-import type { Person, Registration, SessionStatus } from "@/lib/api"
+import type { Person, Registration, SessionStatus, UserOverview } from "@/lib/api"
 import type { SettingsTab } from "@/lib/navigation"
 
 import { SettingsPage } from "./settings"
@@ -37,6 +37,25 @@ function session(role: "installation_administrator" | "user"): SessionStatus {
   }
 }
 
+/** What the Operator Overview shows about someone with nothing set up yet. */
+const NOTHING_SET_UP: UserOverview = {
+  user: { id: "user-dana", email: "dana@example.test", role: "user", state: "active", created_at: "2026-09-01T00:00:00Z", last_sign_in_at: null },
+  status: {
+    status: "setup",
+    needs_attention: false,
+    summary: "Setup is not finished.",
+    version: "0.1.1",
+    checked_at: "2026-09-01T00:00:00Z",
+    last_synced_at: null,
+    scheduler: { configured: true, last_pass_completed_at: null, current_pass_started_at: null },
+    counts: { rules: 0, running: 0, stopped: 0, paused: 0, overdue: 0, open_incidents: 0, blocked_events: 0, disconnected_accounts: 0, lapsed_accounts: 0 },
+    problems: [],
+    rules: [],
+    incidents: [],
+  },
+  resources: { rules: 0, connected_accounts: 0, activity_entries: 0, provider_calls: [], since: "2026-09-01" },
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
 }
@@ -58,6 +77,7 @@ function serve({ role = "installation_administrator", registration, answers = {}
     "GET /api/v1/google/configuration": jsonResponse({ configured: true, redirect_uri: null }),
     "GET /api/v1/accounts": jsonResponse([]),
     "GET /api/v1/integration-tokens": jsonResponse([]),
+    "GET /api/v1/account/overview": jsonResponse(NOTHING_SET_UP),
     "GET /api/v1/storage": jsonResponse({
       database: { bytes: 1024 * 1024, reclaimable_bytes: 0, activity_entries: 0, oldest_activity_at: null },
       logs: { bytes: 0, files: 0, oldest_at: null, newest_at: null },
@@ -121,7 +141,7 @@ async function renderSettings(i18n: I18n, scenario: Scenario = {}) {
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <SettingsPage tab={scenario.tab ?? "administration"} onOpenTab={() => undefined} onOpenPeople={() => undefined} />
+            <SettingsPage tab={scenario.tab ?? "administration"} onOpenTab={() => undefined} onOpenPeople={() => undefined} ownActions={{ openRule: () => undefined, openConnections: () => undefined, openActivity: () => undefined }} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -189,9 +209,9 @@ describe("Administration", () => {
 describe("Settings for someone who is not an administrator", () => {
   it("offers no Administration tab, shows Your account at its address, and never asks for what it holds", async () => {
     await renderSettings(testI18n(), { role: "user", tab: "administration" })
-    const tabs = [...container.querySelectorAll("nav.settings-tabs a")].map((tab) => tab.textContent)
+    const tabs = [...container.querySelectorAll("nav.page-tabs a")].map((tab) => tab.textContent)
     expect(tabs).toEqual(["Your account", "Connections"])
-    expect(container.querySelector("nav.settings-tabs [aria-current='page']")?.textContent).toBe("Your account")
+    expect(container.querySelector("nav.page-tabs [aria-current='page']")?.textContent).toBe("Your account")
     expect(section("own-account-title")).not.toBeNull()
     expect(section("registration-title")).toBeNull()
     expect(section("storage-title")).toBeNull()

@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from types import TracebackType
-from typing import Protocol, Self
+from typing import Literal, Protocol, Self
 
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.providers import ProviderKind
@@ -455,6 +455,14 @@ class ConnectedAccountRecords(Protocol):
         ...
 
 
+class ProviderCallRepository(Protocol):
+    """How many calls a User's runs made to each provider, per UTC day (ADR 0030)."""
+
+    def add(self, day: date, provider: ProviderKind, counts: ProviderCallCounts) -> None:
+        """Add one run's calls to the User's counts for that provider and day."""
+        ...
+
+
 class UnitOfWork(Protocol):
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
@@ -468,6 +476,7 @@ class UnitOfWork(Protocol):
     run_outcomes: RuleRunOutcomeRepository
     previews: RulePreviewRepository
     calendar_names: CalendarNameRepository
+    provider_calls: ProviderCallRepository
 
     def __enter__(self) -> Self: ...
 
@@ -506,6 +515,48 @@ class ScheduledRule:
     """When the rule's last successful full run completed, so its daily pass is due per rule."""
 
 
+@dataclass(frozen=True, slots=True)
+class RecordedRule:
+    """A rule with what Installation Status reads about it."""
+
+    rule: SyncRule
+    last_sync: RuleRunOutcome | None
+    latest_preview: RulePreviewSummary | None
+
+
+@dataclass(frozen=True, slots=True)
+class StatusRecords:
+    """What one User's Installation Status is computed from. It holds no calendar or account
+    name, so nothing read here can show one."""
+
+    rules: tuple[RecordedRule, ...]
+    """In the order the rules were created."""
+    overview: OperationsOverview
+    incidents: tuple[IncidentSummary, ...]
+    """Open incidents, most recently updated first."""
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCallUse:
+    """One provider's calls over some days."""
+
+    provider: ProviderKind
+    calls: int
+    rate_limited: int
+    failed: int
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceUse:
+    """How much of the installation one User uses, in counts; never what their records say."""
+
+    rules: int
+    connected_accounts: int
+    activity_entries: int
+    provider_calls: tuple[ProviderCallUse, ...]
+    """Each provider's calls since the day asked for, by provider."""
+
+
 class InstallationUnitOfWork(Protocol):
     """What reaches across Users. Only the scheduler, migrations, and the Operator Overview
     receive it, so crossing Users is visible in a type (ADR 0029)."""
@@ -527,6 +578,20 @@ class InstallationUnitOfWork(Protocol):
 
     def forget_change_values(self, before: datetime) -> None:
         """Discard every User's Source Change values recorded before `before` (ADR 0017)."""
+        ...
+
+    def resource_use(self, users: Collection[UserId], since: date) -> Mapping[UserId, ResourceUse]:
+        """How much each of `users` uses: their rules, Connected Accounts, and Activity entries,
+        and their provider calls from `since` on."""
+        ...
+
+    def forget_provider_calls(self, before: date) -> None:
+        """Discard every User's provider call counts of days before `before`."""
+        ...
+
+    def status_records(self, users: Collection[UserId]) -> Mapping[UserId, StatusRecords]:
+        """What each of `users`' Installation Status is computed from, read in the same number
+        of queries however many rules they have. A User with no records has empty ones."""
         ...
 
 
@@ -570,6 +635,17 @@ class RunIdGenerator(Protocol):
 
 
 @dataclass(slots=True)
+class ProviderCallCounts:
+    """How many calls went to one provider, and how many of them did not get what they asked."""
+
+    calls: int = 0
+    rate_limited: int = 0
+    """Calls the provider refused for its rate limit or quota."""
+    failed: int = 0
+    """Calls with no answer, or answered with an error other than a rate limit or not found."""
+
+
+@dataclass(slots=True)
 class ProviderCallTally:
     """The provider calls one run made so far; the adapter adds each call as it returns."""
 
@@ -582,6 +658,8 @@ class ProviderCallTally:
     """Calls the provider answered with a server error."""
     token_refreshes: int = 0
     """Access tokens renewed during the run."""
+    providers: dict[ProviderKind, ProviderCallCounts] = field(default_factory=dict)
+    """The same calls by provider, as each User's resource use counts them."""
 
 
 class ProviderCallStats(Protocol):
@@ -656,6 +734,65 @@ class IncidentMessage:
 
     code: str
     params: Mapping[str, str | int | None] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class OpenBlock:
+    entry_id: int
+    rule_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class AccountStanding:
+    """A Connected Account's state and Provider Kind; never its email or name."""
+
+    id: str
+    state: str
+    provider: str
+    lapsed: bool = False
+    """Whether the provider stopped accepting a connected account (ADR 0027)."""
+
+
+@dataclass(frozen=True, slots=True)
+class OperationsOverview:
+    connected_accounts: int
+    disconnected_accounts: int
+    open_incidents: int
+    last_synced_at: str | None
+    open_blocks: tuple[OpenBlock, ...]
+    """Events of existing rules whose latest decision was a block, newest first."""
+    accounts: tuple[AccountStanding, ...] = ()
+    """Every Connected Account, ordered by id."""
+
+    @property
+    def lapsed_accounts(self) -> int:
+        """Connected accounts whose authorization lapsed."""
+        return sum(account.lapsed for account in self.accounts)
+
+
+# The values the incidents table allows; its CHECK constraints keep stored rows to these.
+IncidentState = Literal["open", "resolved"]
+IncidentResolutionValue = Literal[
+    "sync_succeeded", "blocks_cleared", "rule_removed", "access_restored"
+]
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentSummary:
+    id: str
+    rule_id: str | None
+    category: str
+    state: IncidentState
+    summary: str
+    opened_at: str
+    updated_at: str
+    resolved_at: str | None = None
+    resolution: IncidentResolutionValue | None = None
+    """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
+    account_id: str | None = None
+    """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
+    message: IncidentMessage | None = None
+    """The summary as a code and parameters, when it was recorded (ADR 0026)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -883,7 +1020,8 @@ class UserQuery:
     sort: UserSort = UserSort.JOINED
     descending: bool = False
     offset: int = 0
-    limit: int = 50
+    limit: int | None = 50
+    """How many to return; None returns every match, read in the same step as the total."""
 
 
 @dataclass(frozen=True, slots=True)

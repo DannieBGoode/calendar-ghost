@@ -15,7 +15,12 @@ from calendar_sync.application.errors import (
     ActivityRuleRemoved,
     EventInspectionUnavailable,
 )
-from calendar_sync.application.ports import CalendarReader, IncidentMessage, UnitOfWorkFactory
+from calendar_sync.application.ports import (
+    CalendarReader,
+    IncidentSummary,
+    OperationsOverview,
+    UnitOfWorkFactory,
+)
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventId,
@@ -161,65 +166,6 @@ class ActivityQueries(Protocol):
     def recent_changes(self, limit: int) -> Sequence[RecentChange]:
         """The newest written events, each repeated repair counted on its newest write."""
         ...
-
-
-@dataclass(frozen=True, slots=True)
-class OpenBlock:
-    entry_id: int
-    rule_id: str
-
-
-@dataclass(frozen=True, slots=True)
-class AccountStanding:
-    """A Connected Account's state and Provider Kind; never its email or name."""
-
-    id: str
-    state: str
-    provider: str
-    lapsed: bool = False
-    """Whether the provider stopped accepting a connected account (ADR 0027)."""
-
-
-@dataclass(frozen=True, slots=True)
-class OperationsOverview:
-    connected_accounts: int
-    disconnected_accounts: int
-    open_incidents: int
-    last_synced_at: str | None
-    open_blocks: tuple[OpenBlock, ...]
-    """Events of existing rules whose latest decision was a block, newest first."""
-    accounts: tuple[AccountStanding, ...] = ()
-    """Every Connected Account, ordered by id."""
-
-    @property
-    def lapsed_accounts(self) -> int:
-        """Connected accounts whose authorization lapsed."""
-        return sum(account.lapsed for account in self.accounts)
-
-
-# The values the incidents table allows; its CHECK constraints keep stored rows to these.
-IncidentState = Literal["open", "resolved"]
-IncidentResolutionValue = Literal[
-    "sync_succeeded", "blocks_cleared", "rule_removed", "access_restored"
-]
-
-
-@dataclass(frozen=True, slots=True)
-class IncidentSummary:
-    id: str
-    rule_id: str | None
-    category: str
-    state: IncidentState
-    summary: str
-    opened_at: str
-    updated_at: str
-    resolved_at: str | None = None
-    resolution: IncidentResolutionValue | None = None
-    """Why a resolved Incident resolved; None while open or when the reason was not recorded."""
-    account_id: str | None = None
-    """The Connected Account whose failure opened or last refreshed it, when that was recorded."""
-    message: IncidentMessage | None = None
-    """The summary as a code and parameters, when it was recorded (ADR 0026)."""
 
 
 class OperationsQueries(Protocol):

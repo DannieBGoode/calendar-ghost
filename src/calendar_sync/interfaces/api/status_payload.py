@@ -1,9 +1,11 @@
-"""Installation Status as the status API and MCP return it: no IDs of accounts or calendars."""
+"""Installation Status as the status API, MCP, and the Operator Overview return it: no IDs of
+accounts or calendars."""
 
 from __future__ import annotations
 
 from calendar_sync import __version__
 from calendar_sync.application.installation_health import InstallationHealth
+from calendar_sync.application.operator_overview import UserOverview
 from calendar_sync.application.ports import IncidentMessage
 from calendar_sync.application.status import (
     InstallationStatus,
@@ -18,6 +20,8 @@ from calendar_sync.interfaces.api.schemas import (
     InstallationHealthResponse,
     InstallationIncidentResponse,
     ProblemResponse,
+    ProviderCallsResponse,
+    ResourceUseResponse,
     SchedulerResponse,
     StatusCalendarResponse,
     StatusCountsResponse,
@@ -119,6 +123,7 @@ def _calendar(
     return StatusCalendarResponse(
         calendar=calendar_display_name(endpoint, rule.summary.names),
         provider=status.providers.get(endpoint.connected_account_id.value),
+        number=status.calendar_numbers.get(endpoint),
     )
 
 
@@ -133,4 +138,23 @@ def installation_health_response(health: InstallationHealth) -> InstallationHeal
         users={verdict.value: count for verdict, count in health.users.items()},
         disabled_users=health.disabled_users,
         checked_at=health.checked_at.isoformat(),
+    )
+
+
+def resource_use_response(overview: UserOverview) -> ResourceUseResponse:
+    resources = overview.resources
+    return ResourceUseResponse(
+        rules=resources.rules,
+        connected_accounts=resources.connected_accounts,
+        activity_entries=resources.activity_entries,
+        provider_calls=[
+            ProviderCallsResponse(
+                provider=calls.provider.value,
+                calls=calls.calls,
+                rate_limited=calls.rate_limited,
+                failed=calls.failed,
+            )
+            for calls in resources.provider_calls
+        ],
+        since=overview.calls_since.isoformat(),
     )

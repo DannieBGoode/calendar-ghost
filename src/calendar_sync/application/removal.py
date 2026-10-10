@@ -23,10 +23,12 @@ from calendar_sync.application.ports import (
     Clock,
     ProjectionDeleter,
     ProviderCallStats,
+    ProviderCallTally,
     RemovalIncidents,
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.application.resource_use import record_provider_calls
 from calendar_sync.application.retry import with_retries
 from calendar_sync.application.run_log import UntalliedProviderCalls, call_summary, duration
 from calendar_sync.domain.model import EventMapping, ProjectionHandling, SyncRule, SyncRuleId
@@ -66,8 +68,21 @@ class RemoveSyncRule:
             self.locks.for_rule(rule_id),
             self.locks.working(rule_id, work),
             self.call_stats.measure() as calls,
-            self.unit_of_work() as uow,
         ):
+            try:
+                return self._execute_measured(rule_id, handling, work, calls)
+            finally:
+                # After the removal's unit of work closed, so the count never waits on it.
+                record_provider_calls(self.unit_of_work, self.clock, calls)
+
+    def _execute_measured(
+        self,
+        rule_id: SyncRuleId,
+        handling: ProjectionHandling,
+        work: RuleWork,
+        calls: ProviderCallTally,
+    ) -> RemovalResult:
+        with self.unit_of_work() as uow:
             with self.locks.for_writes(rule_id):
                 rule = self._require_possible(uow.rules.get(rule_id), rule_id, handling)
                 uow.rules.save(rule.begin_removal())
