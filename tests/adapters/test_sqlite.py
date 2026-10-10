@@ -1459,3 +1459,25 @@ def test_failure_causes_read_incidents_open_or_recent_and_how_long_a_lapsed_gran
     assert seen == [
         CauseSighting(user, Cause.ACCESS_REVOKED, NOW - timedelta(days=2), True, timedelta(days=7))
     ]
+
+
+def test_a_local_failures_incident_has_no_cause_even_from_an_earlier_release(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "calendar-sync.db"
+    initialize_database(database)
+    user = add_user(database)
+    incidents = SqliteIncidentRepository(database, user)
+    incidents.open(
+        IncidentReport("provider:rule-1", SyncRuleId("rule-1"), "infrastructure", "failed"), NOW
+    )
+    with sqlite3.connect(database) as connection:
+        # As an earlier release, or a write that went wrong, might have left it.
+        connection.execute("UPDATE incidents SET cause = 'unknown'")
+
+    (incident,) = SqliteOperationsQueries(database, user).incidents()
+    with SqliteInstallationUnitOfWorkFactory(database)() as installation:
+        seen = list(installation.failure_causes(NOW - timedelta(days=1)))
+
+    assert incident.cause is None
+    assert seen == []

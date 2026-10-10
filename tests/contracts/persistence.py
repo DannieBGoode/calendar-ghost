@@ -542,6 +542,24 @@ class PersistenceContract:
         # Only who and why: never which rule, calendar, or account.
         assert list(seen) == [CauseSighting(USER, Cause.API_DISABLED, NOW, False)]
 
+    def test_a_local_failure_has_no_cause_and_suggests_nothing(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.run_outcomes.record(
+                RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, False, failure_kind="infrastructure")
+            )
+            uow.commit()
+        with harness.unit_of_work() as uow:
+            latest = uow.run_outcomes.latest(RULE.id, RunKind.SYNC)
+        with harness.installation() as installation:
+            seen = installation.failure_causes(NOW - timedelta(hours=1))
+
+        assert latest is not None
+        assert latest.failure_cause is None
+        assert list(seen) == []
+
     def test_the_latest_preview_replaces_the_previous(self, harness: PersistenceHarness) -> None:
         later = RulePreviewSummary(RULE.id, NOW + timedelta(hours=1), 5, 2, 1, 3)
         with harness.unit_of_work() as uow:

@@ -250,7 +250,8 @@ reauthorize the account; the account may not change the calendar (`calendar_forb
 calendar is gone (`calendar_not_found`), so they choose another calendar or remove the rule;
 Google is limiting requests (`rate_limited`) or failed for now (`temporary`), which fixes itself, so
 they are told when it was last tried and when it is tried again; and anything else is `unknown`,
-whose problem keeps its usual next step, said honestly as trying again. A Cause says who fixes a
+whose problem keeps its usual next step, said honestly as trying again. A failure inside Calendar
+Ghost itself, which no provider refused, has no Cause. A Cause says who fixes a
 failure; whether a rule retries, stops, or lapses its account still follows the failure itself
 (ADR 0031). Incidents and run outcomes record it, and Installation Status shows it on each problem.
 _Avoid_: Error reason, root cause, error message

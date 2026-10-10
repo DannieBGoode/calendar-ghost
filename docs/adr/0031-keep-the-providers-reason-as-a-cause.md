@@ -24,7 +24,8 @@ User's calendars.
 - **A Cause is one of a closed set**, read from the provider's reason code: `api_disabled`,
   `quota_exceeded`, `oauth_client_invalid`, `access_revoked`, `calendar_forbidden`,
   `calendar_not_found`, `rate_limited`, `temporary`, and `unknown`. Anything the adapter does not
-  recognize is `unknown`. The Google adapter translates reason codes at its boundary, citing
+  recognize is `unknown`. A local failure, which no provider refused, has no Cause at all, so it
+  never reads as a provider reason Calendar Ghost does not recognize or counts toward a hint. The Google adapter translates reason codes at its boundary, citing
   Google's documentation for each, as it translates every other provider payload. Google's message
   text is never stored, logged, or returned as part of a Cause. For `unknown`, the adapter logs
   Google's reason code only when it is a short token (letters, digits, and underscores, at most 64

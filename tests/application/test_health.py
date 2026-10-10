@@ -61,7 +61,8 @@ def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
         RuleHealthPolicy.summary(failure),
         account_id=failure.account_id,
         message=IncidentMessage("provider_failure", {"kind": kind.value, "provider": None}),
-        cause=Cause.UNKNOWN,
+        # A local failure has no Cause; any other failure without a reason is unknown.
+        cause=None if kind is ProviderFailureKind.INFRASTRUCTURE else Cause.UNKNOWN,
     )
     assert response.lapsed is None
 
@@ -401,3 +402,12 @@ def test_every_incident_of_a_failure_names_its_cause() -> None:
     # Blocked events follow no provider failure, so they have no Cause.
     assert blocked is not None
     assert blocked.cause is None
+
+
+def test_a_local_failure_opens_an_incident_with_no_cause() -> None:
+    failure = ProviderFailure(ProviderFailureKind.INFRASTRUCTURE, "OSError")
+
+    incident = RuleHealthPolicy().after_failure(RULE, failure, consecutive_failures=1).incident
+
+    assert incident is not None
+    assert incident.cause is None

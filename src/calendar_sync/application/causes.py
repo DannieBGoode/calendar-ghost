@@ -47,3 +47,7 @@ class Cause(StrEnum):
 ADMINISTRATOR_CAUSES = frozenset(
     {Cause.API_DISABLED, Cause.QUOTA_EXCEEDED, Cause.OAUTH_CLIENT_INVALID}
 )
+
+# Failure kinds and Incident categories no provider refusal explains: a local failure, and events
+# still blocked. They carry no Cause, even where an earlier release recorded one.
+WITHOUT_CAUSE = frozenset({"infrastructure", "conflict"})

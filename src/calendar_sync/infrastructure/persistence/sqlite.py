@@ -10,7 +10,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Self
 
-from calendar_sync.application.causes import Cause
+from calendar_sync.application.causes import WITHOUT_CAUSE, Cause
 from calendar_sync.application.errors import DuplicateDirectionalRelationship
 from calendar_sync.application.ports import (
     AuditEntry,
@@ -734,7 +734,9 @@ class SqliteRuleRunOutcomeRepository:
                 outcome.checked_mappings,
                 outcome.drift,
                 outcome.failure_kind,
-                None if outcome.succeeded else (outcome.failure_cause or Cause.UNKNOWN).value,
+                None
+                if outcome.succeeded or outcome.failure_kind in WITHOUT_CAUSE
+                else (outcome.failure_cause or Cause.UNKNOWN).value,
                 outcome.completed_at.isoformat() if outcome.succeeded else None,
                 outcome.completed_at.isoformat()
                 if outcome.succeeded and outcome.full_run
@@ -766,7 +768,9 @@ def _outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
         checked_mappings=int(row["checked_mappings"]),
         drift=int(row["drift"]),
         failure_kind=None if row["failure_kind"] is None else str(row["failure_kind"]),
-        failure_cause=None if row["succeeded"] else Cause.read(row["failure_cause"]),
+        failure_cause=None
+        if row["succeeded"] or row["failure_kind"] in WITHOUT_CAUSE
+        else Cause.read(row["failure_cause"]),
         last_succeeded_at=_optional_time(row["last_succeeded_at"]),
         last_full_succeeded_at=_optional_time(row["last_full_succeeded_at"]),
     )
@@ -1102,6 +1106,7 @@ class SqliteInstallationUnitOfWork:
                 NULL AS opened_at, NULL AS authorized_at
             FROM rule_run_outcomes
             WHERE succeeded = 0 AND failure_cause IS NOT NULL AND completed_at >= ?
+                AND failure_kind NOT IN ('infrastructure', 'conflict')
             UNION ALL
             SELECT incident.user_id, incident.cause, incident.updated_at,
                 incident.state = 'open', incident.opened_at, account.updated_at
@@ -1113,6 +1118,7 @@ class SqliteInstallationUnitOfWork:
                 AND account.state = 'connected'
                 AND account.authorization_lapsed_at IS NOT NULL
             WHERE incident.cause IS NOT NULL
+                AND incident.category NOT IN ('infrastructure', 'conflict')
                 AND (incident.state = 'open' OR incident.updated_at >= ?)
             ORDER BY user_id, at
             """,

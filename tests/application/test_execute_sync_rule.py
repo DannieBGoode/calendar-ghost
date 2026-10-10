@@ -956,3 +956,22 @@ def test_provider_writes_hold_the_rule_write_lock() -> None:
 
     assert observed == [True]
     assert not locks.for_writes(rule().id).locked()
+
+
+def test_a_local_failure_records_no_cause() -> None:
+    # Nothing at the provider refused, so no Cause may say it did (ADR 0031).
+    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work.state.rules[rule().id] = rule()
+    provider = FakeCalendarProvider(event())
+
+    def broken(*_: object) -> ProviderChangeSet:
+        raise OSError("disk full")
+
+    provider.changes = broken  # type: ignore[method-assign,assignment]
+
+    with pytest.raises(OSError, match="disk full"):
+        _use_case(unit_of_work, provider).execute(rule().id)
+
+    outcome = unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)]
+    assert outcome.failure_kind == "infrastructure"
+    assert outcome.failure_cause is None

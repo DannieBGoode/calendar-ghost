@@ -161,16 +161,17 @@ class ExecuteSyncRule:
             raise
         except ProviderFailure as failure:
             log.failed(failure.kind.value)
-            self._record_failure(rule_id, full, failure.kind.value, failure.cause)
+            self._record_failure(rule_id, full, failure.kind.value, failure.provider_cause)
             raise
         except Exception:
             log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
-            self._record_failure(
-                rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value, Cause.UNKNOWN
-            )
+            # A local failure: no provider refused, so it has no Cause.
+            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value, None)
             raise
 
-    def _record_failure(self, rule_id: SyncRuleId, full: bool, kind: str, cause: Cause) -> None:
+    def _record_failure(
+        self, rule_id: SyncRuleId, full: bool, kind: str, cause: Cause | None
+    ) -> None:
         # Recording evidence must never replace the failure the scheduler classifies.
         with suppress(Exception), self.unit_of_work() as uow:
             if uow.rules.get(rule_id) is not None:

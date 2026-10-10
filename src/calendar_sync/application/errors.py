@@ -80,6 +80,12 @@ class ProviderFailure(ApplicationError):
     """Why the provider refused, from its reason code, so its owner can be told (ADR 0031)."""
 
     @property
+    def provider_cause(self) -> Cause | None:
+        """The Cause to record: none for a local failure, which no provider refused, so it is
+        never mistaken for a provider reason Calendar Ghost does not recognize (ADR 0031)."""
+        return None if self.kind is ProviderFailureKind.INFRASTRUCTURE else self.cause
+
+    @property
     def retryable(self) -> bool:
         return self.kind in TRANSIENT_FAILURES
 
