@@ -172,11 +172,12 @@
       "disconnected": "Disconnected",
       "lapsed": "Needs reauthorization"
     },
-    "lapsed": "Google no longer accepts this account. Reauthorize it to restart the rules that use it.",
     "actions": {
       "checkAccess": "Check access",
       "checkingAccess": "Checking access…",
       "disconnect": "Disconnect account",
+      "disconnectHint": "Removes its stored Google credentials. Rules that use it stop until it is reauthorized.",
+      "more": "More actions for {email}",
       "reauthorize": "Reauthorize account",
       "reauthorizeUnavailable": "Add the master key and Google OAuth credentials in .env, then restart.",
       "delete": "Delete account",

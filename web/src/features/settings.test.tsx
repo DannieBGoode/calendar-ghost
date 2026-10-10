@@ -287,18 +287,15 @@ describe("SettingsPage", () => {
     expect(rows.map((row) => row.id)).toEqual(["account-acct-l", "account-acct-a"])
     const [first] = rows
     expect(first?.querySelector(".account-actions > span")?.textContent).toContain("Needs reauthorization")
-    expect(first?.querySelector(".account-lapse-note")?.textContent).toBe(
-      "Google no longer accepts this account. Reauthorize it to restart the rules that use it.",
-    )
+    // The chip and the stopped rules say it; no third sentence repeats it.
+    expect(first?.querySelector(".account-lapse-note")).toBeNull()
     // Google is asked to offer this account first.
     expect(first?.querySelector("a")?.getAttribute("href")).toBe("/api/v1/oauth/google/start?account=acct-l")
     // Arriving from a stopped rule shows that account, and does so only once.
     expect(first?.hasAttribute("data-focused")).toBe(true)
     expect(scrolled).toHaveBeenCalledOnce()
     expect(window.location.search).toBe("")
-    expect(container.querySelector(".account-summary-status")?.textContent).toBe(
-      "1 account connected, 1 needs reauthorization",
-    )
+    expect(container.querySelector(".account-summary-status")?.textContent).toBe("2 accounts, 1 needs reauthorization")
   })
 
   it("says how many rules restarted when Google returns after reauthorization", async () => {
@@ -329,7 +326,15 @@ describe("SettingsPage", () => {
     expect(container.querySelector("#delete-acct-b p")?.textContent).toBe(
       "This cannot be undone. The account record and 1 affected Directional Sync Rule, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed.",
     )
-    await click(button("Disconnect account"))
+    // Disconnecting is a rare, disruptive choice, so it waits in the row's menu.
+    expect([...container.querySelectorAll("button")].some((item) => item.textContent.trim() === "Disconnect account")).toBe(
+      false,
+    )
+    await click(container.querySelector<HTMLButtonElement>("#account-acct-a [aria-haspopup='menu']")!)
+    const disconnect = [...container.querySelectorAll<HTMLButtonElement>("[role='menuitem']")].find(
+      (item) => item.querySelector(".overflow-menu-label")?.textContent === "Disconnect account",
+    )!
+    await click(disconnect)
     expect(container.querySelector("#disconnect-acct-a p")?.textContent).toBe(
       "Stored Google credentials will be removed. 2 affected rules will require reauthorization before they can run.",
     )

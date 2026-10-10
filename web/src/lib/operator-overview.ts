@@ -66,13 +66,58 @@ type StatusCalendar = UserOverview["status"]["rules"][number]["source"]
 
 /**
  * A calendar as the Operator Overview names it: "Calendar 2" in the reader's language when it is
- * numbered in place of its name, otherwise its name. A server too old to send numbers keeps its own
- * label.
+ * numbered in place of its name, otherwise its name. `ownNames` gives an administrator's own
+ * calendars their names on their own page. A server too old to send numbers keeps its own label.
  */
-export function calendarName(i18n: I18n, calendar: StatusCalendar): string {
+export function calendarName(i18n: I18n, calendar: StatusCalendar, ownNames?: ReadonlyMap<number, string>): string {
   const number: unknown = calendar.number
   if (typeof number !== "number") return calendar.calendar
-  return i18n.t("people.overview.calendar", { number })
+  return ownNames?.get(number) ?? i18n.t("people.overview.calendar", { number })
+}
+
+type OverviewStatus = UserOverview["status"]
+
+/** How many of a person's rules run, which the status badge beside it does not say. */
+export function rulesRunning(i18n: I18n, status: OverviewStatus): string {
+  const { rules, running } = status.counts
+  // Without rules, or with the scheduler stopped, the verdict's own sentence explains more.
+  if (rules === 0 || status.status === "stalled") return i18n.t(`people.overview.verdict.${status.status}`)
+  return i18n.t("people.overview.rulesRunning", { count: rules, running })
+}
+
+/** One problem said once for every rule it stops, such as one account's Lapsed Authorization. */
+export type SharedProblem = { problem: ServerProblem; ruleIds: string[] }
+
+export type ArrangedProblems = {
+  /** Problems of no one rule, or of a rule no longer listed. */
+  unattached: ServerProblem[]
+  shared: SharedProblem[]
+  byRule: ReadonlyMap<string, ServerProblem[]>
+}
+
+/**
+ * A person's problems, placed where they are read: a lapsed account once, naming every rule it
+ * stopped, instead of the same three lines under each; every other problem under its rule.
+ */
+export function arrangeProblems(status: OverviewStatus): ArrangedProblems {
+  const listed = new Set(status.rules.map((rule) => rule.id))
+  const unattached: ServerProblem[] = []
+  const shared = new Map<string, SharedProblem>()
+  const byRule = new Map<string, ServerProblem[]>()
+  for (const problem of status.problems) {
+    const ruleId = problem.rule_id
+    if (!ruleId || !listed.has(ruleId)) {
+      unattached.push(problem)
+    } else if (problem.message?.code === "authorization_lapsed") {
+      const key = String(problem.cause)
+      const group = shared.get(key) ?? { problem, ruleIds: [] }
+      group.ruleIds.push(ruleId)
+      shared.set(key, group)
+    } else {
+      byRule.set(ruleId, [...(byRule.get(ruleId) ?? []), problem])
+    }
+  }
+  return { unattached, shared: [...shared.values()], byRule }
 }
 
 type ProviderCalls = ResourceUse["provider_calls"][number]
@@ -163,4 +208,15 @@ export function nextStep(i18n: I18n, problem: ServerProblem, audience: Audience)
 function personStep(i18n: I18n, problem: ServerProblem, name: string): string {
   if (causeOf(problem) === "unknown") return i18n.t("people.overview.next.ownCause.unknown", { name })
   return i18n.t("people.overview.next.ownCause.person", { name })
+}
+
+/** Where an administrator goes, on their own page, to take their own step. */
+export type OwnTarget = "connections" | "rule"
+
+/** The page of an administrator's own next step, when it has one; none for the installation's. */
+export function ownStepTarget(problem: ServerProblem): OwnTarget | null {
+  const next = step(problem)
+  if (next === "reauthorize") return "connections"
+  const onRule = next === "preview" || next === "overdue" || next === "calendar"
+  return onRule && problem.rule_id ? "rule" : null
 }

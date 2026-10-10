@@ -142,8 +142,8 @@
       "other": "{count} accounts need reauthorization"
     },
     "mixed": {
-      "one": "{count} account connected, {reauthorize}",
-      "other": "{count} accounts connected, {reauthorize}"
+      "one": "{count} account, {reauthorize}",
+      "other": "{count} accounts, {reauthorize}"
     },
     "reauthorizeCount": { "one": "{count} needs reauthorization", "other": "{count} need reauthorization" }
   },

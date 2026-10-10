@@ -89,3 +89,11 @@ export function hintText(i18n: I18n, hint: InstallationHint): string {
       return i18n.t("people.health.hints.shared", { count, cause: i18n.t(`people.cause.${causeOf(hint) ?? "unknown"}`) })
   }
 }
+
+/** Causes the problem's own words already state: a lapsed grant, or Google limiting requests. */
+const STATED_BY_PROBLEM: ReadonlySet<Cause> = new Set(["access_revoked", "rate_limited", "temporary"])
+
+/** Whether "Likely cause" tells the reader something the problem does not already say. */
+export function causeAddsToProblem(cause: Cause | null): cause is Cause {
+  return cause !== null && !STATED_BY_PROBLEM.has(cause)
+}

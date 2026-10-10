@@ -361,7 +361,8 @@ describe("People page", () => {
     await renderPeople(testI18n())
     const summary = container.querySelector<HTMLElement>("[aria-labelledby='installation-health-title']")!
     expect(summary.querySelector("h2")?.textContent).toBe("Installation health")
-    expect(summary.textContent).toContain("Someone's rules stopped syncing.")
+    // How many of everyone who may sign in, which the badge beside it does not say.
+    expect(summary.textContent).toContain("1 of 4 people has rules that stopped syncing.")
     expect([...summary.querySelectorAll("button")].map((item) => item.textContent)).toEqual([
       "Stopped: 1",
       "Not set up: 2",

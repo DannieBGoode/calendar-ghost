@@ -9,9 +9,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DisabledBadge } from "@/components/verdict-badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
-import { UserOverviewDetails } from "@/features/user-overview"
+import { UserOverviewDetails, type OwnPage } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
-import { api, ApiError, type Person, type UserOverview } from "@/lib/api"
+import { api, ApiError, type Person, type RuleSummary, type UserOverview } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { appPathForView, isPlainLeftClick } from "@/lib/navigation"
 import { AS_ADMINISTRATOR } from "@/lib/operator-overview"
@@ -28,10 +28,13 @@ export function PersonView({
   personId,
   onBack,
   onDeleted,
+  own,
 }: {
   personId: string
   onBack: () => void
   onDeleted: (notice: string) => void
+  /** Where the administrator goes for their own steps, on their own page. */
+  own: OwnSteps
 }) {
   const { t } = useI18n()
   const session = useQuery({ queryKey: ["session"], queryFn: api.session })
@@ -46,7 +49,7 @@ export function PersonView({
   return (
     <PersonContent
       overview={overview.data}
-      you={overview.data.user.id === session.data?.user?.id}
+      you={overview.data.user.id === session.data?.user?.id ? own : null}
       onBack={onBack}
       onDeleted={onDeleted}
     />
@@ -60,7 +63,8 @@ function PersonContent({
   onDeleted,
 }: {
   overview: UserOverview
-  you: boolean
+  /** The administrator's own steps when this is their own page; null for anyone else's. */
+  you: OwnSteps | null
   onBack: () => void
   onDeleted: (notice: string) => void
 }) {
@@ -85,22 +89,58 @@ function PersonContent({
         <div>
           <h1 ref={heading} tabIndex={-1}>
             {name}
-            {you && <Badge variant="outline">{t("people.you")}</Badge>}
+            {you !== null && <Badge variant="outline">{t("people.you")}</Badge>}
             {person.state === "disabled" && <DisabledBadge />}
           </h1>
           <PersonFacts person={person} now={now} />
         </div>
-        {!you && <PersonMenu person={person} name={name} commands={commands} />}
+        {you === null && <PersonMenu person={person} name={name} commands={commands} />}
       </div>
-      {!you && <PersonDetails person={person} name={name} commands={commands} />}
+      {you === null && <PersonDetails person={person} name={name} commands={commands} />}
       <p className="sr-only" role="status">
         {commands.message}
       </p>
-      {/* Only administrators see People, so on their own page they read as the administrator they are. */}
-      <UserOverviewDetails overview={overview} now={now} audience={you ? AS_ADMINISTRATOR : { name }} />
-      <p className="page-footnote">{t("people.person.intro")}</p>
+      {you ? (
+        <OwnOverview overview={overview} now={now} steps={you} />
+      ) : (
+        <UserOverviewDetails overview={overview} now={now} audience={{ name }} />
+      )}
+      {/* What administrators never see is about someone else; on their own page it says nothing. */}
+      {you === null && <p className="page-footnote">{t("people.person.intro")}</p>}
     </div>
   )
+}
+
+/** Where an administrator's own steps lead from their own page. */
+export type OwnSteps = Omit<OwnPage, "names">
+
+/**
+ * An administrator's own page. Only administrators see People, so they read the steps as their
+ * own, with links to take them, and their calendars by the names they gave them.
+ */
+function OwnOverview({ overview, now, steps }: { overview: UserOverview; now: number; steps: OwnSteps }) {
+  const rules = useQuery({ queryKey: ["rules"], queryFn: api.rules })
+  const own: OwnPage = { ...steps, names: ownCalendarNames(overview, rules.data ?? []) }
+  return <UserOverviewDetails overview={overview} now={now} audience={AS_ADMINISTRATOR} own={own} />
+}
+
+/** Each number's calendar, by the administrator's own name for it, from their own rules. */
+function ownCalendarNames(overview: UserOverview, rules: RuleSummary[]): Map<number, string> {
+  const mine = new Map(rules.map((rule) => [rule.id, rule]))
+  const names = new Map<number, string>()
+  for (const rule of overview.status.rules) {
+    const own = mine.get(rule.id)
+    if (!own) continue
+    for (const [shown, endpoint] of [
+      [rule.source, own.source],
+      [rule.destination, own.destination],
+    ] as const) {
+      if (typeof shown.number === "number" && !names.has(shown.number)) {
+        names.set(shown.number, endpoint.calendar_name ?? endpoint.calendar_id)
+      }
+    }
+  }
+  return names
 }
 
 /** Back to People as it was when this person was opened: the same search, filters, and page. */

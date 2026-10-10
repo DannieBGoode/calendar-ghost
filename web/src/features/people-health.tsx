@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { VerdictBadge, VerdictIcon } from "@/components/verdict-badge"
 import { useI18n } from "@/i18n/provider"
+import type { I18n } from "@/i18n/translator"
 import { api, type InstallationHealthReport, type InstallationHint, type PeopleQuery } from "@/lib/api"
 import { hintText, troubleshootingUrl } from "@/lib/causes"
 import { VERDICTS } from "@/lib/operator-overview"
@@ -70,7 +71,7 @@ function HealthReport({
     <>
       <div className="user-overview-verdict">
         <VerdictBadge verdict={report.status} />
-        <p>{t(`people.health.summary.${report.status}`)}</p>
+        <p>{healthSentence(i18n, report)}</p>
       </div>
       {report.incidents.map((incident) => (
         <p key={incident.kind} className="user-overview-muted">
@@ -110,6 +111,20 @@ function Hints({ hints }: { hints: InstallationHint[] }) {
       </ul>
     </section>
   )
+}
+
+/**
+ * The installation's verdict in a sentence that adds to its badge: how many of everyone who may
+ * sign in it describes. A stalled scheduler, paused rules, and setup concern everyone alike.
+ */
+function healthSentence(i18n: I18n, report: InstallationHealthReport): string {
+  const total = Object.values(report.users).reduce((sum, count) => sum + count, 0)
+  const status = report.status
+  if (status === "stalled" || status === "paused" || status === "setup") {
+    return i18n.t(`people.health.summary.${status}`)
+  }
+  const count = status === "healthy" ? total : (report.users[status] ?? 0)
+  return i18n.t(`people.health.summary.${status}`, { count, total })
 }
 
 function HealthCounts({

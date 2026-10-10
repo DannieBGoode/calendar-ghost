@@ -189,6 +189,15 @@
       }
     },
     "calendar": "Calendar {number}",
+    "stops": "Stops {rules}.",
+    "rulesRunning": {
+      "one": "{running} of {count} rule is running.",
+      "other": "{running} of {count} rules are running."
+    },
+    "go": {
+      "connections": "Open Connections",
+      "rule": "Open the rule"
+    },
     "next": {
       "reauthorize": {
         "self": "Reauthorize your Google account in Settings, under Connections."
@@ -233,10 +242,19 @@
     "tryAgain": "Try again",
     "summary": {
       "stalled": "Calendar Ghost stopped checking calendars, so nobody's rules synchronize until the service runs again.",
-      "stopped": "Someone's rules stopped syncing.",
-      "review": "Someone's synchronization needs a look.",
-      "waiting": "Google is limiting or failing requests. Calendar Ghost retries by itself.",
-      "healthy": "Everyone's synchronization is working.",
+      "stopped": {
+        "one": "{count} of {total} people has rules that stopped syncing.",
+        "other": "{count} of {total} people have rules that stopped syncing."
+      },
+      "review": {
+        "one": "{count} of {total} people needs a look.",
+        "other": "{count} of {total} people need a look."
+      },
+      "waiting": "Google is limiting or failing requests for {count} of {total} people. Calendar Ghost retries by itself.",
+      "healthy": {
+        "one": "Synchronization works for the {count} person here.",
+        "other": "Synchronization works for all {count} people here."
+      },
       "paused": "Synchronization is paused for everyone here.",
       "setup": "Nobody is synchronizing yet."
     },
@@ -266,7 +284,7 @@
     "back": "People",
     "loading": "Loading this person",
     "loadFailure": "This person could not load",
-    "intro": "You see what they see about themselves under Settings, never their calendar names, Google account emails, or events.",
+    "intro": "You see whether their synchronization works, never their calendar names, Google account emails, or events.",
     "joined": "Joined {relative}",
     "lastSignIn": "Last signed in {relative}",
     "neverSignedIn": "Never signed in",

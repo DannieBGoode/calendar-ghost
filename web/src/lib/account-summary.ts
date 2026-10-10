@@ -11,7 +11,7 @@ export function needsReauthorization(account: SummarizedAccount): boolean {
 }
 
 export type AccountSummary = {
-  /** One line for the collapsed list, such as "2 accounts connected, 1 needs reauthorization". */
+  /** One line for the collapsed list, such as "3 accounts, 1 needs reauthorization". */
   text: string
   needsAttention: boolean
   /** Whether an account to reauthorize has stopped rules, which makes it urgent rather than a look. */
@@ -38,8 +38,9 @@ export function accountSummary(i18n: I18n, accounts: readonly SummarizedAccount[
     }
   }
   const reauthorize = i18n.t("overview.accountSummary.reauthorizeCount", { count: unauthorized })
+  // Every account counts, so a connected account that lapsed is not left out of the total.
   return {
-    text: i18n.t("overview.accountSummary.mixed", { count: connected, reauthorize }),
+    text: i18n.t("overview.accountSummary.mixed", { count: accounts.length, reauthorize }),
     needsAttention: true,
     stopsRules,
   }

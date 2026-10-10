@@ -1452,12 +1452,23 @@ p {
   flex: none;
 }
 
+/* Earlier marks sit on top and later ones tuck behind with a small overlap, so initials are never
+   cut off. */
 .account-stack > .account-mark {
+  position: relative;
   outline: 2px solid var(--background);
 }
 
+.account-stack > .account-mark:nth-child(1) {
+  z-index: 3;
+}
+
+.account-stack > .account-mark:nth-child(2) {
+  z-index: 2;
+}
+
 .account-stack > .account-mark + .account-mark {
-  margin-left: -0.5rem;
+  margin-left: -0.25rem;
 }
 
 .account-summary-copy {
@@ -1888,6 +1899,14 @@ p {
   color: var(--success-foreground);
   font-size: 0.875rem;
   font-weight: 550;
+}
+
+/* With nothing wrong, what a person keeps here closes their one Synchronization card. */
+.user-overview-health .user-overview-use {
+  display: grid;
+  gap: 0.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
 }
 
 /* Installation Health above everyone here: one sentence, then quiet counts that set the list's
@@ -2811,14 +2830,6 @@ p {
 
 .account-access-error {
   margin-top: 1rem;
-}
-
-/* Why a connected account needs reauthorization, under its identity. */
-.account-lapse-note {
-  margin-top: 0.75rem;
-  color: var(--warning-foreground);
-  font-size: 0.8125rem;
-  line-height: 1.5;
 }
 
 /* The account a stopped rule, Activity, or Google's return pointed to. */

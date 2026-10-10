@@ -87,6 +87,10 @@ let container: HTMLDivElement
 let root: Root | null = null
 let back: ReturnType<typeof vi.fn<() => void>>
 let deleted: ReturnType<typeof vi.fn<(notice: string) => void>>
+let own: {
+  openRule: ReturnType<typeof vi.fn<(ruleId: string) => void>>
+  openConnections: ReturnType<typeof vi.fn<() => void>>
+}
 
 beforeEach(() => {
   container = document.createElement("div")
@@ -136,6 +140,7 @@ async function renderPerson(i18n: I18n, personId = "user-robin", answers: Record
   )
   back = vi.fn<() => void>()
   deleted = vi.fn<(notice: string) => void>()
+  own = { openRule: vi.fn<(ruleId: string) => void>(), openConnections: vi.fn<() => void>() }
   root = createRoot(container)
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   act(() => {
@@ -143,7 +148,7 @@ async function renderPerson(i18n: I18n, personId = "user-robin", answers: Record
       <StaticI18nProvider i18n={i18n}>
         <ThemeProvider>
           <QueryClientProvider client={queryClient}>
-            <PersonView personId={personId} onBack={back} onDeleted={deleted} />
+            <PersonView personId={personId} onBack={back} onDeleted={deleted} own={own} />
           </QueryClientProvider>
         </ThemeProvider>
       </StaticI18nProvider>,
@@ -262,7 +267,8 @@ describe("A person's page", () => {
     await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(stopped) })
 
     const text = container.textContent
-    expect(text).toContain("Likely cause: Google no longer accepts this Google account's permission.")
+    // The problem already says the account needs reauthorization; the cause would only repeat it.
+    expect(text).not.toContain("Likely cause")
     expect(text).toContain("robin@example.test can fix this from their dashboard.")
     expect(text).not.toContain("How to fix")
     expect(container.querySelector(".user-overview-problem button, .user-overview-problem a")).toBeNull()
@@ -274,6 +280,114 @@ describe("A person's page", () => {
     const text = container.textContent
     expect(text).toContain("Activity explains what happened and what to do.")
     expect(text).not.toContain("dana@example.test can fix this")
+  })
+
+  it("closes with what administrators never see, and no longer points to Settings", async () => {
+    await renderPerson(testI18n())
+
+    const footnote = container.querySelector(".page-footnote")?.textContent ?? ""
+    expect(footnote).toContain("never their calendar names, Google account emails, or events")
+    expect(footnote).not.toContain("Settings")
+  })
+
+  it("says how many rules run, rather than repeating the status badge", async () => {
+    await renderPerson(testI18n())
+
+    expect(container.querySelector(".user-overview-verdict p")?.textContent).toBe("1 of 1 rule is running.")
+  })
+
+  it("keeps a healthy person to one card", async () => {
+    const healthy = {
+      ...robin,
+      status: { ...robin.status, status: "healthy" as const, problems: [], counts: { ...robin.status.counts, blocked_events: 0 } },
+    }
+    await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(healthy) })
+
+    expect([...container.querySelectorAll("h2")].map((heading) => heading.textContent)).toEqual(["Synchronization"])
+    expect(container.textContent).toContain("40 Activity entries")
+  })
+
+  describe("when an account lapsed for every rule it stops", () => {
+    const lapse = (ruleId: string, cause: "access_revoked" | "api_disabled") => ({
+      kind: "stopped" as const,
+      rule_id: ruleId,
+      summary: "A calendar account needs reauthorization",
+      since: null,
+      message: { code: "authorization_lapsed", params: { provider: "google" } },
+      cause,
+      last_tried_at: null,
+    })
+    const rule = robin.status.rules[0]!
+    const twoRules = (cause: "access_revoked" | "api_disabled", person = robin) => ({
+      ...person,
+      status: {
+        ...robin.status,
+        status: "stopped" as const,
+        counts: { ...robin.status.counts, rules: 2, running: 0, stopped: 2 },
+        problems: [lapse("rule-1", cause), lapse("rule-2", cause)],
+        rules: [
+          { ...rule, state: "degraded" as const },
+          {
+            ...rule,
+            id: "rule-2",
+            name: "Calendar 2 → Calendar 1",
+            state: "degraded" as const,
+            source: rule.destination,
+            destination: rule.source,
+          },
+        ],
+      },
+    })
+
+    it("says it once, naming the rules it stops, without a cause line that repeats it", async () => {
+      await renderPerson(testI18n(), "user-robin", {
+        "GET /api/v1/users/user-robin/overview": jsonResponse(twoRules("access_revoked")),
+      })
+
+      const text = container.textContent
+      expect(text.split("A Google Calendar account needs reauthorization").length - 1).toBe(1)
+      expect(text).toContain("Stops Calendar 1 → Calendar 2 and Calendar 2 → Calendar 1.")
+      expect(text.split("robin@example.test can fix this from their dashboard.").length - 1).toBe(1)
+      expect(text).not.toContain("Likely cause")
+    })
+
+    it("on your own page, names your calendars and links to your step", async () => {
+      const dana = {
+        ...robin.user,
+        id: "user-dana",
+        email: "dana@example.test",
+        role: "installation_administrator" as const,
+      }
+      const endpoint = (calendar: string, name: string) => ({
+        connected_account_id: "account-1",
+        calendar_id: `${calendar}@group.example`,
+        calendar_name: name,
+      })
+      await renderPerson(testI18n(), "user-dana", {
+        "GET /api/v1/users/user-dana/overview": jsonResponse(twoRules("access_revoked", { ...robin, user: dana })),
+        "GET /api/v1/rules": jsonResponse([
+          { id: "rule-1", source: endpoint("one", "Family"), destination: endpoint("two", "Work") },
+          { id: "rule-2", source: endpoint("two", "Work"), destination: endpoint("one", "Family") },
+        ]),
+      })
+
+      const text = container.textContent
+      expect(text).toContain("Family → Work")
+      expect(container.querySelector(".page-footnote")).toBeNull()
+      expect(text).toContain("Stops Family → Work and Work → Family.")
+      expect(text).toContain("Reauthorize your Google account in Settings, under Connections.")
+      const open = [...container.querySelectorAll("button")].find((item) => item.textContent === "Open Connections")!
+      await click(open)
+      expect(own.openConnections).toHaveBeenCalled()
+    })
+
+    it("keeps the cause line when it says something new", async () => {
+      await renderPerson(testI18n(), "user-robin", {
+        "GET /api/v1/users/user-robin/overview": jsonResponse(twoRules("api_disabled")),
+      })
+
+      expect(container.textContent).toContain("Likely cause: the Google Calendar API is turned off for this installation.")
+    })
   })
 
   it("has no untranslated text with its actions open", async () => {

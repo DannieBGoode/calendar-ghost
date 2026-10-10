@@ -66,6 +66,8 @@ export function Dashboard({
         visit={visit}
         onViewChange={onViewChange}
         onOpenPerson={onOpenPerson}
+        onOpenRule={onOpenRule}
+        onOpenSettingsTab={onOpenSettingsTab}
       />
     )
   }
@@ -88,12 +90,16 @@ function PeopleRoute({
   visit,
   onViewChange,
   onOpenPerson,
+  onOpenRule,
+  onOpenSettingsTab,
 }: {
   location: AppLocation
   arrival: ViewOptions
   visit: number
   onViewChange: ViewChange
   onOpenPerson: OpenPerson
+  onOpenRule: OpenRule
+  onOpenSettingsTab: OpenSettingsTab
 }) {
   if (personId) {
     return (
@@ -102,6 +108,7 @@ function PeopleRoute({
         personId={personId}
         onBack={() => onViewChange("people", { search: peopleReturnSearch(personId) })}
         onDeleted={(deleted) => onViewChange("people", { notice: deleted, search: peopleReturnSearch(personId) })}
+        own={{ openRule: onOpenRule, openConnections: () => onOpenSettingsTab("connections") }}
       />
     )
   }
