@@ -34,7 +34,6 @@ from calendar_sync.application.accounts import DiscoverCalendars, ListConnectedA
 from calendar_sync.application.activity import InspectActivityEvent
 from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.identity import SetUpInstallation
 from calendar_sync.application.installation_health import GetInstallationHealth
 from calendar_sync.application.operator_overview import OperatorOverview, UserStatuses
 from calendar_sync.application.ports import (
@@ -91,8 +90,10 @@ from calendar_sync.infrastructure.security import CredentialCipher, HistoryCiphe
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
-PREVIEW_EMAIL = "preview@example.test"
-PREVIEW_PASSWORD = "preview-password"  # noqa: S105
+PREVIEW_EMAIL = "preview@preview.com"
+# Shorter than real installations allow, for quick local sign-in: the preview seeds its own Users
+# and never asks the password policy.
+PREVIEW_PASSWORD = "preview"  # noqa: S105
 ROBIN_EMAIL = "robin@example.test"
 """A second, ordinary User in the scenarios that show a Cause two people share."""
 MARKER_TABLE = "dev_preview_marker"
@@ -446,9 +447,16 @@ def build_preview_container(
             adapters.users, statuses, adapters.installation_units, preview_clock
         ),
     )
-    SetUpInstallation(
-        adapters.users, adapters.passwords, adapters.sessions, adapters.ids, adapters.clock
-    ).execute(PREVIEW_EMAIL, PREVIEW_PASSWORD)
+    adapters.users.add_first(
+        User(
+            UserId(adapters.ids.new()),
+            PREVIEW_EMAIL,
+            Role.INSTALLATION_ADMINISTRATOR,
+            UserState.ACTIVE,
+            adapters.clock.now(),
+        ),
+        adapters.passwords.hash(PREVIEW_PASSWORD),
+    )
     if scenario is not Scenario.SETUP:
         _seed(adapters, path, preview_user(path), moment, scenario)
     if scenario in _SHARED:
