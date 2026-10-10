@@ -38,7 +38,8 @@ To see the Web UI with realistic data without a Google account, run:
 .venv/bin/python scripts/dev_preview.py
 ```
 
-Open `http://127.0.0.1:8001/activity` and sign in as `preview@example.test` with `preview-password`. The preview is for
+Open `http://127.0.0.1:8001/activity` and sign in as `preview@example.test` with `preview-password`. In `api-disabled` and
+`access-revoked`, `robin@example.test` signs in with the same password as an ordinary User. The preview is for
 development only:
 
 - It writes only to `dev-preview.db` in the repository root, which it marks as its own. It refuses
@@ -69,6 +70,8 @@ export or a real provider response in repository assets.
 | `paused` | Every rule paused after earlier syncs |
 | `setup` | A new installation with no Google account or rule |
 | `healthy` | Every rule running and up to date |
+| `api-disabled` | Sam and Robin both lost Google because the Calendar API is off; People suggests it and Robin is told an administrator must fix it |
+| `access-revoked` | Sam and Robin both lost Google a week after connecting; each reauthorizes, and People suggests the OAuth app is in Testing mode |
 The preview uses the generated local portraits in `web/public/avatars/`; production accounts use
 the profile photo returned by Google when one is available. Its seed data models one fictional Sam
 across three context-specific identities (`sam@personal.example`, `sam@family.example`, and

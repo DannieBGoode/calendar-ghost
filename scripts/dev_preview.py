@@ -22,7 +22,7 @@ import argparse
 import json
 import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import closing
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -32,6 +32,7 @@ from typing import Any, NoReturn, cast
 
 from calendar_sync.application.accounts import DiscoverCalendars, ListConnectedAccounts
 from calendar_sync.application.activity import InspectActivityEvent
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.identity import SetUpInstallation
 from calendar_sync.application.installation_health import GetInstallationHealth
@@ -44,6 +45,7 @@ from calendar_sync.application.ports import (
     AuditOutcome,
     CalendarAccess,
     CalendarProvider,
+    CauseSighting,
     Clock,
     ConnectedAccount,
     ConnectedAccountRepository,
@@ -64,7 +66,7 @@ from calendar_sync.bootstrap.container import (
     build_adapters,
     compose,
 )
-from calendar_sync.domain.access import UserId
+from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -91,6 +93,8 @@ REPOSITORY = Path(__file__).resolve().parents[1]
 PREVIEW_DATABASE = REPOSITORY / "dev-preview.db"
 PREVIEW_EMAIL = "preview@example.test"
 PREVIEW_PASSWORD = "preview-password"  # noqa: S105
+ROBIN_EMAIL = "robin@example.test"
+"""A second, ordinary User in the scenarios that show a Cause two people share."""
 MARKER_TABLE = "dev_preview_marker"
 
 
@@ -298,9 +302,26 @@ class Scenario(StrEnum):
     PAUSED = "paused"
     SETUP = "setup"
     """A new installation: no Google account, rule, or history."""
+    API_DISABLED = "api-disabled"
+    """Sam and Robin both lost Google because the Calendar API is off: the administrator's Cause,
+    which Installation Health suggests and only Sam, the administrator, can fix."""
+    ACCESS_REVOKED = "access-revoked"
+    """Sam and Robin both lost Google a week after connecting: each reauthorizes, and Installation
+    Health suggests the OAuth app is in Testing mode."""
 
 
-_EXPIRED = frozenset({Scenario.STOPPED, Scenario.SEVERAL})
+# Why each scenario's Personal account lapsed (ADR 0031).
+_LAPSE_CAUSES = {
+    Scenario.STOPPED: Cause.ACCESS_REVOKED,
+    Scenario.SEVERAL: Cause.ACCESS_REVOKED,
+    Scenario.API_DISABLED: Cause.API_DISABLED,
+    Scenario.ACCESS_REVOKED: Cause.ACCESS_REVOKED,
+}
+# The scenarios with Robin, who shares the Cause of Sam's lapse.
+_SHARED = frozenset({Scenario.API_DISABLED, Scenario.ACCESS_REVOKED})
+
+
+_EXPIRED = frozenset(_LAPSE_CAUSES)
 _LIMITED = frozenset({Scenario.WAITING, Scenario.SEVERAL})
 _BLOCKED = frozenset({Scenario.REVIEW, Scenario.SEVERAL})
 LIMITED_RULE = SyncRuleId("preview-family-work")
@@ -372,13 +393,13 @@ def build_preview_container(
     moment = now or adapters.clock.now()
     google = PreviewGoogle()
     composed = compose(settings, adapters)
-    accounts = cast(
-        ConnectedAccountRepository, PreviewAccounts(_scenario_accounts(scenario, moment))
-    )
+    sams = PreviewAccounts(_scenario_accounts(scenario, moment))
+    robins = PreviewAccounts(_robin_accounts(moment))
 
     def preview_services(user: UserId) -> UserServices:
         services = composed.for_user(user)
         units = adapters.unit_of_work(user)
+        accounts = cast(ConnectedAccountRepository, robins if user == ROBIN else sams)
         # Only reads are substituted: without a master key nothing synchronizes or writes.
         return replace(
             services,
@@ -419,6 +440,7 @@ def build_preview_container(
             lambda users: {user: status.health for user, status in statuses.of(users).items()},
             None,
             preview_clock,
+            _failure_causes(adapters),
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, preview_clock
@@ -429,13 +451,133 @@ def build_preview_container(
     ).execute(PREVIEW_EMAIL, PREVIEW_PASSWORD)
     if scenario is not Scenario.SETUP:
         _seed(adapters, path, preview_user(path), moment, scenario)
+    if scenario in _SHARED:
+        _seed_robin(adapters, path, moment, _LAPSE_CAUSES[scenario])
     return container
 
 
 def preview_user(path: Path) -> UserId:
-    """The preview's one User, who owns everything it seeds."""
+    """Sam, the preview's administrator, who owns everything it seeds but Robin's."""
     with closing(sqlite3.connect(path)) as connection:
-        return UserId(str(connection.execute("SELECT id FROM users").fetchone()[0]))
+        found = connection.execute("SELECT id FROM users WHERE email = ?", (PREVIEW_EMAIL,))
+        return UserId(str(found.fetchone()[0]))
+
+
+def _failure_causes(adapters: Adapters) -> Callable[[datetime], Sequence[CauseSighting]]:
+    def read(since: datetime) -> Sequence[CauseSighting]:
+        with adapters.installation_units() as installation:
+            return installation.failure_causes(since)
+
+    return read
+
+
+ROBIN = UserId("preview-robin")
+ROBIN_PERSONAL = ConnectedAccountId("preview-robin-personal")
+ROBIN_WORK = ConnectedAccountId("preview-robin-work")
+ROBIN_RULE = SyncRule(
+    id=SyncRuleId("preview-robin-personal-work"),
+    source=CalendarEndpoint(ROBIN_PERSONAL, CalendarId("robin@personal.example")),
+    destination=CalendarEndpoint(ROBIN_WORK, CalendarId("robin@work.example")),
+    state=SyncRuleState.ENABLED,
+).degrade(awaiting_reauthorization=True)
+ROBIN_CALENDARS = {
+    ROBIN_PERSONAL: DiscoveredCalendar(
+        "robin@personal.example", "Robin", access=CalendarAccess.OWNER, primary=True
+    ),
+    ROBIN_WORK: DiscoveredCalendar(
+        "robin@work.example", "Studio", access=CalendarAccess.OWNER, primary=True
+    ),
+}
+# Robin connected a week before Google stopped accepting the grant, as Testing mode does.
+ROBIN_AUTHORIZED_BEFORE = timedelta(days=7, hours=1)
+
+
+def _robin_accounts(now: datetime) -> tuple[ConnectedAccount, ...]:
+    lapsed_at = (now - timedelta(minutes=50)).isoformat()
+    return tuple(
+        ConnectedAccount(
+            account,
+            "Robin Okafor",
+            calendar.id,
+            ConnectedAccountState.CONNECTED,
+            provider=ProviderKind.GOOGLE,
+            authorization_lapsed_at=lapsed_at if account == ROBIN_PERSONAL else None,
+        )
+        for account, calendar in ROBIN_CALENDARS.items()
+    )
+
+
+def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause) -> None:
+    """Robin, an ordinary User whose Personal account lapsed for the same Cause as Sam's."""
+    adapters.users.add(
+        User(ROBIN, ROBIN_EMAIL, Role.USER, UserState.ACTIVE, now - timedelta(days=20)),
+        adapters.passwords.hash(PREVIEW_PASSWORD),
+    )
+    authorized = (now - ROBIN_AUTHORIZED_BEFORE).isoformat()
+    opened = (now - timedelta(minutes=50)).isoformat()
+    with closing(sqlite3.connect(path)) as connection, connection:
+        # People is shown once someone else may join.
+        connection.execute(
+            "UPDATE installation_settings SET registration_policy = 'invitation_only'"
+        )
+        connection.executemany(
+            """
+            INSERT INTO connected_accounts (
+                id, user_id, provider, display_name, email, encrypted_credentials,
+                state, created_at, updated_at, authorization_lapsed_at
+            ) VALUES (?, ?, 'google', ?, ?, x'00', ?, ?, ?, ?)
+            """,
+            [
+                (
+                    account.id.value,
+                    ROBIN.value,
+                    account.display_name,
+                    account.email,
+                    account.state.value,
+                    authorized,
+                    authorized,
+                    account.authorization_lapsed_at,
+                )
+                for account in _robin_accounts(now)
+            ],
+        )
+    with adapters.unit_of_work(ROBIN)() as uow:
+        uow.rules.add(ROBIN_RULE)
+        uow.run_outcomes.record(
+            RuleRunOutcome(ROBIN_RULE.id, RunKind.SYNC, now - timedelta(hours=2), succeeded=True)
+        )
+        for account, calendar in ROBIN_CALENDARS.items():
+            uow.calendar_names.remember(account, [calendar])
+        uow.commit()
+    with closing(sqlite3.connect(path)) as connection, connection:
+        connection.execute(
+            """
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, account_id, category, state, summary,
+                opened_at, updated_at, message_code, message_params, cause, user_id
+            ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, 'authorization_lapsed', ?, ?, ?)
+            """,
+            (
+                f"authorization:{ROBIN_PERSONAL.value}",
+                f"authorization:{ROBIN_PERSONAL.value}",
+                ROBIN_PERSONAL.value,
+                _LAPSE_KINDS[cause],
+                _LAPSE_SUMMARIES[cause],
+                opened,
+                (now - timedelta(minutes=3)).isoformat(),
+                json.dumps({"kind": _LAPSE_KINDS[cause], "provider": "google"}),
+                cause.value,
+                ROBIN.value,
+            ),
+        )
+
+
+# How Google refuses for each Cause a preview lapse has, as the service records it.
+_LAPSE_KINDS = {Cause.ACCESS_REVOKED: "authentication", Cause.API_DISABLED: "authorization"}
+_LAPSE_SUMMARIES = {
+    Cause.ACCESS_REVOKED: "Authorization for Google Calendar expired",
+    Cause.API_DISABLED: "Access to Google Calendar was denied",
+}
 
 
 PREVIEW_RULES = (
@@ -580,6 +722,13 @@ def _preview_change(found: CalendarEvent, seeded: SeededEntry) -> SourceChange |
     return SourceChange.between(before, after)
 
 
+def _authorized_at(scenario: Scenario, now: datetime) -> str:
+    """When Sam last authorized his accounts: a week before the lapse when Testing mode ends it."""
+    if scenario is Scenario.ACCESS_REVOKED:
+        return (now - timedelta(minutes=60) - timedelta(days=7)).isoformat()
+    return now.isoformat()
+
+
 def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario: Scenario) -> None:
     calendar = PreviewCalendar(now)
     rules = _scenario_rules(scenario)
@@ -599,8 +748,8 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                     account.display_name,
                     account.email,
                     account.state.value,
-                    now.isoformat(),
-                    now.isoformat(),
+                    _authorized_at(scenario, now),
+                    _authorized_at(scenario, now),
                     account.authorization_lapsed_at,
                 )
                 for account in _scenario_accounts(scenario, now)
@@ -616,7 +765,7 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
         for rule, minutes_ago in zip(rules, (3, 4, 2), strict=True):
             completed = now - timedelta(minutes=minutes_ago)
             failure = (
-                "authentication"
+                _LAPSE_KINDS[_LAPSE_CAUSES[scenario]]
                 if rule.state is SyncRuleState.DEGRADED
                 else "rate_limit"
                 if scenario in _LIMITED and rule.id == LIMITED_RULE
@@ -635,6 +784,9 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                     completed_at=completed,
                     succeeded=failure is None,
                     failure_kind=failure,
+                    failure_cause=_LAPSE_CAUSES.get(scenario, Cause.RATE_LIMITED)
+                    if failure
+                    else None,
                 )
             )
         uow.commit()
@@ -654,18 +806,22 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, account_id, category, state, summary,
-                    opened_at, updated_at, message_code, message_params, user_id
-                ) VALUES (?, ?, NULL, ?, 'authentication', 'open', ?, ?, ?, ?, ?, ?)
+                    opened_at, updated_at, message_code, message_params, cause, user_id
+                ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     f"authorization:{PERSONAL_ACCOUNT.value}",
                     f"authorization:{PERSONAL_ACCOUNT.value}",
                     PERSONAL_ACCOUNT.value,
-                    "Authorization for Google Calendar expired",
+                    _LAPSE_KINDS[_LAPSE_CAUSES[scenario]],
+                    _LAPSE_SUMMARIES[_LAPSE_CAUSES[scenario]],
                     (now - timedelta(minutes=60)).isoformat(),
                     (now - timedelta(minutes=2)).isoformat(),
                     "authorization_lapsed",
-                    json.dumps({"kind": "authentication", "provider": "google"}),
+                    json.dumps(
+                        {"kind": _LAPSE_KINDS[_LAPSE_CAUSES[scenario]], "provider": "google"}
+                    ),
+                    _LAPSE_CAUSES[scenario].value,
                     user.value,
                 ),
             )
@@ -679,8 +835,8 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                message_code, message_params, user_id
-            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?)
+                message_code, message_params, cause, user_id
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, 'rate_limited', ?)
             """,
             [
                 (

@@ -13,6 +13,7 @@ from calendar_sync.interfaces.api.app import create_app
 from scripts.dev_preview import (
     PREVIEW_EMAIL,
     PREVIEW_PASSWORD,
+    ROBIN_EMAIL,
     NotAPreviewDatabase,
     Scenario,
     build_preview_container,
@@ -204,3 +205,29 @@ def test_preview_incidents_carry_messages_and_one_keeps_only_its_summary(tmp_pat
         "code": "authorization_lapsed",
         "params": {"kind": "authentication", "provider": "google"},
     }
+
+
+@pytest.mark.parametrize(
+    ("scenario", "cause", "hint"),
+    [
+        (Scenario.API_DISABLED, "api_disabled", "shared_cause"),
+        (Scenario.ACCESS_REVOKED, "access_revoked", "testing_mode"),
+    ],
+)
+def test_preview_shows_a_cause_two_people_share(
+    tmp_path: Path, scenario: Scenario, cause: str, hint: str
+) -> None:
+    container = build_preview_container(tmp_path / "dev-preview.db", NOW, scenario=scenario)
+
+    with TestClient(create_app(container)) as client:
+        client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
+        health = client.get("/api/v1/installation/health").json()
+        people = client.get("/api/v1/users").json()
+        client.post("/api/v1/session", json={"email": ROBIN_EMAIL, "password": PREVIEW_PASSWORD})
+        robins = client.get("/api/v1/status").json()
+
+    assert [(each["kind"], each["cause"], each["users"]) for each in health["hints"]] == [
+        (hint, cause, 2)
+    ]
+    assert people["total"] == 2
+    assert {p["cause"] for p in robins["problems"] if p["kind"] == "stopped"} == {cause}
