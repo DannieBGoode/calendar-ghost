@@ -276,7 +276,7 @@ A User who holds the role that operates the installation. The first User holds i
 _Avoid_: Owner, superuser, admin user
 
 **Operator Overview**:
-The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, and Resource Use. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content, and every User can see exactly what it shows about them, in Settings.
+The Installation Administrator's view of every User's health: each User's Installation Status with calendars shown only by neutral labels ("Calendar 1", "Calendar 2", numbered per User in the order their rules were created), plus the User's email, role, last sign-in, state, and Resource Use. It is the same on every installation, never shows calendar names, calendar identifiers, account emails, or event content. What it shows and never shows is documented, so every User can know it; Settings does not repeat it to them (ADR 0030, amended).
 _Avoid_: Admin dashboard, user management, support view
 
 **Resource Use**:
@@ -396,7 +396,7 @@ diagnostics keep the glossary terms above.
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
-| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them; to each User, "What your administrator can see" in Settings |
+| Operator Overview | "People", with a "Sync" status per person and "Installation health" above them |
 | Cause | "Likely cause:" and the cause in plain words, such as "the Google Calendar API is turned off for this installation". To the User, an administrator's Cause says only "Temporarily unavailable", naming neither the cause nor the administrator, with Check access to try again when the account lapsed; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
 | Installation Hint, on People | the pattern in one sentence with how many people it affects, then "How to fix", linking to its troubleshooting section |
 | Installation Status verdict, on People | "Not running" (stalled), "Stopped", "Needs a look" (review), "Waiting for Google", "Paused", "Not set up" (setup), "Healthy" |

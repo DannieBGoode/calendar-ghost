@@ -3748,53 +3748,6 @@
         "summary": "Set Notifications"
       }
     },
-    "/api/v1/account/overview": {
-      "get": {
-        "description": "What the Operator Overview shows Installation Administrators about the signed-in User,\nexactly as they see it.",
-        "operationId": "own_overview_api_v1_account_overview_get",
-        "parameters": [
-          {
-            "in": "cookie",
-            "name": "calendar_sync_session",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Calendar Sync Session"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UserOverviewResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Own Overview"
-      }
-    },
     "/api/v1/account/password": {
       "put": {
         "description": "Replace the password; every other session of the User ends.",

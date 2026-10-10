@@ -330,8 +330,7 @@ installation's own, and nothing for the administrator to do otherwise. On their 
 administrator reads the steps as their own. A second card holds their accounts, Activity, and calls, with one line on whether the
 calls look normal. Calendars appear only by number ("Calendar 1"), in the reader's language. The
 privacy note closes the page as a footnote, and coming back to People returns to their row.
-Settings shows each person the same overview as rows in one group, collapsed to one summary row,
-with their own calendar names beside the numbers and a link to act on each of their problems.
+Settings does not show a person what administrators see about them.
 
 A problem a provider refused carries its likely cause as a muted line under it ("Likely cause: the
 Google Calendar API is turned off for this installation."). Who acts follows the Cause's owner. For

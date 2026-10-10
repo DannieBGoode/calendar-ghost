@@ -238,30 +238,31 @@ def test_people_filter_and_sort_by_verdict(installation: Installation) -> None:
     assert (sorted_page["total"], len(sorted_page["users"])) == (2, 1)
 
 
-def test_a_user_sees_exactly_what_an_administrator_sees_about_them(
+def test_an_administrator_sees_each_calendar_only_by_its_number(
     installation: Installation,
 ) -> None:
-    client = installation.client
-    seen_by_admin = client.get(f"/api/v1/users/{installation.member.user.value}/overview")
-    installation.as_member()
-    seen_by_member = client.get("/api/v1/account/overview")
+    seen = installation.client.get(f"/api/v1/users/{installation.member.user.value}/overview")
 
-    assert seen_by_admin.status_code == seen_by_member.status_code == 200
-    assert seen_by_admin.headers["cache-control"] == "no-store"
-    admin_view, own_view = seen_by_admin.json(), seen_by_member.json()
-    for view in (admin_view, own_view):
-        view["status"].pop("checked_at")
-    assert admin_view == own_view
-    assert admin_view["user"]["email"] == MEMBER_EMAIL
-    assert [rule["name"] for rule in admin_view["status"]["rules"]] == [
+    assert seen.status_code == 200
+    assert seen.headers["cache-control"] == "no-store"
+    view = seen.json()
+    assert view["user"]["email"] == MEMBER_EMAIL
+    assert [rule["name"] for rule in view["status"]["rules"]] == [
         "Calendar 2 → Calendar 1",
         "Calendar 1 → Calendar 2",
     ]
     # Each calendar's number, so the Web UI can name it in the reader's language.
     assert [
         (rule["source"]["number"], rule["destination"]["number"])
-        for rule in admin_view["status"]["rules"]
+        for rule in view["status"]["rules"]
     ] == [(2, 1), (1, 2)]
+
+
+def test_a_user_has_no_route_to_read_the_overview_about_them(installation: Installation) -> None:
+    # Settings no longer shows a User what administrators see; they read their own status.
+    installation.as_member()
+
+    assert installation.client.get("/api/v1/account/overview").status_code == 404
 
 
 def test_a_users_own_status_names_calendars_and_numbers_none(installation: Installation) -> None:
@@ -296,10 +297,8 @@ def test_no_calendar_account_or_event_reaches_the_overview_health_notifications_
         client.get(f"/api/v1/users/{installation.admin.user.value}/overview").text,
         client.get(f"/api/v1/users/{installation.member.user.value}/overview").text,
         client.get("/api/v1/installation/health").text,
-        client.get("/api/v1/account/overview").text,
     ]
     installation.as_member()
-    shown.append(client.get("/api/v1/account/overview").text)
     # A User's own status names their own calendars, but never repeats what Google said.
     own = [client.get(path).text for path in ("/api/v1/status", "/api/v1/incidents")]
     notifications = RecordingNotifications()

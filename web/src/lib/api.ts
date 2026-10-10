@@ -273,7 +273,6 @@ export const api = {
   setIncidentEmails: (notifyByEmail: boolean) =>
     call("/api/v1/account/notifications", "put", { body: { notify_by_email: notifyByEmail } }),
   /** What the Operator Overview shows administrators about the signed-in User. */
-  ownOverview: () => call("/api/v1/account/overview", "get"),
   /** Whether the signed-in User may delete themself now, and whether nobody would remain. */
   ownAccountDeletion: () => call("/api/v1/account/deletion", "get"),
   deleteOwnAccount: (password: string, projections: ProjectionHandling) =>

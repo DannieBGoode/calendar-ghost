@@ -6,7 +6,6 @@ import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import { api, type RuleDetail, type RuleSummary, type RunningWork } from "@/lib/api"
-import { OWN_OVERVIEW_QUERY } from "@/lib/operator-overview"
 import { previewSummary } from "@/lib/rule-preview"
 import {
   enabledMessage,
@@ -58,7 +57,6 @@ export const RULE_CHANGE_QUERIES = [
   ["accounts"],
   ["recent-changes"],
   ["incidents"],
-  OWN_OVERVIEW_QUERY,
 ] as const
 
 export const PENDING_LABELS: Record<RuleCommand, MessageKey> = {

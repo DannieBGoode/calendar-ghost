@@ -84,27 +84,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/account/overview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Own Overview
-         * @description What the Operator Overview shows Installation Administrators about the signed-in User,
-         *     exactly as they see it.
-         */
-        get: operations["own_overview_api_v1_account_overview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/account/password": {
         parameters: {
             query?: never;
@@ -2268,37 +2247,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SignedInUserResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    own_overview_api_v1_account_overview_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: {
-                calendar_sync_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserOverviewResponse"];
                 };
             };
             /** @description Validation Error */

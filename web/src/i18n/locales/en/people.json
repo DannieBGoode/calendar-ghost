@@ -203,16 +203,11 @@
         "self": "Choose Sync now on the rule, or check Activity."
       },
       "waiting": "Nothing to do: Calendar Ghost retries by itself.",
-      "stalled": {
-        "self": "Your administrator restarts Calendar Ghost. Nothing synchronizes until it runs again.",
-        "person": "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again."
-      },
+      "stalled": "Restart Calendar Ghost on the computer it runs on. Nobody's rules synchronize until it runs again.",
       "calendar": {
         "self": "Open the rule to choose another calendar, or remove the rule."
       },
       "administrator": {
-        "self": "Temporarily unavailable. Calendar Ghost tries again by itself.",
-        "selfLapsed": "Temporarily unavailable. To try again, choose Check access on your Google account in Settings, under Connections.",
         "administrator": "You fix this as the administrator, in Google Cloud.",
         "person": "You fix this as the administrator, in Google Cloud. {name} has nothing to do."
       },
@@ -222,16 +217,10 @@
       }
     },
     "statusTitle": "Synchronization",
-    "calendarNamed": "Calendar {number} ({name})",
     "callsMeaning": {
       "normal": "These calls look normal.",
       "limited": "Google asked Calendar Ghost to slow down a few times, and it tried again later.",
       "manyFailed": "Many calls failed. A Google account usually needs reauthorization, or Google is having trouble."
-    },
-    "go": {
-      "connections": "Open Connections",
-      "rule": "Open the rule",
-      "activity": "Open Activity"
     }
   },
   "problems": {

@@ -61,7 +61,6 @@ const RESPONSES: Record<string, unknown> = {
   "/api/v1/google/configuration": { configured: false, redirect_uri: null },
   "/api/v1/recent-changes": [],
   "/api/v1/integration-tokens": [],
-  "/api/v1/account/overview": NOTHING_SET_UP,
 }
 
 function jsonResponse(body: unknown): Response {

@@ -6,101 +6,53 @@ import { VerdictBadge } from "@/components/verdict-badge"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import type { ResourceUse, ServerProblem, UserOverview } from "@/lib/api"
-import {
-  calendarName,
-  callsMeaning,
-  nextStep,
-  ownStepTarget,
-  problemText,
-  resourceFacts,
-  THEMSELF,
-  type Audience,
-} from "@/lib/operator-overview"
-import { causeOf, causeText, howToFixUrl, isAdministratorCause, retryTiming } from "@/lib/causes"
+import { causeOf, causeText, howToFixUrl, retryTiming } from "@/lib/causes"
+import { calendarName, callsMeaning, nextStep, problemText, resourceFacts, type Audience } from "@/lib/operator-overview"
 
 type Status = UserOverview["status"]
 type StatusRule = Status["rules"][number]
-type HeadingLevel = 2 | 3
-
-/** Cards on a page of their own, such as a person's page under People. */
-export const CARDS = "cards" as const
-/** Rows inside one Settings group. */
-export const ROWS = "rows" as const
-
-/** Where the person themself goes to act on one of their own problems. */
-export type OwnActions = {
-  openRule: (ruleId: string) => void
-  openConnections: () => void
-  openActivity: (ruleId: string | null) => void
-}
-
 type Options = {
   now: number
   audience: Audience
-  headingLevel: HeadingLevel
-  /** Cards on a page of their own; rows inside one Settings group. */
-  layout: typeof CARDS | typeof ROWS
-  /** The person's own calendar names by number, shown beside each number for them only. */
-  ownNames?: ReadonlyMap<number, string>
-  /** Links to act on their own problems, for the person themself only. */
-  actions?: OwnActions
 }
 
 /**
- * What the Operator Overview shows about one User: their sync health, then each rule with its
- * problem and who takes the next step, then their accounts, Activity, and calls. Calendars appear
- * only as "Calendar 1", "Calendar 2". People shows it to an administrator, and Settings shows the
- * same to that User, with their own names beside the numbers.
+ * What the Operator Overview shows about one User, on their page under People: their sync health,
+ * then each rule with its problem and who takes the next step, then their accounts, Activity, and
+ * calls. Calendars appear only as "Calendar 1", "Calendar 2".
  */
 export function UserOverviewDetails({ overview, ...options }: Options & { overview: UserOverview }) {
-  const body = (
-    <>
+  return (
+    <div className="user-overview">
       <SyncBlock status={overview.status} options={options} />
-      <UseBlock resources={overview.resources} options={options} />
-    </>
-  )
-  return options.layout === CARDS ? (
-    <div className="user-overview">{body}</div>
-  ) : (
-    <div className="user-overview settings-list">{body}</div>
+      <UseBlock resources={overview.resources} />
+    </div>
   )
 }
 
 function Block({
-  options,
   title,
   className,
   children,
 }: {
-  options: Options
   title: string
   className?: string
   children: ReactNode
 }) {
   const id = useId()
-  const heading = options.headingLevel === 2 ? <h2 id={id}>{title}</h2> : <h3 id={id}>{title}</h3>
-  const kind = options.layout === CARDS ? "page-card workflow" : "setting-item"
   return (
-    <section className={`${kind} user-overview-block ${className ?? ""}`} aria-labelledby={id}>
-      {heading}
+    <section className={`page-card workflow user-overview-block ${className ?? ""}`} aria-labelledby={id}>
+      <h2 id={id}>{title}</h2>
       {children}
     </section>
   )
 }
 
 /** A rule's name from its calendars: arrows for the eye, words for a screen reader. */
-function RuleName({
-  i18n,
-  rule,
-  ownNames,
-}: {
-  i18n: I18n
-  rule: StatusRule
-  ownNames?: ReadonlyMap<number, string> | undefined
-}) {
+function RuleName({ i18n, rule }: { i18n: I18n; rule: StatusRule }) {
   const names = {
-    source: calendarName(i18n, rule.source, ownNames),
-    destination: calendarName(i18n, rule.destination, ownNames),
+    source: calendarName(i18n, rule.source),
+    destination: calendarName(i18n, rule.destination),
   }
   return (
     <strong className="user-overview-rule">
@@ -127,7 +79,7 @@ function SyncBlock({ status, options }: { status: Status; options: Options }) {
   }
   const unattached = status.problems.filter((p) => !p.rule_id || !status.rules.some((rule) => rule.id === p.rule_id))
   return (
-    <Block options={options} title={t("people.overview.statusTitle")} className="user-overview-health">
+    <Block title={t("people.overview.statusTitle")} className="user-overview-health">
       <div className="user-overview-verdict">
         <VerdictBadge verdict={status.status} />
         <p>{t(`people.overview.verdict.${status.status}`)}</p>
@@ -164,7 +116,7 @@ function RuleItem({
   return (
     <li>
       <div className="user-overview-item-title">
-        <RuleName i18n={i18n} rule={rule} ownNames={options.ownNames} />
+        <RuleName i18n={i18n} rule={rule} />
         <RuleStatusBadge state={rule.state} stopped={rule.problem?.kind === "stopped"} />
       </div>
       <p className="user-overview-muted">{lastSync(i18n, rule.last_succeeded_at, options.now)}</p>
@@ -179,14 +131,11 @@ function RuleItem({
 function ProblemDetail({ problem, status, options }: { problem: ServerProblem; status: Status; options: Options }) {
   const i18n = useI18n()
   const cause = causeOf(problem)
-  // The installation's own Cause is the administrator's to know; the person reads only that it
-  // is temporarily unavailable, so nothing sends them to the administrator.
-  const shown = cause && !(options.audience === THEMSELF && isAdministratorCause(cause)) ? cause : null
   const timing = retryTiming(i18n, problem, status.scheduler.next_pass_at ?? null, options.now)
   return (
     <div className="user-overview-problem">
       <p className="user-overview-problem-text">{problemText(i18n, problem, status.counts.blocked_events)}</p>
-      {shown && <p className="user-overview-muted">{causeText(i18n, shown)}</p>}
+      {cause && <p className="user-overview-muted">{causeText(i18n, cause)}</p>}
       <ProblemStep problem={problem} options={options} />
       {timing && <p className="user-overview-muted">{timing}</p>}
       {problem.since && (
@@ -198,14 +147,10 @@ function ProblemDetail({ problem, status, options }: { problem: ServerProblem; s
   )
 }
 
-/**
- * Who takes the next step and how. An administrator reading an administrator's Cause gets the
- * guide's fix; the person themself gets a link to their own step, and never one only an
- * administrator can take.
- */
+/** Who takes the next step and how; an administrator's Cause adds the guide's fix. */
 function ProblemStep({ problem, options }: { problem: ServerProblem; options: Options }) {
   const i18n = useI18n()
-  const fix = options.audience === THEMSELF ? null : howToFixUrl(causeOf(problem))
+  const fix = howToFixUrl(causeOf(problem))
   return (
     <p className="user-overview-next">
       {nextStep(i18n, problem, options.audience)}
@@ -215,43 +160,19 @@ function ProblemStep({ problem, options }: { problem: ServerProblem; options: Op
           <HowToFixLink href={fix} />
         </>
       )}
-      {options.actions && <OwnStep problem={problem} audience={options.audience} actions={options.actions} />}
     </p>
   )
 }
 
-/** The person's own way to the step: their rule, their Google connections, or their Activity. */
-function OwnStep({ problem, audience, actions }: { problem: ServerProblem; audience: Audience; actions: OwnActions }) {
-  const { t } = useI18n()
-  const target = ownStepTarget(problem, audience)
-  if (target === null) return null
-  const rule = problem.rule_id
-  const open = {
-    connections: actions.openConnections,
-    rule: () => {
-      if (rule) actions.openRule(rule)
-    },
-    activity: () => actions.openActivity(rule),
-  }[target]
-  return (
-    <>
-      {" "}
-      <button type="button" className="text-link inline-link" onClick={open}>
-        {t(`people.overview.go.${target}`)}
-      </button>
-    </>
-  )
-}
-
 /** What the person keeps here and the calls their rules made, with one line on what the calls mean. */
-function UseBlock({ resources, options }: { resources: ResourceUse; options: Options }) {
+function UseBlock({ resources }: { resources: ResourceUse }) {
   const i18n = useI18n()
   const { t } = i18n
   const facts = resourceFacts(i18n, resources)
   const since = i18n.format.shortDay(resources.since, true)
   const meaning = callsMeaning(i18n, resources.provider_calls)
   return (
-    <Block options={options} title={t("people.overview.resourcesTitle")}>
+    <Block title={t("people.overview.resourcesTitle")}>
       <p>{i18n.format.unitList(facts.kept)}</p>
       {facts.calls.length === 0 ? (
         <p className="user-overview-muted">{t("people.overview.noCalls", { since })}</p>

@@ -418,15 +418,5 @@
       "twilight": "Twilight (indigo)",
       "midnight": "Midnight (blue)"
     }
-  },
-  "administratorView": {
-    "title": "What administrators can see",
-    "intro": "Administrators see whether your synchronization works, never your calendar names, Google account emails, or events. Your calendars appear to them only by number.",
-    "summary": "Your sync status",
-    "show": "Show what they see",
-    "hide": "Hide what they see",
-    "loadFailure": "What your administrator can see could not load.",
-    "tryAgain": "Try again",
-    "detailsLabel": "What administrators see about you"
   }
 }

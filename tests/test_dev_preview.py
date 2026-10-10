@@ -166,7 +166,9 @@ def test_preview_people_show_each_users_own_verdict(tmp_path: Path, scenario: Sc
     with TestClient(create_app(container)) as client:
         client.post("/api/v1/session", json={"email": PREVIEW_EMAIL, "password": PREVIEW_PASSWORD})
         own = client.get("/api/v1/status").json()["status"]
-        overview = client.get("/api/v1/account/overview").json()["status"]["status"]
+        overview = client.get(
+            f"/api/v1/users/{preview_user(tmp_path / 'dev-preview.db').value}/overview"
+        ).json()["status"]["status"]
         health = client.get("/api/v1/installation/health").json()["users"]
 
     assert overview == own == scenario.value

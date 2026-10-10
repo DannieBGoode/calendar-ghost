@@ -307,9 +307,8 @@ instead set the user type to **Internal**, which has no 7-day limit.
 
 ## Problems you fix yourself
 
-When Google refuses one of your requests for a reason that is yours to handle, your Overview, the
-rule, and **Settings → Your account → What administrators can see** say the likely cause and your
-one next step. Your administrator sees only that you can fix it from your dashboard, and does not
+When Google refuses one of your requests for a reason that is yours to handle, your Overview and
+the rule say what happened and your one next step. Your administrator sees only that you can fix it from your dashboard, and does not
 contact you about it. If the installation sends email and has a public address, the incident email
 links straight to that step.
 

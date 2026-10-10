@@ -222,8 +222,8 @@ each at its own URL: **Your account** (`/settings/account`, where `/settings` op
 for administrators, **Administration** (`/settings/administration`). Administrators who let other
 people join also get **People** at `/people`, with Installation Health above everyone and each
 person's sync status, and each person's page at `/people/{id}`. They never see anyone's calendar
-names, Google account emails, or events; each person can see exactly what they see under
-**Settings → Your account**.
+names, Google account emails, or events ([data ownership](docs/data-ownership.md) lists exactly what
+they see).
 
 Open **View details** on a rule (`/rules/{id}`) to see its calendars, policy, projection count, and
 latest runs. Changing any of its policies pauses the rule until it passes a new preview,

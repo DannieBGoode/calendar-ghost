@@ -66,16 +66,13 @@ type StatusCalendar = UserOverview["status"]["rules"][number]["source"]
 
 /**
  * A calendar as the Operator Overview names it: "Calendar 2" in the reader's language when it is
- * numbered in place of its name, otherwise its name. `ownNames` adds the person's own name for each
- * number, for the person themself only. A server too old to send numbers keeps its own label.
+ * numbered in place of its name, otherwise its name. A server too old to send numbers keeps its own
+ * label.
  */
-export function calendarName(i18n: I18n, calendar: StatusCalendar, ownNames?: ReadonlyMap<number, string>): string {
+export function calendarName(i18n: I18n, calendar: StatusCalendar): string {
   const number: unknown = calendar.number
   if (typeof number !== "number") return calendar.calendar
-  const own = ownNames?.get(number)
-  return own === undefined
-    ? i18n.t("people.overview.calendar", { number })
-    : i18n.t("people.overview.calendarNamed", { number, name: own })
+  return i18n.t("people.overview.calendar", { number })
 }
 
 type ProviderCalls = ResourceUse["provider_calls"][number]
@@ -94,19 +91,13 @@ export function callsMeaning(i18n: I18n, calls: readonly ProviderCalls[]): strin
 }
 
 /**
- * Who reads a problem: the person themself, the person themself when they administer the
- * installation, or an administrator looking at someone else, by name.
+ * Who reads a problem on a person's page: an administrator looking at someone else, by name, or
+ * at their own page, where the steps are theirs.
  */
-export type Audience = "self" | "administrator" | { name: string }
+export type Audience = "administrator" | { name: string }
 
-/** The person themself, reading what administrators see about them. */
-export const THEMSELF: Audience = "self"
-
-/** The person themself, who also administers the installation and so fixes its Causes. */
+/** An administrator reading their own page, who also fixes the installation's own Causes. */
 export const AS_ADMINISTRATOR: Audience = "administrator"
-
-/** The signed-in User's own overview; every change to their rules, accounts, or Activity refreshes it. */
-export const OWN_OVERVIEW_QUERY = ["own-overview"] as const
 
 const REAUTHORIZE_KINDS = new Set(["authentication", "authorization"])
 
@@ -144,13 +135,11 @@ function step(problem: ServerProblem): Step {
   }
 }
 
-/** The administrator's Cause, to whoever reads it: theirs to fix, or not the User's. */
-function administratorStep(i18n: I18n, problem: ServerProblem, audience: Audience): string {
-  if (audience === "administrator") return i18n.t("people.overview.next.administrator.administrator")
-  if (audience !== "self") return i18n.t("people.overview.next.administrator.person", { name: audience.name })
-  return lapsed(problem)
-    ? i18n.t("people.overview.next.administrator.selfLapsed")
-    : i18n.t("people.overview.next.administrator.self")
+/** The administrator's Cause: the reader's to fix, whoever's page it is on. */
+function administratorStep(i18n: I18n, audience: Audience): string {
+  return audience === "administrator"
+    ? i18n.t("people.overview.next.administrator.administrator")
+    : i18n.t("people.overview.next.administrator.person", { name: audience.name })
 }
 
 /**
@@ -160,39 +149,18 @@ function administratorStep(i18n: I18n, problem: ServerProblem, audience: Audienc
 export function nextStep(i18n: I18n, problem: ServerProblem, audience: Audience): string {
   const next = step(problem)
   if (next === "waiting") return i18n.t("people.overview.next.waiting")
-  if (next === "administrator") return administratorStep(i18n, problem, audience)
-  if (typeof audience === "object") return personStep(i18n, problem, next, audience.name)
+  if (next === "administrator") return administratorStep(i18n, audience)
+  // Restarting Calendar Ghost is an administrator's, whoever's page it is on.
+  if (next === "stalled") return i18n.t("people.overview.next.stalled")
+  if (typeof audience === "object") return personStep(i18n, problem, audience.name)
   return i18n.t(`people.overview.next.${next}.self`)
 }
 
 /**
- * The next step, to an administrator looking at someone else. A stalled scheduler is theirs to
- * restart; every other problem the person fixes from their own dashboard, so the administrator is
- * offered nothing to do (ADR 0031).
+ * The next step, to an administrator looking at someone else: the person fixes their own problems
+ * from their dashboard, so the administrator is offered nothing to do (ADR 0031).
  */
-function personStep(i18n: I18n, problem: ServerProblem, next: Step, name: string): string {
-  if (next === "stalled") return i18n.t("people.overview.next.stalled.person")
+function personStep(i18n: I18n, problem: ServerProblem, name: string): string {
   if (causeOf(problem) === "unknown") return i18n.t("people.overview.next.ownCause.unknown", { name })
   return i18n.t("people.overview.next.ownCause.person", { name })
 }
-
-/** Where the person themself goes for a problem's next step, when it is a page of their own. */
-export function ownStepTarget(problem: ServerProblem, audience: Audience = THEMSELF): OwnTarget | null {
-  const next = step(problem)
-  // Once an administrator fixes their Cause, Check access restarts what the lapse stopped.
-  if (next === "administrator") return audience === "self" && lapsed(problem) ? "connections" : null
-  return problem.rule_id || !RULE_STEPS.has(next) ? (STEP_TARGETS[next] ?? null) : null
-}
-
-type OwnTarget = "connections" | "rule" | "activity"
-
-const STEP_TARGETS: Partial<Record<Step, OwnTarget>> = {
-  reauthorize: "connections",
-  preview: "rule",
-  overdue: "rule",
-  calendar: "rule",
-  activity: "activity",
-}
-
-/** Steps taken on the problem's own rule, so only a problem naming one has them. */
-const RULE_STEPS: ReadonlySet<Step> = new Set(["preview", "overdue", "calendar"])

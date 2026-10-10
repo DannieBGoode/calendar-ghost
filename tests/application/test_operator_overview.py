@@ -195,13 +195,6 @@ def test_only_an_administrator_lists_people() -> None:
         _installation().page(ALICE.id, OverviewQuery())
 
 
-def test_a_user_sees_exactly_what_an_administrator_sees_about_them() -> None:
-    overview = _installation()
-
-    assert overview.own(ALICE.id) == overview.of(ADMIN.id, ALICE.id)
-    assert overview.own(ALICE.id).status.health is StatusVerdict.STOPPED
-
-
 def test_nobody_else_learns_whether_a_user_exists() -> None:
     overview = _installation()
 

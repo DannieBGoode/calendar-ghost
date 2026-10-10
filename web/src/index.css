@@ -1890,38 +1890,6 @@ p {
   font-weight: 550;
 }
 
-/* Settings: what administrators see, opened below its summary row, with the key to its numbers. */
-.administrator-view-details {
-  display: grid;
-  gap: 1rem;
-}
-
-/* Inside one Settings group, each part of the overview is a row with the group's own rhythm. */
-.user-overview.settings-list > .setting-item {
-  display: grid;
-  gap: 0.75rem;
-  padding: 1.25rem 0;
-}
-
-.administrator-view-details:focus {
-  outline: none;
-}
-
-.calendar-key {
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
-}
-
-.calendar-key ul {
-  display: flex;
-  flex-wrap: wrap;
-  margin: 0.375rem 0 0;
-  padding: 0;
-  gap: 0.25rem 1.25rem;
-  color: var(--foreground);
-  list-style: none;
-}
-
 /* Installation Health above everyone here: one sentence, then quiet counts that set the list's
    filters, then what each status means on request. */
 .installation-health.page-card.workflow {

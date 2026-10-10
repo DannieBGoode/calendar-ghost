@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DisabledBadge } from "@/components/verdict-badge"
 import { PersonDetails, PersonMenu } from "@/features/person-actions"
-import { CARDS, UserOverviewDetails } from "@/features/user-overview"
+import { UserOverviewDetails } from "@/features/user-overview"
 import { useI18n } from "@/i18n/provider"
 import { api, ApiError, type Person, type UserOverview } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
@@ -97,13 +97,7 @@ function PersonContent({
         {commands.message}
       </p>
       {/* Only administrators see People, so on their own page they read as the administrator they are. */}
-      <UserOverviewDetails
-        overview={overview}
-        now={now}
-        audience={you ? AS_ADMINISTRATOR : { name }}
-        headingLevel={2}
-        layout={CARDS}
-      />
+      <UserOverviewDetails overview={overview} now={now} audience={you ? AS_ADMINISTRATOR : { name }} />
       <p className="page-footnote">{t("people.person.intro")}</p>
     </div>
   )

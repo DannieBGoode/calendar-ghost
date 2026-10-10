@@ -3,7 +3,6 @@ import { useState } from "react"
 
 import { useI18n } from "@/i18n/provider"
 import { type ConnectedAccount, api } from "@/lib/api"
-import { OWN_OVERVIEW_QUERY } from "@/lib/operator-overview"
 import { withoutKey } from "@/lib/utils"
 
 export type AccessCheck = Awaited<ReturnType<typeof api.verifyAccountAccess>>
@@ -30,7 +29,6 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["rules"] }),
-        queryClient.invalidateQueries({ queryKey: OWN_OVERVIEW_QUERY }),
         queryClient.invalidateQueries({ queryKey: ["incidents"] }),
       ]),
   })
@@ -44,7 +42,6 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["rules"] }),
-        queryClient.invalidateQueries({ queryKey: OWN_OVERVIEW_QUERY }),
       ])
     },
   })
@@ -70,7 +67,6 @@ export function useAccountCommands(accounts: ConnectedAccount[] | undefined) {
         queryClient.invalidateQueries({ queryKey: ["accounts"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard"] }),
         queryClient.invalidateQueries({ queryKey: ["rules"] }),
-        queryClient.invalidateQueries({ queryKey: OWN_OVERVIEW_QUERY }),
         queryClient.invalidateQueries({ queryKey: ["activity"] }),
         queryClient.invalidateQueries({ queryKey: ["incidents"] }),
       ])

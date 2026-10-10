@@ -56,10 +56,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - Each calendar in Installation Status has a `number`: in the Operator Overview, the number its
   neutral label carries ("Calendar 2" has 2), so the Web UI can name it in the reader's language;
   `null` in a User's own status, which names the calendar.
-- **Settings → Your account → What your administrator can see** shows each person exactly what the
-  Operator Overview shows about them, from `GET /api/v1/account/overview`, collapsed to one row,
-  with a key naming their own calendars for each number. A person's page and this view lead with
-  sync health and say who takes the next step for each problem.
+- A person's page leads with sync health and says who takes the next step for each problem.
 - Causes ([ADR 0031](docs/adr/0031-keep-the-providers-reason-as-a-cause.md)). When Google refuses a
   request, Calendar Ghost reads why from Google's reason code, never its message, and records it as
   a Cause on the Incident and the run: the Calendar API is turned off, the project's daily quota is
@@ -72,7 +69,7 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   likely causes when two or more people share an administrator's Cause or an unrecognized one
   within a day, or lose Google about 7 days after connecting (an OAuth app in Testing mode), each
   with **How to fix**; `GET /api/v1/installation/health` returns them as `hints`. A person's page
-  says each problem's likely cause. For an administrator's Cause, each person's Overview and **What administrators can see** say
+  says each problem's likely cause. For an administrator's Cause, each person's Overview says
   only "Temporarily unavailable", naming neither the cause nor the administrator; otherwise they
   give its one step. Administrators
   never contact anyone through Calendar Ghost about a problem.
