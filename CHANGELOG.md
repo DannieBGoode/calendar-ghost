@@ -60,6 +60,27 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   Operator Overview shows about them, from `GET /api/v1/account/overview`, collapsed to one row,
   with a key naming their own calendars for each number. A person's page and this view lead with
   sync health and say who takes the next step for each problem.
+- Causes ([ADR 0031](docs/adr/0031-keep-the-providers-reason-as-a-cause.md)). When Google refuses a
+  request, Calendar Ghost reads why from Google's reason code, never its message, and records it as
+  a Cause on the Incident and the run: the Calendar API is turned off, the project's daily quota is
+  used up, or Google no longer accepts the OAuth client, which only an administrator can fix; or
+  the account's grant was revoked, the calendar is closed to the account or gone, Google is limiting
+  requests or failed for a moment, or a reason Calendar Ghost does not recognize, which the person
+  handles from their own dashboard. Problems and incidents in `GET /api/v1/status`,
+  `GET /api/v1/dashboard`, and `GET /api/v1/incidents` carry `cause`, problems say when they were
+  last tried, and the status and dashboard say when the scheduler next tries. **People** suggests
+  likely causes when two or more people share an administrator's Cause or an unrecognized one
+  within a day, or lose Google about 7 days after connecting (an OAuth app in Testing mode), each
+  with **How to fix**; `GET /api/v1/installation/health` returns them as `hints`. A person's page
+  says each problem's likely cause. Each person's Overview and **What administrators can see** tell
+  them when a Cause is their administrator's to fix, and otherwise give its one step. Administrators
+  never contact anyone through Calendar Ghost about a problem.
+- `CALENDAR_SYNC_PUBLIC_URL`: with it, each incident email links to the person's next step in the
+  Web UI. The link names no calendar, account, or event.
+- Migration 26 adds `incidents.cause` and `rule_run_outcomes.failure_cause`. Earlier failures read
+  as unknown. Rolling back is safe.
+- Google's `dailyLimitExceeded` is now retried as a rate limit; earlier it lapsed the account as if
+  its authorization had been refused.
 
 - Migration 24 records the order rules were created in, and migration 25 counts each person's
   calendar provider calls per day, kept for 30 days. Rolling back past either is safe.

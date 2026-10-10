@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from calendar_sync.application.causes import Cause
 from calendar_sync.application.installation_hints import (
     CAUSE_ANCHORS,
     TESTING_MODE_ANCHOR,
@@ -46,3 +47,22 @@ def test_every_how_to_fix_link_in_the_web_ui_reaches_a_section_of_the_guide() ->
     # The Web UI links each administrator's Cause where Installation Hints do.
     assert linked == {cause.value: anchor for cause, anchor in CAUSE_ANCHORS.items()}
     assert set(linked.values()) <= guide_anchors()
+
+
+# Every Cause has a section of its own, for whoever fixes it; links and readers rely on these.
+SECTIONS = {
+    Cause.API_DISABLED: "the-google-calendar-api-is-turned-off",
+    Cause.QUOTA_EXCEEDED: "the-google-cloud-projects-daily-quota-is-used-up",
+    Cause.OAUTH_CLIENT_INVALID: "google-no-longer-accepts-the-oauth-client",
+    Cause.ACCESS_REVOKED: "google-no-longer-accepts-your-google-account",
+    Cause.CALENDAR_FORBIDDEN: "your-google-account-may-not-change-the-calendar",
+    Cause.CALENDAR_NOT_FOUND: "the-calendar-no-longer-exists",
+    Cause.RATE_LIMITED: "google-is-slowing-calendar-ghost-down",
+    Cause.TEMPORARY: "google-is-slowing-calendar-ghost-down",
+    Cause.UNKNOWN: "google-refused-for-a-reason-calendar-ghost-does-not-recognize",
+}
+
+
+def test_every_cause_has_a_section_of_the_guide() -> None:
+    assert set(SECTIONS) == set(Cause)
+    assert set(SECTIONS.values()) <= guide_anchors()

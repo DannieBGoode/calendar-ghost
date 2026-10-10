@@ -216,9 +216,10 @@ its mappings and last successful incremental positions, and writes nothing while
 - **Google Calendar rejected synchronization**: Google refused a request for a reason other than
   authorization or rate limiting, or answered in a way Calendar Ghost could not use. Choose **Review
   this rule** and check that both calendars still exist and are shared with the accounts the rule
-  uses. Calendar Ghost does not record the error Google returned, so if both calendars are available,
-  recover the rule; if it stops again with the same incident, note when the incident opened when
-  asking for help.
+  uses. Calendar Ghost records only why Google refused, as a likely cause, never the message Google
+  returned; the sections below say what each one means. If both calendars are available, recover
+  the rule; if it stops again with the same incident, note when the incident opened and its likely
+  cause when asking for help.
 - **Local synchronization infrastructure failed**: an unexpected error inside Calendar Ghost stopped
   the run, not a Google condition. Review the container logs for the error, and check that the data
   volume has free space and the database is writable, before recovering the rule.
@@ -302,6 +303,61 @@ read **Publishing status**.
 it. Grants given while the app was in Testing still expire, so each affected person reauthorizes
 once from their own dashboard; after that their access lasts. A Google Workspace organization can
 instead set the user type to **Internal**, which has no 7-day limit.
+
+## Problems you fix yourself
+
+When Google refuses one of your requests for a reason that is yours to handle, your Overview, the
+rule, and **Settings → Your account → What administrators can see** say the likely cause and your
+one next step. Your administrator sees only that you can fix it from your dashboard, and does not
+contact you about it. If the installation sends email and has a public address, the incident email
+links straight to that step.
+
+### Google no longer accepts your Google account
+
+**What you see.** "A Google Calendar account needs reauthorization", with the likely cause "Google
+no longer accepts this Google account's permission". You removed Calendar Ghost's access in your
+Google account, changed something Google treats as ending the grant, or the grant expired.
+
+**What to do.** Choose **Reauthorize account** in **Settings → Connections**, for the account it
+names. Every rule the lapse stopped restarts on its own, with no preview. If it happens again about
+a week after each reauthorization, tell your administrator: the installation's Google app is
+probably in Testing mode ([Google accounts stop working 7 days after
+connecting](#google-accounts-stop-working-7-days-after-connecting)).
+
+### Your Google account may not change the calendar
+
+**What you see.** The rule stopped, with the likely cause "the Google account may not change this
+calendar". The calendar's owner took away your account's permission to make changes, or a Google
+Workspace policy limits it.
+
+**What to do.** Open the rule. Choose another calendar for it, or remove it. To keep the same
+calendar, ask its owner to share it with your Google account with **Make changes to events**, then
+preview the rule again to restart it.
+
+### The calendar no longer exists
+
+**What you see.** The rule stopped, with the likely cause "the calendar no longer exists, or is no
+longer shared with the account". The calendar was deleted, or unshared from the account the rule
+uses.
+
+**What to do.** Open the rule and choose another calendar for it, or remove the rule.
+
+### Google is slowing Calendar Ghost down
+
+**What you see.** "Waiting for Google", with the likely cause "Google asked Calendar Ghost to slow
+down" or "Google failed for a moment", when the rule was last tried, and when it tries again.
+
+**What to do.** Nothing. Calendar Ghost tries again by itself and catches up afterwards. If it lasts
+more than a day, check the Google Workspace Status Dashboard.
+
+### Google refused for a reason Calendar Ghost does not recognize
+
+**What you see.** The rule stopped or needs a look, with the likely cause "Google refused for a
+reason Calendar Ghost does not recognize".
+
+**What to do.** Try the rule's usual step again: open the rule and preview it to restart it, or read
+what Activity says. If it keeps happening, tell your administrator; the service logs name Google's
+reason ([Reading the logs](#reading-the-logs)).
 
 ## A Google account was disconnected
 
