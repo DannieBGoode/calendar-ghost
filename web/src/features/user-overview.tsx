@@ -113,12 +113,12 @@ function SyncBlock({ status, options, children }: { status: Status; options: Opt
       {(unattached.length > 0 || shared.length > 0 || status.rules.length > 0) && (
         <ul className="user-overview-list">
           {unattached.map((problem) => (
-            <li key={`${problem.kind}:${problem.summary}`}>
+            <li key={`${problem.kind}:${problem.summary}`} className="user-overview-list-problem">
               <ProblemDetail problem={problem} status={status} options={options} />
             </li>
           ))}
           {shared.map((group) => (
-            <li key={`shared:${String(group.problem.cause)}`}>
+            <li key={`shared:${String(group.problem.cause)}`} className="user-overview-list-problem">
               <ProblemDetail problem={group.problem} status={status} options={options} stops={stops(group)} />
             </li>
           ))}
@@ -147,11 +147,13 @@ function RuleItem({
   const i18n = useI18n()
   return (
     <li>
-      <div className="user-overview-item-title">
-        <RuleName i18n={i18n} rule={rule} own={options.own} />
-        <RuleStatusBadge state={rule.state} stopped={rule.problem?.kind === "stopped"} />
+      <div className="user-overview-rule-head">
+        <div className="user-overview-item-title">
+          <RuleName i18n={i18n} rule={rule} own={options.own} />
+          <RuleStatusBadge state={rule.state} stopped={rule.problem?.kind === "stopped"} />
+        </div>
+        <p className="user-overview-muted">{lastSync(i18n, rule.last_succeeded_at, options.now)}</p>
       </div>
-      <p className="user-overview-muted">{lastSync(i18n, rule.last_succeeded_at, options.now)}</p>
       {problems.map((problem) => (
         <ProblemDetail key={`${problem.kind}:${problem.summary}`} problem={problem} status={status} options={options} />
       ))}
