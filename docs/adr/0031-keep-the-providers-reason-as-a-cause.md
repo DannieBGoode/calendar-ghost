@@ -38,8 +38,11 @@ User's calendars.
   calendar or remove it for `calendar_forbidden` and `calendar_not_found`; nothing for
   `rate_limited` and `temporary`, which fix themselves, with when the rule was last tried and when
   the scheduler tries again; and the problem's usual next step for `unknown`, said as trying again
-  because the fix is not known. To the User, an administrator's Cause says "Your administrator needs
-  to fix this" and offers no step. To the administrator, a User's Cause says the User can fix it
+  because the fix is not known. To the User, an administrator's Cause says only that Google
+  Calendar is temporarily unavailable, never which Cause or that an administrator fixes it, so a
+  Hosted Service with many Users is not flooded with messages about one outage; the administrator
+  learns it on People. Where the Cause lapsed the account, the User is offered Check access to
+  try again. To the administrator, a User's Cause says the User can fix it
   from their dashboard, or try again for `unknown`, and offers no action. Notes to copy, reminders,
   read receipts, and any other channel from administrator to User are not built.
 - **Incident email links to that step.** When the installation sets `CALENDAR_SYNC_PUBLIC_URL`,
@@ -77,7 +80,8 @@ User's calendars.
 - **Change what an administrator's Cause does**, such as retrying an account the provider refuses
   because the Calendar API is off instead of lapsing it. That changes the recovery model of ADR
   0027 and is left for its own decision; until then a User whose account lapsed for an
-  administrator's Cause chooses Check access once the administrator has fixed it.
+  administrator's Cause is offered Check access to try again, which restarts their rules once the
+  administrator has fixed it.
 
 ## Consequences
 

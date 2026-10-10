@@ -161,12 +161,13 @@ function administratorCause(problems: RuleProblem[]): Cause | null {
 }
 
 /**
- * Rules an administrator's Cause stopped. The User is told it is not theirs to fix and offered
- * only Check access, for once it is; an administrator is sent to People, where the fix is.
+ * Rules an administrator's Cause stopped. The User reads only that Google Calendar is temporarily
+ * unavailable, with Check access to try again, so nothing sends them to the administrator; an
+ * administrator is sent to People, where the fix is.
  */
 function administratorStopped(i18n: I18n, headline: string, cause: Cause, reader: Reader): Problem {
-  const likely = causeText(i18n, cause)
   if (reader.administrator) {
+    const likely = causeText(i18n, cause)
     const title = i18n.t("overview.health.administratorCause.administratorTitle")
     return {
       tone: "stopped",
@@ -182,7 +183,7 @@ function administratorStopped(i18n: I18n, headline: string, cause: Cause, reader
     tone: "stopped",
     headline,
     title,
-    detail: i18n.t("overview.health.administratorCause.detail", { cause: likely }),
+    detail: i18n.t("overview.health.administratorCause.detail"),
     action: { label: i18n.t("overview.health.action.checkAccess"), view: "settings", settingsTab: "connections" },
     summary: title,
   }
@@ -273,16 +274,19 @@ function blockedProblem(i18n: I18n, dashboard: Dashboard): Problem | null {
   }
 }
 
-/** Why one rule waits: Google, said with when it was tried, or a quota only an administrator raises. */
-function waitingDetail(i18n: I18n, named: RuleProblem): string {
-  if (named.cause && isAdministratorCause(named.cause)) {
-    return i18n.t("overview.health.administratorCause.waiting", { cause: causeText(i18n, named.cause) })
+/**
+ * Why one rule waits, with when it was tried. Only an administrator reads that it is a quota they
+ * raise; the User reads that Google is limiting requests, as for any other wait.
+ */
+function waitingDetail(i18n: I18n, named: RuleProblem, reader: Reader): string {
+  if (reader.administrator && named.cause && isAdministratorCause(named.cause)) {
+    return i18n.t("overview.health.administratorCause.administratorWaiting", { cause: causeText(i18n, named.cause) })
   }
   const detail = i18n.t("overview.health.waitingDetailNamed", { detail: named.detail })
   return named.timing ? `${detail} ${named.timing}` : detail
 }
 
-function waitingProblem(i18n: I18n, of: ProblemsByKind): Problem | null {
+function waitingProblem(i18n: I18n, of: ProblemsByKind, reader: Reader): Problem | null {
   const waiting = of("waiting")
   if (waiting.length === 0) return null
   const named = waiting.length === 1 ? waiting[0] : null
@@ -290,7 +294,9 @@ function waitingProblem(i18n: I18n, of: ProblemsByKind): Problem | null {
     tone: "waiting",
     headline: i18n.t("overview.health.waitingHeadline"),
     title: named?.name ?? "",
-    detail: named ? waitingDetail(i18n, named) : i18n.t("overview.health.waitingDetailGeneric", { count: waiting.length }),
+    detail: named
+      ? waitingDetail(i18n, named, reader)
+      : i18n.t("overview.health.waitingDetailGeneric", { count: waiting.length }),
     action: null,
     summary: named
       ? i18n.t("overview.health.ruleWaitingForGoogle", { name: named.name })
@@ -318,7 +324,7 @@ function problemsOf(i18n: I18n, dashboard: Dashboard, ruleProblems: RuleProblem[
     stoppedProblem(i18n, dashboard, of, reader),
     reviewProblem(i18n, of),
     blockedProblem(i18n, dashboard),
-    waitingProblem(i18n, of),
+    waitingProblem(i18n, of, reader),
   ].filter((problem): problem is Problem => problem !== null)
   if (problems.length === 0 && dashboard.open_incidents > 0) problems.push(openIncidentsProblem(i18n, dashboard))
   return problems

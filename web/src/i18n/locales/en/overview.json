@@ -32,11 +32,11 @@
     },
     "chooseAnotherCalendar": "Choose another calendar, or remove the rule.",
     "administratorCause": {
-      "title": "Your administrator needs to fix this",
-      "detail": "{cause} Once they have fixed it, choose Check access on your Google account in Settings to restart your rules.",
+      "title": "Temporarily unavailable",
+      "detail": "Google Calendar is not available to Calendar Ghost right now. To try again, choose Check access on your Google account in Settings. Events already synced stay where they are.",
       "administratorTitle": "You fix this as the administrator",
       "administratorDetail": "{cause} People shows how to fix it in Google Cloud.",
-      "waiting": "{cause} Your administrator needs to fix this; Calendar Ghost tries again by itself."
+      "administratorWaiting": "{cause} You fix this as the administrator, in Google Cloud; Calendar Ghost tries again by itself."
     },
     "setup": {
       "title": "Set up your first synchronization",

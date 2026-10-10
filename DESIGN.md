@@ -276,9 +276,10 @@ A single expressive Overview surface combines a plain-language state, one senten
 | Healthy | Every running rule is up to date | Healthy Moss | Happy |
 
 Red asks the administrator to act now, ochre to take a look, and indigo only informs. When the
-stopped rules share a Cause only the Installation Administrator can fix, the hero's title says "Your
-administrator needs to fix this" and its one action is Check access, for once they have; an
-administrator reading their own Overview is sent to People instead. Waiting on Google says when the
+stopped rules share a Cause only the Installation Administrator can fix, the hero's title says
+"Temporarily unavailable", naming neither the cause nor the administrator, and its one action is
+Check access to try again; an administrator reading their own Overview reads the cause and is sent
+to People instead. Waiting on Google says when the
 rule was last tried and when it tries again. When one rule is the cause, the hero names it and its action opens that rule. The most urgent problem leads; every other current problem is listed under "Also" in a few words with its own link, so one never hides another. The ghost has no mouth: its eyes, brows, and tears carry the feeling. Its speech bubble reacts in a few words and never repeats the copy; a stopped ghost calls out slowly, one line at a time in a new place around it, and reduced motion keeps the first line still. The ghost illustration and bubble belong to this Overview-only moment; other pages keep the quieter surface grammar. The development preview starts in any state with `scripts/dev_preview.py --scenario`.
 
 ### Recent Changes
@@ -333,8 +334,9 @@ with their own calendar names beside the numbers and a link to act on each of th
 A problem a provider refused carries its likely cause as a muted line under it ("Likely cause: the
 Google Calendar API is turned off for this installation."). Who acts follows the Cause's owner. For
 an administrator's Cause, an administrator reads that the fix is theirs, with "How to fix" opening
-the troubleshooting guide's section in a new tab, and the person reads "Your administrator needs to
-fix this" with no step only an administrator can take. For a person's own Cause, the administrator
+the troubleshooting guide's section in a new tab, and the person reads only "Temporarily
+unavailable", with no likely-cause line, no mention of the administrator, and no step only an
+administrator can take. For a person's own Cause, the administrator
 reads only "{name} can fix this from their dashboard" and is offered nothing to do, while the person
 gets their one step. Installation Hints sit in the Installation Health card under "Likely causes",
 between its sentence and its counts: one Attention Ochre row per hint with a lightbulb, one sentence

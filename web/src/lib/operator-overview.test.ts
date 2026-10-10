@@ -162,12 +162,12 @@ describe("nextStep by Cause", () => {
     cause,
   })
 
-  it("tells the User an administrator's Cause is not theirs to fix", () => {
+  it("tells the User an administrator's Cause is temporarily unavailable, naming neither it nor the administrator", () => {
     expect(nextStep(i18n, lapse("api_disabled"), "self")).toBe(
-      "Your administrator needs to fix this. Once they have, choose Check access on your Google account in Settings, under Connections.",
+      "Temporarily unavailable. To try again, choose Check access on your Google account in Settings, under Connections.",
     )
     expect(nextStep(i18n, failed("waiting", "quota_exceeded"), "self")).toBe(
-      "Your administrator needs to fix this. Calendar Ghost tries again by itself.",
+      "Temporarily unavailable. Calendar Ghost tries again by itself.",
     )
     expect(ownStepTarget(lapse("api_disabled"))).toBe("connections")
     expect(ownStepTarget(failed("waiting", "quota_exceeded"))).toBeNull()

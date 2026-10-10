@@ -16,7 +16,7 @@ import {
   THEMSELF,
   type Audience,
 } from "@/lib/operator-overview"
-import { causeOf, causeText, howToFixUrl, retryTiming } from "@/lib/causes"
+import { causeOf, causeText, howToFixUrl, isAdministratorCause, retryTiming } from "@/lib/causes"
 
 type Status = UserOverview["status"]
 type StatusRule = Status["rules"][number]
@@ -179,11 +179,14 @@ function RuleItem({
 function ProblemDetail({ problem, status, options }: { problem: ServerProblem; status: Status; options: Options }) {
   const i18n = useI18n()
   const cause = causeOf(problem)
+  // The installation's own Cause is the administrator's to know; the person reads only that it
+  // is temporarily unavailable, so nothing sends them to the administrator.
+  const shown = cause && !(options.audience === THEMSELF && isAdministratorCause(cause)) ? cause : null
   const timing = retryTiming(i18n, problem, status.scheduler.next_pass_at ?? null, options.now)
   return (
     <div className="user-overview-problem">
       <p className="user-overview-problem-text">{problemText(i18n, problem, status.counts.blocked_events)}</p>
-      {cause && <p className="user-overview-muted">{causeText(i18n, cause)}</p>}
+      {shown && <p className="user-overview-muted">{causeText(i18n, shown)}</p>}
       <ProblemStep problem={problem} options={options} />
       {timing && <p className="user-overview-muted">{timing}</p>}
       {problem.since && (

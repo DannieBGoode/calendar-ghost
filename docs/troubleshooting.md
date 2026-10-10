@@ -236,7 +236,8 @@ run, within five minutes, resolves the incident; **Sync Now** and **Reconcile No
 Some failures come from the installation's Google Cloud project, not from anyone's Google account
 or calendars, so only an Installation Administrator can fix them. Calendar Ghost reads why Google
 refused from its reason code, never its message, and records it as a Cause. Each person's own
-Overview then says "Your administrator needs to fix this" and offers them nothing to do. On
+Overview says only that Google Calendar is temporarily unavailable, without the cause or a mention
+of you, so people are not prompted to contact you. On
 **People**, **Installation health** suggests the likely cause when two or more people show the same
 one within a day, with **How to fix** linking to the section below; a person's page shows the
 likely cause of each of their problems. Administrators never need to contact anyone: once the
@@ -255,9 +256,9 @@ APIs & services**, and look for **Google Calendar API**. If it is missing, or it
 
 **Fix.** Choose **Enable** on the Google Calendar API page, and wait a few minutes for Google to
 apply it. Google refused each affected account while the API was off, so their rules stay stopped
-until each account is checked again: each person's Overview tells them to choose **Check access**
-on their Google account in **Settings → Connections** once it is fixed, and a check that passes
-restarts every rule it stopped, with no preview.
+until each account is checked again: each person's Overview says Google Calendar is temporarily
+unavailable and offers **Check access** on their Google account in **Settings → Connections** to
+try again, and a check that passes restarts every rule it stopped, with no preview.
 
 ### The Google Cloud project's daily quota is used up
 
@@ -283,8 +284,8 @@ no longer accepts this installation's OAuth client", and reauthorizing fails too
 `CALENDAR_SYNC_GOOGLE_CLIENT_SECRET` no longer matches. Do not post either value publicly.
 
 **Fix.** Put the client's current ID and secret in `.env` and run `docker compose up -d`. Each
-person's Overview then tells them to choose **Check access** on their Google account, which restarts
-their rules. If you had to create a new client, Google's grants to the old one do not carry over:
+person's Overview, which says Google Calendar is temporarily unavailable, offers **Check access** on
+their Google account; a check that passes restarts their rules. If you had to create a new client, Google's grants to the old one do not carry over:
 each person's dashboard asks them to choose **Reauthorize account** once.
 
 ### Google accounts stop working 7 days after connecting

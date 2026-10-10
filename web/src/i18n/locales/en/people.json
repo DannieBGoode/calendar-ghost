@@ -215,8 +215,8 @@
         "self": "Open the rule to choose another calendar, or remove the rule."
       },
       "administrator": {
-        "self": "Your administrator needs to fix this. Calendar Ghost tries again by itself.",
-        "selfLapsed": "Your administrator needs to fix this. Once they have, choose Check access on your Google account in Settings, under Connections.",
+        "self": "Temporarily unavailable. Calendar Ghost tries again by itself.",
+        "selfLapsed": "Temporarily unavailable. To try again, choose Check access on your Google account in Settings, under Connections.",
         "administrator": "You fix this as the administrator, in Google Cloud.",
         "person": "You fix this as the administrator, in Google Cloud. {name} has nothing to do."
       },

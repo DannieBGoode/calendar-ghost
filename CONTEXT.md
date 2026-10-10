@@ -242,8 +242,9 @@ Installation Administrator never contacts a User through Calendar Ghost about a 
 can fix, they fix from their own Overview, rule, or Settings. The administrator's Causes are those
 only the installation's Google Cloud project can fix: the Calendar API is turned off
 (`api_disabled`), the project's daily quota is used up (`quota_exceeded`), or Google no longer
-accepts the installation's OAuth client (`oauth_client_invalid`); the User is told their
-administrator needs to fix it. Every other Cause is the User's, with one next step from actions
+accepts the installation's OAuth client (`oauth_client_invalid`). The User is told only that Google
+Calendar is temporarily unavailable, never the Cause or who fixes it, so nobody is sent to the
+administrator, who learns it on People. Every other Cause is the User's, with one next step from actions
 that already exist: Google no longer accepts the account's grant (`access_revoked`), so they
 reauthorize the account; the account may not change the calendar (`calendar_forbidden`) or the
 calendar is gone (`calendar_not_found`), so they choose another calendar or remove the rule;
@@ -396,7 +397,7 @@ diagnostics keep the glossary terms above.
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
 | Operator Overview | "People", with a "Sync" status per person and "Installation health" above them; to each User, "What your administrator can see" in Settings |
-| Cause | "Likely cause:" and the cause in plain words, such as "the Google Calendar API is turned off for this installation". To the User, an administrator's Cause says "Your administrator needs to fix this" and offers no step; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
+| Cause | "Likely cause:" and the cause in plain words, such as "the Google Calendar API is turned off for this installation". To the User, an administrator's Cause says only "Temporarily unavailable", naming neither the cause nor the administrator, with Check access to try again when the account lapsed; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
 | Installation Hint, on People | the pattern in one sentence with how many people it affects, then "How to fix", linking to its troubleshooting section |
 | Installation Status verdict, on People | "Not running" (stalled), "Stopped", "Needs a look" (review), "Waiting for Google", "Paused", "Not set up" (setup), "Healthy" |
 | User Deletion | "Delete your account" for oneself, naming what is deleted (sign-in, rules, Google connections, tokens, Activity, and the events their rules wrote when chosen) and that their Google accounts and own events stay; on People, "Delete" and "Delete {email} permanently?", naming the same and that the events their rules wrote are deleted. "Account deletion" stays out of domain and documentation language |

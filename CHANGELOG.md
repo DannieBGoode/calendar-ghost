@@ -72,8 +72,9 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   likely causes when two or more people share an administrator's Cause or an unrecognized one
   within a day, or lose Google about 7 days after connecting (an OAuth app in Testing mode), each
   with **How to fix**; `GET /api/v1/installation/health` returns them as `hints`. A person's page
-  says each problem's likely cause. Each person's Overview and **What administrators can see** tell
-  them when a Cause is their administrator's to fix, and otherwise give its one step. Administrators
+  says each problem's likely cause. For an administrator's Cause, each person's Overview and **What administrators can see** say
+  only "Temporarily unavailable", naming neither the cause nor the administrator; otherwise they
+  give its one step. Administrators
   never contact anyone through Calendar Ghost about a problem.
 - `CALENDAR_SYNC_PUBLIC_URL`: with it, each incident email links to the person's next step in the
   Web UI. The link names no calendar, account, or event.

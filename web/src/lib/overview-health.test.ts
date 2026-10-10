@@ -192,12 +192,12 @@ describe("overviewHealth", () => {
       ],
     })
 
-    it("tells the User an administrator's Cause is not theirs to fix", () => {
+    it("tells the User an administrator's Cause is temporarily unavailable, naming neither it nor the administrator", () => {
       const health = overviewHealth(i18n, lapsedFor("api_disabled"), now, { ruleName })
 
-      expect(health.title).toBe("Your administrator needs to fix this")
+      expect(health.title).toBe("Temporarily unavailable")
       expect(health.detail).toBe(
-        "Likely cause: the Google Calendar API is turned off for this installation. Once they have fixed it, choose Check access on your Google account in Settings to restart your rules.",
+        "Google Calendar is not available to Calendar Ghost right now. To try again, choose Check access on your Google account in Settings. Events already synced stay where they are.",
       )
       expect(health.action).toMatchObject({ label: "Check access in Settings", view: "settings", settingsTab: "connections" })
     })
@@ -252,7 +252,7 @@ describe("overviewHealth", () => {
       expect(health.action).toBeNull()
     })
 
-    it("tells the User an administrator must fix a used-up quota while rules wait", () => {
+    it("tells the User a used-up quota only that Calendar Ghost retries, while the administrator learns the cause", () => {
       const waiting: Dashboard = {
         ...healthy,
         status: "waiting",
@@ -260,9 +260,13 @@ describe("overviewHealth", () => {
         problems: [{ ...problem("waiting", "rule-7", "Google Calendar is limiting requests"), cause: "quota_exceeded" }],
       }
       const health = overviewHealth(i18n, waiting, now, { ruleName })
+      const administrators = overviewHealth(i18n, waiting, now, { ruleName, administrator: true })
 
       expect(health.detail).toBe(
-        "Likely cause: this installation's daily quota of Google requests is used up. Your administrator needs to fix this; Calendar Ghost tries again by itself.",
+        "Google Calendar is limiting requests. First seen 1 hour ago. Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard.",
+      )
+      expect(administrators.detail).toBe(
+        "Likely cause: this installation's daily quota of Google requests is used up. You fix this as the administrator, in Google Cloud; Calendar Ghost tries again by itself.",
       )
     })
   })

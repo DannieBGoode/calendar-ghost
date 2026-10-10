@@ -243,16 +243,18 @@ describe("AdministratorViewSection", () => {
       },
     }
 
-    it("tells the person it is not theirs to fix, and offers only what they can do", async () => {
+    it("tells the person it is temporarily unavailable, and offers only what they can do", async () => {
       await render(testI18n(), member, "invitation_only", apiOff)
       showWhatTheySee()
       await settle()
 
       const text = container.textContent
-      expect(text).toContain("Likely cause: the Google Calendar API is turned off for this installation.")
       expect(text).toContain(
-        "Your administrator needs to fix this. Once they have, choose Check access on your Google account in Settings, under Connections.",
+        "Temporarily unavailable. To try again, choose Check access on your Google account in Settings, under Connections.",
       )
+      // Neither the installation's cause nor the administrator is named, so nobody is sent to them.
+      expect(text).not.toContain("Likely cause")
+      expect(text).not.toContain("administrator needs")
       expect(text).not.toContain("How to fix")
       const open = [...container.querySelectorAll("button")].find((item) => item.textContent === "Open Connections")!
       act(() => open.click())
@@ -264,6 +266,7 @@ describe("AdministratorViewSection", () => {
       showWhatTheySee()
       await settle()
 
+      expect(container.textContent).toContain("Likely cause: the Google Calendar API is turned off for this installation.")
       expect(container.textContent).toContain("You fix this as the administrator, in Google Cloud.")
       expect(container.querySelector<HTMLAnchorElement>("a.how-to-fix")?.href).toBe(
         "https://calendarghost.com/docs/troubleshooting#the-google-calendar-api-is-turned-off",

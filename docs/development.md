@@ -71,7 +71,7 @@ export or a real provider response in repository assets.
 | `paused` | Every rule paused after earlier syncs |
 | `setup` | A new installation with no Google account or rule |
 | `healthy` | Every rule running and up to date |
-| `api-disabled` | Sam and Robin both lost Google because the Calendar API is off; People suggests it and Robin is told an administrator must fix it |
+| `api-disabled` | Sam and Robin both lost Google because the Calendar API is off; People suggests it and Robin reads only that Google Calendar is temporarily unavailable |
 | `access-revoked` | Sam and Robin both lost Google a week after connecting; each reauthorizes, and People suggests the OAuth app is in Testing mode |
 The preview uses the generated local portraits in `web/public/avatars/`; production accounts use
 the profile photo returned by Google when one is available. Its seed data models one fictional Sam
