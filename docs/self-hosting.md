@@ -87,7 +87,8 @@ not reuse one operator's self-hosted credentials for it.
 Skip this if nobody will connect a Microsoft account. Each installation registers its own
 application; do not copy another operator's client secret into your installation. Calendar Ghost
 reaches Outlook calendars through Microsoft Graph, for Microsoft 365 work or school accounts and for
-personal Outlook.com accounts.
+personal Outlook.com accounts. Outlook support is a preview until the checks in
+[ADR 0034](adr/0034-outlook-through-microsoft-graph.md) pass with real Microsoft accounts.
 
 1. Sign in to the [Microsoft Entra admin center](https://entra.microsoft.com/) with an account that
    may register applications in a directory, and open **Entra ID → App registrations → New
