@@ -87,6 +87,21 @@ class ProjectionFingerprinter:
     """Creates a stable, non-reversible digest of normalized projection content."""
 
     def fingerprint(self, projection: EventProjection) -> ProjectionFingerprint:
+        return self._digest(projection, _canonical_lines(projection.recurrence))
+
+    def matches(self, projection: EventProjection, stored: ProjectionFingerprint | None) -> bool:
+        """Whether `stored` was taken of this projection. A fingerprint stored before rules were
+        compared by their parts hashed the lines as written, and is kept until the next write."""
+        if stored is None:
+            return False
+        if self.fingerprint(projection) == stored:
+            return True
+        written = list(projection.recurrence.lines) if projection.recurrence else None
+        return projection.recurrence is not None and self._digest(projection, written) == stored
+
+    def _digest(
+        self, projection: EventProjection, recurrence: list[str] | None
+    ) -> ProjectionFingerprint:
         payload = {
             "time": self._serialize_time(
                 projection.time, recurring=projection.recurrence is not None
@@ -94,7 +109,7 @@ class ProjectionFingerprinter:
             "title": projection.title,
             "description": projection.description,
             "location": projection.location,
-            "recurrence": _canonical_lines(projection.recurrence),
+            "recurrence": recurrence,
         }
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return ProjectionFingerprint(hashlib.sha256(encoded.encode()).hexdigest())
@@ -179,12 +194,13 @@ class SyncDecisionService:
         # Only a projection the source now calls for differently is a source change; a revision
         # whose projection is the one last written, such as another guest's reply, left the
         # destination edit to repair.
-        if (
-            mapping.source_revision != source_event.revision
-            and expected != mapping.projection_fingerprint
+        if mapping.source_revision != source_event.revision and not self._fingerprinter.matches(
+            projection, mapping.projection_fingerprint
         ):
             reason = SyncReason.SOURCE_CHANGED
-        elif rule.reprojection_required and actual == mapping.projection_fingerprint:
+        elif rule.reprojection_required and self._fingerprinter.matches(
+            self.as_projection(actual_destination), mapping.projection_fingerprint
+        ):
             # The destination is as last written, so the rule's changed policy calls for this.
             reason = SyncReason.POLICY_APPLIED
         else:
