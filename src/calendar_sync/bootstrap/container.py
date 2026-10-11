@@ -80,7 +80,6 @@ from calendar_sync.application.ports import (
     UserDirectory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.rules import (
@@ -100,6 +99,7 @@ from calendar_sync.application.synchronization import ExecuteSyncRule
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.logs import configure_logging
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
@@ -124,9 +124,7 @@ from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteActivityQueries,
     SqliteOperationsQueries,
 )
-from calendar_sync.infrastructure.persistence.authorization_states import (
-    SqliteAuthorizationStates,
-)
+from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.health import (
     SqliteIncidentRepository,
     SqliteRuleHealthRecords,

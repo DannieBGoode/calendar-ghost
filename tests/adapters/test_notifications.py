@@ -5,15 +5,15 @@ from typing import Any, ClassVar
 
 import pytest
 
-from calendar_sync.application.causes import Cause
 from calendar_sync.application.installation_health import (
     InstallationIncident,
     InstallationIncidentKind,
 )
-from calendar_sync.application.ports import IncidentReport
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose, public_address
 from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.incidents import IncidentReport
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 from calendar_sync.infrastructure.notifications import (
     IncidentNotification,

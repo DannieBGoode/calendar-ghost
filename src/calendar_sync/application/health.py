@@ -15,14 +15,12 @@ from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     Clock,
-    IncidentMessage,
     IncidentNotifications,
-    IncidentReport,
     IncidentRepository,
-    IncidentResolution,
     RuleHealthRecords,
     UnitOfWorkFactory,
 )
+from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 PROVIDER_INCIDENT_THRESHOLD = 3

@@ -12,17 +12,13 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.locking import RuleLocks, RuleWork
 from calendar_sync.application.ports import (
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
     Clock,
     IdGenerator,
     RulePreviewSummary,
-    RuleRunOutcome,
-    RunKind,
     UnitOfWorkFactory,
 )
 from calendar_sync.application.removal import RemovalResult, RemoveSyncRule
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     CalendarEndpoint,
@@ -34,6 +30,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 
 
 @dataclass(slots=True)

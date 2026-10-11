@@ -18,7 +18,7 @@ from calendar_sync.application.errors import (
     ReplacementInterrupted,
     RuleNotFound,
 )
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.interfaces.api import problems

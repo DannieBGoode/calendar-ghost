@@ -20,7 +20,6 @@ from calendar_sync.application.installation_health import GetInstallationHealth
 from calendar_sync.application.ports import (
     IntegrationTokenAuthentication,
     IntegrationTokenScope,
-    RuleRunOutcome,
     Sessions,
     UserDirectory,
 )
@@ -28,6 +27,7 @@ from calendar_sync.application.rules import GetSyncRuleDetails
 from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.runs import RuleRunOutcome
 from calendar_sync.interfaces.access import StatusAccess, status_access
 from calendar_sync.interfaces.api.status_payload import (
     installation_health_response,

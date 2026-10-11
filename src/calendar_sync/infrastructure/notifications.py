@@ -11,13 +11,13 @@ from typing import Protocol
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from calendar_sync.application.causes import Cause, CauseOwner
 from calendar_sync.application.installation_health import (
     InstallationIncident,
     InstallationIncidentKind,
 )
-from calendar_sync.application.ports import IncidentReport
 from calendar_sync.domain.access import User, UserId, UserState
+from calendar_sync.domain.causes import Cause, CauseOwner
+from calendar_sync.domain.incidents import IncidentReport
 
 logger = logging.getLogger(__name__)
 

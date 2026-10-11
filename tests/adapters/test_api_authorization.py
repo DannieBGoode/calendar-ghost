@@ -9,9 +9,9 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, build_container, compose
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
@@ -23,14 +23,7 @@ from calendar_sync.interfaces.api.dependencies import (
 )
 from calendar_sync.interfaces.api.dependencies import administrator as administrator_session
 from tests.helpers import NOW, rule
-from tests.users import (
-    OTHER_USER,
-    add_user,
-    administrator,
-    session_for,
-    sign_in,
-    sqlite_units,
-)
+from tests.users import OTHER_USER, add_user, administrator, session_for, sign_in, sqlite_units
 
 # AGENTS.md: only setup, sign-in, and the token-protected Invitation and Password Reset Links are
 # public under /api/, beside the session status and sign-out, which reveal or revoke nothing

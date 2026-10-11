@@ -25,16 +25,16 @@ from calendar_sync.application.activity import (
     RecordedTime,
     activity_category,
 )
-from calendar_sync.application.causes import WITHOUT_CAUSE, Cause
 from calendar_sync.application.ports import (
     AccountStanding,
-    IncidentMessage,
     IncidentSummary,
     OpenBlock,
     OperationsOverview,
 )
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.causes import WITHOUT_CAUSE, Cause
+from calendar_sync.domain.incidents import IncidentMessage
 from calendar_sync.domain.model import SyncAction, SyncReason
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import open_change_values

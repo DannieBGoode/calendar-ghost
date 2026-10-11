@@ -16,12 +16,11 @@ from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AccountAccess,
     AccountCalendars,
-    ConnectedAccount,
     ConnectedAccountRepository,
-    ConnectedAccountState,
     DiscoveredCalendar,
     UnitOfWorkFactory,
 )
+from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 # States that could still write, or be enabled, without the account's authorization.

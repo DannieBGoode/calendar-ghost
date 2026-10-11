@@ -8,11 +8,13 @@ from enum import StrEnum
 from types import TracebackType
 from typing import Literal, Protocol, Self
 
-from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import RegistrationPolicy, Role, User, UserId, UserState
-from calendar_sync.domain.changes import SourceChange, SourceObservation
+from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditEntry
+from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.changes import SourceObservation
+from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -21,16 +23,13 @@ from calendar_sync.domain.model import (
     EventMappingId,
     EventProjection,
     EventRef,
-    EventStatus,
-    EventTime,
     OccurrenceMapping,
     OccurrenceStart,
-    SyncAction,
-    SyncReason,
     SyncRule,
     SyncRuleId,
     TransformationPolicy,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,75 +247,6 @@ class SyncCursorRepository(Protocol):
     def save(self, rule_id: SyncRuleId, cursor: str) -> None: ...
 
 
-@dataclass(frozen=True, slots=True)
-class RecordedEvent:
-    """What Activity names an entry's source event by, as the run saw it (ADR 0014)."""
-
-    title: str
-    time: EventTime | None = None
-    recurring: bool = False
-    cancelled: bool = False
-
-    @classmethod
-    def of(cls, event: CalendarEvent) -> RecordedEvent:
-        return cls(
-            title=event.title,
-            time=event.time,
-            recurring=event.recurrence is not None or event.occurrence is not None,
-            cancelled=event.status is EventStatus.CANCELLED,
-        )
-
-
-class AuditAction(StrEnum):
-    """What an Audit Entry records; the stored values are a compatibility surface."""
-
-    CREATE = "create"
-    UPDATE = "update"
-    DELETE = "delete"
-    IGNORE = "ignore"
-    CONFLICT = "conflict"
-    POLICY_CHANGED = "policy_changed"
-    REMOVE_PROJECTION = "remove_projection"
-    DETACH_PROJECTION = "detach_projection"
-    REMOVAL_CONFLICT = "removal_conflict"
-    RULE_REMOVED = "rule_removed"
-
-    @classmethod
-    def of(cls, action: SyncAction) -> AuditAction:
-        return cls(action.value)
-
-
-class AuditOutcome(StrEnum):
-    COMPLETED = "completed"
-    SKIPPED = "skipped"
-    BLOCKED = "blocked"
-
-    @classmethod
-    def of(cls, action: SyncAction) -> AuditOutcome:
-        if action is SyncAction.IGNORE:
-            return cls.SKIPPED
-        if action is SyncAction.CONFLICT:
-            return cls.BLOCKED
-        return cls.COMPLETED
-
-
-@dataclass(frozen=True, slots=True)
-class AuditEntry:
-    occurred_at: datetime
-    rule_id: SyncRuleId
-    action: AuditAction
-    outcome: AuditOutcome
-    source_event_id: str | None = None
-    destination_event_id: str | None = None
-    detail: str = ""
-    reason: SyncReason | None = None
-    run_id: str | None = None
-    event: RecordedEvent | None = None
-    """The source event's title and time, as ADR 0014 records them."""
-    change: SourceChange | None = None
-    """What the source event's new revision changed since the rule last observed it (ADR 0017)."""
-
-
 class AuditRepository(Protocol):
     def append(self, entry: AuditEntry) -> None: ...
 
@@ -347,38 +277,6 @@ class SourceObservationRepository(Protocol):
     ) -> None:
         """Forget single events that ended before `ended_before`, and other calendars' events."""
         ...
-
-
-class RunKind(StrEnum):
-    SYNC = "sync"
-    RECONCILIATION = "reconciliation"
-
-
-@dataclass(frozen=True, slots=True)
-class RuleRunOutcome:
-    """The latest result of one kind of run: counts and a failure category, never content."""
-
-    rule_id: SyncRuleId
-    kind: RunKind
-    completed_at: datetime
-    succeeded: bool
-    full_run: bool = False
-    created: int = 0
-    updated: int = 0
-    deleted: int = 0
-    conflicts: int = 0
-    checked_mappings: int = 0
-    drift: int = 0
-    failure_kind: str | None = None
-    failure_cause: Cause | None = None
-    """Why a failed run failed (ADR 0031); None for a success. A failure recorded without one
-    reads as unknown."""
-    # When the most recent successful run of this kind completed. The repository keeps it across
-    # later failures, so a failed run never erases evidence that calendars were once current.
-    last_succeeded_at: datetime | None = None
-    # When the most recent successful full run completed, kept across later incremental runs so
-    # the daily full pass is due per rule and survives restarts.
-    last_full_succeeded_at: datetime | None = None
 
 
 class RuleRunOutcomeRepository(Protocol):
@@ -757,14 +655,6 @@ class AccountAuthorizations(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class IncidentMessage:
-    """What an Incident says, as a stable code and parameters the Web UI translates (ADR 0026)."""
-
-    code: str
-    params: Mapping[str, str | int | None] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
 class OpenBlock:
     entry_id: int
     rule_id: str
@@ -824,34 +714,6 @@ class IncidentSummary:
     cause: Cause | None = None
     """Why the provider failure behind it happened (ADR 0031); unknown when that was not recorded,
     and None for an Incident no provider failure opened, such as events still blocked."""
-
-
-@dataclass(frozen=True, slots=True)
-class IncidentReport:
-    """An Incident to open or refresh; repeated reports under one key update one Incident."""
-
-    key: str
-    rule_id: SyncRuleId | None
-    """None for an Incident about a Connected Account rather than one rule."""
-    category: str
-    summary: str
-    """Operational wording only; never an event title or other event content."""
-    account_id: ConnectedAccountId | None = None
-    """The Connected Account whose failure opened or last refreshed the Incident, if known."""
-    message: IncidentMessage | None = None
-    """The summary as a code and parameters; the English `summary` stays for email and logs."""
-    cause: Cause | None = None
-    """Why the provider failure behind it happened, when one did (ADR 0031)."""
-
-
-class IncidentResolution(StrEnum):
-    """Why an Incident resolved, so Activity can tell recovery apart from removal."""
-
-    SYNC_SUCCEEDED = "sync_succeeded"
-    BLOCKS_CLEARED = "blocks_cleared"
-    RULE_REMOVED = "rule_removed"
-    ACCESS_RESTORED = "access_restored"
-    """The account's Lapsed Authorization cleared (ADR 0027)."""
 
 
 class IncidentRepository(Protocol):
@@ -923,27 +785,6 @@ class RecoveryIncidents(Protocol):
     ) -> None:
         """Record the lost authorization a preview met, lapsing the account it names."""
         ...
-
-
-class ConnectedAccountState(StrEnum):
-    CONNECTED = "connected"
-    DISCONNECTED = "disconnected"
-
-
-@dataclass(frozen=True, slots=True)
-class ConnectedAccount:
-    id: ConnectedAccountId
-    display_name: str
-    email: str
-    state: ConnectedAccountState
-    avatar_url: str | None = None
-    authorized_at: str | None = None
-    """When the account was last connected or reauthorized; None while disconnected."""
-    provider: ProviderKind = field(kw_only=True)
-    """The calendar service the account belongs to; it never changes (ADR 0022)."""
-    authorization_lapsed_at: str | None = field(default=None, kw_only=True)
-    """While the provider refuses a connected account's credentials, when the latest refused
-    request began; None while it accepts them (ADR 0027)."""
 
 
 class ConnectedAccountRepository(AccountAuthorizations, Protocol):

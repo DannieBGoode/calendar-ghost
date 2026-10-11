@@ -16,21 +16,19 @@ from calendar_sync.application.operator_overview import (
 )
 from calendar_sync.application.ports import (
     CalendarAccess,
-    ConnectedAccountState,
     DiscoveredCalendar,
     InstallationUnitOfWork,
     InstallationUnitOfWorkFactory,
     ProviderCallCounts,
     ProviderCallUse,
     ResourceUse,
-    RuleRunOutcome,
-    RunKind,
     UserQuery,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.status import StatusVerdict
 from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW, RecentSchedulerHeartbeat, endpoint, rule
 from tests.identity_fakes import MemoryUsers

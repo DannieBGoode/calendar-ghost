@@ -20,13 +20,9 @@ from calendar_sync.application.errors import (
     ConnectedAccountDisconnected,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.ports import (
-    CalendarAccess,
-    ConnectedAccountState,
-    DiscoveredCalendar,
-)
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,

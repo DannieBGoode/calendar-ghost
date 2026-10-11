@@ -5,15 +5,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
-    CalendarReader,
-    Clock,
-    OccurrenceWriter,
-    RecordedEvent,
-)
+from calendar_sync.application.ports import CalendarReader, Clock, OccurrenceWriter
 from calendar_sync.application.sync_run import (
     SyncRunContext,
     has_live_occurrences,
@@ -22,6 +14,7 @@ from calendar_sync.application.sync_run import (
     record,
     require_unchanged,
 )
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,

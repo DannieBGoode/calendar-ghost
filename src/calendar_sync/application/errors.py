@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 
 

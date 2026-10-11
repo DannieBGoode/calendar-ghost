@@ -6,14 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence import sqlite as sqlite_module
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
-from calendar_sync.infrastructure.persistence.sqlite import (
-    initialize_database,
-)
+from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.adapters.test_user_migration import database_at_version
 from tests.helpers import endpoint

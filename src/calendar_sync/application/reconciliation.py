@@ -15,22 +15,18 @@ from calendar_sync.application.errors import (
 )
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
     CalendarReader,
     Clock,
     FullPassRecords,
     ProviderCallStats,
     ProviderCallTally,
-    RuleRunOutcome,
     RunIdGenerator,
-    RunKind,
     UnitOfWorkFactory,
 )
 from calendar_sync.application.resource_use import record_provider_calls
 from calendar_sync.application.run_log import UntalliedProviderCalls, call_summary, duration
 from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,
@@ -46,6 +42,7 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.services import EventProjector, ReconciliationService
 
 logger = logging.getLogger(__name__)

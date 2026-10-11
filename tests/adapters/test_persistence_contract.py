@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.ports import ConnectedAccountState
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory

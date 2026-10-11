@@ -9,13 +9,11 @@ from calendar_sync.application.errors import ProviderFailure
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     Clock,
-    IncidentMessage,
     IncidentNotifications,
-    IncidentReport,
     IncidentRepository,
-    IncidentResolution,
     UnitOfWorkFactory,
 )
+from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 
 

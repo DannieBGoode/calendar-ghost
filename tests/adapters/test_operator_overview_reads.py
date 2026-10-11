@@ -9,10 +9,10 @@ import pytest
 
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.operator_overview import UserStatuses
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.application.rules import ListSyncRules
 from calendar_sync.application.status import GetInstallationStatus, InstallationStatus
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import SyncReason, SyncRuleId
 from calendar_sync.infrastructure.persistence import sqlite as sqlite_module
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteOperationsQueries

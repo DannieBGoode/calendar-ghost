@@ -6,7 +6,6 @@ from __future__ import annotations
 from calendar_sync import __version__
 from calendar_sync.application.installation_health import InstallationHealth
 from calendar_sync.application.operator_overview import UserOverview
-from calendar_sync.application.ports import IncidentMessage
 from calendar_sync.application.status import (
     InstallationStatus,
     Problem,
@@ -14,6 +13,7 @@ from calendar_sync.application.status import (
     RuleStatus,
     calendar_display_name,
 )
+from calendar_sync.domain.incidents import IncidentMessage
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 from calendar_sync.interfaces.api.schemas import (
     IncidentMessageResponse,

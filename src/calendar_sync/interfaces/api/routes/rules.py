@@ -19,7 +19,7 @@ from calendar_sync.application.errors import (
     RuleNotFound,
 )
 from calendar_sync.application.locking import RuleWork
-from calendar_sync.application.ports import RulePreviewSummary, RuleRunOutcome
+from calendar_sync.application.ports import RulePreviewSummary
 from calendar_sync.application.preview import PreviewSyncRule
 from calendar_sync.application.reconciliation import ReconcileNow
 from calendar_sync.application.removal import RemoveSyncRule
@@ -47,6 +47,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.runs import RuleRunOutcome
 from calendar_sync.interfaces.api.dependencies import available, current_user, user_services
 from calendar_sync.interfaces.api.problems import ApiProblem, problem, problem_from
 from calendar_sync.interfaces.api.schemas import (

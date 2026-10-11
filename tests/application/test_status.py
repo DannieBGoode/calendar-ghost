@@ -5,16 +5,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.causes import Cause
 from calendar_sync.application.locking import RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AccountStanding,
-    IncidentMessage,
     IncidentSummary,
     OpenBlock,
     OperationsOverview,
-    RuleRunOutcome,
-    RunKind,
     SchedulerProgress,
 )
 from calendar_sync.application.rules import SyncRuleSummary
@@ -26,7 +22,10 @@ from calendar_sync.application.status import (
     calendar_display_name,
     rule_name,
 )
+from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.incidents import IncidentMessage
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from tests.helpers import endpoint
 
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=UTC)

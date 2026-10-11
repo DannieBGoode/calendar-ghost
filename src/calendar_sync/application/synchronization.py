@@ -5,7 +5,6 @@ from contextlib import nullcontext, suppress
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
-from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
@@ -15,18 +14,12 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.occurrences import SynchronizeOccurrences
 from calendar_sync.application.ports import (
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
     CalendarProvider,
     Clock,
     ProviderCallStats,
     ProviderCallTally,
     ProviderChangeSet,
-    RecordedEvent,
-    RuleRunOutcome,
     RunIdGenerator,
-    RunKind,
     UnitOfWork,
     UnitOfWorkFactory,
 )
@@ -40,6 +33,8 @@ from calendar_sync.application.sync_run import (
     record,
     require_unchanged,
 )
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventMapping,
@@ -55,6 +50,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.services import ProjectionFingerprinter, SyncDecisionService
 
 

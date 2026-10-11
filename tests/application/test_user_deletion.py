@@ -24,7 +24,7 @@ from calendar_sync.application.errors import (
     RemovalRequiresAuthorization,
 )
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import ConnectedAccountState, UnitOfWorkFactory
+from calendar_sync.application.ports import UnitOfWorkFactory
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.domain.access import (
     LastAdministrator,
@@ -34,6 +34,7 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
 )
+from calendar_sync.domain.accounts import ConnectedAccountState
 from calendar_sync.domain.model import (
     ConnectedAccountId,
     EventId,

@@ -26,7 +26,7 @@ from calendar_sync.application.ports import (
     DiscoveredCalendar,
     ProviderChangeSet,
 )
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,

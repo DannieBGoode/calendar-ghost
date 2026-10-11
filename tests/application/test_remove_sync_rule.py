@@ -17,14 +17,10 @@ from calendar_sync.application.errors import (
     ReplacementInterrupted,
 )
 from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
-    AccountAuthorizations,
-    ConnectedAccountState,
-    ProjectionDeleter,
-)
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.ports import AccountAuthorizations, ProjectionDeleter
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.rules import CreateSyncRule, ReplaceSyncRuleCalendars
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import (
     CalendarEvent,
     ConnectedAccountId,

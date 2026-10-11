@@ -8,18 +8,18 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from calendar_sync.application.activity import OperationsQueries
-from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailureKind
 from calendar_sync.application.locking import RuleWorkKind
 from calendar_sync.application.ports import (
     Clock,
-    IncidentMessage,
     IncidentSummary,
     OperationsOverview,
     SchedulerHeartbeat,
     SchedulerProgress,
 )
 from calendar_sync.application.rules import ListSyncRules, SyncRuleSummary
+from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.incidents import IncidentMessage
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 
 STALL_AFTER = timedelta(minutes=15)

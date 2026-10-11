@@ -7,14 +7,9 @@ from datetime import datetime, timedelta
 
 from calendar_sync.application.errors import RuleNotExecutable
 from calendar_sync.application.locking import RuleWork
-from calendar_sync.application.ports import (
-    AuditEntry,
-    CalendarReader,
-    Clock,
-    ProviderCallTally,
-    UnitOfWork,
-)
+from calendar_sync.application.ports import CalendarReader, Clock, ProviderCallTally, UnitOfWork
 from calendar_sync.application.run_log import call_summary, duration
+from calendar_sync.domain.audit import AuditEntry
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEvent,

@@ -13,12 +13,12 @@ from unittest.mock import MagicMock
 import pytest
 from google.auth.exceptions import RefreshError, TransportError
 
-from calendar_sync.application.causes import Cause, CauseOwner
 from calendar_sync.application.errors import (
     AccountAccessCheckFailed,
     ProviderFailure,
     ProviderFailureKind,
 )
+from calendar_sync.domain.causes import Cause, CauseOwner
 from calendar_sync.domain.model import (
     CalendarEvent,
     ConnectedAccountId,
@@ -30,15 +30,10 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
-from calendar_sync.infrastructure.google.oauth import (
-    GoogleOAuthService,
-    OAuthClientConfig,
-)
+from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
-from calendar_sync.infrastructure.persistence.authorization_states import (
-    SqliteAuthorizationStates,
-)
+from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.fake_google_calendar_api import GoogleResponse

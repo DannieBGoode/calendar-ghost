@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from calendar_sync.application.causes import ADMINISTRATOR_CAUSES, Cause
 from calendar_sync.application.ports import CauseSighting
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES, Cause
 
 ADMINISTRATOR_CAUSE_USERS = 1
 """Only the administrator can fix their own Cause, so one User meeting it is enough to say so."""

@@ -9,14 +9,9 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     UserDisabled,
 )
-from calendar_sync.application.ports import (
-    Clock,
-    ConnectedAccount,
-    ConnectedAccountState,
-    IdGenerator,
-)
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.ports import Clock, IdGenerator
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.connections import transaction

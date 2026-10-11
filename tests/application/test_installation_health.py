@@ -4,7 +4,6 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from calendar_sync.application.causes import Cause
 from calendar_sync.application.installation_health import (
     GetInstallationHealth,
     InstallationHealth,
@@ -16,6 +15,7 @@ from calendar_sync.application.installation_hints import HINT_WINDOW
 from calendar_sync.application.ports import CauseSighting, SchedulerProgress
 from calendar_sync.application.status import StatusVerdict
 from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.causes import Cause
 from tests.identity_fakes import MemoryUsers
 
 NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)

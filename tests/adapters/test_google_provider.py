@@ -12,7 +12,7 @@ from calendar_sync.application.errors import (
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     EventId,

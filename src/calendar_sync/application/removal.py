@@ -17,9 +17,6 @@ from calendar_sync.application.errors import (
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.ports import (
     AccountAuthorizations,
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
     Clock,
     ProjectionDeleter,
     ProviderCallStats,
@@ -31,6 +28,7 @@ from calendar_sync.application.ports import (
 from calendar_sync.application.resource_use import record_provider_calls
 from calendar_sync.application.retry import with_retries
 from calendar_sync.application.run_log import UntalliedProviderCalls, call_summary, duration
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import EventMapping, ProjectionHandling, SyncRule, SyncRuleId
 
 logger = logging.getLogger(__name__)

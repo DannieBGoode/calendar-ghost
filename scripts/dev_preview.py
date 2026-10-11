@@ -32,7 +32,6 @@ from typing import Any, NoReturn, cast
 
 from calendar_sync.application.accounts import DiscoverCalendars, ListConnectedAccounts
 from calendar_sync.application.activity import InspectActivityEvent
-from calendar_sync.application.causes import Cause
 from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.identity import SetUpInstallation
 from calendar_sync.application.installation_health import GetInstallationHealth
@@ -40,23 +39,14 @@ from calendar_sync.application.operator_overview import OperatorOverview, UserSt
 from calendar_sync.application.ports import (
     AccountAuthorization,
     AccountCalendars,
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
     CalendarAccess,
     CalendarProvider,
     CauseSighting,
     Clock,
-    ConnectedAccount,
     ConnectedAccountRepository,
-    ConnectedAccountState,
     DiscoveredCalendar,
-    RecordedEvent,
-    RuleRunOutcome,
-    RunKind,
     SchedulerProgress,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import (
@@ -67,6 +57,9 @@ from calendar_sync.bootstrap.container import (
     compose,
 )
 from calendar_sync.domain.access import Role, User, UserId, UserState
+from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -85,6 +78,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher

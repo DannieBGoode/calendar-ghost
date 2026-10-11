@@ -20,7 +20,7 @@ from collections.abc import Mapping
 
 from google.auth.exceptions import RefreshError, TransportError
 
-from calendar_sync.application.causes import Cause
+from calendar_sync.domain.causes import Cause
 
 logger = logging.getLogger(__name__)
 
