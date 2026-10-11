@@ -8,12 +8,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-    RuleNotFound,
-)
+from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.ports import (
     CalendarReader,
@@ -42,6 +37,7 @@ from calendar_sync.domain.model import (
     SyncRule,
     SyncRuleId,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.services import EventProjector, ReconciliationService
 
@@ -147,7 +143,7 @@ class ReconcileSyncRule:
                     self.clock.now(),
                     False,
                     full_run=True,
-                    failure_kind=failure.kind.value,
+                    failure_kind=failure.kind,
                     failure_cause=failure.provider_cause,
                 )
             )

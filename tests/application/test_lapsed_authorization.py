@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryIncidentRepository,
     InMemoryUnitOfWorkFactory,

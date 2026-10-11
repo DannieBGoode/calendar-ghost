@@ -6,11 +6,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
-from calendar_sync.application.sync.errors import (
-    ProjectionOwnershipMismatch,
-    ProviderFailure,
-    ProviderFailureKind,
-)
+from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch, ProviderFailure
 from calendar_sync.application.sync.ports import (
     CalendarReader,
     CreatedProjection,
@@ -34,6 +30,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,

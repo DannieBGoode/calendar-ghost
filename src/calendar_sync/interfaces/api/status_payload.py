@@ -129,7 +129,9 @@ def _calendar(
 ) -> StatusCalendarResponse:
     return StatusCalendarResponse(
         calendar=calendar_display_name(endpoint, rule.summary.names),
-        provider=status.providers.get(endpoint.connected_account_id.value),
+        provider=provider.value
+        if (provider := status.providers.get(endpoint.connected_account_id.value))
+        else None,
         number=status.calendar_numbers.get(endpoint),
     )
 

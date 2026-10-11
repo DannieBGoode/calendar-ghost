@@ -52,6 +52,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from tests.helpers import NOW, endpoint, rule, week_start
 from tests.users import OTHER_USER, USER
@@ -488,7 +489,7 @@ class PersistenceContract:
             RunKind.SYNC,
             NOW,
             False,
-            failure_kind="authorization",
+            failure_kind=ProviderFailureKind.AUTHORIZATION,
             failure_cause=Cause.API_DISABLED,
         )
         with harness.unit_of_work() as uow:
@@ -522,7 +523,9 @@ class PersistenceContract:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
             uow.run_outcomes.record(
-                RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, False, failure_kind="temporary")
+                RuleRunOutcome(
+                    RULE.id, RunKind.SYNC, NOW, False, failure_kind=ProviderFailureKind.TEMPORARY
+                )
             )
             uow.commit()
         with harness.unit_of_work() as uow:
@@ -531,6 +534,7 @@ class PersistenceContract:
             seen = installation.failure_causes(NOW - timedelta(hours=1))
 
         assert latest is not None
+        assert latest.failure_kind is ProviderFailureKind.TEMPORARY
         assert latest.failure_cause is None
         assert list(seen) == []
 
@@ -542,7 +546,7 @@ class PersistenceContract:
             RunKind.SYNC,
             NOW,
             False,
-            failure_kind="authorization",
+            failure_kind=ProviderFailureKind.AUTHORIZATION,
             failure_cause=Cause.API_DISABLED,
         )
         older = replace(failed, rule_id=OTHER_RULE.id, completed_at=NOW - DAY)
@@ -624,7 +628,13 @@ class PersistenceContract:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
             uow.run_outcomes.record(
-                RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, False, failure_kind="infrastructure")
+                RuleRunOutcome(
+                    RULE.id,
+                    RunKind.SYNC,
+                    NOW,
+                    False,
+                    failure_kind=ProviderFailureKind.INFRASTRUCTURE,
+                )
             )
             uow.commit()
         with harness.unit_of_work() as uow:
@@ -1152,13 +1162,22 @@ class PersistenceContract:
 
         mine, theirs = records[USER].overview, records[OTHER_USER].overview
         assert mine.accounts == (
-            AccountStanding("personal-account", "connected", "google", lapsed=True),
-            AccountStanding("work-account", "disconnected", "google"),
+            AccountStanding(
+                "personal-account",
+                ConnectedAccountState.CONNECTED,
+                ProviderKind.GOOGLE,
+                lapsed=True,
+            ),
+            AccountStanding(
+                "work-account", ConnectedAccountState.DISCONNECTED, ProviderKind.GOOGLE
+            ),
         )
         assert (mine.connected_accounts, mine.disconnected_accounts) == (1, 1)
         assert mine.last_synced_at == NOW
         assert theirs.accounts == (
-            AccountStanding("their-personal-account", "connected", "google"),
+            AccountStanding(
+                "their-personal-account", ConnectedAccountState.CONNECTED, ProviderKind.GOOGLE
+            ),
         )
         assert theirs.last_synced_at is None
         assert records[OTHER_USER].rules == ()

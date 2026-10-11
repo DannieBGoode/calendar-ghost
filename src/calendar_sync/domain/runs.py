@@ -8,6 +8,7 @@ from enum import StrEnum
 
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.providers import ProviderFailureKind
 
 
 class RunKind(StrEnum):
@@ -30,7 +31,7 @@ class RuleRunOutcome:
     conflicts: int = 0
     checked_mappings: int = 0
     drift: int = 0
-    failure_kind: str | None = None
+    failure_kind: ProviderFailureKind | None = None
     failure_cause: Cause | None = None
     """Why a failed run failed (ADR 0031); None for a success. A failure recorded without one
     reads as unknown."""

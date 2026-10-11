@@ -14,6 +14,7 @@ from calendar_sync.application.operations.activity import (
 )
 from calendar_sync.application.operations.ports import AccountStanding, OpenBlock
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.incidents import IncidentStep
 from calendar_sync.domain.model import SyncAction, SyncReason, SyncRuleId, TimedInterval
@@ -317,9 +318,13 @@ def test_the_overview_lists_each_account_state_and_provider(tmp_path: Path) -> N
     overview = SqliteOperationsQueries(database, add_user(database)).overview()
 
     assert overview.accounts == (
-        AccountStanding("acct-a", "connected", "google"),
-        AccountStanding("acct-b", "disconnected", "google"),
+        AccountStanding("acct-a", ConnectedAccountState.CONNECTED, ProviderKind.GOOGLE),
+        AccountStanding("acct-b", ConnectedAccountState.DISCONNECTED, ProviderKind.GOOGLE),
     )
+    # A string equals its enum member, so equality alone would not prove the adapter decoded them.
+    assert {(type(a.state), type(a.provider)) for a in overview.accounts} == {
+        (ConnectedAccountState, ProviderKind)
+    }
     assert (overview.connected_accounts, overview.disconnected_accounts) == (1, 1)
 
 

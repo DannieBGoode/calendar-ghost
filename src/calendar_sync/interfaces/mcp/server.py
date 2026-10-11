@@ -188,7 +188,7 @@ def _outcome(outcome: RuleRunOutcome | None) -> dict[str, Any] | None:
         "deleted": outcome.deleted,
         "conflicts": outcome.conflicts,
         "drift": outcome.drift,
-        "failure_kind": outcome.failure_kind,
+        "failure_kind": outcome.failure_kind.value if outcome.failure_kind else None,
     }
 
 

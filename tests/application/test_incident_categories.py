@@ -1,4 +1,4 @@
-from calendar_sync.application.sync.errors import ProviderFailureKind
+from calendar_sync.domain.providers import ProviderFailureKind
 
 
 def test_every_provider_failure_names_its_incidents_category() -> None:

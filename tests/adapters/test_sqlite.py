@@ -44,6 +44,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteOperationsQueries
@@ -353,7 +354,7 @@ def test_run_outcomes_keep_the_latest_per_kind(tmp_path: Path) -> None:
         completed_at=datetime(2026, 9, 2, tzinfo=UTC),
         succeeded=False,
         created=0,
-        failure_kind="rate_limit",
+        failure_kind=ProviderFailureKind.RATE_LIMIT,
     )
     with factory() as uow:
         uow.rules.add(rule())

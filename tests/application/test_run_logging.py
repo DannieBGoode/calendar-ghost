@@ -12,7 +12,6 @@ import pytest
 
 from calendar_sync.application.sync.errors import (
     ProviderFailure,
-    ProviderFailureKind,
     RemovalInterrupted,
     RuleNotExecutable,
 )
@@ -41,6 +40,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,

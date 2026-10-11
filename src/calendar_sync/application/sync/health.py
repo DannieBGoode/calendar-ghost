@@ -7,11 +7,7 @@ from datetime import datetime
 from typing import Protocol
 
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.errors import (
-    AUTHORIZATION_FAILURES,
-    ProviderFailure,
-    ProviderFailureKind,
-)
+from calendar_sync.application.sync.errors import AUTHORIZATION_FAILURES, ProviderFailure
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
@@ -27,6 +23,7 @@ from calendar_sync.domain.incidents import (
     IncidentResolution,
 )
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.providers import ProviderFailureKind
 
 PROVIDER_INCIDENT_THRESHOLD = 3
 """Consecutive failed runs after which a temporary or rate-limited condition opens an Incident."""

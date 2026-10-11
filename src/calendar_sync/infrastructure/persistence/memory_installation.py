@@ -150,8 +150,8 @@ def _status_records(state: MemoryState | None) -> StatusRecords:
     accounts = tuple(
         AccountStanding(
             account.value,
-            standing.value,
-            ProviderKind.GOOGLE.value,
+            standing,
+            ProviderKind.GOOGLE,
             lapsed=standing is ConnectedAccountState.CONNECTED and account in state.lapsed,
         )
         for account, standing in sorted(state.accounts.items(), key=lambda item: item[0].value)
@@ -170,8 +170,10 @@ def _status_records(state: MemoryState | None) -> StatusRecords:
             for rule in state.rules.values()
         ),
         overview=OperationsOverview(
-            connected_accounts=sum(a.state == "connected" for a in accounts),
-            disconnected_accounts=sum(a.state == "disconnected" for a in accounts),
+            connected_accounts=sum(a.state is ConnectedAccountState.CONNECTED for a in accounts),
+            disconnected_accounts=sum(
+                a.state is ConnectedAccountState.DISCONNECTED for a in accounts
+            ),
             open_incidents=0,
             last_synced_at=max(succeeded) if succeeded else None,
             open_blocks=(),

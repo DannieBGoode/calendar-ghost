@@ -15,7 +15,7 @@ from calendar_sync.application.operations.installation_health import (
     InstallationNotifications,
 )
 from calendar_sync.application.operations.ports import SchedulerProgress
-from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.ports import (
     CalendarAccess,
     DiscoveredCalendar,
@@ -28,6 +28,7 @@ from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.scheduling import SchedulerWatch, SystemClock
 from calendar_sync.interfaces.api.app import create_app

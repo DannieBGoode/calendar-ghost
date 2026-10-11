@@ -58,6 +58,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import (
@@ -642,7 +643,7 @@ class SqliteRuleRunOutcomeRepository:
                 outcome.conflicts,
                 outcome.checked_mappings,
                 outcome.drift,
-                outcome.failure_kind,
+                outcome.failure_kind.value if outcome.failure_kind else None,
                 None
                 if outcome.succeeded or outcome.failure_kind in WITHOUT_CAUSE
                 else outcome.failure_cause.value
@@ -678,7 +679,9 @@ def outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
         conflicts=int(row["conflicts"]),
         checked_mappings=int(row["checked_mappings"]),
         drift=int(row["drift"]),
-        failure_kind=None if row["failure_kind"] is None else str(row["failure_kind"]),
+        failure_kind=None
+        if row["failure_kind"] is None
+        else ProviderFailureKind(str(row["failure_kind"])),
         failure_cause=None
         if row["succeeded"] or row["failure_kind"] in WITHOUT_CAUSE
         else Cause.recorded(row["failure_cause"]),

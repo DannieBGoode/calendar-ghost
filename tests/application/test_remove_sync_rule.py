@@ -10,7 +10,6 @@ from calendar_sync.application.sync.errors import (
     NotACalendarChange,
     ProjectionOwnershipMismatch,
     ProviderFailure,
-    ProviderFailureKind,
     RemovalInterrupted,
     RemovalRequiresAuthorization,
     RemovalRequiresProvider,
@@ -38,6 +37,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,

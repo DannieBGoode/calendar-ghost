@@ -9,7 +9,7 @@ from typing import Any
 
 import pytest
 
-from calendar_sync.application.sync.errors import ProviderFailureKind
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence import migrations
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.connections import open_connection, transaction

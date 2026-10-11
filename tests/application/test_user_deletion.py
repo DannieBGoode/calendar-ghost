@@ -18,11 +18,7 @@ from calendar_sync.application.identity.administration import (
     YourOwnDeletion,
 )
 from calendar_sync.application.identity.errors import IncorrectPassword
-from calendar_sync.application.sync.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RemovalRequiresAuthorization,
-)
+from calendar_sync.application.sync.errors import ProviderFailure, RemovalRequiresAuthorization
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.application.sync.removal import RemoveSyncRule
@@ -45,6 +41,7 @@ from calendar_sync.domain.model import (
     ProjectionHandling,
     SyncRuleId,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule
