@@ -148,6 +148,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   still run, from the new `running_rules` field, instead of every enabled rule. A rule whose
   removal is running is not counted by either. `RuleCounts` in
   `application/operations/status.py` is the one place both are counted.
+- What a scheduled pass does moves from `infrastructure/scheduling.py` to `ScheduledPass` in
+  `application/operations/scheduled_pass.py`, with no change in behavior: expiring Source Change
+  values and provider call counts, finishing interrupted lapses, choosing each rule's daily full
+  pass, taking turns between Users, retrying, and recording each run's outcome. The scheduler
+  keeps only its timing, its progress, and how many rules run at once, and an import contract
+  keeps it from importing the Synchronization context. `SystemClock` moves to
+  `infrastructure/clock.py`.
 - The Web UI names the provider wherever one is known: account rows read "Google account" or
   "Microsoft account" beside the address, each avatar and Connect button carries its provider's
   mark, a lapsed account's fix reads "Reauthorize with Microsoft", the collapsed account summary

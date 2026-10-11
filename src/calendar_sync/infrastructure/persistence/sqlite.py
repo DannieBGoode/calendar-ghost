@@ -65,13 +65,13 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.refusals import refusals
 from calendar_sync.infrastructure.persistence.source_changes import (
     SqliteSourceObservationRepository,
     change_columns,
 )
-from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import HistoryCipher
 
 

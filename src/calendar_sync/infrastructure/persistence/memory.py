@@ -52,7 +52,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
 )
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
-from calendar_sync.infrastructure.scheduling import SystemClock
+from calendar_sync.infrastructure.clock import SystemClock
 
 if TYPE_CHECKING:
     from calendar_sync.infrastructure.persistence.memory_installation import (

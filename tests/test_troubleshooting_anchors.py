@@ -11,7 +11,7 @@ from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import calendar_providers
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
-from calendar_sync.infrastructure.scheduling import SystemClock
+from calendar_sync.infrastructure.clock import SystemClock
 
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "troubleshooting.md"
 # Every provider this release composes, as bootstrap describes it.

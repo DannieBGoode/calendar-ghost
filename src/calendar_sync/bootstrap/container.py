@@ -59,6 +59,7 @@ from calendar_sync.application.operations.ports import (
     LogFiles,
     SchedulerHeartbeat,
 )
+from calendar_sync.application.operations.scheduled_pass import ScheduledPass, ScheduledServices
 from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.application.operations.storage import StorageAdministration
 from calendar_sync.application.shared.ports import Clock, IdGenerator
@@ -108,6 +109,7 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.google.descriptor import google_provider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
@@ -150,12 +152,7 @@ from calendar_sync.infrastructure.providers.routing import (
     RoutingAccountCalendars,
     RoutingCalendarProvider,
 )
-from calendar_sync.infrastructure.scheduling import (
-    ScheduledServices,
-    SchedulerWatch,
-    SyncScheduler,
-    SystemClock,
-)
+from calendar_sync.infrastructure.scheduling import SchedulerWatch, SyncScheduler
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher, ScryptPasswords
 from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 
@@ -422,8 +419,11 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
 
     scheduler = (
         SyncScheduler(
-            adapters.installation_units,
-            lambda owner: _scheduled_services(user_services(owner)),
+            ScheduledPass(
+                adapters.installation_units,
+                lambda owner: _scheduled_services(user_services(owner)),
+                adapters.clock,
+            ),
             clock=adapters.clock,
         )
         if adapters.calendar_provider is not None and adapters.accounts is not None

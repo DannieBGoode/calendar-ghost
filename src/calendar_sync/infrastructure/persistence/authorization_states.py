@@ -7,8 +7,8 @@ from pathlib import Path
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence.connections import transaction
-from calendar_sync.infrastructure.scheduling import SystemClock
 
 STATE_LIFETIME = timedelta(minutes=10)
 

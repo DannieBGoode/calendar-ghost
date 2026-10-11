@@ -29,8 +29,9 @@ from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, Re
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.domain.providers import ProviderFailureKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence.connections import transaction
-from calendar_sync.infrastructure.scheduling import SchedulerWatch, SystemClock
+from calendar_sync.infrastructure.scheduling import SchedulerWatch
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
 from tests.adapters.microsoft.test_calendar_provider_contract import outlook

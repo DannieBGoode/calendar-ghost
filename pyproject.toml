@@ -157,6 +157,15 @@ protected_modules = ["mcp"]
 allowed_importers = ["calendar_sync.interfaces.mcp"]
 
 [[tool.importlinter.contracts]]
+# The scheduler decides when a pass runs and how many rules run at once. What a pass does, from
+# retention to recording each run's outcome, is `application.operations.scheduled_pass`.
+name = "The scheduler adapter times scheduled passes and runs no sync use case itself"
+type = "forbidden"
+source_modules = ["calendar_sync.infrastructure.scheduling"]
+forbidden_modules = ["calendar_sync.application.sync", "calendar_sync.domain"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
 name = "Web framework stays in interfaces"
 type = "forbidden"
 source_modules = [

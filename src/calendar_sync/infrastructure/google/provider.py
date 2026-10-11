@@ -27,6 +27,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.google.causes import (
     QUOTA_REASONS,
     RATE_LIMIT_REASONS,
@@ -43,7 +44,6 @@ from calendar_sync.infrastructure.google.translation import (
 )
 from calendar_sync.infrastructure.provider_calls import record_call
 from calendar_sync.infrastructure.retry_after import retry_after_seconds
-from calendar_sync.infrastructure.scheduling import SystemClock
 
 GoogleServiceFactory = Callable[[ConnectedAccountId], Any]
 
