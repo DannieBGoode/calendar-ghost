@@ -2762,6 +2762,7 @@ p {
 }
 
 .account-mark {
+  position: relative;
   display: flex;
   width: 2.5rem;
   height: 2.5rem;
@@ -2786,6 +2787,29 @@ p {
 .account-mark svg {
   width: 1.25rem;
   height: 1.25rem;
+}
+
+/* The provider's mark on the avatar's lower corner, on a small tile of the page's own color, so
+   the list scans by provider; the row's text names the provider too. */
+.account-mark .account-provider-mark {
+  position: absolute;
+  right: -0.1875rem;
+  bottom: -0.1875rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  padding: 0.125rem;
+  border-radius: 0.3125rem;
+  background: var(--background);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.account-mark-compact .account-provider-mark {
+  right: -0.25rem;
+  bottom: -0.25rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  padding: 0.0625rem;
+  border-radius: 0.25rem;
 }
 
 .account-copy {

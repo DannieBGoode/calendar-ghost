@@ -1,5 +1,6 @@
 import { useState } from "react"
 
+import { ProviderMark } from "@/components/provider-mark"
 import { useI18n } from "@/i18n/provider"
 import { accountInitials } from "@/lib/account-avatar"
 import { accountNoun } from "@/lib/providers"
@@ -15,7 +16,7 @@ export function AccountAvatar({
   displayName: string
   email: string
   avatarUrl: string | null | undefined
-  /** The account's Provider Kind, which a pointer's tooltip names; the text beside it says it too. */
+  /** The account's Provider Kind, whose mark sits on the avatar's corner; the text beside it names it too. */
   provider?: string | null | undefined
   compact?: boolean
 }) {
@@ -38,8 +39,9 @@ export function AccountAvatar({
           onError={() => setFailedUrl(photo)}
         />
       ) : (
-        accountInitials(displayName, email, locale)
+        <span>{accountInitials(displayName, email, locale)}</span>
       )}
+      <ProviderMark provider={provider} className="account-provider-mark" />
     </span>
   )
 }

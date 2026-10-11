@@ -9,7 +9,7 @@ import { codeTag, rich } from "@/i18n/rich"
 import type { CalendarProvider } from "@/lib/api"
 import { oauthReturnAtCurrentOrigin } from "@/lib/oauth-redirect"
 import { accountNoun, providerDisplayName } from "@/lib/providers"
-import { type OAuthReturn, useOAuthReturn } from "@/lib/use-oauth-return"
+import { type OAuthMismatch, type OAuthReturn, useOAuthReturn } from "@/lib/use-oauth-return"
 import { cn } from "@/lib/utils"
 
 /** The step that finishes a connection a provider returned elsewhere; shown only while it can. */
@@ -17,8 +17,9 @@ export function OAuthReturnStep({ help }: { help: OAuthReturn }) {
   const i18n = useI18n()
   const { t } = i18n
   const headingId = useId()
-  if (!help.mismatch || !help.awaiting) return null
-  const { provider, redirectOrigin } = help.mismatch
+  const [mismatch] = help.mismatches
+  if (!mismatch || !help.awaiting) return null
+  const { provider, redirectOrigin } = mismatch
   const names = { account: accountNoun(i18n, provider.kind, [provider]), provider: providerDisplayName(i18n, provider.kind, [provider]) }
   return (
     <section className="oauth-feedback oauth-feedback-warning oauth-return" aria-labelledby={headingId}>
@@ -26,7 +27,7 @@ export function OAuthReturnStep({ help }: { help: OAuthReturn }) {
       <div>
         <h3 id={headingId}>{t("settings.oauthReturn.step.title", names)}</h3>
         <p>{rich(t("settings.oauthReturn.step.body", { ...names, origin: redirectOrigin }), { code: codeTag })}</p>
-        <OAuthReturnForm redirectUri={help.mismatch.redirectUri} provider={names.provider} />
+        <OAuthReturnForm redirectUri={mismatch.redirectUri} provider={names.provider} />
       </div>
       <Button variant="ghost" onClick={help.dismiss}>
         {t("settings.oauthReturn.step.dismiss")}
@@ -35,24 +36,52 @@ export function OAuthReturnStep({ help }: { help: OAuthReturn }) {
   )
 }
 
-/** A quiet note that a provider returns elsewhere, with the way to finish and the permanent fix. */
+/** Mismatches by the address they return to, in the order their providers are listed. */
+function byOrigin(mismatches: readonly OAuthMismatch[]): OAuthMismatch[][] {
+  const groups = new Map<string, OAuthMismatch[]>()
+  for (const mismatch of mismatches) {
+    groups.set(mismatch.redirectOrigin, [...(groups.get(mismatch.redirectOrigin) ?? []), mismatch])
+  }
+  return [...groups.values()]
+}
+
+/**
+ * A quiet note for each address providers return to instead of this one, naming every provider
+ * that does, with a way to finish for each and the permanent fix.
+ */
 export function OAuthReturnNote({ help, className }: { help: OAuthReturn; className?: string }) {
+  if (help.awaiting) return null
+  return (
+    <>
+      {byOrigin(help.mismatches).map((group) => (
+        <OAuthReturnGroup key={group[0]?.redirectOrigin} group={group} className={className} />
+      ))}
+    </>
+  )
+}
+
+function OAuthReturnGroup({ group, className }: { group: OAuthMismatch[]; className?: string | undefined }) {
   const i18n = useI18n()
   const { t } = i18n
-  if (!help.mismatch || help.awaiting) return null
-  const origin = help.mismatch.redirectOrigin
-  const provider = providerDisplayName(i18n, help.mismatch.provider.kind, [help.mismatch.provider])
+  const origin = group[0]?.redirectOrigin ?? ""
+  const named = group.map((mismatch) => ({
+    mismatch,
+    name: providerDisplayName(i18n, mismatch.provider.kind, [mismatch.provider]),
+  }))
+  const words = { origin, count: group.length, provider: i18n.format.list(named.map(({ name }) => name)) }
   return (
     <details className={cn("inline-help", className)}>
       <summary>
         <Info aria-hidden="true" />
-        <span>{rich(t("settings.oauthReturn.note.summary", { origin, provider }), { code: codeTag })}</span>
+        <span>{rich(t("settings.oauthReturn.note.summary", words), { code: codeTag })}</span>
         <ChevronDown className="inline-help-chevron" aria-hidden="true" />
       </summary>
       <div className="inline-help-body">
-        <p>{t("settings.oauthReturn.note.body")}</p>
-        <OAuthReturnForm redirectUri={help.mismatch.redirectUri} provider={provider} />
-        <p>{rich(t("settings.oauthReturn.note.fix", { origin, provider }), { code: codeTag })}</p>
+        <p>{t("settings.oauthReturn.note.body", { count: group.length })}</p>
+        {named.map(({ mismatch, name }) => (
+          <OAuthReturnForm key={mismatch.provider.kind} redirectUri={mismatch.redirectUri} provider={name} />
+        ))}
+        <p>{rich(t("settings.oauthReturn.note.fix", words), { code: codeTag })}</p>
       </div>
     </details>
   )

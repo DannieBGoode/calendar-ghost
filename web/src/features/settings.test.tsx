@@ -316,6 +316,7 @@ describe("SettingsPage", () => {
       kind: "outlook",
       display_name: "Microsoft",
       connect_url: "/api/v1/oauth/microsoft/start",
+      redirect_uri: "http://localhost:18000/api/v1/oauth/microsoft/callback",
     }
     await renderSettings(testI18n(), { accounts: [connected, work], providers: [googleProvider(REDIRECT_URI), microsoft] })
 
@@ -328,9 +329,43 @@ describe("SettingsPage", () => {
       "Microsoft account",
       "Google account",
     ])
-    expect(rows[0]?.querySelector("a")?.getAttribute("href")).toBe("/api/v1/oauth/microsoft/start?account=acct-m")
+    // Each avatar wears its provider's mark, so the list scans by provider at a glance.
+    expect(rows.map((row) => row.querySelector(".account-mark .provider-mark")?.getAttribute("data-provider"))).toEqual([
+      "outlook",
+      "google",
+    ])
+    // The fix says where it goes: the provider's own consent, not another page here.
+    const reauthorize = rows[0]?.querySelector("a")
+    expect(reauthorize?.textContent.trim()).toBe("Reauthorize with Microsoft")
+    expect(reauthorize?.getAttribute("href")).toBe("/api/v1/oauth/microsoft/start?account=acct-m")
     const connect = [...container.querySelectorAll<HTMLAnchorElement>(".connect-actions a")]
     expect(connect.map((link) => link.textContent.trim())).toEqual(["Connect Google account", "Connect Microsoft account"])
+    expect(connect.map((link) => link.querySelector(".provider-mark")?.getAttribute("data-provider"))).toEqual(["google", "outlook"])
+    // The collapsed summary groups addresses by provider, and its avatars wear their marks too.
+    expect(container.querySelector(".account-summary-emails")?.textContent).toBe(
+      "Google: dana@example.test · Microsoft: dana@contoso.example",
+    )
+    expect(container.querySelectorAll(".account-stack .provider-mark")).toHaveLength(2)
+  })
+
+  it("names every provider that returns somewhere else, with a way to finish for each", async () => {
+    const microsoft: CalendarProvider = {
+      ...googleProvider(REDIRECT_URI),
+      kind: "outlook",
+      display_name: "Microsoft",
+      connect_url: "/api/v1/oauth/microsoft/start",
+      redirect_uri: "http://localhost:18000/api/v1/oauth/microsoft/callback",
+    }
+    await renderSettings(testI18n(), { providers: [googleProvider(REDIRECT_URI), microsoft] })
+
+    const notes = [...container.querySelectorAll<HTMLDetailsElement>("details.account-group-footer")]
+    expect(notes.map((note) => note.querySelector("summary")?.textContent)).toEqual([
+      "Google and Microsoft return to http://localhost:18000, not this address",
+    ])
+    expect([...notes[0]!.querySelectorAll("label")].map((label) => label.textContent)).toEqual([
+      "Address Google returned to",
+      "Address Microsoft returned to",
+    ])
   })
 
   it("keeps an account's reauthorization unavailable while its provider is not configured", async () => {
@@ -388,7 +423,7 @@ describe("SettingsPage", () => {
     // The visible word stands beside one screen reader phrase, rather than a glued " accounts".
     expect(container.querySelector(".account-summary-toggle [aria-hidden='true']")?.textContent).toBe("Hide")
     expect(container.querySelector(".account-summary-toggle .sr-only")?.textContent).toBe("Hide accounts")
-    expect(container.querySelector(".account-summary-emails")?.textContent).toBe("dana@example.test, robin@example.test")
+    expect(container.querySelector(".account-summary-emails")?.textContent).toBe("Google: dana@example.test, robin@example.test")
 
     await click(button("Check access"))
     expect(container.querySelector(".account-access-result p")?.textContent).toBe(

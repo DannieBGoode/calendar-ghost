@@ -10,7 +10,7 @@ import type { I18n } from "@/i18n/translator"
 import { needsReauthorization } from "@/lib/account-summary"
 import type { CalendarProvider, ConnectedAccount } from "@/lib/api"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
-import { accountNoun, connectUrl } from "@/lib/providers"
+import { accountNoun, connectUrl, providerDisplayName } from "@/lib/providers"
 import type { AccessCheck, AccountCommands } from "@/lib/use-account-commands"
 
 function ruleUsage({ t }: I18n, count: number, authorized: boolean): string {
@@ -148,7 +148,8 @@ function AccountStateBadge({ account }: { account: ConnectedAccount }) {
 
 /** The provider's consent for this account, which it offers first; the row's fix when access is gone. */
 function ReauthorizeButton({ account, provider }: { account: ConnectedAccount; provider: CalendarProvider | null }) {
-  const { t } = useI18n()
+  const i18n = useI18n()
+  const { t } = i18n
   // The row's fix, so it stays visible even before its provider is configured.
   if (!provider) {
     return (
@@ -160,7 +161,8 @@ function ReauthorizeButton({ account, provider }: { account: ConnectedAccount; p
   return (
     <Button className="account-action" asChild>
       <a href={connectUrl(provider, account.id)} onClick={() => recordAuthorizationStart(provider.kind)}>
-        <KeyRound aria-hidden="true" /> {t("settings.accounts.actions.reauthorize")}
+        <KeyRound aria-hidden="true" />{" "}
+        {i18n.t("settings.accounts.actions.reauthorizeWith", { provider: providerDisplayName(i18n, provider.kind, [provider]) })}
       </a>
     </Button>
   )

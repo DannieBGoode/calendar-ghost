@@ -3,6 +3,7 @@ import { CheckCircle2, ChevronDown, CircleUserRound, KeyRound, Plus, ShieldAlert
 import { useState } from "react"
 
 import { AccountAvatar } from "@/components/account-avatar"
+import { ProviderMark } from "@/components/provider-mark"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -10,7 +11,7 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import { codeTag, rich } from "@/i18n/rich"
 import type { MessageKey } from "@/i18n/types"
-import { accountSummary, needsReauthorization } from "@/lib/account-summary"
+import { accountSummary, addressesByProvider, needsReauthorization } from "@/lib/account-summary"
 import { type CalendarProvider, type ConnectedAccount, api } from "@/lib/api"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
 import { accountNoun, connectUrl, providerOf } from "@/lib/providers"
@@ -137,7 +138,8 @@ function ConnectButton({ provider, primary }: { provider: CalendarProvider; prim
   return (
     <Button variant={primary ? "default" : "outline"} asChild>
       <a href={connectUrl(provider)} onClick={() => recordAuthorizationStart(provider.kind)}>
-        <Plus aria-hidden="true" /> {i18n.t("settings.accounts.connect", { account: accountNoun(i18n, provider.kind, [provider]) })}
+        <ProviderMark provider={provider.kind} fallback={<Plus aria-hidden="true" />} />
+        {i18n.t("settings.accounts.connect", { account: accountNoun(i18n, provider.kind, [provider]) })}
       </a>
     </Button>
   )
@@ -189,6 +191,7 @@ function AccountGroup({
         <>
           <AccountSummaryToggle
             accounts={accounts}
+            providers={providers}
             summary={summary}
             open={accountsOpen}
             onToggle={() => onChoose(!accountsOpen)}
@@ -210,11 +213,13 @@ function AccountGroup({
 
 function AccountSummaryToggle({
   accounts,
+  providers,
   summary,
   open,
   onToggle,
 }: {
   accounts: ConnectedAccount[]
+  providers: readonly CalendarProvider[]
   summary: ReturnType<typeof accountSummary>
   open: boolean
   onToggle: () => void
@@ -236,6 +241,7 @@ function AccountSummaryToggle({
             displayName={account.display_name}
             email={account.email}
             avatarUrl={account.avatar_url}
+            provider={account.provider}
             compact
           />
         ))}
@@ -252,9 +258,7 @@ function AccountSummaryToggle({
           )}
           {summary.text}
         </span>
-        <span className="account-summary-emails">
-          {i18n.format.unitList(accounts.map((account) => account.email))}
-        </span>
+        <span className="account-summary-emails">{addressesByProvider(i18n, accounts, providers)}</span>
       </span>
       <span className="account-summary-toggle">
         <span aria-hidden="true">

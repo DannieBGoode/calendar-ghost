@@ -141,7 +141,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 ### Changed
 
 - The Web UI names the provider wherever one is known: account rows read "Google account" or
-  "Microsoft account" beside the address, and causes, waiting messages, and next steps name Google
+  "Microsoft account" beside the address, each avatar and Connect button carries its provider's
+  mark, a lapsed account's fix reads "Reauthorize with Microsoft", the collapsed account summary
+  groups addresses by provider, and the note about a provider returning to another address names
+  every provider that does, and causes, waiting messages, and next steps name Google
   or Microsoft, their consoles, and their status pages. Where no one provider is meant, copy says
   "calendar account" or "the calendar provider"; the People verdict reads "Waiting for the
   provider".

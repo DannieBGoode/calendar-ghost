@@ -399,7 +399,7 @@ diagnostics keep the glossary terms above.
 | Degraded Rule | "Stopped", with the cause and its one next step: "Reauthorize account" when an account it uses has Lapsed Authorization, otherwise "Preview to restart" |
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
 | Connected Account | named by its Provider Kind: "Google account" or "Microsoft account"; "calendar account" where no one provider is meant. Its row in Settings says which ("Microsoft account · dana@contoso.example") |
-| Lapsed Authorization | "Needs reauthorization", naming the account; its action is "Reauthorize account" |
+| Lapsed Authorization | "Needs reauthorization", naming the account; its action is "Reauthorize with Google" or "Reauthorize with Microsoft" on the account's row, which opens the provider's consent, and "Reauthorize account" elsewhere, which opens that row |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
