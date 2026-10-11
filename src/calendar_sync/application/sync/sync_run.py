@@ -20,7 +20,6 @@ from calendar_sync.domain.model import (
     SyncReason,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
 )
 
 logger = logging.getLogger(__name__)
@@ -257,7 +256,7 @@ def require_unchanged(run: SyncRunContext) -> None:
     current = run.uow.rules.get(run.rule.id)
     if (
         current is None
-        or current.state is not SyncRuleState.ENABLED
+        or not current.synchronizes
         or current.material_signature != run.rule.material_signature
         or not run.uow.user_active()
     ):

@@ -91,6 +91,11 @@ to Enabled without a preview and continues from the same preserved positions (AD
 Rule Change, a pause, a removal, or disconnecting one of its accounts while it is stopped clears
 that cause, so its recovery needs a preview again.
 
+`SyncRule` decides these itself, so use cases ask the rule instead of comparing states: whether it
+synchronizes (only when Enabled), whether a preview may validate it (Draft, Paused, or Degraded),
+whether it is stopped only by Lapsed Authorization, and what disconnecting one of its accounts
+makes of it.
+
 Permanent deletion is available only after a Connected Account is disconnected. Deletion removes
 the account and every Directional Sync Rule that references it, including those rules' Event
 Mappings, cursors, incidents, and audit activity. It does not issue provider writes: existing

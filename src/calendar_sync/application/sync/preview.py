@@ -23,7 +23,6 @@ from calendar_sync.domain.model import (
     SyncAction,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
 )
 from calendar_sync.domain.services import EventProjector, SyncDecisionService
 
@@ -141,11 +140,7 @@ class PreviewSyncRule:
             rule = uow.rules.get(rule_id)
         if rule is None:
             raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
-        if rule.state not in {
-            SyncRuleState.DRAFT,
-            SyncRuleState.PAUSED,
-            SyncRuleState.DEGRADED,
-        }:
+        if not rule.can_preview:
             raise RuleNotExecutable(f"sync rule cannot preview from state {rule.state}")
         return rule
 
