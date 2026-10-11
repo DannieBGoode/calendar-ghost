@@ -1,6 +1,7 @@
 """Outlook's Windows time zone names and the IANA names the domain uses (ADR 0034)."""
 
 import time
+from datetime import UTC, datetime
 
 import pytest
 
@@ -48,3 +49,15 @@ def test_every_mapped_zone_exists_and_lookups_stay_fast() -> None:
     windows_zone("Europe/Madrid")
     assert all(iana_zone(name) == mapped for name, mapped in WINDOWS_ZONES.items())
     assert time.monotonic() - started < 5
+
+
+def test_an_equivalent_zone_is_written_only_if_it_keeps_the_offsets_for_the_series_lifetime() -> (
+    None
+):
+    # Madrid keeps Berlin's offsets today, but in 1976 Spain changed its clocks on dates no
+    # Windows zone's did, so a series running through 1976 would move by an hour some weeks.
+    in_1976 = (datetime(1976, 1, 2, tzinfo=UTC), datetime(1977, 1, 1, tzinfo=UTC))
+    this_year = (datetime(2026, 1, 1, tzinfo=UTC), datetime(2027, 1, 1, tzinfo=UTC))
+
+    assert windows_zone("Europe/Madrid", during=in_1976) is None
+    assert windows_zone("Europe/Madrid", during=this_year) == "W. Europe Standard Time"

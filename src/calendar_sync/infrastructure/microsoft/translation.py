@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import deque
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -474,12 +475,12 @@ def projection_body(
     origin = _origin_value(source)
     if projection.recurrence is not None:
         zone = _projection_zone(projection)
-        windows = _windows(zone)
         start = _projection_start(projection, zone)
         try:
             rule = from_ical(projection.recurrence.lines, start)
         except UnsupportedRecurrence as error:
             raise UnsupportedProjection(f"Outlook cannot repeat this series: {error}") from error
+        windows = _windows(zone, _lifetime(rule, start, zone))
         body["recurrence"] = to_graph(rule, windows)
         if isinstance(projection.time, TimedInterval):
             body["start"] = _local(projection.time.starts_at, zone, windows)
@@ -569,11 +570,36 @@ def _projection_zone(projection: EventProjection) -> str:
     return zone
 
 
-def _windows(zone: str) -> str:
-    windows = windows_zone(zone)
+def _windows(zone: str, lifetime: tuple[datetime, datetime]) -> str:
+    """The Windows zone that keeps the series' local time at every moment of its lifetime;
+    UnsupportedProjection when none does, so the series is never written an hour off."""
+    windows = windows_zone(zone, during=lifetime)
     if windows is None:
         raise UnsupportedProjection("Outlook has no time zone that repeats like this one")
     return windows
+
+
+# Time zone data lists every transition through 2037 and then repeats each zone's yearly rule, so
+# two zones that agree through 2039 agree for every later year too.
+_ZONE_RULES_SETTLED = datetime(2040, 1, 1, tzinfo=UTC)
+
+
+def _lifetime(rule: SeriesRule, start: datetime | date, zone: str) -> tuple[datetime, datetime]:
+    """From the series' first day to the day after its last; an endless series to the year its
+    zone's rules repeat unchanged, or two years after it starts if that is later."""
+    first = start if isinstance(start, date) and not isinstance(start, datetime) else start.date()
+    if rule.range.end is not None:
+        last: date | None = rule.range.end
+    elif rule.range.count:
+        last = deque(occurrence_dates(rule), maxlen=1)[0]
+    else:
+        last = None
+    local = ZoneInfo(zone)
+    begins = datetime.combine(first, datetime.min.time(), tzinfo=local).astimezone(UTC)
+    if last is None:
+        return begins, max(_ZONE_RULES_SETTLED, begins + timedelta(days=731))
+    ends = datetime.combine(last + timedelta(days=1), datetime.min.time(), tzinfo=local)
+    return begins, ends.astimezone(UTC)
 
 
 def _projection_start(projection: EventProjection, zone: str) -> datetime | date:

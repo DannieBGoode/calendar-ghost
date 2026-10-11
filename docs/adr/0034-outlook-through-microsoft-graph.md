@@ -171,10 +171,14 @@ mistaken for Drift and rewritten on every run.
 Every read asks for UTC (`Prefer: outlook.timezone="UTC"`) and text bodies. A master's time zone
 comes from its `originalStartTimeZone`, translated from Windows to IANA names with the Unicode CLDR
 mapping, so series keep their local time across daylight saving. A series projection is written in
-the Windows zone of its IANA zone; one whose zone has no Windows name is unsupported rather than
-written in UTC, which would shift its occurrences. Single events and occurrences are written in
-UTC. An all-day event is read by its dates and written from midnight to midnight with `isAllDay`,
-so it stays all-day.
+the Windows zone CLDR maps its IANA zone to. Failing that, it uses the first Windows zone whose IANA
+zone keeps the same UTC offset at every moment of the series' lifetime: offsets compared twice a
+day, and each change matched to the minute, from its first day to the day after its last, or for an
+endless series through 2039, after which time zone data repeats each zone's yearly rule. A series no
+Windows zone keeps exactly is unsupported, a Conflict, rather than written in a zone or in UTC that
+would shift its occurrences. Single events and occurrences are written in UTC. An all-day event is
+read by its dates and written from midnight to midnight with `isAllDay`, so it stays all-day; an
+all-day occurrence is named by its date in its series' own zone.
 
 ### No mail, ever
 

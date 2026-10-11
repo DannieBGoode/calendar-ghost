@@ -284,6 +284,22 @@ def test_a_projection_outlook_cannot_hold_writes_nothing() -> None:
     assert [method for method, _, _ in graph.events.writes] == []
 
 
+def test_a_series_whose_zone_outlook_cannot_keep_for_its_lifetime_writes_nothing() -> None:
+    provider, graph = outlook()
+    # Weekly in Madrid since 1976, when Madrid's offsets differed from every Windows zone's.
+    since_1976 = datetime(1976, 1, 5, 8, 0, tzinfo=UTC)
+    projection = EventProjection(
+        TimedInterval(since_1976, since_1976 + timedelta(minutes=30), "Europe/Madrid"),
+        "Busy",
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=MO",)),
+    )
+
+    with pytest.raises(UnsupportedProjection):
+        provider.create_projection(DESTINATION, _ref("google-series"), RULE, projection, "key-1")
+
+    assert [method for method, _, _ in graph.events.writes] == []
+
+
 def _destination_series(provider: Any, graph: FakeMicrosoftGraph) -> tuple[EventRef, EventRef]:
     source = _ref("google-series")
     created = provider.create_projection(DESTINATION, source, RULE, _series_projection(), "key-1")

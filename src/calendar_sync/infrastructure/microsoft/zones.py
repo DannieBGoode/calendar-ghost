@@ -173,9 +173,10 @@ def iana_zone(name: str | None) -> str | None:
     return name if _loadable(name) else None
 
 
-def windows_zone(iana: str) -> str | None:
+def windows_zone(iana: str, during: tuple[datetime, datetime] | None = None) -> str | None:
     """The Windows zone to write a series in so it keeps `iana`'s local time: the one CLDR maps
-    to it, else one whose zone keeps the same UTC offsets for the next years, else None."""
+    to it, else one whose zone keeps the same UTC offsets for the next years and, given the
+    series' lifetime `during`, at every moment of it; else None."""
     for windows, mapped in WINDOWS_ZONES.items():
         if mapped == iana:
             return windows
@@ -183,9 +184,49 @@ def windows_zone(iana: str) -> str | None:
         return None
     signature = _offsets(iana)
     return next(
-        (windows for windows, mapped in WINDOWS_ZONES.items() if _offsets(mapped) == signature),
+        (
+            windows
+            for windows, mapped in WINDOWS_ZONES.items()
+            if _offsets(mapped) == signature
+            and (during is None or _same_offsets(iana, mapped, *during))
+        ),
         None,
     )
+
+
+@cache
+def _same_offsets(first: str, second: str, starts: datetime, ends: datetime) -> bool:
+    """Whether two zones keep the same UTC offset at every moment from `starts` to `ends`: their
+    offsets agree twice a day, and wherever either changes, both change at the same minute."""
+    zones = (ZoneInfo(first), ZoneInfo(second))
+    moment = starts.astimezone(UTC)
+    before = tuple(moment.astimezone(zone).utcoffset() for zone in zones)
+    while moment < ends:
+        following = moment + _STEP
+        after = tuple(following.astimezone(zone).utcoffset() for zone in zones)
+        if after[0] != after[1]:
+            return False
+        if after != before and len({_change(zone, moment, following) for zone in zones}) > 1:
+            return False
+        moment, before = following, after
+    return True
+
+
+_STEP = timedelta(hours=12)
+
+
+def _change(zone: ZoneInfo, after: datetime, before: datetime) -> datetime | None:
+    """The minute the zone's offset changes between two moments half a day apart; None if it
+    does not."""
+    if after.astimezone(zone).utcoffset() == before.astimezone(zone).utcoffset():
+        return None
+    while before - after > timedelta(minutes=1):
+        middle = after + (before - after) / 2
+        if middle.astimezone(zone).utcoffset() == after.astimezone(zone).utcoffset():
+            after = middle
+        else:
+            before = middle
+    return before.replace(second=0, microsecond=0)
 
 
 @cache
