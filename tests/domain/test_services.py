@@ -1,6 +1,8 @@
 from dataclasses import replace
 from datetime import timedelta, timezone
 
+import pytest
+
 from calendar_sync.domain.model import (
     AllDayRange,
     AllDaySyncPolicy,
@@ -627,3 +629,30 @@ def test_unmapped_managed_exception_of_a_mapped_series_is_incorrect_not_unexpect
     )
 
     assert [item.kind for item in report.drift] == [DriftKind.INCORRECT_PROJECTION]
+
+
+def test_a_rule_projects_a_native_event_its_policy_does_not_exclude() -> None:
+    assert rule().eligible(event())
+    assert rule().eligible(all_day_event())
+    assert decisions.decide(rule(), event(), None, None).action is SyncAction.CREATE
+
+
+@pytest.mark.parametrize(
+    ("policy", "source"),
+    [
+        (TransformationPolicy(), replace(event(), status=EventStatus.CANCELLED, time=None)),
+        (
+            TransformationPolicy(),
+            replace(event(), managed_origin=ManagedOrigin(SyncRuleId("rule-2"), event().reference)),
+        ),
+        (TransformationPolicy(all_day=AllDaySyncPolicy.EXCLUDE), all_day_event()),
+    ],
+    ids=["cancelled", "managed projection", "excluded by the policy"],
+)
+def test_a_rule_projects_no_ineligible_source_and_a_sync_run_agrees(
+    policy: TransformationPolicy, source: CalendarEvent
+) -> None:
+    candidate = replace(rule(), transformation=policy)
+
+    assert not candidate.eligible(source)
+    assert decisions.decide(candidate, source, None, None).action is SyncAction.IGNORE

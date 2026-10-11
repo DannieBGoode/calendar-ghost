@@ -104,6 +104,59 @@ def test_acting_on_a_rule_awaiting_reauthorization_makes_its_recovery_need_a_pre
     assert not change(stopped).awaiting_reauthorization
 
 
+@pytest.mark.parametrize("state", list(SyncRuleState))
+def test_only_an_enabled_rule_synchronizes(state: SyncRuleState) -> None:
+    assert rule(state=state).synchronizes is (state is SyncRuleState.ENABLED)
+
+
+@pytest.mark.parametrize("state", list(SyncRuleState))
+def test_a_rule_can_be_previewed_exactly_when_it_can_be_marked_previewed(
+    state: SyncRuleState,
+) -> None:
+    candidate = rule(state=state)
+    previewable = state in {SyncRuleState.DRAFT, SyncRuleState.PAUSED, SyncRuleState.DEGRADED}
+
+    assert candidate.can_preview is previewable
+    if previewable:
+        assert candidate.mark_previewed().state is SyncRuleState.PREVIEWED
+    else:
+        with pytest.raises(InvalidStateTransition):
+            candidate.mark_previewed()
+
+
+def test_only_a_rule_degraded_by_lapsed_authorization_is_stopped_by_it() -> None:
+    assert rule().degrade(awaiting_reauthorization=True).stopped_by_lapsed_authorization
+    assert not rule().degrade().stopped_by_lapsed_authorization
+    assert not rule().stopped_by_lapsed_authorization
+
+
+@pytest.mark.parametrize("state", [SyncRuleState.PREVIEWED, SyncRuleState.ENABLED])
+def test_disconnecting_an_account_stops_a_rule_that_could_still_write(
+    state: SyncRuleState,
+) -> None:
+    stopped = rule(state=state).on_account_disconnected()
+
+    assert (stopped.state, stopped.awaiting_reauthorization) == (SyncRuleState.DEGRADED, False)
+
+
+def test_disconnecting_an_account_makes_a_lapsed_rule_need_a_preview() -> None:
+    stopped = rule().degrade(awaiting_reauthorization=True).on_account_disconnected()
+
+    assert (stopped.state, stopped.awaiting_reauthorization) == (SyncRuleState.DEGRADED, False)
+
+
+@pytest.mark.parametrize(
+    "state",
+    [SyncRuleState.DRAFT, SyncRuleState.PAUSED, SyncRuleState.DEGRADED, SyncRuleState.REMOVING],
+)
+def test_disconnecting_an_account_leaves_a_rule_that_cannot_write_unchanged(
+    state: SyncRuleState,
+) -> None:
+    unaffected = rule(state=state)
+
+    assert unaffected.on_account_disconnected() == unaffected
+
+
 def test_all_day_range_uses_exclusive_end_date() -> None:
     value = AllDayRange(date(2026, 8, 30), date(2026, 8, 31))
 

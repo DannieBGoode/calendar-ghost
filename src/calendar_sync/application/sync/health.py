@@ -22,7 +22,7 @@ from calendar_sync.domain.incidents import (
     IncidentReport,
     IncidentResolution,
 )
-from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
 
 PROVIDER_INCIDENT_THRESHOLD = 3
@@ -270,11 +270,11 @@ class RuleHealth:
             self._notify(incident, now)
 
     def _degrade(self, rule: SyncRule) -> None:
-        if rule.state is not SyncRuleState.ENABLED:
+        if not rule.synchronizes:
             return
         with self.locks.for_writes(rule.id), self.unit_of_work() as uow:
             current = uow.rules.get(rule.id)
-            if current is not None and current.state is SyncRuleState.ENABLED:
+            if current is not None and current.synchronizes:
                 uow.rules.save(current.degrade())
                 uow.commit()
 

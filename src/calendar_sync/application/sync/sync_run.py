@@ -20,7 +20,6 @@ from calendar_sync.domain.model import (
     SyncReason,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
 )
 
 logger = logging.getLogger(__name__)
@@ -257,7 +256,7 @@ def require_unchanged(run: SyncRunContext) -> None:
     current = run.uow.rules.get(run.rule.id)
     if (
         current is None
-        or current.state is not SyncRuleState.ENABLED
+        or not current.synchronizes
         or current.material_signature != run.rule.material_signature
         or not run.uow.user_active()
     ):
@@ -289,14 +288,6 @@ def _observe(run: SyncRunContext, event: CalendarEvent, at: datetime) -> SourceC
     if previous is not None and previous.revision == current.revision:
         return None
     if previous is not None:
-        # A list the provider did not return in full keeps the last complete one, so a guest removed
-        # before the next complete list is still reported.
-        current = replace(
-            current,
-            guests=previous.guests if current.guests is None else current.guests,
-            conferencing=(
-                previous.conferencing if current.conferencing is None else current.conferencing
-            ),
-        )
+        current = current.completed_by(previous)
     observations.save(run.rule.id, event.reference, current, at)
     return SourceChange.between(previous, current) if previous is not None else None
