@@ -12,7 +12,7 @@ import { PageSkeleton } from "@/components/page-skeleton"
 import { PageTabs } from "@/components/page-tabs"
 import { Button } from "@/components/ui/button"
 import { HistorySection, type ActivityFeed, type UpdateLocation } from "@/features/activity-history"
-import { IncidentsSection } from "@/features/activity-incidents"
+import { IncidentsSection, type IncidentPages } from "@/features/activity-incidents"
 import { useI18n } from "@/i18n/provider"
 import { showCategories } from "@/lib/activity"
 import {
@@ -23,7 +23,7 @@ import {
 } from "@/lib/activity-failure"
 import { activitySearch, activityStateFromSearch, type ActivityLocationState } from "@/lib/activity-location"
 import type { RuleContext } from "@/lib/activity-rule-context"
-import { ACTIVITY_PAGE_SIZE, api, type AuditEntry, type Incident } from "@/lib/api"
+import { ACTIVITY_PAGE_SIZE, api, INCIDENTS_PAGE_SIZE, type AuditEntry } from "@/lib/api"
 import { documentTitle } from "@/lib/brand"
 import { openIncidentCount, type IncidentStep } from "@/lib/incidents"
 import {
@@ -170,7 +170,12 @@ export function ActivityView({
     // Keep the current table on screen while another rule or filter loads.
     placeholderData: keepPreviousData,
   })
-  const incidents = useQuery({ queryKey: ["incidents"], queryFn: api.incidents })
+  const incidents = useInfiniteQuery({
+    queryKey: ["incidents", "list"],
+    queryFn: ({ pageParam }) => api.incidents(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => (page.length === INCIDENTS_PAGE_SIZE ? page.at(-1)?.cursor : undefined),
+  })
   const context = useRuleContext()
   const entries = activity.data?.pages.flat() ?? []
   const selection = useSelectedEntry(entryId, entries, activity.isPending)
@@ -202,7 +207,12 @@ export function ActivityView({
       update={update}
       feed={activity}
       entries={entries}
-      incidents={incidents.data}
+      incidents={{
+        items: incidents.data.pages.flat(),
+        more: incidents.hasNextPage,
+        loadingMore: incidents.isFetchingNextPage,
+        loadMore: () => void incidents.fetchNextPage(),
+      }}
       context={context}
       selection={selection}
       focusDetailRef={focusDetail}
@@ -277,7 +287,7 @@ function ActivityPage({
   update: UpdateLocation
   feed: ActivityFeed
   entries: AuditEntry[]
-  incidents: Incident[]
+  incidents: IncidentPages
   context: RuleContext
   selection: { entry: AuditEntry | undefined; loading: boolean }
   focusDetailRef: RefObject<boolean>
@@ -317,8 +327,8 @@ function ActivityPage({
     <div className="page-section">
       <ActivityHeading tab={tab} />
       {/* Without any Incident there is only History, so Activity needs no tabs. */}
-      {(incidents.length > 0 || tab === "incidents") && (
-        <ActivityTabs current={tab} openCount={openIncidentCount(incidents)} onOpen={onOpenTab} />
+      {(incidents.items.length > 0 || tab === "incidents") && (
+        <ActivityTabs current={tab} openCount={openIncidentCount(incidents.items)} onOpen={onOpenTab} />
       )}
       {tab === "incidents" ? (
         <IncidentsSection

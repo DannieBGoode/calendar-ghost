@@ -118,6 +118,19 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   it closed and how long it lasted, or "Still open". Selecting one opens it beside the table at
   `/activity/incidents/<id>` with what it means or how it closed, its likely Cause, and its next
   step. Open incidents no longer lead the History page.
+- Each Incident's next step is decided once, in the domain, from its Cause, category, and rule
+  as it is now, and the Web UI and the incident email offer the same one
+  ([ADR 0033](docs/adr/0033-decide-an-incidents-next-step-in-the-domain.md)). Before, a calendar
+  the account may no longer use sent the email to the rule while Activity offered to reauthorize.
+  The email for blocked events now opens that rule's blocked events. `GET /api/v1/incidents`
+  returns each Incident's `step`.
+- Activity lists every incident: `GET /api/v1/incidents` pages with `before`, the last incident's
+  `cursor`, the table ends in
+  "Load older incidents" while there are more, and `GET /api/v1/incidents/{incident_id}` opens an
+  incident the list does not hold.
+- An administrator's Cause in Activity's incident details names the Cause and How to fix only to
+  an administrator; anyone else reads that Google Calendar is not available right now, with Check
+  access, as on the Overview (ADR 0031).
 - Form fields have borders with enough contrast again: a global reset no longer overrides them.
   Midnight's primary color is calmer, so a red status draws the eye first.
 - Settings groups share the border, fill, radius, and padding of the app's other cards. "Your

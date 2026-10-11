@@ -1,17 +1,27 @@
 import { ArrowRight, CircleCheck, TriangleAlert } from "lucide-react"
+import { skipToken, useQuery } from "@tanstack/react-query"
 import { useRef, type MouseEvent } from "react"
 
 import { GhostMark } from "@/components/ghost-mark"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { IncidentClosedTime, IncidentDetail } from "@/features/activity-incident-details"
 import { incidentText } from "@/i18n/incident-text"
 import { formatRunTime } from "@/lib/activity"
 import { ruleNames, type RuleContext } from "@/lib/activity-rule-context"
-import type { Incident } from "@/lib/api"
+import { api, type Incident } from "@/lib/api"
 import type { IncidentStep } from "@/lib/incidents"
 import { appPathForIncident, isPlainLeftClick } from "@/lib/navigation"
 
 type IncidentProps = { incident: Incident; context: RuleContext }
+
+/** The incidents listed so far, and whether the server holds older ones. */
+export type IncidentPages = {
+  items: Incident[]
+  more: boolean
+  loadingMore: boolean
+  loadMore: () => void
+}
 type OnSelect = (incidentId: string | null, history: "push" | "replace") => void
 
 /**
@@ -25,7 +35,7 @@ export function IncidentsSection({
   onSelect,
   onStep,
 }: {
-  incidents: Incident[]
+  incidents: IncidentPages
   selectedId: string | null
   context: RuleContext
   onSelect: OnSelect
@@ -33,10 +43,12 @@ export function IncidentsSection({
 }) {
   const { t } = context.i18n
   const focusDetail = useRef(false)
-  const open = incidents.filter((incident) => incident.state === "open")
-  const resolved = incidents.filter((incident) => incident.state !== "open")
+  const { items, more } = incidents
+  const open = items.filter((incident) => incident.state === "open")
+  const resolved = items.filter((incident) => incident.state !== "open")
   const ordered = [...open, ...resolved]
   const index = ordered.findIndex((incident) => incident.id === selectedId)
+  const selected = useSelectedIncident(selectedId, ordered[index])
   const detailOpen = selectedId !== null
 
   function select(incident: Incident) {
@@ -55,7 +67,7 @@ export function IncidentsSection({
     requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-incident-link="${closing}"]`)?.focus())
   }
 
-  if (incidents.length === 0) {
+  if (items.length === 0) {
     return (
       <section className="workflow activity-section page-card" aria-label={t("activity.incidents.title")}>
         <div className="empty-panel">
@@ -74,15 +86,22 @@ export function IncidentsSection({
           <IncidentsTable
             open={open}
             resolved={resolved}
+            more={more}
             selectedId={selectedId}
             showRuleColumn={!detailOpen}
             context={context}
             onSelect={select}
           />
+          {more && (
+            <Button variant="outline" className="activity-more" onClick={incidents.loadMore} disabled={incidents.loadingMore}>
+              {incidents.loadingMore ? t("activity.incidents.loadingOlder") : t("activity.incidents.loadOlder")}
+            </Button>
+          )}
         </div>
         {detailOpen && (
           <IncidentDetail
-            incident={ordered[index]}
+            incident={selected.incident}
+            loading={selected.loading}
             context={context}
             focusRef={focusDetail}
             onClose={close}
@@ -99,6 +118,7 @@ export function IncidentsSection({
 function IncidentsTable({
   open,
   resolved,
+  more,
   selectedId,
   showRuleColumn,
   context,
@@ -106,6 +126,8 @@ function IncidentsTable({
 }: {
   open: Incident[]
   resolved: Incident[]
+  /** Whether older incidents are still to load, so the last group's count is a floor. */
+  more: boolean
   selectedId: string | null
   showRuleColumn: boolean
   context: RuleContext
@@ -120,9 +142,7 @@ function IncidentsTable({
           <th scope="rowgroup" role="rowheader" colSpan={columns}>
             <span className="incident-group-label">
               {state === "open" ? <TriangleAlert aria-hidden="true" /> : <CircleCheck aria-hidden="true" />}
-              {state === "open"
-                ? t("activity.incidents.group.open", { count: items.length })
-                : t("activity.incidents.group.resolved", { count: items.length })}
+              {groupLabel(t, state, items.length, more && (state === "resolved" || resolved.length === 0))}
             </span>
           </th>
         </tr>
@@ -239,4 +259,27 @@ function IncidentSubject({ incident, context }: IncidentProps) {
   }
   const account = incident.account_id ? context.accountsById.get(incident.account_id) : undefined
   return <span>{account?.email ?? t("activity.incidents.installation")}</span>
+}
+
+const GROUP_LABELS = {
+  open: { all: "activity.incidents.group.open", floor: "activity.incidents.group.openMore" },
+  resolved: { all: "activity.incidents.group.resolved", floor: "activity.incidents.group.resolvedMore" },
+} as const
+
+/** "2 resolved", or "100+ resolved" while older ones are still to load. */
+function groupLabel(t: RuleContext["i18n"]["t"], state: "open" | "resolved", count: number, floor: boolean): string {
+  return t(GROUP_LABELS[state][floor ? "floor" : "all"], { count })
+}
+
+/** The selected incident, from the listed ones or, when they do not hold it, on its own. */
+function useSelectedIncident(selectedId: string | null, listed: Incident | undefined) {
+  // A link can name an incident older than the ones listed so far.
+  const direct = useQuery({
+    queryKey: ["incidents", selectedId],
+    queryFn: selectedId === null ? skipToken : () => api.incident(selectedId),
+    enabled: listed === undefined,
+    retry: false,
+  })
+  const incident = listed ?? (direct.data?.id === selectedId ? direct.data : undefined)
+  return { incident, loading: incident === undefined && direct.isFetching }
 }

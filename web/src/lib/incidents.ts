@@ -1,7 +1,7 @@
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
-import type { ConnectedAccount, Incident } from "@/lib/api"
-import { causeOf, howToFixUrl, type Cause } from "@/lib/causes"
+import type { Incident } from "@/lib/api"
+import { causeOf, howToFixUrl, isAdministratorCause, type Cause } from "@/lib/causes"
 
 /** What the administrator can do to fix an open incident, if anything. */
 type IncidentAction =
@@ -10,85 +10,41 @@ type IncidentAction =
   | { kind: "blocked"; ruleId: string; label: string }
 
 /** Where a resolved incident leads: its rule's history, to see the runs around it. */
-export type IncidentFollowUp = { kind: "history"; ruleId: string; label: string }
+type IncidentFollowUp = { kind: "history"; ruleId: string; label: string }
 
 /** The one next step an incident's details offer: its fix while open, its follow-up once resolved. */
 export type IncidentStep = IncidentAction | IncidentFollowUp
 
-export type IncidentGuidance = { detail: string | null; action: IncidentAction | null }
+/** The server's one next step for an incident (ADR 0033); the Web UI only words it. */
+type ServerStep = NonNullable<Incident["step"]>
 
-/** What an incident's rule looks like now; null when the incident has no rule or it is gone. */
-export type IncidentRuleState = { accessRenewed: boolean }
-
-/**
- * Whether the rule's Google access was renewed after the incident last recorded a failure. An
- * authorization failure leaves its account connected, so being connected proves nothing; only
- * reauthorizing the account that failed does, with every account of the rule connected. When
- * the failing account was not recorded, every account of the rule must have been reauthorized.
- */
-export function accessRenewedSince(incident: Incident, accounts: (ConnectedAccount | undefined)[]): boolean {
-  const lastFailure = Date.parse(incident.updated_at)
-  const renewed = (account: ConnectedAccount | undefined) =>
-    account?.authorized_at != null && Date.parse(account.authorized_at) > lastFailure
-  if (accounts.some((account) => account?.state !== "connected")) return false
-  if (incident.account_id === null) return accounts.every(renewed)
-  return renewed(accounts.find((account) => account?.id === incident.account_id))
+/** What each step says while the incident is open, and the button that takes it. */
+const STEPS: Record<ServerStep, { detail: MessageKey | null; label: MessageKey | null }> = {
+  reauthorize: { detail: "activity.incidents.guidance.authorization", label: "activity.incidents.action.reauthorize" },
+  recover_rule: { detail: "activity.incidents.guidance.accessRenewed", label: "activity.incidents.action.recover" },
+  review_rule: { detail: "activity.incidents.guidance.stopped", label: "activity.incidents.action.review" },
+  see_blocked: { detail: "activity.incidents.guidance.conflict", label: "activity.incidents.action.seeBlocked" },
+  wait: { detail: "activity.incidents.guidance.retrying", label: null },
+  administrator: { detail: "activity.incidents.guidance.administrator", label: null },
+  see_history: { detail: null, label: "activity.incidents.action.seeActivity" },
 }
 
-const AUTHORIZATION = new Set(["authentication", "authorization"])
-const STOPPED = new Set(["permanent", "infrastructure"])
-const RETRYING = new Set(["rate_limit", "temporary"])
-
-/** An action on the incident's rule, offered only while the rule still exists. */
-function ruleAction(kind: "rule" | "blocked", ruleId: string | null, label: string): IncidentAction | null {
-  return ruleId ? { kind, ruleId, label } : null
-}
-
-function authorizationGuidance(
-  i18n: I18n,
-  incident: Incident,
-  ruleId: string | null,
-  rule: IncidentRuleState | null,
-): IncidentGuidance {
-  // Reauthorizing renews access but leaves the rule stopped; only its recovery closes this.
-  if (ruleId && rule?.accessRenewed) {
-    return {
-      detail: i18n.t("activity.incidents.guidance.accessRenewed"),
-      action: { kind: "rule", ruleId, label: i18n.t("activity.incidents.action.recover") },
-    }
+/** The button for the incident's step; the server offers a rule's steps only while it exists. */
+function stepAction(incident: Incident, step: ServerStep, label: string): IncidentStep | null {
+  if (step === "reauthorize") return { kind: "settings", label, accountId: incident.account_id }
+  const ruleId = incident.rule_id
+  if (!ruleId) return null
+  switch (step) {
+    case "recover_rule":
+    case "review_rule":
+      return { kind: "rule", ruleId, label }
+    case "see_blocked":
+      return { kind: "blocked", ruleId, label }
+    case "see_history":
+      return { kind: "history", ruleId, label }
+    default:
+      return null
   }
-  return {
-    detail: i18n.t("activity.incidents.guidance.authorization"),
-    action: {
-      kind: "settings",
-      label: i18n.t("activity.incidents.action.reauthorize"),
-      accountId: incident.account_id,
-    },
-  }
-}
-
-/**
- * The next step for an open incident, in the terms of what its category needs. A rule action is
- * offered only while the rule still exists.
- */
-export function incidentGuidance(i18n: I18n, incident: Incident, rule: IncidentRuleState | null): IncidentGuidance {
-  const { t } = i18n
-  const ruleId = rule ? incident.rule_id : null
-  if (AUTHORIZATION.has(incident.category)) return authorizationGuidance(i18n, incident, ruleId, rule)
-  if (STOPPED.has(incident.category)) {
-    return {
-      detail: t("activity.incidents.guidance.stopped"),
-      action: ruleAction("rule", ruleId, t("activity.incidents.action.review")),
-    }
-  }
-  if (RETRYING.has(incident.category)) return { detail: t("activity.incidents.guidance.retrying"), action: null }
-  if (incident.category === "conflict") {
-    return {
-      detail: t("activity.incidents.guidance.conflict"),
-      action: ruleAction("blocked", ruleId, t("activity.incidents.action.seeBlocked")),
-    }
-  }
-  return { detail: null, action: ruleAction("rule", ruleId, t("activity.incidents.action.review")) }
 }
 
 const RESOLUTIONS: Record<NonNullable<Incident["resolution"]>, MessageKey> = {
@@ -111,12 +67,6 @@ export function incidentClosedAt(incident: Incident): string {
 /** How many incidents still need attention; Activity's Incidents tab counts them. */
 export function openIncidentCount(incidents: Incident[]): number {
   return incidents.filter((incident) => incident.state === "open").length
-}
-
-/** A resolved incident's rule, while it exists, so its history shows the runs around it. */
-export function resolvedFollowUp(i18n: I18n, incident: Incident, rule: IncidentRuleState | null): IncidentFollowUp | null {
-  if (incident.state === "open" || !rule || !incident.rule_id) return null
-  return { kind: "history", ruleId: incident.rule_id, label: i18n.t("activity.incidents.action.seeActivity") }
 }
 
 export type IncidentDuration = { unit: "moment" | "minute" | "hour" | "day"; count: number }
@@ -145,14 +95,48 @@ export type IncidentDetail = {
   fixUrl: string | null
 }
 
-export function incidentDetail(i18n: I18n, incident: Incident, rule: IncidentRuleState | null): IncidentDetail {
-  // An unrecognised reason explains nothing, so the details leave it out.
-  const known = causeOf(incident)
-  const cause = known === "unknown" ? null : known
-  if (incident.state !== "open") {
-    const explanation = incidentResolution(i18n, incident)
-    return { explanation, cause, step: resolvedFollowUp(i18n, incident, rule), fixUrl: null }
+/** Who reads the incident: only an administrator learns an administrator's Cause (ADR 0031). */
+export type IncidentReader = { administrator: boolean }
+
+export function incidentDetail(i18n: I18n, incident: Incident, reader: IncidentReader): IncidentDetail {
+  if (incident.step === "administrator" && !reader.administrator) return unavailableDetail(i18n, incident)
+  const cause = shownCause(incident, reader)
+  const open = incident.state === "open"
+  return {
+    explanation: open ? stepDetail(i18n, incident) : incidentResolution(i18n, incident),
+    cause,
+    step: incidentAction(i18n, incident),
+    fixUrl: open ? howToFixUrl(cause) : null,
   }
-  const { detail, action } = incidentGuidance(i18n, incident, rule)
-  return { explanation: detail, cause, step: action, fixUrl: howToFixUrl(cause) }
+}
+
+/** The Cause the reader may read: none unrecognised, and an administrator's only to them. */
+function shownCause(incident: Incident, reader: IncidentReader): Cause | null {
+  const cause = causeOf(incident)
+  if (cause === "unknown") return null
+  return isAdministratorCause(cause) && !reader.administrator ? null : cause
+}
+
+function stepDetail(i18n: I18n, incident: Incident): string | null {
+  const detail = incident.step ? STEPS[incident.step].detail : null
+  return detail ? i18n.t(detail) : null
+}
+
+function incidentAction(i18n: I18n, incident: Incident): IncidentStep | null {
+  const label = incident.step ? STEPS[incident.step].label : null
+  return incident.step && label ? stepAction(incident, incident.step, i18n.t(label)) : null
+}
+
+/**
+ * An administrator's Cause, as anyone else reads it: Google Calendar is not available right now,
+ * with Check access to try again, never which Cause or that an administrator fixes it (ADR 0031).
+ */
+function unavailableDetail(i18n: I18n, incident: Incident): IncidentDetail {
+  const label = i18n.t("activity.incidents.action.checkAccess")
+  return {
+    explanation: i18n.t("activity.incidents.guidance.unavailable"),
+    cause: null,
+    step: { kind: "settings", label, accountId: incident.account_id },
+    fixUrl: null,
+  }
 }

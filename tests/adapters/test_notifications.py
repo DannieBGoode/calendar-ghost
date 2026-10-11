@@ -255,7 +255,12 @@ def test_an_installation_emails_rule_incidents_to_their_owner_and_never_to_its_w
         ),
         (
             IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), "conflict", "blocked"),
-            "https://ghost.example.test/activity",
+            "https://ghost.example.test/activity?rule=rule-1&show=blocked",
+        ),
+        # A local failure stops the rule until it is reviewed.
+        (
+            IncidentReport("provider:rule-1", SyncRuleId("rule-1"), "infrastructure", "failed"),
+            "https://ghost.example.test/rules/rule-1",
         ),
     ],
 )
