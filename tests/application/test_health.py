@@ -195,6 +195,15 @@ class Incidents:
         self.resolutions[key] = resolution
         self.open_keys.discard(key)
 
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        return frozenset(
+            report.account_id
+            for report in self.reports
+            if report.key in self.open_keys
+            and report.rule_id is None
+            and report.account_id is not None
+        )
+
 
 class Notifications:
     def __init__(self) -> None:

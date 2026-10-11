@@ -138,7 +138,7 @@ class RecordingHealth:
     ) -> None:
         self.failures.append(failure)
 
-    def resume_restored(self) -> int:
+    def finish_interrupted_lapses(self) -> int:
         return 0
 
 
@@ -481,7 +481,7 @@ def test_a_pass_first_resumes_rules_an_interrupted_restoration_left_stopped() ->
     units = _awaiting_reauthorization()
 
     class Resuming(RecordingHealth):
-        def resume_restored(self) -> int:
+        def finish_interrupted_lapses(self) -> int:
             with units() as uow:
                 stopped = uow.rules.get(rule().id)
                 assert stopped is not None
@@ -504,7 +504,7 @@ def test_a_failure_to_resume_rules_never_stops_the_pass(caplog: pytest.LogCaptur
         uow.commit()
 
     class Failing(RecordingHealth):
-        def resume_restored(self) -> int:
+        def finish_interrupted_lapses(self) -> int:
             raise sqlite3.OperationalError("database is locked")
 
     execute = RecordingExecuteRule([None])
@@ -512,7 +512,7 @@ def test_a_failure_to_resume_rules_never_stops_the_pass(caplog: pytest.LogCaptur
     asyncio.run(_scheduler(execute, units, Failing()).run_once())
 
     assert execute.calls == 1
-    assert "Resuming rules after Reauthorization failed" in caplog.text
+    assert "Finishing an interrupted lapse or restoration failed" in caplog.text
 
 
 def test_a_pass_runs_different_rules_at_the_same_time() -> None:
@@ -1336,11 +1336,42 @@ def test_a_lapse_committed_while_a_rule_resumes_keeps_it_stopped(
 
     monkeypatch.setattr(SqliteSyncRuleRepository, "save", lapsing_first)
 
-    assert health.resume_restored() == 0
+    assert health.finish_interrupted_lapses() == 0
     with unit_of_work() as uow:
         kept = uow.rules.get(stopped.id)
     assert kept is not None
     assert kept.state is SyncRuleState.DEGRADED
+
+
+def test_a_pass_resolves_an_authorized_accounts_incident_with_no_rule_waiting(
+    tmp_path: Path,
+) -> None:
+    # A lapse opened the account's Incident while no rule awaited the account, as when the User
+    # paused or removed the one it stopped. Reauthorizing then saved new credentials, clearing the
+    # lapse, and the process stopped before restoring resolved the Incident.
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    add_user(database)
+    work = store.for_user(USER).save(
+        "Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE
+    )
+    unit_of_work = sqlite_units(database)
+    health = _rule_health(database, unit_of_work)
+    expired = ProviderFailure(ProviderFailureKind.AUTHENTICATION, "expired", account_id=work.id)
+    health.lapses.lapsed(work.id, expired, attempted_at=datetime.now(UTC))
+    store.for_user(USER).save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
+    services = ScheduledServices(cast(ExecuteSyncRule, RecordingExecuteRule([])), health)
+
+    asyncio.run(
+        SyncScheduler(
+            SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services
+        ).run_once()
+    )
+
+    with sqlite3.connect(database) as connection:
+        incidents = connection.execute("SELECT state, resolution FROM incidents").fetchall()
+    assert incidents == [("resolved", "access_restored")]
 
 
 def _lapsed(store: SqliteConnectedAccountStore, account_id: ConnectedAccountId) -> bool:

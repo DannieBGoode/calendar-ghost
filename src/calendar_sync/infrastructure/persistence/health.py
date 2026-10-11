@@ -205,3 +205,15 @@ class SqliteIncidentRepository:
                     self._user,
                 ),
             )
+
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        with transaction(self._database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT account_id FROM incidents
+                WHERE user_id = ? AND rule_id IS NULL AND account_id IS NOT NULL
+                    AND state = 'open'
+                """,
+                (self._user,),
+            ).fetchall()
+        return frozenset(ConnectedAccountId(str(row[0])) for row in rows)

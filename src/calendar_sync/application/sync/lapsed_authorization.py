@@ -101,29 +101,23 @@ class LapsedAuthorizations:
         self._resolve(account_id)
         return sum(self._resume(rule_id) for rule_id in waiting)
 
-    def resume_restored(self) -> int:
+    def finish_interrupted(self) -> int:
         """Finish restorations an interruption left; how many rules resumed.
 
         Reauthorizing clears a lapse with the new credentials, and `restored` then commits each
-        step on its own, so a stop or failure between them leaves rules the lapse alone stopped
-        while their accounts are authorized again. Each scheduler pass calls this, so they resume
-        and their accounts' Incidents resolve without another Reauthorization (ADR 0027).
+        step on its own, so a stop or failure between them leaves the account's Incident open,
+        and rules the lapse alone stopped, while the account is authorized again. Each scheduler
+        pass calls this, so the Incident resolves and the rules resume without another
+        Reauthorization (ADR 0027). It calls no provider.
         """
+        incidents = self.incidents.accounts_with_open_incidents()
         with self.unit_of_work() as uow:
             waiting = tuple(
                 rule
                 for rule in uow.rules.list()
                 if rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
             )
-            accounts = {
-                account
-                for rule in waiting
-                for account in (
-                    rule.source.connected_account_id,
-                    rule.destination.connected_account_id,
-                )
-            }
-            authorized = {account for account in accounts if uow.accounts.authorized(account)}
+            authorized = {account for account in incidents if uow.accounts.authorized(account)}
         for account_id in sorted(authorized, key=lambda account: account.value):
             self._resolve(account_id)
         return sum(self._resume(rule.id) for rule in waiting)

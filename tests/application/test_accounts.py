@@ -373,6 +373,9 @@ class OpenedIncidents:
     def resolve(self, *args: object, **kwargs: object) -> None:
         return None
 
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        return frozenset()
+
 
 def test_a_refused_access_check_records_why_the_provider_refused() -> None:
     units = InMemoryUnitOfWorkFactory().for_user(USER)

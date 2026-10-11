@@ -31,6 +31,7 @@ from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditEntry
 from calendar_sync.domain.causes import WITHOUT_CAUSE
 from calendar_sync.domain.changes import SourceObservation
+from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,
@@ -553,9 +554,54 @@ class MemoryDatabase:
     partitions: dict[UserId, MemoryState] = field(default_factory=dict)
     disabled: set[UserId] = field(default_factory=set)
     """Users who may not sign in; the scheduler holds their rules."""
+    incidents: dict[UserId, dict[str, IncidentReport]] = field(default_factory=dict)
+    """Each User's open Incidents by key; like SQLite's, they change outside any unit of work."""
 
     def state_of(self, user_id: UserId) -> MemoryState:
         return self.partitions.setdefault(user_id, MemoryState())
+
+
+class InMemoryIncidentRepository:
+    """One User's open Incidents, as SQLite opens and resolves them; it keeps which are open,
+    not when or why they opened or resolved."""
+
+    def __init__(self, database: MemoryDatabase, user_id: UserId) -> None:
+        self._database = database
+        self._user = user_id
+
+    def open(self, incident: IncidentReport, at: datetime) -> bool:  # noqa: ARG002
+        state = self._database.state_of(self._user)
+        # An account's own Incident opens only while the account is lapsed.
+        if incident.rule_id is None and incident.account_id not in state.lapsed:
+            return False
+        opened = self._open()
+        newly = incident.key not in opened
+        opened[incident.key] = incident
+        return newly
+
+    def resolve(
+        self,
+        key: str,
+        at: datetime,  # noqa: ARG002
+        resolution: IncidentResolution,  # noqa: ARG002
+        *,
+        while_authorized: ConnectedAccountId | None = None,
+    ) -> None:
+        state = self._database.state_of(self._user)
+        if while_authorized is None or InMemoryConnectedAccountRecords(state).authorized(
+            while_authorized
+        ):
+            self._open().pop(key, None)
+
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        return frozenset(
+            incident.account_id
+            for incident in self._open().values()
+            if incident.rule_id is None and incident.account_id is not None
+        )
+
+    def _open(self) -> dict[str, IncidentReport]:
+        return self._database.incidents.setdefault(self._user, {})
 
 
 @dataclass(frozen=True, slots=True)

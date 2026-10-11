@@ -119,8 +119,8 @@ class SyncScheduler:
             installation.forget_provider_calls(first_counted_day(today))
             installation.commit()
             # Before listing the pass's rules, so a rule resumed here runs in this same pass.
-            for owner in installation.users_awaiting_reauthorization():
-                await asyncio.to_thread(self._resume_restored, owner)
+            for owner in installation.users_with_unfinished_lapses():
+                await asyncio.to_thread(self._finish_lapses, owner)
             # Each rule's daily full pass is due from its own last one, so a restart or another
             # rule's failure never re-lists calendars that already completed today's pass.
             due = tuple(
@@ -138,12 +138,14 @@ class SyncScheduler:
         await asyncio.gather(*(run(scheduled, full) for scheduled, full in due))
         return frozenset(scheduled.rule.id.value for scheduled, _ in due)
 
-    def _resume_restored(self, owner: UserId) -> None:
-        """Resume what an interrupted restoration left stopped; a failure waits for a pass."""
+    def _finish_lapses(self, owner: UserId) -> None:
+        """Finish what an interrupted lapse or restoration left; a failure waits for a pass."""
         try:
-            self._services_for(owner).health.resume_restored()
+            self._services_for(owner).health.finish_interrupted_lapses()
         except Exception:
-            logger.exception("Resuming rules after Reauthorization failed; trying again next pass")
+            logger.exception(
+                "Finishing an interrupted lapse or restoration failed; trying again next pass"
+            )
 
     def _execute_with_retry(self, scheduled: ScheduledRule, full: bool = False) -> bool:
         rule = scheduled.rule

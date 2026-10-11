@@ -20,7 +20,7 @@ from calendar_sync.application.operations.ports import (
 )
 from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.domain.access import UserId
-from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleState
 from calendar_sync.infrastructure.persistence.activity_queries import operations_of
@@ -96,17 +96,30 @@ class SqliteInstallationUnitOfWork:
             for row in rows
         )
 
-    def users_awaiting_reauthorization(self) -> Sequence[UserId]:
+    def users_with_unfinished_lapses(self) -> Sequence[UserId]:
         assert self._connection is not None
         rows = self._connection.execute(
             """
-            SELECT DISTINCT sync_rules.user_id
-            FROM sync_rules
-            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
-            WHERE sync_rules.state = ? AND sync_rules.awaiting_reauthorization = 1
-            ORDER BY sync_rules.user_id
+            SELECT users.id FROM users
+            WHERE users.state = 'active' AND (
+                EXISTS (
+                    SELECT 1 FROM sync_rules
+                    WHERE sync_rules.user_id = users.id
+                        AND sync_rules.state = ? AND sync_rules.awaiting_reauthorization = 1
+                )
+                OR EXISTS (
+                    SELECT 1 FROM incidents
+                    JOIN connected_accounts account
+                        ON account.id = incidents.account_id
+                        AND account.user_id = incidents.user_id
+                    WHERE incidents.user_id = users.id AND incidents.rule_id IS NULL
+                        AND incidents.state = 'open'
+                        AND account.state = ? AND account.authorization_lapsed_at IS NULL
+                )
+            )
+            ORDER BY users.id
             """,
-            (SyncRuleState.DEGRADED.value,),
+            (SyncRuleState.DEGRADED.value, ConnectedAccountState.CONNECTED.value),
         ).fetchall()
         return tuple(UserId(str(row[0])) for row in rows)
 

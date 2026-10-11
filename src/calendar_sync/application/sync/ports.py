@@ -489,6 +489,10 @@ class IncidentRepository(Protocol):
         """
         ...
 
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        """Every account whose own Incident, the one its Lapsed Authorization opens, is open."""
+        ...
+
 
 class IncidentNotifications(Protocol):
     def incident_opened(self, incident: IncidentReport, at: datetime) -> None:

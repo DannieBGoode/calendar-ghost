@@ -23,7 +23,11 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import SyncRuleId, SyncRuleState
 from calendar_sync.domain.runs import RunKind
-from calendar_sync.infrastructure.persistence.memory import MemoryDatabase, MemoryState
+from calendar_sync.infrastructure.persistence.memory import (
+    InMemoryIncidentRepository,
+    MemoryDatabase,
+    MemoryState,
+)
 
 
 class InMemoryInstallationUnitOfWork:
@@ -55,16 +59,25 @@ class InMemoryInstallationUnitOfWork:
             if rule.state is SyncRuleState.ENABLED
         )
 
-    def users_awaiting_reauthorization(self) -> tuple[UserId, ...]:
+    def users_with_unfinished_lapses(self) -> tuple[UserId, ...]:
         return tuple(
             owner
             for owner, state in sorted(
                 self._database.partitions.items(), key=lambda item: item[0].value
             )
             if owner not in self._database.disabled
-            and any(
-                rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
-                for rule in state.rules.values()
+            and (
+                any(
+                    rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
+                    for rule in state.rules.values()
+                )
+                or any(
+                    state.accounts.get(account) is ConnectedAccountState.CONNECTED
+                    and account not in state.lapsed
+                    for account in InMemoryIncidentRepository(
+                        self._database, owner
+                    ).accounts_with_open_incidents()
+                )
             )
         )
 
@@ -82,7 +95,7 @@ class InMemoryInstallationUnitOfWork:
             }
 
     def failure_causes(self, since: datetime) -> list[CauseSighting]:
-        """Failed runs since `since`; this store keeps no Incidents."""
+        """Failed runs since `since`; Incidents are not read here."""
         return sorted(
             (
                 CauseSighting(owner, outcome.failure_cause, outcome.completed_at, False)
@@ -120,8 +133,8 @@ def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:
 
 
 def _status_records(state: MemoryState | None) -> StatusRecords:
-    """A User's records as Installation Status reads them. This store keeps no Incidents or
-    Activity blocks, and every account it records is a Google account."""
+    """A User's records as Installation Status reads them. This store reads no Incidents here,
+    keeps no Activity blocks, and records every account as a Google account."""
     state = state or MemoryState()
     accounts = tuple(
         AccountStanding(

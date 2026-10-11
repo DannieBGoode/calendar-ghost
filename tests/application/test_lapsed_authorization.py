@@ -28,9 +28,11 @@ class Incidents:
     def __init__(self) -> None:
         self.opened: list[IncidentReport] = []
         self.resolved: list[tuple[str, IncidentResolution]] = []
+        self.open_ones: dict[str, IncidentReport] = {}
 
     def open(self, incident: IncidentReport, at: datetime) -> bool:
         self.opened.append(incident)
+        self.open_ones[incident.key] = incident
         return len(self.opened) == 1
 
     def resolve(
@@ -42,6 +44,14 @@ class Incidents:
         while_authorized: ConnectedAccountId | None = None,
     ) -> None:
         self.resolved.append((key, resolution))
+        self.open_ones.pop(key, None)
+
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        return frozenset(
+            incident.account_id
+            for incident in self.open_ones.values()
+            if incident.rule_id is None and incident.account_id is not None
+        )
 
 
 def _installation() -> tuple[InMemoryUserUnitOfWorkFactory, Incidents, LapsedAuthorizations]:
@@ -199,15 +209,14 @@ def test_rules_an_interrupted_restoration_left_stopped_resume_at_the_next_check(
     lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
     del unit_of_work.state.lapsed[WORK]
 
-    assert lapses.resume_restored() == 1
+    assert lapses.finish_interrupted() == 1
     assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.ENABLED
     assert unit_of_work.state.rules[needs_preview.id].state is SyncRuleState.DEGRADED
-    # Resolving names each authorized account; one with no open Incident has nothing to resolve.
+    # Only an account with an open Incident has one to resolve.
     assert incidents.resolved == [
-        ("authorization:personal-account", IncidentResolution.ACCESS_RESTORED),
-        ("authorization:work-account", IncidentResolution.ACCESS_RESTORED),
+        ("authorization:work-account", IncidentResolution.ACCESS_RESTORED)
     ]
-    assert lapses.resume_restored() == 0
+    assert lapses.finish_interrupted() == 0
 
 
 def test_the_check_leaves_a_rule_whose_other_account_is_still_lapsed() -> None:
@@ -218,7 +227,7 @@ def test_the_check_leaves_a_rule_whose_other_account_is_still_lapsed() -> None:
     lapses.lapsed(PERSONAL, replace(EXPIRED, account_id=PERSONAL), attempted_at=NOW)
     del unit_of_work.state.lapsed[WORK]
 
-    assert lapses.resume_restored() == 0
+    assert lapses.finish_interrupted() == 0
     assert unit_of_work.state.rules[awaiting.id].state is SyncRuleState.DEGRADED
     # Only the authorized account's Incident resolves; the other stays open.
     assert incidents.resolved == [
@@ -230,6 +239,27 @@ def test_the_check_does_nothing_while_no_rule_awaits_reauthorization() -> None:
     unit_of_work, incidents, lapses = _installation()
     unit_of_work.state.rules = {rule().id: rule()}
 
-    assert lapses.resume_restored() == 0
+    assert lapses.finish_interrupted() == 0
     assert unit_of_work.state.rules[rule().id] == rule()
+    assert incidents.resolved == []
+
+
+def test_the_check_resolves_an_authorized_accounts_incident_with_no_rule_waiting() -> None:
+    # The lapse stopped no rule that still waits, as when the User paused the one it stopped,
+    # and Reauthorization cleared it before the process stopped.
+    unit_of_work, incidents, lapses = _installation()
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
+    del unit_of_work.state.lapsed[WORK]
+
+    assert lapses.finish_interrupted() == 0
+    assert incidents.resolved == [
+        ("authorization:work-account", IncidentResolution.ACCESS_RESTORED)
+    ]
+
+
+def test_the_check_leaves_the_incident_of_an_account_still_lapsed() -> None:
+    _, incidents, lapses = _installation()
+    lapses.lapsed(WORK, EXPIRED, attempted_at=NOW)
+
+    assert lapses.finish_interrupted() == 0
     assert incidents.resolved == []
