@@ -93,6 +93,11 @@ class FakeGraphEvents:
         self._changed(mailbox, calendar, event_id)
         return event_id
 
+    def remove(self, mailbox: str, calendar: str, event_id: str) -> None:
+        """Delete an event as its owner would in Outlook; delta then reports it `@removed`."""
+        del self.stored[event_id]
+        self._changed(mailbox, calendar, event_id, removed=True)
+
     def in_calendar(self, mailbox: str, calendar: str) -> list[StoredEvent]:
         return [
             event

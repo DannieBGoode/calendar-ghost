@@ -3,6 +3,10 @@
 It keeps Google-shaped event JSON per calendar and answers only the `events()` requests the
 adapter sends for the Calendar Provider contract. Every write must ask Google to notify nobody and
 carry no guests, conferencing, or attachments; each one is recorded for inspection.
+
+A series expands only `RRULE:FREQ=DAILY` with `COUNT`, the one pattern the contract uses. Its
+instances are named as Google names them, `<series>_<UTC start>`. Patching or deleting an instance
+stores it as an exception, cancelled when deleted, which listings then report like Google does.
 """
 
 from __future__ import annotations
@@ -86,6 +90,8 @@ class FakeGoogleCalendarApi:
     writes: list[RecordedWrite] = field(default_factory=list)
     version: int = 0
     inserted: int = 0
+    refused_tokens: bool = False
+    """Whether every sync token is refused with 410, as Google does once it expires them."""
 
     def service_for(self, account_id: ConnectedAccountId) -> FakeService:
         return FakeService(self, account_id.value)
@@ -95,6 +101,11 @@ class FakeGoogleCalendarApi:
         key = (endpoint.connected_account_id.value, endpoint.calendar_id.value)
         stored = self._store(key, {"status": "confirmed", **copy.deepcopy(event_json)})
         return copy.deepcopy(stored)
+
+    def remove(self, endpoint: CalendarEndpoint, event_id: str) -> None:
+        """Delete a Native Event as its owner would: Google keeps it, cancelled."""
+        key = (endpoint.connected_account_id.value, endpoint.calendar_id.value)
+        self._store(key, {**self._existing(key, event_id), "status": "cancelled"})
 
     def stored(self, endpoint: CalendarEndpoint, event_id: str) -> EventJson:
         key = (endpoint.connected_account_id.value, endpoint.calendar_id.value)
@@ -132,7 +143,28 @@ class FakeGoogleCalendarApi:
         )
 
     def get(self, key: tuple[str, str], event_id: str) -> EventJson:
-        return copy.deepcopy(self._existing(key, event_id))
+        return copy.deepcopy(self._existing_or_instance(key, event_id))
+
+    def _existing_or_instance(self, key: tuple[str, str], event_id: str) -> EventJson:
+        """A stored event, or an unmodified instance of a stored series."""
+        found = self.calendars.get(key, {}).get(event_id)
+        if found is not None:
+            return found
+        series_id, _, token = event_id.rpartition("_")
+        master = self.calendars.get(key, {}).get(series_id)
+        if master is None or not token:
+            raise GoogleApiError(404, reason="notFound")
+        for instance in self._expanded(series_id, master):
+            if instance["id"] == event_id:
+                return instance
+        raise GoogleApiError(404, reason="notFound")
+
+    def patch(
+        self, key: tuple[str, str], event_id: str, body: EventJson, send_updates: str | None
+    ) -> EventJson:
+        existing = self._existing_or_instance(key, event_id)
+        self._write("patch", key, event_id, body, send_updates)
+        return copy.deepcopy(self._store(key, {**copy.deepcopy(existing), **copy.deepcopy(body)}))
 
     def insert(self, key: tuple[str, str], body: EventJson, send_updates: str | None) -> EventJson:
         self._write("insert", key, None, body, send_updates)
@@ -149,7 +181,7 @@ class FakeGoogleCalendarApi:
         return copy.deepcopy(self._store(key, replaced))
 
     def delete(self, key: tuple[str, str], event_id: str, send_updates: str | None) -> str:
-        existing = self._existing(key, event_id)
+        existing = self._existing_or_instance(key, event_id)
         if existing["status"] == "cancelled":
             raise GoogleApiError(410, reason="deleted")
         self._write("delete", key, event_id, None, send_updates)
@@ -158,6 +190,8 @@ class FakeGoogleCalendarApi:
         return ""
 
     def listing(self, key: tuple[str, str], query: EventQuery) -> EventJson:
+        if query.sync_token is not None and self.refused_tokens:
+            raise GoogleApiError(410, reason="fullSyncRequired")
         matching = [
             event_json
             for event_id, event_json in self.calendars.get(key, {}).items()
@@ -171,6 +205,58 @@ class FakeGoogleCalendarApi:
         else:
             response["nextSyncToken"] = f"sync-{self.version}"
         return response
+
+    def instances(
+        self,
+        key: tuple[str, str],
+        series_id: str,
+        *,
+        original_start: str | None,
+        show_deleted: bool,
+        time_max: str | None,
+    ) -> EventJson:
+        master = self._existing(key, series_id)
+        if master["status"] == "cancelled":
+            raise GoogleApiError(410, reason="deleted")
+        items = []
+        for expanded in self._expanded(series_id, master):
+            instance = self.calendars.get(key, {}).get(expanded["id"], expanded)
+            starts = instance["originalStartTime"]["dateTime"]
+            if original_start is not None and _instant(starts) != _instant(original_start):
+                continue
+            if instance["status"] == "cancelled" and not show_deleted:
+                continue
+            if time_max is not None and _instant(starts) >= _instant(time_max):
+                continue
+            items.append(copy.deepcopy(instance))
+        return {"items": items}
+
+    def _expanded(self, series_id: str, master: EventJson) -> list[EventJson]:
+        """The series' regular instances, as Google expands its recurrence."""
+        rules = [line for line in master.get("recurrence", []) if line.startswith("RRULE:")]
+        if not rules:
+            return []
+        parts = dict(part.split("=", 1) for part in rules[0].removeprefix("RRULE:").split(";"))
+        if parts.get("FREQ") != "DAILY" or "COUNT" not in parts or len(parts) != 2:
+            raise NotImplementedError(f"the fake expands only DAILY with COUNT: {rules[0]}")
+        first = _instant(master["start"]["dateTime"])
+        length = _instant(master["end"]["dateTime"]) - first
+        instances = []
+        for day in range(int(parts["COUNT"])):
+            start = first + timedelta(days=day)
+            utc = start.astimezone(UTC)
+            fields = {k: v for k, v in master.items() if k not in {"id", "recurrence", "etag"}}
+            instances.append(
+                {
+                    **copy.deepcopy(fields),
+                    "id": f"{series_id}_{utc.strftime('%Y%m%dT%H%M%SZ')}",
+                    "recurringEventId": series_id,
+                    "originalStartTime": {"dateTime": utc.isoformat()},
+                    "start": {"dateTime": utc.isoformat()},
+                    "end": {"dateTime": (utc + length).isoformat()},
+                }
+            )
+        return instances
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,6 +330,35 @@ class FakeEvents:
 
     def get(self, *, calendarId: str, eventId: str) -> FakeRequest:
         return FakeRequest(lambda: self.api.get((self.account_id, calendarId), eventId))
+
+    def instances(
+        self,
+        *,
+        calendarId: str,
+        eventId: str,
+        originalStart: str | None = None,
+        showDeleted: bool = False,
+        maxResults: int = 250,
+        timeMax: str | None = None,
+        fields: str | None = None,
+        pageToken: str | None = None,
+    ) -> FakeRequest:
+        return FakeRequest(
+            lambda: self.api.instances(
+                (self.account_id, calendarId),
+                eventId,
+                original_start=originalStart,
+                show_deleted=showDeleted,
+                time_max=timeMax,
+            )
+        )
+
+    def patch(
+        self, *, calendarId: str, eventId: str, body: EventJson, sendUpdates: str | None = None
+    ) -> FakeRequest:
+        return FakeRequest(
+            lambda: self.api.patch((self.account_id, calendarId), eventId, body, sendUpdates)
+        )
 
     def insert(
         self, *, calendarId: str, body: EventJson, sendUpdates: str | None = None

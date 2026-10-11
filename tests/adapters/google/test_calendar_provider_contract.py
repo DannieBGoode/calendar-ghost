@@ -28,4 +28,10 @@ class TestGoogleCalendarProvider(CalendarProviderContract):
         return ProviderHarness(
             GoogleCalendarProvider(api.service_for),
             lambda native: api.seed(native.reference.calendar, google_json(native)),
+            lambda native: api.remove(native.reference.calendar, native.reference.event_id.value),
+            lambda _calendar: setattr(api, "refused_tokens", True),
+            # Google expands a series from its recurrence; nothing to tell it.
+            lambda _series: None,
+            # A sync token orders changes by version, not time, so nothing needs to age.
+            lambda _native: None,
         )
