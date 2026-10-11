@@ -70,6 +70,9 @@ class ProviderHarness:
     backdate: Callable[[CalendarEvent], object]
     """Make a seeded event read as last changed a day ago, for a backend that re-reads events
     changed shortly before a cursor, as Outlook does for clocks that disagree."""
+    duplicate: Callable[[EventRef], object]
+    """Copy an event with every property Calendar Ghost wrote on it, as a restored backup or a
+    copy made in the calendar's own app leaves two events carrying one Operation Key."""
 
 
 def _projection(title: str = "Busy") -> EventProjection:
@@ -192,6 +195,40 @@ class CalendarProviderContract:
         assert found is not None
         assert found.reference == created.reference
         assert harness.provider.find_projection(DESTINATION, "key-never-used") is None
+
+    def test_a_key_another_rules_projection_carries_is_never_adopted(
+        self, harness: ProviderHarness
+    ) -> None:
+        theirs = _create(harness, "key-1", OTHER_RULE_ID)
+
+        with pytest.raises(ProjectionOwnershipMismatch):
+            _create(harness, "key-1")
+
+        listed = harness.provider.managed_events(DESTINATION, OTHER_RULE_ID, WINDOW_START)
+        assert [projection.reference for projection in listed] == [theirs.reference]
+        assert list(harness.provider.managed_events(DESTINATION, RULE_ID, WINDOW_START)) == []
+
+    def test_a_key_another_source_events_projection_carries_is_never_adopted(
+        self, harness: ProviderHarness
+    ) -> None:
+        theirs = _create(harness, "key-1", RULE_ID, "other-source")
+
+        with pytest.raises(ProjectionOwnershipMismatch):
+            _create(harness, "key-1")
+
+        listed = harness.provider.managed_events(DESTINATION, RULE_ID, WINDOW_START)
+        assert [projection.reference for projection in listed] == [theirs.reference]
+
+    def test_two_events_carrying_one_key_are_never_told_apart(
+        self, harness: ProviderHarness
+    ) -> None:
+        created = _create(harness, "key-1")
+        harness.duplicate(created.reference)
+
+        with pytest.raises(ProjectionOwnershipMismatch):
+            harness.provider.find_projection(DESTINATION, "key-1")
+        with pytest.raises(ProjectionOwnershipMismatch):
+            _create(harness, "key-1")
 
     def test_managed_events_list_only_this_rules_projections(
         self, harness: ProviderHarness

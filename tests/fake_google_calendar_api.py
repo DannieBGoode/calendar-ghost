@@ -107,6 +107,13 @@ class FakeGoogleCalendarApi:
         key = (endpoint.connected_account_id.value, endpoint.calendar_id.value)
         self._store(key, {**self._existing(key, event_id), "status": "cancelled"})
 
+    def duplicate(self, endpoint: CalendarEndpoint, event_id: str) -> str:
+        """Copy an event with its private properties under a new id; the copy's id."""
+        key = (endpoint.connected_account_id.value, endpoint.calendar_id.value)
+        copied = {**copy.deepcopy(self.calendars[key][event_id]), "id": f"{event_id}-copy"}
+        self._store(key, copied)
+        return str(copied["id"])
+
     def stored(self, endpoint: CalendarEndpoint, event_id: str) -> EventJson:
         key = (endpoint.connected_account_id.value, endpoint.calendar_id.value)
         return copy.deepcopy(self.calendars[key][event_id])

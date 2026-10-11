@@ -317,17 +317,24 @@ class OutlookCalendarProvider:
     def find_projection(
         self, destination: CalendarEndpoint, operation_key: str
     ) -> CalendarEvent | None:
+        """The projection one Operation Key wrote, from every page Graph answers; more than one
+        event carrying the key is never told apart."""
         with self._refusals(destination.connected_account_id):
             query = {"$filter": property_filter(OPERATION_PROPERTY, operation_key), "$top": "2"}
             token = self._token(destination.connected_account_id)
-            page = self._graph.request(
-                "events.list",
-                "GET",
-                f"{_calendar_path(destination)}/events",
-                token,
-                params={"$select": SELECT, "$expand": EXPAND, **query},
-            )
-            found = [item for item in items_of(page) if item.get("isCancelled") is not True]
+            found = [
+                item
+                for page in self._graph.pages(
+                    "events.list",
+                    f"{_calendar_path(destination)}/events",
+                    token,
+                    params={"$select": SELECT, "$expand": EXPAND, **query},
+                )
+                for item in items_of(page)
+                if item.get("isCancelled") is not True
+            ]
+            if len(found) > 1:
+                raise _mismatch("Outlook holds more than one event for one Operation Key")
             return _translate(found[0], destination) if found else None
 
     def create_projection(
@@ -340,6 +347,8 @@ class OutlookCalendarProvider:
     ) -> CreatedProjection:
         existing = self.find_projection(destination, operation_key)
         if existing is not None:
+            if not _owned(existing.managed_origin, rule_id, source):
+                raise _mismatch("Outlook event does not carry compatible ownership metadata")
             return CreatedProjection(existing)
         body = projection_body(projection, rule_id, source, operation_key)
         with self._refusals(destination.connected_account_id):
@@ -791,6 +800,12 @@ def _written(
     return _translate(
         {**answer, "singleValueExtendedProperties": body["singleValueExtendedProperties"]},
         calendar,
+    )
+
+
+def _mismatch(detail: str) -> ProjectionOwnershipMismatch:
+    return ProjectionOwnershipMismatch(
+        detail, provider=ProviderKind.OUTLOOK, provider_label=MICROSOFT.calendar_name
     )
 
 

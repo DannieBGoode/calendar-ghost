@@ -34,4 +34,5 @@ class TestGoogleCalendarProvider(CalendarProviderContract):
             lambda _series: None,
             # A sync token orders changes by version, not time, so nothing needs to age.
             lambda _native: None,
+            lambda copied: api.duplicate(copied.calendar, copied.event_id.value),
         )

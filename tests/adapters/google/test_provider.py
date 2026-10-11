@@ -136,10 +136,22 @@ def test_incremental_changes_are_not_a_complete_listing() -> None:
 
 
 def test_create_projection_reuses_an_existing_operation() -> None:
+    source = event().reference
+    # The projection an interrupted create left, owned by this rule and source.
+    existing = {
+        **google_event_payload("existing-projection"),
+        "extendedProperties": {
+            "private": {
+                "gcs_rule_id": "rule-1",
+                "gcs_source_account_id": source.calendar.connected_account_id.value,
+                "gcs_source_calendar_id": source.calendar.calendar_id.value,
+                "gcs_source_event_id": source.event_id.value,
+                "gcs_operation_key": "stable-operation-key",
+            }
+        },
+    }
     events_api = MagicMock()
-    events_api.list.return_value = request_returning(
-        {"items": [google_event_payload("existing-projection")]}
-    )
+    events_api.list.return_value = request_returning({"items": [existing]})
     provider = provider_with_events_api(events_api)
     projection = EventProjection(
         TimedInterval(
@@ -151,7 +163,7 @@ def test_create_projection_reuses_an_existing_operation() -> None:
 
     created = provider.create_projection(
         endpoint("work", "destination"),
-        event().reference,
+        source,
         SyncRuleId("rule-1"),
         projection,
         "stable-operation-key",

@@ -88,4 +88,5 @@ class TestOutlookCalendarProvider(CalendarProviderContract):
             # Outlook expands a series from its recurrence; nothing to tell it.
             lambda _series: None,
             lambda native: backdate_in(graph, native),
+            lambda copied: graph.events.duplicate(copied.event_id.value),
         )

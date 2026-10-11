@@ -154,21 +154,20 @@ class GoogleCalendarProvider:
     def find_projection(
         self, destination: CalendarEndpoint, operation_key: str
     ) -> CalendarEvent | None:
-        try:
-            existing = self._call(
-                "events.list",
-                self._service(destination.connected_account_id)
-                .events()
-                .list(
-                    calendarId=destination.calendar_id.value,
-                    privateExtendedProperty=f"{OPERATION_PROPERTY}={operation_key}",
-                    showDeleted=False,
-                    maxResults=2,
-                ),
-            ).get("items", [])
-        except Exception as error:
-            raise self._failure(error, destination.connected_account_id) from error
-        return to_domain_event(existing[0], destination) if existing else None
+        """The projection one Operation Key wrote, from every page Google answers; more than one
+        event carrying the key is never told apart."""
+        found = self._list(
+            destination,
+            {
+                "calendarId": destination.calendar_id.value,
+                "privateExtendedProperty": f"{OPERATION_PROPERTY}={operation_key}",
+                "showDeleted": False,
+                "maxResults": 2,
+            },
+        )
+        if len(found) > 1:
+            raise _mismatch("Google holds more than one event for one Operation Key")
+        return found[0] if found else None
 
     def create_projection(
         self,
@@ -180,6 +179,8 @@ class GoogleCalendarProvider:
     ) -> CreatedProjection:
         existing = self.find_projection(destination, operation_key)
         if existing is not None:
+            if not _owned(existing.managed_origin, rule_id, source):
+                raise _mismatch("Google event does not carry compatible ownership metadata")
             return CreatedProjection(existing)
         try:
             payload = self._call(
@@ -596,6 +597,12 @@ def _as_instant(start: OccurrenceStart) -> datetime:
     if isinstance(start, datetime):
         return start.astimezone(UTC)
     return datetime(start.year, start.month, start.day, tzinfo=UTC)
+
+
+def _mismatch(detail: str) -> ProjectionOwnershipMismatch:
+    return ProjectionOwnershipMismatch(
+        detail, provider=ProviderKind.GOOGLE, provider_label=GOOGLE.calendar_name
+    )
 
 
 def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:

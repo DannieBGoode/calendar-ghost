@@ -72,6 +72,8 @@ class FakeCalendars:
     """Calendars whose next cursor is rejected, so their feed falls back to a full listing."""
     """Every single-event and single-occurrence lookup, in order."""
     operations: dict[str, EventRef] = field(default_factory=dict)
+    copies: dict[str, list[EventRef]] = field(default_factory=dict)
+    """Events copied with an Operation Key, by that key."""
     created: int = 0
     unsupported: set[EventRef] = field(default_factory=set)
     """Sources whose projections, as created or updated, this destination cannot hold."""
@@ -220,13 +222,28 @@ class FakeCalendars:
             response=master.response,
         )
 
+    def duplicate(self, reference: EventRef) -> EventRef:
+        """Copy a projection with its Operation Key under a new identifier; the copy's."""
+        copied = EventRef(reference.calendar, EventId(f"{reference.event_id.value}-copy"))
+        self.events[copied] = replace(self.events[reference], reference=copied)
+        key = next(key for key, made in self.operations.items() if made == reference)
+        self.copies.setdefault(key, []).append(copied)
+        return copied
+
     def find_projection(
         self, destination: CalendarEndpoint, operation_key: str
     ) -> CalendarEvent | None:
-        reference = self.operations.get(operation_key)
-        found = None if reference is None else self.events.get(reference)
-        # Like Google's showDeleted=False lookup, a cancelled projection is not found.
-        return found if found is not None and found.status is EventStatus.CONFIRMED else None
+        made = self.operations.get(operation_key)
+        candidates = [made, *self.copies.get(operation_key, [])] if made is not None else []
+        found = [
+            event
+            for event in (self.events.get(reference) for reference in candidates)
+            # Like Google's showDeleted=False lookup, a cancelled projection is not found.
+            if event is not None and event.status is EventStatus.CONFIRMED
+        ]
+        if len(found) > 1:
+            raise ProjectionOwnershipMismatch("two events carry one Operation Key")
+        return found[0] if found else None
 
     def create_projection(
         self,
@@ -238,6 +255,8 @@ class FakeCalendars:
     ) -> CreatedProjection:
         existing = self.find_projection(destination, operation_key)
         if existing is not None:
+            if not _owned(existing.managed_origin, rule_id, source):
+                raise _denied()
             return CreatedProjection(existing)
         if source in self.unsupported:
             raise UnsupportedProjection("this destination cannot hold the projection")

@@ -19,6 +19,7 @@ organizer's meeting sends to its attendees.
 from __future__ import annotations
 
 import calendar as months
+import copy
 import re
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
@@ -103,6 +104,16 @@ class FakeGraphEvents:
         """Delete an event as its owner would in Outlook; delta then reports it `@removed`."""
         del self.stored[event_id]
         self._changed(mailbox, calendar, event_id, removed=True)
+
+    def duplicate(self, event_id: str) -> str:
+        """Copy an event with its extended properties under a new id; the copy's id."""
+        original = self.stored[event_id]
+        copied = self._new_id()
+        self.stored[copied] = StoredEvent(
+            copied, original.mailbox, original.calendar, copy.deepcopy(original.fields)
+        )
+        self._changed(original.mailbox, original.calendar, copied)
+        return copied
 
     def in_calendar(self, mailbox: str, calendar: str) -> list[StoredEvent]:
         return [
