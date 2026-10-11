@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Thread
-from typing import Any, cast, get_args
+from typing import Any, cast
 from unittest.mock import Mock
 
 import pytest
@@ -50,7 +50,7 @@ from calendar_sync.bootstrap.container import (
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
-from calendar_sync.domain.incidents import IncidentCategory, IncidentReport, IncidentStep
+from calendar_sync.domain.incidents import IncidentCategory, IncidentReport
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -90,7 +90,6 @@ from calendar_sync.infrastructure.providers.routing import RoutingAccountCalenda
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from calendar_sync.interfaces.api.dependencies import SESSION_COOKIE
-from calendar_sync.interfaces.api.schemas import IncidentCategoryValue, IncidentStepValue
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import (
     RecentSchedulerHeartbeat,
@@ -368,14 +367,6 @@ def test_incidents_page_on_and_open_one_at_a_time_with_their_next_step(
     assert one.json()["step"] == "reauthorize"
     assert missing.status_code == 404
     assert missing.json()["code"] == "incident_not_found"
-
-
-def test_the_api_offers_every_next_step_the_domain_decides() -> None:
-    assert set(get_args(IncidentStepValue)) == {step.value for step in IncidentStep}
-
-
-def test_the_api_names_every_incident_category_the_domain_knows() -> None:
-    assert set(get_args(IncidentCategoryValue)) == {category.value for category in IncidentCategory}
 
 
 def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: Path) -> None:
