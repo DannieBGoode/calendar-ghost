@@ -94,7 +94,9 @@ from the Operation Key, which Graph documents as the identifier that keeps a ret
 creating the event twice
 ([event resource](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0)).
 A create whose answer timed out after Graph stored the event is then retried safely, even before the
-property filter can see it.
+property filter can see it. The event a POST answers with may be one stored long before and changed
+since, so it is read back with its properties, and adopted only if its Managed Origin is still the
+rule and source creating it; otherwise it is a `ProjectionOwnershipMismatch` too.
 
 ### Change feed: rebuilding series from v1.0
 

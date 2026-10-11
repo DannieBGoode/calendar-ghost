@@ -368,8 +368,15 @@ class OutlookCalendarProvider:
                 self._token(destination.connected_account_id),
                 body=body,
             )
-            # Graph answers without the extended properties it was given; they are as written.
-            return CreatedProjection(_written(created, body, destination))
+            # Graph answers without extended properties, and a repeated `transactionId` with the
+            # event it stored then, which may have changed since: it is read back as it is now.
+            stored = self._read(destination, _required_id(created))
+        if stored is None:
+            raise self._unproven("Outlook did not answer the event it created")
+        event = _translate(stored, destination)
+        if not _owned(event.managed_origin, rule_id, source):
+            raise _mismatch("Outlook event does not carry compatible ownership metadata")
+        return CreatedProjection(event)
 
     def update_projection(
         self,
@@ -845,6 +852,13 @@ def _written(
         {**answer, "singleValueExtendedProperties": body["singleValueExtendedProperties"]},
         calendar,
     )
+
+
+def _required_id(item: Mapping[str, Any]) -> str:
+    event_id = item.get("id")
+    if not isinstance(event_id, str) or not event_id:
+        raise GraphRefusal(None)
+    return event_id
 
 
 def _mismatch(detail: str) -> ProjectionOwnershipMismatch:

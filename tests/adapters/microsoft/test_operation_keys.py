@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 
-from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch, ProviderFailure
 from calendar_sync.domain.model import (
     EventId,
     EventProjection,
@@ -21,6 +21,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
+from calendar_sync.infrastructure.microsoft.translation import OPERATION_PROPERTY, RULE_PROPERTY
 from tests.adapters.microsoft.test_calendar_provider_contract import MAILBOXES, outlook
 from tests.fake_microsoft_graph_api import FakeMicrosoftGraph
 from tests.helpers import endpoint
@@ -90,3 +91,20 @@ def test_a_create_that_timed_out_after_graph_stored_it_is_not_made_twice() -> No
     posted = [body for method, _, body in graph.events.writes if method == "POST"]
     assert [body.get("transactionId") for body in posted] == [posted[0]["transactionId"]]
     assert posted[0]["transactionId"]
+
+
+def test_an_event_a_retried_create_answers_with_is_adopted_only_if_it_is_still_owned() -> None:
+    provider, graph = outlook()
+    source = EventRef(SOURCE, EventId("google-dentist"))
+    first = provider.create_projection(DESTINATION, source, RULE, PROJECTION, "key-1")
+    stored = graph.events.stored[first.destination_event.reference.event_id.value]
+    # Since then, the event lost its Operation Key and was claimed by another rule, so the key's
+    # filter misses it; Graph still answers the repeated transactionId with it.
+    stored.fields["singleValueExtendedProperties"] = [
+        {"id": RULE_PROPERTY, "value": "foreign-rule"} if each["id"] == RULE_PROPERTY else each
+        for each in stored.fields["singleValueExtendedProperties"]
+        if each["id"] != OPERATION_PROPERTY
+    ]
+
+    with pytest.raises(ProjectionOwnershipMismatch):
+        provider.create_projection(DESTINATION, source, RULE, PROJECTION, "key-1")
