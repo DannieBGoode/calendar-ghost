@@ -11,6 +11,7 @@ from calendar_sync.application.sync.errors import (
     ProviderFailure,
     UnsupportedProjection,
 )
+from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
     CalendarReader,
     CreatedProjection,
@@ -463,6 +464,7 @@ def sync_use_case(factory: UnitOfWorkFactory, calendars: FakeCalendars) -> Execu
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
 

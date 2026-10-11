@@ -5,6 +5,7 @@ from typing import cast
 import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
+from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import CalendarReader, UnitOfWorkFactory
 from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.domain.model import (
@@ -50,6 +51,7 @@ def _preview(unit_of_work: UnitOfWorkFactory, provider: CalendarReader) -> Previ
         EventProjector(),
         FixedClock(),
         SyncDecisionService(EventProjector(), ProjectionFingerprinter()),
+        locks=RuleLocks(),
     )
 
 

@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
@@ -77,7 +78,7 @@ def _stored(
     incidents = InMemoryIncidentRepository(unit_of_work.database, USER)
     notifications = Notifications()
     lapses = LapsedAuthorizations(
-        unit_of_work, incidents, FixedClock(), notifications=notifications
+        unit_of_work, incidents, FixedClock(), notifications=notifications, locks=RuleLocks()
     )
     return incidents, notifications, lapses
 
@@ -88,7 +89,11 @@ def _installation() -> tuple[InMemoryUserUnitOfWorkFactory, Incidents, LapsedAut
         unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
         unit_of_work.state.providers[account] = ProviderKind.GOOGLE
     incidents = Incidents()
-    return unit_of_work, incidents, LapsedAuthorizations(unit_of_work, incidents, FixedClock())
+    return (
+        unit_of_work,
+        incidents,
+        LapsedAuthorizations(unit_of_work, incidents, FixedClock(), locks=RuleLocks()),
+    )
 
 
 def test_a_lapse_marks_the_account_and_opens_one_incident_for_it() -> None:

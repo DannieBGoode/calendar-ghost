@@ -152,7 +152,7 @@ class RuleHealth:
     records: RuleHealthRecords
     incidents: IncidentRepository
     clock: Clock
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
     notifications: IncidentNotifications | None = None
     policy: RuleHealthPolicy = field(default_factory=RuleHealthPolicy)
     lapses: LapsedAuthorizations = field(init=False)

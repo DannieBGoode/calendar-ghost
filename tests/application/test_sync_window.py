@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import CreatedProjection
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
@@ -125,6 +126,7 @@ def test_create_acknowledged_before_a_crash_is_adopted_after_it_leaves_the_windo
         fingerprinter,
         clock,
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
     sync.execute(rule().id)
     edge = replace(

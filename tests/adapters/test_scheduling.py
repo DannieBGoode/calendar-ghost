@@ -1600,6 +1600,7 @@ def test_a_queued_rule_does_not_run_once_its_user_is_disabled() -> None:
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=RuleLocks(),
     )
 
     def services_for(owner: UserId) -> ScheduledServices:

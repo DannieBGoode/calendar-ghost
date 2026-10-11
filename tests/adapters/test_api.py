@@ -1992,6 +1992,7 @@ def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_bloc
         fingerprinter,
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=adapters.locks,
     )
     synchronize.execute(rule().id)
     # The source is gone for good, so the full pass blocks its projection; the check that
@@ -2010,6 +2011,7 @@ def test_reconcile_now_reports_conflicts_apart_from_drift_and_lists_them_as_bloc
         ReconciliationService(fingerprinter),
         FixedClock(),
         UuidRunIdGenerator(),
+        locks=adapters.locks,
     )
     container = _with_services(container, reconcile_now=ReconcileNow(synchronize, reconcile))
 
@@ -3121,6 +3123,7 @@ def test_preview_reports_recurring_series_and_planned_actions(tmp_path: Path) ->
         EventProjector(),
         FixedClock(),
         SyncDecisionService(EventProjector(), fingerprinter),
+        locks=adapters.locks,
     )
 
     with TestClient(create_app(_with_services(container, preview_sync_rule=preview))) as client:

@@ -40,7 +40,7 @@ def test_changing_an_enabled_rule_pauses_it_and_audits_without_google_writes() -
     unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
 
-    changed = ChangeSyncRulePolicy(unit_of_work, FixedClock()).execute(
+    changed = ChangeSyncRulePolicy(unit_of_work, FixedClock(), locks=RuleLocks()).execute(
         rule().id,
         ProjectionContent.DETAILS,
         AllDaySyncPolicy.INCLUDE,
@@ -64,7 +64,7 @@ def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
     unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.ENABLED)
 
-    unchanged = ChangeSyncRulePolicy(unit_of_work, FixedClock()).execute(
+    unchanged = ChangeSyncRulePolicy(unit_of_work, FixedClock(), locks=RuleLocks()).execute(
         rule().id,
         ProjectionContent.BUSY_ONLY,
         AllDaySyncPolicy.INCLUDE,
@@ -79,7 +79,7 @@ def test_saving_the_same_policy_keeps_the_rule_enabled() -> None:
 def test_policy_change_is_blocked_for_missing_or_removing_rules() -> None:
     unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.REMOVING)
-    use_case = ChangeSyncRulePolicy(unit_of_work, FixedClock())
+    use_case = ChangeSyncRulePolicy(unit_of_work, FixedClock(), locks=RuleLocks())
 
     with pytest.raises(RuleNotFound):
         use_case.execute(
@@ -105,14 +105,14 @@ def test_details_report_mapping_count_and_latest_outcomes() -> None:
     synced = RuleRunOutcome(rule().id, RunKind.SYNC, datetime(2026, 9, 1, tzinfo=UTC), True)
     unit_of_work.state.outcomes[(rule().id, RunKind.SYNC)] = synced
 
-    details = GetSyncRuleDetails(unit_of_work).execute(rule().id)
+    details = GetSyncRuleDetails(unit_of_work, locks=RuleLocks()).execute(rule().id)
 
     assert details.rule == rule()
     assert details.mapping_count == 0
     assert details.last_sync == synced
     assert details.last_reconciliation is None
     with pytest.raises(RuleNotFound):
-        GetSyncRuleDetails(unit_of_work).execute(SyncRuleId("missing"))
+        GetSyncRuleDetails(unit_of_work, locks=RuleLocks()).execute(SyncRuleId("missing"))
 
 
 def test_policy_change_waits_for_an_in_flight_provider_write() -> None:

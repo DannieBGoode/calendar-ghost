@@ -84,7 +84,7 @@ class ExecuteSyncRule:
     fingerprinter: ProjectionFingerprinter
     clock: Clock
     run_ids: RunIdGenerator
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
     change_feeds: ChangeFeedCursors = field(init=False, repr=False)
     events: SynchronizeEvents = field(init=False, repr=False)

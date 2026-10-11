@@ -82,7 +82,7 @@ class PreviewSyncRule:
     projector: EventProjector
     clock: Clock
     decisions: SyncDecisionService
-    locks: RuleLocks = field(default_factory=RuleLocks)
+    locks: RuleLocks
     incidents: RecoveryIncidents | None = None
 
     def execute(self, rule_id: SyncRuleId) -> RulePreview:
