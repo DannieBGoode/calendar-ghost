@@ -90,18 +90,33 @@ reaches Outlook calendars through Microsoft Graph, for Microsoft 365 work or sch
 personal Outlook.com accounts. Outlook support is a preview until the checks in
 [ADR 0034](adr/0034-outlook-through-microsoft-graph.md) pass with real Microsoft accounts.
 
-1. Sign in to the [Microsoft Entra admin center](https://entra.microsoft.com/) with an account that
-   may register applications in a directory, and open **Entra ID → App registrations → New
-   registration**. Microsoft's [Register an application](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app)
+1. Sign in with an account that may register applications in a directory you control, and open
+   **App registrations → New registration**:
+   - With a work or school account, use the
+     [Microsoft Entra admin center](https://entra.microsoft.com/) (**Entra ID → App
+     registrations**). Your organization may require its IT administrator's approval.
+   - With a personal account, such as Outlook.com or Hotmail, use the
+     [Azure portal](https://portal.azure.com/) and search for **App registrations**; the Entra
+     admin center refuses personal accounts. A personal account needs a directory of its own:
+     signing up for a free [Azure account](https://azure.microsoft.com/free) creates one,
+     **Default Directory**, after Microsoft verifies a phone number and a card. Registering an
+     application charges nothing.
+   - Check the directory named at the top right before registering. An account that was invited
+     as a guest to another organization (its sign-in shows `#EXT#`) may be taken to that
+     organization's directory; choose **Settings → Directories + subscriptions** and switch to
+     your own.
+
+   Microsoft's [Register an application](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app)
    quickstart explains who may register one.
 2. Enter a name, such as `Calendar Ghost`, and choose **Supported account types**:
-   - **Accounts in any organizational directory and personal Microsoft accounts** lets both work or
-     school accounts and Outlook.com accounts connect. Keep `CALENDAR_SYNC_MICROSOFT_TENANT=common`.
-   - **Accounts in this organizational directory only** lets only your organization's accounts
-     connect. Set `CALENDAR_SYNC_MICROSOFT_TENANT` to the **Directory (tenant) ID** from the
-     application's **Overview**.
-   - **Personal Microsoft accounts only** lets only Outlook.com accounts connect. Set
-     `CALENDAR_SYNC_MICROSOFT_TENANT=consumers`.
+   - **Any Entra ID Tenant + Personal Microsoft accounts** (earlier named "Accounts in any
+     organizational directory and personal Microsoft accounts") lets both work or school accounts
+     and Outlook.com accounts connect. Keep `CALENDAR_SYNC_MICROSOFT_TENANT=common`.
+   - **Single tenant only** ("Accounts in this organizational directory only") lets only your
+     organization's accounts connect. Set `CALENDAR_SYNC_MICROSOFT_TENANT` to the **Directory
+     (tenant) ID** from the application's **Overview**.
+   - **Personal accounts only** ("Personal Microsoft accounts only") lets only Outlook.com accounts
+     connect. Set `CALENDAR_SYNC_MICROSOFT_TENANT=consumers`.
 3. Under **Redirect URI**, choose the **Web** platform and enter this exact address, then choose
    **Register**:
 

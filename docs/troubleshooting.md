@@ -312,7 +312,8 @@ instead set the user type to **Internal**, which has no 7-day limit.
 **Symptom.** Every person's Microsoft accounts stop at the same time, the likely cause reads
 "Microsoft no longer accepts this installation's OAuth client", and reauthorizing fails too.
 
-**Confirm.** In the [Microsoft Entra admin center](https://entra.microsoft.com/), open **App
+**Confirm.** In the [Microsoft Entra admin center](https://entra.microsoft.com/), or the
+[Azure portal](https://portal.azure.com/) for a directory a personal account owns, open **App
 registrations**, find the application whose **Application (client) ID** is
 `CALENDAR_SYNC_MICROSOFT_CLIENT_ID`, and open **Certificates & secrets**. The secret in
 `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET` has most likely expired: each secret has an expiry date,

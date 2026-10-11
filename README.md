@@ -166,8 +166,9 @@ photo. Profile access is optional; without it, accounts show initials.
 
 #### Microsoft
 
-In the [Microsoft Entra admin center](https://entra.microsoft.com/), register an application with
-**Accounts in any organizational directory and personal Microsoft accounts**, a **Web** redirect URI
+In the [Microsoft Entra admin center](https://entra.microsoft.com/), or in the
+[Azure portal](https://portal.azure.com/) with a personal account, register an application with
+**Any Entra ID Tenant + Personal Microsoft accounts**, a **Web** redirect URI
 of `http://localhost:8000/api/v1/oauth/microsoft/callback`, the delegated Microsoft Graph
 permissions `openid`, `email`, `offline_access`, `User.Read`, and `Calendars.ReadWrite`, and a client
 secret. The secret expires on a date you choose, at most 24 months away; note it and rotate the
