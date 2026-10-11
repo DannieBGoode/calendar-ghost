@@ -179,6 +179,7 @@ export function ActivityView({
   if (required.some((query) => query.error)) {
     return (
       <ActivityUnavailable
+        tab={tab}
         errors={required.map((query) => query.error)}
         refreshing={required.some((query) => query.isFetching)}
         onRetry={() => void Promise.all(required.map((query) => query.refetch()))}
@@ -212,10 +213,13 @@ export function ActivityView({
 }
 
 function ActivityUnavailable({
+  tab,
   errors,
   refreshing,
   onRetry,
 }: {
+  /** The tab that failed to load, so the page keeps its title. */
+  tab: ActivityTab
   errors: unknown[]
   refreshing: boolean
   onRetry: () => void
@@ -233,7 +237,7 @@ function ActivityUnavailable({
 
   return (
     <div className="page-section">
-      <ActivityHeading />
+      <ActivityHeading tab={tab} />
       <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
         <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
         <h2 id="activity-error-title">{t("activity.failure.title")}</h2>
@@ -372,7 +376,7 @@ function ActivityTabs({
 }
 
 /** The page names what its tab shows: what the rules did, or what needed attention. */
-function ActivityHeading({ tab = "history" }: { tab?: ActivityTab }) {
+function ActivityHeading({ tab }: { tab: ActivityTab }) {
   const { t } = useI18n()
   return (
     <div>

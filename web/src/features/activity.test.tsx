@@ -410,6 +410,12 @@ describe("ActivityView", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("Activity is temporarily unavailable")
   })
 
+  it("keeps the Incidents title when the incidents cannot load", async () => {
+    await renderActivity(testI18n(), { failIncidents: true }, "", "incidents")
+    expect(container.querySelector("h1")?.textContent).toBe("What needed attention")
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Activity is temporarily unavailable")
+  })
+
   it("opens a blocked Incident's events in History", async () => {
     await renderActivity(testI18n(), {}, "", { incidentId: "open-conflict" })
     const seeBlocked = [...container.querySelectorAll("button")].find((item) => item.textContent === "See blocked events")
