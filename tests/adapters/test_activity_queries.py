@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.activity import (
+from calendar_sync.application.operations.activity import (
     ActivityCategory,
     ActivityFilter,
     EntryEvents,
     activity_category,
 )
-from calendar_sync.application.ports import AccountStanding, OpenBlock
+from calendar_sync.application.operations.ports import AccountStanding, OpenBlock
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import SyncAction, SyncReason, SyncRuleId, TimedInterval
 from calendar_sync.infrastructure.persistence import activity_queries
@@ -20,7 +20,7 @@ from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteActivityQueries,
     SqliteOperationsQueries,
 )
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from tests.helpers import endpoint, rule
 from tests.users import RULE_ACCOUNTS, add_user, sqlite_units
 

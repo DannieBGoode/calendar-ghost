@@ -5,16 +5,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.locking import RuleWork, RuleWorkKind
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     AccountStanding,
     IncidentSummary,
     OpenBlock,
     OperationsOverview,
     SchedulerProgress,
 )
-from calendar_sync.application.rules import SyncRuleSummary
-from calendar_sync.application.status import (
+from calendar_sync.application.operations.status import (
     InstallationStatus,
     ProblemKind,
     StatusVerdict,
@@ -22,6 +20,8 @@ from calendar_sync.application.status import (
     calendar_display_name,
     rule_name,
 )
+from calendar_sync.application.sync.locking import RuleWork, RuleWorkKind
+from calendar_sync.application.sync.rules import SyncRuleSummary
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentMessage
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState

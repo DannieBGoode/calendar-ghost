@@ -9,12 +9,12 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence.connections import transaction
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
-from calendar_sync.infrastructure.persistence.sqlite import (
+from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
-    SqliteUnitOfWorkFactory,
-    initialize_database,
 )
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 from tests.contracts.persistence import PersistenceContract, PersistenceHarness
 from tests.helpers import NOW

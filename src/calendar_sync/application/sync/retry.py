@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable
 
-from calendar_sync.application.errors import ProviderFailure
+from calendar_sync.application.sync.errors import ProviderFailure
 
 RETRY_ATTEMPTS = 3
 RETRY_JITTER_SECONDS = 0.25

@@ -7,8 +7,8 @@ from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
-from calendar_sync.application.errors import STORAGE_BUSY_MESSAGE, StorageBusy
-from calendar_sync.application.ports import DatabaseUsage
+from calendar_sync.application.operations.errors import STORAGE_BUSY_MESSAGE, StorageBusy
+from calendar_sync.application.operations.ports import DatabaseUsage
 from calendar_sync.infrastructure.persistence.activity_queries import _BLOCK, _TITLE_OBSERVED
 from calendar_sync.infrastructure.persistence.connections import open_connection
 

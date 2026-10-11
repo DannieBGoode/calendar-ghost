@@ -10,10 +10,18 @@ from time import sleep
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind, RuleNotExecutable
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import CreatedProjection, ProviderChangeSet, UnitOfWorkFactory
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.errors import (
+    ProviderFailure,
+    ProviderFailureKind,
+    RuleNotExecutable,
+)
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
+    CreatedProjection,
+    ProviderChangeSet,
+    UnitOfWorkFactory,
+)
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -41,7 +49,7 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from tests.helpers import NOW, event, rescheduled, rule
 from tests.users import USER, sqlite_units
 

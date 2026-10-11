@@ -12,13 +12,13 @@ from datetime import datetime
 from threading import Lock
 from typing import Protocol
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AuthorizationNotConfigured,
     ConnectedAccountNotFound,
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.ports import (
     AccountAccess,
     AccountCalendars,
     CalendarProvider,

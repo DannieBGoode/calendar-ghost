@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from calendar_sync.application.ports import CauseSighting
+from calendar_sync.application.operations.ports import CauseSighting
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.causes import ADMINISTRATOR_CAUSES, Cause
 

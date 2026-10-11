@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     DuplicateDirectionalRelationship,
     NotACalendarChange,
     ProjectionOwnershipMismatch,
@@ -16,10 +16,10 @@ from calendar_sync.application.errors import (
     RemovalRequiresProvider,
     ReplacementInterrupted,
 )
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import AccountAuthorizations, ProjectionDeleter
-from calendar_sync.application.removal import RemoveSyncRule
-from calendar_sync.application.rules import CreateSyncRule, ReplaceSyncRuleCalendars
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import AccountAuthorizations, ProjectionDeleter
+from calendar_sync.application.sync.removal import RemoveSyncRule
+from calendar_sync.application.sync.rules import CreateSyncRule, ReplaceSyncRuleCalendars
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import (
     CalendarEvent,

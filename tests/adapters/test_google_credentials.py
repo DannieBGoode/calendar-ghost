@@ -7,12 +7,15 @@ import pytest
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 
-from calendar_sync.application.errors import AccountAccessCheckFailed, ConnectedAccountDisconnected
+from calendar_sync.application.sync.errors import (
+    AccountAccessCheckFailed,
+    ConnectedAccountDisconnected,
+)
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.users import USER, add_user

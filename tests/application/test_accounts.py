@@ -7,22 +7,22 @@ from typing import cast
 
 import pytest
 
-from calendar_sync.application.accounts import (
+from calendar_sync.application.sync.accounts import (
     CheckAccountAccess,
     DeleteConnectedAccount,
     DisconnectConnectedAccount,
     DiscoverCalendars,
     ListConnectedAccounts,
 )
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
     ProviderFailureKind,
 )
-from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
     AccountAccess,
     CalendarAccess,
     DiscoveredCalendar,

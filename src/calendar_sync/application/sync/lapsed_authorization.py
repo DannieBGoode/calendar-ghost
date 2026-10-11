@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from calendar_sync.application.errors import ProviderFailure
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
-    Clock,
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
     IncidentNotifications,
     IncidentRepository,
     UnitOfWorkFactory,

@@ -1,16 +1,15 @@
+"""Errors of synchronization: rules, Connected Accounts, and provider calls."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
-
-
-class ApplicationError(Exception):
-    """Base class for use-case failures."""
 
 
 class RuleNotExecutable(ApplicationError):
@@ -150,46 +149,6 @@ class ReplacementInterrupted(ApplicationError):
         )
 
 
-class InfrastructureFailure(ApplicationError):
-    """A local adapter failed to fulfill its contract."""
-
-
-class AdminAlreadyConfigured(ApplicationError):
-    """The installation already has its first User."""
-
-
-class PasswordPolicyViolation(ApplicationError):
-    """A proposed password is too weak."""
-
-
-class IncorrectCredentials(ApplicationError):
-    """No User signs in with this email and password; which part was wrong is not said."""
-
-
-class IncorrectPassword(ApplicationError):
-    """The signed-in User's current password, asked for to confirm a change, is wrong."""
-
-
-class SignInThrottled(ApplicationError):
-    """Too many failed sign-ins for this email or from this client; try again later."""
-
-    def __init__(self, retry_after: float) -> None:
-        self.retry_after = max(1, round(retry_after))
-        super().__init__(f"too many failed sign-ins; try again in {self.retry_after} seconds")
-
-
-class UserDisabled(ApplicationError):
-    """An Installation Administrator has stopped this User from signing in."""
-
-
-class EmailTaken(ApplicationError):
-    """Another User already signs in with this email."""
-
-
-class EmailRequired(ApplicationError):
-    """The User must add an email before anything else."""
-
-
 class ConnectedAccountNotFound(ApplicationError):
     """The requested Connected Account does not exist."""
 
@@ -236,42 +195,3 @@ class AccountAccessCheckFailed(ApplicationError):
         """How the provider refused, so an authorization refusal can lapse the account."""
         self.cause = cause
         """Why the provider refused, so the lapse it records says who fixes it (ADR 0031)."""
-
-
-class ActivityEventNotFound(ApplicationError):
-    """The Activity entry does not exist or names no source event."""
-
-
-class ActivityRuleRemoved(ApplicationError):
-    """The Activity entry's rule was removed, so its calendars are no longer known."""
-
-
-class EventInspectionUnavailable(ApplicationError):
-    """Events cannot be read live without a configured calendar provider."""
-
-
-class InvalidActivityAge(ApplicationError):
-    """Activity can be cleared only from one of the offered ages."""
-
-
-STORAGE_BUSY_MESSAGE = (
-    "Old Activity was cleared, but its space could not be reclaimed while a rule is "
-    "synchronizing. Try again when it finishes."
-)
-
-
-class StorageBusy(ApplicationError):
-    """Rule work kept the database from being compacted.
-
-    Raised by the storage use case when a rule's lock cannot be acquired before its deadline, and
-    by the SQLite adapter when `VACUUM` itself reports the database is locked -- a database user
-    rule locks do not cover, such as a lifecycle change, Activity read, or health write.
-    """
-
-
-class FileLoggingOff(ApplicationError):
-    """The installation keeps no log files to read or purge."""
-
-
-class InvalidIntegrationTokenName(ValueError):
-    """An Integration Token name must be 1 to 80 printable characters."""

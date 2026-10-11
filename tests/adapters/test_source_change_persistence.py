@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 
-from calendar_sync.application.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import (
@@ -18,8 +18,8 @@ from calendar_sync.domain.model import (
     SyncReason,
     TimedInterval,
 )
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.source_changes import open_change_values
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 from tests.fake_calendar import FakeCalendars, sync_use_case
 from tests.helpers import NOW, endpoint, event, rule

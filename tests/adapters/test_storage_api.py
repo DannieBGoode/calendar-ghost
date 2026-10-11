@@ -83,8 +83,8 @@ def test_clearing_activity_answers_what_was_removed(tmp_path: Path) -> None:
 def test_clearing_while_a_rule_runs_is_a_conflict(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from calendar_sync.application.errors import StorageBusy
-    from calendar_sync.application.storage import StorageAdministration
+    from calendar_sync.application.operations.errors import StorageBusy
+    from calendar_sync.application.operations.storage import StorageAdministration
 
     def busy(self: StorageAdministration, older_than_days: int) -> object:
         raise StorageBusy("Old Activity was cleared, but its space could not be reclaimed")

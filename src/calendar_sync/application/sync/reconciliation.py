@@ -7,25 +7,25 @@ from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RuleNotExecutable,
     RuleNotFound,
 )
-from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.ports import (
     CalendarReader,
-    Clock,
     FullPassRecords,
     ProviderCallStats,
     ProviderCallTally,
     RunIdGenerator,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.resource_use import record_provider_calls
-from calendar_sync.application.run_log import UntalliedProviderCalls, call_summary, duration
-from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
+from calendar_sync.application.sync.resource_use import record_provider_calls
+from calendar_sync.application.sync.run_log import UntalliedProviderCalls, call_summary, duration
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import (
     CalendarEvent,

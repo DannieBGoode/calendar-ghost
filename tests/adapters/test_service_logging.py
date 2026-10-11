@@ -36,13 +36,15 @@ def test_lines_are_written_once_to_stderr_with_a_utc_timestamp(
     configure_logging("info")
     configure_logging("INFO")
 
-    logging.getLogger("calendar_sync.application.sync_run").info("run started rule=r1 run=ab12")
-    logging.getLogger("calendar_sync.application.sync_run").debug("google call op=events.get")
+    logging.getLogger("calendar_sync.application.sync.sync_run").info(
+        "run started rule=r1 run=ab12"
+    )
+    logging.getLogger("calendar_sync.application.sync.sync_run").debug("google call op=events.get")
 
     assert len(own_handlers(service_logger)) == 1
     err = capsys.readouterr().err
     assert re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z INFO calendar_sync\.application\.sync_run "
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z INFO calendar_sync\.application\.sync\.sync_run "
         r"run started rule=r1 run=ab12\n",
         err,
     )

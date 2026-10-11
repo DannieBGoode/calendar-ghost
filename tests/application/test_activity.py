@@ -1,22 +1,20 @@
 import pytest
 
-from calendar_sync.application.activity import (
+from calendar_sync.application.operations.activity import (
     ActivityCategory,
     Dashboard,
     EntryEvents,
     InspectActivityEvent,
     activity_category,
 )
-from calendar_sync.application.errors import (
+from calendar_sync.application.operations.errors import (
     ActivityEventNotFound,
     ActivityRuleRemoved,
     EventInspectionUnavailable,
 )
-from calendar_sync.application.ports import OpenBlock, OperationsOverview
+from calendar_sync.application.operations.ports import OpenBlock, OperationsOverview
 from calendar_sync.domain.model import EventId, EventRef, SyncReason, SyncRuleState
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUnitOfWorkFactory,
-)
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars
 from tests.helpers import event, rule
 from tests.users import USER

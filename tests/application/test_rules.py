@@ -5,9 +5,9 @@ from threading import Thread
 
 import pytest
 
-from calendar_sync.application.errors import ConnectedAccountRequired, RuleNotFound
-from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.rules import (
+from calendar_sync.application.sync.errors import ConnectedAccountRequired, RuleNotFound
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,
     CreateDraftSyncRule,
     CreateSyncRule,

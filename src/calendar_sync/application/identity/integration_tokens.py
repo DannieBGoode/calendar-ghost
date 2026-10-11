@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from calendar_sync.application.errors import InvalidIntegrationTokenName
+from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
 
 TOKEN_PREFIX = "cgs_"  # noqa: S105
 # The prefix and 32 random bytes in unpadded URL-safe base64.

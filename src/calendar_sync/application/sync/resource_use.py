@@ -9,7 +9,8 @@ from __future__ import annotations
 import logging
 from datetime import UTC, date, timedelta
 
-from calendar_sync.application.ports import Clock, ProviderCallTally, UnitOfWorkFactory
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.ports import ProviderCallTally, UnitOfWorkFactory
 
 logger = logging.getLogger(__name__)
 

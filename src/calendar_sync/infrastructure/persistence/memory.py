@@ -7,30 +7,32 @@ from datetime import date, datetime
 from types import TracebackType
 from typing import Self
 
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     AccountStanding,
+    CauseSighting,
+    InstallationUnitOfWork,
+    OperationsOverview,
+    ProviderCallUse,
+    RecordedRule,
+    ResourceUse,
+    StatusRecords,
+)
+from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.ports import (
     AuditRepository,
     CalendarNameRepository,
-    CauseSighting,
     ConnectedAccountRecords,
     DiscoveredCalendar,
     EventMappingRepository,
     ExceptionReplayRepository,
-    InstallationUnitOfWork,
     OccurrenceMappingRepository,
-    OperationsOverview,
     ProviderCallCounts,
     ProviderCallRepository,
-    ProviderCallUse,
-    RecordedRule,
-    ResourceUse,
     RulePreviewRepository,
     RulePreviewSummary,
     RuleRunOutcomeRepository,
     ScheduledRule,
     SourceObservationRepository,
-    StatusRecords,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,

@@ -7,20 +7,20 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.operations.errors import (
     STORAGE_BUSY_MESSAGE,
     FileLoggingOff,
     InvalidActivityAge,
     StorageBusy,
 )
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
-    Clock,
+from calendar_sync.application.operations.ports import (
     DatabaseStorage,
     DatabaseUsage,
     LogFiles,
     LogUsage,
 )
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.locking import RuleLocks
 
 logger = logging.getLogger(__name__)
 

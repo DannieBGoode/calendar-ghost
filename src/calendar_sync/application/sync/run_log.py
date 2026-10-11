@@ -9,7 +9,7 @@ from __future__ import annotations
 from contextlib import AbstractContextManager, nullcontext
 from datetime import timedelta
 
-from calendar_sync.application.ports import ProviderCallTally
+from calendar_sync.application.sync.ports import ProviderCallTally
 
 
 class UntalliedProviderCalls:

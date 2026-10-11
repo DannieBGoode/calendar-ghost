@@ -9,7 +9,7 @@ from __future__ import annotations
 import secrets
 from dataclasses import dataclass, field
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import (
     AdminAlreadyConfigured,
     IncorrectCredentials,
     IncorrectPassword,
@@ -17,23 +17,15 @@ from calendar_sync.application.errors import (
     SignInThrottled,
     UserDisabled,
 )
-from calendar_sync.application.ports import (
-    Clock,
-    IdGenerator,
+from calendar_sync.application.identity.ports import (
     PasswordHasher,
     Session,
     Sessions,
     SignInThrottle,
     UserDirectory,
 )
-from calendar_sync.domain.access import (
-    InvalidEmail,
-    Role,
-    User,
-    UserId,
-    UserState,
-    email_address,
-)
+from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.domain.access import InvalidEmail, Role, User, UserId, UserState, email_address
 
 PASSWORD_MINIMUM = 12
 

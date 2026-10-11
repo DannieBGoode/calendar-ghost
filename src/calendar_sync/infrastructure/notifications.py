@@ -11,7 +11,7 @@ from typing import Protocol
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from calendar_sync.application.installation_health import (
+from calendar_sync.application.operations.installation_health import (
     InstallationIncident,
     InstallationIncidentKind,
 )

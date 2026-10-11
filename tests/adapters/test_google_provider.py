@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.auth.exceptions import RefreshError, TransportError
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
     ProviderFailureKind,

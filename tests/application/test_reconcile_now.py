@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
-from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.errors import RuleNotExecutable
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.audit import AuditAction, AuditOutcome
 from calendar_sync.domain.model import (
     EventId,

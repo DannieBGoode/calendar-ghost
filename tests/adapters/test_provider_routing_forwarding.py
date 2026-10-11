@@ -14,8 +14,8 @@ from typing import cast
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.ports import (
     CalendarProvider,
     CalendarReader,
     OccurrenceWriter,

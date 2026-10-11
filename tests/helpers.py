@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 
-from calendar_sync.application.ports import Clock, SchedulerProgress
+from calendar_sync.application.operations.ports import SchedulerProgress
+from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.model import (
     AllDayRange,
     CalendarEndpoint,

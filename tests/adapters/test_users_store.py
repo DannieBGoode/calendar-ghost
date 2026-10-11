@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.errors import EmailTaken
-from calendar_sync.application.ports import IssuedLink, UserPage, UserQuery, UserSort
+from calendar_sync.application.identity.errors import EmailTaken
+from calendar_sync.application.identity.ports import IssuedLink, UserPage, UserQuery, UserSort
 from calendar_sync.domain.access import (
     LastAdministrator,
     OnlyMeNeedsOneUser,
@@ -18,12 +18,12 @@ from calendar_sync.domain.access import (
     UserId,
     UserState,
 )
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.registration import (
     SqliteInvitations,
     SqlitePasswordResetLinks,
     SqliteRegistrationSettings,
 )
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
 from calendar_sync.infrastructure.persistence.users import SqliteUserDirectory
 from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 from tests.adapters.test_user_migration import (

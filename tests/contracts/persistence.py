@@ -12,16 +12,18 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     AccountStanding,
-    CalendarAccess,
     CauseSighting,
-    DiscoveredCalendar,
     InstallationUnitOfWorkFactory,
-    ProviderCallCounts,
     ProviderCallUse,
     RecordedRule,
+)
+from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.ports import (
+    CalendarAccess,
+    DiscoveredCalendar,
+    ProviderCallCounts,
     RulePreviewSummary,
     UnitOfWork,
     UnitOfWorkFactory,

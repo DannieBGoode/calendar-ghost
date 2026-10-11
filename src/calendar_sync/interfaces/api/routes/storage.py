@@ -6,9 +6,13 @@ from typing import Annotated, Protocol
 from fastapi import APIRouter, Depends, Query, Response, status
 from fastapi.responses import StreamingResponse
 
-from calendar_sync.application.errors import FileLoggingOff, InvalidActivityAge, StorageBusy
-from calendar_sync.application.ports import DatabaseUsage, LogUsage
-from calendar_sync.application.storage import ACTIVITY_AGES, StorageAdministration
+from calendar_sync.application.operations.errors import (
+    FileLoggingOff,
+    InvalidActivityAge,
+    StorageBusy,
+)
+from calendar_sync.application.operations.ports import DatabaseUsage, LogUsage
+from calendar_sync.application.operations.storage import ACTIVITY_AGES, StorageAdministration
 from calendar_sync.interfaces.api.dependencies import administrator, app_services
 from calendar_sync.interfaces.api.problems import problem_from
 from calendar_sync.interfaces.api.schemas import (

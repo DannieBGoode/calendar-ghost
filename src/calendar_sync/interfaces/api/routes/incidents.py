@@ -4,7 +4,7 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends
 
-from calendar_sync.application.activity import OperationsQueries
+from calendar_sync.application.operations.activity import OperationsQueries
 from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.schemas import IncidentResponse
 from calendar_sync.interfaces.api.status_payload import message_response

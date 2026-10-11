@@ -5,7 +5,7 @@ from typing import Any, ClassVar
 
 import pytest
 
-from calendar_sync.application.installation_health import (
+from calendar_sync.application.operations.installation_health import (
     InstallationIncident,
     InstallationIncidentKind,
 )

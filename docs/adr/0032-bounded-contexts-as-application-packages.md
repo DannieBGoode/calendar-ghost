@@ -22,10 +22,10 @@ states will not hold while it grows.
 
   | Package | Owns |
   | --- | --- |
-  | `application/sync` | Directional Sync Rules, previews, Sync Runs, occurrences, reconciliation, Rule Removal, Connected Accounts and Lapsed Authorization, rule health and the Incidents it reports, and the rule locks |
+  | `application/sync` | Directional Sync Rules, previews, Sync Runs, occurrences, reconciliation, Rule Removal, Connected Accounts and Lapsed Authorization, rule health and the Incidents it reports, the rule locks, and provider failures, retries, and call counts |
   | `application/identity` | Users, sign-in and sessions, administration, Invitations, Password Reset Links, and Integration Tokens |
   | `application/operations` | Activity, Installation Status, Installation Health and Installation Hints, the Operator Overview, and storage |
-  | `application/shared` | The base application error, provider failures, retries, the clock and identifier ports, and provider call counting |
+  | `application/shared` | The base application error and the clock and identifier ports, which every context uses |
 
   Each context declares its own ports in its own `ports.py`, and its own errors in its own
   `errors.py`.

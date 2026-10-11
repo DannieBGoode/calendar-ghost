@@ -5,11 +5,11 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Literal
 
-from calendar_sync.application.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
-from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.ports import (
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.ports import (
     CalendarReader,
-    Clock,
     RecoveryIncidents,
     RulePreviewSummary,
     UnitOfWork,

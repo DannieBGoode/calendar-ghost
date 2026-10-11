@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.ports import CreatedProjection
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.ports import CreatedProjection
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,

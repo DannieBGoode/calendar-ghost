@@ -13,14 +13,14 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from oauthlib.oauth2 import WebApplicationClient  # type: ignore[import-untyped]
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     CalendarPermissionRequired,
     ConnectedAccountDisconnected,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.ports import CalendarAccess, DiscoveredCalendar
+from calendar_sync.application.sync.ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
@@ -37,7 +37,7 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
     STATE_LIFETIME,
     SqliteAuthorizationStates,
 )
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher, InvalidMasterKey
 from tests.adapters.test_user_migration import LATEST_VERSION
 from tests.users import OTHER_USER, USER, add_user

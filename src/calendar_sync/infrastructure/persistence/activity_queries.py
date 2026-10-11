@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from calendar_sync.application.activity import (
+from calendar_sync.application.operations.activity import (
     BLOCK_ACTIONS,
     LEGACY_SKIP_REASON,
     NO_CHANGE_REASONS,
@@ -25,13 +25,13 @@ from calendar_sync.application.activity import (
     RecordedTime,
     activity_category,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     AccountStanding,
     IncidentSummary,
     OpenBlock,
     OperationsOverview,
 )
-from calendar_sync.application.sync_run import UNRECORDED_REASONS
+from calendar_sync.application.sync.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.causes import WITHOUT_CAUSE, Cause
 from calendar_sync.domain.incidents import IncidentMessage

@@ -1,8 +1,9 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 
-from calendar_sync.application.errors import (
-    ApplicationError,
+from calendar_sync.application.shared.errors import ApplicationError
+from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.application.sync.errors import (
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
     NotACalendarChange,
@@ -10,14 +11,9 @@ from calendar_sync.application.errors import (
     ReplacementInterrupted,
     RuleNotFound,
 )
-from calendar_sync.application.locking import RuleLocks, RuleWork
-from calendar_sync.application.ports import (
-    Clock,
-    IdGenerator,
-    RulePreviewSummary,
-    UnitOfWorkFactory,
-)
-from calendar_sync.application.removal import RemovalResult, RemoveSyncRule
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork
+from calendar_sync.application.sync.ports import RulePreviewSummary, UnitOfWorkFactory
+from calendar_sync.application.sync.removal import RemovalResult, RemoveSyncRule
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,

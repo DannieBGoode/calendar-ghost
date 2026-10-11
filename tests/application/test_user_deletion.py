@@ -6,7 +6,7 @@ from datetime import datetime
 
 import pytest
 
-from calendar_sync.application.administration import (
+from calendar_sync.application.identity.administration import (
     AdministratorRequired,
     DeleteOwnAccount,
     DeleteUser,
@@ -17,15 +17,15 @@ from calendar_sync.application.administration import (
     UserDeletionInterrupted,
     YourOwnDeletion,
 )
-from calendar_sync.application.errors import (
-    IncorrectPassword,
+from calendar_sync.application.identity.errors import IncorrectPassword
+from calendar_sync.application.sync.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RemovalRequiresAuthorization,
 )
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import UnitOfWorkFactory
-from calendar_sync.application.removal import RemoveSyncRule
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.domain.access import (
     LastAdministrator,
     RegistrationPolicy,

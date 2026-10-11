@@ -81,8 +81,13 @@ web/ and interfaces/  ->  application/  ->  domain/
 
 - `src/calendar_sync/domain/` is provider- and framework-independent. It cannot import application,
   infrastructure, interfaces, or bootstrap modules.
-- `src/calendar_sync/application/` coordinates use cases through protocols in `application/ports.py`.
-  It cannot import concrete Google, SQLite, scheduler, notification, or Web API adapters.
+- `src/calendar_sync/application/` coordinates use cases through protocols. It cannot import
+  concrete Google, SQLite, scheduler, notification, or Web API adapters.
+- The application has one package per bounded context (ADR 0032): `sync`, `identity`, and
+  `operations`, with `shared` below them. Each declares its own ports in `ports.py` and its own
+  errors in `errors.py`. Contexts depend only downward, `operations` → `identity` → `sync` →
+  `shared`, and `lint-imports` fails otherwise. Put a new use case in the context whose language
+  it speaks; a glossary concept that several contexts name belongs in `domain/`.
 - `src/calendar_sync/infrastructure/` owns Google payload translation, OAuth, SQLite, scheduling,
   notifications, and cryptography.
 - `src/calendar_sync/interfaces/` owns HTTP schemas, routes, sessions, and serving the compiled UI.

@@ -11,7 +11,7 @@ from typing import Any, cast
 import pytest
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.ports import IntegrationTokenScope
+from calendar_sync.application.identity.ports import IntegrationTokenScope
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
 from calendar_sync.domain.access import UserId

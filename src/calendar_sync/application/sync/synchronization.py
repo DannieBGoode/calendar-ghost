@@ -5,17 +5,17 @@ from contextlib import nullcontext, suppress
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RuleNotExecutable,
     RuleNotFound,
 )
-from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.occurrences import SynchronizeOccurrences
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.occurrences import SynchronizeOccurrences
+from calendar_sync.application.sync.ports import (
     CalendarProvider,
-    Clock,
     ProviderCallStats,
     ProviderCallTally,
     ProviderChangeSet,
@@ -23,9 +23,9 @@ from calendar_sync.application.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.resource_use import record_provider_calls
-from calendar_sync.application.run_log import UntalliedProviderCalls
-from calendar_sync.application.sync_run import (
+from calendar_sync.application.sync.resource_use import record_provider_calls
+from calendar_sync.application.sync.run_log import UntalliedProviderCalls
+from calendar_sync.application.sync.sync_run import (
     SOURCE_CHANGE_RETENTION,
     SyncRunContext,
     SyncRunLog,

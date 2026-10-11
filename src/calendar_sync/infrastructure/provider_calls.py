@@ -13,7 +13,7 @@ import logging
 from contextlib import AbstractContextManager
 from contextvars import ContextVar, Token
 
-from calendar_sync.application.ports import ProviderCallCounts, ProviderCallTally
+from calendar_sync.application.sync.ports import ProviderCallCounts, ProviderCallTally
 from calendar_sync.domain.accounts import ProviderKind
 
 logger = logging.getLogger(__name__)

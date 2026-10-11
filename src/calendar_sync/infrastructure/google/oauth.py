@@ -19,7 +19,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import UserDisabled
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     AuthorizationNotConfigured,
@@ -28,9 +29,8 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
     ProviderFailureKind,
-    UserDisabled,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.ports import (
     AccountAccess,
     AuthorizedAccount,
     CalendarAccess,

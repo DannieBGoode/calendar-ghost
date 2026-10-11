@@ -4,12 +4,12 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response, status
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import (
     IncorrectCredentials,
     SignInThrottled,
     UserDisabled,
 )
-from calendar_sync.application.identity import SignIn
+from calendar_sync.application.identity.sign_in import SignIn
 from calendar_sync.domain.access import User
 from calendar_sync.interfaces.api.dependencies import (
     SESSION_COOKIE,

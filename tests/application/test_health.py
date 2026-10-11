@@ -5,14 +5,14 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.health import (
+from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.health import (
     PROVIDER_INCIDENT_THRESHOLD,
     FailureResponse,
     RuleHealth,
     RuleHealthPolicy,
 )
-from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution

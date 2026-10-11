@@ -4,9 +4,9 @@ accounts or calendars."""
 from __future__ import annotations
 
 from calendar_sync import __version__
-from calendar_sync.application.installation_health import InstallationHealth
-from calendar_sync.application.operator_overview import UserOverview
-from calendar_sync.application.status import (
+from calendar_sync.application.operations.installation_health import InstallationHealth
+from calendar_sync.application.operations.operator_overview import UserOverview
+from calendar_sync.application.operations.status import (
     InstallationStatus,
     Problem,
     ProblemKind,

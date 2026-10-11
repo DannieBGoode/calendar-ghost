@@ -7,8 +7,8 @@ from typing import Any, cast
 import pytest
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.errors import ProviderFailure
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.interfaces.api.app import create_app
 from scripts.dev_preview import (
     PREVIEW_EMAIL,

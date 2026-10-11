@@ -4,16 +4,16 @@ from collections.abc import Iterable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AUTHORIZATION_FAILURES,
     AccountAccessCheckFailed,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
     ProviderFailure,
 )
-from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
     AccountAccess,
     AccountCalendars,
     ConnectedAccountRepository,

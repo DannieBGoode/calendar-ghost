@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from calendar_sync.application.ports import Session
+from calendar_sync.application.identity.ports import Session
 from calendar_sync.domain.access import UserId
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.users import SESSION_LIFETIME, SqliteSessions
 from tests.users import OTHER_USER, USER, add_user
 

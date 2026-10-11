@@ -4,16 +4,16 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from calendar_sync.application.installation_health import (
+from calendar_sync.application.operations.installation_health import (
     GetInstallationHealth,
     InstallationHealth,
     InstallationIncident,
     InstallationIncidentKind,
     installation_incidents,
 )
-from calendar_sync.application.installation_hints import HINT_WINDOW
-from calendar_sync.application.ports import CauseSighting, SchedulerProgress
-from calendar_sync.application.status import StatusVerdict
+from calendar_sync.application.operations.installation_hints import HINT_WINDOW
+from calendar_sync.application.operations.ports import CauseSighting, SchedulerProgress
+from calendar_sync.application.operations.status import StatusVerdict
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from calendar_sync.domain.causes import Cause
 from tests.identity_fakes import MemoryUsers

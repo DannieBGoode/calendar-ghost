@@ -8,11 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.errors import InvalidIntegrationTokenName
-from calendar_sync.application.ports import IntegrationTokenScope, IntegrationTokenSummary
+from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
+from calendar_sync.application.identity.ports import IntegrationTokenScope, IntegrationTokenSummary
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import token_hash
 from tests.users import USER, add_user
 

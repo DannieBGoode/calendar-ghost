@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import CreatedProjection
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import CreatedProjection
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -20,9 +20,7 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUserUnitOfWorkFactory,
-)
+from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from tests.application.test_run_logging import SteppedClock
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory
 from tests.helpers import event, rule

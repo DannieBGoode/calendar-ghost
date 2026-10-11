@@ -7,17 +7,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from calendar_sync.application.activity import OperationsQueries
-from calendar_sync.application.errors import ProviderFailureKind
-from calendar_sync.application.locking import RuleWorkKind
-from calendar_sync.application.ports import (
-    Clock,
+from calendar_sync.application.operations.activity import OperationsQueries
+from calendar_sync.application.operations.ports import (
     IncidentSummary,
     OperationsOverview,
     SchedulerHeartbeat,
     SchedulerProgress,
 )
-from calendar_sync.application.rules import ListSyncRules, SyncRuleSummary
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import ProviderFailureKind
+from calendar_sync.application.sync.locking import RuleWorkKind
+from calendar_sync.application.sync.rules import ListSyncRules, SyncRuleSummary
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentMessage
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState

@@ -11,29 +11,28 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 
-from calendar_sync.application.administration import (
+from calendar_sync.application.identity.administration import (
     AdministratorRequired,
     UserNotFound,
     require_administrator,
 )
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
-    Clock,
+from calendar_sync.application.identity.ports import UserDirectory, UserQuery
+from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
     ResourceUse,
     SchedulerHeartbeat,
     SchedulerProgress,
     StatusRecords,
-    UserDirectory,
-    UserQuery,
 )
-from calendar_sync.application.resource_use import first_counted_day
-from calendar_sync.application.rules import SyncRuleSummary
-from calendar_sync.application.status import (
+from calendar_sync.application.operations.status import (
     InstallationStatus,
     StatusVerdict,
     assess_installation,
 )
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.resource_use import first_counted_day
+from calendar_sync.application.sync.rules import SyncRuleSummary
 from calendar_sync.domain.access import User, UserId
 from calendar_sync.domain.model import CalendarEndpoint, SyncRule
 

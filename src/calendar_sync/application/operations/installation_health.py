@@ -14,19 +14,23 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 
-from calendar_sync.application.installation_hints import (
+from calendar_sync.application.identity.ports import UserDirectory
+from calendar_sync.application.operations.installation_hints import (
     HINT_WINDOW,
     InstallationHint,
     installation_hints,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     CauseSighting,
-    Clock,
     SchedulerHeartbeat,
     SchedulerProgress,
-    UserDirectory,
 )
-from calendar_sync.application.status import NEEDS_ATTENTION, StatusVerdict, stalled_since
+from calendar_sync.application.operations.status import (
+    NEEDS_ATTENTION,
+    StatusVerdict,
+    stalled_since,
+)
+from calendar_sync.application.shared.ports import Clock
 from calendar_sync.domain.access import UserId, UserState
 
 # Most urgent first. Nothing needing attention reads healthy before paused, and paused before

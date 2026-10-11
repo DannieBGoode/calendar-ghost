@@ -10,17 +10,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.operations.errors import (
     ActivityEventNotFound,
     ActivityRuleRemoved,
     EventInspectionUnavailable,
 )
-from calendar_sync.application.ports import (
-    CalendarReader,
-    IncidentSummary,
-    OperationsOverview,
-    UnitOfWorkFactory,
-)
+from calendar_sync.application.operations.ports import IncidentSummary, OperationsOverview
+from calendar_sync.application.sync.ports import CalendarReader, UnitOfWorkFactory
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventId,

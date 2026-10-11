@@ -6,15 +6,15 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Protocol
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import (
     AUTHORIZATION_FAILURES,
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
-    Clock,
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
     IncidentNotifications,
     IncidentRepository,
     RuleHealthRecords,

@@ -30,24 +30,23 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
-from calendar_sync.application.accounts import DiscoverCalendars, ListConnectedAccounts
-from calendar_sync.application.activity import InspectActivityEvent
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.identity import SetUpInstallation
-from calendar_sync.application.installation_health import GetInstallationHealth
-from calendar_sync.application.operator_overview import OperatorOverview, UserStatuses
-from calendar_sync.application.ports import (
+from calendar_sync.application.identity.sign_in import SetUpInstallation
+from calendar_sync.application.operations.activity import InspectActivityEvent
+from calendar_sync.application.operations.installation_health import GetInstallationHealth
+from calendar_sync.application.operations.operator_overview import OperatorOverview, UserStatuses
+from calendar_sync.application.operations.ports import CauseSighting, SchedulerProgress
+from calendar_sync.application.operations.status import GetInstallationStatus
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.accounts import DiscoverCalendars, ListConnectedAccounts
+from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.ports import (
     AccountAuthorization,
     AccountCalendars,
     CalendarAccess,
     CalendarProvider,
-    CauseSighting,
-    Clock,
     ConnectedAccountRepository,
     DiscoveredCalendar,
-    SchedulerProgress,
 )
-from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import (
     Adapters,

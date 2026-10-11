@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-from calendar_sync.application.installation_hints import (
+from calendar_sync.application.operations.installation_hints import (
     CAUSE_ANCHORS,
     TESTING_MODE_ANCHOR,
     UNRECOGNIZED_ANCHOR,

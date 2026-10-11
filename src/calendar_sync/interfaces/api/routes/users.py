@@ -11,7 +11,7 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 
-from calendar_sync.application.administration import (
+from calendar_sync.application.identity.administration import (
     AcceptInvitation,
     AdministratorRequired,
     ChangeRole,
@@ -37,18 +37,18 @@ from calendar_sync.application.administration import (
     YourOwnResetLink,
     YourOwnState,
 )
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import (
     EmailTaken,
     IncorrectCredentials,
     PasswordPolicyViolation,
 )
-from calendar_sync.application.operator_overview import (
+from calendar_sync.application.identity.ports import IssuedLink, UserQuery, UserSort
+from calendar_sync.application.operations.operator_overview import (
     OperatorOverview,
     OverviewQuery,
     UserOverview,
 )
-from calendar_sync.application.ports import IssuedLink, UserQuery, UserSort
-from calendar_sync.application.status import StatusVerdict
+from calendar_sync.application.operations.status import StatusVerdict
 from calendar_sync.domain.access import (
     InvalidEmail,
     LastAdministrator,

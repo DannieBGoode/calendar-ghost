@@ -7,17 +7,17 @@ from threading import Barrier, Thread
 
 import pytest
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.operations.ports import CauseSighting
+from calendar_sync.application.sync.errors import (
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.ports import (
     CalendarAccess,
-    CauseSighting,
     DiscoveredCalendar,
     RulePreviewSummary,
 )
-from calendar_sync.application.rules import CreateSyncRule
+from calendar_sync.application.sync.rules import CreateSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
@@ -48,11 +48,11 @@ from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteOperationsQueries
 from calendar_sync.infrastructure.persistence.health import SqliteIncidentRepository
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
-from calendar_sync.infrastructure.persistence.sqlite import (
+from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
-    initialize_database,
 )
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.adapters.test_user_migration import LATEST_VERSION, database_at_version
 from tests.helpers import NOW, endpoint, event, rule, week_start

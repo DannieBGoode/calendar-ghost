@@ -4,12 +4,12 @@ import sqlite3
 from datetime import UTC
 from pathlib import Path
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import UserDisabled
+from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.application.sync.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
-    UserDisabled,
 )
-from calendar_sync.application.ports import Clock, IdGenerator
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId

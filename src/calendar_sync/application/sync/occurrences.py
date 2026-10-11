@@ -4,9 +4,10 @@ import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import CalendarReader, Clock, OccurrenceWriter
-from calendar_sync.application.sync_run import (
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import CalendarReader, OccurrenceWriter
+from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
     has_live_occurrences,
     read_destination_series,

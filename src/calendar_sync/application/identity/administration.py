@@ -7,20 +7,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from calendar_sync.application.errors import (
-    ApplicationError,
-    EmailTaken,
-    IncorrectPassword,
-    RemovalInterrupted,
-    RemovalRequiresAuthorization,
-    RemovalRequiresProvider,
-    RuleNotFound,
-    SignInThrottled,
-)
-from calendar_sync.application.identity import require_password, start_session
-from calendar_sync.application.ports import (
-    Clock,
-    IdGenerator,
+from calendar_sync.application.identity.errors import EmailTaken, IncorrectPassword, SignInThrottled
+from calendar_sync.application.identity.ports import (
     Invitations,
     IssuedLink,
     PasswordHasher,
@@ -30,10 +18,19 @@ from calendar_sync.application.ports import (
     Session,
     Sessions,
     SignInThrottle,
-    UnitOfWorkFactory,
     UserDirectory,
 )
-from calendar_sync.application.removal import RemoveSyncRule
+from calendar_sync.application.identity.sign_in import require_password, start_session
+from calendar_sync.application.shared.errors import ApplicationError
+from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.application.sync.errors import (
+    RemovalInterrupted,
+    RemovalRequiresAuthorization,
+    RemovalRequiresProvider,
+    RuleNotFound,
+)
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
+from calendar_sync.application.sync.removal import RemoveSyncRule
 from calendar_sync.domain.access import (
     LastAdministrator,
     OnlyMeNeedsOneUser,
