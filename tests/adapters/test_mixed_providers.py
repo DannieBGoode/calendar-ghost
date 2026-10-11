@@ -9,7 +9,7 @@ from datetime import timedelta
 from typing import Any
 
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule
-from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import (
     ConnectedAccountId,
     EventStatus,
@@ -84,6 +84,13 @@ def _installation(*rules: SyncRule) -> Installation:
         },
     )
     factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    # The User's own Connected Accounts, one on each provider.
+    for account, kind in (
+        ("personal-account", ProviderKind.GOOGLE),
+        ("work-account", ProviderKind.OUTLOOK),
+    ):
+        factory.state.accounts[ConnectedAccountId(account)] = ConnectedAccountState.CONNECTED
+        factory.state.providers[ConnectedAccountId(account)] = kind
     with factory() as uow:
         for rule in rules:
             uow.rules.add(rule)

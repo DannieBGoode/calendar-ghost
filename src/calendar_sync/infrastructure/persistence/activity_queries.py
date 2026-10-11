@@ -90,7 +90,8 @@ def open_blocks(
         "a.source_event_id IS NOT NULL",
         f"""NOT EXISTS (
             SELECT 1 FROM audit_entries later
-            WHERE later.rule_id = a.rule_id AND later.source_event_id = a.source_event_id
+            WHERE later.rule_id = a.rule_id AND later.user_id = a.user_id
+                AND later.source_event_id = a.source_event_id
                 AND later.id > a.id {same_run}
         )""",  # noqa: S608
     ]
@@ -101,14 +102,15 @@ def open_blocks(
         conditions.append(
             f"""(
                 SELECT {_BLOCK.format(t="earlier")} FROM audit_entries earlier
-                WHERE earlier.rule_id = a.rule_id AND earlier.source_event_id = a.source_event_id
+                WHERE earlier.rule_id = a.rule_id AND earlier.user_id = a.user_id
+                    AND earlier.source_event_id = a.source_event_id
                     AND earlier.id <= :floor
                 ORDER BY earlier.id DESC LIMIT 1
             ) = 1"""  # noqa: S608
         )
     blocks: list[tuple[int, str]] = []
     for rule in rules:
-        floor = after if after is not None else _checked_floor(connection, rule)
+        floor = after if after is not None else _checked_floor(connection, rule, user_id)
         blocks.extend(
             (int(row[0]), rule)
             # Interpolates only constant SQL fragments and `?` placeholders; values stay bound.
@@ -123,9 +125,10 @@ def open_blocks(
     return sorted(blocks, reverse=True)
 
 
-def _checked_floor(connection: sqlite3.Connection, rule_id: str) -> int:
+def _checked_floor(connection: sqlite3.Connection, rule_id: str, user_id: str) -> int:
     row = connection.execute(
-        "SELECT audit_floor FROM rule_block_checks WHERE rule_id = ?", (rule_id,)
+        "SELECT audit_floor FROM rule_block_checks WHERE rule_id = ? AND user_id = ?",
+        (rule_id, user_id),
     ).fetchone()
     return int(row[0]) if row else 0
 
@@ -440,7 +443,8 @@ def _open_blocks_of(
         f"""
         SELECT a.id, a.rule_id, a.user_id
         FROM sync_rules r
-        LEFT JOIN rule_block_checks checked ON checked.rule_id = r.id
+        LEFT JOIN rule_block_checks checked
+            ON checked.rule_id = r.id AND checked.user_id = r.user_id
         JOIN audit_entries a INDEXED BY audit_entries_rule_id
             ON a.rule_id = r.id AND a.user_id = r.user_id
             AND a.id > COALESCE(checked.audit_floor, 0)
@@ -449,7 +453,8 @@ def _open_blocks_of(
             AND a.source_event_id IS NOT NULL
             AND NOT EXISTS (
                 SELECT 1 FROM audit_entries later
-                WHERE later.rule_id = a.rule_id AND later.source_event_id = a.source_event_id
+                WHERE later.rule_id = a.rule_id AND later.user_id = a.user_id
+                    AND later.source_event_id = a.source_event_id
                     AND later.id > a.id
             )
         ORDER BY a.id DESC
@@ -694,7 +699,8 @@ def _previous_names(connection: sqlite3.Connection, ids: Sequence[int]) -> dict[
                 p.event_all_day, p.event_recurring
             FROM audit_entries a JOIN audit_entries p ON p.id = (
                 SELECT id FROM audit_entries
-                WHERE rule_id = a.rule_id AND source_event_id = a.source_event_id
+                WHERE rule_id = a.rule_id AND user_id = a.user_id
+                    AND source_event_id = a.source_event_id
                     AND id < a.id AND {_TITLE_OBSERVED}
                 ORDER BY id DESC LIMIT 1
             )
@@ -716,7 +722,8 @@ def _repeated_repairs(connection: sqlite3.Connection, written: Sequence[int]) ->
             f"""
             SELECT a.id FROM audit_entries a JOIN audit_entries p ON p.id = (
                 SELECT id FROM audit_entries
-                WHERE rule_id = a.rule_id AND source_event_id = a.source_event_id
+                WHERE rule_id = a.rule_id AND user_id = a.user_id
+                    AND source_event_id = a.source_event_id
                     AND id < a.id
                 ORDER BY id DESC LIMIT 1
             )

@@ -52,12 +52,11 @@ from calendar_sync.infrastructure.persistence.health import SqliteIncidentReposi
 from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.adapters.test_user_migration import LATEST_VERSION, database_at_version
 from tests.helpers import NOW, endpoint, event, rule, week_start
-from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, sqlite_units
+from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, memory_units, sqlite_units
 
 
 def test_sqlite_rule_repository_round_trip(tmp_path: Path) -> None:
@@ -658,7 +657,7 @@ def test_calendar_names_record_only_changes_and_go_with_their_account(tmp_path: 
 
 
 def test_memory_adapter_keeps_calendar_names_of_existing_accounts() -> None:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    factory = memory_units()
     account = ConnectedAccountId("account-1")
     factory.state.accounts[account] = ConnectedAccountState.DISCONNECTED
     family = CalendarEndpoint(account, CalendarId("family"))
@@ -674,7 +673,7 @@ def test_memory_adapter_keeps_calendar_names_of_existing_accounts() -> None:
 
 
 def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    factory = memory_units()
     # Another direction, since SQLite refuses a second rule for one source and destination.
     other = replace(
         rule(), id=SyncRuleId("rule-2"), destination=endpoint("work-account", "other-calendar")
@@ -703,7 +702,7 @@ def test_memory_adapter_purges_a_rule_with_its_audit_entries() -> None:
 
 
 def test_memory_adapter_supports_removal_counts_and_outcomes() -> None:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    factory = memory_units()
     with factory() as uow:
         uow.rules.add(rule(state=SyncRuleState.PAUSED))
         uow.mappings.save(_mapping())

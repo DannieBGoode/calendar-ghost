@@ -203,6 +203,28 @@ def test_entries_name_the_event_by_its_last_observed_title(database: Path) -> No
     assert queries.entry(4) is None
 
 
+def test_entries_never_name_the_event_by_another_users_title(database: Path) -> None:
+    # Audit Entries outlive their rule, so another User's entries can name the same rule and
+    # event identifiers; neither their title nor their repair is this User's (ADR 0029).
+    other = add_user(database, UserId("user-2"))
+    with sqlite_units(database, user=other, accounts=())() as uow:
+        uow.audit.append(_entry("update", "destination_drift_repaired", title="Their secret"))
+        uow.commit()
+    _append(
+        database,
+        _entry("update", "destination_drift_repaired", run_id="run-2"),
+        _entry("remove_projection", None, run_id=None),
+    )
+    queries = SqliteActivityQueries(database, add_user(database))
+
+    repaired, removed = queries.entry(2), queries.entry(3)
+
+    assert repaired is not None
+    assert (repaired.event, repaired.repeated) == (None, False)
+    assert removed is not None
+    assert removed.event is None
+
+
 def test_entry_events_name_the_rule_and_events(database: Path) -> None:
     _append(database, _entry("create", "source_created"), _entry("policy_changed", None))
     queries = SqliteActivityQueries(database, add_user(database))

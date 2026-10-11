@@ -38,7 +38,6 @@ from calendar_sync.domain.services import (
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,
 )
 from tests.application.test_execute_sync_rule import (
@@ -55,11 +54,11 @@ from tests.fake_calendar import (
     sync_use_case,
 )
 from tests.helpers import NOW, endpoint, event, occurrence, rule, series, week_start
-from tests.users import USER
+from tests.users import memory_units
 
 
 def test_reconciliation_independently_proves_managed_projection() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
     projector = EventProjector()
@@ -87,7 +86,7 @@ def test_reconciliation_independently_proves_managed_projection() -> None:
 
 
 def test_reconciliation_records_its_outcome() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
     fingerprinter = ProjectionFingerprinter()
@@ -108,7 +107,7 @@ def test_reconciliation_records_its_outcome() -> None:
 
 
 def test_a_failed_reconciliation_records_why_the_provider_refused() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     provider = FakeCalendarProvider(event())
     refused = ProviderFailure(ProviderFailureKind.PERMANENT, "404", cause=Cause.CALENDAR_NOT_FOUND)
@@ -133,7 +132,7 @@ def test_a_failed_reconciliation_records_why_the_provider_refused() -> None:
 
 
 def test_reconciliation_waits_for_the_rule_lock_held_by_removal_or_sync() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     fingerprinter = ProjectionFingerprinter()
     locks = RuleLocks()

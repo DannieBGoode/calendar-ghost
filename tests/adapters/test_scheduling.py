@@ -90,7 +90,15 @@ from calendar_sync.infrastructure.scheduling import (
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import endpoint, event, rule
-from tests.users import OTHER_USER, RULE_ACCOUNTS, USER, add_user, sqlite_units
+from tests.users import (
+    OTHER_USER,
+    RULE_ACCOUNTS,
+    USER,
+    add_user,
+    memory_units,
+    rule_accounts,
+    sqlite_units,
+)
 
 
 class RecordingNotifications:
@@ -409,8 +417,8 @@ class FullPassRecordingExecuteRule:
 
 
 def test_daily_full_pass_is_due_per_rule_and_survives_a_restart() -> None:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
     second = replace(rule(), id=SyncRuleId("rule-2"), source=endpoint("other", "calendar"))
+    factory = memory_units(accounts=rule_accounts(rule(), second))
     with factory() as uow:
         uow.rules.add(rule())
         uow.rules.add(second)
@@ -458,22 +466,24 @@ class ConcurrencyRecordingExecuteRule:
 
 
 def _enabled_rules(count: int) -> InMemoryUserUnitOfWorkFactory:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    rules = [
+        replace(
+            rule(),
+            id=SyncRuleId(f"rule-{number}"),
+            source=endpoint(f"account-{number}", "calendar"),
+        )
+        for number in range(1, count + 1)
+    ]
+    factory = memory_units(accounts=rule_accounts(*rules))
     with factory() as uow:
-        for number in range(1, count + 1):
-            uow.rules.add(
-                replace(
-                    rule(),
-                    id=SyncRuleId(f"rule-{number}"),
-                    source=endpoint(f"account-{number}", "calendar"),
-                )
-            )
+        for each in rules:
+            uow.rules.add(each)
         uow.commit()
     return factory
 
 
 def _awaiting_reauthorization() -> InMemoryUserUnitOfWorkFactory:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    factory = memory_units()
     with factory() as uow:
         uow.rules.add(rule().degrade(awaiting_reauthorization=True))
         uow.commit()
@@ -502,8 +512,10 @@ def test_a_pass_first_resumes_rules_an_interrupted_restoration_left_stopped() ->
 
 def test_a_failure_to_resume_rules_never_stops_the_pass(caplog: pytest.LogCaptureFixture) -> None:
     units = _awaiting_reauthorization()
+    running = replace(rule(), id=SyncRuleId("running"), source=endpoint("other", "cal"))
+    memory_units(InMemoryUnitOfWorkFactory(units.database), accounts=rule_accounts(running))
     with units() as uow:
-        uow.rules.add(replace(rule(), id=SyncRuleId("running"), source=endpoint("other", "cal")))
+        uow.rules.add(running)
         uow.commit()
 
     class Failing(RecordingHealth):
@@ -721,7 +733,7 @@ def test_block_health_waits_for_a_rule_removal_in_progress(tmp_path: Path) -> No
 
 
 def test_a_scheduled_run_that_listed_everything_checks_blocks_as_the_daily_pass() -> None:
-    factory = InMemoryUnitOfWorkFactory().for_user(USER)
+    factory = memory_units()
     with factory() as uow:
         uow.rules.add(rule())
         uow.commit()
@@ -1019,7 +1031,7 @@ def test_legacy_and_corrupt_incident_messages_read_as_none(tmp_path: Path) -> No
 
 
 def test_each_scheduler_pass_forgets_change_values_of_every_rule() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule(state=SyncRuleState.PAUSED)
     now = datetime(2026, 9, 30, 10, tzinfo=UTC)
 
@@ -1041,7 +1053,7 @@ def test_each_scheduler_pass_forgets_change_values_of_every_rule() -> None:
 
 
 def test_each_scheduler_pass_forgets_provider_calls_older_than_30_days() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     today = date(2026, 9, 30)
     for days_ago in (0, 29, 30):
         unit_of_work.state.provider_calls[(ProviderKind.GOOGLE, today - timedelta(days_ago))] = (
@@ -1068,7 +1080,7 @@ def test_each_scheduler_pass_forgets_provider_calls_older_than_30_days() -> None
 def test_a_failed_pass_is_logged_and_the_next_interval_runs_again(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     opened = 0
 
     def locked_once() -> InstallationUnitOfWork:
@@ -1120,7 +1132,7 @@ def test_the_scheduler_reports_when_it_started_and_its_last_completed_pass() -> 
     clock = SteppingClock(datetime(2026, 10, 3, 9, 0, tzinfo=UTC))
     scheduler = _scheduler(
         RecordingExecuteRule([]),
-        InMemoryUnitOfWorkFactory().for_user(USER),
+        memory_units(),
         Mock(),
         clock=clock,
     )
@@ -1176,7 +1188,7 @@ def test_a_completed_pass_is_published_before_the_running_pass_is_cleared() -> N
     clock = ObservingClock(datetime(2026, 10, 3, 9, 0, tzinfo=UTC))
     scheduler = _scheduler(
         RecordingExecuteRule([]),
-        InMemoryUnitOfWorkFactory().for_user(USER),
+        memory_units(),
         Mock(),
         clock=clock,
     )
@@ -1193,7 +1205,7 @@ def test_a_completed_pass_is_published_before_the_running_pass_is_cleared() -> N
 
 
 def test_the_rules_a_pass_listed_are_published_only_when_it_completes() -> None:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     enabled = rule()
     paused = replace(rule(state=SyncRuleState.PAUSED), id=SyncRuleId("paused-rule"))
     unit_of_work.state.rules[enabled.id] = enabled
@@ -1507,10 +1519,21 @@ def test_a_refusal_from_before_reauthorization_neither_lapses_nor_stops(tmp_path
         assert connection.execute("SELECT COUNT(*) FROM incidents").fetchone() == (0,)
 
 
+def _theirs(rule_id: SyncRuleId) -> SyncRule:
+    """Another User's rule, on accounts of their own, as a rule's accounts must be its User's."""
+    return replace(
+        rule(),
+        id=rule_id,
+        source=endpoint("their-personal-account", "personal-calendar"),
+        destination=endpoint("their-work-account", "work-calendar"),
+    )
+
+
 def test_each_rule_runs_with_its_owners_services() -> None:
     database = InMemoryUnitOfWorkFactory()
-    theirs = replace(rule(), id=SyncRuleId("rule-2"))
+    theirs = _theirs(SyncRuleId("rule-2"))
     for user, owned in ((USER, rule()), (OTHER_USER, theirs)):
+        memory_units(database, user=user, accounts=rule_accounts(owned))
         with database.for_user(user)() as uow:
             uow.rules.add(owned)
             uow.commit()
@@ -1533,9 +1556,10 @@ def test_each_rule_runs_with_its_owners_services() -> None:
 
 def test_a_disabled_users_rules_are_held_until_they_are_enabled_again() -> None:
     database = InMemoryUnitOfWorkFactory()
-    for user, rule_id in ((USER, "rule-1"), (OTHER_USER, "rule-2")):
+    for user, owned in ((USER, rule()), (OTHER_USER, _theirs(SyncRuleId("rule-2")))):
+        memory_units(database, user=user, accounts=rule_accounts(owned))
         with database.for_user(user)() as uow:
-            uow.rules.add(replace(rule(), id=SyncRuleId(rule_id)))
+            uow.rules.add(owned)
             uow.commit()
     execute = FullPassRecordingExecuteRule()
     scheduler = _scheduler(execute, database.for_user(USER), RecordingHealth())
@@ -1553,8 +1577,9 @@ def test_a_disabled_users_rules_are_held_until_they_are_enabled_again() -> None:
 def test_a_queued_rule_does_not_run_once_its_user_is_disabled() -> None:
     """A pass lists rules before running them; a User disabled in between gets no writes."""
     database = InMemoryUnitOfWorkFactory()
-    theirs = replace(rule(), id=SyncRuleId("rule-2"))
+    theirs = _theirs(SyncRuleId("rule-2"))
     for user, owned in ((USER, rule()), (OTHER_USER, theirs)):
+        memory_units(database, user=user, accounts=rule_accounts(owned))
         with database.for_user(user)() as uow:
             uow.rules.add(owned)
             uow.commit()

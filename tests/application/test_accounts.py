@@ -40,7 +40,7 @@ from calendar_sync.infrastructure.persistence.memory import (
 )
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, endpoint
-from tests.users import OTHER_USER, USER
+from tests.users import OTHER_USER, USER, memory_units, rule_accounts
 
 ACCOUNT = ConnectedAccountId("personal")
 
@@ -78,7 +78,7 @@ class RecordingAccounts:
 
 
 def _with_rules(*rules: SyncRule) -> InMemoryUserUnitOfWorkFactory:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units(accounts=rule_accounts(*rules))
     with unit_of_work() as uow:
         for rule in rules:
             uow.rules.add(rule)
@@ -281,14 +281,14 @@ def test_deletion_purges_every_rule_using_the_account_and_then_the_account() -> 
 def test_deletion_is_refused_for_a_connected_or_unknown_account() -> None:
     affected = _rule("affected", ACCOUNT.value)
     connected, unit_of_work, _ = _deletion(affected, state=ConnectedAccountState.CONNECTED)
-    unknown, _, _ = _deletion(affected, state=None)
+    unknown, _, _ = _deletion(state=None)
 
     with pytest.raises(ConnectedAccountMustBeDisconnected):
         connected.execute(ACCOUNT)
     with pytest.raises(ConnectedAccountNotFound):
         unknown.execute(ACCOUNT)
 
-    assert unit_of_work.state.accounts == {ACCOUNT: ConnectedAccountState.CONNECTED}
+    assert unit_of_work.state.accounts[ACCOUNT] is ConnectedAccountState.CONNECTED
     assert list(unit_of_work.state.rules) == [affected.id]
 
 
@@ -338,7 +338,7 @@ def test_deletion_is_refused_when_the_account_is_reauthorized_while_it_waited() 
     worker.join(2)
 
     assert len(errors) == 1
-    assert unit_of_work.state.accounts == {ACCOUNT: ConnectedAccountState.CONNECTED}
+    assert unit_of_work.state.accounts[ACCOUNT] is ConnectedAccountState.CONNECTED
     assert list(unit_of_work.state.rules) == [affected.id]
 
 
@@ -371,7 +371,7 @@ def test_discovering_calendars_of_another_users_account_asks_no_provider() -> No
 
 
 def test_checking_access_of_another_users_account_asks_no_provider() -> None:
-    units = InMemoryUnitOfWorkFactory().for_user(USER)
+    units = memory_units()
     calendars = CountingCalendars()
     check = CheckAccountAccess(
         calendars,
@@ -408,7 +408,7 @@ class OpenedIncidents:
 
 
 def test_a_refused_access_check_records_why_the_provider_refused() -> None:
-    units = InMemoryUnitOfWorkFactory().for_user(USER)
+    units = memory_units()
     units.state.accounts[ACCOUNT] = ConnectedAccountState.CONNECTED
     incidents = OpenedIncidents()
     account = ConnectedAccount(

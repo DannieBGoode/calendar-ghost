@@ -19,7 +19,12 @@ from calendar_sync.application.operations.ports import (
     ProviderCallUse,
     RecordedRule,
 )
-from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.errors import (
+    DuplicateDirectionalRelationship,
+    IdentityCollision,
+    MissingReference,
+    RecordRefused,
+)
 from calendar_sync.application.sync.ports import (
     CalendarAccess,
     DiscoveredCalendar,
@@ -34,7 +39,12 @@ from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.changes import SourceObservation
-from calendar_sync.domain.incidents import IncidentCategory, IncidentReport, IncidentResolution
+from calendar_sync.domain.incidents import (
+    AccountAuthorization,
+    IncidentCategory,
+    IncidentReport,
+    IncidentResolution,
+)
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarId,
@@ -48,6 +58,7 @@ from calendar_sync.domain.model import (
     OccurrenceStart,
     OccurrenceState,
     ProjectionFingerprint,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     TimedInterval,
@@ -68,6 +79,7 @@ THEIR_SOURCE = endpoint("their-personal-account", "personal-calendar")
 THEIR_DESTINATION = endpoint("their-work-account", "work-calendar")
 """Another User's calendars, with the same calendar identifiers as RULE's."""
 DAY = timedelta(days=1)
+HOUR = timedelta(hours=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +91,6 @@ class PersistenceHarness:
     disconnect: Callable[[ConnectedAccountId, UserId], object]
     disable: Callable[[UserId], object]
     """Disable a User, as an Installation Administrator would outside any unit of work."""
-    refused: tuple[type[Exception], ...]
-    """What this storage raises for a record whose parent does not exist or is taken."""
     installation: InstallationUnitOfWorkFactory
     """Units of work across every User, as the scheduler and the Operator Overview read them."""
     incidents: Callable[[UserId], IncidentRepository]
@@ -137,6 +147,28 @@ def _account_incident(account_id: ConnectedAccountId) -> IncidentReport:
         IncidentCategory.AUTHENTICATION,
         "Authorization for Google Calendar expired",
         account_id=account_id,
+    )
+
+
+def _rule_incident(
+    rule_id: SyncRuleId, cause: Cause | None = Cause.CALENDAR_FORBIDDEN, key: str = ""
+) -> IncidentReport:
+    """The Incident a rule's provider failure opens."""
+    return IncidentReport(
+        key or f"provider:{rule_id.value}",
+        rule_id,
+        IncidentCategory.PERMANENT,
+        "Google Calendar rejected synchronization",
+        account_id=RULE.destination.connected_account_id,
+        cause=cause,
+    )
+
+
+def _block(
+    rule_id: SyncRuleId, event_id: str | None, reason: SyncReason | None = None
+) -> AuditEntry:
+    return AuditEntry(
+        NOW, rule_id, AuditAction.CONFLICT, AuditOutcome.BLOCKED, event_id, reason=reason
     )
 
 
@@ -261,6 +293,62 @@ class PersistenceContract:
             with pytest.raises(DuplicateDirectionalRelationship):
                 uow.rules.save(replace(OTHER_RULE, destination=RULE.destination))
 
+    def test_a_second_rule_with_one_identifier_is_refused(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            with pytest.raises(IdentityCollision):
+                uow.rules.add(replace(OTHER_RULE, id=RULE.id))
+
+    def test_every_refusal_is_a_record_refused(self, harness: PersistenceHarness) -> None:
+        """A use case can handle any refusal of any store as one error."""
+        assert issubclass(DuplicateDirectionalRelationship, RecordRefused)
+        assert issubclass(IdentityCollision, RecordRefused)
+        assert issubclass(MissingReference, RecordRefused)
+        with harness.unit_of_work() as uow, pytest.raises(RecordRefused):
+            uow.cursors.save(RULE.id, "cursor")
+
+    def test_a_rule_needs_accounts_its_user_has_when_the_unit_commits(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(THEIR_ACCOUNT, OTHER_USER)
+        unknown = replace(RULE, id=SyncRuleId("unknown"), source=endpoint("unknown", "calendar"))
+        theirs = replace(
+            RULE, id=SyncRuleId("theirs"), destination=endpoint(THEIR_ACCOUNT.value, "calendar")
+        )
+
+        for refused in (unknown, theirs):
+            with harness.unit_of_work() as uow:
+                # Accounts are checked at commit, so an account and its rules go in either order.
+                uow.rules.add(refused)
+                with pytest.raises(MissingReference):
+                    uow.commit()
+        with harness.unit_of_work() as uow:
+            assert uow.rules.list() == ()
+
+    def test_an_account_a_rule_still_names_is_deleted_only_with_the_rule(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.commit()
+        harness.disconnect_account(ACCOUNT)
+
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.delete_disconnected(ACCOUNT)
+            with pytest.raises(MissingReference):
+                uow.commit()
+        with harness.unit_of_work() as uow:
+            kept = uow.accounts.state(ACCOUNT)
+            assert uow.accounts.delete_disconnected(ACCOUNT)
+            uow.rules.purge(RULE.id)
+            uow.commit()
+
+        with harness.unit_of_work() as uow:
+            assert (kept, uow.accounts.state(ACCOUNT)) == (ConnectedAccountState.DISCONNECTED, None)
+            assert uow.rules.list() == ()
+
     def test_saving_an_unknown_rule_fails(self, harness: PersistenceHarness) -> None:
         with harness.unit_of_work() as uow, pytest.raises(KeyError):
             uow.rules.save(RULE)
@@ -322,6 +410,81 @@ class PersistenceContract:
             assert uow.rules.get(RULE.id) is None
             assert uow.mappings.count_for_rule(RULE.id) == 0
 
+    def test_removing_a_rule_resolves_its_open_incidents_when_the_unit_commits(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.add(OTHER_RULE)
+            uow.commit()
+        incidents = harness.incidents(USER)
+        for each in (RULE, OTHER_RULE):
+            assert incidents.open(_rule_incident(each.id), NOW)
+
+        with harness.unit_of_work() as uow:
+            uow.rules.remove(RULE.id)
+        with harness.installation() as installation:
+            uncommitted = installation.status_records([USER])[USER].incidents
+        with harness.unit_of_work() as uow:
+            uow.rules.remove(RULE.id)
+            uow.commit()
+        with harness.installation() as installation:
+            records = installation.status_records([USER])[USER]
+            seen = installation.failure_causes(NOW - HOUR)
+
+        assert {incident.rule_id for incident in uncommitted} == {
+            RULE.id.value,
+            OTHER_RULE.id.value,
+        }
+        assert [incident.rule_id for incident in records.incidents] == [OTHER_RULE.id.value]
+        assert records.overview.open_incidents == 1
+        # Resolved, not deleted: the removed rule's Incident is still a recent failure.
+        assert sorted(sighting.open for sighting in seen) == [False, True]
+
+    def test_a_unit_entered_again_forgets_the_incident_changes_it_did_not_commit(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.commit()
+        assert harness.incidents(USER).open(_rule_incident(RULE.id), NOW)
+        unit = harness.unit_of_work()
+
+        with unit as uow:
+            uow.rules.purge(RULE.id)
+        with unit as uow:
+            uow.commit()
+        with harness.installation() as installation:
+            records = installation.status_records([USER])[USER]
+
+        assert [incident.rule_id for incident in records.incidents] == [RULE.id.value]
+
+    def test_purging_a_rule_deletes_its_incidents_when_the_unit_commits(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.add(OTHER_RULE)
+            uow.commit()
+        incidents = harness.incidents(USER)
+        assert incidents.open(_rule_incident(RULE.id, key="provider:resolved"), NOW - HOUR)
+        incidents.resolve("provider:resolved", NOW, IncidentResolution.SYNC_SUCCEEDED)
+        for each in (RULE, OTHER_RULE):
+            assert incidents.open(_rule_incident(each.id), NOW)
+
+        with harness.unit_of_work() as uow:
+            uow.rules.purge(RULE.id)
+        with harness.installation() as installation:
+            uncommitted = installation.failure_causes(NOW - DAY)
+        with harness.unit_of_work() as uow:
+            uow.rules.purge(RULE.id)
+            uow.commit()
+        with harness.installation() as installation:
+            seen = installation.failure_causes(NOW - DAY)
+
+        assert len(uncommitted) == 3
+        assert seen == [CauseSighting(USER, Cause.CALENDAR_FORBIDDEN, NOW, True)]
+
     # Event Mappings
 
     def test_mappings_are_found_by_source_destination_and_rule(
@@ -364,7 +527,7 @@ class PersistenceContract:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
             uow.mappings.save(_mapping("first", destination="projection"))
-            with pytest.raises(harness.refused):
+            with pytest.raises(IdentityCollision):
                 uow.mappings.save(_mapping("second", destination="projection"))
 
     def test_deleting_a_mapping_takes_its_occurrences_and_replay(
@@ -408,7 +571,7 @@ class PersistenceContract:
     def test_an_occurrence_needs_its_series_mapping(self, harness: PersistenceHarness) -> None:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
-            with pytest.raises(harness.refused):
+            with pytest.raises(MissingReference):
                 uow.occurrences.save(_occurrence(_mapping("missing"), week_start(1), "1"))
 
     def test_pending_replays_follow_their_series_mapping(self, harness: PersistenceHarness) -> None:
@@ -439,7 +602,7 @@ class PersistenceContract:
     def test_a_replay_needs_its_series_mapping(self, harness: PersistenceHarness) -> None:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
-            with pytest.raises(harness.refused):
+            with pytest.raises(MissingReference):
                 uow.replays.add(EventMappingId("missing"))
 
     # Cursors, outcomes, previews
@@ -704,6 +867,34 @@ class PersistenceContract:
             assert uow.accounts.state(ACCOUNT) is None
             assert not uow.accounts.delete_disconnected(ACCOUNT)
 
+    def test_deleting_an_account_deletes_its_own_incidents_when_the_unit_commits(
+        self, harness: PersistenceHarness
+    ) -> None:
+        work = RULE.destination.connected_account_id
+        for account in (ACCOUNT, work):
+            harness.connect_account(account)
+            _lapse(harness, account, USER)
+        incidents = harness.incidents(USER)
+        # A rule's Incident naming the account is the rule's, so it stays.
+        assert incidents.open(_rule_incident(OTHER_RULE.id), NOW)
+        harness.disconnect_account(ACCOUNT)
+
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.delete_disconnected(ACCOUNT)
+        uncommitted = incidents.accounts_with_open_incidents()
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.delete_disconnected(ACCOUNT)
+            uow.commit()
+        with harness.installation() as installation:
+            kept = installation.status_records([USER])[USER].incidents
+
+        assert uncommitted == {ACCOUNT, work}
+        assert incidents.accounts_with_open_incidents() == {work}
+        assert sorted((incident.rule_id or "", incident.account_id) for incident in kept) == [
+            ("", work.value),
+            (OTHER_RULE.id.value, work.value),
+        ]
+
     def test_a_connected_account_stays_lapsed_until_its_lapse_clears(
         self, harness: PersistenceHarness
     ) -> None:
@@ -912,7 +1103,7 @@ class PersistenceContract:
             lambda uow: uow.observations.save(RULE.id, source, _observation(), NOW),
         )
         for write in writes:
-            with harness.unit_of_work() as uow, pytest.raises(harness.refused):
+            with harness.unit_of_work() as uow, pytest.raises(MissingReference):
                 write(uow)
 
     def test_a_second_mapping_for_one_source_is_refused(self, harness: PersistenceHarness) -> None:
@@ -921,7 +1112,7 @@ class PersistenceContract:
         with harness.unit_of_work() as uow:
             uow.rules.add(RULE)
             uow.mappings.save(first)
-            with pytest.raises(harness.refused):
+            with pytest.raises(IdentityCollision):
                 uow.mappings.save(again)
 
     def test_saving_a_mapping_again_keeps_its_rule_and_source(
@@ -970,7 +1161,7 @@ class PersistenceContract:
             uow.rules.add(RULE)
             uow.mappings.save(series)
             uow.occurrences.save(first)
-            with pytest.raises(harness.refused):
+            with pytest.raises(IdentityCollision):
                 uow.occurrences.save(replace(first, original_start=week_start(2)))
 
     # Users (ADR 0029): another User can neither read, change, nor delete these records. The two
@@ -1063,22 +1254,42 @@ class PersistenceContract:
         self, harness: PersistenceHarness
     ) -> None:
         series, source = self._seed_first_user(harness)
-        writes: tuple[Callable[[UnitOfWork], object], ...] = (
-            lambda uow: uow.rules.save(RULE.pause()),
-            lambda uow: uow.mappings.save(replace(series, source_revision="theirs")),
-            lambda uow: uow.mappings.save(replace(_mapping("theirs"), rule_id=RULE.id)),
-            lambda uow: uow.occurrences.save(_occurrence(series, week_start(2), "theirs")),
-            lambda uow: uow.replays.add(series.id),
-            lambda uow: uow.cursors.save(RULE.id, "their-cursor"),
-            lambda uow: uow.destination_cursors.save(RULE.id, "their-cursor"),
-            lambda uow: uow.run_outcomes.record(RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, False)),
-            lambda uow: uow.previews.record(RulePreviewSummary(RULE.id, NOW, 9, 9)),
-            lambda uow: uow.observations.save(RULE.id, source, _observation(NOW + DAY), NOW),
+        # Another User's rule and series are missing to this User; their identifiers are taken.
+        writes: tuple[tuple[type[Exception], Callable[[UnitOfWork], object]], ...] = (
+            (KeyError, lambda uow: uow.rules.save(RULE.pause())),
+            (
+                IdentityCollision,
+                lambda uow: uow.mappings.save(replace(series, source_revision="theirs")),
+            ),
+            (
+                MissingReference,
+                lambda uow: uow.mappings.save(replace(_mapping("theirs"), rule_id=RULE.id)),
+            ),
+            (
+                MissingReference,
+                lambda uow: uow.occurrences.save(_occurrence(series, week_start(2), "theirs")),
+            ),
+            (MissingReference, lambda uow: uow.replays.add(series.id)),
+            (MissingReference, lambda uow: uow.cursors.save(RULE.id, "their-cursor")),
+            (MissingReference, lambda uow: uow.destination_cursors.save(RULE.id, "their-cursor")),
+            (
+                MissingReference,
+                lambda uow: uow.run_outcomes.record(
+                    RuleRunOutcome(RULE.id, RunKind.SYNC, NOW, False)
+                ),
+            ),
+            (
+                MissingReference,
+                lambda uow: uow.previews.record(RulePreviewSummary(RULE.id, NOW, 9, 9)),
+            ),
+            (
+                MissingReference,
+                lambda uow: uow.observations.save(RULE.id, source, _observation(NOW + DAY), NOW),
+            ),
         )
-        for index, write in enumerate(writes):
-            with pytest.raises((KeyError, *harness.refused)):
+        for refusal, write in writes:
+            with pytest.raises(refusal):
                 _commit_as(harness, OTHER_USER, write)
-            assert index >= 0
         with harness.units(OTHER_USER)() as uow:
             uow.calendar_names.remember(ACCOUNT, [_calendar("personal-calendar", "Renamed")])
             assert not uow.accounts.lapse(ACCOUNT, attempted_at=NOW + DAY)
@@ -1118,12 +1329,16 @@ class PersistenceContract:
         same_identifier = replace(RULE, source=THEIR_SOURCE, destination=THEIR_DESTINATION)
         their_account = replace(RULE, id=SyncRuleId("their-rule"), destination=THEIR_DESTINATION)
 
-        for refused in (same_identifier, their_account):
+        # The identifier is refused when the rule is added; the account when the unit commits.
+        for refusal, refused in (
+            (IdentityCollision, same_identifier),
+            (MissingReference, their_account),
+        ):
 
             def add(uow: UnitOfWork, rule_: SyncRule = refused) -> None:
                 uow.rules.add(rule_)
 
-            with pytest.raises((DuplicateDirectionalRelationship, KeyError, *harness.refused)):
+            with pytest.raises(refusal):
                 _commit_as(harness, OTHER_USER, add)
 
         with harness.units(OTHER_USER)() as uow:
@@ -1199,6 +1414,124 @@ class PersistenceContract:
         )
         assert theirs.last_synced_at is None
         assert records[OTHER_USER].rules == ()
+
+    def test_status_records_hold_each_users_open_incidents_most_recently_updated_first(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.commit()
+        harness.disconnect_account(RULE.destination.connected_account_id)
+        incidents = harness.incidents(USER)
+        assert incidents.open(_rule_incident(RULE.id), NOW)
+        assert incidents.open(_rule_incident(OTHER_RULE.id), NOW + HOUR)
+        # Refreshing keeps when it opened; a resolved one is no longer read.
+        assert not incidents.open(_rule_incident(RULE.id, Cause.API_DISABLED), NOW + 2 * HOUR)
+        assert incidents.open(_rule_incident(RULE.id, key="provider:resolved"), NOW)
+        incidents.resolve("provider:resolved", NOW, IncidentResolution.SYNC_SUCCEEDED)
+        assert harness.incidents(OTHER_USER).open(_rule_incident(SyncRuleId("theirs")), NOW)
+
+        with harness.installation() as installation:
+            records = installation.status_records([USER, OTHER_USER])
+
+        mine = records[USER]
+        assert mine.overview.open_incidents == 2
+        assert [
+            (each.rule_id, each.state, each.opened_at, each.updated_at, each.cause)
+            for each in mine.incidents
+        ] == [
+            (RULE.id.value, "open", NOW, NOW + 2 * HOUR, Cause.API_DISABLED),
+            (OTHER_RULE.id.value, "open", NOW + HOUR, NOW + HOUR, Cause.CALENDAR_FORBIDDEN),
+        ]
+        refreshed, of_no_rule = mine.incidents
+        assert (refreshed.category, refreshed.summary, refreshed.account_id) == (
+            IncidentCategory.PERMANENT,
+            "Google Calendar rejected synchronization",
+            RULE.destination.connected_account_id.value,
+        )
+        # Its rule and the rule's accounts as they are now, which its next step weighs.
+        assert refreshed.rule_exists
+        assert refreshed.rule_accounts == (
+            AccountAuthorization(RULE.source.connected_account_id, True, NOW),
+            AccountAuthorization(RULE.destination.connected_account_id, False, None),
+        )
+        assert (of_no_rule.rule_exists, of_no_rule.rule_accounts) == (False, ())
+        assert [each.rule_id for each in records[OTHER_USER].incidents] == ["theirs"]
+
+    def test_status_records_hold_each_users_open_blocks_newest_first(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.rules.add(OTHER_RULE)
+            for entry in (
+                _block(RULE.id, "cleared"),
+                _block(RULE.id, "blocked"),
+                AuditEntry(NOW, RULE.id, AuditAction.CREATE, AuditOutcome.COMPLETED, "cleared"),
+                # Recurring exclusions were recorded as conflicts before reason codes; they skip.
+                _block(OTHER_RULE.id, "skipped", SyncReason.RECURRING_UNSUPPORTED),
+                _block(OTHER_RULE.id, "blocked"),
+                _block(RULE.id, None),
+            ):
+                uow.audit.append(entry)
+            uow.commit()
+        # Another User's later decision about the same rule and event identifiers is theirs.
+        _commit_as(
+            harness,
+            OTHER_USER,
+            lambda uow: uow.audit.append(
+                AuditEntry(NOW, RULE.id, AuditAction.CREATE, AuditOutcome.COMPLETED, "blocked")
+            ),
+        )
+
+        with harness.installation() as installation:
+            records = installation.status_records([USER, OTHER_USER])
+        with harness.unit_of_work() as uow:
+            uow.rules.remove(OTHER_RULE.id)
+            uow.commit()
+        with harness.installation() as installation:
+            once_removed = installation.status_records([USER])[USER]
+
+        blocks = records[USER].overview.open_blocks
+        assert [block.rule_id for block in blocks] == [OTHER_RULE.id.value, RULE.id.value]
+        assert blocks[0].entry_id > blocks[1].entry_id
+        assert records[OTHER_USER].overview.open_blocks == ()
+        # A removed rule's blocks are no longer open.
+        assert once_removed.overview.open_blocks == (blocks[1],)
+
+    def test_failure_causes_name_each_users_provider_incidents_open_or_updated_since_a_time(
+        self, harness: PersistenceHarness
+    ) -> None:
+        harness.connect_account(ACCOUNT)
+        harness.connect_account(THEIR_ACCOUNT, OTHER_USER)
+        incidents = harness.incidents(USER)
+        for key, opened, cause, resolved in (
+            ("provider:long-resolved", NOW - 2 * DAY, Cause.QUOTA_EXCEEDED, NOW - DAY),
+            ("provider:just-resolved", NOW - 2 * DAY, Cause.CALENDAR_FORBIDDEN, NOW),
+            ("provider:open", NOW + HOUR, Cause.API_DISABLED, None),
+            ("provider:no-cause", NOW, None, None),
+        ):
+            assert incidents.open(_rule_incident(RULE.id, cause, key), opened)
+            if resolved is not None:
+                incidents.resolve(key, resolved, IncidentResolution.SYNC_SUCCEEDED)
+        # Events still blocked have no Cause, even when one was recorded.
+        blocked = replace(_rule_incident(RULE.id, key="blocks"), category=IncidentCategory.CONFLICT)
+        assert incidents.open(blocked, NOW)
+        # A lapsed account's own Incident tells how long after its authorization it opened.
+        with harness.unit_of_work() as uow:
+            assert uow.accounts.lapse(ACCOUNT, attempted_at=NOW)
+            uow.commit()
+        revoked = replace(_account_incident(ACCOUNT), cause=Cause.ACCESS_REVOKED)
+        assert incidents.open(revoked, NOW + 2 * HOUR)
+
+        with harness.installation() as installation:
+            seen = installation.failure_causes(NOW - HOUR)
+
+        assert seen == [
+            CauseSighting(USER, Cause.CALENDAR_FORBIDDEN, NOW, False),
+            CauseSighting(USER, Cause.API_DISABLED, NOW + HOUR, True),
+            CauseSighting(USER, Cause.ACCESS_REVOKED, NOW + 2 * HOUR, True, 2 * HOUR),
+        ]
 
     def test_status_records_of_a_user_without_records_are_empty(
         self, harness: PersistenceHarness

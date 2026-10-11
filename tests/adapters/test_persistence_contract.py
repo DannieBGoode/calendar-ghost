@@ -1,6 +1,5 @@
 """The in-memory unit of work and SQLite honor the persistence contract."""
 
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -40,12 +39,14 @@ class TestInMemoryUnitOfWork(PersistenceContract):
         def disconnect(account_id: ConnectedAccountId, user: UserId) -> None:
             database.for_user(user).state.accounts[account_id] = ConnectedAccountState.DISCONNECTED
 
+        # The accounts the contract's rules use, recorded as the SQLite harness records them.
+        for account in RULE_ACCOUNTS:
+            connect(ConnectedAccountId(account), USER)
         return PersistenceHarness(
             database.for_user,
             connect=connect,
             disconnect=disconnect,
             disable=database.database.disabled.add,
-            refused=(KeyError, ValueError),
             installation=database.installation(),
             incidents=lambda user: InMemoryIncidentRepository(database.database, user),
         )
@@ -92,7 +93,6 @@ class TestSqliteUnitOfWork(PersistenceContract):
             connect=connect,
             disconnect=disconnect,
             disable=disable,
-            refused=(sqlite3.IntegrityError,),
             installation=SqliteInstallationUnitOfWorkFactory(database),
             incidents=lambda user: SqliteIncidentRepository(database, user),
         )

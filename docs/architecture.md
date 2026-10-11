@@ -321,12 +321,19 @@ only the scheduler, the Operator Overview, the migrations, and the composition r
 
 The in-memory unit of work that application tests use and the SQLite one both pass the persistence
 contract in `tests/contracts/persistence.py`. It states, through the ports alone, the behavior use
-cases rely on: writes are discarded until committed, rule removal takes a rule's records with it, a
-record without its rule or series is refused, identities stay unique, listings come back in a fixed
-order, and a second User with the same calendar and event identifiers reads, changes, and deletes
-nothing of the first User's. The in-memory store keeps each User's records in a partition of their
-own. It does not make the two interchangeable in every respect; when a use case starts
-relying on another storage behavior, add it to the contract.
+cases rely on: writes are discarded until committed, rule removal takes a rule's records with it
+and resolves its open Incidents, purging a rule or deleting an account deletes their Incidents, a
+record without its rule or series is refused, a rule's accounts must be its User's when the unit
+commits, identities stay unique, listings come back in a fixed order, Installation Status reads
+each User's open Incidents and blocks, and a second User with the same calendar and event
+identifiers reads, changes, and deletes nothing of the first User's. Both stores refuse a write
+with the same errors from `application/sync/errors.py`: `DuplicateDirectionalRelationship`,
+`IdentityCollision`, or `MissingReference`, each a `RecordRefused`. SQLite's constraint failures
+become these in `infrastructure/persistence/refusals.py`, including those raised at commit, so no
+use case catches `sqlite3.IntegrityError`. The in-memory store keeps each User's records in a
+partition of their own. It keeps no daily block checks, so every block that is still its event's
+latest decision is open there. It does not make the two interchangeable in every respect; when a
+use case starts relying on another storage behavior, add it to the contract.
 
 ## Public compatibility surfaces
 
