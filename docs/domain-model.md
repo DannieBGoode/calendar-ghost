@@ -66,7 +66,7 @@ Attendees, organizer identity, conferencing links, and attachments do not enter 
 
 ## Source Observations and Source Changes
 
-`domain/changes.py` holds a Source Observation: the tracked details of a source event a rule last saw, namely its title, time, description, location, guests, recurrence, and conferencing entry points. Guests are a set of lower-cased email addresses, so responses to invitations and display names are not tracked. `SourceChange.between` compares two observations and names the fields that differ, in that order; unknown guests or conferencing on either side are not compared. Cancelled events and Managed Projections are not observed.
+`domain/changes.py` holds a Source Observation: the tracked details of a source event a rule last saw, namely its title, time, description, location, guests, recurrence, and conferencing entry points. Guests are a set of lower-cased email addresses, so responses to invitations and display names are not tracked. `SourceChange.between` compares two observations and names the fields that differ, in that order; unknown guests or conferencing on either side are not compared. `SourceObservation.completed_by` keeps the last complete guest or conferencing list when a new observation has none, so a guest removed before the next complete list is still reported. Cancelled events and Managed Projections are not observed.
 
 ## State machines
 

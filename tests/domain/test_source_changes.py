@@ -125,3 +125,32 @@ def test_a_response_observed_before_responses_were_tracked_is_not_compared() -> 
         )
         is None
     )
+
+
+def test_an_incomplete_list_is_completed_by_the_last_complete_one() -> None:
+    previous = observed()
+    partial = observed(revision="revision-2", title="Renamed", guests=None, conferencing=None)
+
+    completed = partial.completed_by(previous)
+
+    assert completed == replace(partial, guests=previous.guests, conferencing=previous.conferencing)
+
+
+def test_a_complete_list_is_kept_even_when_it_removed_a_guest() -> None:
+    previous = observed()
+    current = observed(revision="revision-2", guests=("ana@example.com",), conferencing=())
+
+    assert current.completed_by(previous) == current
+    change = SourceChange.between(previous, current.completed_by(previous))
+    assert change is not None
+    assert change.fields == (SourceField.GUESTS, SourceField.CONFERENCING)
+
+
+def test_a_guest_removed_while_the_list_was_incomplete_is_still_reported() -> None:
+    first = observed()
+    partial = observed(revision="revision-2", guests=None).completed_by(first)
+    later = observed(revision="revision-3", guests=("ana@example.com",)).completed_by(partial)
+
+    change = SourceChange.between(partial, later)
+    assert change is not None
+    assert change.fields == (SourceField.GUESTS,)
