@@ -241,6 +241,15 @@ release that enables the provider:
 9. That `instances` accepts a window from 1601 to 4500, and that Outlook keeps no calendar item
    outside it, so a first or last occurrence it does not list there was cancelled.
 10. That a POST repeating an earlier `transactionId` answers with the event already stored.
+11. Whether an event is visible to the extended-property filter as soon as it is created, on a
+    personal account and on a work account, or only after a delay; `transactionId` covers a retried
+    create meanwhile, and nothing else assumes it.
+12. How a change to a master's recurrence or time affects its exceptions: which are kept, moved, or
+    dropped, and whether a dropped exception is reported as removed.
+13. Series in custom time zones, and occurrences that fall in a daylight saving gap or fold: their
+    `originalStart`, and whether the adapter names each occurrence as Outlook does.
+14. Which spelling of the calendar access refusal, `ErrorAccessDenied` or `accessDenied`, a
+    personal account and a work account each return.
 
 ## Alternatives considered
 
