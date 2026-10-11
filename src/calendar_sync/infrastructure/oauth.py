@@ -54,7 +54,7 @@ class OAuthStates:
     def begin(self, owner: UserId) -> str:
         """A new state for a flow `owner` begins; the callback connects for them alone."""
         state = secrets.token_urlsafe(32)
-        self._states.store(state, owner)
+        self._states.store(state, owner, self._provider)
         return state
 
     def claim(self, state: str, user: UserId) -> UserId:
@@ -74,7 +74,7 @@ class OAuthStates:
         self._consume(state)
 
     def _consume(self, state: str) -> UserId:
-        owner = self._states.consume(state)
+        owner = self._states.consume(state, self._provider)
         if owner is None:
             raise InvalidAuthorizationState("OAuth state is missing, expired, or already used")
         return owner

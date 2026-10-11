@@ -106,6 +106,7 @@ _FORWARD_MIGRATIONS = (
     (25, "0025_provider_calls.sql"),
     (26, "0026_failure_causes.sql"),
     (27, "0027_failure_providers.sql"),
+    (28, "0028_oauth_state_providers.sql"),
 )
 _CHECKED_FROM = 21
 """Migrations from here on prove every reference before committing. Earlier ones ran before

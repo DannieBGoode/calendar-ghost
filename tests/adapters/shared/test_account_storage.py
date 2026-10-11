@@ -219,28 +219,28 @@ def _states(tmp_path: Path) -> tuple[SqliteAuthorizationStates, MovableClock]:
 
 def test_an_oauth_state_is_consumed_once_within_its_lifetime(tmp_path: Path) -> None:
     states, clock = _states(tmp_path)
-    states.store("synthetic-state", USER)
+    states.store("synthetic-state", USER, ProviderKind.GOOGLE)
 
     clock.moment = STORED + STATE_LIFETIME - timedelta(seconds=1)
-    assert states.consume("synthetic-state") == USER
-    assert states.consume("synthetic-state") is None
+    assert states.consume("synthetic-state", ProviderKind.GOOGLE) == USER
+    assert states.consume("synthetic-state", ProviderKind.GOOGLE) is None
 
 
 def test_an_oauth_state_is_rejected_once_its_lifetime_ends(tmp_path: Path) -> None:
     states, clock = _states(tmp_path)
-    states.store("synthetic-state", USER)
+    states.store("synthetic-state", USER, ProviderKind.GOOGLE)
 
     clock.moment = STORED + STATE_LIFETIME
-    assert states.consume("synthetic-state") is None
+    assert states.consume("synthetic-state", ProviderKind.GOOGLE) is None
 
 
 def test_an_oauth_state_of_a_disabled_user_cannot_be_used(tmp_path: Path) -> None:
     states, _ = _states(tmp_path)
-    states.store("synthetic-state", USER)
+    states.store("synthetic-state", USER, ProviderKind.GOOGLE)
     with sqlite3.connect(tmp_path / "test.db") as connection:
         connection.execute("UPDATE users SET state = 'disabled' WHERE id = ?", (USER.value,))
 
-    assert states.consume("synthetic-state") is None
+    assert states.consume("synthetic-state", ProviderKind.GOOGLE) is None
 
 
 def test_connected_account_authorization_reflects_disconnection(tmp_path: Path) -> None:

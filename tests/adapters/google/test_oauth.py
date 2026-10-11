@@ -19,6 +19,7 @@ from calendar_sync.application.ports import (
     CalendarAccess,
     DiscoveredCalendar,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,
@@ -57,7 +58,7 @@ def test_oauth_completion_refuses_a_user_who_did_not_begin_the_flow(tmp_path: Pa
     add_user(database)
     add_user(database, OTHER_USER, role="user")
     oauth = _oauth(database, store)
-    SqliteAuthorizationStates(database).store("synthetic-state", USER)
+    SqliteAuthorizationStates(database).store("synthetic-state", USER, ProviderKind.GOOGLE)
 
     def no_exchange(state: str) -> None:
         raise AssertionError("the code must not be exchanged")
@@ -67,7 +68,9 @@ def test_oauth_completion_refuses_a_user_who_did_not_begin_the_flow(tmp_path: Pa
     with pytest.raises(AuthorizationFailed):
         oauth.complete("synthetic-state", "synthetic-code", OTHER_USER)
     # The state is used up, so it cannot be tried again by anyone.
-    assert SqliteAuthorizationStates(database).consume("synthetic-state") is None
+    assert (
+        SqliteAuthorizationStates(database).consume("synthetic-state", ProviderKind.GOOGLE) is None
+    )
     assert store.for_user(OTHER_USER).list() == ()
     assert store.for_user(USER).list() == ()
 
@@ -147,7 +150,7 @@ def test_oauth_completion_exchanges_explicit_code_without_parsing_callback_url(
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     add_user(database)
     oauth = _oauth(database, store)
-    SqliteAuthorizationStates(database).store("synthetic-state", USER)
+    SqliteAuthorizationStates(database).store("synthetic-state", USER, ProviderKind.GOOGLE)
     flow = StubFlow()
 
     def fake_flow(state: str) -> StubFlow:
@@ -213,7 +216,7 @@ def _complete_with_identity(
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     add_user(database)
     oauth = _oauth(database, store)
-    SqliteAuthorizationStates(database).store("synthetic-state", USER)
+    SqliteAuthorizationStates(database).store("synthetic-state", USER, ProviderKind.GOOGLE)
     monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
     monkeypatch.setattr(
         "calendar_sync.infrastructure.google.oauth.build",
@@ -314,7 +317,7 @@ def test_oauth_completion_rejects_a_grant_without_all_calendar_scopes(
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     add_user(database)
     oauth = _oauth(database, store)
-    SqliteAuthorizationStates(database).store("synthetic-state", USER)
+    SqliteAuthorizationStates(database).store("synthetic-state", USER, ProviderKind.GOOGLE)
     monkeypatch.setattr(oauth, "_flow", lambda _: StubFlow())
 
     with pytest.raises(CalendarPermissionRequired, match="Calendar permission"):
@@ -524,7 +527,7 @@ def test_a_user_disabled_during_the_token_exchange_connects_nothing(
     store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
     add_user(database)
     oauth = _oauth(database, store)
-    SqliteAuthorizationStates(database).store("synthetic-state", USER)
+    SqliteAuthorizationStates(database).store("synthetic-state", USER, ProviderKind.GOOGLE)
 
     class StubCredentials:
         id_token = None

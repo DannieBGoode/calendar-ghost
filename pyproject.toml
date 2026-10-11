@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "calendar-ghost"
 version = "0.1.1"
-description = "Calendar Ghost: self-hosted, one-way Google Calendar synchronization"
+description = "Calendar Ghost: self-hosted, one-way synchronization between Google and Outlook calendars"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { file = "LICENSE" }
@@ -21,13 +21,13 @@ dependencies = [
   "fastapi>=0.115,<1",
   "google-api-python-client>=2.160,<3",
   "google-auth-oauthlib>=1.2,<2",
+  "httpx>=0.28,<1",
   "mcp>=2.3,<3",
   "uvicorn[standard]>=0.34,<1",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "httpx>=0.28,<1",
   "import-linter>=2.15,<3",
   "mypy>=1.15,<2",
   "pytest>=8.3,<9",
@@ -101,6 +101,7 @@ forbidden_modules = [
   "google",
   "google_auth_oauthlib",
   "googleapiclient",
+  "httpx",
   "mcp",
   "pydantic",
   "smtplib",
@@ -118,7 +119,12 @@ source_modules = [
   "calendar_sync.infrastructure.provider_calls",
   "calendar_sync.infrastructure.retry_after",
 ]
-forbidden_modules = ["calendar_sync.infrastructure.google"]
+forbidden_modules = ["calendar_sync.infrastructure.google", "calendar_sync.infrastructure.microsoft"]
+
+[[tool.importlinter.contracts]]
+name = "Provider adapters never import each other"
+type = "independence"
+modules = ["calendar_sync.infrastructure.google", "calendar_sync.infrastructure.microsoft"]
 
 [[tool.importlinter.contracts]]
 name = "Google SDK types stay in the Google adapter"
@@ -126,6 +132,12 @@ type = "protected"
 protected_modules = ["google", "google_auth_oauthlib", "googleapiclient"]
 # Composing or calling the adapter is fine; importing SDK types directly is not.
 allowed_importers = ["calendar_sync.infrastructure.google"]
+
+[[tool.importlinter.contracts]]
+name = "The HTTP client Microsoft Graph is reached with stays in the Microsoft adapter"
+type = "protected"
+protected_modules = ["httpx"]
+allowed_importers = ["calendar_sync.infrastructure.microsoft"]
 
 [[tool.importlinter.contracts]]
 name = "The MCP SDK stays in the MCP interface"

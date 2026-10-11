@@ -57,6 +57,37 @@ def test_another_user_claiming_a_state_uses_it_up_and_connects_nothing(tmp_path:
         states.claim(state, USER)
 
 
+def test_a_state_returns_only_to_the_provider_whose_flow_began_it(tmp_path: Path) -> None:
+    states, database = _states(tmp_path)
+    other = OAuthStates(SqliteAuthorizationStates(database), ProviderKind.OUTLOOK)
+    state = states.begin(USER)
+
+    # A state returned to another provider's callback is unknown there and stays usable here.
+    with pytest.raises(InvalidAuthorizationState):
+        other.claim(state, USER)
+    assert states.claim(state, USER) == USER
+
+
+def test_migration_28_keeps_a_flow_begun_before_it_with_google(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    add_user(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("ALTER TABLE oauth_states DROP COLUMN provider")
+        connection.execute("DELETE FROM schema_migrations WHERE version = 28")
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "INSERT INTO oauth_states (state_hash, user_id, created_at, expires_at) "
+            "VALUES (?, ?, '2000-01-01T00:00:00+00:00', '2999-01-01T00:00:00+00:00')",
+            (hashlib.sha256(b"begun-before").hexdigest(), USER.value),
+        )
+
+    initialize_database(database)
+
+    google = OAuthStates(SqliteAuthorizationStates(database), ProviderKind.GOOGLE)
+    assert google.claim("begun-before", USER) == USER
+
+
 def test_a_state_of_a_user_disabled_meanwhile_cannot_be_claimed(tmp_path: Path) -> None:
     states, database = _states(tmp_path)
     state = states.begin(USER)

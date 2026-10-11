@@ -1148,7 +1148,9 @@ def test_google_oauth_callback_exchanges_code_without_forwarding_http_url(
 
 def _begin(tmp_path: Path, owner: UserId) -> None:
     """Begin a flow for `owner` under the state the callbacks below return with."""
-    SqliteAuthorizationStates(tmp_path / "test.db").store("synthetic-state", owner)
+    SqliteAuthorizationStates(tmp_path / "test.db").store(
+        "synthetic-state", owner, ProviderKind.GOOGLE
+    )
 
 
 def _refuse_code_exchange(google: GoogleOAuthService, monkeypatch: pytest.MonkeyPatch) -> Mock:
@@ -1208,7 +1210,12 @@ def test_google_oauth_callback_refuses_a_browser_signed_in_as_another_user(
     assert adapters.accounts(attacker).list() == ()
     assert adapters.accounts(victim).list() == ()
     # The state is used up, so its User cannot finish the flow with the code later.
-    assert SqliteAuthorizationStates(tmp_path / "test.db").consume("synthetic-state") is None
+    assert (
+        SqliteAuthorizationStates(tmp_path / "test.db").consume(
+            "synthetic-state", ProviderKind.GOOGLE
+        )
+        is None
+    )
 
 
 def test_google_oauth_callback_refuses_a_disabled_user(

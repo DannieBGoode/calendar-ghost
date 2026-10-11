@@ -50,9 +50,9 @@ ACCOUNT_MANAGEMENT_UNAVAILABLE = "account_management_unavailable"
 PROVIDER_NOT_CONFIGURED = "provider_not_configured"
 # Where a provider returns the browser: Settings, at the tab that lists Connected Accounts.
 CONNECTIONS = "/settings/connections"
-# OAuth errors that mean the person refused what was asked, rather than that the flow failed
-# (RFC 6749 section 4.1.2.1).
-REFUSED = frozenset({"access_denied"})
+# OAuth errors that mean the person, or their organization, did not grant what was asked, rather
+# than that the flow failed: RFC 6749 section 4.1.2.1 and OpenID Connect Core section 3.1.2.6.
+REFUSED = frozenset({"access_denied", "consent_required"})
 
 
 class AccountServices(Protocol):
