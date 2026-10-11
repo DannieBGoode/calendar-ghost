@@ -52,7 +52,7 @@ support, billing, and the Operator Overview belong in this repository. ADRs 0029
 their persistence, isolation, and identity, and
 `docs/superpowers/specs/2026-10-09-multi-user-design.md` orders the work. Users have shipped: every
 record belongs to one User, use cases receive a unit of work scoped to that User, and only the
-scheduler, migrations, and (later) the Operator Overview receive the installation-wide
+scheduler, migrations, and the Operator Overview receive the installation-wide
 `InstallationUnitOfWork`. A new owned table carries `user_id` and refers to its parent by
 identifier and User together; `tests/adapters/test_user_isolation_schema.py` fails otherwise.
 Plan limits apply only when an administrator turns Plans on, and billing only when Commercial Mode

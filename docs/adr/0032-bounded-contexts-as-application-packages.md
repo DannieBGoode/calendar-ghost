@@ -43,10 +43,12 @@ states will not hold while it grows.
   rules: disconnecting an account degrades its rules, deleting it purges them, and a Lapsed
   Authorization stops and later resumes them. Rule health degrades rules when runs fail. Each of
   these use cases coordinates accounts and rules, but only deleting an account changes both in one
-  transaction. Disconnection degrades each rule in its own transaction under that rule's lock,
-  then disconnects the account in another. Lapsed Authorization records the lapse, then stops each
-  rule, then opens its Incident, each committed separately; restoring it clears the lapse, then
-  resolves the Incident, then resumes each rule. Moving accounts to a context of their own would
+  transaction. Disconnection degrades each previewed or enabled rule that uses the account, and
+  makes one awaiting reauthorization need a preview, each in its own transaction under that rule's
+  lock, then disconnects the account in another. Lapsed Authorization
+  records the lapse, then stops each enabled rule of the account, then opens its Incident, each
+  committed separately. Restoring it clears the lapse, then resolves the Incident, then resumes
+  each rule the lapse alone stopped once both of its accounts are authorized. Moving accounts to a context of their own would
   put this coordination in two contexts that both need the other. Google authorization,
   credentials, and discovery stay in the Google adapter, as before.
 
