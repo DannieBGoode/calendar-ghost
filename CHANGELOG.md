@@ -299,6 +299,15 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   scheduled pass now resumes them and resolves that Incident (ADR 0027).
 - A rule resuming after Reauthorization stays stopped when another rule's run records a new lapse
   of the same account at that moment. Before, it could resume against the lapsed account.
+- An account's Lapsed Authorization Incident resolves once the account is authorized again, even
+  when no rule still waits for it, as after the User paused or removed the rule it stopped. Before,
+  a restoration interrupted at that point left the Incident open. Each scheduled pass now resolves
+  it.
+- A lapse that the process stopped partway is finished at the next scheduled pass: the account's
+  enabled rules stop, and its Incident opens, with one notification, if it had not opened. Before,
+  those rules kept running until their own next authorization failure, and the Incident could
+  stay unopened. Without the provider's refusal at hand, that Incident says the account's
+  authorization expired and has no Cause (ADR 0027).
 - The calendar replacement form no longer shows a rule's previous calendars after the rule
   refreshes; untouched fields follow the rule, and edits are kept.
 - The Web UI's request helper keeps headers passed as a `Headers` object.

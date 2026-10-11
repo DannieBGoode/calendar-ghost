@@ -208,7 +208,8 @@ lapses the Connected Account Google rejected and opens one Incident for that acc
 covering every rule it stops; a preview that finds another account's authorization lost lapses
 that account too. Reauthorization, or an access check Google passes, resolves the account's
 Incident (`access_restored`, migration 20) and resumes the rules the lapse alone stopped
-([ADR 0027](adr/0027-lapsed-authorization-and-automatic-recovery.md)).
+([ADR 0027](adr/0027-lapsed-authorization-and-automatic-recovery.md)). Each scheduled pass also
+finishes a lapse or restoration that an interruption left partly done.
 
 ## Reconciliation
 
