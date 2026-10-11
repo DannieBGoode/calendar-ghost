@@ -215,7 +215,11 @@ awaiting an answer, and `none` or anything unknown counts as accepted, as ADR 00
 and `sensitivity` are read as Google's transparency and visibility are, which is not at all: a rule
 projects an event the source shows as free, and a Details Projection copies a private event's title,
 as it does from Google. Attendee addresses and the online meeting's join address are read only to
-describe Source Changes, never projected.
+describe Source Changes, never projected. Outlook also writes an online meeting's join link, dial-in
+numbers, and conference ID into its body
+([online meetings](https://learn.microsoft.com/en-us/graph/outlook-calendar-online-meetings)), so an
+event that is an online meeting (`isOnlineMeeting`, `onlineMeeting`, or `onlineMeetingUrl`) reads
+with no description, and a Details Projection of it carries none.
 
 ### Causes
 

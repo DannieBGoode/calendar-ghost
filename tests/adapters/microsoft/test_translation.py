@@ -207,6 +207,35 @@ def test_guests_and_the_join_address_are_read_to_describe_changes_only() -> None
     assert event.web_link == "https://outlook.example.test/event"
 
 
+# Outlook writes an online meeting's join details into its body (Microsoft's "Outlook calendar
+# online meetings" example, https://learn.microsoft.com/en-us/graph/outlook-calendar-online-meetings).
+TEAMS_BODY = (
+    "Agenda\r\n________________________________________________________________________________\r\n"
+    "Microsoft Teams meeting\r\nJoin: https://teams.example.test/l/meetup-join/private-marker\r\n"
+    "Meeting ID: 000 000 000 000\r\nDial in by phone: +1 555 0100, conference ID: 000000\r\n"
+)
+
+
+@pytest.mark.parametrize(
+    "meeting",
+    [
+        {"isOnlineMeeting": True},
+        {"onlineMeeting": {"joinUrl": "https://teams.example.test/l/meetup-join/private-marker"}},
+        {"onlineMeetingUrl": "https://teams.example.test/l/meetup-join/private-marker"},
+    ],
+    ids=["isOnlineMeeting", "onlineMeeting", "onlineMeetingUrl"],
+)
+def test_an_online_meetings_body_with_its_join_details_is_never_its_description(
+    meeting: dict[str, Any],
+) -> None:
+    event = to_domain_event(
+        item(body={"contentType": "text", "content": TEAMS_BODY}, **meeting), CALENDAR
+    )
+
+    assert "private-marker" not in event.description
+    assert "000000" not in event.description
+
+
 def _properties(origin: dict[str, Any], rule: str = "rule-1") -> list[dict[str, str]]:
     return [
         {"id": RULE_PROPERTY, "value": rule},

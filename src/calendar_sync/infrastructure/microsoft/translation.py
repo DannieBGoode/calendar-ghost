@@ -61,8 +61,8 @@ EXPAND = (
 """What every read expands, so a Managed Projection is known wherever it is read."""
 SELECT = (
     "id,changeKey,type,seriesMasterId,originalStart,originalStartTimeZone,isCancelled,isAllDay,"
-    "start,end,subject,body,location,recurrence,responseStatus,attendees,onlineMeeting,"
-    "onlineMeetingUrl,webLink,lastModifiedDateTime"
+    "start,end,subject,body,location,recurrence,responseStatus,attendees,isOnlineMeeting,"
+    "onlineMeeting,onlineMeetingUrl,webLink,lastModifiedDateTime"
 )
 EXCEPTION_ATTENDEES = "exceptionOccurrences($select=id,attendees)"
 """What a series master is read with to learn whether any of its exceptions has attendees."""
@@ -113,7 +113,7 @@ def to_domain_event(
         revision=str(item.get("changeKey") or item.get("lastModifiedDateTime") or event_id),
         status=EventStatus.CANCELLED if cancelled else EventStatus.CONFIRMED,
         title=str(item.get("subject") or ""),
-        description=_text(item.get("body")),
+        description=_description(item),
         location=_location(item.get("location")),
         recurrence=recurrence,
         occurrence=_occurrence(item, series_zone),
@@ -367,6 +367,17 @@ def _conferencing(item: Mapping[str, Any]) -> tuple[str, ...]:
     if isinstance(item.get("onlineMeetingUrl"), str) and item["onlineMeetingUrl"]:
         uris.add(item["onlineMeetingUrl"])
     return tuple(sorted(uri for uri in uris if uri))
+
+
+def _description(item: Mapping[str, Any]) -> str:
+    """The event's text body; none for an online meeting, whose body Outlook fills with its join
+    link, dial-in numbers, and conference ID, conferencing data no projection carries."""
+    online = (
+        item.get("isOnlineMeeting") is True
+        or isinstance(item.get("onlineMeeting"), Mapping)
+        or bool(item.get("onlineMeetingUrl"))
+    )
+    return "" if online else _text(item.get("body"))
 
 
 def _text(body: object) -> str:
