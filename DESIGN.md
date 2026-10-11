@@ -316,7 +316,11 @@ open". Selecting a row opens the incident beside the table at its own address
 Resolved chip, what happened, what it means or how it closed, the likely Cause when it is known,
 one next step (the fix while open, with How to fix for an administrator's Cause, or the rule's
 history once resolved), then when it opened, was last seen or closed, and the rule with its
-accounts. While the panel is open the table drops its rule column, as History does. On a narrow
+accounts. The server decides the next step; an administrator's Cause shows its likely Cause and How to
+fix only to an administrator, and anyone else reads that Google Calendar is not available right
+now, with Check access. The table lists the server's most recent incidents and ends in "Load older
+incidents" while it holds more; until then the last group's count reads as a floor ("100+
+resolved"). While the panel is open the table drops its rule column, as History does. On a narrow
 screen each row becomes a card that labels its values, and the panel replaces the table.
 
 ### Rule Rows

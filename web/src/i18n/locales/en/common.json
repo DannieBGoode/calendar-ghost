@@ -40,6 +40,7 @@
     "account_not_found": "This account is no longer connected. Reload to see the current accounts.",
     "account_required": "Connect both accounts before you create a rule between their calendars.",
     "activity_entry_not_found": "This Activity entry no longer exists. It may have been cleared.",
+    "incident_not_found": "This incident no longer exists.",
     "activity_rule_removed": "This entry's rule was removed, so its events cannot be looked up.",
     "administrator_required": "Only an administrator of this Calendar Ghost can do that.",
     "authorization_failed": "Google did not authorize the account. Try connecting it again.",

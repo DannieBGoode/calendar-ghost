@@ -10,6 +10,7 @@ import { StaticI18nProvider } from "@/i18n/provider"
 import { dateWords, pseudoI18n, testI18n, untranslatedText } from "@/i18n/testing"
 import type { I18n } from "@/i18n/translator"
 import type { ActivityTab, ViewChange } from "@/lib/navigation"
+import { INCIDENTS_PAGE_SIZE } from "@/lib/api"
 import type {
   api,
   AuditEntry,
@@ -131,7 +132,11 @@ function incident(overrides: Partial<Incident>): Incident {
     account_id: accountA.id,
     message: null,
     cause: null,
+    // The server decides each incident's step (ADR 0033); these fixtures name the one it would.
+    step: "reauthorize",
     ...overrides,
+    // The server's cursor is opaque; these fixtures make one from the id.
+    cursor: `cursor-${overrides.id ?? "incident"}`,
   }
 }
 
@@ -148,6 +153,7 @@ const INCIDENTS: Incident[] = [
   incident({
     id: "open-conflict",
     category: "conflict",
+    step: "see_blocked",
     summary: "Stored summary: 2 events blocked",
     message: { code: "events_still_blocked", params: { count: 2 } },
   }),
@@ -155,13 +161,15 @@ const INCIDENTS: Incident[] = [
     id: "open-installation",
     rule_id: null,
     category: "infrastructure",
+    step: null,
     summary: "Stored summary: infrastructure",
     message: { code: "provider_failure", params: { kind: "infrastructure", provider: null } },
   }),
-  incident({ id: "resolved-legacy", state: "resolved", category: "permanent", summary: LEGACY_SUMMARY }),
+  incident({ id: "resolved-legacy", state: "resolved", category: "permanent", summary: LEGACY_SUMMARY, step: "see_history" }),
   incident({
     id: "resolved-sync",
     state: "resolved",
+    step: "see_history",
     category: "temporary",
     resolution: "sync_succeeded",
     resolved_at: at(0, 7),
@@ -228,7 +236,21 @@ const FIXTURE_TEXT = [
   ...LIST_WORDS,
 ]
 
-type Scenario = { entries?: AuditEntry[]; incidents?: Incident[]; failIncidents?: boolean; failHistory?: boolean }
+type Scenario = {
+  entries?: AuditEntry[]
+  incidents?: Incident[]
+  /** Incidents the server keeps beyond those it lists, which a link can still open. */
+  unlisted?: Incident[]
+  failIncidents?: boolean
+  failHistory?: boolean
+}
+
+/** One page of incidents as the server lists them, after the one `before` names. */
+function incidentPage(incidents: Incident[], url: string): Response {
+  const before = new URL(url, "http://localhost").searchParams.get("before")
+  const start = before === null ? 0 : incidents.findIndex((incident) => incident.cursor === before) + 1
+  return jsonResponse(incidents.slice(start, start + INCIDENTS_PAGE_SIZE))
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
@@ -243,17 +265,29 @@ function patternResponse(path: string): Response {
   return jsonResponse({ detail: "not found" }, 404)
 }
 
-function mockFetch({ entries = ENTRIES, incidents = INCIDENTS, failIncidents = false, failHistory = false }: Scenario) {
+function mockFetch({
+  entries = ENTRIES,
+  incidents = INCIDENTS,
+  unlisted = [],
+  failIncidents = false,
+  failHistory = false,
+}: Scenario) {
   const responses: Record<string, Response> = {
     "/api/v1/audit-entries": failHistory ? jsonResponse({ detail: "boom" }, 500) : jsonResponse(entries),
-    "/api/v1/incidents": failIncidents ? jsonResponse({ detail: "boom" }, 500) : jsonResponse(incidents),
     "/api/v1/rules": jsonResponse([rule]),
     "/api/v1/accounts": jsonResponse([accountA, accountB]),
   }
+  const kept = new Map([...incidents, ...unlisted].map((incident) => [`/api/v1/incidents/${incident.id}`, incident]))
   vi.stubGlobal(
     "fetch",
     vi.fn((input: string | URL) => {
-      const path = String(input).split("?")[0] ?? ""
+      const url = String(input)
+      const path = url.split("?")[0] ?? ""
+      if (path === "/api/v1/incidents") {
+        return Promise.resolve(failIncidents ? jsonResponse({ detail: "boom" }, 500) : incidentPage(incidents, url))
+      }
+      const one = kept.get(path)
+      if (one) return Promise.resolve(jsonResponse(one))
       return Promise.resolve(responses[path] ?? patternResponse(path))
     }),
   )
@@ -414,6 +448,41 @@ describe("ActivityView", () => {
     await renderActivity(testI18n(), { failIncidents: true }, "", "incidents")
     expect(container.querySelector("h1")?.textContent).toBe("What needed attention")
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("Activity is temporarily unavailable")
+  })
+
+  it("loads older incidents on request, and counts what it has loaded as a floor until then", async () => {
+    const many = Array.from({ length: INCIDENTS_PAGE_SIZE + 2 }, (_, index) =>
+      incident({ id: `old-${index}`, state: "resolved", step: "see_history", resolution: "sync_succeeded" }),
+    )
+    await renderActivity(testI18n(), { incidents: many }, "", "incidents")
+    const heading = () => container.querySelector('.incident-group[data-state="resolved"] th')?.textContent
+    expect(heading()).toBe(`${INCIDENTS_PAGE_SIZE}+ resolved`)
+    await click([...container.querySelectorAll("button")].find((item) => item.textContent === "Load older incidents") ?? null)
+    await settle()
+    expect(container.querySelectorAll(".incident-row")).toHaveLength(INCIDENTS_PAGE_SIZE + 2)
+    expect(heading()).toBe(`${INCIDENTS_PAGE_SIZE + 2} resolved`)
+    expect([...container.querySelectorAll("button")].some((item) => item.textContent === "Load older incidents")).toBe(false)
+  })
+
+  it("opens an incident the list does not hold at its own address", async () => {
+    const archived = incident({
+      id: "archived",
+      state: "resolved",
+      step: "see_history",
+      resolution: "access_restored",
+      summary: "Archived",
+    })
+    await renderActivity(testI18n(), { unlisted: [archived] }, "", { incidentId: "archived" })
+    expect(container.querySelector(".activity-detail")?.textContent).toContain(
+      "Resolved when Google accepted the account again.",
+    )
+  })
+
+  it("says an incident no longer exists when the server has none at that address", async () => {
+    await renderActivity(testI18n(), {}, "", { incidentId: "gone" })
+    expect(container.querySelector(".activity-detail [role='status']")?.textContent).toBe(
+      "This incident no longer exists.",
+    )
   })
 
   it("opens a blocked Incident's events in History", async () => {

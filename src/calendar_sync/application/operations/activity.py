@@ -168,8 +168,14 @@ class ActivityQueries(Protocol):
 class OperationsQueries(Protocol):
     def overview(self) -> OperationsOverview: ...
 
-    def incidents(self) -> Sequence[IncidentSummary]:
-        """Open incidents first, then resolved ones, each most recently updated first."""
+    def incidents(self, before: str | None = None) -> Sequence[IncidentSummary]:
+        """One page of incidents: open ones first, then resolved ones, each most recently updated
+        first. `before` is the `cursor` of the last one of the previous page, so a page goes on
+        where that one was, though it has changed since; one that is not a cursor starts none."""
+        ...
+
+    def incident(self, incident_id: str) -> IncidentSummary | None:
+        """One of the User's incidents, listed or not; None for any other."""
         ...
 
 
