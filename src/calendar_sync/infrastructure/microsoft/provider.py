@@ -24,7 +24,6 @@ from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
-    ProviderFailureKind,
     UnsupportedProjection,
 )
 from calendar_sync.application.sync.ports import CreatedProjection, ProviderChangeSet
@@ -43,6 +42,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.microsoft.causes import cause_of
 from calendar_sync.infrastructure.microsoft.graph import GraphHttp, GraphRefusal, TokenRefusal
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT

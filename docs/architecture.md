@@ -140,7 +140,7 @@ A Sync Run is the `ExecuteSyncRule` use case in `application/sync/synchronizatio
 rule's lock, applies the source batch and then the destination batch, and records a failed run; it
 composes collaborators from its own ports for the rest. `ChangeFeedCursors` in `change_feeds.py`
 reads both change feeds from the saved cursors and, only after both batches succeed, saves the next
-cursors and records the run's outcome. `SynchronizeEvents` in `events.py` decides one source event,
+cursors and records the run's outcome. `SynchronizeEvents` in `event_sync.py` decides one source event,
 writes its projection, and records its Event Mapping and Audit Entry; `SynchronizeOccurrences` in
 `occurrences.py` does the same for one occurrence of a series. `ExceptionReplays` in
 `exception_replays.py` applies a new series' Occurrence Exceptions from the source, and
@@ -215,6 +215,8 @@ Mechanics every provider shares are tested once, in `tests/adapters/shared/`, an
 `tests/adapters/test_mixed_providers.py` runs rules between a Google and an Outlook calendar, in
 both directions at once, to prove neither copies the other's projections. The contract states,
 through the ports alone, the ownership, idempotency, and listing guarantees the use cases rely on.
+It does not yet state recurrence or change-feed behavior; each adapter's own tests cover those
+(`tests/adapters/google/test_provider.py`, `tests/adapters/microsoft/test_provider.py`).
 
 ## Provider descriptors
 

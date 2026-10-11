@@ -38,7 +38,7 @@ from calendar_sync.application.operations.ports import CauseSighting, SchedulerP
 from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.accounts import DiscoverCalendars, ListConnectedAccounts
-from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.ports import (
     AccountAuthorization,
     AccountCalendars,
@@ -82,6 +82,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.google.guide import GOOGLE
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
@@ -635,9 +636,9 @@ def _seed_robin(adapters: Adapters, path: Path, now: datetime, scenario: Scenari
 
 # How a provider refuses for each Cause a preview lapse has, as the service records it.
 _LAPSE_KINDS = {
-    Cause.ACCESS_REVOKED: "authentication",
-    Cause.API_DISABLED: "authorization",
-    Cause.OAUTH_CLIENT_INVALID: "authentication",
+    Cause.ACCESS_REVOKED: ProviderFailureKind.AUTHENTICATION,
+    Cause.API_DISABLED: ProviderFailureKind.AUTHORIZATION,
+    Cause.OAUTH_CLIENT_INVALID: ProviderFailureKind.AUTHENTICATION,
 }
 _CALENDAR_NAMES = {ProviderKind.GOOGLE: "Google Calendar", ProviderKind.OUTLOOK: "Outlook"}
 
@@ -645,7 +646,7 @@ _CALENDAR_NAMES = {ProviderKind.GOOGLE: "Google Calendar", ProviderKind.OUTLOOK:
 def _lapse_summary(cause: Cause, provider: ProviderKind) -> str:
     """The lapse's summary, worded as the service words it."""
     calendar = _CALENDAR_NAMES[provider]
-    if _LAPSE_KINDS[cause] == "authentication":
+    if _LAPSE_KINDS[cause] is ProviderFailureKind.AUTHENTICATION:
         return f"Authorization for {calendar} expired"
     return f"Access to {calendar} was denied"
 
@@ -850,7 +851,7 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
             failure = (
                 _LAPSE_KINDS[_LAPSE_CAUSES[scenario]]
                 if rule.state is SyncRuleState.DEGRADED
-                else "rate_limit"
+                else ProviderFailureKind.RATE_LIMIT
                 if scenario in _LIMITED and rule.id == LIMITED_RULE
                 else None
             )

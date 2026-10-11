@@ -22,7 +22,7 @@ from calendar_sync.application.operations.status import (
 )
 from calendar_sync.application.sync.locking import RuleWork, RuleWorkKind
 from calendar_sync.application.sync.rules import SyncRuleSummary
-from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentCategory, IncidentMessage
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
@@ -31,8 +31,8 @@ from tests.helpers import endpoint
 
 NOW = datetime(2026, 10, 3, 12, 0, tzinfo=UTC)
 CONNECTED = (
-    AccountStanding("personal-account", "connected", "google"),
-    AccountStanding("work-account", "connected", "google"),
+    AccountStanding("personal-account", ConnectedAccountState.CONNECTED, ProviderKind.GOOGLE),
+    AccountStanding("work-account", ConnectedAccountState.CONNECTED, ProviderKind.GOOGLE),
 )
 LISTED = frozenset({"rule-1", "rule-2", "rule-a", "rule-b", "rule-c", "rule-d"})
 """Every rule id these tests enable, as the last completed pass listed them."""
@@ -73,8 +73,8 @@ def _overview(
     last_synced_at: datetime | None = datetime(2026, 10, 3, 11, 58, tzinfo=UTC),
 ) -> OperationsOverview:
     return OperationsOverview(
-        connected_accounts=sum(a.state == "connected" for a in accounts),
-        disconnected_accounts=sum(a.state == "disconnected" for a in accounts),
+        connected_accounts=sum(a.state is ConnectedAccountState.CONNECTED for a in accounts),
+        disconnected_accounts=sum(a.state is ConnectedAccountState.DISCONNECTED for a in accounts),
         open_incidents=open_incidents,
         last_synced_at=last_synced_at,
         open_blocks=blocks,
@@ -117,7 +117,10 @@ def test_a_running_installation_is_healthy() -> None:
     assert status.needs_attention is False
     assert status.problems == ()
     assert status.summary == "1 rule running."
-    assert status.providers == {"personal-account": "google", "work-account": "google"}
+    assert status.providers == {
+        "personal-account": ProviderKind.GOOGLE,
+        "work-account": ProviderKind.GOOGLE,
+    }
 
 
 def test_rule_names_use_last_known_calendar_names() -> None:
@@ -247,7 +250,9 @@ def test_problems_without_an_incident_have_no_message() -> None:
 @pytest.mark.parametrize("side", ["personal-account", "work-account"])
 def test_an_enabled_rule_with_a_disconnected_account_is_stopped(side: str) -> None:
     accounts = tuple(
-        replace(account, state="disconnected") if account.id == side else account
+        replace(account, state=ConnectedAccountState.DISCONNECTED)
+        if account.id == side
+        else account
         for account in CONNECTED
     )
     status = assess_installation(
@@ -384,7 +389,11 @@ def test_an_open_incident_never_reads_as_healthy() -> None:
         ),
         (
             [_summary(_rule(state=SyncRuleState.PAUSED))],
-            _overview(accounts=tuple(replace(a, state="disconnected") for a in CONNECTED)),
+            _overview(
+                accounts=tuple(
+                    replace(a, state=ConnectedAccountState.DISCONNECTED) for a in CONNECTED
+                )
+            ),
             StatusVerdict.SETUP,
         ),
     ],
@@ -442,8 +451,10 @@ def test_a_review_worthy_incident_wins_over_a_waiting_one_regardless_of_order() 
 
 
 LAPSED = (
-    AccountStanding("personal-account", "connected", "google"),
-    AccountStanding("work-account", "connected", "google", lapsed=True),
+    AccountStanding("personal-account", ConnectedAccountState.CONNECTED, ProviderKind.GOOGLE),
+    AccountStanding(
+        "work-account", ConnectedAccountState.CONNECTED, ProviderKind.GOOGLE, lapsed=True
+    ),
 )
 
 

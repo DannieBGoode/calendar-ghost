@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.incidents import IncidentCategory
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
+from calendar_sync.domain.providers import ProviderFailureKind
 
 
 class RuleNotExecutable(ApplicationError):
@@ -35,20 +34,6 @@ class RemovalRequiresProvider(ApplicationError):
 
 class RemovalRequiresAuthorization(ApplicationError):
     """Deleting projections needs an authorized destination account."""
-
-
-class ProviderFailureKind(StrEnum):
-    AUTHENTICATION = "authentication"
-    AUTHORIZATION = "authorization"
-    RATE_LIMIT = "rate_limit"
-    TEMPORARY = "temporary"
-    PERMANENT = "permanent"
-    INFRASTRUCTURE = "infrastructure"
-
-    @property
-    def incident_category(self) -> IncidentCategory:
-        """The category of the Incidents a failure of this kind opens."""
-        return IncidentCategory(self.value)
 
 
 # Failures that only reauthorizing the Connected Account can resolve.

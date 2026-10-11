@@ -5,7 +5,7 @@ from threading import Thread
 import pytest
 
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.reconciliation import ReconcileSyncRule
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule
@@ -28,6 +28,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RunKind
 from calendar_sync.domain.services import (
     EventProjector,

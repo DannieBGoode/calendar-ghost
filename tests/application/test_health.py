@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.health import (
     PROVIDER_INCIDENT_THRESHOLD,
     FailureResponse,
@@ -22,6 +22,7 @@ from calendar_sync.domain.incidents import (
     IncidentResolution,
 )
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
 from tests.helpers import NOW, rule

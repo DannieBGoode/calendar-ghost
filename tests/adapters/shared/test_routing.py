@@ -11,7 +11,6 @@ from calendar_sync.application.sync.errors import (
     AuthorizationNotConfigured,
     ConnectedAccountNotFound,
     ProviderFailure,
-    ProviderFailureKind,
 )
 from calendar_sync.application.sync.ports import (
     AccountAccess,
@@ -26,6 +25,7 @@ from calendar_sync.application.sync.provider_descriptors import (
 )
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.providers.routing import (
     RoutingAccountCalendars,
     RoutingCalendarProvider,

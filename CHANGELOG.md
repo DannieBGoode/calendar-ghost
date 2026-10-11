@@ -158,6 +158,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   composes `ChangeFeedCursors`, `SynchronizeEvents`, and `ExceptionReplays`, and
   `SyncDecisionService.decide_occurrence` takes one `OccurrenceSituation` and no longer needs a
   complexity exception.
+- A run's failure kind, and each Connected Account's state and Provider Kind in Installation
+  Status, are typed as their domain enums instead of strings. `ProviderFailureKind` moves to
+  `domain/providers.py`, and `application/sync/events.py` is now `event_sync.py`, so it is not
+  mistaken for domain events. Stored values, API payloads, and the OpenAPI document are unchanged.
 - Activity has a History tab and an Incidents tab, each at its own address (`/activity` and
   `/activity/incidents`), while any Incident is kept; the Incidents tab counts the open ones.
   Incidents list in one table, open first, each with when it opened, the rule or account, and when

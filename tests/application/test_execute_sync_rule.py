@@ -10,11 +10,7 @@ from time import sleep
 
 import pytest
 
-from calendar_sync.application.sync.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-)
+from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
     CreatedProjection,
@@ -41,6 +37,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RunKind
 from calendar_sync.domain.services import (
     EventProjector,

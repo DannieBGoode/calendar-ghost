@@ -151,17 +151,20 @@ def _resource_use(state: MemoryState | None, since: date) -> ResourceUse:
 
 def _status_records(state: MemoryState | None) -> StatusRecords:
     """A User's records as Installation Status reads them. This store reads no Incidents here and
-    keeps no Activity blocks; an account's provider is empty unless a test recorded one."""
+    keeps no Activity blocks. It knows an account's provider only when a test recorded one, so an
+    account without one counts but has no standing."""
     state = state or MemoryState()
     accounts = tuple(
         AccountStanding(
             account.value,
-            standing.value,
-            state.providers[account].value if account in state.providers else "",
+            standing,
+            state.providers[account],
             lapsed=standing is ConnectedAccountState.CONNECTED and account in state.lapsed,
         )
         for account, standing in sorted(state.accounts.items(), key=lambda item: item[0].value)
+        if account in state.providers
     )
+    standings = state.accounts.values()
     succeeded = [
         outcome.last_succeeded_at
         for (_, kind), outcome in state.outcomes.items()
@@ -176,8 +179,8 @@ def _status_records(state: MemoryState | None) -> StatusRecords:
             for rule in state.rules.values()
         ),
         overview=OperationsOverview(
-            connected_accounts=sum(a.state == "connected" for a in accounts),
-            disconnected_accounts=sum(a.state == "disconnected" for a in accounts),
+            connected_accounts=sum(s is ConnectedAccountState.CONNECTED for s in standings),
+            disconnected_accounts=sum(s is ConnectedAccountState.DISCONNECTED for s in standings),
             open_incidents=0,
             last_synced_at=max(succeeded) if succeeded else None,
             open_blocks=(),

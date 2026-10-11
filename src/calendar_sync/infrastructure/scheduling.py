@@ -19,11 +19,7 @@ from calendar_sync.application.operations.ports import (
     SchedulerProgress,
 )
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-)
+from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.health import RunHealth
 from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.application.sync.resource_use import first_counted_day
@@ -32,6 +28,7 @@ from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRule
+from calendar_sync.domain.providers import ProviderFailureKind
 
 logger = logging.getLogger(__name__)
 

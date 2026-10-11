@@ -10,7 +10,7 @@ from typing import Literal, Protocol, Self
 
 from calendar_sync.application.sync.ports import RulePreviewSummary, ScheduledRule
 from calendar_sync.domain.access import UserId
-from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import (
     AccountAuthorization,
@@ -225,8 +225,8 @@ class AccountStanding:
     """A Connected Account's state and Provider Kind; never its email or name."""
 
     id: str
-    state: str
-    provider: str
+    state: ConnectedAccountState
+    provider: ProviderKind
     lapsed: bool = False
     """Whether the provider stopped accepting a connected account (ADR 0027)."""
 

@@ -13,7 +13,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
 from calendar_sync.application.sync.errors import (
     ProviderFailure,
-    ProviderFailureKind,
     RemovalInterrupted,
     ReplacementInterrupted,
     RuleNotFound,
@@ -21,6 +20,7 @@ from calendar_sync.application.sync.errors import (
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import SyncRuleId
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.interfaces.api import problems
 from calendar_sync.interfaces.api.problems import install_problem_handlers, problem, problem_from
 

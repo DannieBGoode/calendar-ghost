@@ -19,7 +19,6 @@ from calendar_sync.application.sync.errors import (
     CalendarPermissionRequired,
     ConnectedAccountNotFound,
     ProviderFailure,
-    ProviderFailureKind,
     RemovalInterrupted,
 )
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
@@ -72,6 +71,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.services import (
     EventProjector,
@@ -2138,7 +2138,7 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
                 RunKind.SYNC,
                 datetime(2026, 9, 28, 10, 0, tzinfo=UTC),
                 succeeded=False,
-                failure_kind="rate_limit",
+                failure_kind=ProviderFailureKind.RATE_LIMIT,
                 failure_provider=ProviderKind.OUTLOOK,
             )
         )
@@ -2206,7 +2206,7 @@ def test_last_successful_sync_survives_a_later_failure(tmp_path: Path) -> None:
                 succeeded,
                 completed_at=datetime(2026, 9, 28, 10, 0, tzinfo=UTC),
                 succeeded=False,
-                failure_kind="rate_limit",
+                failure_kind=ProviderFailureKind.RATE_LIMIT,
             )
         )
         uow.commit()

@@ -14,7 +14,7 @@ from typing import cast
 
 import pytest
 
-from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.ports import (
     CalendarProvider,
     CalendarReader,
@@ -33,6 +33,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.providers.routing import RoutingCalendarProvider
 from tests.helpers import NOW, endpoint
 

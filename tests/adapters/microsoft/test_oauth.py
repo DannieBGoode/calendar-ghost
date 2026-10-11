@@ -16,11 +16,11 @@ from calendar_sync.application.sync.errors import (
     AuthorizationNotConfigured,
     CalendarPermissionRequired,
     InvalidAuthorizationState,
-    ProviderFailureKind,
 )
 from calendar_sync.application.sync.ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.microsoft.oauth import (
     SCOPES,
     MicrosoftClient,

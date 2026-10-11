@@ -10,11 +10,7 @@ from typing import Any
 from google.auth.exceptions import RefreshError, TransportError
 
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.errors import (
-    ProjectionOwnershipMismatch,
-    ProviderFailure,
-    ProviderFailureKind,
-)
+from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch, ProviderFailure
 from calendar_sync.application.sync.ports import CreatedProjection, ProviderChangeSet
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
@@ -30,6 +26,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.google.causes import (
     QUOTA_REASONS,
     RATE_LIMIT_REASONS,

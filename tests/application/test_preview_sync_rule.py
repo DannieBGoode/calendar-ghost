@@ -4,11 +4,7 @@ from typing import cast
 
 import pytest
 
-from calendar_sync.application.sync.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-)
+from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.ports import CalendarReader, UnitOfWorkFactory
 from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.domain.model import (
@@ -24,6 +20,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,

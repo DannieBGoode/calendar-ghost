@@ -7,11 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.auth.exceptions import RefreshError, TransportError
 
-from calendar_sync.application.sync.errors import (
-    ProjectionOwnershipMismatch,
-    ProviderFailure,
-    ProviderFailureKind,
-)
+from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch, ProviderFailure
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -25,6 +21,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.google.provider import (
     LIVE_OCCURRENCE_FIELDS,
     OCCURRENCE_EXCEPTION_FIELDS,

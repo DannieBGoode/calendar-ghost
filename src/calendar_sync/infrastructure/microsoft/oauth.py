@@ -28,7 +28,6 @@ from calendar_sync.application.sync.errors import (
     CalendarPermissionRequired,
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
-    ProviderFailureKind,
 )
 from calendar_sync.application.sync.ports import (
     AccountAccess,
@@ -40,6 +39,7 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.microsoft.causes import cause_of
 from calendar_sync.infrastructure.microsoft.graph import (
     LOGIN,

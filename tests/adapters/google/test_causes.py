@@ -13,11 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 from google.auth.exceptions import RefreshError, TransportError
 
-from calendar_sync.application.sync.errors import (
-    AccountAccessCheckFailed,
-    ProviderFailure,
-    ProviderFailureKind,
-)
+from calendar_sync.application.sync.errors import AccountAccessCheckFailed, ProviderFailure
 from calendar_sync.domain.causes import Cause, CauseOwner
 from calendar_sync.domain.model import (
     CalendarEvent,
@@ -30,6 +26,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.google.oauth import GoogleOAuthService
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.oauth import OAuthClientConfig

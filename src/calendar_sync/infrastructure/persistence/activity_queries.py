@@ -382,9 +382,10 @@ def operations_of(
         accounts[row["user_id"]].append(
             AccountStanding(
                 str(row["id"]),
-                str(row["state"]),
-                str(row["provider"]),
-                lapsed=row["state"] == "connected" and row["authorization_lapsed_at"] is not None,
+                ConnectedAccountState(str(row["state"])),
+                ProviderKind(str(row["provider"])),
+                lapsed=row["state"] == ConnectedAccountState.CONNECTED.value
+                and row["authorization_lapsed_at"] is not None,
             )
         )
     incidents: dict[str, list[IncidentSummary]] = {user: [] for user in users}
@@ -410,8 +411,12 @@ def operations_of(
     return {
         user: UserOperations(
             OperationsOverview(
-                connected_accounts=sum(a.state == "connected" for a in accounts[user]),
-                disconnected_accounts=sum(a.state == "disconnected" for a in accounts[user]),
+                connected_accounts=sum(
+                    a.state is ConnectedAccountState.CONNECTED for a in accounts[user]
+                ),
+                disconnected_accounts=sum(
+                    a.state is ConnectedAccountState.DISCONNECTED for a in accounts[user]
+                ),
                 # Every open incident counts, though only the most recent are read, as in
                 # `SqliteOperationsQueries`, so both readers assess the same ones.
                 open_incidents=len(incidents[user]),
