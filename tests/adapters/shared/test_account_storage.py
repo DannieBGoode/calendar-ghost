@@ -274,3 +274,23 @@ def test_account_state_is_stored_under_its_existing_values(tmp_path: Path) -> No
     assert store.for_user(USER).get(account.id) == store.for_user(USER).list()[0]
     assert store.for_user(USER).list()[0].state is ConnectedAccountState.DISCONNECTED
     assert store.for_user(USER).get(ConnectedAccountId("missing")) is None
+
+
+def test_the_same_address_at_two_providers_is_two_connected_accounts(tmp_path: Path) -> None:
+    database = tmp_path / "test.db"
+    initialize_database(database)
+    add_user(database)
+    store = SqliteConnectedAccountStore(database, CredentialCipher(CredentialCipher.generate_key()))
+    accounts = store.for_user(USER)
+
+    google = accounts.save("Person", "person@example.test", "{}", provider=ProviderKind.GOOGLE)
+    outlook = accounts.save("Person", "person@example.test", "{}", provider=ProviderKind.OUTLOOK)
+    again = accounts.save("Person", "person@example.test", "{}", provider=ProviderKind.OUTLOOK)
+
+    assert google.id != outlook.id
+    assert again.id == outlook.id
+    assert store.provider_of(outlook.id) is ProviderKind.OUTLOOK
+    assert {account.provider for account in accounts.list()} == {
+        ProviderKind.GOOGLE,
+        ProviderKind.OUTLOOK,
+    }

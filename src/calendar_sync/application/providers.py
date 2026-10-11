@@ -13,6 +13,7 @@ class ProviderKind(StrEnum):
     """The calendar service a Connected Account belongs to; stored, so values never change."""
 
     GOOGLE = "google"
+    OUTLOOK = "outlook"
 
     @classmethod
     def recorded(cls, value: object) -> ProviderKind | None:

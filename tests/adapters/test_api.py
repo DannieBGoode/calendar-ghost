@@ -458,6 +458,23 @@ def test_providers_lists_each_configured_provider_and_how_to_connect_it(tmp_path
     assert none == []
 
 
+def test_without_microsoft_settings_no_microsoft_provider_is_listed(tmp_path: Path) -> None:
+    settings = Settings(
+        tmp_path / "test.db",
+        master_key=CredentialCipher.generate_key(),
+        google_client_id="synthetic-client",
+        google_client_secret="synthetic-secret",
+    )
+
+    with TestClient(create_app(build_container(settings))) as client:
+        sign_in(client)
+        listed = client.get("/api/v1/providers").json()
+        start = client.get("/api/v1/oauth/microsoft/start", follow_redirects=False)
+
+    assert [provider["kind"] for provider in listed] == ["google"]
+    assert (start.status_code, start.json()["code"]) == (503, "authorization_not_configured")
+
+
 def test_a_connection_flow_no_provider_offers_is_not_found(tmp_path: Path) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 

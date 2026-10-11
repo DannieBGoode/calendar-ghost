@@ -233,11 +233,11 @@ run, within five minutes, resolves the incident; **Sync Now** and **Reconcile No
 
 ## Problems only an administrator can fix
 
-Some failures come from the installation's Google Cloud project, not from anyone's Google account
-or calendars, so only an Installation Administrator can fix them. Calendar Ghost reads why Google
-refused from its reason code, never its message, and records it as a Cause. Each person's own
-Overview says only that Google Calendar is temporarily unavailable, without the cause or a mention
-of you, so people are not prompted to contact you. On
+Some failures come from the installation's Google Cloud project or Microsoft Entra application,
+not from anyone's account or calendars, so only an Installation Administrator can fix them.
+Calendar Ghost reads why the provider refused from its reason code, never its message, and records
+it as a Cause. Each person's own Overview says only that the calendar service is temporarily
+unavailable, without the cause or a mention of you, so people are not prompted to contact you. On
 **People**, **Installation health** says **Needs you**, People is marked in the navigation, and the
 likely cause is shown as soon as anyone meets it, with **How to fix** linking to the section below; a person's page shows the
 likely cause of each of their problems. Administrators never need to contact anyone: once the
@@ -305,6 +305,26 @@ it. Grants given while the app was in Testing still expire, so each affected per
 once from their own dashboard; after that their access lasts. A Google Workspace organization can
 instead set the user type to **Internal**, which has no 7-day limit.
 
+### Microsoft no longer accepts the OAuth client
+
+**Symptom.** Every person's Microsoft accounts stop at the same time, the likely cause reads
+"Microsoft no longer accepts this installation's OAuth client", and reauthorizing fails too.
+
+**Confirm.** In the [Microsoft Entra admin center](https://entra.microsoft.com/), open **App
+registrations**, find the application whose **Application (client) ID** is
+`CALENDAR_SYNC_MICROSOFT_CLIENT_ID`, and open **Certificates & secrets**. The secret in
+`CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET` has most likely expired: each secret has an expiry date,
+at most 24 months after it was created. The application may also have been deleted. The service
+logs name Microsoft's code, such as `AADSTS7000222` for an expired secret
+([Reading the logs](#reading-the-logs)). Do not post either value publicly.
+
+**Fix.** Choose **New client secret**, copy its **Value** (shown only once), put it in `.env` as
+`CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`, and run `docker compose up -d`. Each person's Overview
+offers **Check access** on their Microsoft account; a check that passes restarts their rules. If
+you had to register a new application, Microsoft's grants to the old one do not carry over: each
+person reauthorizes once. To avoid this, add a reminder for the secret's expiry date and create
+the next secret before it.
+
 ## Problems you fix yourself
 
 When Google refuses one of your requests for a reason that is yours to handle, your Overview and
@@ -358,6 +378,48 @@ reason Calendar Ghost does not recognize".
 **What to do.** Try the rule's usual step again: open the rule and preview it to restart it, or read
 what Activity says. If it keeps happening, tell your administrator; the service logs name Google's
 reason ([Reading the logs](#reading-the-logs)).
+
+### Microsoft no longer accepts your Microsoft account
+
+**What you see.** "A Microsoft account needs reauthorization", with the likely cause "Microsoft no
+longer accepts this Microsoft account's permission". You removed Calendar Ghost's access, your
+password was reset, your sign-in now needs another step such as multifactor authentication, or the
+grant went unused for 90 days.
+
+**What to do.** Choose **Reauthorize account** in **Settings → Connections**, for the account it
+names. Every rule the lapse stopped restarts on its own, with no preview. With a work or school
+account, your organization may require its administrator to approve applications: if Microsoft
+says the application needs approval, ask your organization's IT administrator to grant consent to
+it, then reauthorize.
+
+### Your Microsoft account may not change the calendar
+
+**What you see.** The rule stopped, with the likely cause "the Microsoft account may not change
+this calendar". The calendar was shared with your account to read only, or its owner took away
+your permission to edit it.
+
+**What to do.** Open the rule. Choose another calendar for it, or remove it. To keep the same
+calendar, ask its owner to share it with your Microsoft account with **Can edit**, then preview the
+rule again to restart it.
+
+### Microsoft is slowing Calendar Ghost down
+
+**What you see.** "Waiting for Microsoft", with the likely cause "Microsoft asked Calendar Ghost to
+slow down" or "Microsoft failed for a moment", when the rule was last tried, and when it tries
+again.
+
+**What to do.** Nothing. Calendar Ghost tries again by itself, waiting as long as Microsoft asks,
+and catches up afterwards. If it lasts more than a day, check the Microsoft 365 service health
+status page.
+
+### Microsoft refused for a reason Calendar Ghost does not recognize
+
+**What you see.** The rule stopped or needs a look, with the likely cause "Microsoft refused for a
+reason Calendar Ghost does not recognize".
+
+**What to do.** Try the rule's usual step again: open the rule and preview it to restart it, or read
+what Activity says. If it keeps happening, tell your administrator; the service logs name
+Microsoft's code ([Reading the logs](#reading-the-logs)).
 
 ## A Google account was disconnected
 

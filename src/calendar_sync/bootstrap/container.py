@@ -109,6 +109,7 @@ from calendar_sync.infrastructure.google.descriptor import google_provider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
 from calendar_sync.infrastructure.log_files import RotatingLogFiles
+from calendar_sync.infrastructure.microsoft.descriptor import MicrosoftClient, microsoft_provider
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
@@ -393,6 +394,16 @@ def calendar_providers(
                 states,
                 settings.master_key,
                 clock,
+            ),
+            microsoft_provider(
+                MicrosoftClient(
+                    OAuthClientConfig(
+                        settings.microsoft_client_id,
+                        settings.microsoft_client_secret,
+                        settings.microsoft_redirect_uri,
+                    ),
+                    settings.microsoft_tenant,
+                )
             ),
         )
     )

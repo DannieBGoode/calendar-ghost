@@ -278,9 +278,27 @@ at the foot of Connected accounts. For 10 minutes after you start connecting fro
 for the address Google returned to instead: pasting it finishes the connection at the address you
 are using, without a tunnel.
 
+## Microsoft (Outlook) settings
+
+Outlook calendars connect through a Microsoft Entra application the installation registers
+([self-hosting guide](self-hosting.md), [ADR 0032](adr/0032-outlook-through-microsoft-graph.md)).
+Without its settings, the installation behaves as before and offers no Microsoft account.
+
+- `CALENDAR_SYNC_MICROSOFT_CLIENT_ID` and `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`: the
+  application's client ID and a client secret. A secret expires on the date chosen when it was
+  created, at most 24 months later; create the next one and put it here before then.
+- `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI`: the redirect URI registered on the application, by default
+  `http://localhost:8000/api/v1/oauth/microsoft/callback`. Microsoft, like Google, accepts plain
+  `http://` only for `localhost`, so a LAN host uses an SSH tunnel or an HTTPS name exactly as
+  described above, with `/api/v1/oauth/microsoft/callback` as the path.
+- `CALENDAR_SYNC_MICROSOFT_TENANT`: which accounts may sign in, `common` by default for personal
+  and work or school accounts. `organizations` admits work or school accounts only, `consumers`
+  personal ones only, and a tenant ID only that organization's accounts.
+
 ## Secrets
 
-Keep Google client credentials and the installation master key outside the database and repository. Use Docker secrets or a root-readable environment file. Database backups cannot restore connected accounts without the separately backed-up master key.
+Keep Google and Microsoft client credentials and the installation master key outside the database
+and repository. Use Docker secrets or a root-readable environment file. Database backups cannot restore connected accounts without the separately backed-up master key.
 
 The database also holds each observed event's description, location, guest addresses, recurrence,
 and conferencing links, sealed with a key derived from the master key, and 90 days of their earlier

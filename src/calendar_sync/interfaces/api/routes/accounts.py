@@ -26,7 +26,7 @@ from calendar_sync.application.errors import (
     InvalidAuthorizationState,
 )
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.ports import CalendarAccess
+from calendar_sync.application.ports import AccountCalendars, CalendarAccess
 from calendar_sync.application.provider_descriptors import ProviderDescriptor, ProviderDirectory
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
@@ -77,6 +77,11 @@ class AuthorizationServices(Protocol):
 
     @property
     def providers(self) -> ProviderDirectory: ...
+    @property
+    def account_calendars(self) -> AccountCalendars | None:
+        """Present only with the installation master key, without which no account is stored."""
+        ...
+
     def for_user(self, user_id: UserId) -> AccountServices: ...
 
 
@@ -131,10 +136,15 @@ def start_oauth(
     """Start the provider's consent for the signed-in User; reauthorizing a known `account`
     suggests its email to the provider."""
     descriptor = _provider(installation, slug)
-    connection = available(
-        descriptor.connection,
+    available(
+        installation.account_calendars,
         ACCOUNT_MANAGEMENT_UNAVAILABLE,
         "configure the installation master key before connecting an account",
+    )
+    connection = available(
+        descriptor.connection,
+        "authorization_not_configured",
+        f"configure the {descriptor.guide.display_name} OAuth client before connecting",
     )
     try:
         url = connection.authorization.authorization_url(

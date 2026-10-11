@@ -363,10 +363,14 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `CALENDAR_SYNC_DATABASE_PATH` | No | SQLite path; defaults locally to `./calendar-sync.db`, while Compose uses `/data/calendar-sync.db` |
-| `CALENDAR_SYNC_MASTER_KEY` | For Google | URL-safe Base64 value decoding to exactly 32 bytes |
+| `CALENDAR_SYNC_MASTER_KEY` | To connect accounts | URL-safe Base64 value decoding to exactly 32 bytes |
 | `CALENDAR_SYNC_GOOGLE_CLIENT_ID` | For Google | OAuth Web application client ID |
 | `CALENDAR_SYNC_GOOGLE_CLIENT_SECRET` | For Google | OAuth Web application client secret |
 | `CALENDAR_SYNC_GOOGLE_REDIRECT_URI` | For Google | Exact registered OAuth callback |
+| `CALENDAR_SYNC_MICROSOFT_CLIENT_ID` | For Outlook | Microsoft Entra application (client) ID |
+| `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET` | For Outlook | Client secret value; it expires on the date chosen when it was created |
+| `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` | For Outlook | Exact registered redirect URI; defaults to `http://localhost:8000/api/v1/oauth/microsoft/callback` |
+| `CALENDAR_SYNC_MICROSOFT_TENANT` | No | Which Microsoft accounts may connect: `common` (default, personal and work or school), `organizations`, `consumers`, or a tenant ID |
 | `CALENDAR_SYNC_SECURE_COOKIES` | No | Set `true` when serving the app over HTTPS |
 | `CALENDAR_SYNC_LOG_LEVEL` | No | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); defaults to `INFO` |
 | `CALENDAR_SYNC_LOG_DIR` | No | Directory for rotating log files; unset defaults to `logs` beside the database (`/data/logs` in Compose). Empty turns file logging off |
