@@ -65,6 +65,8 @@ SELECT = (
     "start,end,subject,body,location,recurrence,responseStatus,attendees,onlineMeeting,"
     "onlineMeetingUrl,webLink,lastModifiedDateTime"
 )
+EXCEPTION_ATTENDEES = "exceptionOccurrences($select=id,attendees)"
+"""What a series master is read with to learn whether any of its exceptions has attendees."""
 OCCURRENCE_TYPES = frozenset({"occurrence", "exception"})
 # Marks the identifier of an occurrence Outlook cancelled, which has no event of its own.
 CANCELLED_MARKER = "~cancelled~"
@@ -316,6 +318,15 @@ def _properties(item: Mapping[str, Any]) -> dict[str, str]:
 def _response(item: Mapping[str, Any]) -> str:
     status = item.get("responseStatus")
     return str(status.get("response")) if isinstance(status, Mapping) else "none"
+
+
+def exceptions_have_attendees(item: Mapping[str, Any]) -> bool | None:
+    """Whether any exception of a series master, read with EXCEPTION_ATTENDEES, has attendees;
+    None when Graph did not list its exceptions in full."""
+    exceptions = item.get("exceptionOccurrences")
+    if not isinstance(exceptions, list) or "exceptionOccurrences@odata.nextLink" in item:
+        return None
+    return any(isinstance(each, Mapping) and each.get("attendees") for each in exceptions)
 
 
 def _guests(attendees: object) -> tuple[str, ...]:

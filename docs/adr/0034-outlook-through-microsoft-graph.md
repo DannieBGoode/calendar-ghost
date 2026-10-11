@@ -190,8 +190,11 @@ sends a cancellation only for a meeting with attendees, which a projection never
 still invite guests to a projection, or to one occurrence of a projected series, in Outlook. Such an
 event is never updated, deleted, or cancelled again, and its guests are never cleared, since each of
 those emails them: the write is refused as a Conflict (`projection_unsupported`), the event is left
-as it is, and Rule Removal leaves it too. A change that could email anyone is release-blocking, as
-for Google.
+as it is, and Rule Removal leaves it too. Updating or deleting a series also reaches the guests of
+each of its exceptions, so before either the adapter reads the series' `exceptionOccurrences` with
+their attendees: if any has guests, the write is a Conflict as well, and if Graph does not list them
+all, the series is not changed until it does. A change that could email anyone is release-blocking,
+as for Google.
 
 ### Reading source events
 
@@ -261,6 +264,9 @@ release that enables the provider:
     `originalStart`, and whether the adapter names each occurrence as Outlook does.
 14. Which spelling of the calendar access refusal, `ErrorAccessDenied` or `accessDenied`, a
     personal account and a work account each return.
+15. That a series master read with `$expand=exceptionOccurrences($select=id,attendees)` lists every
+    exception with its attendees, how a long list continues, and that deleting or updating a series
+    emails the guests of an exception that has them.
 
 ## Alternatives considered
 

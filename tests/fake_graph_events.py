@@ -208,7 +208,18 @@ class FakeGraphEvents:
         expand = "$expand" in params
         event = self._event(mailbox, calendar, event_id)
         if event is not None:
-            return httpx.Response(200, json=self._serve(event, expand=expand))
+            answer = self._serve(event, expand=expand)
+            if "exceptionOccurrences" in params.get("$expand", "") and event.is_series:
+                # "exceptionOccurrences: ... the event instances that are exceptions in a
+                # recurring series. Exceptions can differ from other occurrences in a recurring
+                # series, such as the subject, start or end times, or attendees. Exceptions don't
+                # include canceled occurrences. Returned only on $select and $expand in a GET
+                # operation that specifies the ID of a series master event"
+                # (https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0).
+                answer["exceptionOccurrences"] = [
+                    self._instance(event, day, expand=False) for day in sorted(event.exceptions)
+                ]
+            return httpx.Response(200, json=answer)
         found = self._occurrence(mailbox, calendar, event_id)
         if found is None:
             return _error(404, "ErrorItemNotFound")
@@ -423,7 +434,10 @@ class FakeGraphEvents:
         """Whether a write to this event or occurrence reaches attendees."""
         event = self._event(mailbox, calendar, event_id)
         if event is not None:
-            return bool(event.fields.get("attendees"))
+            # A series' cancellation or update also reaches its exceptions' own attendees.
+            return bool(event.fields.get("attendees")) or any(
+                override.get("attendees") for override in event.exceptions.values()
+            )
         found = self._occurrence(mailbox, calendar, event_id)
         if found is None:
             return False

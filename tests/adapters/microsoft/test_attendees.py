@@ -5,9 +5,10 @@ refused as a Conflict and the event is left as it is (ADR 0034)."""
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import httpx
 import pytest
 
-from calendar_sync.application.sync.errors import UnsupportedProjection
+from calendar_sync.application.sync.errors import ProviderFailure, UnsupportedProjection
 from calendar_sync.domain.model import (
     EventId,
     EventProjection,
@@ -16,6 +17,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from tests.adapters.microsoft.test_calendar_provider_contract import outlook
 from tests.fake_microsoft_graph_api import FakeMicrosoftGraph
 from tests.helpers import endpoint
@@ -123,3 +125,54 @@ def test_an_exception_someone_invited_guests_to_is_left_alone() -> None:
     assert _writes(graph) == ["POST", "DELETE"]
     assert graph.events.mail == []
     assert provider.get_occurrence(destination, later) is not None
+
+
+def test_a_series_with_an_exception_someone_invited_guests_to_is_never_updated_or_deleted() -> None:
+    provider, graph = outlook()
+    destination, source = _series(provider)
+    # Only the second Monday's occurrence has guests; the series itself has none.
+    series = graph.events.stored[destination.event_id.value]
+    series.exceptions[date(2026, 10, 19)] = {"attendees": GUESTS}
+    later = MONDAY + timedelta(hours=2)
+    moved = EventProjection(
+        TimedInterval(later, later + timedelta(minutes=30), "Europe/Madrid"),
+        "Busy",
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=MO",)),
+    )
+
+    with pytest.raises(UnsupportedProjection):
+        provider.update_projection(destination, source, RULE, moved, "key-2")
+    with pytest.raises(UnsupportedProjection):
+        provider.delete_projection(destination, source, RULE, "key-3")
+
+    assert destination.event_id.value in graph.events.stored
+    assert _writes(graph) == ["POST"]
+    assert graph.events.mail == []
+
+
+def test_a_series_whose_exceptions_outlook_did_not_list_is_not_deleted_now() -> None:
+    provider, graph = outlook()
+    destination, source = _series(provider)
+    serve = graph.handle
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if "exceptionOccurrences" in request.url.params.get("$expand", ""):
+            graph.requests.append(request)
+            # The exceptions continue on a page of their own, unread.
+            return httpx.Response(
+                200,
+                json={
+                    "id": destination.event_id.value,
+                    "exceptionOccurrences": [],
+                    "exceptionOccurrences@odata.nextLink": "https://graph.microsoft.com/v1.0/more",
+                },
+            )
+        return serve(request)
+
+    graph.handle = handle  # type: ignore[method-assign]
+
+    with pytest.raises(ProviderFailure) as failed:
+        provider.delete_projection(destination, source, RULE, "key-2")
+
+    assert failed.value.kind is ProviderFailureKind.TEMPORARY
+    assert _writes(graph) == ["POST"]

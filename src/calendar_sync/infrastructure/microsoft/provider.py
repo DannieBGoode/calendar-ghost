@@ -48,6 +48,7 @@ from calendar_sync.infrastructure.microsoft.graph import GraphHttp, GraphRefusal
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.microsoft.recurrence import occurrence_dates
 from calendar_sync.infrastructure.microsoft.translation import (
+    EXCEPTION_ATTENDEES,
     EXPAND,
     OCCURRENCE_TYPES,
     OPERATION_PROPERTY,
@@ -58,6 +59,7 @@ from calendar_sync.infrastructure.microsoft.translation import (
     all_day_series_zone,
     cancelled_occurrence,
     cancelled_occurrence_reference,
+    exceptions_have_attendees,
     instances_window,
     items_of,
     occurrence_body,
@@ -382,6 +384,7 @@ class OutlookCalendarProvider:
                 provider_label=MICROSOFT.calendar_name,
             )
         _refuse_guests(existing)
+        self._refuse_exception_guests(existing)
         body = projection_body(projection, rule_id, source, operation_key)
         if projection.recurrence is None and existing.recurrence is not None:
             body["recurrence"] = None
@@ -414,7 +417,29 @@ class OutlookCalendarProvider:
                 provider_label=MICROSOFT.calendar_name,
             )
         _refuse_guests(existing)
+        self._refuse_exception_guests(existing)
         self._delete(destination.calendar, destination.event_id.value)
+
+    def _refuse_exception_guests(self, existing: CalendarEvent) -> None:
+        """Refuse to change a series one of whose exceptions someone invited guests to: Outlook
+        emails them about the series' update or deletion too. A series whose exceptions Graph
+        did not list in full is not changed now (ADR 0034)."""
+        if existing.recurrence is None:
+            return
+        account = existing.reference.calendar.connected_account_id
+        with self._refusals(account):
+            item = self._graph.request(
+                "events.get",
+                "GET",
+                _event_path(existing.reference),
+                self._token(account),
+                params={"$select": "id", "$expand": EXCEPTION_ATTENDEES},
+            )
+        invited = exceptions_have_attendees(item)
+        if invited is None:
+            raise self._unproven("Outlook did not list the exceptions of a series")
+        if invited:
+            raise UnsupportedProjection("Outlook would notify the guests of an occurrence")
 
     def _delete(self, calendar: CalendarEndpoint, event_id: str) -> None:
         """DELETE, which notifies nobody about an event without attendees, as projections are;
