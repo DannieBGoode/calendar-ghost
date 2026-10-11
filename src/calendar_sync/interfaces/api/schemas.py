@@ -128,6 +128,8 @@ class RunOutcomeResponse(ApiResponse):
     checked_mappings: int
     drift: int
     failure_kind: str | None
+    failure_provider: str | None = None
+    """The Provider Kind of the calendar that failed, when a provider did."""
     last_succeeded_at: str | None
 
 

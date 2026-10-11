@@ -7,12 +7,18 @@ from unittest.mock import Mock
 import pytest
 
 from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
     AuthorizationNotConfigured,
     ConnectedAccountNotFound,
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import AccountCalendars, CalendarAccess, DiscoveredCalendar
+from calendar_sync.application.ports import (
+    AccountAccess,
+    AccountCalendars,
+    CalendarAccess,
+    DiscoveredCalendar,
+)
 from calendar_sync.application.provider_descriptors import (
     ProviderDescriptor,
     ProviderDirectory,
@@ -150,3 +156,30 @@ def test_account_calendars_of_an_unconfigured_provider_are_unavailable() -> None
         router.verify_access(PERSONAL)
 
     assert str(raised.value) == "Example Calendar is not configured on this installation"
+
+
+def test_an_access_check_names_the_provider_that_refused_it() -> None:
+    refused = AccountAccessCheckFailed("expired", ProviderFailureKind.AUTHENTICATION)
+    outlook = Mock()
+    outlook.verify_access.side_effect = refused
+    router = RoutingAccountCalendars(
+        StoredKinds({PERSONAL: ProviderKind.OUTLOOK}),
+        {ProviderKind.OUTLOOK: cast(AccountCalendars, outlook)},
+    )
+
+    with pytest.raises(AccountAccessCheckFailed) as raised:
+        router.verify_access(PERSONAL)
+
+    assert raised.value.provider is ProviderKind.OUTLOOK
+    assert raised.value.kind is ProviderFailureKind.AUTHENTICATION
+
+
+def test_an_access_check_that_passes_names_no_provider() -> None:
+    google = Mock()
+    google.verify_access.return_value = AccountAccess(3, 2)
+    router = RoutingAccountCalendars(
+        StoredKinds({PERSONAL: ProviderKind.GOOGLE}),
+        {ProviderKind.GOOGLE: cast(AccountCalendars, google)},
+    )
+
+    assert router.verify_access(PERSONAL) == AccountAccess(3, 2)

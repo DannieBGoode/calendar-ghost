@@ -315,7 +315,7 @@ describe("OwnAccountSection", () => {
     await renderSection(testI18n(), { answers: { "GET /api/v1/account/deletion": deletion({ last_user: true }) } })
     await click(button("Delete your account"))
     expect(container.querySelector("#own-delete-confirmation p")?.textContent).toBe(
-      "You are the last person here. This deletes your sign-in, rules, Google connections, tokens, and Activity, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
+      "You are the last person here. This deletes your sign-in, rules, calendar connections, tokens, and Activity, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Choose below what happens to the events your rules wrote. Your own events and your calendar accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
     )
   })
 
@@ -323,12 +323,12 @@ describe("OwnAccountSection", () => {
     await renderSection(testI18n())
     queryClient.setQueryData(["rules"], [{ id: "rule-private" }])
     expect(deletionItem().querySelector("p")?.textContent).toBe(
-      "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your Google accounts and your own events stay.",
+      "Deletes your sign-in, rules, and calendar connections. You choose whether the events your rules wrote go too. Your calendar accounts and your own events stay.",
     )
     await click(button("Delete your account"))
     const confirmation = container.querySelector<HTMLElement>("#own-delete-confirmation")!
     expect(confirmation.querySelector("p")?.textContent).toBe(
-      "This deletes your sign-in, rules, Google connections, tokens, and Activity, and signs you out. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
+      "This deletes your sign-in, rules, calendar connections, tokens, and Activity, and signs you out. Choose below what happens to the events your rules wrote. Your own events and your calendar accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
     )
     expect(confirmation.querySelector<HTMLInputElement>("input[value='delete']")!.checked).toBe(true)
     expect(button("Delete my account", confirmation).disabled).toBe(true)

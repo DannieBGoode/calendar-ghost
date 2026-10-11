@@ -247,12 +247,15 @@ class AccountAccessCheckFailed(ApplicationError):
         detail: str,
         kind: ProviderFailureKind = ProviderFailureKind.PERMANENT,
         cause: Cause | None = None,
+        provider: ProviderKind | None = None,
     ) -> None:
         super().__init__(detail)
         self.kind = kind
         """How the provider refused, so an authorization refusal can lapse the account."""
         self.cause = cause
         """Why the provider refused, so the lapse it records says who fixes it (ADR 0031)."""
+        self.provider = provider
+        """Which provider refused, so a message can name it; the router sets it."""
 
 
 class ActivityEventNotFound(ApplicationError):

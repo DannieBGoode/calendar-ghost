@@ -43,7 +43,7 @@ export function ProblemDetail({
     <div className="user-overview-problem" data-owner={cause ? (isAdministratorCause(cause) ? "administrator" : "user") : undefined}>
       <p className="user-overview-problem-text">{problemText(i18n, problem, status.counts.blocked_events)}</p>
       {stops && <p className="user-overview-muted">{stops}</p>}
-      {causeAddsToProblem(cause) && <p className="user-overview-muted">{causeText(i18n, cause)}</p>}
+      {causeAddsToProblem(cause) && <p className="user-overview-muted">{causeText(i18n, cause, problem.provider)}</p>}
       <ProblemStep problem={problem} options={options} />
       {typeof options.audience === "object" && <SupportHint problem={problem} />}
       {timing && <p className="user-overview-muted">{timing}</p>}

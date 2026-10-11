@@ -48,12 +48,27 @@ describe("isAdministratorCause", () => {
 })
 
 describe("causeText", () => {
-  it("says the likely cause in plain words", () => {
-    expect(causeText(i18n, "api_disabled")).toBe(
+  it("says the likely cause in plain words, naming the provider that raised it", () => {
+    expect(causeText(i18n, "api_disabled", "google")).toBe(
       "Likely cause: the Google Calendar API is turned off for this installation.",
     )
-    expect(causeText(i18n, "unknown")).toBe(
+    expect(causeText(i18n, "unknown", "google")).toBe(
       "Likely cause: Google refused for a reason Calendar Ghost does not recognize.",
+    )
+    expect(causeText(i18n, "access_revoked", "outlook")).toBe(
+      "Likely cause: Microsoft no longer accepts this Microsoft account's permission.",
+    )
+    expect(causeText(i18n, "oauth_client_invalid", "outlook")).toBe(
+      "Likely cause: Microsoft no longer accepts this installation's OAuth client.",
+    )
+  })
+
+  it("names no provider when the server names none", () => {
+    expect(causeText(i18n, "calendar_forbidden", null)).toBe(
+      "Likely cause: the calendar account may not change this calendar.",
+    )
+    expect(causeText(i18n, "rate_limited", "a-later-provider")).toBe(
+      "Likely cause: the calendar provider asked Calendar Ghost to slow down.",
     )
   })
 })
@@ -97,10 +112,22 @@ describe("hintText", () => {
       "1 person is affected because the Google Calendar API is turned off for this installation.",
     )
     expect(hintText(i18n, hint("testing_mode", "access_revoked"))).toBe(
-      "3 people lost Google about 7 days after connecting, which usually means the Google OAuth app is in Testing mode.",
+      "3 people lost access about 7 days after connecting, which usually means the OAuth app at Google is in Testing mode.",
     )
     expect(hintText(i18n, hint("unrecognized", "unknown"))).toBe(
       "3 people failed for a reason Calendar Ghost does not recognize. The service logs name Google's reason.",
+    )
+  })
+
+  it("names the provider each pattern is about", () => {
+    expect(hintText(i18n, { ...hint("shared_cause", "oauth_client_invalid"), provider: "outlook" })).toBe(
+      "3 people are affected because Microsoft no longer accepts this installation's OAuth client.",
+    )
+    expect(hintText(i18n, { ...hint("unrecognized", "unknown"), provider: "outlook" })).toBe(
+      "3 people failed for a reason Calendar Ghost does not recognize. The service logs name Microsoft's reason.",
+    )
+    expect(hintText(i18n, { ...hint("unrecognized", "unknown"), provider: null })).toBe(
+      "3 people failed for a reason Calendar Ghost does not recognize. The service logs name the calendar provider's reason.",
     )
   })
 })

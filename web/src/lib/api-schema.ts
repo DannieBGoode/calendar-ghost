@@ -1869,6 +1869,8 @@ export interface components {
             drift: number;
             /** Failure Kind */
             failure_kind: string | null;
+            /** Failure Provider */
+            failure_provider: string | null;
             /** Full Run */
             full_run: boolean;
             /** Last Succeeded At */

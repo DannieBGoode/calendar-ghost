@@ -13,6 +13,7 @@ from threading import Lock
 from typing import Protocol
 
 from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
     AuthorizationNotConfigured,
     ConnectedAccountNotFound,
     ProviderFailure,
@@ -245,4 +246,8 @@ class RoutingAccountCalendars:
         return self._for(account_id).calendars(account_id)
 
     def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
-        return self._for(account_id).verify_access(account_id)
+        try:
+            return self._for(account_id).verify_access(account_id)
+        except AccountAccessCheckFailed as error:
+            error.provider = self._kinds.of(account_id)
+            raise

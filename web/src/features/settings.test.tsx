@@ -302,6 +302,37 @@ describe("SettingsPage", () => {
     ])
   })
 
+  it("names each account's provider in its row and on its avatar, and reauthorizes it with that provider", async () => {
+    const work = {
+      ...connected,
+      id: "acct-m",
+      provider: "outlook",
+      display_name: "Dana Work",
+      email: "dana@contoso.example",
+      authorization_lapsed_at: justNow,
+    }
+    const microsoft: CalendarProvider = {
+      ...googleProvider(REDIRECT_URI),
+      kind: "outlook",
+      display_name: "Microsoft",
+      connect_url: "/api/v1/oauth/microsoft/start",
+    }
+    await renderSettings(testI18n(), { accounts: [connected, work], providers: [googleProvider(REDIRECT_URI), microsoft] })
+
+    const rows = [...container.querySelectorAll<HTMLLIElement>(".account-item")]
+    expect(rows.map((row) => row.querySelector(".account-copy p")?.textContent)).toEqual([
+      "Microsoft account · dana@contoso.example",
+      "Google account · dana@example.test",
+    ])
+    expect(rows.map((row) => row.querySelector(".account-mark")?.getAttribute("title"))).toEqual([
+      "Microsoft account",
+      "Google account",
+    ])
+    expect(rows[0]?.querySelector("a")?.getAttribute("href")).toBe("/api/v1/oauth/microsoft/start?account=acct-m")
+    const connect = [...container.querySelectorAll<HTMLAnchorElement>(".connect-actions a")]
+    expect(connect.map((link) => link.textContent.trim())).toEqual(["Connect Google account", "Connect Microsoft account"])
+  })
+
   it("keeps an account's reauthorization unavailable while its provider is not configured", async () => {
     const lapsed = { ...connected, id: "acct-l", provider: "example", authorization_lapsed_at: justNow }
     await renderSettings(testI18n(), { accounts: [lapsed] })

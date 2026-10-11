@@ -929,7 +929,7 @@ def test_an_access_check_google_refuses_lapses_the_account_and_one_it_passes_res
     assert failed.status_code == 424
     assert (failed.json()["code"], failed.json()["params"]) == (
         "account_access_check_failed",
-        {"reason": "authentication"},
+        {"reason": "authentication", "provider": "google"},
     )
     assert [item["authorization_lapsed_at"] is not None for item in lapsed] == [False, True]
     assert passed.json()["rules_resumed"] == 1
@@ -2035,6 +2035,7 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
                 datetime(2026, 9, 28, 10, 0, tzinfo=UTC),
                 succeeded=False,
                 failure_kind="rate_limit",
+                failure_provider=ProviderKind.OUTLOOK,
             )
         )
         uow.commit()
@@ -2054,6 +2055,8 @@ def test_dashboard_and_rule_list_report_the_latest_successful_sync(tmp_path: Pat
     assert dashboard["needs_attention"] is False
     assert rules["rule-1"]["last_sync"]["created"] == 2
     assert rules["rule-2"]["last_sync"]["failure_kind"] == "rate_limit"
+    assert rules["rule-2"]["last_sync"]["failure_provider"] == "outlook"
+    assert rules["rule-1"]["last_sync"]["failure_provider"] is None
 
 
 def test_rules_report_work_running_for_them_so_a_reloaded_page_can_show_it(

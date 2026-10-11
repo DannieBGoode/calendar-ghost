@@ -221,13 +221,14 @@ describe("A person's page", () => {
       summary: "A calendar account needs reauthorization",
       since: null,
       message: { code: "authorization_lapsed", params: { provider: "google" } },
+      provider: "google",
     }
     const blocked = { ...robin.status.problems[0]!, rule_id: "rule-1" }
     const both = { ...robin, status: { ...robin.status, status: "stopped" as const, problems: [lapsed, blocked] } }
     await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(both) })
 
     const text = container.textContent
-    expect(text).toContain("A Google Calendar account needs reauthorization")
+    expect(text).toContain("A Google account needs reauthorization")
     expect(text).toContain("robin@example.test can fix this from their dashboard.")
     expect(text).toContain("3 events couldn't be synced")
   })
@@ -274,6 +275,7 @@ describe("A person's page", () => {
       summary: "A calendar account needs reauthorization",
       since: null,
       message: { code: "authorization_lapsed", params: { provider: "google" } },
+      provider: "google",
       cause: "access_revoked" as const,
       last_tried_at: justNow,
     }
@@ -303,7 +305,7 @@ describe("A person's page", () => {
     await renderPerson(testI18n())
 
     const footnote = container.querySelector(".page-footnote")?.textContent ?? ""
-    expect(footnote).toContain("never their calendar names, Google account emails, or events")
+    expect(footnote).toContain("never their calendar names, connected account emails, or events")
     expect(footnote).not.toContain("Settings")
   })
 
@@ -331,6 +333,7 @@ describe("A person's page", () => {
       summary: "A calendar account needs reauthorization",
       since: null,
       message: { code: "authorization_lapsed", params: { provider: "google" } },
+      provider: "google",
       cause,
       last_tried_at: null,
     })
@@ -362,7 +365,7 @@ describe("A person's page", () => {
       })
 
       const text = container.textContent
-      expect(text.split("A Google Calendar account needs reauthorization").length - 1).toBe(1)
+      expect(text.split("A Google account needs reauthorization").length - 1).toBe(1)
       expect(text).toContain("Stops Calendar 1 → Calendar 2 and Calendar 2 → Calendar 1.")
       expect(text.split("robin@example.test can fix this from their dashboard.").length - 1).toBe(1)
       expect(text).not.toContain("Likely cause")

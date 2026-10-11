@@ -2692,6 +2692,17 @@
             ],
             "title": "Failure Kind"
           },
+          "failure_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Provider"
+          },
           "full_run": {
             "title": "Full Run",
             "type": "boolean"
@@ -2727,6 +2738,7 @@
           "checked_mappings",
           "drift",
           "failure_kind",
+          "failure_provider",
           "last_succeeded_at"
         ],
         "title": "RunOutcomeResponse",

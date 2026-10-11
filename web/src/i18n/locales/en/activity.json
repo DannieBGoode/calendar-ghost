@@ -251,7 +251,7 @@
       "trigger": "Couldn't be read in {source}",
       "effect": "blocked, {destination} left unchanged",
       "explanation": "Its source event in {source} could not be read, so the event in {destination} was left as it is rather than risk deleting it.",
-      "next": "If this repeats, check in Settings that the Google account for {source} is still connected."
+      "next": "If this repeats, check in Settings that the calendar account for {source} is still connected."
     },
     "occurrenceChanged": {
       "trigger": "Changed in {source}",
@@ -379,15 +379,15 @@
   },
   "lookup": {
     "removedRule": "This rule was removed, so its events can no longer be looked up.",
-    "notConfigured": "Google is not configured, so the event cannot be looked up.",
-    "failed": "Google could not return this event right now. The account may need reauthorization in Settings.",
-    "loading": "Looking up the event in Google…",
+    "notConfigured": "Its calendar provider is not configured, so the event cannot be looked up.",
+    "failed": "Its calendar provider could not return this event right now. The account may need reauthorization in Settings.",
+    "loading": "Looking up the event…",
     "sourceEvent": "Source event",
     "managedProjection": "Managed projection",
-    "missing": "No longer exists in Google Calendar.",
+    "missing": "No longer exists in its calendar.",
     "cancelled": "Cancelled",
     "cancelledAndWhen": "Cancelled · {when}",
-    "openInGoogle": "Open in Google Calendar"
+    "openInCalendar": "Open in its calendar"
   },
   "detail": {
     "label": "Entry details",
@@ -439,8 +439,8 @@
     "opened": "Opened {time}",
     "closed": "Closed {time}",
     "guidance": {
-      "accessRenewed": "Google access is renewed, but the rule stays stopped until it is recovered.",
-      "authorization": "Nothing is written until the Google account is reauthorized. Existing events stay where they are.",
+      "accessRenewed": "Calendar access is renewed, but the rule stays stopped until it is recovered.",
+      "authorization": "Nothing is written until the calendar account is reauthorized. Existing events stay where they are.",
       "stopped": "The rule is stopped and writes nothing until it is recovered.",
       "retrying": "Nothing to do now. Calendar Ghost keeps retrying and closes this after the next successful sync.",
       "conflict": "The rest of the rule keeps syncing. This closes when a daily check finds nothing still blocked."
@@ -455,7 +455,7 @@
       "syncSucceeded": "Resolved by a successful sync.",
       "blocksCleared": "Resolved when the daily check found nothing still blocked.",
       "ruleRemoved": "Closed when the rule was removed.",
-      "accessRestored": "Resolved when Google accepted the account again."
+      "accessRestored": "Resolved when the calendar provider accepted the account again."
     }
   }
 }

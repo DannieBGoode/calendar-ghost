@@ -80,11 +80,11 @@
     }
   },
   "failure": {
-    "authentication": "Google authorization expired",
-    "authorization": "Google calendar access was denied",
-    "rateLimit": "Google Calendar was limiting requests",
-    "temporary": "Google Calendar was temporarily unavailable",
-    "permanent": "Google Calendar rejected the request",
+    "authentication": "Authorization for {calendar} expired",
+    "authorization": "Access to {calendar} was denied",
+    "rateLimit": "{Calendar} was limiting requests",
+    "temporary": "{Calendar} was temporarily unavailable",
+    "permanent": "{Calendar} rejected the request",
     "unknown": "Local synchronization failed"
   },
   "state": {
@@ -131,7 +131,7 @@
     },
     "allDayRemoved": "All-day projections in {destination} will be deleted on the next run.",
     "allDayAdded": "All-day source events will be added to {destination} on the next run.",
-    "nothingChanges": "Nothing changes in Google Calendar until the rule is enabled again."
+    "nothingChanges": "Nothing changes in your calendars until the rule is enabled again."
   },
   "projections": {
     "legend": "Projections this rule wrote",
@@ -155,7 +155,7 @@
     }
   },
   "endpointFields": {
-    "account": "Google account",
+    "account": "Calendar account",
     "accountOption": "{name} ({email})",
     "calendar": "Calendar",
     "writableCalendar": "Calendar you can edit",
@@ -316,11 +316,11 @@
     "enabled": "Enabled. The first sync to {destination} runs within five minutes, or choose Sync now.",
     "paused": "Paused. Existing events stay in {destination}. Preview the rule again to resume.",
     "recovery": {
-      "authentication": "Google authorization expired {when}, so Calendar Ghost stopped this rule to be safe.",
-      "authorization": "Google calendar access was denied {when}, so Calendar Ghost stopped this rule to be safe.",
-      "rateLimit": "Google Calendar was limiting requests {when}, so Calendar Ghost stopped this rule to be safe.",
-      "temporary": "Google Calendar was temporarily unavailable {when}, so Calendar Ghost stopped this rule to be safe.",
-      "permanent": "Google Calendar rejected a request {when}, so Calendar Ghost stopped this rule to be safe.",
+      "authentication": "Authorization for {calendar} expired {when}, so Calendar Ghost stopped this rule to be safe.",
+      "authorization": "Access to {calendar} was denied {when}, so Calendar Ghost stopped this rule to be safe.",
+      "rateLimit": "{Calendar} was limiting requests {when}, so Calendar Ghost stopped this rule to be safe.",
+      "temporary": "{Calendar} was temporarily unavailable {when}, so Calendar Ghost stopped this rule to be safe.",
+      "permanent": "{Calendar} rejected a request {when}, so Calendar Ghost stopped this rule to be safe.",
       "unknown": "A sync could not finish {when}, so Calendar Ghost stopped this rule to be safe.",
       "noFailure": "Calendar Ghost stopped this rule to be safe.",
       "next": "Nothing was lost. Preview it to check both calendars, then start syncing again."

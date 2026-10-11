@@ -10,7 +10,7 @@ import type { I18n } from "@/i18n/translator"
 import { needsReauthorization } from "@/lib/account-summary"
 import type { CalendarProvider, ConnectedAccount } from "@/lib/api"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
-import { connectUrl } from "@/lib/providers"
+import { accountNoun, connectUrl } from "@/lib/providers"
 import type { AccessCheck, AccountCommands } from "@/lib/use-account-commands"
 
 function ruleUsage({ t }: I18n, count: number, authorized: boolean): string {
@@ -105,12 +105,18 @@ function AccountIdentity({
         displayName={account.display_name}
         email={account.email}
         avatarUrl={account.avatar_url}
+        provider={account.provider}
       />
       <div className="account-copy">
         {/* One person often connects several accounts under the same name, so the address
             leads when the name alone would not tell them apart. */}
         <h3>{sharedName ? account.email : account.display_name}</h3>
-        <p>{sharedName ? account.display_name : account.email}</p>
+        <p>
+          {i18n.t("settings.accounts.providerAndAddress", {
+            account: accountNoun(i18n, account.provider),
+            address: sharedName ? account.display_name : account.email,
+          })}
+        </p>
         <span data-stopped={!authorized && account.rule_count > 0 ? "" : undefined}>
           {ruleUsage(i18n, account.rule_count, authorized)}
         </span>

@@ -63,6 +63,7 @@ const rule: RuleSummary = {
     checked_mappings: 1,
     drift: 0,
     failure_kind: null,
+    failure_provider: null,
     last_succeeded_at: null,
   },
   latest_preview: null,

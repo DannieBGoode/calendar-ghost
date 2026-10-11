@@ -353,7 +353,7 @@ describe("ActivityView", () => {
     await renderActivity(testI18n(), {}, "?entry=5")
     const next = container.querySelector(".activity-next")
     expect(next?.textContent).toBe(
-      "What to do: If this repeats, check in Settings that the Google account for Family is still connected.",
+      "What to do: If this repeats, check in Settings that the calendar account for Family is still connected.",
     )
     expect(next?.querySelector("strong")?.textContent).toBe("What to do:")
   })

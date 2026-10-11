@@ -167,10 +167,10 @@ describe("activity presentation", () => {
       "This rule was removed, so its events can no longer be looked up.",
     )
     expect(eventLookupFailure(i18n, new ApiError("unavailable", 503))).toBe(
-      "Google is not configured, so the event cannot be looked up.",
+      "Its calendar provider is not configured, so the event cannot be looked up.",
     )
     expect(eventLookupFailure(i18n, new ApiError("provider", 424))).toBe(
-      "Google could not return this event right now. The account may need reauthorization in Settings.",
+      "Its calendar provider could not return this event right now. The account may need reauthorization in Settings.",
     )
   })
 

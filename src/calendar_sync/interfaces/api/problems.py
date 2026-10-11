@@ -173,7 +173,10 @@ def _params(error: Exception) -> dict[str, ParamValue]:
     if isinstance(error, ProviderFailure):
         return failure_params(error)
     if isinstance(error, AccountAccessCheckFailed):
-        return {"reason": error.kind.value}
+        return {
+            "reason": error.kind.value,
+            "provider": error.provider.value if error.provider else None,
+        }
     if isinstance(error, SignInThrottled):
         return {"retry_after": error.retry_after}
     if isinstance(error, UserDeletionInterrupted):

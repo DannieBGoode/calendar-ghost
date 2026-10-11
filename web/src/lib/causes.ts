@@ -1,6 +1,7 @@
 import type { I18n } from "@/i18n/translator"
 import type { CalendarProvider, InstallationHint, ServerProblem } from "@/lib/api"
 import { HELP_URL } from "@/lib/brand"
+import { providerWords } from "@/lib/providers"
 
 /** Why a provider call failed (ADR 0031), as the server names it. */
 export type Cause = NonNullable<ServerProblem["cause"]>
@@ -44,9 +45,14 @@ export function fixesItself(cause: Cause | null): boolean {
   return cause !== null && FIXES_ITSELF.has(cause)
 }
 
+/** The Cause in plain words, naming the provider that raised it when the server says which. */
+function causeWords(i18n: I18n, cause: Cause, provider: string | null | undefined): string {
+  return i18n.t(`people.cause.${cause}`, providerWords(i18n, provider))
+}
+
 /** "Likely cause: …", in plain words. */
-export function causeText(i18n: I18n, cause: Cause): string {
-  return i18n.t("people.cause.label", { cause: i18n.t(`people.cause.${cause}`) })
+export function causeText(i18n: I18n, cause: Cause, provider: string | null | undefined): string {
+  return i18n.t("people.cause.label", { cause: causeWords(i18n, cause, provider) })
 }
 
 /**
@@ -80,13 +86,14 @@ export function retryTiming(i18n: I18n, problem: ServerProblem, nextPassAt: stri
 /** An Installation Hint in one sentence, with how many people it affects. */
 export function hintText(i18n: I18n, hint: InstallationHint): string {
   const count = hint.users
+  const words = providerWords(i18n, hint.provider)
   switch (hint.kind) {
     case "testing_mode":
-      return i18n.t("people.health.hints.testingMode", { count })
+      return i18n.t("people.health.hints.testingMode", { count, ...words })
     case "unrecognized":
-      return i18n.t("people.health.hints.unrecognized", { count })
+      return i18n.t("people.health.hints.unrecognized", { count, ...words })
     default:
-      return i18n.t("people.health.hints.shared", { count, cause: i18n.t(`people.cause.${causeOf(hint) ?? "unknown"}`) })
+      return i18n.t("people.health.hints.shared", { count, cause: causeWords(i18n, causeOf(hint) ?? "unknown", hint.provider) })
   }
 }
 
