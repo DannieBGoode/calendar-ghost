@@ -327,14 +327,14 @@ the next secret before it.
 
 ## Problems you fix yourself
 
-When Google refuses one of your requests for a reason that is yours to handle, your Overview and
+When Google or Microsoft refuses one of your requests for a reason that is yours to handle, your Overview and
 the rule say what happened and your one next step. Your administrator sees only that you can fix it from your dashboard, and does not
 contact you about it. If the installation sends email and has a public address, the incident email
 links straight to that step.
 
 ### Google no longer accepts your Google account
 
-**What you see.** "A Google Calendar account needs reauthorization", with the likely cause "Google
+**What you see.** "A Google account needs reauthorization", with the likely cause "Google
 no longer accepts this Google account's permission". You removed Calendar Ghost's access in your
 Google account, changed something Google treats as ending the grant, or the grant expired.
 
@@ -421,10 +421,10 @@ reason Calendar Ghost does not recognize".
 what Activity says. If it keeps happening, tell your administrator; the service logs name
 Microsoft's code ([Reading the logs](#reading-the-logs)).
 
-## A Google account was disconnected
+## A calendar account was disconnected
 
 Open **Settings → Connections → Connected accounts** and choose **Reauthorize account** for the same
-Google identity. The installation no longer retains credentials for a disconnected account, and
+Google or Microsoft identity. The installation no longer retains credentials for a disconnected account, and
 enabled rules that reference it remain degraded. After reauthorization, open Rules, choose
 **Validate recovery**, inspect the preview, and enable each affected rule. Existing mappings,
 Managed Projections, and incremental positions are preserved throughout recovery.
@@ -432,15 +432,15 @@ Managed Projections, and incremental positions are preserved throughout recovery
 To remove the local identity permanently, choose **Delete account** and review the destructive
 confirmation. Permanent deletion removes every affected Directional Sync Rule and its mappings,
 cursors, incidents, and audit activity. Existing Managed Projections are not deleted from Google
-Calendar and will no longer be managed. Unrelated accounts and rules are unchanged.
+Calendar or Outlook and will no longer be managed. Unrelated accounts and rules are unchanged.
 
-## Google consent ends on "Unable to connect"
+## Consent ends on "Unable to connect"
 
-The browser followed the configured redirect URI to an address that does not reach this
+After Google or Microsoft consent, the browser followed the configured redirect URI to an address that does not reach this
 installation, usually `localhost` while Calendar Ghost runs on another host. No account was saved.
 To finish this attempt, copy the whole address from the address bar, return to Settings in the
-browser you started from, paste it into **Address Google returned to** under **Finish connecting
-your Google account**, and choose **Finish connecting** within 10 minutes; each callback works
+browser you started from, paste it into **Address Google returned to** (or **Address Microsoft
+returned to**) under **Finish connecting your Google account** (or **Microsoft account**), and choose **Finish connecting** within 10 minutes; each callback works
 once. From another browser, sign in there as the same person first; the same field is in the note
 at the foot of Connected accounts. Replacing the origin in the address bar by hand, for example
 `localhost:18000` with `192.168.1.50:18000`, does the same. Only the person who started connecting
@@ -448,23 +448,44 @@ can finish: a callback opened without signing in, or by anyone else, connects no
 that authorization failed. To stop it recurring, use an HTTPS redirect URI or an SSH tunnel as
 described in [Deployment](deployment.md#google-oauth-redirect-uri-on-a-lan-host).
 
-## Google Calendar permission was not granted
+## Calendar permission was not granted
 
 The OAuth callback returns to **Settings → Connections → Connected accounts** without saving an
-account. Choose **Try again**, select the intended Google identity, and grant both calendar-list and
-event access. Calendar Ghost verifies those permissions before it stores the Connected Account.
-Declining consent does not create an account or retain Google credentials.
+account. Choose **Try again**, select the intended Google or Microsoft identity, and grant calendar
+access: for Google, both calendar-list and event access; for Microsoft, **Have full access to your
+calendars**. Calendar Ghost verifies those permissions before it stores the Connected Account.
+Declining consent does not create an account or retain any credentials.
+
+## Microsoft sign-in stops with an error
+
+Microsoft shows its own page, with a code beginning `AADSTS`, instead of returning to Calendar
+Ghost. No account was saved.
+
+- **AADSTS50011**, the redirect URI does not match: the address in
+  `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` must be registered exactly under the application's
+  **Authentication → Web → Redirect URIs** ([Register a Microsoft Entra
+  application](self-hosting.md#register-a-microsoft-entra-application)).
+- **Need admin approval**, or **AADSTS65001** or **AADSTS90094**: the person's organization lets
+  only its IT administrator approve applications. They ask that administrator to grant consent to
+  the application, then connect again.
+- **AADSTS50020** or "You can't sign in here with a personal Microsoft account": the application's
+  **Supported account types** does not include this kind of account, or
+  `CALENDAR_SYNC_MICROSOFT_TENANT` names one organization. Use `common` with **Accounts in any
+  organizational directory and personal Microsoft accounts** to accept both.
+- **AADSTS7000215** or **AADSTS7000222**, after consent: the client secret is wrong or expired
+  ([Microsoft no longer accepts the OAuth client](#microsoft-no-longer-accepts-the-oauth-client)).
 
 ## A connected account fails Check access
 
-If Google no longer accepts the account, the check says so and the account is marked **Needs
+If its provider no longer accepts the account, the check says so and the account is marked **Needs
 reauthorization**; choose **Reauthorize account**. If Google denied calendar access, the Google
 Calendar API may be off: it is enabled on the Google Cloud project, not separately on each Google
 identity. Confirm that the API remains enabled for the project owning the OAuth client, then choose
-**Reauthorize account** for the affected identity. **Check access** verifies both calendar-list and
-event access through read-only requests. A successful check also reports the number of writable
-calendars; an account with zero writable calendars can be a Source Calendar but cannot provide a
-Destination Calendar.
+**Reauthorize account** for the affected identity. If Microsoft denied calendar access, the grant
+most likely lacks calendar permission: choose **Reauthorize account** and accept calendar access.
+**Check access** verifies both calendar-list and event access through read-only requests. A
+successful check also reports the number of writable calendars; an account with zero writable
+calendars can be a Source Calendar but cannot provide a Destination Calendar.
 
 ## Destination edits return
 

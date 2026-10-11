@@ -1,11 +1,12 @@
 # Deployment
 
-For the first-time, step-by-step setup, including creating a Google Cloud OAuth application, see
-the [self-hosting guide](self-hosting.md).
+For the first-time, step-by-step setup, including creating a Google Cloud OAuth application and
+registering a Microsoft Entra application, see the [self-hosting guide](self-hosting.md).
 
 ## Docker Compose
 
-Copy `.env.example` to `.env`, configure Google OAuth values when the adapter is enabled, and run:
+Copy `.env.example` to `.env`, configure the Google or Microsoft OAuth values of each provider you
+offer, and run:
 
 ```sh
 docker compose up -d --build
@@ -200,13 +201,21 @@ counts with them. The Operator Overview shows these counts. Rolling back is safe
 ignore the table, and its counts stop growing until the next upgrade.
 
 Migration 26 adds the nullable `incidents.cause` and `rule_run_outcomes.failure_cause` columns:
-why each failure happened, as a Cause read from Google's reason code, never its message
+why each failure happened, as a Cause read from the provider's reason code, never its message
 ([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md)). No row is rewritten: failures
 recorded earlier read as `unknown`. A failure no provider answer explains, such as one inside
 Calendar Ghost, is stored as `none` and has no Cause, as Incidents about blocked events do. Rolling back
 works with the same database: earlier releases ignore the columns. An earlier release that refreshes
 an open Incident or records a failed run leaves the Cause it found, so after upgrading again that
 Incident or run can show a stale Cause until it fails again.
+
+Migration 27 adds the nullable `incidents.provider` and `rule_run_outcomes.failure_provider`
+columns: the Provider Kind whose answer gave a failure its Cause, so Installation Hints and the Web
+UI name the provider and link its own troubleshooting section. Every Cause recorded before it was
+Google's, so the migration fills in `google` wherever a Cause was recorded. Migration 28 adds
+`oauth_states.provider`, so a consent that returns to another provider's callback is refused;
+consent begun before the upgrade was Google's. Rolling back past either is safe: earlier releases
+ignore the columns.
 
 Sign-in failures are counted per email and per client address for 15 minutes: after five failures
 for one email, or twenty from one address, sign-in answers `429` with a `Retry-After` header until
@@ -216,7 +225,7 @@ so a restart forgets them.
 
 Run one application process per SQLite database. The shipped container uses one Uvicorn process and
 serializes concurrent scheduler and manual executions of the same rule in memory. A scheduler pass
-runs up to four different rules at once, so one rule waiting on Google does not hold up the rest.
+runs up to four different rules at once, so one rule waiting on its provider does not hold up the rest.
 Multi-process workers are not supported with the SQLite deployment.
 
 The database uses SQLite's write-ahead log, so Web UI reads and scheduler writes do not wait for
@@ -227,7 +236,7 @@ release switches an existing database to the write-ahead log, and rolling back k
 releases read it without change.
 
 The service logs to standard error at `CALENDAR_SYNC_LOG_LEVEL` (`INFO` by default; `DEBUG` adds a
-line per Google call). Compose keeps the container's logs with the `json-file` driver capped at
+line per provider call). Compose keeps the container's logs with the `json-file` driver capped at
 three files of 10 MB, so a long-running Raspberry Pi does not fill its storage. Read them with
 `docker compose logs -f app`; [Troubleshooting](troubleshooting.md#reading-the-logs) explains each
 line.
@@ -286,7 +295,9 @@ Without its settings, the installation behaves as before and offers no Microsoft
 
 - `CALENDAR_SYNC_MICROSOFT_CLIENT_ID` and `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`: the
   application's client ID and a client secret. A secret expires on the date chosen when it was
-  created, at most 24 months later; create the next one and put it here before then.
+  created, at most 24 months later; create the next one and put it here before then
+  ([rotating the secret](self-hosting.md#register-a-microsoft-entra-application)). Calendar Ghost
+  cannot read the expiry date and does not warn before it.
 - `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI`: the redirect URI registered on the application, by default
   `http://localhost:8000/api/v1/oauth/microsoft/callback`. Microsoft, like Google, accepts plain
   `http://` only for `localhost`, so a LAN host uses an SSH tunnel or an HTTPS name exactly as
@@ -311,7 +322,7 @@ Clearing old Activity from **Settings → Administration → Storage** removes r
 only; a backup taken before the clear keeps those entries until it rotates out of your backup
 schedule ([ADR 0019](adr/0019-administrator-chosen-activity-retention.md)).
 
-Disconnecting a Google identity from **Settings → Connections** replaces its encrypted credential
+Disconnecting a Google or Microsoft identity from **Settings → Connections** replaces its encrypted credential
 payload with an empty encrypted value. Directional Sync Rules and their mappings remain in SQLite so
 the same identity can be reauthorized and reconciled later.
 
@@ -328,7 +339,7 @@ receives another User's incidents.
 Set `CALENDAR_SYNC_PUBLIC_URL` to the address people open Calendar Ghost at, such as
 `https://calendar.example.com` or `http://192.168.1.50:8000`, and each email links to the page
 holding that person's next step for its Cause
-([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md)): their Google connections to
+([ADR 0031](adr/0031-keep-the-providers-reason-as-a-cause.md)): their calendar connections to
 reauthorize, the rule to choose another calendar or try again, or the Overview when there is nothing
 for them to do. The link names a page and at most a rule's internal identifier, never a calendar,
 account, or event. Only an `http` or `https` address at the root of its host, with no path or query, is used, because

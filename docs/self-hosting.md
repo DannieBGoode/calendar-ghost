@@ -15,12 +15,17 @@ You need:
 - Docker with Compose v2;
 - durable storage for the Compose data volume;
 - a host with a synchronized clock; and
-- one or more Google accounts whose calendars you want to connect.
+- one or more Google or Microsoft accounts whose calendars you want to connect.
 
 The supplied image targets `linux/amd64` and `linux/arm64`. Keep the installation on a trusted
 machine or place it behind HTTPS before exposing it beyond your local network.
 
-## 2. Create a Google Cloud application
+## 2. Register Calendar Ghost with your calendar providers
+
+Register Calendar Ghost with Google, with Microsoft, or with both, depending on whose calendars you
+will connect. A provider you do not register is not offered.
+
+### Create a Google Cloud application
 
 Each self-hosted installation should use its own Google Cloud project and OAuth client. Do not
 copy another operator's client secret into your installation.
@@ -63,7 +68,7 @@ copy another operator's client secret into your installation.
    explains the client and redirect-URI requirements. Keep the client secret out of source
    control and out of screenshots.
 
-### External-app testing and verification
+#### External-app testing and verification
 
 Testing is suitable for initial setup and short-lived development only. For a long-running
 self-hosted installation, move the OAuth consent screen's publishing status to **In production**
@@ -76,6 +81,73 @@ While the app is in testing, every connected identity must be listed as a test u
 may show a testing or unverified-app warning during consent. A future public hosted service is a
 separate OAuth product and may need its own Google verification and production-audience process; do
 not reuse one operator's self-hosted credentials for it.
+
+### Register a Microsoft Entra application
+
+Skip this if nobody will connect a Microsoft account. Each installation registers its own
+application; do not copy another operator's client secret into your installation. Calendar Ghost
+reaches Outlook calendars through Microsoft Graph, for Microsoft 365 work or school accounts and for
+personal Outlook.com accounts.
+
+1. Sign in to the [Microsoft Entra admin center](https://entra.microsoft.com/) with an account that
+   may register applications in a directory, and open **Entra ID → App registrations → New
+   registration**. Microsoft's [Register an application](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app)
+   quickstart explains who may register one.
+2. Enter a name, such as `Calendar Ghost`, and choose **Supported account types**:
+   - **Accounts in any organizational directory and personal Microsoft accounts** lets both work or
+     school accounts and Outlook.com accounts connect. Keep `CALENDAR_SYNC_MICROSOFT_TENANT=common`.
+   - **Accounts in this organizational directory only** lets only your organization's accounts
+     connect. Set `CALENDAR_SYNC_MICROSOFT_TENANT` to the **Directory (tenant) ID** from the
+     application's **Overview**.
+   - **Personal Microsoft accounts only** lets only Outlook.com accounts connect. Set
+     `CALENDAR_SYNC_MICROSOFT_TENANT=consumers`.
+3. Under **Redirect URI**, choose the **Web** platform and enter this exact address, then choose
+   **Register**:
+
+   ```text
+   http://localhost:8000/api/v1/oauth/microsoft/callback
+   ```
+
+   Like Google, Microsoft accepts plain HTTP only for `localhost`; for another host, register an
+   HTTPS address ([5. Use a LAN host or HTTPS](#5-use-a-lan-host-or-https)). More addresses can be
+   added later under **Authentication**.
+4. On the application's **Overview**, copy the **Application (client) ID**.
+5. Open **API permissions → Add a permission → Microsoft Graph → Delegated permissions** and add
+   these, keeping **User.Read**, which is there already:
+
+   ```text
+   openid
+   email
+   offline_access
+   User.Read
+   Calendars.ReadWrite
+   ```
+
+   `Calendars.ReadWrite` lets Calendar Ghost read the events a rule selects and manage the events it
+   writes; `offline_access` keeps synchronizing while nobody is signed in; the others identify the
+   Connected Account. Add no application permissions and no `Calendars.ReadWrite.Shared`. None of
+   these needs an administrator's consent, but an organization may allow only its IT administrator
+   to approve applications: they then choose **Grant admin consent** on this page.
+6. Open **Certificates & secrets → Client secrets → New client secret**, enter a description, and
+   choose when it expires. The admin center recommends 180 days; the longest is 24 months. Copy the
+   secret's **Value** at once, since it is shown only this one time, and not its **Secret ID**.
+   Keep it out of source control and out of screenshots.
+7. Write down the secret's **Expires** date and set yourself a reminder before it. Calendar Ghost
+   cannot read the date, and does not warn you before the secret expires.
+
+To rotate the secret before it expires:
+
+1. Create a new client secret as in step 6, leaving the old one in place.
+2. Put the new **Value** in `.env` as `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET` and run
+   `docker compose up -d`.
+3. Wait about two hours, so that every access token issued before the change has expired and has
+   been renewed with the new secret. If **People** shows nothing that needs you, delete the old
+   secret in **Certificates & secrets**.
+
+Nobody needs to reauthorize: grants belong to the application, not to one secret. If a secret
+expires first, every Microsoft account stops at once with the likely cause "Microsoft no longer
+accepts this installation's OAuth client";
+[the fix](troubleshooting.md#microsoft-no-longer-accepts-the-oauth-client) is the same rotation.
 
 ## 3. Configure the installation
 
@@ -98,11 +170,17 @@ CALENDAR_SYNC_MASTER_KEY=PASTE_GENERATED_KEY_HERE
 CALENDAR_SYNC_GOOGLE_CLIENT_ID=PASTE_GOOGLE_CLIENT_ID_HERE
 CALENDAR_SYNC_GOOGLE_CLIENT_SECRET=PASTE_GOOGLE_CLIENT_SECRET_HERE
 CALENDAR_SYNC_GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/oauth/google/callback
+# Only if you registered a Microsoft Entra application:
+CALENDAR_SYNC_MICROSOFT_CLIENT_ID=PASTE_APPLICATION_CLIENT_ID_HERE
+CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET=PASTE_CLIENT_SECRET_VALUE_HERE
+CALENDAR_SYNC_MICROSOFT_REDIRECT_URI=http://localhost:8000/api/v1/oauth/microsoft/callback
+CALENDAR_SYNC_MICROSOFT_TENANT=common
 # Optional: make the UI's Source link point to the exact checkout being built.
 # CALENDAR_GHOST_SOURCE_URL=https://github.com/DannieBGoode/calendar-ghost/tree/<commit-or-tag>
 ```
 
-The master key encrypts stored Google credentials and seals sensitive event-history values. Back it
+Leave out the lines of a provider you did not register. The master key encrypts stored Google and
+Microsoft credentials and seals sensitive event-history values. Back it
 up separately from the database. Never commit `.env`, replace the master key on an existing
 installation, or paste either secret into an issue. Losing the key makes encrypted credentials and
 sealed history unreadable.
@@ -119,8 +197,8 @@ curl --fail http://localhost:8000/health
 Open <http://localhost:8000> and create the administrator with your email and a password of at
 least 12 characters. Then:
 
-1. Connect each Google identity. The browser must be able to return to the configured redirect
-   URI after Google consent.
+1. Connect each Google or Microsoft identity. The browser must be able to return to the configured
+   redirect URI after the provider's consent.
 2. Create a Directional Sync Rule with one Source Calendar and one Destination Calendar.
 3. Keep the default Busy-Only Projection unless you have a reason to expose more detail.
 4. Preview the rule, inspect the decisions, and enable it.
@@ -139,7 +217,7 @@ join and the app shows nothing about other people. To share it with your househo
    page appears in the main navigation.
 2. On **People**, choose **Invite someone** and pass the link on yourself. It works once and expires
    after 7 days; the person chooses their own email and password.
-3. Everyone's Google accounts, rules, Activity, and tokens are their own. As the administrator you
+3. Everyone's calendar accounts, rules, Activity, and tokens are their own. As the administrator you
    see each person's email, role, whether they may sign in, when they joined, and when they last
    signed in, never their calendars or events. Search by part of an email, filter by role or
    state, sort by email, joining, or last sign-in, and page through 50 people at a time; the
@@ -147,22 +225,22 @@ join and the app shows nothing about other people. To share it with your househo
 
 From **People** you can also make someone an administrator, disable someone, which signs them out
 and holds their rules until you enable them again, create a password reset link for someone who
-forgot theirs, or delete someone. Deleting someone deletes their sign-in, rules, Google connections,
+forgot theirs, or delete someone. Deleting someone deletes their sign-in, rules, calendar connections,
 tokens, and Activity, and the events their rules wrote wherever Calendar Ghost can still reach
-them; their own events and their Google accounts stay as they are. While anyone else remains, the
+them; their own events and their Google and Microsoft accounts stay as they are. While anyone else remains, the
 installation keeps one administrator who can sign in, so the last administrator must make someone
 else an administrator before deleting their own account. You may return to **Only me** once you are
 the only person again. Anyone can change their own email and password, turn their incident emails
 off, or delete their own account under **Settings → Your account**, choosing whether the events
 their rules wrote are deleted too. When the last person deletes
 their own account, Calendar Ghost returns to setup: the next person to open it creates the
-administrator, as on a new installation, and the Google OAuth settings and master key in `.env`
+administrator, as on a new installation, and the OAuth settings and master key in `.env`
 stay as they were.
 
 ## 5. Use a LAN host or HTTPS
 
-Google accepts plain HTTP OAuth redirects for `localhost`, but not for a private LAN IP or a
-`.local` hostname. For a Raspberry Pi or home server, use either:
+Google and Microsoft accept plain HTTP OAuth redirects for `localhost`, but not for a private LAN
+IP or a `.local` hostname. For a Raspberry Pi or home server, use either:
 
 - an SSH tunnel while connecting accounts, while keeping the default `localhost` redirect; or
 - an HTTPS hostname, such as a private tailnet name or a domain behind a reverse proxy.
@@ -171,6 +249,7 @@ For HTTPS, register the exact URL and set matching values, for example:
 
 ```dotenv
 CALENDAR_SYNC_GOOGLE_REDIRECT_URI=https://calendar.example.test/api/v1/oauth/google/callback
+CALENDAR_SYNC_MICROSOFT_REDIRECT_URI=https://calendar.example.test/api/v1/oauth/microsoft/callback
 CALENDAR_SYNC_SECURE_COOKIES=true
 ```
 
@@ -335,9 +414,9 @@ Both `/api/v1/status` and `/mcp` answer the same verdict. Each status means:
 | Status | What it means | What to do |
 | --- | --- | --- |
 | `stalled` | Rules are enabled, but the scheduler is not running passes | Restart the service |
-| `stopped` | A rule is suspended, usually because a Google account lost access | Reauthorize the account in Settings |
+| `stopped` | A rule is suspended, usually because a calendar account lost access | Reauthorize the account in Settings |
 | `review` | An incident, blocked events, or a rule not synced in over a day needs a look | Open Activity or the named rule |
-| `waiting` | Google is limiting or failing requests | Nothing yet; it retries by itself |
+| `waiting` | A calendar provider is limiting or failing requests | Nothing yet; it retries by itself |
 | `paused` | Rules exist and have synced before, but none is enabled | Nothing, unless you meant to resume one |
 | `setup` | No account or rule yet, or none has synced | Finish connecting an account and creating a rule |
 | `healthy` | Every enabled rule is running and up to date | Nothing |
@@ -401,6 +480,8 @@ curl --fail http://localhost:8000/health
   differ. Compare scheme, hostname, port, path, and trailing slash character by character.
 - **Test-user or access warning:** add the Google identity under the External app's **Test users**
   list, then restart the consent flow.
+- **`AADSTS50011` or another `AADSTS` page from Microsoft:** see [Microsoft sign-in stops with an
+  error](troubleshooting.md#microsoft-sign-in-stops-with-an-error).
 - **The app cannot decrypt connected accounts:** restore the original installation master key;
   do not generate a replacement.
 - **A LAN callback cannot load:** use the SSH tunnel or configure HTTPS as described above. The

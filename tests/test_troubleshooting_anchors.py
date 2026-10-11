@@ -63,3 +63,13 @@ def test_the_web_ui_reads_how_to_fix_sections_from_the_server() -> None:
     anchors = {anchor for guide in GUIDES for anchor in guide.cause_anchors.values()}
 
     assert not any(anchor in causes.read_text() for anchor in anchors)
+
+
+@pytest.mark.parametrize("guide", GUIDES, ids=lambda guide: guide.kind.value)
+def test_no_provider_sends_people_to_another_providers_section(guide: ProviderGuide) -> None:
+    # An Outlook Cause is explained in a Microsoft section, or in one every provider shares.
+    others = {other.display_name.lower() for other in GUIDES if other.kind is not guide.kind}
+    lifetime = [guide.grant_lifetime.anchor] if guide.grant_lifetime else []
+
+    for anchor in {*guide.cause_anchors.values(), *lifetime}:
+        assert not any(name in anchor.split("-") for name in others), anchor

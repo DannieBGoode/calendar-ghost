@@ -7,11 +7,13 @@ cutoff, and observes the destination endpoint. A successful initial run establis
 incremental cursors for source and destination. Later runs request both change feeds every five
 minutes or through Sync Now. Source changes project forward; mapped destination changes load their
 authoritative source and repair edits or deletions during that same run. Google's incremental feed
-is not bounded by the initial `timeMin`, so it also reports changes to events that ended long ago.
+is not bounded by the initial `timeMin`, so it also reports changes to events that ended long ago;
+the Outlook adapter's feed, a Graph delta round plus a listing of everything modified since the
+previous run, reports them too ([ADR 0032](adr/0032-outlook-through-microsoft-graph.md)).
 An unmapped single event that ended before the rolling window start (30 days before the run) is
 ignored with reason `before_sync_window`; mapped events and recurring series are decided normally.
 Before skipping, the run looks up a projection created with the event's create Operation Key, so a
-create Google acknowledged before an interrupted run recorded its mapping is adopted, not orphaned.
+create the provider acknowledged before an interrupted run recorded its mapping is adopted, not orphaned.
 
 ## Cost of a run
 
@@ -24,7 +26,7 @@ could have drifted:
   when it was written has not drifted, so it is counted as ignored without reading its source.
   Source changes arrive through the source feed. Any other content, status, or ownership repairs
   from the source as before. This applies only when both feeds returned changes since a cursor; a
-  missing cursor, or one Google rejects (HTTP 410), yields a full listing, and every reported
+  missing cursor, or one the provider rejects (Google's HTTP 410, Graph's expired delta link), yields a full listing, and every reported
   projection is then verified against its source.
 - A mapping already decided from the source feed in the same run is not decided again from the
   destination feed.
@@ -67,17 +69,17 @@ projections as Detached Events removes mappings without provider writes. Managed
 mapping are never deleted.
 
 A mapped event whose Managed Origin metadata does not match the rule and source is a Conflict for
-that event only: it stays in Google untouched, its mapping is removed, a `removal_conflict` audit
+that event only: it stays in its calendar untouched, its mapping is removed, a `removal_conflict` audit
 entry records it under **Blocked**, and removal continues. Temporary and rate-limited failures retry
 each deletion up to three times with exponential backoff and jitter under the same Operation Key
-before removal stops as interrupted. Google's `Retry-After` hint, bounded to 60 seconds, replaces
+before removal stops as interrupted. The provider's `Retry-After` hint, bounded to 60 seconds, replaces
 the backoff delay for removal and scheduled runs alike. Authentication and authorization failures stop removal at once
 and open one Incident for the rule, resolved when the removal completes. See
 [ADR 0012](adr/0012-rule-removal-conflicts-and-retries.md).
 
 ## Loop prevention
 
-Managed Google events carry private extended properties containing rule, source, and operation identity. A reverse rule ignores any event bearing managed origin metadata. This permits `A -> B` and `B -> A` while native events flow in both directions without projection loops.
+Managed events carry private metadata containing rule, source, and operation identity: private extended properties in Google, and single-value extended properties in Calendar Ghost's own namespace in Outlook. A reverse rule ignores any event bearing managed origin metadata. This permits `A -> B` and `B -> A` while native events flow in both directions without projection loops.
 
 ## Recurrence
 
@@ -124,9 +126,9 @@ recreated on every run. A mapped series stays dormant: its Series Mapping and `c
 Occurrence Mappings are kept, and its occurrences are ignored rather than reported as a missing
 destination occurrence. Full Reconciliation accepts a dormant series once it confirms the
 projection is really gone, and Rule Preview excludes it. For a series that was never mapped, a
-projection that Google created before an interrupted run could record its mapping is found by its
+projection that the provider created before an interrupted run could record its mapping is found by its
 create Operation Key and removed (`series_without_occurrences_removed`). Only an answered lookup
-may report that none remain: a series Google cannot expand counts as live, and so does one whose
+may report that none remain: a series the provider cannot expand counts as live, and so does one whose
 occurrences run past the page limit.
 
 A series projection created from an incremental feed, including a dormant series restored when
@@ -204,9 +206,9 @@ successful scheduled run. Only scheduled runs report their success to rule healt
 Reconcile Now never resolve it. Each resolved incident records why it resolved (`sync_succeeded`,
 `blocks_cleared`, or `rule_removed`, SQLite migration 12), and reopening one resets its opening
 time, so "First seen" on the Overview measures only the current episode. An authorization failure
-lapses the Connected Account Google rejected and opens one Incident for that account at once,
+lapses the Connected Account its provider rejected and opens one Incident for that account at once,
 covering every rule it stops; a preview that finds another account's authorization lost lapses
-that account too. Reauthorization, or an access check Google passes, resolves the account's
+that account too. Reauthorization, or an access check the provider passes, resolves the account's
 Incident (`access_restored`, migration 20) and resumes the rules the lapse alone stopped
 ([ADR 0027](adr/0027-lapsed-authorization-and-automatic-recovery.md)).
 
@@ -229,7 +231,7 @@ counted, or reported, unless it lies outside the rule's relationship, which is a
 `mapping_inconsistent` Conflict at any age and needs no read to prove. A series reaches the window while any occurrence does, however long ago it
 began, and its Occurrence Mappings are checked when their original start is in the window or
 either listing returned the occurrence as an exception, so an old occurrence moved into the window
-is checked and a past one is not. It never writes to Google, so the Web UI never calls what it
+is checked and a past one is not. It never writes to any calendar, so the Web UI never calls what it
 found repaired ([ADR 0016](adr/0016-reconcile-within-the-sync-window.md)).
 
 | Finding | Kind | Why it can remain after the full pass |

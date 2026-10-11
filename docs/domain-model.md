@@ -85,7 +85,7 @@ because its ownership could not be verified, and a failed removal can be retried
 preventing a previously validated rule from being enabled without authorization. A Degraded Rule
 performs no writes until the account is reauthorized and the rule passes a new recovery preview;
 re-enabling starts with both preserved incremental positions. A rule degraded only by Lapsed
-Authorization, when Google refuses a connected account's credentials, records that cause. Once
+Authorization, when its provider refuses a connected account's credentials, records that cause. Once
 every account it uses is authorized again, by Reauthorization or a passing access check, it returns
 to Enabled without a preview and continues from the same preserved positions (ADR 0027). A Material
 Rule Change, a pause, a removal, or disconnecting one of its accounts while it is stopped clears
@@ -94,7 +94,7 @@ that cause, so its recovery needs a preview again.
 Permanent deletion is available only after a Connected Account is disconnected. Deletion removes
 the account and every Directional Sync Rule that references it, including those rules' Event
 Mappings, cursors, incidents, and audit activity. It does not issue provider writes: existing
-Managed Projections remain in Google Calendar but are no longer managed.
+Managed Projections remain in Google Calendar or Outlook but are no longer managed.
 Deletion first waits for any run, provider write, or lifecycle change of each affected rule to
 finish, as Rule Removal does, so no in-flight work outlives the records it depends on. The account
 and its rules are then deleted in one transaction that also rechecks the account is disconnected,

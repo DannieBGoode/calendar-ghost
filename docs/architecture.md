@@ -38,8 +38,8 @@ React UI / FastAPI / Scheduler
    Synchronization domain
               ^
               |
- Google and SQLite adapters
- implement application ports
+ Google, Microsoft, and SQLite
+ adapters implement application ports
 ```
 
 The domain imports only Python's standard library and provider-neutral domain modules. Application services depend on protocols. The composition root constructs concrete adapters explicitly.
@@ -47,7 +47,7 @@ The domain imports only Python's standard library and provider-neutral domain mo
 
 Web API routes only parse input, call one use case or port, and map its result or application
 error to HTTP. `bootstrap/container.py` composes in two steps: `build_adapters` makes the SQLite and
-Google adapters from Settings, and `compose` wires the use cases from them into the `Container`
+provider adapters from Settings, and `compose` wires the use cases from them into the `Container`
 the routes call. The `Container` holds installation-wide services (identity, administration,
 Installation Health, the Operator Overview, the scheduler) and `for_user`, which composes one User's use cases from
 adapters made for that User: their unit of work, account store, Activity queries, incidents, and
@@ -63,7 +63,7 @@ without it, and one route guard answers 503 for them.
 Time and identifiers come through ports too. `build_adapters` makes one `SystemClock`, one
 `UuidIdGenerator`, and one `UuidRunIdGenerator`, and passes them to each adapter and use case that
 reads the time or makes an identifier: sessions, OAuth states, Connected Accounts, incidents, rule
-removal, Google's Retry-After dates, and Sync Run identifiers. Only the schema migration
+removal, providers' Retry-After dates, and Sync Run identifiers. Only the schema migration
 bookkeeping in `initialize_database` reads the system clock directly. Tests pass a fixed clock to
 check expiry and retry waits without sleeping.
 
@@ -85,8 +85,9 @@ every administrator route.
 
 Provider authorization is split the same way. Each provider's package holds its OAuth flow,
 credentials, and calendar discovery, configured by an `OAuthClientConfig` value that bootstrap
-builds from Settings, such as `infrastructure/google/oauth.py`. The mechanics every flow shares live
-in `infrastructure/oauth.py`: single-use states bound to the session of the User who began the flow,
+builds from Settings, such as `infrastructure/google/oauth.py` and
+`infrastructure/microsoft/oauth.py`. The mechanics every flow shares live in
+`infrastructure/oauth.py`: single-use states bound to the session of the User who began the flow,
 PKCE, one token refresh per account at a time, and connecting only for a User still active.
 Connected Accounts and their credentials, encrypted by the `CredentialCipher` in
 `infrastructure/security.py`, live in `infrastructure/persistence/accounts.py`, which implements the
@@ -168,7 +169,11 @@ never name a provider.
 The test fake, the router, and every adapter pass the Calendar Provider contract in
 `tests/contracts/calendar_provider.py` before being composed: the fake and the router in
 `tests/adapters/test_calendar_provider_contract.py`, and each adapter, through a fake of its
-provider's API, in its own test package, such as `tests/adapters/google/`. The contract states,
+provider's API, in its own test package: `tests/adapters/google/` against a fake Google Calendar API,
+and `tests/adapters/microsoft/` against a fake Microsoft Graph (`tests/fake_microsoft_graph_api.py`).
+Mechanics every provider shares are tested once, in `tests/adapters/shared/`, and
+`tests/adapters/test_mixed_providers.py` runs rules between a Google and an Outlook calendar, in
+both directions at once, to prove neither copies the other's projections. The contract states,
 through the ports alone, the ownership, idempotency, and listing guarantees the use cases rely on.
 
 ## Provider descriptors
@@ -191,15 +196,36 @@ the installation master key, a descriptor offers only its guide.
 Only a Provider Kind names a provider in the domain, application, and interfaces, and no module
 outside a provider's package names a Provider Kind member: `tests/test_provider_neutrality.py`
 fails otherwise. Its one exception is `interfaces/api/routes/compatibility.py`, which keeps
-`GET /api/v1/google/configuration` for earlier clients. Import-linter keeps each provider's SDK in
-its package, and the neutral infrastructure (`oauth`, `providers`, `provider_calls`,
-`retry_after`) from importing any provider's package.
+`GET /api/v1/google/configuration` for earlier clients. Import-linter (`pyproject.toml`) enforces
+the rest, with no `ignore_imports` for any provider:
 
-To add a provider: create `infrastructure/<provider>/` with its guide, adapter, OAuth flow, and
-Cause mapping; give it a test package under `tests/adapters/<provider>/` that runs the Calendar
-Provider contract through a fake of its API; add its Provider Kind and one line to
-`calendar_providers`; add its settings; and write its sections of `docs/troubleshooting.md` and its
-Web UI catalog entries.
+- the domain and application import no provider package, SDK, or HTTP client;
+- the neutral infrastructure (`oauth`, `providers`, `provider_calls`, `retry_after`, persistence)
+  imports neither `infrastructure.google` nor `infrastructure.microsoft`;
+- `infrastructure.google` and `infrastructure.microsoft` never import each other;
+- the Google client libraries stay in `infrastructure.google`, and `httpx`, which reaches Microsoft
+  Graph, stays in `infrastructure.microsoft`.
+
+`tests/adapters/microsoft/` also proves no Microsoft answer leaks: Graph's `message` and the
+identity platform's `error_description` are never kept, logged, or returned. The privacy sentinels
+in `tests/adapters/test_operator_overview_api.py` include a person with Microsoft accounts, whose
+emails, calendars, events, and Microsoft's words never reach People, incidents, notifications, or
+logs.
+
+To add a provider:
+
+1. Write an ADR on how its API meets the Calendar Provider contract, as ADR 0032 does for Graph.
+2. Add its Provider Kind to `application/providers.py` and its settings to `bootstrap/config.py`.
+3. Create `infrastructure/<provider>/` with its guide, adapter, translation, OAuth flow on the
+   shared mechanics in `infrastructure/oauth.py`, Cause mapping, and `descriptor.py`.
+4. Add one line to `calendar_providers` in `bootstrap/container.py`, and import-linter contracts
+   that keep its SDK in its package and it independent of the other providers.
+5. Give it a test package under `tests/adapters/<provider>/` that runs the Calendar Provider
+   contract through a fake of its API, a table-driven Cause test, and a privacy leak test.
+6. Write its sections of `docs/troubleshooting.md` under the anchors its guide names
+   (`tests/test_troubleshooting_anchors.py` checks them), its setup in `docs/self-hosting.md`, and
+   its Web UI catalog entries in `common.json`: `provider`, `providerName`, `providerAccount`,
+   `providerApi`, `providerConsole`, and `providerStatus`.
 
 ## Logging
 
@@ -216,7 +242,7 @@ counts a renewed access token toward the current run. Use cases default to
 
 ## Transaction boundary
 
-Google and SQLite cannot share an atomic transaction. A Sync Run therefore uses stable operation
+A calendar provider and SQLite cannot share an atomic transaction. A Sync Run therefore uses stable operation
 keys, provider ownership metadata, and retry-safe writes. Acknowledged event operations commit
 individually to keep SQLite write locks away from later network calls; source and destination
 incremental cursors commit last, after both batches complete. If the process stops after a provider

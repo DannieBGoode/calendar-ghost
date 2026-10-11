@@ -16,7 +16,7 @@ rules, or events ([ADR 0029](adr/0029-isolate-users-in-one-sqlite-database.md),
 
 - Directional Sync Rules, calendar and Connected Account identifiers, mappings, cursors, operation
   state, incidents, and run outcomes.
-- Connected Account identity details such as the Google email, display name, avatar URL, and cached
+- Connected Account identity details such as the Google or Microsoft email, display name, avatar URL, and cached
   calendar names. OAuth credentials are encrypted with the Installation Master Key.
 - Audit Entries, including the source event title and time needed to make Activity useful. These
   values are plain text in SQLite.
@@ -49,14 +49,14 @@ shows:
 - their Installation Status: its verdict, each problem, and each rule's state and last successful
   sync, with every calendar named only "Calendar 1", "Calendar 2", and so on, numbered in the order
   their rules were created; and
-- their resource use: how many rules, Google accounts, and Activity entries they have, and the calls
+- their resource use: how many rules, calendar accounts, and Activity entries they have, and the calls
   their rules made to each calendar provider over the last 30 days.
 
-It never shows a User's calendar names or identifiers, their Google account emails, or any event
+It never shows a User's calendar names or identifiers, their Google or Microsoft account emails, or any event
 title or other event content, and there is no setting that shows more. Installation Health, above
 the list, counts Users by status and names nobody. This page is where every User learns what
-administrators see; the Web UI does not repeat it to them. Tests seed calendar names, Google account emails,
-calendar identifiers, and event titles with markers for two Users and check that none reaches the
+administrators see; the Web UI does not repeat it to them. Tests seed calendar names, Google and Microsoft account emails,
+calendar identifiers, event titles, and a provider's own error message with markers for three Users and check that none reaches the
 Operator Overview, Installation Health, the installation's notifications, or the logs.
 
 An administrator can still disable or delete a User, issue them a password reset link, and change
@@ -66,7 +66,12 @@ their role. Calendar Ghost does not yet record which administrator did what.
 
 The installation communicates with:
 
-1. Google APIs, to authorize Connected Accounts and read or write the calendars selected by rules.
+1. Google APIs and Microsoft Graph, with Microsoft's identity platform, for whichever providers the
+   operator configured: to authorize Connected Accounts and to read or write the calendars selected
+   by rules. Calendar Ghost marks the events it writes with extended properties in its own
+   namespace, which Outlook does not display: the rule, the operation, and the source event's
+   identifiers, start, and repeat pattern, never its title or other content. Writes to Outlook never invite or email
+   anyone.
 2. An SMTP server and a webhook URL only when the operator configures them. With SMTP, each User
    receives their own Incident Notifications at their email, unless they turn them off; the
    configured SMTP recipient and the webhook receive only incidents about the installation itself,
@@ -90,7 +95,7 @@ the database:
 - the application data directory, including `calendar-sync.db` with its `calendar-sync.db-wal` and
   `calendar-sync.db-shm` files, and any retained local logs;
 - the Installation Master Key;
-- the Google OAuth client settings and notification settings from the operator's protected `.env`
+- the Google and Microsoft OAuth client settings and notification settings from the operator's protected `.env`
   or secret store; and
 - the image version and migration version used when the backup was made.
 
@@ -110,10 +115,10 @@ installation state.
 
 - Settings can clear older Activity and purge local log files. A backup made before that action may
   still contain the cleared values until the backup is rotated out.
-- Disconnecting a Connected Account removes its stored Google credentials while retaining mappings
+- Disconnecting a Connected Account removes its stored credentials while retaining mappings
   and rules for safe reauthorization.
 - Permanently deleting a disconnected Connected Account removes its local identity, affected rules,
-  mappings, incidents, and Activity. Existing Managed Projections remain in Google because the
+  mappings, incidents, and Activity. Existing Managed Projections remain in Google Calendar or Outlook because the
   installation no longer has authorization or ownership evidence to change them.
 - Rule Removal can delete owned destination projections or retain them as Detached Events, according
   to its User's choice.
@@ -128,6 +133,7 @@ installation state.
   to the operator's retention policy, remove the Compose data volume, and delete the protected local
   secrets. Verify that no external backup or snapshot still contains the database.
 
-The local operator controls the host, the database, the master key, and the retention policy. Google
-continues to control the source and destination data stored in Google Calendar; Calendar Ghost only
+The local operator controls the host, the database, the master key, and the retention policy. Google and
+Microsoft continue to control the source and destination data stored in Google Calendar and Outlook;
+Calendar Ghost only
 manages the projections authorized by the operator's rules.

@@ -82,15 +82,17 @@ web/ and interfaces/  ->  application/  ->  domain/
 - `src/calendar_sync/domain/` is provider- and framework-independent. It cannot import application,
   infrastructure, interfaces, or bootstrap modules.
 - `src/calendar_sync/application/` coordinates use cases through protocols in `application/ports.py`.
-  It cannot import concrete Google, SQLite, scheduler, notification, or Web API adapters.
-- `src/calendar_sync/infrastructure/` owns Google payload translation, OAuth, SQLite, scheduling,
-  notifications, and cryptography.
+  It cannot import concrete Google, Microsoft, SQLite, scheduler, notification, or Web API adapters.
+- `src/calendar_sync/infrastructure/` owns Google and Microsoft Graph payload translation, OAuth,
+  SQLite, scheduling, notifications, and cryptography. Each provider's package (`google/`,
+  `microsoft/`) exposes one descriptor to bootstrap; nothing outside it branches on its Provider
+  Kind, and the two never import each other (`docs/architecture.md`, Provider descriptors).
 - `src/calendar_sync/interfaces/` owns HTTP schemas, routes, sessions, and serving the compiled UI.
 - `src/calendar_sync/bootstrap/` is the only dependency-composition boundary.
 - `web/` contains the React source. Reuse the existing shadcn-style components and design tokens
   before adding UI primitives.
-- Raw provider dictionaries must be translated at the Google adapter boundary. Do not leak Google
-  SDK types into the application or domain.
+- Raw provider dictionaries must be translated at their adapter's boundary. Do not leak Google SDK
+  types or `httpx` types into the application or domain.
 - Prefer explicit constructor injection and small protocols. Do not introduce a dependency-injection
   framework, repository framework, event bus, or microservice boundary.
 - `lint-imports` enforces these boundaries through the contracts in `pyproject.toml`. Its
@@ -179,8 +181,9 @@ the Docker build context, and has its own `Site` workflow.
   User who began it. `/api/v1/status`, `/api/v1/installation/health`, and
   `/mcp` are the only routes that accept an Integration Token, and `/mcp` accepts nothing else
   (ADR 0024). `tests/adapters/test_api_authorization.py` lists them; extend it with every route.
-- Google writes use `sendUpdates=none`. A change that could email attendees or mutate source events
-  is release-blocking.
+- Google writes use `sendUpdates=none`. Outlook writes are appointments with no attendees that ask
+  for no responses, and never call `/cancel`, `/forward`, or a response action. A change that could
+  email attendees or mutate source events is release-blocking.
 - Preserve least-privilege OAuth scopes and encrypted credential storage.
 
 ## Development
@@ -264,7 +267,7 @@ gitleaks git .
 CI's `secrets` job runs the same scan on a pull request's commits and on each push to `main`.
 
 For release-facing changes, also build the image for the supported architectures through CI or
-`docker compose build`. Tests must not require a personal Google account.
+`docker compose build`. Tests must not require a personal Google or Microsoft account.
 
 ## Test Coverage
 
@@ -292,7 +295,7 @@ recovery flows over trivial line execution.
 ```text
 src/calendar_sync/domain/          Entities, value objects, policies, and decisions
 src/calendar_sync/application/     Use cases and boundary protocols
-src/calendar_sync/infrastructure/  Google, SQLite, security, scheduling, notifications
+src/calendar_sync/infrastructure/  Google, Microsoft, SQLite, security, scheduling, notifications
 src/calendar_sync/interfaces/      FastAPI routes and compiled Web UI
 src/calendar_sync/bootstrap/       Dependency composition
 web/                               React, TypeScript, Vite, Tailwind, shadcn-style source
