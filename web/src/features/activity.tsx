@@ -174,16 +174,20 @@ export function ActivityView({
   const context = useRuleContext()
   const entries = activity.data?.pages.flat() ?? []
   const selection = useSelectedEntry(entryId, entries, activity.isPending)
-  if (activity.isPending || incidents.isPending) return <PageSkeleton label={t("activity.page.loading")} />
-
-  if (activity.error || incidents.error) {
+  // History's entries hold back only History; the Incidents tab needs nothing but its incidents.
+  const required = tab === "history" ? [activity, incidents] : [incidents]
+  if (required.some((query) => query.error)) {
     return (
       <ActivityUnavailable
-        errors={[activity.error, incidents.error]}
-        refreshing={activity.isFetching || incidents.isFetching}
-        onRetry={() => void Promise.all([activity.refetch(), incidents.refetch()])}
+        errors={required.map((query) => query.error)}
+        refreshing={required.some((query) => query.isFetching)}
+        onRetry={() => void Promise.all(required.map((query) => query.refetch()))}
       />
     )
+  }
+
+  if (!incidents.data || required.some((query) => query.isPending)) {
+    return <PageSkeleton label={t("activity.page.loading")} />
   }
 
   return (

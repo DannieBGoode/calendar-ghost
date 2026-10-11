@@ -18,8 +18,9 @@ describe("Activity view states", () => {
     const { t } = testI18n()
     expect(t("activity.empty.none.title")).toBe("No activity yet")
     expect(t("activity.failure.title")).toBe("Activity is temporarily unavailable")
-    expect(activitySource).toContain("activity.refetch()")
-    expect(activitySource).toContain("incidents.refetch()")
+    // Retrying refetches every request the shown tab needs: History's entries and the incidents.
+    expect(activitySource).toContain('tab === "history" ? [activity, incidents] : [incidents]')
+    expect(activitySource).toContain("required.map((query) => query.refetch())")
   })
 })
 

@@ -52,6 +52,8 @@ export function IncidentDetail({
       onNext={onNext}
     />
   )
+  // The server lists only the most recent incidents, so a link to an older one is still kept but
+  // not listed; the panel says so rather than claim it is gone.
   if (!incident) {
     return (
       <aside className="activity-detail" aria-label={t("activity.incidents.detail.label")} onKeyDown={close}>

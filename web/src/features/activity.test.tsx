@@ -228,7 +228,7 @@ const FIXTURE_TEXT = [
   ...LIST_WORDS,
 ]
 
-type Scenario = { entries?: AuditEntry[]; incidents?: Incident[]; failIncidents?: boolean }
+type Scenario = { entries?: AuditEntry[]; incidents?: Incident[]; failIncidents?: boolean; failHistory?: boolean }
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: status < 400, status, json: () => Promise.resolve(body) } as Response
@@ -243,9 +243,9 @@ function patternResponse(path: string): Response {
   return jsonResponse({ detail: "not found" }, 404)
 }
 
-function mockFetch({ entries = ENTRIES, incidents = INCIDENTS, failIncidents = false }: Scenario) {
+function mockFetch({ entries = ENTRIES, incidents = INCIDENTS, failIncidents = false, failHistory = false }: Scenario) {
   const responses: Record<string, Response> = {
-    "/api/v1/audit-entries": jsonResponse(entries),
+    "/api/v1/audit-entries": failHistory ? jsonResponse({ detail: "boom" }, 500) : jsonResponse(entries),
     "/api/v1/incidents": failIncidents ? jsonResponse({ detail: "boom" }, 500) : jsonResponse(incidents),
     "/api/v1/rules": jsonResponse([rule]),
     "/api/v1/accounts": jsonResponse([accountA, accountB]),
@@ -401,6 +401,13 @@ describe("ActivityView", () => {
     await click([...container.querySelectorAll(".activity-detail button")].find((item) => item.textContent.includes("Close")) ?? null)
     expect(window.location.pathname).toBe("/activity/incidents")
     expect(container.querySelector(".activity-detail")).toBeNull()
+  })
+
+  it("shows Incidents even when History cannot load, and says so only on History", async () => {
+    await renderActivity(testI18n(), { failHistory: true }, "", "incidents")
+    expect(container.querySelector(".incidents-table")).not.toBeNull()
+    await click(container.querySelector('.page-tab[href="/activity"]'))
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Activity is temporarily unavailable")
   })
 
   it("opens a blocked Incident's events in History", async () => {

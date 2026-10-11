@@ -456,7 +456,7 @@
       "label": "Incident details",
       "previous": "Previous incident",
       "next": "Next incident",
-      "missing": "This incident is no longer kept.",
+      "missing": "This incident is not among the ones listed here. Only the most recent incidents are listed.",
       "opened": "Opened",
       "lastSeen": "Last seen",
       "closed": "Closed",
