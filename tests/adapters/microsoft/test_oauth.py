@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
 
 from calendar_sync.application.sync.errors import (
@@ -241,6 +242,43 @@ def test_a_grant_without_calendar_access_connects_nothing(installation: Installa
     with pytest.raises(CalendarPermissionRequired):
         installation.oauth.complete(_query(url)["state"], code, USER)
     assert installation.store.for_user(USER).list() == ()
+
+
+def _calendars_answered_without_a_list(graph: FakeMicrosoftGraph) -> None:
+    """Graph answers the calendar listing with success but no list in `value`."""
+    serve = graph.handle
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/me/calendars"):
+            return httpx.Response(200, json={"value": "unavailable"})
+        return serve(request)
+
+    graph.handle = handle  # type: ignore[method-assign]
+
+
+def test_a_calendar_listing_without_its_calendars_connects_nothing(
+    installation: Installation,
+) -> None:
+    url = installation.oauth.authorization_url(USER)
+    code = installation.graph.consent(url, ADDRESS)
+    _calendars_answered_without_a_list(installation.graph)
+
+    with pytest.raises(AuthorizationFailed):
+        installation.oauth.complete(_query(url)["state"], code, USER)
+    assert installation.store.for_user(USER).list() == ()
+
+
+def test_an_access_check_answered_without_its_calendars_is_retried(
+    installation: Installation,
+) -> None:
+    _connect(installation)
+    (account,) = installation.store.for_user(USER).list()
+    _calendars_answered_without_a_list(installation.graph)
+
+    with pytest.raises(AccountAccessCheckFailed) as failed:
+        installation.oauth.verify_access(account.id)
+
+    assert failed.value.kind is ProviderFailureKind.TEMPORARY
 
 
 def test_a_refused_code_exchange_connects_nothing(installation: Installation) -> None:

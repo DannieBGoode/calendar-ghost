@@ -44,7 +44,12 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.microsoft.causes import CALENDAR_REFUSALS, cause_of
-from calendar_sync.infrastructure.microsoft.graph import GraphHttp, GraphRefusal, TokenRefusal
+from calendar_sync.infrastructure.microsoft.graph import (
+    GraphHttp,
+    GraphRefusal,
+    TokenRefusal,
+    items_of,
+)
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.microsoft.recurrence import occurrence_dates
 from calendar_sync.infrastructure.microsoft.translation import (
@@ -61,7 +66,6 @@ from calendar_sync.infrastructure.microsoft.translation import (
     cancelled_occurrence_reference,
     exceptions_have_attendees,
     instances_window,
-    items_of,
     occurrence_body,
     projection_body,
     property_filter,

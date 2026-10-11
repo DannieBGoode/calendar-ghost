@@ -9,7 +9,7 @@ which can quote the request (ADR 0031, ADR 0034).
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -165,3 +165,12 @@ class GraphHttp:
         while isinstance(link := page.get("@odata.nextLink"), str):
             page = self.request(operation, "GET", link, token)
             yield page
+
+
+def items_of(page: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
+    """A listing page's items. A page without a list in `value` is no answer, never an empty
+    one, so it fails for now and proves nothing absent."""
+    values = page.get("value")
+    if not isinstance(values, list):
+        raise GraphRefusal(None)
+    return [item for item in values if isinstance(item, Mapping)]

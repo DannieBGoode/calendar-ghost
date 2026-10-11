@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import deque
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -35,7 +35,6 @@ from calendar_sync.domain.model import (
     TimedInterval,
     occurrence_start,
 )
-from calendar_sync.infrastructure.microsoft.graph import GraphRefusal
 from calendar_sync.infrastructure.microsoft.recurrence import (
     SeriesRule,
     UnsupportedRecurrence,
@@ -656,12 +655,3 @@ def instances_window(after: datetime, before: datetime) -> dict[str, str]:
         "startDateTime": after.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "endDateTime": before.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
-
-
-def items_of(page: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
-    """A listing page's items. A page without a list in `value` is no answer, never an empty
-    one, so it fails for now and proves nothing absent."""
-    values = page.get("value")
-    if not isinstance(values, list):
-        raise GraphRefusal(None)
-    return [item for item in values if isinstance(item, Mapping)]

@@ -48,6 +48,7 @@ from calendar_sync.infrastructure.microsoft.graph import (
     GraphRefusal,
     Json,
     TokenRefusal,
+    items_of,
     token_refusal,
 )
 from calendar_sync.infrastructure.oauth import (
@@ -292,9 +293,8 @@ class MicrosoftOAuthService:
             token,
             params={"$select": "id,name,canEdit,isDefaultCalendar"},
         ):
-            values = page.get("value")
-            if isinstance(values, list):
-                items.extend(item for item in values if isinstance(item, dict))
+            # A page without a list is no answer, never proof the account has no calendars.
+            items.extend(dict(item) for item in items_of(page))
         return items
 
 
