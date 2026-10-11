@@ -105,9 +105,10 @@ web/ and interfaces/  ->  application/  ->  domain/
 - `lint-imports` enforces these boundaries through the contracts in `pyproject.toml`. Its
   only `ignore_imports` entry lets the FastAPI factory in `interfaces/api/app.py` build the
   container, because it is the process entry point. Never add one to make a change pass.
-- Ruff bounds function complexity and argument count. Existing `# noqa: C901`, `PLR0912`,
-  `PLR0913`, and `PLR0915` markers are debt to shrink, not a pattern to copy: split new code
-  instead of suppressing the rule.
+- Ruff bounds function complexity and argument count. Split code instead of suppressing the
+  rule: `tests/test_architecture.py` fails on a `noqa` for `C901`, `PLR0912`, `PLR0913`, or
+  `PLR0915` in `src/`, and on an application dataclass with behavior whose constructor takes more
+  than `max-args` fields. Its list of such dataclasses is debt that may only shrink.
 - ESLint applies the same kind of bounds to `web/src`, and no frontend code is exempt. Split a
   component, hook, or module that reaches a bound into cohesive files (for example
   `features/rule-details.tsx` and its section files); never add an `eslint-disable` for these rules.

@@ -158,6 +158,10 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   composes `ChangeFeedCursors`, `SynchronizeEvents`, and `ExceptionReplays`, and
   `SyncDecisionService.decide_occurrence` takes one `OccurrenceSituation` and no longer needs a
   complexity exception.
+- Synchronization safety is enforced by tests, with no change in behavior: every use case that
+  runs, previews, reconciles, or changes a rule must receive the installation's one rule lock
+  registry instead of creating its own, and a test fails on a complexity suppression in
+  production code or an application dataclass whose constructor exceeds Ruff's argument bound.
 - A run's failure kind, and each Connected Account's state and Provider Kind in Installation
   Status, are typed as their domain enums instead of strings. `ProviderFailureKind` moves to
   `domain/providers.py`, and `application/sync/events.py` is now `event_sync.py`, so it is not
