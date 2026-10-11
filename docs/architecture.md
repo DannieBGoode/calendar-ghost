@@ -133,6 +133,18 @@ pass. An interrupted disconnection is not repaired here: the rules it stopped wr
 retrying the disconnection completes it. Scheduled runs and Rule Removal share one retry helper in
 `application/sync/retry.py`, which retries only temporary and rate-limited failures.
 
+A Sync Run is the `ExecuteSyncRule` use case in `application/sync/synchronization.py`. It holds the
+rule's lock, applies the source batch and then the destination batch, and records a failed run; it
+composes collaborators from its own ports for the rest. `ChangeFeedCursors` in `change_feeds.py`
+reads both change feeds from the saved cursors and, only after both batches succeed, saves the next
+cursors and records the run's outcome. `SynchronizeEvents` in `events.py` decides one source event,
+writes its projection, and records its Event Mapping and Audit Entry; `SynchronizeOccurrences` in
+`occurrences.py` does the same for one occurrence of a series. `ExceptionReplays` in
+`exception_replays.py` applies a new series' Occurrence Exceptions from the source, and
+`own_writes.py` recognizes a projection the destination feed reports exactly as the rule last wrote
+it. The domain's `SyncDecisionService` makes every decision; an occurrence's evidence reaches it as
+one `OccurrenceSituation`.
+
 Installation Status follows the same direction ([ADR 0024](adr/0024-integration-tokens-installation-status-and-mcp.md)).
 `application/operations/status.py` decides the one verdict the Overview, `GET /api/v1/status`, and MCP share:
 `assess_installation` is a pure function of the rule summaries, the operations overview, open

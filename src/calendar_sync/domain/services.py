@@ -16,7 +16,7 @@ from calendar_sync.domain.model import (
     EventStatus,
     NoProjectionExpected,
     OccurrenceCheck,
-    OccurrenceMapping,
+    OccurrenceSituation,
     OccurrenceStart,
     ProjectionContent,
     ProjectionFingerprint,
@@ -173,106 +173,48 @@ class SyncDecisionService:
             reason = SyncReason.DESTINATION_DRIFT_REPAIRED
         return SyncDecision(SyncAction.UPDATE, reason, projection)
 
-    # Ordered decision table; each guard returns a reason. Its inputs are the evidence it weighs.
-    def decide_occurrence(  # noqa: C901, PLR0912, PLR0913
-        self,
-        rule: SyncRule,
-        source_series: CalendarEvent,
-        series_mapping: EventMapping | None,
-        original_start: OccurrenceStart,
-        source_occurrence: CalendarEvent | None,
-        occurrence_mapping: OccurrenceMapping | None,
-        destination_series: CalendarEvent | None,
-        destination_occurrence: CalendarEvent | None,
-        *,
-        destination_reported: bool = False,
-        has_live_occurrences: bool = True,
-    ) -> SyncDecision:
-        """Decide one occurrence of a mapped series; `None` means no such occurrence exists."""
-        if source_series.reference.calendar != rule.source:
-            return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
-        if source_series.managed_origin is not None:
-            return SyncDecision(SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE)
-        if series_mapping is None or source_series.status is EventStatus.CANCELLED:
+    def decide_occurrence(self, rule: SyncRule, situation: OccurrenceSituation) -> SyncDecision:
+        """Decide one occurrence of a mapped series from the evidence in `situation`."""
+        # In order: loop prevention, identity conflicts, removals, projection.
+        series_mapping = situation.series_mapping
+        ignored = _unsynchronized_series(rule, situation.source_series)
+        if ignored is not None:
+            return ignored
+        if series_mapping is None:
             return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
-        if (
-            not series_mapping.belongs_to(rule)
-            or series_mapping.source != source_series.reference
-            or (
-                occurrence_mapping is not None
-                and (
-                    occurrence_mapping.series_mapping_id != series_mapping.id
-                    or occurrence_mapping.original_start != original_start
-                )
-            )
-            or (
-                source_occurrence is not None
-                and not _is_occurrence_of(
-                    source_occurrence, source_series.reference, original_start
-                )
-            )
-        ):
-            return SyncDecision(SyncAction.CONFLICT, SyncReason.MAPPING_INCONSISTENT)
-        if (
-            destination_series is None
-            or destination_series.status is EventStatus.CANCELLED
-            or destination_series.reference != series_mapping.destination
-        ):
-            # A dormant series has no projection until one of its occurrences is restored.
-            if not has_live_occurrences and (
-                destination_series is None or destination_series.status is EventStatus.CANCELLED
-            ):
-                return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
-            return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
-        origin = destination_series.managed_origin
-        if origin is None or not origin.owns(rule, source_series.reference):
-            return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT)
-        if destination_occurrence is not None:
-            if not _is_occurrence_of(
-                destination_occurrence, series_mapping.destination, original_start
-            ):
-                return SyncDecision(
-                    SyncAction.CONFLICT, SyncReason.DESTINATION_IDENTITY_INCONSISTENT
-                )
-            # Google omits metadata on cancelled instances; the parent series proves ownership.
-            occurrence_origin = destination_occurrence.managed_origin
-            if occurrence_origin is not None and not occurrence_origin.owns(
-                rule, source_series.reference
-            ):
-                return SyncDecision(
-                    SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
-                )
-
-        destination_absent = (
-            destination_occurrence is None or destination_occurrence.status is EventStatus.CANCELLED
-        )
-        if source_occurrence is None:
-            if destination_absent:
+        unproven = _occurrence_identity_decision(rule, situation, series_mapping)
+        if unproven is not None:
+            return unproven
+        source, destination = situation.source_occurrence, situation.destination_occurrence
+        if source is None:
+            if _is_absent(destination):
                 return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_RETIRED)
             return SyncDecision(SyncAction.DELETE, SyncReason.OCCURRENCE_REMOVED_FROM_SERIES)
-        cancelled = source_occurrence.status is EventStatus.CANCELLED
-        exclusion = None if cancelled else rule.transformation.exclusion(source_occurrence)
-        if cancelled or exclusion is not None:
-            if destination_absent:
-                return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_ALREADY_CANCELLED)
-            reason = (
-                exclusion.removal_reason
-                if exclusion is not None
-                else SyncReason.OCCURRENCE_CANCELLED
-            )
-            return SyncDecision(SyncAction.DELETE, reason)
-        if destination_occurrence is None:
+        removal = _occurrence_removal(rule, source, destination)
+        if removal is not None:
+            return removal
+        if destination is None:
             return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
+        return self._occurrence_projection_decision(rule, situation, source, destination)
 
-        projection = self._projector.project(source_occurrence, rule)
+    def _occurrence_projection_decision(
+        self,
+        rule: SyncRule,
+        situation: OccurrenceSituation,
+        source: CalendarEvent,
+        destination: CalendarEvent,
+    ) -> SyncDecision:
+        """Restore or update an occurrence whose projection differs from the source's."""
+        projection = self._projector.project(source, rule)
         expected = self._fingerprinter.fingerprint(projection)
+        recorded = situation.occurrence_mapping
         # As for a series, only a projection the source now calls for differently than the one
         # last written is a source change (ADR 0017).
-        source_changed = not destination_reported and (
-            occurrence_mapping is None
+        source_changed = not situation.destination_reported and (
+            recorded is None
             or (
-                occurrence_mapping.source_revision != source_occurrence.revision
-                and occurrence_mapping.projection_fingerprint != expected
+                recorded.source_revision != source.revision
+                and recorded.projection_fingerprint != expected
             )
         )
         changed = (
@@ -280,16 +222,16 @@ class SyncDecisionService:
             if source_changed
             else SyncReason.OCCURRENCE_DRIFT_REPAIRED
         )
-        if destination_occurrence.status is EventStatus.CANCELLED:
+        if destination.status is EventStatus.CANCELLED:
             return SyncDecision(SyncAction.UPDATE, changed, projection)
-        actual = self._fingerprinter.fingerprint(self.as_projection(destination_occurrence))
+        actual = self._fingerprinter.fingerprint(self.as_projection(destination))
         if expected == actual:
             return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_CURRENT, projection)
         if (
             rule.reprojection_required
             and not source_changed
-            and occurrence_mapping is not None
-            and occurrence_mapping.projection_fingerprint == actual
+            and recorded is not None
+            and recorded.projection_fingerprint == actual
         ):
             return SyncDecision(SyncAction.UPDATE, SyncReason.POLICY_APPLIED, projection)
         return SyncDecision(SyncAction.UPDATE, changed, projection)
@@ -359,6 +301,104 @@ def _removal(
             return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
         return SyncDecision(SyncAction.DELETE, SyncReason.SERIES_WITHOUT_OCCURRENCES_REMOVED)
     return None
+
+
+def _unsynchronized_series(rule: SyncRule, source_series: CalendarEvent) -> SyncDecision | None:
+    """Ignore occurrences of a series this rule does not synchronize."""
+    if source_series.reference.calendar != rule.source:
+        return SyncDecision(SyncAction.IGNORE, SyncReason.OUTSIDE_SOURCE_CALENDAR)
+    if source_series.managed_origin is not None:
+        return SyncDecision(SyncAction.IGNORE, SyncReason.MANAGED_PROJECTION_SOURCE)
+    if source_series.status is EventStatus.CANCELLED:
+        return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_NOT_SYNCHRONIZED)
+    return None
+
+
+def _occurrence_identity_decision(
+    rule: SyncRule, situation: OccurrenceSituation, series_mapping: EventMapping
+) -> SyncDecision | None:
+    """Stop when the mappings or the destination cannot prove this rule owns the occurrence."""
+    if _occurrence_mappings_inconsistent(rule, situation, series_mapping):
+        return SyncDecision(SyncAction.CONFLICT, SyncReason.MAPPING_INCONSISTENT)
+    unproven = _destination_series_decision(rule, situation, series_mapping)
+    if unproven is not None:
+        return unproven
+    conflict = _destination_occurrence_conflict(rule, situation, series_mapping)
+    return SyncDecision(SyncAction.CONFLICT, conflict) if conflict is not None else None
+
+
+def _occurrence_mappings_inconsistent(
+    rule: SyncRule, situation: OccurrenceSituation, series_mapping: EventMapping
+) -> bool:
+    """The Series Mapping or Occurrence Mapping names another rule, series, or occurrence."""
+    source_series, start = situation.source_series, situation.original_start
+    recorded, source = situation.occurrence_mapping, situation.source_occurrence
+    return (
+        not series_mapping.belongs_to(rule)
+        or series_mapping.source != source_series.reference
+        or (
+            recorded is not None
+            and (
+                recorded.series_mapping_id != series_mapping.id or recorded.original_start != start
+            )
+        )
+        or (source is not None and not _is_occurrence_of(source, source_series.reference, start))
+    )
+
+
+def _destination_series_decision(
+    rule: SyncRule, situation: OccurrenceSituation, series_mapping: EventMapping
+) -> SyncDecision | None:
+    """Stop when the destination series is missing, dormant, or not this rule's projection."""
+    destination_series = situation.destination_series
+    if (
+        destination_series is None
+        or destination_series.status is EventStatus.CANCELLED
+        or destination_series.reference != series_mapping.destination
+    ):
+        # A dormant series has no projection until one of its occurrences is restored.
+        if not situation.has_live_occurrences and _is_absent(destination_series):
+            return SyncDecision(SyncAction.IGNORE, SyncReason.SERIES_WITHOUT_OCCURRENCES)
+        return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OCCURRENCE_MISSING)
+    origin = destination_series.managed_origin
+    if origin is None or not origin.owns(rule, situation.source_series.reference):
+        return SyncDecision(SyncAction.CONFLICT, SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT)
+    return None
+
+
+def _destination_occurrence_conflict(
+    rule: SyncRule, situation: OccurrenceSituation, series_mapping: EventMapping
+) -> SyncReason | None:
+    """Why the destination occurrence is not this rule's projection of it, if so."""
+    destination = situation.destination_occurrence
+    if destination is None:
+        return None
+    if not _is_occurrence_of(destination, series_mapping.destination, situation.original_start):
+        return SyncReason.DESTINATION_IDENTITY_INCONSISTENT
+    # Google omits metadata on cancelled instances; the parent series proves ownership.
+    origin = destination.managed_origin
+    if origin is not None and not origin.owns(rule, situation.source_series.reference):
+        return SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT
+    return None
+
+
+def _occurrence_removal(
+    rule: SyncRule, source: CalendarEvent, destination: CalendarEvent | None
+) -> SyncDecision | None:
+    """Cancel, or leave cancelled, an occurrence the source cancelled or the rule excludes."""
+    cancelled = source.status is EventStatus.CANCELLED
+    exclusion = None if cancelled else rule.transformation.exclusion(source)
+    if not cancelled and exclusion is None:
+        return None
+    if _is_absent(destination):
+        return SyncDecision(SyncAction.IGNORE, SyncReason.OCCURRENCE_ALREADY_CANCELLED)
+    reason = exclusion.removal_reason if exclusion is not None else SyncReason.OCCURRENCE_CANCELLED
+    return SyncDecision(SyncAction.DELETE, reason)
+
+
+def _is_absent(event: CalendarEvent | None) -> bool:
+    """No such event exists, or the provider keeps it only as a cancellation."""
+    return event is None or event.status is EventStatus.CANCELLED
 
 
 def _is_occurrence_of(event: CalendarEvent, series: EventRef, start: OccurrenceStart) -> bool:
