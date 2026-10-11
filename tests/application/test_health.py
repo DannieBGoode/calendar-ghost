@@ -15,7 +15,12 @@ from calendar_sync.application.sync.health import (
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
+from calendar_sync.domain.incidents import (
+    IncidentCategory,
+    IncidentMessage,
+    IncidentReport,
+    IncidentResolution,
+)
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FixedClock
@@ -50,7 +55,7 @@ def test_failures_requiring_intervention_degrade_and_open_an_incident_at_once(
     assert response.incident == IncidentReport(
         f"provider:{RULE.value}",
         RULE,
-        kind.value,
+        kind.incident_category,
         RuleHealthPolicy.summary(failure),
         account_id=failure.account_id,
         message=IncidentMessage("provider_failure", {"kind": kind.value, "provider": None}),
@@ -123,7 +128,7 @@ def test_persisting_blocks_open_one_incident_that_names_how_many() -> None:
     assert one == IncidentReport(
         f"blocked:{RULE.value}",
         RULE,
-        "conflict",
+        IncidentCategory.CONFLICT,
         "1 event could not be synced and was still blocked at the daily check.",
         message=IncidentMessage("events_still_blocked", {"count": 1}),
     )
@@ -138,7 +143,7 @@ def test_a_blocked_removal_names_its_cause() -> None:
     assert incident == IncidentReport(
         f"removal:{RULE.value}",
         RULE,
-        "authorization",
+        IncidentCategory.AUTHORIZATION,
         "Rule Removal stopped: Access to the calendar provider was denied",
         account_id=ACCOUNT,
         message=IncidentMessage("removal_stopped", {"kind": "authorization", "provider": None}),

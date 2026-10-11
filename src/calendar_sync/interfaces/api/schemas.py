@@ -29,6 +29,17 @@ CauseValue = Literal[
 ]
 """Why a provider call failed (ADR 0031). A client that meets one it does not know shows it as
 unknown."""
+IncidentCategoryValue = Literal[
+    "authentication",
+    "authorization",
+    "rate_limit",
+    "temporary",
+    "permanent",
+    "infrastructure",
+    "conflict",
+    "unknown",
+]
+"""What kind of condition an Incident reports; one stored by another release reads as unknown."""
 IncidentStepValue = Literal[
     "reauthorize",
     "recover_rule",
@@ -408,7 +419,7 @@ class ActivityEventResponse(ApiResponse):
 class IncidentResponse(ApiResponse):
     id: str
     rule_id: str | None
-    category: str
+    category: IncidentCategoryValue
     state: IncidentState
     summary: str
     opened_at: str
@@ -514,7 +525,7 @@ class StatusRuleResponse(ApiResponse):
 
 class StatusIncidentResponse(ApiResponse):
     rule_id: str | None
-    category: str
+    category: IncidentCategoryValue
     summary: str
     opened_at: str
     cause: CauseValue | None = None

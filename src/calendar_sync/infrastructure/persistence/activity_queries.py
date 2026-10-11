@@ -37,7 +37,7 @@ from calendar_sync.application.sync.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState
 from calendar_sync.domain.causes import WITHOUT_CAUSE, Cause
-from calendar_sync.domain.incidents import AccountAuthorization, IncidentMessage
+from calendar_sync.domain.incidents import AccountAuthorization, IncidentCategory, IncidentMessage
 from calendar_sync.domain.model import ConnectedAccountId, SyncAction, SyncReason
 from calendar_sync.infrastructure.persistence.connections import open_connection
 from calendar_sync.infrastructure.persistence.source_changes import open_change_values
@@ -503,7 +503,7 @@ def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
     return IncidentSummary(
         id=row["id"],
         rule_id=row["rule_id"],
-        category=row["category"],
+        category=IncidentCategory.read(row["category"]),
         state=row["state"],
         summary=row["summary"],
         opened_at=datetime.fromisoformat(row["opened_at"]),

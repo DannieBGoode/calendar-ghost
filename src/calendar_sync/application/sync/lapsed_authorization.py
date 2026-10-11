@@ -29,7 +29,7 @@ def lapse_incident(account_id: ConnectedAccountId, failure: ProviderFailure) -> 
     return IncidentReport(
         authorization_key(account_id),
         None,
-        failure.kind.value,
+        failure.kind.incident_category,
         failure.summary,
         account_id=account_id,
         message=IncidentMessage(

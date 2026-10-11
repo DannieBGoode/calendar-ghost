@@ -20,7 +20,12 @@ from calendar_sync.application.sync.ports import (
     RuleHealthRecords,
     UnitOfWorkFactory,
 )
-from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
+from calendar_sync.domain.incidents import (
+    IncidentCategory,
+    IncidentMessage,
+    IncidentReport,
+    IncidentResolution,
+)
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
 PROVIDER_INCIDENT_THRESHOLD = 3
@@ -85,7 +90,7 @@ class RuleHealthPolicy:
         return IncidentReport(
             self.provider_key(rule_id),
             rule_id,
-            failure.kind.value,
+            failure.kind.incident_category,
             self.summary(failure),
             account_id=failure.account_id,
             message=_failure_message("provider_failure", failure),
@@ -101,7 +106,7 @@ class RuleHealthPolicy:
         return IncidentReport(
             self.blocked_key(rule_id),
             rule_id,
-            "conflict",
+            IncidentCategory.CONFLICT,
             f"{events} could not be synced and {verb} still blocked at the daily check.",
             message=IncidentMessage("events_still_blocked", {"count": persisting}),
         )
@@ -110,7 +115,7 @@ class RuleHealthPolicy:
         return IncidentReport(
             f"removal:{rule_id.value}",
             rule_id,
-            failure.kind.value,
+            failure.kind.incident_category,
             f"Rule Removal stopped: {self.summary(failure)}",
             account_id=failure.account_id,
             message=_failure_message("removal_stopped", failure),
