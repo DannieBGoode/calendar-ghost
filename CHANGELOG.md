@@ -124,6 +124,11 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   the account may no longer use sent the email to the rule while Activity offered to reauthorize.
   The email for blocked events now opens that rule's blocked events. `GET /api/v1/incidents`
   returns each Incident's `step`.
+- An Incident's `category` is one of a closed set in the domain (`IncidentCategory`): a provider
+  failure's kind, `conflict` for events still blocked, or `unknown` for a category another release
+  stored. `GET /api/v1/incidents` and `GET /api/v1/status` return it as an enum, and a new
+  provider failure kind fails a test until the domain's categories, and so its next steps,
+  know it.
 - Activity lists every incident: `GET /api/v1/incidents` pages with `before`, the last incident's
   `cursor`, the table ends in
   "Load older incidents" while there are more, and `GET /api/v1/incidents/{incident_id}` opens an
