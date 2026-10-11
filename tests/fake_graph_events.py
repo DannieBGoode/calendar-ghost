@@ -115,6 +115,13 @@ class FakeGraphEvents:
         self._changed(original.mailbox, original.calendar, copied)
         return copied
 
+    def invite(self, event_id: str, attendees: list[Json]) -> None:
+        """Invite guests to an event or series as its owner would in Outlook, which changes it."""
+        event = self.stored[event_id]
+        event.fields["attendees"] = attendees
+        self._touch(event)
+        self._changed(event.mailbox, event.calendar, event_id)
+
     def in_calendar(self, mailbox: str, calendar: str) -> list[StoredEvent]:
         return [
             event
@@ -154,6 +161,12 @@ class FakeGraphEvents:
             return _error(404, "ErrorInvalidUrl")
         if method == "GET":
             return self._get(mailbox, calendar, event_id, params)
+        condition = request.headers.get("If-Match")
+        current = self._etag(mailbox, calendar, event_id)
+        if condition is not None and current is not None and condition != current:
+            # The item changed since the version the write names: Exchange's "the change key
+            # passed in the request does not match the current change key for the item".
+            return _error(412, "ErrorIrresolvableConflict")
         if method == "PATCH":
             return self._patch(mailbox, calendar, event_id, _json(request))
         if method == "DELETE":
@@ -327,6 +340,7 @@ class FakeGraphEvents:
         properties = fields.pop("singleValueExtendedProperties", None)
         answer: Json = {
             "id": event.id,
+            "@odata.etag": f'W/"ck-{event.id}-{event.change}"',
             "changeKey": f"ck-{event.id}-{event.change}",
             "lastModifiedDateTime": event.modified.isoformat().replace("+00:00", "Z"),
             "type": "seriesMaster" if event.is_series else "singleInstance",
@@ -348,9 +362,12 @@ class FakeGraphEvents:
         all_day = bool(series.fields.get("isAllDay"))
         own_start = _utc(override["start"]) if "start" in override else start
         own_end = _utc(override["end"]) if "end" in override else start + length
+        # An occurrence changes with its series, as its attendees and other fields do.
+        change_key = f"ck-{series.id}-{series.change}-{day}-{len(override)}"
         answer: Json = {
             "id": f"{series.id}.occ.{day.isoformat()}",
-            "changeKey": f"ck-{series.id}-{day}-{len(override)}",
+            "@odata.etag": f'W/"{change_key}"',
+            "changeKey": change_key,
             "type": "exception" if override else "occurrence",
             "seriesMasterId": series.id,
             "originalStart": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -429,6 +446,16 @@ class FakeGraphEvents:
         if event is None or (event.mailbox, event.calendar) != (mailbox, calendar):
             return None
         return event
+
+    def _etag(self, mailbox: str, calendar: str, event_id: str) -> str | None:
+        """The version an event or occurrence is at now; None when it is not there."""
+        event = self._event(mailbox, calendar, event_id)
+        if event is not None:
+            return str(self._serve(event, expand=False)["@odata.etag"])
+        found = self._occurrence(mailbox, calendar, event_id)
+        if found is None:
+            return None
+        return str(self._instance(*found, expand=False)["@odata.etag"])
 
     def _has_attendees(self, mailbox: str, calendar: str, event_id: str) -> bool:
         """Whether a write to this event or occurrence reaches attendees."""

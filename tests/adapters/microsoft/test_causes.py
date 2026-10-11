@@ -53,6 +53,9 @@ GRAPH_CASES = [
     (404, "ErrorItemNotFound", Cause.CALENDAR_NOT_FOUND),
     (404, "itemNotFound", Cause.CALENDAR_NOT_FOUND),
     (404, "ErrorFolderNotFound", Cause.CALENDAR_NOT_FOUND),
+    # A write conditional on an older version of the event: it is read again.
+    (412, "ErrorIrresolvableConflict", Cause.TEMPORARY),
+    (412, "preconditionFailed", Cause.TEMPORARY),
     (400, "MailboxNotEnabledForRESTAPI", Cause.UNKNOWN),
     (400, "ErrorInvalidRequest", Cause.UNKNOWN),
 ]

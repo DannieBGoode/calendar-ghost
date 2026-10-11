@@ -320,6 +320,13 @@ def _response(item: Mapping[str, Any]) -> str:
     return str(status.get("response")) if isinstance(status, Mapping) else "none"
 
 
+def unchanged_since(event: CalendarEvent) -> dict[str, str]:
+    """Headers that make a write apply only to the version of the event that was read: Graph
+    answers each item with `@odata.etag`, `W/"<changeKey>"`, and refuses a write naming an older
+    one with 412 (ADR 0034)."""
+    return {"If-Match": f'W/"{event.revision}"'}
+
+
 def exceptions_have_attendees(item: Mapping[str, Any]) -> bool | None:
     """Whether any exception of a series master, read with EXCEPTION_ATTENDEES, has attendees;
     None when Graph did not list its exceptions in full."""

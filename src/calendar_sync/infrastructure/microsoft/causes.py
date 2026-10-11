@@ -108,6 +108,9 @@ def _graph_cause(error: GraphRefusal) -> Cause:
     status = error.status or 0
     if status == 429:
         return Cause.RATE_LIMITED
+    if status == 412:
+        # A write conditional on a version the event has since left: it is read again.
+        return Cause.TEMPORARY
     if status == 401:
         return Cause.ACCESS_REVOKED
     if status >= 500:

@@ -69,6 +69,7 @@ from calendar_sync.infrastructure.microsoft.translation import (
     series_of,
     to_domain_event,
     transaction_id,
+    unchanged_since,
 )
 from calendar_sync.infrastructure.retry_after import retry_after_seconds
 
@@ -93,6 +94,8 @@ NOT_FOUND = frozenset({404, 410})
 # Delta tokens Graph no longer accepts; a full listing starts a new round.
 RESYNC_CODES = frozenset({"syncStateNotFound", "resyncRequired"})
 CROSSING_NEIGHBOURS = "ErrorOccurrenceCrossingBoundary"
+# A conditional write refused because the event changed since it was read.
+PRECONDITION_FAILED = 412
 
 Json = dict[str, Any]
 
@@ -396,6 +399,7 @@ class OutlookCalendarProvider:
                 _event_path(destination),
                 self._token(account),
                 body=body,
+                headers=unchanged_since(existing),
             )
             return _written(updated, body, destination.calendar)
 
@@ -418,7 +422,7 @@ class OutlookCalendarProvider:
             )
         _refuse_guests(existing)
         self._refuse_exception_guests(existing)
-        self._delete(destination.calendar, destination.event_id.value)
+        self._delete(existing)
 
     def _refuse_exception_guests(self, existing: CalendarEvent) -> None:
         """Refuse to change a series one of whose exceptions someone invited guests to: Outlook
@@ -441,16 +445,18 @@ class OutlookCalendarProvider:
         if invited:
             raise UnsupportedProjection("Outlook would notify the guests of an occurrence")
 
-    def _delete(self, calendar: CalendarEndpoint, event_id: str) -> None:
-        """DELETE, which notifies nobody about an event without attendees, as projections are;
-        never `/cancel`, which always would (ADR 0034)."""
-        with self._refusals(calendar.connected_account_id):
+    def _delete(self, existing: CalendarEvent) -> None:
+        """DELETE of the version read, which notifies nobody about an event without attendees,
+        as projections are; never `/cancel`, which always would (ADR 0034)."""
+        account = existing.reference.calendar.connected_account_id
+        with self._refusals(account):
             try:
                 self._graph.request(
                     "events.delete",
                     "DELETE",
-                    f"{_calendar_path(calendar)}/events/{event_id}",
-                    self._token(calendar.connected_account_id),
+                    _event_path(existing.reference),
+                    self._token(account),
+                    headers=unchanged_since(existing),
                 )
             except GraphRefusal as error:
                 if error.status not in NOT_FOUND:
@@ -666,6 +672,7 @@ class OutlookCalendarProvider:
                     _event_path(instance.reference),
                     self._token(calendar.connected_account_id),
                     body=body,
+                    headers=unchanged_since(instance),
                 )
             except GraphRefusal as error:
                 if CROSSING_NEIGHBOURS in error.codes:
@@ -689,7 +696,7 @@ class OutlookCalendarProvider:
         )
         if instance is None or instance.status is EventStatus.CANCELLED:
             return
-        self._delete(destination_series.calendar, instance.reference.event_id.value)
+        self._delete(instance)
 
     def _owned_occurrence(
         self,
@@ -809,6 +816,9 @@ def _kind(error: GraphRefusal | TokenRefusal) -> ProviderFailureKind:
         return ProviderFailureKind.TEMPORARY
     if status == 429:
         return ProviderFailureKind.RATE_LIMIT
+    if status == PRECONDITION_FAILED:
+        # The event changed since it was read; the next run reads it again.
+        return ProviderFailureKind.TEMPORARY
     if status == 401:
         return ProviderFailureKind.AUTHENTICATION
     if status == 403 and not CALENDAR_REFUSALS.intersection(error.codes):
