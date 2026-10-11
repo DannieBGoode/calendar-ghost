@@ -98,6 +98,7 @@ const SOURCES = Object.values(
  * every message under it names a code the server sends.
  */
 const TEMPLATE_VALUES: TemplateValues = {
+  "activity.incidents.lasted.*": ["moment", "minute", "hour", "day"],
   "people.*.title": ["empty", "beyond"],
   "people.*.body": ["empty", "beyond"],
   "people.roles.*": ["installation_administrator", "user"],

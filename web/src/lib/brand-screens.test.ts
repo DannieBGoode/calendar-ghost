@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 
 import authSource from "../features/auth-screen.tsx?raw"
 import rulesSource from "../features/rules.tsx?raw"
-import activitySource from "../features/activity.tsx?raw"
+import activitySource from "../features/activity-history.tsx?raw"
 import settingsAccountRowSource from "../features/settings-account-row.tsx?raw"
 import settingsAccountsSource from "../features/settings-accounts.tsx?raw"
 import settingsGoogleReturnSource from "../features/settings-google-return.tsx?raw"

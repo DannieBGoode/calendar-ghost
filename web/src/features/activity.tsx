@@ -4,53 +4,96 @@ import {
   useInfiniteQuery,
   useQueries,
   useQuery,
-  type InfiniteData,
-  type UseInfiniteQueryResult,
 } from "@tanstack/react-query"
 import { RefreshCw, ShieldAlert } from "lucide-react"
-import { useRef, useState, type RefObject } from "react"
+import { useEffect, useRef, useState, type RefObject } from "react"
 
-import { GhostMark } from "@/components/ghost-mark"
 import { PageSkeleton } from "@/components/page-skeleton"
+import { PageTabs } from "@/components/page-tabs"
 import { Button } from "@/components/ui/button"
-import { ActivityDetail } from "@/features/activity-entry-details"
-import { ActivityFilters } from "@/features/activity-filters"
-import { OpenIncidents, ResolvedIncidents } from "@/features/activity-incidents"
-import { ActivityTable } from "@/features/activity-table"
+import { HistorySection, type ActivityFeed, type UpdateLocation } from "@/features/activity-history"
+import { IncidentsSection } from "@/features/activity-incidents"
 import { useI18n } from "@/i18n/provider"
-import { activityDayGroups, activityRows, groupRuns, showCategories } from "@/lib/activity"
+import { showCategories } from "@/lib/activity"
 import {
   activityFailure,
   activityFailureActions,
   activityFailureMessages,
   activityFailureRequiresReload,
 } from "@/lib/activity-failure"
-import { emptyHistoryCopy, entrySteps, historyStatus, type HistoryFilters } from "@/lib/activity-history"
 import { activitySearch, activityStateFromSearch, type ActivityLocationState } from "@/lib/activity-location"
 import type { RuleContext } from "@/lib/activity-rule-context"
 import { ACTIVITY_PAGE_SIZE, api, type AuditEntry, type Incident } from "@/lib/api"
-import { splitIncidents, type IncidentAction } from "@/lib/incidents"
-import { accountSearch, type OpenRule, type ViewChange } from "@/lib/navigation"
+import { documentTitle } from "@/lib/brand"
+import { openIncidentCount, type IncidentStep } from "@/lib/incidents"
+import {
+  accountSearch,
+  appPathForActivityTab,
+  appPathForIncident,
+  DEFAULT_ACTIVITY_TAB,
+  type ActivityTab,
+  type OpenRule,
+  type ViewChange,
+} from "@/lib/navigation"
 
-type UpdateLocation = (next: Partial<ActivityLocationState>, history: "push" | "replace") => void
-type ActivityFeed = UseInfiniteQueryResult<InfiniteData<AuditEntry[]>>
+/** Opens a tab of Activity; History can open with its filters changed, such as to one rule's blocks. */
+type OpenActivityTab = (tab: ActivityTab, filters?: Partial<ActivityLocationState>) => void
+/** Opens one Incident beside the table, or closes it with null. */
+type SelectIncident = (incidentId: string | null, history: "push" | "replace") => void
 
 /**
  * Filters and the open entry live in the address so Back, reload, and shared links keep them. The
  * view remounts on every arrival, including Back and Forward, so it only reads the address once.
+ * They belong to History, so every change opens History's own address.
  */
 function useActivityLocation() {
   const [state, setState] = useState(() => activityStateFromSearch(window.location.search))
 
   function update(next: Partial<ActivityLocationState>, history: "push" | "replace") {
     const merged = { ...state, ...next }
-    const url = `${window.location.pathname}${activitySearch(merged)}`
+    const url = `${appPathForActivityTab("history")}${activitySearch(merged)}`
     if (history === "push") window.history.pushState(null, "", url)
     else window.history.replaceState(null, "", url)
     setState(merged)
   }
 
   return [state, update] as const
+}
+
+/**
+ * Which tab shows, and which Incident is open beside its table. Each has its own address; switching
+ * keeps this page, and History's filters, in place.
+ */
+function useActivityTabs(
+  initialTab: ActivityTab | undefined,
+  initialIncidentId: string | undefined,
+  update: UpdateLocation,
+) {
+  const i18n = useI18n()
+  const [tab, setTab] = useState(initialTab ?? DEFAULT_ACTIVITY_TAB)
+  const [incidentId, setIncidentId] = useState(initialIncidentId ?? null)
+  useEffect(() => {
+    const page = tab === "incidents" ? i18n.t("activity.tabs.documentTitle") : i18n.t("app.nav.activity")
+    document.title = documentTitle(i18n, page)
+  }, [i18n, tab])
+
+  function openTab(next: ActivityTab, filters?: Partial<ActivityLocationState>) {
+    if (next === tab && !filters) return
+    if (next === "history") update(filters ?? {}, "push")
+    else window.history.pushState(null, "", appPathForActivityTab(next))
+    setTab(next)
+    setIncidentId(null)
+  }
+
+  // Each Incident has its own address too, so Back closes it and a link opens it.
+  function selectIncident(next: string | null, history: "push" | "replace") {
+    const url = next === null ? appPathForActivityTab("incidents") : appPathForIncident(next)
+    if (history === "push") window.history.pushState(null, "", url)
+    else window.history.replaceState(null, "", url)
+    setIncidentId(next)
+  }
+
+  return { tab, incidentId, openTab, selectIncident }
 }
 
 /** The rules, accounts, and calendar names each entry needs to name its rule. */
@@ -94,9 +137,23 @@ function useSelectedEntry(entryId: number | null, entries: AuditEntry[], feedPen
   return { entry, loading: entry === undefined && (directEntry.isPending || directEntry.isFetching) }
 }
 
-export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewChange; onOpenRule: OpenRule }) {
-  const { t } = useI18n()
+export function ActivityView({
+  tab: initialTab,
+  incidentId: initialIncidentId,
+  onViewChange,
+  onOpenRule,
+}: {
+  /** The tab the address names; History when it names none. */
+  tab?: ActivityTab | undefined
+  /** The Incident the address opens beside the Incidents table. */
+  incidentId?: string | undefined
+  onViewChange: ViewChange
+  onOpenRule: OpenRule
+}) {
+  const i18n = useI18n()
+  const { t } = i18n
   const [state, update] = useActivityLocation()
+  const { tab, incidentId, openTab, selectIncident } = useActivityTabs(initialTab, initialIncidentId, update)
   const { ruleId, show, entryId } = state
   const query = state.query ?? ""
   const focusDetail = useRef(false)
@@ -117,21 +174,29 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
   const context = useRuleContext()
   const entries = activity.data?.pages.flat() ?? []
   const selection = useSelectedEntry(entryId, entries, activity.isPending)
-
-  if (activity.isPending || incidents.isPending) return <PageSkeleton label={t("activity.page.loading")} />
-
-  if (activity.error || incidents.error) {
+  // History's entries hold back only History; the Incidents tab needs nothing but its incidents.
+  const required = tab === "history" ? [activity, incidents] : [incidents]
+  if (required.some((query) => query.error)) {
     return (
       <ActivityUnavailable
-        errors={[activity.error, incidents.error]}
-        refreshing={activity.isFetching || incidents.isFetching}
-        onRetry={() => void Promise.all([activity.refetch(), incidents.refetch()])}
+        tab={tab}
+        errors={required.map((query) => query.error)}
+        refreshing={required.some((query) => query.isFetching)}
+        onRetry={() => void Promise.all(required.map((query) => query.refetch()))}
       />
     )
   }
 
+  if (!incidents.data || required.some((query) => query.isPending)) {
+    return <PageSkeleton label={t("activity.page.loading")} />
+  }
+
   return (
     <ActivityPage
+      tab={tab}
+      onOpenTab={openTab}
+      incidentId={incidentId}
+      onSelectIncident={selectIncident}
       state={state}
       query={query}
       update={update}
@@ -148,10 +213,13 @@ export function ActivityView({ onViewChange, onOpenRule }: { onViewChange: ViewC
 }
 
 function ActivityUnavailable({
+  tab,
   errors,
   refreshing,
   onRetry,
 }: {
+  /** The tab that failed to load, so the page keeps its title. */
+  tab: ActivityTab
   errors: unknown[]
   refreshing: boolean
   onRetry: () => void
@@ -169,7 +237,7 @@ function ActivityUnavailable({
 
   return (
     <div className="page-section">
-      <ActivityHeading />
+      <ActivityHeading tab={tab} />
       <section className="empty-panel" role="alert" aria-labelledby="activity-error-title">
         <div className="empty-icon empty-icon-error"><ShieldAlert aria-hidden="true" /></div>
         <h2 id="activity-error-title">{t("activity.failure.title")}</h2>
@@ -184,6 +252,10 @@ function ActivityUnavailable({
 }
 
 function ActivityPage({
+  tab,
+  onOpenTab,
+  incidentId,
+  onSelectIncident,
   state,
   query,
   update,
@@ -196,6 +268,10 @@ function ActivityPage({
   onViewChange,
   onOpenRule,
 }: {
+  tab: ActivityTab
+  onOpenTab: OpenActivityTab
+  incidentId: string | null
+  onSelectIncident: SelectIncident
   state: ActivityLocationState
   query: string
   update: UpdateLocation
@@ -208,168 +284,104 @@ function ActivityPage({
   onViewChange: ViewChange
   onOpenRule: OpenRule
 }) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const { ruleId, show, entryId } = state
-  const { open: openIncidents, resolved: resolvedIncidents } = splitIncidents(incidents)
-  const runs = groupRuns(entries)
-  const groups = activityRows(i18n, runs)
-  const days = activityDayGroups(groups)
-  const visibleEntries = runs.flatMap((run) => run.entries)
-  const { newer, older } = entrySteps(visibleEntries, selection.entry)
-  const updating = feed.isPlaceholderData
-  const detailOpen = entryId !== null
-
-  function select(entry: AuditEntry | undefined, history: "push" | "replace") {
-    if (entry) update({ entryId: entry.id }, history)
+  function showHistory(ruleId: string, show: "blocked" | "") {
+    onOpenTab("history", { ruleId, show, query: "", entryId: null })
+    requestAnimationFrame(() => document.getElementById("activity-feed-title")?.scrollIntoView({ block: "start" }))
   }
 
-  function openEntry(entry: AuditEntry) {
-    focusDetailRef.current = true
-    select(entry, entryId === null ? "push" : "replace")
-  }
-
-  function closeDetail() {
-    const closing = entryId
-    update({ entryId: null }, "push")
-    // Return focus to the row the details described.
-    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-row-link="${closing}"]`)?.focus())
-  }
-
-  function changeFilters(next: Partial<ActivityLocationState>) {
-    update({ ...next, entryId: null }, "replace")
-  }
-
-  function followIncident(action: IncidentAction) {
-    if (action.kind === "settings") {
-      const search = action.accountId ? { search: accountSearch(action.accountId) } : {}
-      onViewChange("settings", { settingsTab: "connections", ...search })
-    }
-    else if (action.kind === "rule") onOpenRule(action.ruleId)
-    else {
-      update({ ruleId: action.ruleId, show: "blocked", query: "", entryId: null }, "push")
-      requestAnimationFrame(() => document.getElementById("activity-feed-title")?.scrollIntoView({ block: "start" }))
+  // Every kind of step is handled here; a new one fails to compile until it is.
+  function followStep(step: IncidentStep) {
+    switch (step.kind) {
+      case "settings": {
+        const search = step.accountId ? { search: accountSearch(step.accountId) } : {}
+        onViewChange("settings", { settingsTab: "connections", ...search })
+        return
+      }
+      case "rule":
+        onOpenRule(step.ruleId)
+        return
+      case "blocked":
+        showHistory(step.ruleId, "blocked")
+        return
+      case "history":
+        showHistory(step.ruleId, "")
+        return
+      default: {
+        const unhandled: never = step
+        return unhandled
+      }
     }
   }
-
-  function stepTo(rowLink: string | undefined) {
-    // With details open, the arrow keys step through entries without leaving the table.
-    if (detailOpen) select(visibleEntries.find((item) => String(item.id) === rowLink), "replace")
-  }
-
-  // A selected rule is named above the table, and the detail pane names the rule of its entry.
-  const showRuleColumn = !ruleId && !detailOpen
 
   return (
     <div className="page-section">
-      <ActivityHeading />
-      <OpenIncidents incidents={openIncidents} context={context} onAction={followIncident} />
-      <ResolvedIncidents incidents={resolvedIncidents} context={context} />
-
-      <section className="workflow activity-section page-card" aria-labelledby="activity-feed-title">
-        <div className="section-heading activity-feed-heading">
-          <div>
-            <h2 id="activity-feed-title">{t("activity.history.title")}</h2>
-            <p>{t("activity.history.intro")}</p>
-          </div>
-        </div>
-        <ActivityFilters
+      <ActivityHeading tab={tab} />
+      {/* Without any Incident there is only History, so Activity needs no tabs. */}
+      {(incidents.length > 0 || tab === "incidents") && (
+        <ActivityTabs current={tab} openCount={openIncidentCount(incidents)} onOpen={onOpenTab} />
+      )}
+      {tab === "incidents" ? (
+        <IncidentsSection
+          incidents={incidents}
+          selectedId={incidentId}
+          context={context}
+          onSelect={onSelectIncident}
+          onStep={followStep}
+        />
+      ) : (
+        <HistorySection
+          state={state}
           query={query}
-          ruleId={ruleId}
-          show={show}
+          update={update}
+          feed={feed}
           entries={entries}
           context={context}
-          onChange={changeFilters}
+          selection={selection}
+          focusDetailRef={focusDetailRef}
+          onOpenRule={onOpenRule}
         />
-        <p className="sr-only" role="status">
-          {historyStatus(i18n, { updating, query, more: feed.hasNextPage, count: visibleEntries.length })}
-        </p>
-
-        {/* A linked entry the filters hide still opens beside an empty table. */}
-        <div className="activity-layout" data-detail={detailOpen}>
-          <div className="activity-table-wrap" aria-busy={updating} data-updating={updating}>
-            {groups.length === 0 ? (
-              <EmptyActivity
-                filters={{ ruleId, show, query }}
-                onShowAll={() => changeFilters({ show: "all" })}
-                onAllRules={() => changeFilters({ ruleId: "" })}
-                onClearSearch={() => changeFilters({ query: "" })}
-              />
-            ) : (
-              <>
-                <ActivityTable
-                  days={days}
-                  context={context}
-                  state={state}
-                  showRuleColumn={showRuleColumn}
-                  onOpen={openEntry}
-                  onFilterRule={(value) => changeFilters({ ruleId: value })}
-                  onStep={stepTo}
-                />
-                {feed.hasNextPage && (
-                  <Button variant="outline" className="activity-more" onClick={() => void feed.fetchNextPage()} disabled={feed.isFetchingNextPage}>
-                    {feed.isFetchingNextPage ? t("activity.history.loadingOlder") : t("activity.history.loadOlder")}
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
-          {detailOpen && (
-            <ActivityDetail
-              entry={selection.entry}
-              loading={selection.loading}
-              context={context}
-              focusRef={focusDetailRef}
-              onClose={closeDetail}
-              onOpenRule={onOpenRule}
-              onNewer={newer && (() => select(newer, "replace"))}
-              onOlder={older && (() => select(older, "replace"))}
-            />
-          )}
-        </div>
-      </section>
+      )}
     </div>
   )
 }
 
-function ActivityHeading() {
+function ActivityTabs({
+  current,
+  openCount,
+  onOpen,
+}: {
+  current: ActivityTab
+  openCount: number
+  onOpen: (tab: ActivityTab) => void
+}) {
+  const { t } = useI18n()
+  return (
+    <PageTabs
+      label={t("activity.tabs.label")}
+      current={current}
+      onOpen={onOpen}
+      tabs={[
+        { id: "history", label: t("activity.tabs.history"), href: appPathForActivityTab("history") },
+        {
+          id: "incidents",
+          label: t("activity.tabs.incidents"),
+          href: appPathForActivityTab("incidents"),
+          count: openCount,
+          countLabel: t("activity.tabs.openCount", { count: openCount }),
+          countTone: "attention",
+        },
+      ]}
+    />
+  )
+}
+
+/** The page names what its tab shows: what the rules did, or what needed attention. */
+function ActivityHeading({ tab }: { tab: ActivityTab }) {
   const { t } = useI18n()
   return (
     <div>
-      <h1>{t("activity.page.title")}</h1>
-      <p className="page-intro">{t("activity.page.intro")}</p>
-    </div>
-  )
-}
-
-function EmptyActivity({
-  filters,
-  onShowAll,
-  onAllRules,
-  onClearSearch,
-}: {
-  filters: HistoryFilters
-  onShowAll: () => void
-  onAllRules: () => void
-  onClearSearch: () => void
-}) {
-  const i18n = useI18n()
-  const { t } = i18n
-  const { ruleId, show, query } = filters
-  const copy = emptyHistoryCopy(i18n, filters)
-  const filtered = Boolean(ruleId) || show !== "all" || Boolean(query)
-  return (
-    <div className="empty-panel">
-      <GhostMark className="empty-ghost" />
-      <h2>{copy.title}</h2>
-      <p>{copy.body}</p>
-      {filtered && (
-        <div className="empty-actions">
-          {query && <Button variant="outline" onClick={onClearSearch}>{t("activity.search.clear")}</Button>}
-          {show !== "all" && <Button variant="outline" onClick={onShowAll}>{t("activity.filters.showAll")}</Button>}
-          {ruleId && <Button variant="outline" onClick={onAllRules}>{t("activity.filters.showAllRules")}</Button>}
-        </div>
-      )}
+      <h1>{tab === "incidents" ? t("activity.page.incidentsTitle") : t("activity.page.title")}</h1>
+      <p className="page-intro">{tab === "incidents" ? t("activity.page.incidentsIntro") : t("activity.page.intro")}</p>
     </div>
   )
 }

@@ -295,6 +295,30 @@ beside a marker carries only words. Changes are moss, a
 removal included, because removing an event is routine; blocked changes use Attention Ochre text and
 link to that rule's Activity. Event titles appear only on request, as each run recorded them.
 
+### Activity
+
+While any Incident is kept, Activity has two link tabs under its title, each at its own address:
+History (`/activity`), the table of what each run did, and Incidents (`/activity/incidents`). With
+none, Activity is History alone, with no tabs; the Incidents address still answers with an empty
+state. Filters and the open entry belong to History and stay in its query string. While an
+Incident is open, the Incidents tab carries an Attention Ochre count of the open ones; at zero it
+carries none. The page title follows the tab: "What your rules did" over History, "What needed
+attention" over Incidents, each with its own sentence. Incidents is one card holding a table grouped
+like History's days, each opened by the same quiet heading: a warning icon and "2 open" in
+Attention Ochre, then a check and "5 resolved" in muted text. Each open row ends in an Attention
+Ochre "Still open" chip, the tab's count repeated on the rows it counts, so a person who followed
+it sees at once which rows it meant, before selecting any. Rows take no colored fill, which turns
+muddy on the dark palettes; the icons, the headings, and the words say the same without color. A row is one line and, as in History, starts with its time:
+when it opened, a warning icon (open) or a check (resolved) beside what happened, the rule's
+calendars or the account, and when it closed with how long it lasted ("after 2 hours"), or "Still
+open". Selecting a row opens the incident beside the table at its own address
+(`/activity/incidents/<id>`), in the same panel History uses for an entry, never a modal: an Open or
+Resolved chip, what happened, what it means or how it closed, the likely Cause when it is known,
+one next step (the fix while open, with How to fix for an administrator's Cause, or the rule's
+history once resolved), then when it opened, was last seen or closed, and the rule with its
+accounts. While the panel is open the table drops its rule column, as History does. On a narrow
+screen each row becomes a card that labels its values, and the panel replaces the table.
+
 ### Rule Rows
 
 Each rule row shows its direction, policy, last run, status badge, and at most one visible next step (preview, start syncing, or reauthorize). Routine commands such as Sync Now, Reconcile Now, and Pause live in a "More actions" menu whose items explain what each does and when it runs by itself. Command results appear on the row that ran them and are announced through one persistent live region.

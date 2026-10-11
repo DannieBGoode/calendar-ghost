@@ -220,7 +220,7 @@ Renewal of a connected or disconnected account's authorization after access is l
 _Avoid_: Reconnect, log in again
 
 **Incident**:
-A persistent operational condition requiring attention, such as expired authorization or identity corruption. Repeated sync attempts update one incident rather than creating duplicate alerts. An incident resolves after a successful scheduled sync, when a daily pass finds nothing still blocked, or when its rule is removed, and records which. An incident for Lapsed Authorization belongs to the Connected Account instead of one rule: it names every rule the lapse stopped, sends one notification, and resolves when the lapse clears; one that opens again starts a new episode with its own opening time. Resolved incidents are kept as evidence until their Connected Account is deleted, but Activity leads only with open ones.
+A persistent operational condition requiring attention, such as expired authorization or identity corruption. Repeated sync attempts update one incident rather than creating duplicate alerts. An incident resolves after a successful scheduled sync, when a daily pass finds nothing still blocked, or when its rule is removed, and records which. An incident for Lapsed Authorization belongs to the Connected Account instead of one rule: it names every rule the lapse stopped, sends one notification, and resolves when the lapse clears; one that opens again starts a new episode with its own opening time. Resolved incidents are kept as evidence until their Connected Account is deleted. While any incident is kept, Activity lists them under its own Incidents tab, open ones first, and that tab counts the open ones.
 _Avoid_: Error message, failure log
 
 **Incident Notification**:

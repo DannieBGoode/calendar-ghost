@@ -1,12 +1,19 @@
 import type { I18n } from "@/i18n/translator"
 import type { MessageKey } from "@/i18n/types"
 import type { ConnectedAccount, Incident } from "@/lib/api"
+import { causeOf, howToFixUrl, type Cause } from "@/lib/causes"
 
-/** What the administrator can do about an open incident, if anything. */
-export type IncidentAction =
+/** What the administrator can do to fix an open incident, if anything. */
+type IncidentAction =
   | { kind: "settings"; label: string; accountId: string | null }
   | { kind: "rule"; ruleId: string; label: string }
   | { kind: "blocked"; ruleId: string; label: string }
+
+/** Where a resolved incident leads: its rule's history, to see the runs around it. */
+export type IncidentFollowUp = { kind: "history"; ruleId: string; label: string }
+
+/** The one next step an incident's details offer: its fix while open, its follow-up once resolved. */
+export type IncidentStep = IncidentAction | IncidentFollowUp
 
 export type IncidentGuidance = { detail: string | null; action: IncidentAction | null }
 
@@ -101,10 +108,51 @@ export function incidentClosedAt(incident: Incident): string {
   return incident.resolved_at ?? incident.updated_at
 }
 
-/** Open incidents lead Activity; resolved ones are evidence kept out of the way. */
-export function splitIncidents(incidents: Incident[]): { open: Incident[]; resolved: Incident[] } {
-  return {
-    open: incidents.filter((incident) => incident.state === "open"),
-    resolved: incidents.filter((incident) => incident.state !== "open"),
+/** How many incidents still need attention; Activity's Incidents tab counts them. */
+export function openIncidentCount(incidents: Incident[]): number {
+  return incidents.filter((incident) => incident.state === "open").length
+}
+
+/** A resolved incident's rule, while it exists, so its history shows the runs around it. */
+export function resolvedFollowUp(i18n: I18n, incident: Incident, rule: IncidentRuleState | null): IncidentFollowUp | null {
+  if (incident.state === "open" || !rule || !incident.rule_id) return null
+  return { kind: "history", ruleId: incident.rule_id, label: i18n.t("activity.incidents.action.seeActivity") }
+}
+
+export type IncidentDuration = { unit: "moment" | "minute" | "hour" | "day"; count: number }
+
+const MINUTE = 60_000
+
+/** How long a resolved incident stayed open, to the nearest unit; null while it is open. */
+export function incidentDuration(incident: Incident): IncidentDuration | null {
+  if (incident.state === "open") return null
+  const minutes = Math.floor((Date.parse(incidentClosedAt(incident)) - Date.parse(incident.opened_at)) / MINUTE)
+  if (Number.isNaN(minutes)) return null
+  if (minutes < 1) return { unit: "moment", count: 0 }
+  if (minutes < 60) return { unit: "minute", count: minutes }
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return { unit: "hour", count: hours }
+  return { unit: "day", count: Math.round(hours / 24) }
+}
+
+/** What an incident's details show, beyond its row. */
+export type IncidentDetail = {
+  /** What an open incident means, or how a resolved one closed. */
+  explanation: string | null
+  cause: Cause | null
+  step: IncidentStep | null
+  /** The troubleshooting section for an open incident the administrator must fix. */
+  fixUrl: string | null
+}
+
+export function incidentDetail(i18n: I18n, incident: Incident, rule: IncidentRuleState | null): IncidentDetail {
+  // An unrecognised reason explains nothing, so the details leave it out.
+  const known = causeOf(incident)
+  const cause = known === "unknown" ? null : known
+  if (incident.state !== "open") {
+    const explanation = incidentResolution(i18n, incident)
+    return { explanation, cause, step: resolvedFollowUp(i18n, incident, rule), fixUrl: null }
   }
+  const { detail, action } = incidentGuidance(i18n, incident, rule)
+  return { explanation: detail, cause, step: action, fixUrl: howToFixUrl(cause) }
 }

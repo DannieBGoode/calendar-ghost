@@ -5,10 +5,11 @@ import { testI18n } from "@/i18n/testing"
 import entryDetailsSource from "../features/activity-entry-details.tsx?raw"
 import tableSource from "../features/activity-table.tsx?raw"
 import viewSource from "../features/activity.tsx?raw"
+import historySectionSource from "../features/activity-history.tsx?raw"
 import historySource from "./activity-history.ts?raw"
 
-// The Activity view, its table, its entry details, and the copy for an empty history.
-const activitySource = [viewSource, tableSource, entryDetailsSource, historySource].join("\n")
+// The Activity view, its History section and table, its entry details, and the copy for an empty history.
+const activitySource = [viewSource, historySectionSource, tableSource, entryDetailsSource, historySource].join("\n")
 
 describe("Activity view states", () => {
   it("keeps successful empty activity distinct from a recoverable request failure", () => {
@@ -17,8 +18,9 @@ describe("Activity view states", () => {
     const { t } = testI18n()
     expect(t("activity.empty.none.title")).toBe("No activity yet")
     expect(t("activity.failure.title")).toBe("Activity is temporarily unavailable")
-    expect(activitySource).toContain("activity.refetch()")
-    expect(activitySource).toContain("incidents.refetch()")
+    // Retrying refetches every request the shown tab needs: History's entries and the incidents.
+    expect(activitySource).toContain('tab === "history" ? [activity, incidents] : [incidents]')
+    expect(activitySource).toContain("required.map((query) => query.refetch())")
   })
 })
 

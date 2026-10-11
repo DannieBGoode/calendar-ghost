@@ -108,6 +108,12 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Activity has a History tab and an Incidents tab, each at its own address (`/activity` and
+  `/activity/incidents`), while any Incident is kept; the Incidents tab counts the open ones.
+  Incidents list in one table, open first, each with when it opened, the rule or account, and when
+  it closed and how long it lasted, or "Still open". Selecting one opens it beside the table at
+  `/activity/incidents/<id>` with what it means or how it closed, its likely Cause, and its next
+  step. Open incidents no longer lead the History page.
 - Form fields have borders with enough contrast again: a global reset no longer overrides them.
   Midnight's primary color is calmer, so a red status draws the eye first.
 - Settings groups share the border, fill, radius, and padding of the app's other cards. "Your
