@@ -155,11 +155,12 @@ The adapter translates `patternedRecurrence` to iCalendar lines and back, exactl
 | `absoluteMonthly`, day d from 29 | `FREQ=MONTHLY;BYMONTHDAY=28,...,d;BYSETPOS=-1`: Outlook moves day d to the month's last day when the month is shorter |
 | `relativeMonthly`, index, one day | `FREQ=MONTHLY;BYDAY=2MO` (or `-1MO` for last) |
 | `relativeMonthly`, index, several days | `FREQ=MONTHLY;BYDAY=MO,TU,...;BYSETPOS=n` |
-| `absoluteYearly`, `relativeYearly` | `FREQ=YEARLY;BYMONTH=m` with the monthly forms above |
+| `absoluteYearly`, `relativeYearly` | `FREQ=YEARLY;BYMONTH=m` with the monthly forms above; a yearly `BYMONTHDAY=d`, or a bare `FREQ=YEARLY` from day d, is written as `absoluteYearly` day d whenever month m has day d in every year, such as November 30, since Outlook then never moves it |
 | range `endDate`, `numbered`, `noEnd` | `UNTIL` (the end of that day in the series' zone), `COUNT`, neither; an `UNTIL` before the day's occurrence ends the range the day before |
 
 Anything else has no Graph equivalent and is never approximated: hourly or finer frequencies,
-`BYMONTHDAY` from 29 without the last-day form, negative or several `BYMONTHDAY` values, several
+`BYMONTHDAY` from 29 without the last-day form, unless the rule is yearly and its month has that
+day in every year, negative or several `BYMONTHDAY` values, several
 `BYMONTH` values, `BYYEARDAY`, `BYWEEKNO`, `BYHOUR` and finer, `BYSETPOS` lists, a fifth weekday
 (`5MO` or `-2MO`), `COUNT` with `UNTIL`, and `RDATE`, `EXDATE`, or `EXRULE` lines. Restoring an
 occurrence Outlook cancelled has no Graph operation either, nor has moving an exception past a
