@@ -187,6 +187,18 @@ def _recurrence(item: Mapping[str, Any]) -> tuple[Recurrence | None, str | None]
     return Recurrence(to_ical(rule, _local_start(item, zone))), zone
 
 
+def all_day_series_zone(item: Mapping[str, Any]) -> str:
+    """The IANA zone an all-day series' days fall in: its recurrence's zone, else the zone it
+    started in, else UTC. Monday in Paris is Monday there, though Graph answers in UTC."""
+    recurrence = item.get("recurrence")
+    windows = (
+        _series_windows_zone(item, recurrence)
+        if isinstance(recurrence, Mapping)
+        else _optional(item.get("originalStartTimeZone"))
+    )
+    return iana_zone(windows) or "Etc/UTC"
+
+
 def _series_windows_zone(item: Mapping[str, Any], recurrence: Mapping[str, Any]) -> str | None:
     range_ = recurrence.get("range")
     zone = range_.get("recurrenceTimeZone") if isinstance(range_, Mapping) else None

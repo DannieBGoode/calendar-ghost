@@ -55,6 +55,7 @@ from calendar_sync.infrastructure.microsoft.translation import (
     SELECT,
     GraphTranslationError,
     Series,
+    all_day_series_zone,
     cancelled_occurrence,
     cancelled_occurrence_reference,
     instances_window,
@@ -813,10 +814,14 @@ def _event_path(reference: EventRef) -> str:
 
 
 def _series_zone(item: Mapping[str, Any]) -> str | None:
+    """The IANA zone that names the series' occurrences: a timed one's own, and for an all-day
+    one the zone its days fall in."""
+    if item.get("isAllDay"):
+        return all_day_series_zone(item)
     shape = series_of(item)
-    if shape is None or not isinstance(shape.start, datetime):
-        return "Etc/UTC" if item.get("isAllDay") else None
-    return str(shape.start.tzinfo)
+    return (
+        str(shape.start.tzinfo) if shape is not None and isinstance(shape.start, datetime) else None
+    )
 
 
 def _event_start(event: CalendarEvent) -> datetime:
