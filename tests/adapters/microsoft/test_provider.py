@@ -321,6 +321,24 @@ def test_a_series_whose_zone_outlook_cannot_keep_until_its_last_end_writes_nothi
     assert [method for method, _, _ in graph.events.writes] == []
 
 
+def test_a_series_that_ends_before_its_zone_changes_is_written() -> None:
+    provider, graph = outlook()
+    # Once, from Thursday 25 to Saturday 27 March 1976 at 09:00 in Madrid, which ends before
+    # Madrid moved to summer time on the 28th; until then Berlin's zone keeps its offsets.
+    starts = datetime(1976, 3, 25, 8, 0, tzinfo=UTC)
+    projection = EventProjection(
+        TimedInterval(starts, datetime(1976, 3, 27, 8, 0, tzinfo=UTC), "Europe/Madrid"),
+        "Busy",
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;WKST=SU;BYDAY=TH;COUNT=1",)),
+    )
+
+    provider.create_projection(DESTINATION, _ref("google-series"), RULE, projection, "key-1")
+
+    ((method, _, body),) = graph.events.writes
+    assert method == "POST"
+    assert body["recurrence"]["range"]["recurrenceTimeZone"] == "W. Europe Standard Time"
+
+
 def _destination_series(provider: Any, graph: FakeMicrosoftGraph) -> tuple[EventRef, EventRef]:
     source = _ref("google-series")
     created = provider.create_projection(DESTINATION, source, RULE, _series_projection(), "key-1")

@@ -616,8 +616,9 @@ def _lifetime(
     rule: SeriesRule, start: datetime | date, zone: str, duration: timedelta
 ) -> tuple[datetime, datetime]:
     """From the series' first day until its last occurrence ends, which may be days after it
-    starts; an endless series to the year its zone's rules repeat unchanged, or two years after
-    it starts if that is later."""
+    starts, whether Outlook counts its length in the zone's clock time or in elapsed time; an
+    endless series to the year its zone's rules repeat unchanged, or two years after it starts if
+    that is later."""
     first = start if isinstance(start, date) and not isinstance(start, datetime) else start.date()
     if rule.range.end is not None:
         last: date | None = rule.range.end
@@ -629,8 +630,11 @@ def _lifetime(
     begins = datetime.combine(first, datetime.min.time(), tzinfo=local).astimezone(UTC)
     if last is None:
         return begins, max(_ZONE_RULES_SETTLED, begins + timedelta(days=731))
-    ends = datetime.combine(last + timedelta(days=1), datetime.min.time(), tzinfo=local)
-    return begins, ends.astimezone(UTC) + duration
+    clock = start.time() if isinstance(start, datetime) else datetime.min.time()
+    final = datetime.combine(last, clock, tzinfo=local)
+    elapsed = final.astimezone(UTC) + duration
+    on_the_clock = (final + duration).astimezone(UTC)
+    return begins, max(elapsed, on_the_clock)
 
 
 def _duration(projection: EventProjection) -> timedelta:
