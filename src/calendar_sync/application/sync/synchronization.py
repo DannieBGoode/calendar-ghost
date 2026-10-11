@@ -12,6 +12,7 @@ from calendar_sync.application.sync.errors import (
     RuleNotExecutable,
     RuleNotFound,
 )
+from calendar_sync.application.sync.exception_replays import ExceptionReplays
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.occurrences import SynchronizeOccurrences
 from calendar_sync.application.sync.own_writes import is_own_occurrence_write, is_own_write
@@ -93,6 +94,7 @@ class ExecuteSyncRule:
     call_stats: ProviderCallStats = field(default_factory=UntalliedProviderCalls)
     occurrences: SynchronizeOccurrences = field(init=False, repr=False)
     change_feeds: ChangeFeedCursors = field(init=False, repr=False)
+    exception_replays: ExceptionReplays = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.change_feeds = ChangeFeedCursors(self.provider, self.clock, self.run_ids, self.locks)
@@ -105,6 +107,7 @@ class ExecuteSyncRule:
             self._repair_series,
             self.locks,
         )
+        self.exception_replays = ExceptionReplays(self.provider, self.occurrences)
 
     def execute(
         self, rule_id: SyncRuleId, *, full: bool = False, work: RuleWork | None = None
@@ -170,7 +173,7 @@ class ExecuteSyncRule:
             self._repair_destinations(run, feeds.destination)
             if run.reproject:
                 self._reproject_remaining(run)
-            self._finish_pending_replays(run)
+            self.exception_replays.finish_pending(run)
             self.change_feeds.advance(run, feeds)
         log.finished(run.counts)
 
@@ -420,7 +423,7 @@ class ExecuteSyncRule:
             and source_event.recurrence is not None
             and not run.source_listed
         ):
-            self._replay_exceptions(run, mapping, source_event)
+            self.exception_replays.replay(run, mapping, source_event)
         return decision
 
     def _complete_series_revision(self, run: SyncRunContext, source_series: CalendarEvent) -> None:
@@ -432,33 +435,6 @@ class ExecuteSyncRule:
                 return
             run.uow.mappings.save(mapping.confirm_revision(source_series.revision))
             run.uow.commit()
-
-    def _replay_exceptions(
-        self, run: SyncRunContext, mapping: EventMapping, source_series: CalendarEvent
-    ) -> None:
-        """A new series starts from its recurrence alone; its exceptions come from the source.
-
-        This covers exceptions the incremental feed did not report and cancellations that were
-        never recorded. The pending replay is cleared only after every exception was applied.
-        """
-        self.occurrences.replay_exceptions(run, mapping, source_series)
-        run.uow.replays.remove(mapping.id)
-        run.uow.commit()
-
-    def _finish_pending_replays(self, run: SyncRunContext) -> None:
-        """Complete replays an earlier failed run left unfinished."""
-        pending = run.uow.replays.pending(run.rule.id)
-        if pending and run.log is not None:
-            run.log.replaying(len(pending))
-        for mapping in pending:
-            source_series = None if run.source_listed else self.provider.get_event(mapping.source)
-            if source_series is None or source_series.recurrence is None:
-                # A full listing already applied every exception in the window, and a series
-                # that is gone or no longer recurring is decided by its own change.
-                run.uow.replays.remove(mapping.id)
-                run.uow.commit()
-                continue
-            self._replay_exceptions(run, mapping, source_series)
 
     def _decide_and_write(
         self,
