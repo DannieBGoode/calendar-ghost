@@ -15,7 +15,9 @@ Invariants:
 - All-day events are included by default and may be excluded per rule.
 - Declined events are never projected. Events answered Maybe are marked as tentative by default, and unanswered invitations are treated as Maybe by default; both may be changed per rule ([ADR 0018](adr/0018-project-by-invitation-response.md)).
 - Destination content is never authoritative.
-- Managed projections are never eligible sources.
+- Managed projections are never eligible sources. `SyncRule.eligible` is the one rule for which
+  source events a rule projects: Native Events, not cancelled, that its policy does not exclude.
+  Rule Preview and Full Reconciliation ask it; a Sync Run decides the same while naming the reason.
 
 ## Event Mapping aggregate
 

@@ -426,6 +426,14 @@ class SyncRule:
         """Degraded only by Lapsed Authorization, so it resumes without a preview (ADR 0027)."""
         return self.state is SyncRuleState.DEGRADED and self.awaiting_reauthorization
 
+    def eligible(self, event: CalendarEvent) -> bool:
+        """Whether the rule projects a source event: a Native Event, not cancelled, that its
+        Transformation Policy does not exclude.
+
+        A Sync Run makes the same decision in `SyncDecisionService.decide`, which also says why.
+        """
+        return event.managed_origin is None and self.transformation.projects(event)
+
     def mark_previewed(self) -> Self:
         if not self.can_preview:
             raise InvalidStateTransition(f"cannot validate a rule in state {self.state}")

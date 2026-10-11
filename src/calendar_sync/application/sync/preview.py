@@ -51,14 +51,6 @@ class RulePreview:
     occurrence_changes: int = 0
 
 
-def _excluded(event: CalendarEvent, rule: SyncRule) -> bool:
-    return (
-        event.managed_origin is not None
-        or event.status is EventStatus.CANCELLED
-        or rule.transformation.exclusion(event) is not None
-    )
-
-
 @dataclass(slots=True)
 class _PreviewScope:
     """Source events a preview would project, each with its parent series if an occurrence."""
@@ -150,7 +142,7 @@ class PreviewSyncRule:
         live: dict[EventRef, bool] = {}
 
         def skipped(master: CalendarEvent) -> bool:
-            if _excluded(master, rule):
+            if not rule.eligible(master):
                 return True
             if master.recurrence is None:
                 return False
@@ -196,11 +188,7 @@ class PreviewSyncRule:
         start = event.occurrence.original_start
         series_mapping = uow.mappings.for_source(rule.id, parent.reference)
         if series_mapping is None:
-            cancels = (
-                event.status is EventStatus.CANCELLED
-                or rule.transformation.exclusion(event) is not None
-            )
-            action = SyncAction.DELETE if cancels else SyncAction.UPDATE
+            action = SyncAction.UPDATE if rule.transformation.projects(event) else SyncAction.DELETE
         else:
             destination_series = self.provider.get_event(series_mapping.destination)
             destination = (
