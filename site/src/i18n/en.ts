@@ -30,7 +30,7 @@ export const en = {
   meta: {
     title: "Calendar Ghost: private calendar sync you host yourself",
     description:
-      "Sync your Google calendars on your own server. Share only “Busy”, or the event's details. Open source, self-hosted, with no app telemetry.",
+      "Sync your Google and Outlook calendars on your own server. Share only “Busy”, or the event's details. Open source, self-hosted, with no app telemetry.",
     notFoundTitle: "Page not found · Calendar Ghost",
     /** A documentation page's title: `{title}` is its document's own first heading. */
     docTitle: "{title} · Calendar Ghost",
@@ -137,8 +137,8 @@ export const en = {
     title: "How it works",
     steps: [
       {
-        title: "Connect your Google accounts.",
-        body: "Personal, family, and work can each be a different Google account.",
+        title: "Connect your Google and Microsoft accounts.",
+        body: "Personal, family, and work can each be a different account, on Google or Microsoft.",
       },
       {
         title: "Make a rule.",
@@ -152,9 +152,9 @@ export const en = {
   },
   compatibleCalendars: {
     title: "Compatible calendars",
-    body: "Sync your Google calendars across personal and Google Workspace accounts.",
+    body: "Sync Google and Outlook calendars across personal, Google Workspace, and Microsoft 365 accounts.",
     google: { name: "Google Calendar", status: "Compatible", detail: "Personal Google accounts and Google Workspace." },
-    outlook: { name: "Outlook", status: "Coming soon", detail: "Support for Microsoft calendars is on the way." },
+    outlook: { name: "Outlook", status: "Compatible", detail: "Microsoft 365 work or school accounts and personal Outlook.com." },
     icloud: { name: "iCloud", status: "Coming soon", detail: "Support for Apple calendars is on the way." },
   },
   /** The "How it works" strip's small pieces of the app, and the ghost waiting at the last step. */
@@ -268,7 +268,7 @@ export const en = {
       { title: "See what happened", body: "Activity shows what each rule did, and why." },
       {
         title: "No app telemetry",
-        body: "The installed application talks only to Google and to the notification targets you set up.",
+        body: "The installed application talks only to Google, Microsoft, and the notification targets you set up.",
       },
       {
         title: "Monitors and AI agents",
@@ -309,7 +309,7 @@ export const en = {
     /** The one line under the title. */
     line: "One Docker service and one SQLite file, on a server you own. Use it alone, or invite your household.",
     /** What you need, in one quiet line under the commands. */
-    requirements: "Docker and a Google Cloud project. Runs on a Raspberry Pi.",
+    requirements: "Docker, and a Google Cloud project or a Microsoft Entra app. Runs on a Raspberry Pi.",
     copy: "Copy",
     copied: "Copied",
     selected: "Selected. Press Ctrl+C or ⌘C.",
@@ -336,7 +336,10 @@ export const en = {
         q: "Can my family use it too?",
         a: "Yes. Invite them with a link. Each person signs in with their own email and keeps their own calendars, rules, and Activity. Nobody else sees them, not even the administrator.",
       },
-      { q: "Outlook, iCloud, or CalDAV?", a: "Google Calendar is the only provider today. Outlook and iCloud are coming soon; CalDAV is not supported yet." },
+      {
+        q: "Outlook, iCloud, or CalDAV?",
+        a: "Outlook works today, beside Google Calendar, for Microsoft 365 and Outlook.com accounts, and one rule can sync between them. iCloud is coming soon; CalDAV is not supported yet.",
+      },
       {
         q: "Is it ready for my real calendars?",
         a: "Yes. Like any self-hosted software, you run it at your own risk, so keep backups.",
@@ -379,10 +382,10 @@ export const en = {
     pages: {
       "self-hosting": {
         description:
-          "Run Calendar Ghost on your own machine: Docker, a Google Cloud project, the settings file, first-run setup, inviting other people, monitors and agents, and backups.",
+          "Run Calendar Ghost on your own machine: Docker, a Google Cloud project or a Microsoft Entra app, the settings file, first-run setup, inviting other people, monitors and agents, and backups.",
       },
       troubleshooting: {
-        description: "What to check when Calendar Ghost cannot reach Google, a rule stops, an event did not synchronize, or you cannot sign in.",
+        description: "What to check when Calendar Ghost cannot reach Google or Microsoft, a rule stops, an event did not synchronize, or you cannot sign in.",
       },
     },
     /** The small table of contents beside the document. */
