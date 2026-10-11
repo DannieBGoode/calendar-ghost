@@ -11,6 +11,7 @@ from calendar_sync.application.errors import (
     ProviderFailureKind,
     RuleNotExecutable,
     RuleNotFound,
+    UnsupportedProjection,
 )
 from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.occurrences import SynchronizeOccurrences
@@ -647,7 +648,13 @@ class ExecuteSyncRule:
         # Deciding may read the provider, which takes time; the User may be disabled meanwhile.
         require_unchanged(run)
         run.count(decision.action, source_event.reference)
-        mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
+        try:
+            mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
+        except UnsupportedProjection:
+            # The destination cannot hold it exactly, so it is blocked rather than approximated.
+            blocked = SyncDecision(SyncAction.CONFLICT, SyncReason.PROJECTION_UNSUPPORTED)
+            run.recount(decision.action, blocked.action, source_event.reference)
+            decision, source_moved = blocked, False
         if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:
             record(
                 run,

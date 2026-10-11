@@ -23,6 +23,8 @@ dependencies = [
   "google-auth-oauthlib>=1.2,<2",
   "httpx>=0.28,<1",
   "mcp>=2.3,<3",
+  # IANA time zones for Outlook series, also where the system has none, as in slim images.
+  "tzdata>=2024.1",
   "uvicorn[standard]>=0.34,<1",
 ]
 

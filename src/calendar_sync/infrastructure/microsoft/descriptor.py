@@ -8,6 +8,7 @@ from calendar_sync.application.ports import Clock
 from calendar_sync.application.provider_descriptors import ProviderConnection, ProviderDescriptor
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient, MicrosoftOAuthService
+from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
@@ -35,4 +36,5 @@ def microsoft_provider(
         configured=True,
         connection=ProviderConnection(oauth, client.oauth.redirect_uri),
         calendars=oauth,
+        provider=OutlookCalendarProvider(oauth, oauth.graph, clock),
     )

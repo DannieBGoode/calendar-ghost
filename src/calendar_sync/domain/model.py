@@ -570,6 +570,8 @@ class SyncReason(StrEnum):
     SERIES_WITHOUT_OCCURRENCES = "series_without_occurrences"
     SERIES_WITHOUT_OCCURRENCES_REMOVED = "series_without_occurrences_removed"
     PROJECTION_UNMAPPED = "projection_unmapped"
+    PROJECTION_UNSUPPORTED = "projection_unsupported"
+    """The destination's provider cannot hold the projection exactly, so nothing was written."""
 
 
 _EXCLUSION_REASONS = {

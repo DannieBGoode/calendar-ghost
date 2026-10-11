@@ -122,7 +122,8 @@ What this cannot do, and what follows:
 - A series whose time zone cannot be recognized (Outlook's legacy custom zones) cannot be
   expanded. It counts as live, its exceptions are applied only as Graph reports them, and looking
   up one of its occurrences that `instances` does not return is a temporary failure, never proof of
-  absence.
+  absence. As a source it reads in UTC, which can move its projected occurrences by an hour across
+  daylight saving; the service logs a warning naming the event when it reads one.
 
 ### Recurrence
 
@@ -147,7 +148,10 @@ occurrence Outlook cancelled has no Graph operation either, nor has moving an ex
 neighbour. Each raises `UnsupportedProjection`, and the Sync Run records a **Conflict** for that one
 event or occurrence (`projection_unsupported`), leaving the destination unchanged while the rest of
 the rule keeps synchronizing; a Conflict still there at the daily pass opens the rule's blocked
-Incident. Every Graph pattern has an exact iCalendar form, so an Outlook source never needs this.
+Incident. Every Graph pattern has an exact iCalendar form, so an Outlook source never needs this. A series
+projection keeps, in its private origin, the lines and zone it was written with, and reads back with
+them while Outlook still holds exactly that rule, so an equivalent rule written differently is never
+mistaken for Drift and rewritten on every run.
 
 ### Time zones and all-day events
 

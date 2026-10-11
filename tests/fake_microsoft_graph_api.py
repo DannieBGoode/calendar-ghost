@@ -20,6 +20,8 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
+from tests.fake_graph_events import FakeGraphEvents
+
 GRAPH = "https://graph.microsoft.com/v1.0"
 LOGIN = "https://login.microsoftonline.com"
 CLIENT_ID = "synthetic-client"
@@ -95,6 +97,7 @@ class FakeMicrosoftGraph:
         self._refresh: dict[str, Grant] = {}
         self.token_requests: list[Mapping[str, str]] = []
         self.requests: list[httpx.Request] = []
+        self.events = FakeGraphEvents()
         self.refusals: list[tuple[Callable[[httpx.Request], bool], Refusal]] = []
         """Refusals answered, in order, to the first request each one matches; each answers
         once."""
@@ -179,9 +182,9 @@ class FakeMicrosoftGraph:
         calendar = next(
             (c for c in mailbox.calendars if path.startswith(f"/me/calendars/{c.id}/")), None
         )
-        if request.method == "GET" and calendar is not None and path.endswith("/events"):
-            return httpx.Response(200, json={"value": []})
-        return _graph_error(404, "ErrorItemNotFound")
+        if calendar is None:
+            return _graph_error(404, "ErrorItemNotFound")
+        return self.events.serve(request, mailbox.address, calendar.id, path)
 
     def _calendars(self, request: httpx.Request, mailbox: FakeMailbox) -> httpx.Response:
         page = int(request.url.params.get("page", "0"))

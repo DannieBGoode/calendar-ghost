@@ -205,6 +205,11 @@ class SyncRunContext:
             self.blocked.add(source)
         self._report_progress()
 
+    def recount(self, counted: SyncAction, action: SyncAction, source: EventRef) -> None:
+        """Count a decision as `action` instead of the `counted` one its write could not make."""
+        self.counts[counted] -= 1
+        self.count(action, source)
+
     def expect(self, items: int) -> None:
         """Add `items` the run will handle to its reported total, before handling any of them."""
         if self.work is not None:

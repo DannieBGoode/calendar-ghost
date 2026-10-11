@@ -10,6 +10,7 @@ from calendar_sync.application.errors import (
     ProjectionOwnershipMismatch,
     ProviderFailure,
     ProviderFailureKind,
+    UnsupportedProjection,
 )
 from calendar_sync.application.ports import (
     CalendarReader,
@@ -75,6 +76,10 @@ class FakeCalendars:
     """Every single-event and single-occurrence lookup, in order."""
     operations: dict[str, EventRef] = field(default_factory=dict)
     created: int = 0
+    unsupported: set[EventRef] = field(default_factory=set)
+    """Sources whose projections, as created or updated, this destination cannot hold."""
+    unsupported_occurrences: set[OccurrenceStart] = field(default_factory=set)
+    """Occurrences this destination cannot write, such as one it cannot restore."""
     exception_listings: list[EventRef] = field(default_factory=list)
     listings: list[CalendarEndpoint] = field(default_factory=list)
     """Calendars listed in full by `list_events`, in order."""
@@ -234,6 +239,8 @@ class FakeCalendars:
         existing = self.find_projection(destination, operation_key)
         if existing is not None:
             return CreatedProjection(existing)
+        if source in self.unsupported:
+            raise UnsupportedProjection("this destination cannot hold the projection")
         self.created += 1
         reference = EventRef(destination, EventId(f"projection-{self.created}"))
         created = CalendarEvent(
@@ -264,6 +271,8 @@ class FakeCalendars:
         existing = self.events.get(destination)
         if existing is None or not _owned(existing.managed_origin, rule_id, source):
             raise _denied()
+        if source in self.unsupported:
+            raise UnsupportedProjection("this destination cannot hold the projection")
         updated = replace(
             existing,
             time=projection.time,
@@ -314,6 +323,8 @@ class FakeCalendars:
         )
         if instance is None:
             raise ProviderFailure(ProviderFailureKind.PERMANENT, "occurrence could not be resolved")
+        if original_start in self.unsupported_occurrences:
+            raise UnsupportedProjection("this destination cannot write the occurrence")
         written = replace(
             instance,
             time=projection.time,

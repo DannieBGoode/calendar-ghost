@@ -130,6 +130,12 @@ class ProjectionOwnershipMismatch(ProviderFailure):
         )
 
 
+class UnsupportedProjection(ApplicationError):
+    """The destination's provider cannot hold this projection exactly, such as a recurrence it
+    cannot repeat or an occurrence it cannot restore. It is never approximated: the run blocks
+    that one event as a Conflict and keeps synchronizing the rest (ADR 0032)."""
+
+
 @dataclass(frozen=True, slots=True)
 class RemovalInterrupted(ApplicationError):
     """Rule Removal stopped partway; the rule stays in Removing with its remaining mappings."""

@@ -4,6 +4,7 @@ import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from calendar_sync.application.errors import UnsupportedProjection
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.ports import (
     AuditAction,
@@ -142,15 +143,23 @@ class SynchronizeOccurrences:
         # The stop check and the write share one short lock with rule lifecycle changes.
         with self.locks.for_writes(run.rule.id):
             require_unchanged(run)
-            run.count(decision.action, occurrence.source_ref or source_series.reference)
-            destination_ref = self._write(
-                run,
-                series_mapping,
-                occurrence,
-                decision,
-                destination.reference if destination is not None else None,
-                record_current=record_current,
-            )
+            counted = occurrence.source_ref or source_series.reference
+            run.count(decision.action, counted)
+            try:
+                destination_ref = self._write(
+                    run,
+                    series_mapping,
+                    occurrence,
+                    decision,
+                    destination.reference if destination is not None else None,
+                    record_current=record_current,
+                )
+            except UnsupportedProjection:
+                # The destination cannot write it exactly, so it is blocked, never approximated.
+                blocked = SyncDecision(SyncAction.CONFLICT, SyncReason.PROJECTION_UNSUPPORTED)
+                run.recount(decision.action, blocked.action, counted)
+                decision = blocked
+                destination_ref = destination.reference if destination is not None else None
             source_ref = occurrence.source_ref
             if source_ref is not None:
                 run.handled.add(source_ref)
