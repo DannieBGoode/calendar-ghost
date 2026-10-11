@@ -73,15 +73,21 @@ the routes call. The `Container` holds installation-wide services (identity, adm
 Installation Health, the Operator Overview, the scheduler) and `for_user`, which composes one User's use cases from
 adapters made for that User: their unit of work, account store, Activity queries, incidents, and
 Incident Notifications. A route resolves the signed-in User from the session and calls only that
-User's use cases, so no use case can reach another User's records. The scheduler lists due rules
-through the installation-wide `InstallationUnitOfWork` and runs each with its owner's use cases,
-taking turns between Users. The `Container` holds no concrete adapter, unit of work, or rule
-locks. Tests and the development preview substitute adapters before `compose`, or use cases after
+User's use cases, so no use case can reach another User's records. A scheduled pass,
+`ScheduledPass` in `application/operations/scheduled_pass.py`, lists due rules through the
+installation-wide `InstallationUnitOfWork` and runs each with its owner's use cases, taking turns
+between Users. It also expires Source Change values and old provider call counts, finishes
+interrupted lapses, chooses which rules owe their daily full pass, retries, and records each run's
+outcome. `SyncScheduler` in `infrastructure/scheduling.py` decides only when a pass starts and how
+many rules run at once, in worker threads, and reports its progress; an import contract keeps it
+from importing the Synchronization context or the domain. The `Container` holds no concrete adapter,
+unit of work, or rule locks. Tests and the development preview substitute adapters before `compose`, or use cases after
 it. `Adapters` holds ports, or functions that make a User's port, rather than concrete classes, so a
 substitute needs only to honor the port. Use cases that need the installation master key are absent
 without it, and one route guard answers 503 for them.
 
-Time and identifiers come through ports too. `build_adapters` makes one `SystemClock`, one
+Time and identifiers come through ports too. `build_adapters` makes one `SystemClock`
+(`infrastructure/clock.py`), one
 `UuidIdGenerator`, and one `UuidRunIdGenerator`, and passes them to each adapter and use case that
 reads the time or makes an identifier: sessions, OAuth states, Connected Accounts, incidents, rule
 removal, providers' Retry-After dates, and Sync Run identifiers. Only the schema migration
@@ -153,8 +159,10 @@ Installation Status follows the same direction ([ADR 0024](adr/0024-integration-
 `assess_installation` is a pure function of the rule summaries, the operations overview, open
 incidents, and the scheduler's `SchedulerProgress`, read through the `SchedulerHeartbeat` port that
 `SyncScheduler` implements in memory. Each User's Installation Status covers their rules and the
-installation problems that affect them. `application/operations/installation_health.py` sums every User's
-verdict into Installation Health for Installation Administrators, beside installation incidents,
+installation problems that affect them. `RuleCounts`, beside it, counts its rules once: a rule has
+stopped when it has a Stopped problem, and runs when it is enabled and has not stopped. The status
+API and the Overview's `Dashboard` both read these counts, so they cannot disagree.
+`application/operations/installation_health.py` sums every User's verdict into Installation Health for Installation Administrators, beside installation incidents,
 such as a scheduler that stalled; `SchedulerWatch` reports that one to the installation's own
 channels.
 
@@ -316,7 +324,7 @@ refuses a record whose User differs from its parent's, and a rule's accounts mus
 Each repository of a User's unit of work adds that User to every statement, and an upsert that meets
 another User's record is refused rather than skipped. Deleting a User deletes everything they own
 through these references. `tests/adapters/test_user_isolation_schema.py` checks the schema, and that
-only the scheduler, the Operator Overview, the migrations, and the composition root reach
+only the scheduled pass, the Operator Overview, the migrations, and the composition root reach
 `InstallationUnitOfWork`.
 
 The in-memory unit of work that application tests use and the SQLite one both pass the persistence

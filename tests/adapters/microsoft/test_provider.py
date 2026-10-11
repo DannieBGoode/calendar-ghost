@@ -28,10 +28,10 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.microsoft.graph import GraphHttp, token_refusal
 from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider
 from calendar_sync.infrastructure.provider_calls import ContextProviderCallStats
-from calendar_sync.infrastructure.scheduling import SystemClock
 from tests.adapters.microsoft.test_calendar_provider_contract import MAILBOXES, outlook
 from tests.fake_microsoft_graph_api import FakeMicrosoftGraph, graph_error
 from tests.helpers import endpoint

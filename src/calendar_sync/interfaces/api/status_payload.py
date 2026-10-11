@@ -7,15 +7,16 @@ from calendar_sync import __version__
 from calendar_sync.application.operations.installation_health import InstallationHealth
 from calendar_sync.application.operations.operator_overview import UserOverview
 from calendar_sync.application.operations.status import (
+    Dashboard,
     InstallationStatus,
     Problem,
-    ProblemKind,
     RuleStatus,
     calendar_display_name,
 )
 from calendar_sync.domain.incidents import IncidentMessage
-from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
+from calendar_sync.domain.model import CalendarEndpoint
 from calendar_sync.interfaces.api.schemas import (
+    DashboardResponse,
     IncidentMessageResponse,
     InstallationHealthResponse,
     InstallationHintResponse,
@@ -54,8 +55,7 @@ def problem_response(problem: Problem) -> ProblemResponse:
 def status_response(status: InstallationStatus) -> StatusResponse:
     overview = status.overview
     scheduler = status.scheduler
-    states = [rule.summary.rule.state for rule in status.rules]
-    stopped = {p.rule_id for p in status.problems if p.kind is ProblemKind.STOPPED}
+    counts = status.counts
     return StatusResponse(
         status=status.health.value,
         needs_attention=status.needs_attention,
@@ -80,15 +80,11 @@ def status_response(status: InstallationStatus) -> StatusResponse:
             ),
         ),
         counts=StatusCountsResponse(
-            rules=len(status.rules),
-            running=sum(
-                rule.summary.rule.state is SyncRuleState.ENABLED
-                and rule.summary.rule.id.value not in stopped
-                for rule in status.rules
-            ),
-            stopped=len(stopped),
-            paused=states.count(SyncRuleState.PAUSED),
-            overdue=sum(p.kind is ProblemKind.OVERDUE for p in status.problems),
+            rules=counts.rules,
+            running=counts.running,
+            stopped=counts.stopped,
+            paused=counts.paused,
+            overdue=counts.overdue,
             open_incidents=overview.open_incidents,
             blocked_events=len(overview.open_blocks),
             disconnected_accounts=overview.disconnected_accounts,
@@ -106,6 +102,30 @@ def status_response(status: InstallationStatus) -> StatusResponse:
             )
             for incident in status.open_incidents
         ],
+    )
+
+
+def dashboard_response(status: InstallationStatus) -> DashboardResponse:
+    """The Overview's verdict and counts, counted as `status_response` counts them."""
+    summary = Dashboard.of(status)
+    next_pass = status.scheduler.next_pass_at if status.scheduler else None
+    return DashboardResponse(
+        status=status.health.value,
+        needs_attention=status.needs_attention,
+        problems=[problem_response(problem) for problem in status.problems],
+        connected_accounts=summary.connected_accounts,
+        disconnected_accounts=summary.disconnected_accounts,
+        lapsed_accounts=summary.lapsed_accounts,
+        sync_rules=summary.rules.rules,
+        enabled_rules=summary.enabled_rules,
+        running_rules=summary.rules.running,
+        stopped_rules=summary.rules.stopped,
+        open_incidents=summary.open_incidents,
+        last_synced_at=summary.last_synced_at.isoformat() if summary.last_synced_at else None,
+        blocked_events=summary.blocked_events,
+        blocked_entry_id=summary.blocked_entry_id,
+        blocked_rule_id=summary.blocked_rule_id,
+        next_pass_at=next_pass.isoformat() if next_pass else None,
     )
 
 

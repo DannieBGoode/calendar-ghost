@@ -355,6 +355,10 @@ A healthy installation answers like this (shortened):
 - `status` is the one verdict, explained in the table below. Alert on `needs_attention`: it is
   `true` only for `stalled`, `stopped`, and `review`.
 - `summary` is one sentence for a dashboard tile.
+- `counts.stopped` counts the rules that do not synchronize until someone acts: each has a
+  `stopped` problem, such as a rule whose account needs reauthorization or whose removal was
+  interrupted. `counts.running` counts the enabled rules that have not stopped. A rule whose removal
+  is running is not counted. The Overview counts its running and stopped rules the same way.
 - `problems` lists every current problem, most urgent first, each with a `kind` (`stalled`,
   `stopped`, `review`, `overdue`, `blocked`, or `waiting`), the rule it concerns, and a summary.
   A problem that an Incident explains also has a `message`: the same summary as a stable `code`

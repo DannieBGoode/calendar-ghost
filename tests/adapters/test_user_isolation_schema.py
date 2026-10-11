@@ -11,15 +11,15 @@ from calendar_sync.infrastructure.persistence.migrations import initialize_datab
 INSTALLATION_TABLES = {"schema_migrations", "users", "installation_settings", "invitations"}
 SOURCE = Path(__file__).resolve().parents[2] / "src" / "calendar_sync"
 # Only these may receive the installation-wide unit of work: the ports that declare it, the
-# adapters that implement it and run migrations, the scheduler, the Operator Overview, and the
-# composition root that hands it to both.
+# adapters that implement it and run migrations, the scheduled pass, the Operator Overview, and
+# the composition root that hands it to both.
 INSTALLATION_UNIT_RECEIVERS = {
     "application/operations/operator_overview.py",
     "application/operations/ports.py",
+    "application/operations/scheduled_pass.py",
     "bootstrap/container.py",
     "infrastructure/persistence/installation.py",
     "infrastructure/persistence/memory_installation.py",
-    "infrastructure/scheduling.py",
 }
 
 
@@ -89,5 +89,5 @@ def test_only_the_scheduler_overview_and_migrations_get_the_installation_unit() 
             receivers.add(module.relative_to(SOURCE).as_posix())
 
     assert receivers <= INSTALLATION_UNIT_RECEIVERS, receivers - INSTALLATION_UNIT_RECEIVERS
-    assert "infrastructure/scheduling.py" in receivers
+    assert "application/operations/scheduled_pass.py" in receivers
     assert "application/operations/operator_overview.py" in receivers

@@ -1,6 +1,7 @@
 import asyncio
 import sqlite3
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
@@ -19,7 +20,13 @@ from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
     SchedulerProgress,
 )
-from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
+from calendar_sync.application.operations.scheduled_pass import (
+    ScheduledPass,
+    ScheduledServices,
+    SyncRuns,
+)
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.application.sync.health import RuleHealth, RunHealth
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
@@ -54,6 +61,7 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import (
@@ -80,16 +88,11 @@ from calendar_sync.infrastructure.persistence.sqlite import (
     SqliteConnectedAccountRecords,
     SqliteSyncRuleRepository,
 )
-from calendar_sync.infrastructure.scheduling import (
-    ScheduledServices,
-    SchedulerWatch,
-    SyncScheduler,
-    SystemClock,
-    fairly_ordered,
-)
+from calendar_sync.infrastructure.scheduling import SchedulerWatch, SyncScheduler
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.fake_calendar import FakeCalendars, FixedClock
 from tests.helpers import endpoint, event, rule
+from tests.scheduled_fakes import RecordingExecuteRule, RecordingHealth
 from tests.users import (
     OTHER_USER,
     RULE_ACCOUNTS,
@@ -111,52 +114,22 @@ class RecordingNotifications:
         self.incidents.append(incident)
 
 
-class RecordingExecuteRule:
-    def __init__(self, outcomes: list[Exception | None]) -> None:
-        self.outcomes = outcomes
-        self.calls = 0
-
-    def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
-        outcome = self.outcomes[self.calls]
-        self.calls += 1
-        if outcome is not None:
-            raise outcome
-        return SyncRunResult(rule_id)
-
-
-class RecordingHealth:
-    def __init__(self) -> None:
-        self.successes = 0
-        self.full_successes = 0
-        self.failures: list[ProviderFailure] = []
-
-    def record_success(
-        self,
-        _rule: object,
-        *,
-        full_pass_floor: int | None = None,
-        full_pass_run: str | None = None,
-    ) -> None:
-        self.successes += 1
-        self.full_successes += full_pass_floor is not None
-        self.full_pass_run = full_pass_run
-
-    def audit_floor(self) -> int:
-        return 0
-
-    def record_failure(
-        self, _rule: object, failure: ProviderFailure, *, attempted_at: datetime | None = None
-    ) -> None:
-        self.failures.append(failure)
-
-    def finish_interrupted_lapses(self) -> int:
-        return 0
-
-
 def _scheduler(execute: object, units: object, health: object, **options: Any) -> SyncScheduler:
     """A scheduler over the store of `units`, running every User's rules with `execute`."""
-    services = ScheduledServices(cast(ExecuteSyncRule, execute), cast(RunHealth, health))
-    return SyncScheduler(_installation_of(units), lambda _owner: services, **options)
+    services = ScheduledServices(cast(SyncRuns, execute), cast(RunHealth, health))
+    return _running(_installation_of(units), lambda _owner: services, **options)
+
+
+def _running(
+    installation: InstallationUnitOfWorkFactory,
+    services_for: Callable[[UserId], ScheduledServices],
+    *,
+    clock: Clock | None = None,
+    **options: Any,
+) -> SyncScheduler:
+    """A scheduler whose passes run each User's rules with the services `services_for` gives."""
+    scheduled = ScheduledPass(installation, services_for, clock or SystemClock())
+    return SyncScheduler(scheduled, clock=clock, **options)
 
 
 def _installation_of(units: object) -> InstallationUnitOfWorkFactory:
@@ -260,78 +233,6 @@ def test_success_resolves_existing_incident_and_resets_failure_count(tmp_path: P
         failures = connection.execute("SELECT COUNT(*) FROM rule_failures").fetchone()[0]
     assert incident_state == "resolved"
     assert failures == 0
-
-
-def test_scheduler_retries_temporary_failure_then_records_success(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    temporary = ProviderFailure(ProviderFailureKind.TEMPORARY, "outage")
-    execute = RecordingExecuteRule([temporary, None])
-    health = RecordingHealth()
-    monkeypatch.setattr("calendar_sync.infrastructure.scheduling.time.sleep", lambda _delay: None)
-    scheduler = _scheduler(
-        execute,
-        None,
-        health,
-    )
-
-    successful = scheduler._execute_with_retry(_scheduled(rule()))
-
-    assert successful is True
-    assert execute.calls == 2
-    assert health.successes == 1
-    assert health.failures == []
-
-
-def test_scheduler_does_not_retry_permanent_failure() -> None:
-    permanent = ProviderFailure(ProviderFailureKind.PERMANENT, "rejected")
-    execute = RecordingExecuteRule([permanent])
-    health = RecordingHealth()
-    scheduler = _scheduler(
-        execute,
-        None,
-        health,
-    )
-
-    successful = scheduler._execute_with_retry(_scheduled(rule()))
-
-    assert successful is False
-    assert execute.calls == 1
-    assert health.failures == [permanent]
-
-
-def test_scheduler_isolates_unexpected_rule_failure() -> None:
-    execute = RecordingExecuteRule([ValueError("corrupt local state")])
-    health = RecordingHealth()
-    scheduler = _scheduler(
-        execute,
-        None,
-        health,
-    )
-
-    successful = scheduler._execute_with_retry(_scheduled(rule()))
-
-    assert successful is False
-    assert execute.calls == 1
-    assert len(health.failures) == 1
-    assert health.failures[0].kind is ProviderFailureKind.INFRASTRUCTURE
-
-
-def test_rule_removed_or_edited_during_a_pass_is_skipped_without_an_incident() -> None:
-    execute = RecordingExecuteRule([RuleNotExecutable("sync rule rule-1 does not exist")])
-    health = RecordingHealth()
-    scheduler = _scheduler(
-        execute,
-        None,
-        health,
-    )
-
-    successful = scheduler._execute_with_retry(_scheduled(rule()))
-
-    assert successful is True
-    assert execute.calls == 1
-    assert health.failures == []
-    assert health.successes == 0
 
 
 def test_degrading_after_an_authorization_failure_waits_for_a_concurrent_rule_change(
@@ -730,50 +631,6 @@ def test_block_health_waits_for_a_rule_removal_in_progress(tmp_path: Path) -> No
     worker.join(2)
 
     assert waited
-
-
-def test_a_scheduled_run_that_listed_everything_checks_blocks_as_the_daily_pass() -> None:
-    factory = memory_units()
-    with factory() as uow:
-        uow.rules.add(rule())
-        uow.commit()
-
-    class ListingEverything:
-        """A reprojection or a rejected cursor lists both calendars in full."""
-
-        def execute(self, rule_id: SyncRuleId, *, full: bool = False) -> SyncRunResult:
-            return SyncRunResult(rule_id, run_id="forced", listed_in_full=True)
-
-    health = RecordingHealth()
-    scheduler = _scheduler(ListingEverything(), factory, health)
-
-    assert scheduler._execute_with_retry(_scheduled(rule()), full=False) is True
-    assert (health.full_successes, health.full_pass_run) == (1, "forced")
-
-
-def test_failing_to_record_health_never_reports_a_successful_run_as_failed() -> None:
-    class BrokenHealth(RecordingHealth):
-        def record_success(
-            self,
-            _rule: object,
-            *,
-            full_pass_floor: int | None = None,
-            full_pass_run: str | None = None,
-        ) -> None:
-            raise sqlite3.OperationalError("database is locked")
-
-        def audit_floor(self) -> int:
-            raise sqlite3.OperationalError("database is locked")
-
-    health = BrokenHealth()
-    scheduler = _scheduler(
-        RecordingExecuteRule([None]),
-        None,
-        health,
-    )
-
-    assert scheduler._execute_with_retry(_scheduled(rule()), full=True) is True
-    assert health.failures == []
 
 
 def test_blocked_incident_is_notified_after_the_rule_lock_is_released(tmp_path: Path) -> None:
@@ -1308,12 +1165,10 @@ def test_a_pass_finishes_a_restoration_the_process_stopped_before(tmp_path: Path
     store.for_user(USER).save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
     assert not _lapsed(store, work.id)
     execute = RecordingExecuteRule([None])
-    services = ScheduledServices(cast(ExecuteSyncRule, execute), health)
+    services = ScheduledServices(cast(SyncRuns, execute), health)
 
     asyncio.run(
-        SyncScheduler(
-            SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services
-        ).run_once()
+        _running(SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services).run_once()
     )
 
     with unit_of_work() as uow:
@@ -1382,12 +1237,10 @@ def test_a_pass_resolves_an_authorized_accounts_incident_with_no_rule_waiting(
     expired = ProviderFailure(ProviderFailureKind.AUTHENTICATION, "expired", account_id=work.id)
     health.lapses.lapsed(work.id, expired, attempted_at=datetime.now(UTC))
     store.for_user(USER).save("Work", "work@example.test", "{}", provider=ProviderKind.GOOGLE)
-    services = ScheduledServices(cast(ExecuteSyncRule, RecordingExecuteRule([])), health)
+    services = ScheduledServices(cast(SyncRuns, RecordingExecuteRule([])), health)
 
     asyncio.run(
-        SyncScheduler(
-            SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services
-        ).run_once()
+        _running(SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services).run_once()
     )
 
     with sqlite3.connect(database) as connection:
@@ -1431,10 +1284,8 @@ def test_a_pass_finishes_a_lapse_the_process_stopped_after_recording(tmp_path: P
     notifications = RecordingNotifications()
     health = _rule_health(database, unit_of_work, notifications)
     execute = RecordingExecuteRule([])
-    services = ScheduledServices(cast(ExecuteSyncRule, execute), health)
-    scheduler = SyncScheduler(
-        SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services
-    )
+    services = ScheduledServices(cast(SyncRuns, execute), health)
+    scheduler = _running(SqliteInstallationUnitOfWorkFactory(database), lambda _owner: services)
 
     asyncio.run(scheduler.run_once())
     asyncio.run(scheduler.run_once())
@@ -1545,11 +1396,9 @@ def test_each_rule_runs_with_its_owners_services() -> None:
                 ran.append((owner, rule_id.value))
                 return SyncRunResult(rule_id)
 
-        return ScheduledServices(
-            cast(ExecuteSyncRule, OwnersRuns()), cast(RunHealth, RecordingHealth())
-        )
+        return ScheduledServices(cast(SyncRuns, OwnersRuns()), cast(RunHealth, RecordingHealth()))
 
-    asyncio.run(SyncScheduler(database.installation(), services_for).run_once())
+    asyncio.run(_running(database.installation(), services_for).run_once())
 
     assert sorted(ran, key=lambda item: item[1]) == [(USER, "rule-1"), (OTHER_USER, "rule-2")]
 
@@ -1605,24 +1454,12 @@ def test_a_queued_rule_does_not_run_once_its_user_is_disabled() -> None:
 
     def services_for(owner: UserId) -> ScheduledServices:
         runs = their_runs if owner == OTHER_USER else DisablingTheOtherUser()
-        return ScheduledServices(cast(ExecuteSyncRule, runs), cast(RunHealth, health))
+        return ScheduledServices(cast(SyncRuns, runs), cast(RunHealth, health))
 
-    asyncio.run(SyncScheduler(database.installation(), services_for, concurrency=1).run_once())
+    asyncio.run(_running(database.installation(), services_for, concurrency=1).run_once())
 
     assert calendars.writes == []
     assert health.failures == []
-
-
-def test_rules_take_turns_between_users() -> None:
-    def owned(owner: UserId, rule_id: str) -> ScheduledRule:
-        return ScheduledRule(owner, replace(rule(), id=SyncRuleId(rule_id)), None)
-
-    many = [owned(USER, f"mine-{number}") for number in range(3)]
-    few = [owned(OTHER_USER, "theirs")]
-
-    ordered = fairly_ordered([*many, *few])
-
-    assert [item.rule.id.value for item in ordered] == ["mine-0", "theirs", "mine-1", "mine-2"]
 
 
 class Progressing:
@@ -1677,7 +1514,7 @@ def test_the_installation_hears_once_when_the_scheduler_stalls_and_again_after_i
 
 def test_the_scheduler_says_when_its_next_pass_begins(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = FixedClock()
-    scheduler = SyncScheduler(
+    scheduler = _running(
         InMemoryUnitOfWorkFactory().installation(),
         lambda _owner: cast(ScheduledServices, None),
         interval_seconds=300,

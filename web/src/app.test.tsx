@@ -24,6 +24,7 @@ const dashboard: Dashboard = {
   lapsed_accounts: 0,
   sync_rules: 0,
   enabled_rules: 0,
+  running_rules: 0,
   stopped_rules: 0,
   open_incidents: 0,
   last_synced_at: null,

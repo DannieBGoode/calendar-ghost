@@ -1157,6 +1157,8 @@ export interface components {
             open_incidents: number;
             /** Problems */
             problems: components["schemas"]["ProblemResponse"][];
+            /** Running Rules */
+            running_rules: number;
             /**
              * Status
              * @enum {string}

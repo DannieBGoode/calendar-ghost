@@ -14,6 +14,7 @@ from calendar_sync.application.sync.rules import ListSyncRules
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import SyncReason, SyncRuleId
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence import installation as installation_module
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteOperationsQueries
 from calendar_sync.infrastructure.persistence.connections import open_connection, transaction
@@ -21,7 +22,6 @@ from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.scheduling import SystemClock
 from tests.helpers import RecentSchedulerHeartbeat, endpoint, rule
 from tests.users import OTHER_USER, USER, sqlite_units
 

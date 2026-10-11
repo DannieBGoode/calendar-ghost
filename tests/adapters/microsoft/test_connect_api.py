@@ -10,6 +10,7 @@ from calendar_sync.application.sync.provider_descriptors import ProviderDirector
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_adapters, compose
 from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.microsoft.descriptor import microsoft_provider
 from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient
 from calendar_sync.infrastructure.oauth import OAuthClientConfig
@@ -18,7 +19,6 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
 from calendar_sync.infrastructure.providers.routing import RoutingAccountCalendars
-from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import CredentialCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.fake_microsoft_graph_api import CLIENT_ID, CLIENT_SECRET, FakeMicrosoftGraph

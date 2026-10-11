@@ -6,9 +6,9 @@ from datetime import timedelta
 import pytest
 
 from calendar_sync.domain.model import CalendarEvent, ConnectedAccountId, TimedInterval
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.microsoft.graph import GraphHttp
 from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider
-from calendar_sync.infrastructure.scheduling import SystemClock
 from tests.contracts.calendar_provider import CalendarProviderContract, ProviderHarness
 from tests.fake_microsoft_graph_api import FakeCalendar, FakeMicrosoftGraph
 

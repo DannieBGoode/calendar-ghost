@@ -15,6 +15,7 @@ from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUnitOfWorkFactory,
@@ -22,7 +23,6 @@ from calendar_sync.infrastructure.persistence.memory import (
 )
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
-from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import HistoryCipher, ScryptPasswords, token_hash
 from tests.helpers import NOW
 

@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.infrastructure.clock import SystemClock
 from calendar_sync.infrastructure.microsoft.descriptor import microsoft_provider
 from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient, MicrosoftOAuthService
 from calendar_sync.infrastructure.microsoft.provider import OutlookCalendarProvider
@@ -12,7 +13,6 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
-from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import CredentialCipher
 
 REDIRECT = "http://localhost:8000/api/v1/oauth/microsoft/callback"
