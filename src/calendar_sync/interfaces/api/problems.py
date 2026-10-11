@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.utils import is_body_allowed_for_status_code
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from calendar_sync.application.administration import (
+from calendar_sync.application.identity.administration import (
     AdministratorRequired,
     LinkUnusable,
     RegistrationClosed,
@@ -26,11 +26,27 @@ from calendar_sync.application.administration import (
     YourOwnResetLink,
     YourOwnState,
 )
-from calendar_sync.application.errors import (
-    AccountAccessCheckFailed,
+from calendar_sync.application.identity.errors import (
+    AdminAlreadyConfigured,
+    EmailRequired,
+    EmailTaken,
+    IncorrectCredentials,
+    IncorrectPassword,
+    InvalidIntegrationTokenName,
+    PasswordPolicyViolation,
+    SignInThrottled,
+    UserDisabled,
+)
+from calendar_sync.application.operations.errors import (
     ActivityEventNotFound,
     ActivityRuleRemoved,
-    AdminAlreadyConfigured,
+    EventInspectionUnavailable,
+    FileLoggingOff,
+    InvalidActivityAge,
+    StorageBusy,
+)
+from calendar_sync.application.sync.errors import (
+    AccountAccessCheckFailed,
     AuthorizationFailed,
     AuthorizationNotConfigured,
     ConnectedAccountDisconnected,
@@ -38,17 +54,8 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
-    EmailRequired,
-    EmailTaken,
-    EventInspectionUnavailable,
-    FileLoggingOff,
-    IncorrectCredentials,
-    IncorrectPassword,
-    InvalidActivityAge,
     InvalidAuthorizationState,
-    InvalidIntegrationTokenName,
     NotACalendarChange,
-    PasswordPolicyViolation,
     ProviderFailure,
     RemovalInterrupted,
     RemovalRequiresAuthorization,
@@ -56,9 +63,6 @@ from calendar_sync.application.errors import (
     ReplacementInterrupted,
     RuleNotExecutable,
     RuleNotFound,
-    SignInThrottled,
-    StorageBusy,
-    UserDisabled,
 )
 from calendar_sync.domain.access import InvalidEmail, LastAdministrator, OnlyMeNeedsOneUser
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition

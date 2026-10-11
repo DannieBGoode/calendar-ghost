@@ -8,7 +8,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-from calendar_sync.application.ports import IdGenerator, IssuedLink, PendingInvitation
+from calendar_sync.application.identity.ports import IssuedLink, PendingInvitation
+from calendar_sync.application.shared.ports import IdGenerator
 from calendar_sync.domain.access import (
     RegistrationPolicy,
     User,

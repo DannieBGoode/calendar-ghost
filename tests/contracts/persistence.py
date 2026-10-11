@@ -12,29 +12,26 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     AccountStanding,
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
-    CalendarAccess,
     CauseSighting,
-    ConnectedAccountState,
-    DiscoveredCalendar,
     InstallationUnitOfWorkFactory,
-    ProviderCallCounts,
     ProviderCallUse,
     RecordedRule,
+)
+from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.ports import (
+    CalendarAccess,
+    DiscoveredCalendar,
+    ProviderCallCounts,
     RulePreviewSummary,
-    RuleRunOutcome,
-    RunKind,
     UnitOfWork,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -53,6 +50,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from tests.helpers import NOW, endpoint, rule, week_start
 from tests.users import OTHER_USER, USER
 
@@ -973,7 +971,7 @@ class PersistenceContract:
             AccountStanding("work-account", "disconnected", "google"),
         )
         assert (mine.connected_accounts, mine.disconnected_accounts) == (1, 1)
-        assert mine.last_synced_at == NOW.isoformat()
+        assert mine.last_synced_at == NOW
         assert theirs.accounts == (
             AccountStanding("their-personal-account", "connected", "google"),
         )

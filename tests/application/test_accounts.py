@@ -7,35 +7,31 @@ from typing import cast
 
 import pytest
 
-from calendar_sync.application.accounts import (
+from calendar_sync.application.sync.accounts import (
     CheckAccountAccess,
     DeleteConnectedAccount,
     DisconnectConnectedAccount,
     DiscoverCalendars,
     ListConnectedAccounts,
 )
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
     ProviderFailureKind,
 )
-from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
     AccountAccess,
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
     CalendarAccess,
-    ConnectedAccount,
-    ConnectedAccountState,
     DiscoveredCalendar,
-    IncidentReport,
     IncidentRepository,
 )
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.incidents import IncidentReport
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUnitOfWorkFactory,

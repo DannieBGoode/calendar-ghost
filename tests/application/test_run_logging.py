@@ -10,24 +10,24 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RemovalInterrupted,
     RuleNotExecutable,
 )
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
     CreatedProjection,
     ProjectionDeleter,
     ProviderCallTally,
     ProviderChangeSet,
 )
-from calendar_sync.application.reconciliation import ReconcileSyncRule
-from calendar_sync.application.removal import RemoveSyncRule
-from calendar_sync.application.run_log import UntalliedProviderCalls, duration
-from calendar_sync.application.sync_run import SyncRunLog
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.reconciliation import ReconcileSyncRule
+from calendar_sync.application.sync.removal import RemoveSyncRule
+from calendar_sync.application.sync.run_log import UntalliedProviderCalls, duration
+from calendar_sync.application.sync.sync_run import SyncRunLog
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarEvent,
@@ -48,9 +48,7 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUserUnitOfWorkFactory,
-)
+from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, endpoint, event, rule, series
 

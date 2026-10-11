@@ -4,8 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.installation_hints import (
+from calendar_sync.application.operations.installation_hints import (
     ADMINISTRATOR_CAUSE_USERS,
     HINT_WINDOW,
     HINTED_USERS,
@@ -15,8 +14,9 @@ from calendar_sync.application.installation_hints import (
     InstallationHint,
     installation_hints,
 )
-from calendar_sync.application.ports import CauseSighting
+from calendar_sync.application.operations.ports import CauseSighting
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.causes import Cause
 
 NOW = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
 ROBIN, SAM, ALEX = UserId("robin"), UserId("sam"), UserId("alex")

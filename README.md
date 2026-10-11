@@ -460,7 +460,7 @@ See [docs/development.md](docs/development.md) for architecture rules and
 AGENTS.md          Canonical project instructions for coding agents
 src/calendar_sync/
   domain/          Provider-independent entities, value objects, policies, and decisions
-  application/     Use cases and boundary protocols
+  application/     Use cases and boundary protocols, one package per bounded context
   infrastructure/  Google, SQLite, security, scheduling, and notification adapters
   interfaces/      FastAPI routes, the MCP server, and the compiled Web UI
   bootstrap/       Explicit dependency composition

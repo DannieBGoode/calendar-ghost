@@ -4,10 +4,11 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from calendar_sync.application.causes import NO_CAUSE
-from calendar_sync.application.errors import ProviderFailureKind
-from calendar_sync.application.ports import IdGenerator, IncidentReport, IncidentResolution
+from calendar_sync.application.shared.ports import IdGenerator
+from calendar_sync.application.sync.errors import ProviderFailureKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.causes import NO_CAUSE
+from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.activity_queries import open_blocks

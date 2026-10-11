@@ -7,28 +7,22 @@ from threading import Barrier, Thread
 
 import pytest
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import (
+from calendar_sync.application.operations.ports import CauseSighting
+from calendar_sync.application.sync.errors import (
     ConnectedAccountRequired,
     DuplicateDirectionalRelationship,
 )
-from calendar_sync.application.ports import (
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
+from calendar_sync.application.sync.ports import (
     CalendarAccess,
-    CauseSighting,
-    ConnectedAccountState,
     DiscoveredCalendar,
-    IncidentReport,
-    IncidentResolution,
     RulePreviewSummary,
-    RuleRunOutcome,
-    RunKind,
 )
-from calendar_sync.application.providers import ProviderKind
-from calendar_sync.application.rules import CreateSyncRule
+from calendar_sync.application.sync.rules import CreateSyncRule
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarId,
@@ -50,16 +44,15 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteOperationsQueries
 from calendar_sync.infrastructure.persistence.health import SqliteIncidentRepository
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUnitOfWorkFactory,
-)
-from calendar_sync.infrastructure.persistence.sqlite import (
+from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
-    initialize_database,
 )
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher
 from tests.adapters.test_user_migration import LATEST_VERSION, database_at_version
 from tests.helpers import NOW, endpoint, event, rule, week_start
@@ -1029,7 +1022,7 @@ def test_migration_20_lapses_accounts_an_open_authorization_incident_names(
         for account in store.for_user(USER).list()
         if account.id in {work.id, renewed.id}
     }
-    assert lapsed == {work.id: "9999-01-01T00:00:00+00:00", renewed.id: None}
+    assert lapsed == {work.id: datetime(9999, 1, 1, tzinfo=UTC), renewed.id: None}
     with sqlite_units(database)() as uow:
         awaiting = {rule.id: rule.awaiting_reauthorization for rule in uow.rules.list()}
     assert awaiting == {stopped.id: True, other.id: False}
@@ -1379,7 +1372,8 @@ def test_migration_26_reads_earlier_failures_as_unknown(tmp_path: Path) -> None:
             """
             INSERT INTO incidents (id, deduplication_key, rule_id, category, state,
                 summary, opened_at, updated_at, user_id)
-            VALUES (?, ?, 'rule-1', ?, 'open', 's', 't', 't', ?)
+            VALUES (?, ?, 'rule-1', ?, 'open', 's', '2026-10-01T00:00:00+00:00',
+                '2026-10-01T00:00:00+00:00', ?)
             """,
             [
                 ("i-1", "provider:rule-1", "authorization", user.value),

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from calendar_sync.application.administration import (
+from calendar_sync.application.identity.administration import (
     AcceptInvitation,
     AdministratorRequired,
     ChangeRole,
@@ -29,9 +29,9 @@ from calendar_sync.application.administration import (
     YourOwnResetLink,
     YourOwnState,
 )
-from calendar_sync.application.errors import EmailTaken, IncorrectCredentials
-from calendar_sync.application.identity import SignIn
-from calendar_sync.application.ports import IssuedLink
+from calendar_sync.application.identity.errors import EmailTaken, IncorrectCredentials
+from calendar_sync.application.identity.ports import IssuedLink
+from calendar_sync.application.identity.sign_in import SignIn
 from calendar_sync.domain.access import (
     LastAdministrator,
     OnlyMeNeedsOneUser,

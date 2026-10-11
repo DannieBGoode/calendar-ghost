@@ -52,7 +52,7 @@ support, billing, and the Operator Overview belong in this repository. ADRs 0029
 their persistence, isolation, and identity, and
 `docs/superpowers/specs/2026-10-09-multi-user-design.md` orders the work. Users have shipped: every
 record belongs to one User, use cases receive a unit of work scoped to that User, and only the
-scheduler, migrations, and (later) the Operator Overview receive the installation-wide
+scheduler, migrations, and the Operator Overview receive the installation-wide
 `InstallationUnitOfWork`. A new owned table carries `user_id` and refers to its parent by
 identifier and User together; `tests/adapters/test_user_isolation_schema.py` fails otherwise.
 Plan limits apply only when an administrator turns Plans on, and billing only when Commercial Mode
@@ -81,8 +81,15 @@ web/ and interfaces/  ->  application/  ->  domain/
 
 - `src/calendar_sync/domain/` is provider- and framework-independent. It cannot import application,
   infrastructure, interfaces, or bootstrap modules.
-- `src/calendar_sync/application/` coordinates use cases through protocols in `application/ports.py`.
-  It cannot import concrete Google, SQLite, scheduler, notification, or Web API adapters.
+- `src/calendar_sync/application/` coordinates use cases through protocols. It cannot import
+  concrete Google, SQLite, scheduler, notification, or Web API adapters.
+- The application has one package per bounded context (ADR 0032): `sync`, `identity`, and
+  `operations`, with `shared` below them. Each context's `ports.py` and `errors.py` hold what its
+  modules share; a use-case module may declare ports and errors of its own beside its use cases,
+  and other modules import them from there. Contexts depend only downward, `operations` →
+  `identity` → `sync` → `shared`, and `lint-imports` fails otherwise, or when an application
+  module belongs to no context. Put a new use case in the context whose language it speaks; a
+  glossary concept that several contexts name belongs in `domain/`.
 - `src/calendar_sync/infrastructure/` owns Google payload translation, OAuth, SQLite, scheduling,
   notifications, and cryptography.
 - `src/calendar_sync/interfaces/` owns HTTP schemas, routes, sessions, and serving the compiled UI.

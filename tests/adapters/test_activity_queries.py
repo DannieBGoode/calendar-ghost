@@ -6,29 +6,21 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.activity import (
+from calendar_sync.application.operations.activity import (
     ActivityCategory,
     ActivityFilter,
     EntryEvents,
     activity_category,
 )
-from calendar_sync.application.ports import (
-    AccountStanding,
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
-    OpenBlock,
-    RecordedEvent,
-)
+from calendar_sync.application.operations.ports import AccountStanding, OpenBlock
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import SyncAction, SyncReason, SyncRuleId, TimedInterval
 from calendar_sync.infrastructure.persistence import activity_queries
 from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteActivityQueries,
     SqliteOperationsQueries,
 )
-from calendar_sync.infrastructure.persistence.sqlite import (
-    initialize_database,
-)
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from tests.helpers import endpoint, rule
 from tests.users import RULE_ACCOUNTS, add_user, sqlite_units
 
@@ -352,4 +344,7 @@ def test_incidents_list_open_ones_first_then_most_recently_updated(database: Pat
     assert [incident.id for incident in incidents] == ["new-open", "old-open", "resolved"]
     assert incidents[0].rule_id is None
     assert (incidents[0].resolved_at, incidents[0].resolution) == (None, None)
-    assert (incidents[2].resolved_at, incidents[2].resolution) == ("2026-09-05", "rule_removed")
+    assert (incidents[2].resolved_at, incidents[2].resolution) == (
+        datetime(2026, 9, 5),
+        "rule_removed",
+    )

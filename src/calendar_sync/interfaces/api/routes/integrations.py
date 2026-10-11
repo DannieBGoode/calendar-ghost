@@ -4,14 +4,14 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends, Response, status
 
-from calendar_sync.application.errors import InvalidIntegrationTokenName
-from calendar_sync.application.installation_health import GetInstallationHealth
-from calendar_sync.application.ports import (
+from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
+from calendar_sync.application.identity.ports import (
     IntegrationTokens,
     IntegrationTokenScope,
     IntegrationTokenSummary,
 )
-from calendar_sync.application.status import GetInstallationStatus
+from calendar_sync.application.operations.installation_health import GetInstallationHealth
+from calendar_sync.application.operations.status import GetInstallationStatus
 from calendar_sync.domain.access import UserId
 from calendar_sync.interfaces.api.dependencies import (
     Identity,

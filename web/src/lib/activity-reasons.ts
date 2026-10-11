@@ -207,7 +207,7 @@ export const ACTION_FALLBACK: Record<string, MessageKey> = {
   conflict: "activity.action.conflict",
 }
 
-// Rule management entries carry no SyncReason; keep in sync with application/rules.py and removal.py.
+// Rule management entries carry no SyncReason; keep in sync with application/sync/rules.py and removal.py.
 export const RULE_ACTIONS: Record<string, CopyKeys> = {
   policy_changed: {
     effect: "activity.ruleAction.policyChanged.effect",

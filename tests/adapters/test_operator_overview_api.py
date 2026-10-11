@@ -10,26 +10,23 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.installation_health import (
+from calendar_sync.application.operations.installation_health import (
     InstallationIncident,
     InstallationNotifications,
 )
-from calendar_sync.application.ports import (
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
+from calendar_sync.application.operations.ports import SchedulerProgress
+from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.ports import (
     CalendarAccess,
     DiscoveredCalendar,
     ProviderCallCounts,
-    RecordedEvent,
-    SchedulerProgress,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Container, build_adapters, compose
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId, SyncRuleState
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.scheduling import SchedulerWatch, SystemClock

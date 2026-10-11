@@ -10,15 +10,15 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from calendar_sync.application.errors import (
-    InvalidIntegrationTokenName,
+from calendar_sync.application.identity.errors import InvalidIntegrationTokenName
+from calendar_sync.application.sync.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RemovalInterrupted,
     ReplacementInterrupted,
     RuleNotFound,
 )
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.errors import DomainValidationError, InvalidStateTransition
 from calendar_sync.domain.model import SyncRuleId
 from calendar_sync.interfaces.api import problems

@@ -4,7 +4,7 @@ from typing import Annotated, Protocol
 
 from fastapi import APIRouter, Depends
 
-from calendar_sync.application.activity import OperationsQueries
+from calendar_sync.application.operations.activity import OperationsQueries
 from calendar_sync.interfaces.api.dependencies import current_user, user_services
 from calendar_sync.interfaces.api.schemas import IncidentResponse
 from calendar_sync.interfaces.api.status_payload import message_response
@@ -32,9 +32,9 @@ def list_incidents(services: Services) -> list[IncidentResponse]:
             category=incident.category,
             state=incident.state,
             summary=incident.summary,
-            opened_at=incident.opened_at,
-            updated_at=incident.updated_at,
-            resolved_at=incident.resolved_at,
+            opened_at=incident.opened_at.isoformat(),
+            updated_at=incident.updated_at.isoformat(),
+            resolved_at=incident.resolved_at.isoformat() if incident.resolved_at else None,
             resolution=incident.resolution,
             account_id=incident.account_id,
             message=message_response(incident.message),

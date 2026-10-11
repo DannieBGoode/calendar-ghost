@@ -6,8 +6,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
-from calendar_sync.application.errors import EmailTaken
-from calendar_sync.application.ports import (
+from calendar_sync.application.identity.errors import EmailTaken
+from calendar_sync.application.identity.ports import (
     IssuedLink,
     PendingInvitation,
     Session,

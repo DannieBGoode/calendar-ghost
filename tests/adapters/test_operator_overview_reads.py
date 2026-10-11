@@ -7,20 +7,20 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.operator_overview import UserStatuses
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome
-from calendar_sync.application.rules import ListSyncRules
-from calendar_sync.application.status import GetInstallationStatus, InstallationStatus
+from calendar_sync.application.operations.operator_overview import UserStatuses
+from calendar_sync.application.operations.status import GetInstallationStatus, InstallationStatus
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.rules import ListSyncRules
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.model import SyncReason, SyncRuleId
-from calendar_sync.infrastructure.persistence import sqlite as sqlite_module
+from calendar_sync.infrastructure.persistence import installation as installation_module
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteOperationsQueries
 from calendar_sync.infrastructure.persistence.connections import open_connection, transaction
-from calendar_sync.infrastructure.persistence.sqlite import (
+from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
-    initialize_database,
 )
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.scheduling import SystemClock
 from tests.helpers import RecentSchedulerHeartbeat, endpoint, rule
 from tests.users import OTHER_USER, USER, sqlite_units
@@ -147,7 +147,7 @@ def test_a_page_of_users_is_read_in_as_many_queries_however_many_rules_they_have
         connection.set_trace_callback(statements.append)
         return connection
 
-    monkeypatch.setattr(sqlite_module, "open_connection", counted)
+    monkeypatch.setattr(installation_module, "open_connection", counted)
 
     def queries(users: list[UserId]) -> int:
         statements.clear()

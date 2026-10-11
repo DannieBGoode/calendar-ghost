@@ -5,10 +5,9 @@ from threading import Thread
 
 import pytest
 
-from calendar_sync.application.errors import ConnectedAccountRequired, RuleNotFound
-from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.ports import ConnectedAccountState, RuleRunOutcome, RunKind
-from calendar_sync.application.rules import (
+from calendar_sync.application.sync.errors import ConnectedAccountRequired, RuleNotFound
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.rules import (
     ChangeSyncRulePolicy,
     CreateDraftSyncRule,
     CreateSyncRule,
@@ -17,6 +16,7 @@ from calendar_sync.application.rules import (
     ListSyncRules,
     PauseSyncRule,
 )
+from calendar_sync.domain.accounts import ConnectedAccountState
 from calendar_sync.domain.errors import InvalidStateTransition
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -27,9 +27,8 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUnitOfWorkFactory,
-)
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FixedClock
 from tests.helpers import rule
 from tests.users import USER

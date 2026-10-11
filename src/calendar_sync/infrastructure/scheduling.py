@@ -8,28 +8,28 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from itertools import zip_longest
 
-from calendar_sync.application.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-)
-from calendar_sync.application.health import RunHealth
-from calendar_sync.application.installation_health import (
+from calendar_sync.application.operations.installation_health import (
     InstallationIncidentKind,
     InstallationNotifications,
     installation_incidents,
 )
-from calendar_sync.application.ports import (
-    Clock,
+from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
-    ScheduledRule,
     SchedulerHeartbeat,
     SchedulerProgress,
 )
-from calendar_sync.application.resource_use import first_counted_day
-from calendar_sync.application.retry import with_retries
-from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import (
+    ProviderFailure,
+    ProviderFailureKind,
+    RuleNotExecutable,
+)
+from calendar_sync.application.sync.health import RunHealth
+from calendar_sync.application.sync.ports import ScheduledRule
+from calendar_sync.application.sync.resource_use import first_counted_day
+from calendar_sync.application.sync.retry import with_retries
+from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncRule
 
