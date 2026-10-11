@@ -66,6 +66,7 @@ from calendar_sync.infrastructure.microsoft.translation import (
     removed_event,
     series_of,
     to_domain_event,
+    transaction_id,
 )
 from calendar_sync.infrastructure.retry_after import retry_after_seconds
 
@@ -351,6 +352,9 @@ class OutlookCalendarProvider:
                 raise _mismatch("Outlook event does not carry compatible ownership metadata")
             return CreatedProjection(existing)
         body = projection_body(projection, rule_id, source, operation_key)
+        # Graph answers a retried POST with the event it already stored, even one the key's
+        # filter cannot see yet (`transactionId`, ADR 0034).
+        body["transactionId"] = transaction_id(operation_key)
         with self._refusals(destination.connected_account_id):
             created = self._graph.request(
                 "events.create",

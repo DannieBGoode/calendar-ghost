@@ -162,6 +162,13 @@ class FakeGraphEvents:
 
     def _create(self, mailbox: str, calendar: str, body: Json) -> httpx.Response:
         self._mail_check("create", body)
+        # "transactionId: A custom identifier specified by a client app for the server to avoid
+        # redundant POST operations in case of client retries to create the same event"
+        # (https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0).
+        transaction = body.get("transactionId")
+        for event in self.in_calendar(mailbox, calendar):
+            if transaction and event.fields.get("transactionId") == transaction:
+                return httpx.Response(201, json=self._serve(event, expand=False))
         event_id = self._new_id()
         event = StoredEvent(event_id, mailbox, calendar, dict(body), modified=self._now())
         self.stored[event_id] = event

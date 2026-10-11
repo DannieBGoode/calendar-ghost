@@ -489,6 +489,11 @@ def projection_body(
     return body
 
 
+def transaction_id(operation_key: str) -> str:
+    """The `transactionId` a create sends, the same for every retry of one Operation Key."""
+    return f"calendar-ghost-{operation_key}"
+
+
 def occurrence_body(
     projection: EventProjection,
     rule_id: SyncRuleId,

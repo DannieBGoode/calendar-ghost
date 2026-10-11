@@ -87,6 +87,15 @@ an occurrence its original start). Rule and Operation Key are separate so they c
 expands the three properties, so an event carrying them is a Managed Projection and is never a
 source, exactly as Google's private extended properties work (ADR 0006).
 
+`find_projection` reads every page of its filter. More than one live event carrying one Operation
+Key, or one whose Managed Origin is not the rule and source creating it, raises
+`ProjectionOwnershipMismatch` and is never adopted. Every create also sends `transactionId`, derived
+from the Operation Key, which Graph documents as the identifier that keeps a retried POST from
+creating the event twice
+([event resource](https://learn.microsoft.com/en-us/graph/api/resources/event?view=graph-rest-1.0)).
+A create whose answer timed out after Graph stored the event is then retried safely, even before the
+property filter can see it.
+
 ### Change feed: rebuilding series from v1.0
 
 The adapter keeps series as series without beta, from three documented reads:
@@ -230,6 +239,7 @@ release that enables the provider:
 8. The Graph `error.code` values above, which Graph's error reference no longer lists.
 9. That `instances` accepts a window from 1601 to 4500, and that Outlook keeps no calendar item
    outside it, so a first or last occurrence it does not list there was cancelled.
+10. That a POST repeating an earlier `transactionId` answers with the event already stored.
 
 ## Alternatives considered
 
