@@ -1204,7 +1204,7 @@ def test_a_calendar_listing_the_provider_refuses_asks_to_reauthorize(
     # Not a server error: the account lapses and the answer says to reauthorize it.
     assert response.status_code == 424
     assert response.json()["code"] == "account_access_check_failed"
-    assert response.json()["params"]["reason"] == "authentication"
+    assert response.json()["params"] == {"reason": "authentication", "provider": "google"}
     assert [item["authorization_lapsed_at"] is not None for item in accounts] == [True]
 
 
