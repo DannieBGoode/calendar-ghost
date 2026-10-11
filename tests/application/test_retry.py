@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from calendar_sync.application.sync.errors import (
-    ProjectionOwnershipMismatch,
-    ProviderFailure,
-    ProviderFailureKind,
-)
+from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch, ProviderFailure
 from calendar_sync.application.sync.retry import RETRY_ATTEMPTS, with_retries
+from calendar_sync.domain.providers import ProviderFailureKind
 
 
 class Operation:

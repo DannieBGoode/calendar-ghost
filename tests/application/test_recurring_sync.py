@@ -8,12 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.sync.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-)
-from calendar_sync.application.sync.events import event_operation_key
+from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
+from calendar_sync.application.sync.event_sync import event_operation_key
 from calendar_sync.application.sync.ports import ProviderChangeSet
 from calendar_sync.domain.audit import RecordedEvent
 from calendar_sync.domain.model import (
@@ -39,6 +35,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
     UnansweredInvitationPolicy,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case

@@ -18,7 +18,6 @@ from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     ConnectedAccountMustBeDisconnected,
     ConnectedAccountNotFound,
-    ProviderFailureKind,
 )
 from calendar_sync.application.sync.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.sync.locking import RuleLocks
@@ -34,6 +33,7 @@ from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentReport
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,

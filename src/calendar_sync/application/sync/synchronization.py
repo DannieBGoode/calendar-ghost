@@ -5,13 +5,8 @@ from dataclasses import dataclass, field
 
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.change_feeds import ChangeFeedCursors
-from calendar_sync.application.sync.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-    RuleNotFound,
-)
-from calendar_sync.application.sync.events import SynchronizeEvents
+from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable, RuleNotFound
+from calendar_sync.application.sync.event_sync import SynchronizeEvents
 from calendar_sync.application.sync.exception_replays import ExceptionReplays
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.occurrences import SynchronizeOccurrences
@@ -47,6 +42,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.services import ProjectionFingerprinter, SyncDecisionService
 
@@ -137,16 +133,16 @@ class ExecuteSyncRule:
             raise
         except ProviderFailure as failure:
             log.failed(failure.kind.value)
-            self._record_failure(rule_id, full, failure.kind.value, failure.provider_cause)
+            self._record_failure(rule_id, full, failure.kind, failure.provider_cause)
             raise
         except Exception:
             log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
             # A local failure: no provider refused, so it has no Cause.
-            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE.value, None)
+            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE, None)
             raise
 
     def _record_failure(
-        self, rule_id: SyncRuleId, full: bool, kind: str, cause: Cause | None
+        self, rule_id: SyncRuleId, full: bool, kind: ProviderFailureKind, cause: Cause | None
     ) -> None:
         # Recording evidence must never replace the failure the scheduler classifies.
         with suppress(Exception), self.unit_of_work() as uow:

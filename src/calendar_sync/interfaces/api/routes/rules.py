@@ -453,7 +453,7 @@ def _outcome_response(outcome: RuleRunOutcome | None) -> RunOutcomeResponse | No
         conflicts=outcome.conflicts,
         checked_mappings=outcome.checked_mappings,
         drift=outcome.drift,
-        failure_kind=outcome.failure_kind,
+        failure_kind=outcome.failure_kind.value if outcome.failure_kind else None,
         last_succeeded_at=(
             outcome.last_succeeded_at.isoformat() if outcome.last_succeeded_at else None
         ),

@@ -17,6 +17,7 @@ from calendar_sync.application.operations.ports import (
 from calendar_sync.application.shared.ports import Clock
 from calendar_sync.application.sync.locking import RuleWorkKind
 from calendar_sync.application.sync.rules import ListSyncRules, SyncRuleSummary
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import IncidentCategory, IncidentMessage
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
@@ -99,7 +100,7 @@ class InstallationStatus:
     overview: OperationsOverview
     scheduler: SchedulerProgress | None
     checked_at: datetime
-    providers: Mapping[str, str] = field(default_factory=dict)
+    providers: Mapping[str, ProviderKind] = field(default_factory=dict)
     """Each Connected Account's Provider Kind, by account id."""
     calendar_numbers: Mapping[CalendarEndpoint, int] = field(default_factory=dict)
     """In the Operator Overview, the number each calendar's neutral label carries; empty when
@@ -153,7 +154,9 @@ def assess_installation(
     """The verdict, most urgent problem first, from what the installation recorded."""
     visible = [summary for summary in rules if not _removal_running(summary)]
     enabled = [s for s in visible if s.rule.state is SyncRuleState.ENABLED]
-    disconnected = {a.id for a in overview.accounts if a.state == "disconnected"}
+    disconnected = {
+        a.id for a in overview.accounts if a.state is ConnectedAccountState.DISCONNECTED
+    }
     lapsed = {a.id: a.provider for a in overview.accounts if a.lapsed}
     open_incidents = tuple(incident for incident in incidents if incident.state == "open")
     block_rule_ids = {block.rule_id for block in overview.open_blocks}
@@ -255,7 +258,7 @@ def _stopped(
     visible: Sequence[SyncRuleSummary],
     incidents: Sequence[IncidentSummary],
     disconnected: set[str],
-    lapsed: Mapping[str, str],
+    lapsed: Mapping[str, ProviderKind],
     lapses: Mapping[str, IncidentSummary],
     now: datetime,
 ) -> list[Problem]:
@@ -291,7 +294,9 @@ def _stopped(
 
 
 def _lapse_problem(
-    summary: SyncRuleSummary, lapsed: Mapping[str, str], lapses: Mapping[str, IncidentSummary]
+    summary: SyncRuleSummary,
+    lapsed: Mapping[str, ProviderKind],
+    lapses: Mapping[str, IncidentSummary],
 ) -> Problem | None:
     """A running or stopped rule an account's Lapsed Authorization stops, naming no account, with
     why the provider refused from the account's Incident."""
@@ -305,7 +310,7 @@ def _lapse_problem(
         ProblemKind.STOPPED,
         summary.rule.id.value,
         "A calendar account needs reauthorization",
-        message=IncidentMessage("authorization_lapsed", {"provider": lapsed[account]}),
+        message=IncidentMessage("authorization_lapsed", {"provider": lapsed[account].value}),
         cause=incident.cause if incident is not None else Cause.UNKNOWN,
         last_tried_at=incident.updated_at if incident else None,
     )

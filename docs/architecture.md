@@ -137,7 +137,7 @@ A Sync Run is the `ExecuteSyncRule` use case in `application/sync/synchronizatio
 rule's lock, applies the source batch and then the destination batch, and records a failed run; it
 composes collaborators from its own ports for the rest. `ChangeFeedCursors` in `change_feeds.py`
 reads both change feeds from the saved cursors and, only after both batches succeed, saves the next
-cursors and records the run's outcome. `SynchronizeEvents` in `events.py` decides one source event,
+cursors and records the run's outcome. `SynchronizeEvents` in `event_sync.py` decides one source event,
 writes its projection, and records its Event Mapping and Audit Entry; `SynchronizeOccurrences` in
 `occurrences.py` does the same for one occurrence of a series. `ExceptionReplays` in
 `exception_replays.py` applies a new series' Occurrence Exceptions from the source, and
@@ -203,11 +203,12 @@ send each request to the adapter of the Provider Kind its Connected Account belo
 calendars may belong to different providers (ADR 0022). The use cases receive the routers and
 never name a provider.
 
-The test fake, the router, and every new adapter pass the Calendar Provider contract in
-`tests/contracts/calendar_provider.py` before being composed. The contract states, through the
-ports alone, the ownership, idempotency, and listing guarantees the use cases rely on. The Google
-adapter predates the contract and does not run the suite; it is covered by
-`tests/adapters/test_google_provider.py` instead.
+The test fake, the router, the Google adapter, and every new adapter pass the Calendar Provider
+contract in `tests/contracts/calendar_provider.py` before being composed
+(`tests/adapters/test_calendar_provider_contract.py`). The contract states, through the ports
+alone, the ownership, idempotency, and listing guarantees the use cases rely on. It does not yet
+state recurrence or change-feed behavior; `tests/adapters/test_google_provider.py` covers those for
+Google.
 
 ## Logging
 

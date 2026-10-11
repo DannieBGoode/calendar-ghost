@@ -19,11 +19,7 @@ from calendar_sync.application.operations.ports import (
     InstallationUnitOfWorkFactory,
     SchedulerProgress,
 )
-from calendar_sync.application.sync.errors import (
-    ProviderFailure,
-    ProviderFailureKind,
-    RuleNotExecutable,
-)
+from calendar_sync.application.sync.errors import ProviderFailure, RuleNotExecutable
 from calendar_sync.application.sync.health import RuleHealth, RunHealth
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
@@ -51,6 +47,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.services import (
     EventProjector,
