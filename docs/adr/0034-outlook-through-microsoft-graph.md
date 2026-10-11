@@ -212,7 +212,8 @@ endpoint's `error` field, to the closed set of ADR 0031, citing Microsoft's docu
   a tenant whose administrator has not consented), `interaction_required`, `consent_required`, and
   Graph's `InvalidAuthenticationToken` and `Authorization_RequestDenied`. Its step, Reauthorize account, explains that a work account
   may need its organization's administrator to approve the application first.
-- `calendar_forbidden`: `ErrorAccessDenied` on a calendar. `calendar_not_found`:
+- `calendar_forbidden`: `ErrorAccessDenied` or `accessDenied` on a calendar; either spelling stops
+  only that calendar's rule and never lapses the account. `calendar_not_found`:
   `ErrorItemNotFound` or `ErrorFolderNotFound` on a calendar. `rate_limited`: 429 and `TooManyRequests`,
   `ApplicationThrottled`, `activityLimitReached`. `temporary`: 503, 504, and other 5xx answers, and
   `temporarily_unavailable`.

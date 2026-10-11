@@ -7,6 +7,7 @@ import pytest
 
 from calendar_sync.application.sync.errors import ProviderFailure
 from calendar_sync.domain.causes import Cause, CauseOwner
+from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.microsoft.causes import cause_of
 from calendar_sync.infrastructure.microsoft.graph import GraphRefusal, TokenRefusal
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
@@ -125,3 +126,18 @@ def test_a_failure_the_adapter_raises_carries_its_cause_without_microsofts_words
 
     assert raised.value.cause is Cause.CALENDAR_FORBIDDEN
     assert "private-marker" not in str(raised.value)
+
+
+@pytest.mark.parametrize("spelling", ["ErrorAccessDenied", "accessDenied"])
+def test_a_calendar_the_account_may_not_change_stops_only_its_rule(spelling: str) -> None:
+    # Graph answers either spelling for a calendar shared to read only; neither says the
+    # account's own authorization is gone, so neither lapses it.
+    provider, graph = outlook()
+    graph.refuse(graph_error(403, spelling))
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.list_events(endpoint("personal-account", "personal-calendar"), NOW)
+
+    assert raised.value.cause is Cause.CALENDAR_FORBIDDEN
+    assert raised.value.kind is ProviderFailureKind.PERMANENT
+    assert not raised.value.requires_authorization

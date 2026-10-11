@@ -43,7 +43,7 @@ from calendar_sync.domain.model import (
     TransformationPolicy,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
-from calendar_sync.infrastructure.microsoft.causes import cause_of
+from calendar_sync.infrastructure.microsoft.causes import CALENDAR_REFUSALS, cause_of
 from calendar_sync.infrastructure.microsoft.graph import GraphHttp, GraphRefusal, TokenRefusal
 from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.microsoft.recurrence import occurrence_dates
@@ -786,7 +786,7 @@ def _kind(error: GraphRefusal | TokenRefusal) -> ProviderFailureKind:
         return ProviderFailureKind.RATE_LIMIT
     if status == 401:
         return ProviderFailureKind.AUTHENTICATION
-    if status == 403 and "ErrorAccessDenied" not in error.codes:
+    if status == 403 and not CALENDAR_REFUSALS.intersection(error.codes):
         return ProviderFailureKind.AUTHORIZATION
     # One calendar the account may not change, or one that is gone: its rule stops alone.
     return ProviderFailureKind.PERMANENT

@@ -71,6 +71,12 @@ GRAPH_CAUSES = {
     "ErrorFolderNotFound": Cause.CALENDAR_NOT_FOUND,
 }
 
+# Graph's codes for one calendar the account may not change, in either spelling it answers: a
+# refusal of that calendar's rule, never of the account's authorization.
+CALENDAR_REFUSALS = frozenset(
+    code for code, cause in GRAPH_CAUSES.items() if cause is Cause.CALENDAR_FORBIDDEN
+)
+
 # What an unrecognized reason may be logged as: a code, never a sentence.
 _LOGGABLE = re.compile(r"[A-Za-z0-9_.]{1,64}")
 
