@@ -18,7 +18,7 @@ INSTALLATION_UNIT_RECEIVERS = {
     "application/operations/ports.py",
     "bootstrap/container.py",
     "infrastructure/persistence/installation.py",
-    "infrastructure/persistence/memory.py",
+    "infrastructure/persistence/memory_installation.py",
     "infrastructure/scheduling.py",
 }
 

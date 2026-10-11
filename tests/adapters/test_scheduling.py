@@ -65,10 +65,12 @@ from calendar_sync.infrastructure.persistence.installation import (
     SqliteInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryInstallationUnitOfWork,
-    InMemoryInstallationUnitOfWorkFactory,
     InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,
+)
+from calendar_sync.infrastructure.persistence.memory_installation import (
+    InMemoryInstallationUnitOfWork,
+    InMemoryInstallationUnitOfWorkFactory,
 )
 from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.sqlite import (
