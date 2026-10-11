@@ -21,10 +21,7 @@ from calendar_sync.application.sync.ports import (
     UnitOfWorkFactory,
 )
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState
-from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
-
-# States that could still write, or be enabled, without the account's authorization.
-_DEGRADED_ON_DISCONNECT = frozenset({SyncRuleState.PREVIEWED, SyncRuleState.ENABLED})
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,12 +131,9 @@ class DisconnectConnectedAccount:
             # Waiting for an in-flight write means none happens with the account once degraded.
             with self.locks.for_writes(rule_id), self.unit_of_work() as uow:
                 rule = uow.rules.get(rule_id)
-                if rule is not None and rule.state in _DEGRADED_ON_DISCONNECT:
-                    uow.rules.save(rule.degrade())
-                    uow.commit()
-                elif rule is not None and rule.awaiting_reauthorization:
-                    # Disconnecting is a deliberate stop, so recovering needs a preview.
-                    uow.rules.save(rule.require_preview())
+                stopped = rule.on_account_disconnected() if rule is not None else None
+                if stopped is not None and stopped != rule:
+                    uow.rules.save(stopped)
                     uow.commit()
         account = self.accounts.disconnect(account_id)
         with self.unit_of_work() as uow:

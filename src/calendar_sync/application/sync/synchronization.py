@@ -41,7 +41,6 @@ from calendar_sync.domain.model import (
     SyncReason,
     SyncRule,
     SyncRuleId,
-    SyncRuleState,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
@@ -68,7 +67,7 @@ def _executable_rule(uow: UnitOfWork, rule_id: SyncRuleId) -> SyncRule:
     rule = uow.rules.get(rule_id)
     if rule is None:
         raise RuleNotFound(f"sync rule {rule_id.value} does not exist")
-    if rule.state is not SyncRuleState.ENABLED:
+    if not rule.synchronizes:
         raise RuleNotExecutable(f"sync rule is {rule.state}, not enabled")
     # The scheduler lists rules before it runs them, so a User disabled since is caught here.
     if not uow.user_active():

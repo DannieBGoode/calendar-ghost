@@ -173,6 +173,13 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   are not its User's, resolves a removed rule's Incidents and deletes a purged rule's or a deleted
   account's, and its Installation Status reads open Incidents, blocks, and Incident Causes. The
   persistence contract checks each of these for both stores.
+- Synchronization rules live in the domain, with no change in behavior: `SyncRule` says whether
+  it synchronizes, whether a preview may validate it, whether it is stopped only by Lapsed
+  Authorization, what disconnecting one of its accounts makes of it, and which source events it
+  projects, so Rule Preview and Full Reconciliation share one eligibility rule. A Source
+  Observation keeps the last complete guest list itself (`SourceObservation.completed_by`). A test
+  fails when an API schema's `Literal` alias and the enum it mirrors list different values, or a
+  new alias mirrors no enum.
 - Activity's reads of a rule's earlier entries and block checks also match the User, so another
   User's entries with the same rule and event identifiers never name, repeat, or clear this
   User's events. Clearing Activity keeps the entries those reads need, matched the same way.

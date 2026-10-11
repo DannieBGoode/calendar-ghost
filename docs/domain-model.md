@@ -15,7 +15,9 @@ Invariants:
 - All-day events are included by default and may be excluded per rule.
 - Declined events are never projected. Events answered Maybe are marked as tentative by default, and unanswered invitations are treated as Maybe by default; both may be changed per rule ([ADR 0018](adr/0018-project-by-invitation-response.md)).
 - Destination content is never authoritative.
-- Managed projections are never eligible sources.
+- Managed projections are never eligible sources. `SyncRule.eligible` is the one rule for which
+  source events a rule projects: Native Events, not cancelled, that its policy does not exclude.
+  Rule Preview and Full Reconciliation ask it; a Sync Run decides the same while naming the reason.
 
 ## Event Mapping aggregate
 
@@ -64,7 +66,7 @@ Attendees, organizer identity, conferencing links, and attachments do not enter 
 
 ## Source Observations and Source Changes
 
-`domain/changes.py` holds a Source Observation: the tracked details of a source event a rule last saw, namely its title, time, description, location, guests, recurrence, and conferencing entry points. Guests are a set of lower-cased email addresses, so responses to invitations and display names are not tracked. `SourceChange.between` compares two observations and names the fields that differ, in that order; unknown guests or conferencing on either side are not compared. Cancelled events and Managed Projections are not observed.
+`domain/changes.py` holds a Source Observation: the tracked details of a source event a rule last saw, namely its title, time, description, location, guests, recurrence, and conferencing entry points. Guests are a set of lower-cased email addresses, so responses to invitations and display names are not tracked. `SourceChange.between` compares two observations and names the fields that differ, in that order; unknown guests or conferencing on either side are not compared. `SourceObservation.completed_by` keeps the last complete guest or conferencing list when a new observation has none, so a guest removed before the next complete list is still reported. Cancelled events and Managed Projections are not observed.
 
 ## State machines
 
@@ -90,6 +92,11 @@ every account it uses is authorized again, by Reauthorization or a passing acces
 to Enabled without a preview and continues from the same preserved positions (ADR 0027). A Material
 Rule Change, a pause, a removal, or disconnecting one of its accounts while it is stopped clears
 that cause, so its recovery needs a preview again.
+
+`SyncRule` decides these itself, so use cases ask the rule instead of comparing states: whether it
+synchronizes (only when Enabled), whether a preview may validate it (Draft, Paused, or Degraded),
+whether it is stopped only by Lapsed Authorization, and what disconnecting one of its accounts
+makes of it.
 
 Permanent deletion is available only after a Connected Account is disconnected. Deletion removes
 the account and every Directional Sync Rule that references it, including those rules' Event

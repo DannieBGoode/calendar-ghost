@@ -16,7 +16,7 @@ from calendar_sync.application.sync.ports import (
 )
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
-from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
+from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId
 from calendar_sync.domain.providers import ProviderFailureKind
 
 
@@ -89,7 +89,7 @@ class LapsedAuthorizations:
             enabled = tuple(
                 rule.id
                 for rule in uow.rules.list()
-                if rule.state is SyncRuleState.ENABLED and rule.uses_account(account_id)
+                if rule.synchronizes and rule.uses_account(account_id)
             )
             uow.commit()
         if not lapsed:
@@ -137,7 +137,7 @@ class LapsedAuthorizations:
             authorized = {account for account in incidents if uow.accounts.authorized(account)}
         for account_id, provider in lapsed.items():
             for rule in rules:
-                if rule.state is SyncRuleState.ENABLED and rule.uses_account(account_id):
+                if rule.synchronizes and rule.uses_account(account_id):
                     self._stop(rule.id, account_id)
             if account_id not in incidents:
                 # Not refreshed, so an Incident a lapse opened meanwhile keeps its own failure.
@@ -145,11 +145,7 @@ class LapsedAuthorizations:
                 self._open(incident, self.clock.now(), refresh=False)
         for account_id in sorted(authorized, key=lambda account: account.value):
             self._resolve(account_id)
-        return sum(
-            self._resume(rule.id)
-            for rule in rules
-            if rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
-        )
+        return sum(self._resume(rule.id) for rule in rules if rule.stopped_by_lapsed_authorization)
 
     def _open(self, incident: IncidentReport, now: datetime, *, refresh: bool) -> None:
         # Only a newly opened Incident is notified, so an open one never notifies twice.
@@ -169,7 +165,7 @@ class LapsedAuthorizations:
         """Stop an enabled rule until the account is authorized again; waits for any write."""
         with self.locks.for_writes(rule_id), self.unit_of_work() as uow:
             rule = uow.rules.get(rule_id)
-            if rule is None or rule.state is not SyncRuleState.ENABLED:
+            if rule is None or not rule.synchronizes:
                 return
             # Restoring decides for each rule under this same write lock, after clearing the lapse.
             # If it cleared the lapse before this check, the rule keeps running; if after, it
@@ -184,8 +180,7 @@ class LapsedAuthorizations:
             rule = uow.rules.get(rule_id)
             if (
                 rule is None
-                or rule.state is not SyncRuleState.DEGRADED
-                or not rule.awaiting_reauthorization
+                or not rule.stopped_by_lapsed_authorization
                 or not _both_authorized(uow, rule)
             ):
                 return False
