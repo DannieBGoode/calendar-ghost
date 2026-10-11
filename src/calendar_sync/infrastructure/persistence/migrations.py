@@ -36,6 +36,8 @@ _FORWARD_MIGRATIONS = (
     (24, "0024_rule_creation_order.sql"),
     (25, "0025_provider_calls.sql"),
     (26, "0026_failure_causes.sql"),
+    (27, "0027_failure_providers.sql"),
+    (28, "0028_oauth_state_providers.sql"),
 )
 
 

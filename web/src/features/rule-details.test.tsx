@@ -74,6 +74,7 @@ const succeeded: RunOutcome = {
   checked_mappings: 3,
   drift: 2,
   failure_kind: null,
+  failure_provider: null,
   last_succeeded_at: null,
 }
 

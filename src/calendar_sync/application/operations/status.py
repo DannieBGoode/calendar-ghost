@@ -82,6 +82,9 @@ class Problem:
     no provider failure explains it."""
     last_tried_at: datetime | None = None
     """When the failure behind it last happened, which is when the rule was last tried."""
+    provider: ProviderKind | None = None
+    """The provider whose failure explains it, so the Web UI names it and its troubleshooting
+    section; None when no provider failure does."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,10 +131,10 @@ class InstallationStatus:
 
 
 def calendar_display_name(endpoint: CalendarEndpoint, names: Mapping[CalendarEndpoint, str]) -> str:
-    """The calendar's last known name, except when showing it would leak an account email or
-    bare calendar id: Google stores `summary or id` as a calendar's name (so an unnamed or
-    unlisted calendar's "name" is its id), and a primary calendar's summary is the account email
-    by default."""
+    """The calendar's last known name, except when showing it would leak an account email or a
+    bare calendar id: a calendar named after its account looks like an email, and earlier
+    releases recorded an unnamed calendar's identifier as its name. Adapters report a calendar
+    without a name of its own, which is remembered without one."""
     name = names.get(endpoint)
     if not name or name == endpoint.calendar_id.value or "@" in name:
         return UNNAMED_CALENDAR
@@ -313,6 +316,7 @@ def _lapse_problem(
         message=IncidentMessage("authorization_lapsed", {"provider": lapsed[account].value}),
         cause=incident.cause if incident is not None else Cause.UNKNOWN,
         last_tried_at=incident.updated_at if incident else None,
+        provider=lapsed[account],
     )
 
 
@@ -326,6 +330,7 @@ def _incident_problem(kind: ProblemKind, incident: IncidentSummary, rule_id: str
         incident.message,
         incident.cause,
         incident.updated_at,
+        incident.provider,
     )
 
 

@@ -4,6 +4,7 @@ import hashlib
 from dataclasses import dataclass
 
 from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import UnsupportedProjection
 from calendar_sync.application.sync.ports import CalendarProvider
 from calendar_sync.application.sync.sync_run import (
     SyncRunContext,
@@ -60,7 +61,13 @@ class SynchronizeEvents:
         # Deciding may read the provider, which takes time; the User may be disabled meanwhile.
         require_unchanged(run)
         run.count(decision.action, source_event.reference)
-        mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
+        try:
+            mapping = self._write(run, source_event, mapping, decision, source_moved=source_moved)
+        except UnsupportedProjection:
+            # The destination cannot hold it exactly, so it is blocked rather than approximated.
+            blocked = SyncDecision(SyncAction.CONFLICT, SyncReason.PROJECTION_UNSUPPORTED)
+            run.recount(decision.action, blocked.action, source_event.reference)
+            decision, source_moved = blocked, False
         if record_current or decision.reason is not SyncReason.PROJECTION_CURRENT:
             record(
                 run,
@@ -96,7 +103,7 @@ class SynchronizeEvents:
             # A listed projection is used once; any later decision this run reads it fresh.
             listed = run.listed_destinations.pop(mapping.destination, None)
             fetched = listed if listed is not None else self.provider.get_event(mapping.destination)
-            # Google keeps deleted events as metadata-less cancellations; treat them as missing.
+            # A provider may keep deleted events as metadata-less cancellations: they are missing.
             actual = None if fetched is None or fetched.status is EventStatus.CANCELLED else fetched
         decision = self.decisions.decide(
             rule, source_event, mapping, actual, window_start=run.window_start
@@ -107,7 +114,7 @@ class SynchronizeEvents:
                 rule.id, source_event.reference, source_event.revision, SyncAction.CREATE
             ),
         ):
-            # Google acknowledged this create before an interrupted run could record its
+            # The provider acknowledged this create before an interrupted run could record its
             # mapping; complete it idempotently instead of orphaning the projection.
             decision = self.decisions.decide(rule, source_event, mapping, actual)
         if (
@@ -210,7 +217,7 @@ class SynchronizeEvents:
     def _acknowledged_series(
         self, run: SyncRunContext, source_event: CalendarEvent
     ) -> tuple[EventMapping | None, CalendarEvent | None]:
-        """Find a series Google created before an interrupted run could record its mapping.
+        """Find a series the provider created before an interrupted run could record its mapping.
 
         Its ownership is then verified like any mapped projection before it is removed.
         """

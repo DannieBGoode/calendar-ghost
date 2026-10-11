@@ -375,7 +375,7 @@ def _destination_occurrence_conflict(
         return None
     if not _is_occurrence_of(destination, series_mapping.destination, situation.original_start):
         return SyncReason.DESTINATION_IDENTITY_INCONSISTENT
-    # Google omits metadata on cancelled instances; the parent series proves ownership.
+    # A provider may omit metadata on cancelled instances; the parent series proves it.
     origin = destination.managed_origin
     if origin is not None and not origin.owns(rule, situation.source_series.reference):
         return SyncReason.DESTINATION_OWNERSHIP_INCONSISTENT

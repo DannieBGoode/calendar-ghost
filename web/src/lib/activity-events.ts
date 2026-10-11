@@ -36,6 +36,7 @@ const EITHER_SCOPE_REASONS = new Set([
   "destination_ownership_inconsistent",
   "source_unverifiable",
   "projection_unmapped",
+  "projection_unsupported",
 ])
 
 function eventScope(reason: string | null | undefined, recurring: boolean): EventScope {

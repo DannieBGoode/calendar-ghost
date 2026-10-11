@@ -35,7 +35,7 @@ const problem = (
   rule_id: string | null,
   summary: string,
   since: string | null = "2026-09-28T11:00:00Z",
-): ServerProblem => ({ kind, rule_id, summary, since, message: null, cause: null, last_tried_at: null })
+): ServerProblem => ({ kind, rule_id, summary, since, message: null, cause: null, last_tried_at: null, provider: "google" })
 
 describe("overviewHealth", () => {
   it("reports the last successful sync when everything is quiet", () => {
@@ -116,6 +116,23 @@ describe("overviewHealth", () => {
     expect(health.action).toBeNull()
   })
 
+  it("names the provider every waiting rule waits for, and none when they wait for different ones", () => {
+    const waiting = (...problems: ServerProblem[]): Dashboard => ({ ...healthy, status: "waiting", open_incidents: 1, problems })
+    const outlook = { ...problem("waiting", "rule-7", "Outlook is limiting requests"), provider: "outlook" }
+
+    const one = overviewHealth(i18n, waiting(outlook), now, { ruleName })
+    const both = overviewHealth(i18n, waiting(outlook, problem("waiting", "rule-8", "Google Calendar is limiting requests")), now, { ruleName })
+
+    expect(one.headline).toBe("Waiting for Microsoft")
+    expect(one.detail).toBe(
+      "Outlook is limiting requests. First seen 1 hour ago. Wait for Microsoft to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Microsoft 365 service status page.",
+    )
+    expect(both.headline).toBe("Waiting for the calendar provider")
+    expect(both.detail).toBe(
+      "The calendar provider is limiting or failing requests for 2 rules. Wait for the calendar provider to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the calendar provider's status page.",
+    )
+  })
+
   it("leads with the most urgent problem and lists every other one", () => {
     const health = overviewHealth(
       i18n,
@@ -174,7 +191,7 @@ describe("overviewHealth", () => {
     )
     expect(health.tone).toBe("stopped")
     expect(health.headline).toBe("2 rules stopped syncing")
-    expect(health.title).toBe("1 Google account needs reauthorization")
+    expect(health.title).toBe("1 calendar account needs reauthorization")
     expect(health.facts).toEqual(["No rules running", "Last sync 3 minutes ago"])
     expect(health.action).toMatchObject({ view: "settings", settingsTab: "connections" })
   })
@@ -212,10 +229,22 @@ describe("overviewHealth", () => {
       expect(health.action).toMatchObject({ label: "Open People", view: "people" })
     })
 
+    it("names the provider whose registration the administrator fixes, and only to the administrator", () => {
+      const outlook = lapsedFor("oauth_client_invalid")
+      outlook.problems = outlook.problems.map((each) => ({ ...each, provider: "outlook" }))
+
+      expect(overviewHealth(i18n, outlook, now, { ruleName, administrator: true }).detail).toBe(
+        "Likely cause: Microsoft no longer accepts this installation's OAuth client. People shows how to fix it in the Microsoft Entra admin center.",
+      )
+      expect(overviewHealth(i18n, outlook, now, { ruleName }).detail).toBe(
+        "Outlook is not available to Calendar Ghost right now. To try again, choose Check access on your Microsoft account in Settings. Events already synced stay where they are.",
+      )
+    })
+
     it("asks the User to reauthorize for their own Cause", () => {
       const health = overviewHealth(i18n, lapsedFor("access_revoked"), now, { ruleName })
 
-      expect(health.title).toBe("1 Google account needs reauthorization")
+      expect(health.title).toBe("1 calendar account needs reauthorization")
       expect(health.action).toMatchObject({ view: "settings", settingsTab: "connections" })
     })
 
@@ -278,7 +307,7 @@ describe("overviewHealth", () => {
       now,
     )
     expect(health.tone).toBe("setup")
-    expect(health.headline).toBe("Reauthorize your Google account")
+    expect(health.headline).toBe("Reauthorize your calendar account")
     expect(health.action).toMatchObject({ view: "settings", settingsTab: "connections" })
   })
 

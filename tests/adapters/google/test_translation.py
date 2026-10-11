@@ -105,7 +105,7 @@ def test_only_https_google_event_links_are_translated() -> None:
     assert unsafe.web_link is None
 
 
-FIXTURES = Path(__file__).parent.parent / "fixtures"
+FIXTURES = Path(__file__).parents[2] / "fixtures"
 
 
 def _fixture(name: str) -> dict[str, object]:

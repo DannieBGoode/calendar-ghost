@@ -97,6 +97,9 @@ const SOURCES = Object.values(
  * marks a template the server's codes complete; tests/adapters/test_api_problems.py checks that
  * every message under it names a code the server sends.
  */
+// Every Provider Kind the server sends, as `ProviderKind` in domain/accounts.py names them.
+const PROVIDER_KINDS = ["google", "outlook"]
+
 const TEMPLATE_VALUES: TemplateValues = {
   "activity.incidents.lasted.*": ["moment", "minute", "hour", "day"],
   "people.*.title": ["empty", "beyond"],
@@ -120,7 +123,12 @@ const TEMPLATE_VALUES: TemplateValues = {
     "temporary",
     "unknown",
   ],
-  "common.provider.*": ["google"],
+  "common.provider.*": PROVIDER_KINDS,
+  "common.providerName.*": PROVIDER_KINDS,
+  "common.providerAccount.*": PROVIDER_KINDS,
+  "common.providerApi.*": PROVIDER_KINDS,
+  "common.providerConsole.*": PROVIDER_KINDS,
+  "common.providerStatus.*": PROVIDER_KINDS,
   "common.apiError.*": "server",
   "common.apiError.*_*": "server",
 }

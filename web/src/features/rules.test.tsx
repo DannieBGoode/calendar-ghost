@@ -208,6 +208,7 @@ const lastSync: RunOutcome = {
   checked_mappings: 1,
   drift: 0,
   failure_kind: null,
+  failure_provider: null,
   last_succeeded_at: null,
 }
 
@@ -234,7 +235,7 @@ const RULE_ROWS: RuleSummary[] = [
   ruleSummary("stopped", {
     state: "degraded",
     destination: { connected_account_id: accountB.id, calendar_id: workB2.id, calendar_name: workB2.summary },
-    last_sync: { ...lastSync, succeeded: false, failure_kind: "temporary" },
+    last_sync: { ...lastSync, succeeded: false, failure_kind: "temporary", failure_provider: "google" },
   }),
   ruleSummary("previewed", {
     state: "dry_run_validated",
@@ -312,7 +313,7 @@ describe("RulesView", () => {
     const lapsed = { ...accountB, authorization_lapsed_at: justNow }
     const stopped = ruleSummary("stopped", {
       state: "degraded",
-      last_sync: { ...lastSync, succeeded: false, failure_kind: "authentication" },
+      last_sync: { ...lastSync, succeeded: false, failure_kind: "authentication", failure_provider: "google" },
     })
     const onViewChange = vi.fn()
     await renderRulesList(testI18n(), { rows: [stopped], accounts: [accountA, lapsed], onViewChange })

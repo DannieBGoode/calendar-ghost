@@ -197,6 +197,12 @@ export const REASONS: Record<string, CopyKeys> = {
     explanation: "activity.reason.projectionUnmapped.explanation",
     next: "activity.reason.projectionUnmapped.next",
   },
+  projection_unsupported: {
+    trigger: "activity.reason.projectionUnsupported.trigger",
+    effect: "activity.reason.projectionUnsupported.effect",
+    explanation: "activity.reason.projectionUnsupported.explanation",
+    next: "activity.reason.projectionUnsupported.next",
+  },
 }
 
 export const ACTION_FALLBACK: Record<string, MessageKey> = {

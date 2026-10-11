@@ -12,7 +12,8 @@ from calendar_sync.application.sync.errors import (
     ConnectedAccountDisconnected,
 )
 from calendar_sync.domain.accounts import ProviderKind
-from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
+from calendar_sync.infrastructure.google.oauth import GoogleOAuthService
+from calendar_sync.infrastructure.oauth import OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.migrations import initialize_database

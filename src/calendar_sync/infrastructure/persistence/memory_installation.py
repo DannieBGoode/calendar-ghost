@@ -89,7 +89,13 @@ class InMemoryInstallationUnitOfWork:
 
     def failure_causes(self, since: datetime) -> list[CauseSighting]:
         runs = (
-            CauseSighting(owner, outcome.failure_cause, outcome.completed_at, False)
+            CauseSighting(
+                owner,
+                outcome.failure_cause,
+                outcome.completed_at,
+                False,
+                provider=outcome.failure_provider,
+            )
             for owner, state in self._database.partitions.items()
             for outcome in state.outcomes.values()
             if not outcome.succeeded
@@ -170,13 +176,16 @@ def _incident_sighting(
         else None
     )
     lived = incident.opened_at - authorized if incident.open and authorized else None
-    return CauseSighting(owner, report.cause, incident.updated_at, incident.open, lived)
+    return CauseSighting(
+        owner, report.cause, incident.updated_at, incident.open, lived, provider=report.provider
+    )
 
 
 def _status_records(database: MemoryDatabase, user: UserId) -> StatusRecords:
     """A User's records as Installation Status reads them. This store keeps no daily block
-    checks, so every block still the latest decision about its event is open, and it records
-    every account as a Google account."""
+    checks, so every block still the latest decision about its event is open. It knows an
+    account's provider only when a test recorded one, so an account without one counts but has no
+    standing."""
     state = database.partitions.get(user) or MemoryState()
     incidents = sorted(
         (
@@ -191,11 +200,13 @@ def _status_records(database: MemoryDatabase, user: UserId) -> StatusRecords:
         AccountStanding(
             account.value,
             standing,
-            ProviderKind.GOOGLE,
+            state.providers[account],
             lapsed=standing is ConnectedAccountState.CONNECTED and account in state.lapsed,
         )
         for account, standing in sorted(state.accounts.items(), key=lambda item: item[0].value)
+        if account in state.providers
     )
+    standings = state.accounts.values()
     succeeded = [
         outcome.last_succeeded_at
         for (_, kind), outcome in state.outcomes.items()
@@ -210,10 +221,8 @@ def _status_records(database: MemoryDatabase, user: UserId) -> StatusRecords:
             for rule in state.rules.values()
         ),
         overview=OperationsOverview(
-            connected_accounts=sum(a.state is ConnectedAccountState.CONNECTED for a in accounts),
-            disconnected_accounts=sum(
-                a.state is ConnectedAccountState.DISCONNECTED for a in accounts
-            ),
+            connected_accounts=sum(s is ConnectedAccountState.CONNECTED for s in standings),
+            disconnected_accounts=sum(s is ConnectedAccountState.DISCONNECTED for s in standings),
             open_incidents=len(incidents),
             last_synced_at=max(succeeded) if succeeded else None,
             open_blocks=_open_blocks(state),
@@ -262,6 +271,9 @@ def _incident_summary(key: str, incident: MemoryIncident, state: MemoryState) ->
         account_id=report.account_id.value if report.account_id else None,
         message=report.message,
         cause=None if report.category in WITHOUT_CAUSE else report.cause,
+        provider=None
+        if report.category in WITHOUT_CAUSE or report.cause is None
+        else report.provider,
         rule_exists=rule is not None,
         rule_accounts=tuple(
             _authorization(state, end.connected_account_id)

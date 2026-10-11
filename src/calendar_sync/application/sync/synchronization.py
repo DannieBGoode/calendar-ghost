@@ -28,6 +28,7 @@ from calendar_sync.application.sync.sync_run import (
     record,
     require_unchanged,
 )
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import (
@@ -133,16 +134,23 @@ class ExecuteSyncRule:
             raise
         except ProviderFailure as failure:
             log.failed(failure.kind.value)
-            self._record_failure(rule_id, full, failure.kind, failure.provider_cause)
+            self._record_failure(
+                rule_id, full, failure.kind, failure.provider_cause, failure.provider
+            )
             raise
         except Exception:
             log.failed(ProviderFailureKind.INFRASTRUCTURE.value)
             # A local failure: no provider refused, so it has no Cause.
-            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE, None)
+            self._record_failure(rule_id, full, ProviderFailureKind.INFRASTRUCTURE)
             raise
 
     def _record_failure(
-        self, rule_id: SyncRuleId, full: bool, kind: ProviderFailureKind, cause: Cause | None
+        self,
+        rule_id: SyncRuleId,
+        full: bool,
+        kind: ProviderFailureKind,
+        cause: Cause | None = None,
+        provider: ProviderKind | None = None,
     ) -> None:
         # Recording evidence must never replace the failure the scheduler classifies.
         with suppress(Exception), self.unit_of_work() as uow:
@@ -156,6 +164,7 @@ class ExecuteSyncRule:
                         full,
                         failure_kind=kind,
                         failure_cause=cause,
+                        failure_provider=provider,
                     )
                 )
                 uow.commit()

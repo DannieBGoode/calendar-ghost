@@ -6,13 +6,13 @@
     "intro": "Each rule shows the events of one calendar in another, as busy time or with their details. The source calendar is never changed.",
     "closeBuilder": "Close rule builder",
     "createButton": "Create sync rule",
-    "connectAccountHint": "<link>Connect a Google account</link> first.",
+    "connectAccountHint": "<link>Connect a calendar account</link> first.",
     "reviewInActivity": "Review in Activity",
     "dismiss": "Dismiss",
     "draftSavedNotice": "Draft saved. Preview it to see exactly what will be written before anything changes.",
     "empty": {
       "title": "No rules yet",
-      "connectFirst": "Connect a Google account in Settings, then create your first rule here.",
+      "connectFirst": "Connect a calendar account in Settings, then create your first rule here.",
       "createFirst": "Create a rule, preview its effects, then start syncing."
     },
     "ariaLabel": "Sync rules",
@@ -39,7 +39,7 @@
     "primaryCalendar": "Primary calendar"
   },
   "accountSelect": {
-    "empty": "No Google accounts"
+    "empty": "No calendar accounts"
   },
   "picker": {
     "clear": "Clear",
@@ -95,7 +95,7 @@
     "intro": "Saving creates a draft. Nothing is written until you preview the rule and start syncing.",
     "sourceLegend": "Source calendar",
     "destinationLegend": "Destination calendar",
-    "googleAccount": "Google account",
+    "account": "Calendar account",
     "calendarLabel": "Calendar",
     "destinationCalendarLabel": "Calendar you can edit",
     "sameEndpointError": "Choose a destination different from the source calendar.",

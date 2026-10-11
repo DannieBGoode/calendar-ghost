@@ -251,7 +251,7 @@ def _recorded_time_response(time: RecordedTime) -> RecordedTimeResponse:
 def _event_snapshot(event: CalendarEvent | None) -> EventSnapshotResponse:
     if event is None:
         return EventSnapshotResponse(found=False)
-    # Google keeps a cancelled event's title for a while; it names what was removed.
+    # A provider may keep a cancelled event's title for a while; it names what was removed.
     cancelled = event.status is EventStatus.CANCELLED
     time = event.time
     if time is None:

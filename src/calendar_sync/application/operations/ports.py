@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Iterator, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from types import TracebackType
 from typing import Literal, Protocol, Self
@@ -80,6 +80,8 @@ class CauseSighting:
     authorized_for: timedelta | None = None
     """For a lapsed account's open Incident, how long after the account was last authorized it
     lapsed; None otherwise."""
+    provider: ProviderKind | None = field(default=None, kw_only=True)
+    """The provider that answered, as recorded with the failure; None when it is not known."""
 
 
 class InstallationUnitOfWork(Protocol):
@@ -274,6 +276,8 @@ class IncidentSummary:
     cause: Cause | None = None
     """Why the provider failure behind it happened (ADR 0031); unknown when that was not recorded,
     and None for an Incident no provider failure opened, such as events still blocked."""
+    provider: ProviderKind | None = None
+    """The provider whose failure opened it, when that was recorded."""
     rule_exists: bool = False
     """Whether its rule exists now; False for an account's or the installation's own Incident."""
     rule_accounts: tuple[AccountAuthorization, ...] = ()

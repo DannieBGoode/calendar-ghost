@@ -94,6 +94,7 @@ def test_a_users_verdict_and_problems_are_their_own_overviews() -> None:
     state = units.for_user(USER).state
     for account in (FAMILY, WORK):
         state.accounts[account.connected_account_id] = ConnectedAccountState.CONNECTED
+        state.providers[account.connected_account_id] = ProviderKind.GOOGLE
     with units.for_user(USER)() as uow:
         uow.rules.add(stopped)
         uow.run_outcomes.record(
@@ -125,9 +126,10 @@ def _installation() -> OperatorOverview:
         users.add(user, "hash")
     bobs = (endpoint("bob-personal", "personal"), endpoint("bob-work", "work"))
     for owner, endpoints in ((ALICE, (FAMILY, WORK)), (BOB, bobs)):
-        accounts = units.for_user(owner.id).state.accounts
+        state = units.for_user(owner.id).state
         for account in endpoints:
-            accounts[account.connected_account_id] = ConnectedAccountState.CONNECTED
+            state.accounts[account.connected_account_id] = ConnectedAccountState.CONNECTED
+            state.providers[account.connected_account_id] = ProviderKind.GOOGLE
     with units.for_user(ALICE.id)() as uow:
         uow.rules.add(replace(rule(), state=SyncRuleState.DEGRADED))
         uow.commit()

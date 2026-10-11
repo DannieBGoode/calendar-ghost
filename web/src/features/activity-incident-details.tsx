@@ -14,6 +14,7 @@ import { api, type Incident } from "@/lib/api"
 import { causeText } from "@/lib/causes"
 import { isAdministrator } from "@/lib/people"
 import { incidentClosedAt, incidentDetail, incidentDuration, type IncidentStep } from "@/lib/incidents"
+import { useProviders } from "@/lib/use-providers"
 
 type IncidentProps = { incident: Incident; context: RuleContext }
 
@@ -91,7 +92,7 @@ function IncidentSummary({
   const { i18n } = context
   const { t } = i18n
   const open = incident.state === "open"
-  const { explanation, cause, step, fixUrl } = incidentDetail(i18n, incident, { administrator: useIsAdministrator() })
+  const { explanation, cause, step, fixUrl } = incidentDetail(i18n, incident, { administrator: useIsAdministrator(), providers: useProviders() })
   return (
     <div className="activity-detail-heading">
       <Badge variant={open ? "attention" : "neutral"}>
@@ -102,7 +103,7 @@ function IncidentSummary({
         {incidentText(i18n, incident)}
       </h2>
       {explanation && <p className="incident-explanation">{explanation}</p>}
-      {cause && <p className="activity-explanation">{causeText(i18n, cause)}</p>}
+      {cause && <p className="activity-explanation">{causeText(i18n, cause, incident.provider)}</p>}
       {(step ?? fixUrl) && (
         <div className="incident-actions">
           {step && (

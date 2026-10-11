@@ -15,6 +15,11 @@ class Settings:
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/v1/oauth/google/callback"
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_redirect_uri: str = "http://localhost:8000/api/v1/oauth/microsoft/callback"
+    microsoft_tenant: str = "common"
+    """Which Microsoft accounts may connect; "common" admits personal and work or school ones."""
     incident_webhook_url: str = ""
     smtp_host: str = ""
     smtp_port: int = 587
@@ -48,6 +53,13 @@ class Settings:
                 "CALENDAR_SYNC_GOOGLE_REDIRECT_URI",
                 "http://localhost:8000/api/v1/oauth/google/callback",
             ),
+            microsoft_client_id=os.environ.get("CALENDAR_SYNC_MICROSOFT_CLIENT_ID", ""),
+            microsoft_client_secret=os.environ.get("CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET", ""),
+            microsoft_redirect_uri=os.environ.get(
+                "CALENDAR_SYNC_MICROSOFT_REDIRECT_URI",
+                "http://localhost:8000/api/v1/oauth/microsoft/callback",
+            ),
+            microsoft_tenant=os.environ.get("CALENDAR_SYNC_MICROSOFT_TENANT", "") or "common",
             incident_webhook_url=os.environ.get("CALENDAR_SYNC_INCIDENT_WEBHOOK_URL", ""),
             smtp_host=os.environ.get("CALENDAR_SYNC_SMTP_HOST", ""),
             smtp_port=int(os.environ.get("CALENDAR_SYNC_SMTP_PORT", "587")),

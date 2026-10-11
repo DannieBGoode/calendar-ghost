@@ -21,7 +21,11 @@ from tests.users import USER, memory_units
 PERSONAL = ConnectedAccountId("personal-account")
 WORK = ConnectedAccountId("work-account")
 EXPIRED = ProviderFailure(
-    ProviderFailureKind.AUTHENTICATION, "expired", account_id=WORK, provider=ProviderKind.GOOGLE
+    ProviderFailureKind.AUTHENTICATION,
+    "expired",
+    account_id=WORK,
+    provider=ProviderKind.GOOGLE,
+    provider_label="Example Calendar",
 )
 
 
@@ -69,6 +73,7 @@ def _stored(
     """Lapses over the store's own Incidents, as SQLite opens and resolves them."""
     for account in (PERSONAL, WORK):
         unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
+        unit_of_work.state.providers[account] = ProviderKind.GOOGLE
     incidents = InMemoryIncidentRepository(unit_of_work.database, USER)
     notifications = Notifications()
     lapses = LapsedAuthorizations(
@@ -81,6 +86,7 @@ def _installation() -> tuple[InMemoryUserUnitOfWorkFactory, Incidents, LapsedAut
     unit_of_work = memory_units()
     for account in (PERSONAL, WORK):
         unit_of_work.state.accounts[account] = ConnectedAccountState.CONNECTED
+        unit_of_work.state.providers[account] = ProviderKind.GOOGLE
     incidents = Incidents()
     return unit_of_work, incidents, LapsedAuthorizations(unit_of_work, incidents, FixedClock())
 
@@ -97,7 +103,8 @@ def test_a_lapse_marks_the_account_and_opens_one_incident_for_it() -> None:
         None,
         WORK,
     )
-    assert incident.summary == "Authorization for Google Calendar expired"
+    assert incident.summary == "Authorization for Example Calendar expired"
+    assert incident.provider is ProviderKind.GOOGLE
     assert incident.message is not None
     assert incident.message.code == "authorization_lapsed"
 
@@ -322,9 +329,10 @@ def test_the_check_stops_the_rules_an_interrupted_lapse_left_enabled() -> None:
     assert (sent.key, sent.category, sent.summary, sent.cause) == (
         "authorization:work-account",
         "authentication",
-        "Authorization for Google Calendar expired",
+        "Authorization for the calendar provider expired",
         None,
     )
+    # The core names no provider; the Web UI names it from the message's `provider`.
     assert sent.message is not None
     assert sent.message.params == {"kind": "authentication", "provider": "google"}
 

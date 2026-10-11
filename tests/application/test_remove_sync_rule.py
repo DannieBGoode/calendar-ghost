@@ -231,7 +231,10 @@ def test_removal_interrupted_names_the_provider_that_failed() -> None:
         processed=1,
         remaining=2,
         failure=ProviderFailure(
-            ProviderFailureKind.AUTHORIZATION, "denied", provider=ProviderKind.GOOGLE
+            ProviderFailureKind.AUTHORIZATION,
+            "denied",
+            provider=ProviderKind.GOOGLE,
+            provider_label="Example Calendar",
         ),
     )
     neutral = RemovalInterrupted(
@@ -241,7 +244,7 @@ def test_removal_interrupted_names_the_provider_that_failed() -> None:
     )
 
     assert str(named) == (
-        "removal stopped after 1 of 3 projections because Google Calendar reported "
+        "removal stopped after 1 of 3 projections because Example Calendar reported "
         "authorization; retry to continue"
     )
     assert str(neutral) == (
@@ -555,6 +558,29 @@ def test_ownership_conflict_leaves_that_event_and_removal_completes() -> None:
     assert completed.action == "rule_removed"
     assert "2 left because ownership could not be verified" in completed.detail
     assert all("Private appointment" not in entry.detail for entry in unit_of_work.state.audit)
+
+
+def test_a_projection_its_provider_cannot_delete_quietly_is_left_and_removal_completes() -> None:
+    calendars = FakeCalendars()
+    sources = [EventRef(rule().source, EventId(f"source-{index}")) for index in range(2)]
+    kept = calendars.put(_destination("destination-0", ManagedOrigin(rule().id, sources[0])))
+    calendars.put(_destination("destination-1", ManagedOrigin(rule().id, sources[1])))
+    # Someone invited guests to it, so deleting it would email them.
+    calendars.undeletable.add(kept.reference)
+    unit_of_work = _with_mappings(2)
+
+    result = _retrying_remover(unit_of_work, calendars).execute(
+        rule().id, ProjectionHandling.DELETE
+    )
+
+    assert (result.deleted, result.detached, result.conflicts) == (1, 0, 1)
+    assert kept.reference in calendars.events
+    assert calendars.writes == [("delete", "destination-1")]
+    assert unit_of_work.state.rules == {}
+    blocked = [entry for entry in unit_of_work.state.audit if entry.outcome == "blocked"]
+    assert [entry.destination_event_id for entry in blocked] == ["destination-0"]
+    completed = unit_of_work.state.audit[-1]
+    assert "1 left because deleting them would notify someone" in completed.detail
 
 
 def test_temporary_failures_retry_with_backoff_using_the_same_operation_key() -> None:

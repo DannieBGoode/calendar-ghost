@@ -306,7 +306,7 @@ class RulePreviewRepository(Protocol):
 
 
 class CalendarNameRepository(Protocol):
-    """The name each calendar last had in Google, so a rule is named before Google answers."""
+    """The name each calendar last had in its provider, so a rule is named before it answers."""
 
     def remember(
         self, account_id: ConnectedAccountId, calendars: Sequence[DiscoveredCalendar]
@@ -588,9 +588,18 @@ class CalendarAccess(StrEnum):
 class DiscoveredCalendar:
     id: str
     summary: str
+    """How the calendar is labelled when it is listed: its name, or what its provider shows for a
+    calendar without one."""
     access: CalendarAccess
     """What this Connected Account may do with it, in provider-neutral terms."""
     primary: bool
+    named: bool = field(default=True, kw_only=True)
+    """Whether the provider gave it a name of its own, so its summary may name its rules."""
+
+    @property
+    def name(self) -> str:
+        """The name rules show for it; empty when its provider gave it none."""
+        return self.summary if self.named else ""
 
     @property
     def writable(self) -> bool:

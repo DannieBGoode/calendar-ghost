@@ -1,4 +1,6 @@
 import type { I18n } from "@/i18n/translator"
+import type { CalendarProvider } from "@/lib/api"
+import { providerDisplayName } from "@/lib/providers"
 
 type SummarizedAccount = { state: string; rule_count: number; authorization_lapsed_at?: string | null }
 
@@ -44,4 +46,22 @@ export function accountSummary(i18n: I18n, accounts: readonly SummarizedAccount[
     needsAttention: true,
     stopsRules,
   }
+}
+
+/** The accounts' addresses grouped by provider, such as "Google: a@x, b@x · Microsoft: c@y". */
+export function addressesByProvider(
+  i18n: I18n,
+  accounts: readonly { email: string; provider: string }[],
+  providers: readonly CalendarProvider[] = [],
+): string {
+  const groups = new Map<string, string[]>()
+  for (const account of accounts) groups.set(account.provider, [...(groups.get(account.provider) ?? []), account.email])
+  return [...groups]
+    .map(([kind, emails]) =>
+      i18n.t("settings.accounts.addressesOf", {
+        provider: providerDisplayName(i18n, kind, providers),
+        addresses: i18n.format.unitList(emails),
+      }),
+    )
+    .reduce((first, next) => i18n.t("settings.accounts.addressGroups", { first, next }))
 }

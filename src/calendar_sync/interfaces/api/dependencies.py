@@ -165,7 +165,7 @@ def installation_reader(
 
 
 def available[T](use_case: T | None, code: str, detail: str) -> T:
-    """The one guard for what needs the installation master key or Google OAuth."""
+    """The one guard for what needs the installation master key or a provider's OAuth client."""
     if use_case is None:
         raise problem(status.HTTP_503_SERVICE_UNAVAILABLE, code, detail)
     return use_case

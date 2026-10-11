@@ -1449,7 +1449,8 @@ def test_a_pass_finishes_a_lapse_the_process_stopped_after_recording(tmp_path: P
         (f"authorization:{work.value}", "open", "authentication", "none")
     ]
     (notified,) = notifications.incidents
-    assert notified.summary == "Authorization for Google Calendar expired"
+    # The core names no provider; the Web UI names it from the message's `provider`.
+    assert notified.summary == "Authorization for the calendar provider expired"
 
 
 def test_finishing_a_lapse_keeps_the_incident_a_lapse_opens_meanwhile(

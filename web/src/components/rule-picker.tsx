@@ -282,6 +282,7 @@ function PickerEndpoint({ endpoint, showAccount }: { endpoint: RulePickerEndpoin
         displayName={endpoint.account?.display_name ?? ""}
         email={email}
         avatarUrl={endpoint.account?.avatar_url}
+        provider={endpoint.account?.provider}
         compact
       />
       <span className="rule-picker-endpoint-copy">

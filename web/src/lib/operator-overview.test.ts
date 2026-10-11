@@ -23,6 +23,7 @@ const problem = (kind: ServerProblem["kind"], summary: string): ServerProblem =>
   message: null,
   cause: null,
   last_tried_at: null,
+  provider: "google",
 })
 
 describe("verdictTone", () => {
@@ -57,7 +58,7 @@ describe("problemText", () => {
       message: { code: "authorization_lapsed", params: { provider: "google" } },
     }
 
-    expect(problemText(i18n, lapsed, 0)).toBe("A Google Calendar account needs reauthorization")
+    expect(problemText(i18n, lapsed, 0)).toBe("A Google account needs reauthorization")
   })
 })
 
@@ -79,14 +80,14 @@ describe("resourceFacts", () => {
     }
 
     expect(resourceFacts(i18n, busy)).toEqual({
-      kept: ["3 rules", "2 Google accounts", "1,204 Activity entries"],
+      kept: ["3 rules", "2 calendar accounts", "1,204 Activity entries"],
       calls: ["Google Calendar: 1,530 calls, 2 refused for too many requests, 1 failed"],
     })
   })
 
   it("says when no rule called a calendar provider", () => {
     expect(resourceFacts(i18n, quiet)).toEqual({
-      kept: ["1 rule", "2 Google accounts", "1 Activity entry"],
+      kept: ["1 rule", "2 calendar accounts", "1 Activity entry"],
       calls: [],
     })
   })
@@ -115,6 +116,12 @@ describe("callsMeaning", () => {
     )
     expect(callsMeaning(i18n, [google(1000, 0, 80)])).toBe(
       "Many calls failed. A Google account usually needs reauthorization, or Google is having trouble.",
+    )
+    expect(callsMeaning(i18n, [google(100, 2, 0), { ...google(100, 2, 0), provider: "outlook" }])).toBe(
+      "The calendar provider asked Calendar Ghost to slow down a few times, and it tried again later.",
+    )
+    expect(callsMeaning(i18n, [google(100, 0, 0), { ...google(100, 1, 0), provider: "outlook" }])).toBe(
+      "Microsoft asked Calendar Ghost to slow down a few times, and it tried again later.",
     )
     expect(callsMeaning(i18n, [])).toBeNull()
   })

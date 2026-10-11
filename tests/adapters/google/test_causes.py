@@ -27,8 +27,9 @@ from calendar_sync.domain.model import (
     TimedInterval,
 )
 from calendar_sync.domain.providers import ProviderFailureKind
-from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
+from calendar_sync.infrastructure.google.oauth import GoogleOAuthService
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.oauth import OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.migrations import initialize_database

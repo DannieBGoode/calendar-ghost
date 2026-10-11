@@ -14,6 +14,7 @@ from calendar_sync.application.sync.errors import (
     RemovalRequiresAuthorization,
     RemovalRequiresProvider,
     RuleNotFound,
+    UnsupportedProjection,
 )
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.ports import (
@@ -129,15 +130,22 @@ class RemoveSyncRule:
         deleting = handling is ProjectionHandling.DELETE
         deleted = 0
         conflicts = 0
+        unchangeable = 0
         for mapping in mappings:
             owned = True
             if deleting:
                 try:
                     self._delete_with_retry(mapping)
                 except ProjectionOwnershipMismatch:
-                    # Unproven ownership blocks this event only; it stays in Google untouched.
+                    # Unproven ownership blocks this event only; it stays in its calendar untouched.
                     owned = False
                     conflicts += 1
+                except UnsupportedProjection:
+                    # Its provider cannot delete it without notifying someone, such as guests
+                    # invited to it since; it stays in its calendar untouched.
+                    owned = False
+                    conflicts += 1
+                    unchangeable += 1
                 except ProviderFailure as failure:
                     if failure.requires_authorization and self.incidents is not None:
                         self.incidents.removal_blocked(
@@ -156,9 +164,7 @@ class RemoveSyncRule:
 
         detached = len(mappings) - deleted - conflicts
         uow.rules.remove(rule.id)
-        detail = f"{deleted} projections deleted, {detached} kept as detached events"
-        if conflicts:
-            detail += f", {conflicts} left because ownership could not be verified"
+        detail = _removal_detail(deleted, detached, conflicts - unchangeable, unchangeable)
         uow.audit.append(
             AuditEntry(
                 occurred_at=self.clock.now(),
@@ -224,3 +230,13 @@ class RemoveSyncRule:
 def _operation_key(mapping: EventMapping) -> str:
     raw = "|".join((mapping.rule_id.value, mapping.id.value, "remove"))
     return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def _removal_detail(deleted: int, detached: int, unproven: int, unchangeable: int) -> str:
+    """What Rule Removal did with the rule's projections, in counts only."""
+    detail = f"{deleted} projections deleted, {detached} kept as detached events"
+    if unproven:
+        detail += f", {unproven} left because ownership could not be verified"
+    if unchangeable:
+        detail += f", {unchangeable} left because deleting them would notify someone"
+    return detail

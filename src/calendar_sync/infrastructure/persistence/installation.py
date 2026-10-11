@@ -42,6 +42,7 @@ def _cause_sighting(row: sqlite3.Row) -> CauseSighting:
         datetime.fromisoformat(str(row["at"])),
         bool(row["open"]),
         lived,
+        provider=ProviderKind.recorded(row["provider"]),
     )
 
 
@@ -173,14 +174,15 @@ class SqliteInstallationUnitOfWork:
         rows = self._connection.execute(
             """
             SELECT user_id, failure_cause AS cause, completed_at AS at, 0 AS open,
-                NULL AS opened_at, NULL AS authorized_at
+                NULL AS opened_at, NULL AS authorized_at, failure_provider AS provider
             FROM rule_run_outcomes
             WHERE succeeded = 0 AND failure_cause IS NOT NULL AND failure_cause != 'none'
                 AND completed_at >= ?
                 AND failure_kind NOT IN ('infrastructure', 'conflict')
             UNION ALL
             SELECT incident.user_id, incident.cause, incident.updated_at,
-                incident.state = 'open', incident.opened_at, account.updated_at
+                incident.state = 'open', incident.opened_at, account.updated_at,
+                incident.provider
             FROM incidents incident
             LEFT JOIN connected_accounts account
                 ON incident.rule_id IS NULL

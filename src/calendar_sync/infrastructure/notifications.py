@@ -117,7 +117,7 @@ def _notification(incident: IncidentReport, at: datetime) -> IncidentNotificatio
 
 def _step_path(incident: IncidentReport) -> str:
     """The page holding the owner's one next step, as the domain decides it for the Web UI too
-    (ADR 0033): their Google connections to reauthorize, the rule to review, its blocked events,
+    (ADR 0033): their calendar connections to reauthorize, the rule to review, its blocked events,
     or the Overview when there is nothing for them to do. Its rule exists, having just run, and
     nobody has renewed access since it failed. A rule is named only by its internal identifier."""
     step = next_step(

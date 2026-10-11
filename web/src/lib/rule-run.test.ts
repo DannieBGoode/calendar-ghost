@@ -25,6 +25,7 @@ const outcome: RunOutcome = {
   checked_mappings: 0,
   drift: 0,
   failure_kind: null,
+  failure_provider: null,
   last_succeeded_at: null,
 }
 const result: SyncResult = { rule_id: "r", created: 0, updated: 0, deleted: 0, ignored: 0, conflicts: 0 }
@@ -39,7 +40,7 @@ const reconciled: ReconcileResult = {
 describe("lastRunLabel", () => {
   it("describes success, failure, and never-run rules", () => {
     expect(lastRunLabel(i18n, outcome, now)).toBe("Last synced 10 minutes ago")
-    expect(lastRunLabel(i18n, { ...outcome, succeeded: false, failure_kind: "rate_limit" }, now)).toBe(
+    expect(lastRunLabel(i18n, { ...outcome, succeeded: false, failure_kind: "rate_limit", failure_provider: "google" }, now)).toBe(
       "Last sync failed 10 minutes ago: Google Calendar was limiting requests",
     )
     expect(lastRunLabel(i18n, null, now)).toBe("Not synced yet")
@@ -180,8 +181,11 @@ describe("previewReadyLabel", () => {
 
 describe("recoveryExplanation", () => {
   it("names the cause and reassures that nothing was lost", () => {
-    expect(recoveryExplanation(i18n, { ...outcome, succeeded: false, failure_kind: "rate_limit" }, now)).toBe(
+    expect(recoveryExplanation(i18n, { ...outcome, succeeded: false, failure_kind: "rate_limit", failure_provider: "google" }, now)).toBe(
       "Google Calendar was limiting requests 10 minutes ago, so Calendar Ghost stopped this rule to be safe. Nothing was lost. Preview it to check both calendars, then start syncing again.",
+    )
+    expect(recoveryExplanation(i18n, { ...outcome, succeeded: false, failure_kind: "authentication", failure_provider: "outlook" }, now)).toMatch(
+      /^Authorization for Outlook expired 10 minutes ago, so Calendar Ghost stopped this rule/,
     )
     expect(recoveryExplanation(i18n, null, now)).toMatch(/^Calendar Ghost stopped this rule to be safe\. Nothing was lost/)
   })

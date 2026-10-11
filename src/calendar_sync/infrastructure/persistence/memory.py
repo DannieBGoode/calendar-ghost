@@ -63,6 +63,8 @@ if TYPE_CHECKING:
 @dataclass(slots=True)
 class MemoryState:
     accounts: dict[ConnectedAccountId, ConnectedAccountState] = field(default_factory=dict)
+    providers: dict[ConnectedAccountId, ProviderKind] = field(default_factory=dict)
+    """Each account's Provider Kind, where a test recorded one."""
     lapsed: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
     authorized_at: dict[ConnectedAccountId, datetime] = field(default_factory=dict)
     """When each account was last authorized; one missing was authorized before any request."""
@@ -141,11 +143,12 @@ class InMemoryConnectedAccountRecords:
         )
 
     def lapsed(self) -> dict[ConnectedAccountId, ProviderKind]:
-        # Every account this store records is a Google account.
+        # This store knows an account's provider only when a test recorded it.
         return {
-            account: ProviderKind.GOOGLE
+            account: self._state.providers[account]
             for account in sorted(self._state.lapsed, key=lambda account: account.value)
             if self._state.accounts.get(account) is ConnectedAccountState.CONNECTED
+            and account in self._state.providers
         }
 
     def delete_disconnected(self, account_id: ConnectedAccountId) -> bool:
@@ -457,6 +460,9 @@ class InMemoryRuleRunOutcomeRepository:
             failure_cause=None
             if outcome.succeeded or outcome.failure_kind in WITHOUT_CAUSE
             else outcome.failure_cause,
+            failure_provider=None
+            if outcome.succeeded or outcome.failure_kind in WITHOUT_CAUSE
+            else outcome.failure_provider,
             last_succeeded_at=succeeded_at,
             last_full_succeeded_at=full_at,
         )
@@ -488,7 +494,7 @@ class InMemoryCalendarNameRepository:
             return
         for calendar in calendars:
             endpoint = CalendarEndpoint(account_id, CalendarId(calendar.id))
-            self._state.calendar_names[endpoint] = calendar.summary
+            self._state.calendar_names[endpoint] = calendar.name
 
     def names(self, endpoints: Collection[CalendarEndpoint]) -> dict[CalendarEndpoint, str]:
         return {

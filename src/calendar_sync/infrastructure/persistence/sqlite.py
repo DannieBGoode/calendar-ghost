@@ -637,8 +637,8 @@ class SqliteRuleRunOutcomeRepository:
             INSERT INTO rule_run_outcomes (
                 rule_id, kind, completed_at, succeeded, full_run, created, updated,
                 deleted, conflicts, checked_mappings, drift, failure_kind, failure_cause,
-                last_succeeded_at, last_full_succeeded_at, user_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                failure_provider, last_succeeded_at, last_full_succeeded_at, user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(rule_id, kind) DO UPDATE SET
                 last_succeeded_at = CASE WHEN excluded.succeeded
                     THEN excluded.completed_at ELSE rule_run_outcomes.last_succeeded_at END,
@@ -654,7 +654,8 @@ class SqliteRuleRunOutcomeRepository:
                 checked_mappings = excluded.checked_mappings,
                 drift = excluded.drift,
                 failure_kind = excluded.failure_kind,
-                failure_cause = excluded.failure_cause
+                failure_cause = excluded.failure_cause,
+                failure_provider = excluded.failure_provider
             WHERE rule_run_outcomes.user_id = excluded.user_id
             """,
             (
@@ -675,6 +676,9 @@ class SqliteRuleRunOutcomeRepository:
                 else outcome.failure_cause.value
                 if outcome.failure_cause
                 else NO_CAUSE,
+                outcome.failure_provider.value
+                if outcome.failure_provider and _caused(outcome)
+                else None,
                 outcome.completed_at.isoformat() if outcome.succeeded else None,
                 outcome.completed_at.isoformat()
                 if outcome.succeeded and outcome.full_run
@@ -689,6 +693,11 @@ class SqliteRuleRunOutcomeRepository:
             (rule_id.value, kind.value, self._user),
         ).fetchone()
         return outcome_from_row(row) if row is not None else None
+
+
+def _caused(outcome: RuleRunOutcome) -> bool:
+    """Whether a provider's answer explains the outcome: a failure that is not local."""
+    return not outcome.succeeded and outcome.failure_kind not in WITHOUT_CAUSE
 
 
 def outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
@@ -710,6 +719,7 @@ def outcome_from_row(row: sqlite3.Row) -> RuleRunOutcome:
         failure_cause=None
         if row["succeeded"] or row["failure_kind"] in WITHOUT_CAUSE
         else Cause.recorded(row["failure_cause"]),
+        failure_provider=ProviderKind.recorded(row["failure_provider"]),
         last_succeeded_at=optional_time(row["last_succeeded_at"]),
         last_full_succeeded_at=optional_time(row["last_full_succeeded_at"]),
     )
@@ -824,7 +834,7 @@ class SqliteCalendarNameRepository:
             WHERE name != excluded.name
             """,
             [
-                (calendar.id, calendar.summary, now, account_id.value, self._user)
+                (calendar.id, calendar.name, now, account_id.value, self._user)
                 for calendar in calendars
             ],
         )

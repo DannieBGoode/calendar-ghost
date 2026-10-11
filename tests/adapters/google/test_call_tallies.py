@@ -20,7 +20,7 @@ from calendar_sync.infrastructure.provider_calls import (
     record_call,
     record_token_refresh,
 )
-from tests.adapters.test_google_provider import (
+from tests.adapters.google.test_provider import (
     google_event_payload,
     request_raising,
     request_returning,

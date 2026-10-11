@@ -6,7 +6,11 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
-from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch, ProviderFailure
+from calendar_sync.application.sync.errors import (
+    ProjectionOwnershipMismatch,
+    ProviderFailure,
+    UnsupportedProjection,
+)
 from calendar_sync.application.sync.ports import (
     CalendarReader,
     CreatedProjection,
@@ -68,7 +72,16 @@ class FakeCalendars:
     """Calendars whose next cursor is rejected, so their feed falls back to a full listing."""
     """Every single-event and single-occurrence lookup, in order."""
     operations: dict[str, EventRef] = field(default_factory=dict)
+    copies: dict[str, list[EventRef]] = field(default_factory=dict)
+    """Events copied with an Operation Key, by that key."""
     created: int = 0
+    unsupported: set[EventRef] = field(default_factory=set)
+    """Sources whose projections, as created or updated, this destination cannot hold."""
+    unsupported_occurrences: set[OccurrenceStart] = field(default_factory=set)
+    """Occurrences this destination cannot write, such as one it cannot restore."""
+    undeletable: set[EventRef] = field(default_factory=set)
+    """Projections this destination cannot delete without notifying anyone, such as one someone
+    invited guests to."""
     exception_listings: list[EventRef] = field(default_factory=list)
     listings: list[CalendarEndpoint] = field(default_factory=list)
     """Calendars listed in full by `list_events`, in order."""
@@ -209,13 +222,28 @@ class FakeCalendars:
             response=master.response,
         )
 
+    def duplicate(self, reference: EventRef) -> EventRef:
+        """Copy a projection with its Operation Key under a new identifier; the copy's."""
+        copied = EventRef(reference.calendar, EventId(f"{reference.event_id.value}-copy"))
+        self.events[copied] = replace(self.events[reference], reference=copied)
+        key = next(key for key, made in self.operations.items() if made == reference)
+        self.copies.setdefault(key, []).append(copied)
+        return copied
+
     def find_projection(
         self, destination: CalendarEndpoint, operation_key: str
     ) -> CalendarEvent | None:
-        reference = self.operations.get(operation_key)
-        found = None if reference is None else self.events.get(reference)
-        # Like Google's showDeleted=False lookup, a cancelled projection is not found.
-        return found if found is not None and found.status is EventStatus.CONFIRMED else None
+        made = self.operations.get(operation_key)
+        candidates = [made, *self.copies.get(operation_key, [])] if made is not None else []
+        found = [
+            event
+            for event in (self.events.get(reference) for reference in candidates)
+            # Like Google's showDeleted=False lookup, a cancelled projection is not found.
+            if event is not None and event.status is EventStatus.CONFIRMED
+        ]
+        if len(found) > 1:
+            raise ProjectionOwnershipMismatch("two events carry one Operation Key")
+        return found[0] if found else None
 
     def create_projection(
         self,
@@ -227,7 +255,11 @@ class FakeCalendars:
     ) -> CreatedProjection:
         existing = self.find_projection(destination, operation_key)
         if existing is not None:
+            if not _owned(existing.managed_origin, rule_id, source):
+                raise _denied()
             return CreatedProjection(existing)
+        if source in self.unsupported:
+            raise UnsupportedProjection("this destination cannot hold the projection")
         self.created += 1
         reference = EventRef(destination, EventId(f"projection-{self.created}"))
         created = CalendarEvent(
@@ -258,6 +290,8 @@ class FakeCalendars:
         existing = self.events.get(destination)
         if existing is None or not _owned(existing.managed_origin, rule_id, source):
             raise _denied()
+        if source in self.unsupported:
+            raise UnsupportedProjection("this destination cannot hold the projection")
         updated = replace(
             existing,
             time=projection.time,
@@ -288,6 +322,8 @@ class FakeCalendars:
             return
         if not _owned(existing.managed_origin, rule_id, source):
             raise _denied()
+        if destination in self.undeletable:
+            raise UnsupportedProjection("this destination cannot delete the projection quietly")
         for instance in self.instances_of(destination):
             del self.events[instance.reference]
         del self.events[destination]
@@ -308,6 +344,8 @@ class FakeCalendars:
         )
         if instance is None:
             raise ProviderFailure(ProviderFailureKind.PERMANENT, "occurrence could not be resolved")
+        if original_start in self.unsupported_occurrences:
+            raise UnsupportedProjection("this destination cannot write the occurrence")
         written = replace(
             instance,
             time=projection.time,
