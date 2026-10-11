@@ -218,6 +218,13 @@ endpoint's `error` field, to the closed set of ADR 0031, citing Microsoft's docu
   `ApplicationThrottled`, `activityLimitReached`. `temporary`: 503, 504, and other 5xx answers, and
   `temporarily_unavailable`.
 
+Graph's `Retry-After` is honored up to 60 seconds, the cap Google's hint has too
+(`infrastructure/retry_after.py`). Graph may ask for longer, but a retry waits in the process while
+it holds the rule's lock, so a longer wait would hold up that rule's other work, and the next
+scheduled pass, five minutes later, retries anyway. A longer hint is waited out for 60 seconds at
+most; if Graph still refuses after the last of the run's three attempts, the run fails as
+`rate_limited` and the rule waits for its next pass.
+
 AADSTS numbers are logged, as short tokens, only to help an administrator name a failure; no
 decision reads them, because Microsoft says they change. Microsoft's message text is never stored,
 logged, or returned. Nothing Graph answers maps to `api_disabled` or `quota_exceeded`.
