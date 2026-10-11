@@ -123,7 +123,8 @@ The adapter keeps series as series without beta, from three documented reads:
    last occurrence has a neighbour on one side only and may move any distance the other way, so on
    that side it is looked for across every date Outlook keeps, 1601 to 4500; the series has no
    other occurrence there, so that answer is short. It is cancelled only when that answer is
-   complete and does not list it.
+   complete and does not list it. For the same reason, whether a series that ends still has a
+   live occurrence is asked of every date Outlook keeps, not only of its first to last slot.
 
 What this cannot do, and what follows:
 

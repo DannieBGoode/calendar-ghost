@@ -4,7 +4,13 @@ may have moved (ADR 0034)."""
 
 from datetime import UTC, datetime, timedelta
 
-from calendar_sync.domain.model import EventId, EventRef, EventStatus, TimedInterval
+from calendar_sync.domain.model import (
+    EventId,
+    EventRef,
+    EventStatus,
+    TimedInterval,
+    TransformationPolicy,
+)
 from tests.adapters.microsoft.test_calendar_provider_contract import MAILBOXES, outlook
 from tests.fake_microsoft_graph_api import FakeMicrosoftGraph
 from tests.helpers import endpoint
@@ -115,3 +121,12 @@ def test_an_edge_occurrence_is_looked_for_across_every_date_outlook_keeps() -> N
     ]
     # From the first Monday, which it never moves past, to the last date Outlook keeps.
     assert windows == [("2026-10-12T07:00:00Z", "4501-01-01T00:30:00Z")]
+
+
+def test_a_series_whose_only_live_occurrence_moved_years_later_is_still_live() -> None:
+    provider, graph = outlook()
+    series = _two_mondays(graph)
+    graph.events._delete(MAILBOX, "personal-calendar", f"{series.event_id.value}.occ.2026-10-12")
+    _move_last(graph, series, "2029-11-12")
+
+    assert provider.has_live_occurrences(series, TransformationPolicy())

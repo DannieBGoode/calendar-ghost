@@ -527,15 +527,20 @@ class OutlookCalendarProvider:
                 # A series Graph cannot read counts as live, so it synchronizes as before.
                 return True
             shape = series_of(item)
-            first = (
-                shape.first
-                if shape is not None
-                else _event_start(_translate(item, series.calendar))
-            )
             last = _last_end(shape) if shape is not None else None
-            before = last or self._clock.now() + EXCEPTION_HORIZON
+            if last is not None:
+                # A first or last occurrence may have moved anywhere Outlook keeps dates; the
+                # others stay between their neighbours, so this lists them all.
+                after, before = OUTLOOK_EARLIEST, OUTLOOK_LATEST
+            else:
+                after = (
+                    shape.first
+                    if shape is not None
+                    else _event_start(_translate(item, series.calendar))
+                )
+                before = self._clock.now() + EXCEPTION_HORIZON
             try:
-                found, complete = self._instances(series, item, first, before)
+                found, complete = self._instances(series, item, after, before)
             except GraphRefusal as error:
                 if error.status in UNLISTABLE:
                     return True
