@@ -33,6 +33,7 @@ from calendar_sync.application.ports import (
     OpenBlock,
     OperationsOverview,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.sync_run import UNRECORDED_REASONS
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import SyncAction, SyncReason
@@ -174,7 +175,7 @@ _ENTRY_COLUMNS = (
     " event_title, event_starts, event_ends, event_all_day, event_recurring, event_cancelled,"
     " change_fields"
 )
-# An entry observed its event's title unless Google reported a cancellation without one.
+# An entry observed its event's title unless its provider reported a cancellation without one.
 _TITLE_OBSERVED = "event_title IS NOT NULL AND (event_title <> '' OR NOT event_cancelled)"
 
 
@@ -407,7 +408,7 @@ def _open_blocks_of(
 
 
 _INCIDENT_COLUMNS = """id, rule_id, account_id, category, state, summary, opened_at, updated_at,
-    resolved_at, resolution, message_code, message_params, cause"""
+    resolved_at, resolution, message_code, message_params, cause, provider"""
 
 
 def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
@@ -427,6 +428,9 @@ def _incident_summary(row: sqlite3.Row) -> IncidentSummary:
         # unknown when an earlier release recorded nothing; blocked events and local failures
         # have none.
         cause=None if row["category"] in WITHOUT_CAUSE else Cause.recorded(row["cause"]),
+        provider=None
+        if row["category"] in WITHOUT_CAUSE
+        else ProviderKind.recorded(row["provider"]),
     )
 
 

@@ -14,6 +14,8 @@ from calendar_sync.application.installation_health import (
 )
 from calendar_sync.application.installation_hints import HINT_WINDOW
 from calendar_sync.application.ports import CauseSighting, SchedulerProgress
+from calendar_sync.application.provider_descriptors import ProviderGuide
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.status import StatusVerdict
 from calendar_sync.domain.access import Role, User, UserId, UserState
 from tests.identity_fakes import MemoryUsers
@@ -22,6 +24,20 @@ NOW = datetime(2026, 10, 9, 12, 0, tzinfo=UTC)
 TICKING = SchedulerProgress(NOW - timedelta(days=1), None, NOW - timedelta(minutes=2))
 STOPPED_SINCE = NOW - timedelta(minutes=40)
 STALLED = SchedulerProgress(NOW - timedelta(days=1), None, STOPPED_SINCE)
+PROVIDER = ProviderKind.GOOGLE
+GUIDES = (
+    ProviderGuide(
+        PROVIDER,
+        "example",
+        "Example",
+        "Example Calendar",
+        {Cause.API_DISABLED: "the-api-is-off", Cause.QUOTA_EXCEEDED: "the-quota-is-used-up"},
+    ),
+)
+
+
+def failure(user: str, cause: Cause) -> CauseSighting:
+    return CauseSighting(UserId(user), cause, NOW, False, provider=PROVIDER)
 
 
 class Heartbeat:
@@ -153,7 +169,7 @@ def test_hints_come_from_failures_of_users_who_may_sign_in() -> None:
 
     def sightings(since: datetime) -> list[CauseSighting]:
         asked.append(since)
-        return [CauseSighting(UserId(f"user-{n}"), Cause.API_DISABLED, NOW, False) for n in (0, 2)]
+        return [failure(f"user-{n}", Cause.API_DISABLED) for n in (0, 2)]
 
     lone = GetInstallationHealth(
         users,
@@ -161,11 +177,12 @@ def test_hints_come_from_failures_of_users_who_may_sign_in() -> None:
         Heartbeat(TICKING),
         Clock(),
         sightings,
+        GUIDES,
     ).execute()
     users.add(User(UserId("user-3"), "u3@example.test", Role.USER, UserState.ACTIVE, NOW), "hash")
 
     def shared(since: datetime) -> list[CauseSighting]:
-        return [*sightings(since), CauseSighting(UserId("user-3"), Cause.API_DISABLED, NOW, False)]
+        return [*sightings(since), failure("user-3", Cause.API_DISABLED)]
 
     health = GetInstallationHealth(
         users,
@@ -173,6 +190,7 @@ def test_hints_come_from_failures_of_users_who_may_sign_in() -> None:
         Heartbeat(TICKING),
         Clock(),
         shared,
+        GUIDES,
     ).execute()
 
     # A disabled User's rules do not run, so only the active User's failure counts.
@@ -193,7 +211,7 @@ def test_a_hint_needs_attention_whatever_the_verdicts() -> None:
     users = _users(("a", UserState.ACTIVE))
 
     def quota(_since: datetime) -> list[CauseSighting]:
-        return [CauseSighting(UserId("user-0"), Cause.QUOTA_EXCEEDED, NOW, False)]
+        return [failure("user-0", Cause.QUOTA_EXCEEDED)]
 
     health = GetInstallationHealth(
         users,
@@ -201,6 +219,7 @@ def test_a_hint_needs_attention_whatever_the_verdicts() -> None:
         Heartbeat(TICKING),
         Clock(),
         quota,
+        GUIDES,
     ).execute()
 
     assert health.status is StatusVerdict.WAITING

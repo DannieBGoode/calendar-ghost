@@ -7,7 +7,7 @@ import rulesSource from "../features/rules.tsx?raw"
 import activitySource from "../features/activity.tsx?raw"
 import settingsAccountRowSource from "../features/settings-account-row.tsx?raw"
 import settingsAccountsSource from "../features/settings-accounts.tsx?raw"
-import settingsGoogleReturnSource from "../features/settings-google-return.tsx?raw"
+import settingsOAuthReturnSource from "../features/settings-oauth-return.tsx?raw"
 import settingsStorageSource from "../features/settings-storage.tsx?raw"
 import settingsPageSource from "../features/settings.tsx?raw"
 
@@ -17,7 +17,7 @@ const settingsSource = [
   settingsAccountsSource,
   settingsAccountRowSource,
   settingsStorageSource,
-  settingsGoogleReturnSource,
+  settingsOAuthReturnSource,
 ].join("\n")
 
 const stylesheet = readFileSync(new URL("../index.css", import.meta.url), "utf8")

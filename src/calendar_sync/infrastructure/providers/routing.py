@@ -13,6 +13,7 @@ from threading import Lock
 from typing import Protocol
 
 from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
     AuthorizationNotConfigured,
     ConnectedAccountNotFound,
     ProviderFailure,
@@ -26,6 +27,7 @@ from calendar_sync.application.ports import (
     DiscoveredCalendar,
     ProviderChangeSet,
 )
+from calendar_sync.application.provider_descriptors import ProviderDirectory
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import (
     CalendarEndpoint,
@@ -62,24 +64,38 @@ class _KnownKinds:
         return found
 
 
-def _not_configured(kind: ProviderKind) -> str:
-    return f"{kind.calendar_name} is not configured on this installation"
+def _not_configured(label: str | None) -> str:
+    return f"{label or 'The calendar provider'} is not configured on this installation"
 
 
 class RoutingCalendarProvider:
     """Every calendar role, answered by the adapter of each request's Connected Account."""
 
     def __init__(
-        self, kinds: ProviderKinds, adapters: Mapping[ProviderKind, CalendarProvider]
+        self,
+        kinds: ProviderKinds,
+        adapters: Mapping[ProviderKind, CalendarProvider],
+        labels: Mapping[ProviderKind, str] | None = None,
     ) -> None:
         self._kinds = _KnownKinds(kinds)
         self._adapters = dict(adapters)
+        # How messages name each provider, even one this installation has not configured.
+        self._labels = dict(labels or {})
+
+    @classmethod
+    def of(cls, kinds: ProviderKinds, providers: ProviderDirectory) -> RoutingCalendarProvider:
+        """A router to the calendar adapter each provider's descriptor offers."""
+        return cls(
+            kinds,
+            {d.kind: d.provider for d in providers.descriptors if d.provider is not None},
+            {guide.kind: guide.calendar_name for guide in providers.guides},
+        )
 
     def _for(self, calendar: CalendarEndpoint) -> CalendarProvider:
         account = calendar.connected_account_id
         kind = self._kinds.of(account)
         if kind is None:
-            # As the Google adapter reported an account it could not find: the rule stops.
+            # As an adapter reports an account it cannot find: the rule stops.
             raise ProviderFailure(
                 ProviderFailureKind.PERMANENT,
                 f"connected account {account.value} does not exist",
@@ -87,11 +103,13 @@ class RoutingCalendarProvider:
             )
         adapter = self._adapters.get(kind)
         if adapter is None:
+            label = self._labels.get(kind)
             raise ProviderFailure(
                 ProviderFailureKind.PERMANENT,
-                _not_configured(kind),
+                _not_configured(label),
                 account_id=account,
                 provider=kind,
+                provider_label=label,
             )
         return adapter
 
@@ -197,10 +215,23 @@ class RoutingAccountCalendars:
     """Calendar discovery and access checks, answered by each account's provider."""
 
     def __init__(
-        self, kinds: ProviderKinds, adapters: Mapping[ProviderKind, AccountCalendars]
+        self,
+        kinds: ProviderKinds,
+        adapters: Mapping[ProviderKind, AccountCalendars],
+        labels: Mapping[ProviderKind, str] | None = None,
     ) -> None:
         self._kinds = _KnownKinds(kinds)
         self._adapters = dict(adapters)
+        self._labels = dict(labels or {})
+
+    @classmethod
+    def of(cls, kinds: ProviderKinds, providers: ProviderDirectory) -> RoutingAccountCalendars:
+        """A router to the calendar discovery each provider's descriptor offers."""
+        return cls(
+            kinds,
+            {d.kind: d.calendars for d in providers.descriptors if d.calendars is not None},
+            {guide.kind: guide.calendar_name for guide in providers.guides},
+        )
 
     def _for(self, account_id: ConnectedAccountId) -> AccountCalendars:
         kind = self._kinds.of(account_id)
@@ -208,11 +239,15 @@ class RoutingAccountCalendars:
             raise ConnectedAccountNotFound(f"connected account {account_id.value} does not exist")
         adapter = self._adapters.get(kind)
         if adapter is None:
-            raise AuthorizationNotConfigured(_not_configured(kind))
+            raise AuthorizationNotConfigured(_not_configured(self._labels.get(kind)))
         return adapter
 
     def calendars(self, account_id: ConnectedAccountId) -> Sequence[DiscoveredCalendar]:
         return self._for(account_id).calendars(account_id)
 
     def verify_access(self, account_id: ConnectedAccountId) -> AccountAccess:
-        return self._for(account_id).verify_access(account_id)
+        try:
+            return self._for(account_id).verify_access(account_id)
+        except AccountAccessCheckFailed as error:
+            error.provider = self._kinds.of(account_id)
+            raise

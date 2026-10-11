@@ -281,7 +281,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Google Configuration */
+        /**
+         * Google Configuration
+         * @description Whether Google can be connected, and the redirect URI to register with it.
+         */
         get: operations["google_configuration_api_v1_google_configuration_get"];
         put?: never;
         post?: never;
@@ -433,7 +436,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/oauth/google/start": {
+    "/api/v1/oauth/{slug}/start": {
         parameters: {
             query?: never;
             header?: never;
@@ -441,11 +444,11 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Start Google Oauth
-         * @description Start Google's consent for the signed-in User; reauthorizing a known `account` suggests
-         *     its email to Google.
+         * Start Oauth
+         * @description Start the provider's consent for the signed-in User; reauthorizing a known `account`
+         *     suggests its email to the provider.
          */
-        get: operations["start_google_oauth_api_v1_oauth_google_start_get"];
+        get: operations["start_oauth_api_v1_oauth__slug__start_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -482,6 +485,26 @@ export interface paths {
         put?: never;
         /** Check Password Reset */
         post: operations["check_password_reset_api_v1_password_resets_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Providers
+         * @description The calendar providers this installation configured, and how to connect each.
+         */
+        get: operations["list_providers_api_v1_providers_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -947,6 +970,21 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** AccountAccessResponse */
+        AccountAccessResponse: {
+            /** Calendar Api */
+            calendar_api: boolean;
+            /** Calendar List Access */
+            calendar_list_access: boolean;
+            /** Calendars Visible */
+            calendars_visible: number;
+            /** Event Access */
+            event_access: boolean;
+            /** Rules Resumed */
+            rules_resumed: number;
+            /** Writable Calendars */
+            writable_calendars: number;
+        };
         /** ActivityEventResponse */
         ActivityEventResponse: {
             destination: components["schemas"]["EventSnapshotResponse"] | null;
@@ -1201,28 +1239,6 @@ export interface components {
              */
             removed: string[];
         };
-        /** GoogleAccountAccessResponse */
-        GoogleAccountAccessResponse: {
-            /** Calendar Api */
-            calendar_api: boolean;
-            /** Calendar List Access */
-            calendar_list_access: boolean;
-            /** Calendars Visible */
-            calendars_visible: number;
-            /** Event Access */
-            event_access: boolean;
-            /** Rules Resumed */
-            rules_resumed: number;
-            /** Writable Calendars */
-            writable_calendars: number;
-        };
-        /** GoogleConfigurationResponse */
-        GoogleConfigurationResponse: {
-            /** Configured */
-            configured: boolean;
-            /** Redirect Uri */
-            redirect_uri: string | null;
-        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1311,6 +1327,8 @@ export interface components {
              * @enum {string}
              */
             kind: "shared_cause" | "testing_mode" | "unrecognized";
+            /** Provider */
+            provider: string | null;
             /** Users */
             users: number;
         };
@@ -1501,6 +1519,8 @@ export interface components {
             /** Last Tried At */
             last_tried_at: string | null;
             message: components["schemas"]["IncidentMessageResponse"] | null;
+            /** Provider */
+            provider: string | null;
             /** Rule Id */
             rule_id: string | null;
             /** Since */
@@ -1518,6 +1538,31 @@ export interface components {
             provider: string;
             /** Rate Limited */
             rate_limited: number;
+        };
+        /** ProviderConfigurationResponse */
+        ProviderConfigurationResponse: {
+            /** Configured */
+            configured: boolean;
+            /** Redirect Uri */
+            redirect_uri: string | null;
+        };
+        /**
+         * ProviderResponse
+         * @description A calendar provider Users of this installation can connect, and how.
+         */
+        ProviderResponse: {
+            /** Cause Anchors */
+            cause_anchors: {
+                [key: string]: string;
+            };
+            /** Connect Url */
+            connect_url: string;
+            /** Display Name */
+            display_name: string;
+            /** Kind */
+            kind: string;
+            /** Redirect Uri */
+            redirect_uri: string;
         };
         /**
          * RecentChangeResponse
@@ -1824,6 +1869,8 @@ export interface components {
             drift: number;
             /** Failure Kind */
             failure_kind: string | null;
+            /** Failure Provider */
+            failure_provider: string | null;
             /** Full Run */
             full_run: boolean;
             /** Last Succeeded At */
@@ -2440,7 +2487,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GoogleAccountAccessResponse"];
+                    "application/json": components["schemas"]["AccountAccessResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2638,7 +2685,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GoogleConfigurationResponse"];
+                    "application/json": components["schemas"]["ProviderConfigurationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2972,13 +3019,15 @@ export interface operations {
             };
         };
     };
-    start_google_oauth_api_v1_oauth_google_start_get: {
+    start_oauth_api_v1_oauth__slug__start_get: {
         parameters: {
             query?: {
                 account?: string | null;
             };
             header?: never;
-            path?: never;
+            path: {
+                slug: string;
+            };
             cookie?: {
                 calendar_sync_session?: string | null;
             };
@@ -3056,6 +3105,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinkStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_providers_api_v1_providers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                calendar_sync_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderResponse"][];
                 };
             };
             /** @description Validation Error */

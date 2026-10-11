@@ -39,7 +39,7 @@ describe("policy change consequences", () => {
     expect(lines).toContain(
       "37 existing projections in Family will show event titles, descriptions, and locations after the next run, to anyone who can see Family.",
     )
-    expect(lines.at(-1)).toBe("Nothing changes in Google Calendar until the rule is enabled again.")
+    expect(lines.at(-1)).toBe("Nothing changes in your calendars until the rule is enabled again.")
   })
 
   it("explains redaction and all-day exclusion", () => {
@@ -135,6 +135,7 @@ describe("state and outcome labels", () => {
       checked_mappings: 42,
       drift: 0,
       failure_kind: null,
+      failure_provider: null,
       last_succeeded_at: null,
     }
     expect(runOutcomeSummary(i18n, base, "sync")).toBe("Succeeded: 2 created, 1 updated, 0 deleted")
@@ -156,10 +157,16 @@ describe("state and outcome labels", () => {
       "Checked 42 projections: 2 differences found; none were changed. 1 conflict blocked",
     )
     expect(
-      runOutcomeSummary(i18n, { ...base, succeeded: false, failure_kind: "authentication" }, "sync"),
-    ).toBe("Failed: Google authorization expired")
+      runOutcomeSummary(i18n, { ...base, succeeded: false, failure_kind: "authentication", failure_provider: "google" }, "sync"),
+    ).toBe("Failed: Authorization for Google Calendar expired")
     expect(
-      runOutcomeSummary(i18n, { ...base, succeeded: false, failure_kind: "infrastructure" }, "sync"),
+      runOutcomeSummary(i18n, { ...base, succeeded: false, failure_kind: "authorization", failure_provider: "outlook" }, "sync"),
+    ).toBe("Failed: Access to Outlook was denied")
+    expect(runOutcomeSummary(i18n, { ...base, succeeded: false, failure_kind: "temporary" }, "sync")).toBe(
+      "Failed: The calendar provider was temporarily unavailable",
+    )
+    expect(
+      runOutcomeSummary(i18n, { ...base, succeeded: false, failure_kind: "infrastructure", failure_provider: "google" }, "sync"),
     ).toBe("Failed: Local synchronization failed")
   })
 })

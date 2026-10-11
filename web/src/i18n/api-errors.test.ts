@@ -76,6 +76,7 @@ describe("providerName", () => {
   it("names known providers and falls back neutrally", () => {
     expect(providerName(i18n, "google")).toBe("Google Calendar")
     expect(providerName(i18n, null)).toBe("the calendar provider")
-    expect(providerName(i18n, "outlook")).toBe("the calendar provider")
+    expect(providerName(i18n, "outlook")).toBe("Outlook")
+    expect(providerName(i18n, "a-later-provider")).toBe("the calendar provider")
   })
 })

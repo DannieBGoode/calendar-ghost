@@ -373,6 +373,8 @@ class RuleRunOutcome:
     failure_cause: Cause | None = None
     """Why a failed run failed (ADR 0031); None for a success. A failure recorded without one
     reads as unknown."""
+    failure_provider: ProviderKind | None = None
+    """The provider whose answer gave the Cause, so hints can name it; None without a Cause."""
     # When the most recent successful run of this kind completed. The repository keeps it across
     # later failures, so a failed run never erases evidence that calendars were once current.
     last_succeeded_at: datetime | None = None
@@ -406,7 +408,7 @@ class RulePreviewRepository(Protocol):
 
 
 class CalendarNameRepository(Protocol):
-    """The name each calendar last had in Google, so a rule is named before Google answers."""
+    """The name each calendar last had in its provider, so a rule is named before it answers."""
 
     def remember(
         self, account_id: ConnectedAccountId, calendars: Sequence[DiscoveredCalendar]
@@ -575,6 +577,8 @@ class CauseSighting:
     authorized_for: timedelta | None = None
     """For a lapsed account's open Incident, how long after the account was last authorized it
     lapsed; None otherwise."""
+    provider: ProviderKind | None = field(default=None, kw_only=True)
+    """The provider that answered, as recorded with the failure; None when it is not known."""
 
 
 class InstallationUnitOfWork(Protocol):
@@ -824,6 +828,8 @@ class IncidentSummary:
     cause: Cause | None = None
     """Why the provider failure behind it happened (ADR 0031); unknown when that was not recorded,
     and None for an Incident no provider failure opened, such as events still blocked."""
+    provider: ProviderKind | None = None
+    """The provider whose failure opened it, when that was recorded."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -842,6 +848,8 @@ class IncidentReport:
     """The summary as a code and parameters; the English `summary` stays for email and logs."""
     cause: Cause | None = None
     """Why the provider failure behind it happened, when one did (ADR 0031)."""
+    provider: ProviderKind | None = None
+    """The provider whose failure it reports, when one did."""
 
 
 class IncidentResolution(StrEnum):
@@ -977,9 +985,18 @@ class CalendarAccess(StrEnum):
 class DiscoveredCalendar:
     id: str
     summary: str
+    """How the calendar is labelled when it is listed: its name, or what its provider shows for a
+    calendar without one."""
     access: CalendarAccess
     """What this Connected Account may do with it, in provider-neutral terms."""
     primary: bool
+    named: bool = field(default=True, kw_only=True)
+    """Whether the provider gave it a name of its own, so its summary may name its rules."""
+
+    @property
+    def name(self) -> str:
+        """The name rules show for it; empty when its provider gave it none."""
+        return self.summary if self.named else ""
 
     @property
     def writable(self) -> bool:

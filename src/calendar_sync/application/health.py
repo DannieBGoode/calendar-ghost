@@ -92,6 +92,7 @@ class RuleHealthPolicy:
             account_id=failure.account_id,
             message=_failure_message("provider_failure", failure),
             cause=failure.provider_cause,
+            provider=failure.provider,
         )
 
     def after_full_pass(self, rule_id: SyncRuleId, persisting: int) -> IncidentReport | None:
@@ -117,6 +118,7 @@ class RuleHealthPolicy:
             account_id=failure.account_id,
             message=_failure_message("removal_stopped", failure),
             cause=failure.provider_cause,
+            provider=failure.provider,
         )
 
 

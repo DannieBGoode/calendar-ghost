@@ -177,7 +177,7 @@ class SyncRuleSummary:
     running: RuleWork | None
     """What runs for the rule in this process now, so a reloaded page can show it again."""
     names: Mapping[CalendarEndpoint, str] = field(default_factory=dict)
-    """The last name Google gave each of the rule's calendars, when one was recorded."""
+    """The last name the provider gave each of the rule's calendars, when one was recorded."""
 
 
 @dataclass(slots=True)
@@ -212,7 +212,7 @@ class SyncRuleDetails:
     latest_preview: RulePreviewSummary | None = None
     running: RuleWork | None = None
     names: Mapping[CalendarEndpoint, str] = field(default_factory=dict)
-    """The last name Google gave each of the rule's calendars, when one was recorded."""
+    """The last name the provider gave each of the rule's calendars, when one was recorded."""
 
 
 @dataclass(slots=True)

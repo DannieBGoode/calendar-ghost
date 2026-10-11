@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from calendar_sync.application.errors import ProviderFailureKind
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.infrastructure.persistence import sqlite as sqlite_persistence
 from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.persistence.connections import open_connection, transaction
@@ -214,18 +215,18 @@ def test_an_orphaned_failure_count_from_an_earlier_release_is_left_alone(tmp_pat
 def test_an_adapter_write_that_fails_releases_the_database(tmp_path: Path) -> None:
     database = _database(tmp_path)
     states = SqliteAuthorizationStates(database)
-    states.store("state-1", USER)
+    states.store("state-1", USER, ProviderKind.GOOGLE)
 
     with pytest.raises(sqlite3.IntegrityError) as failure:
-        states.store("state-1", USER)
+        states.store("state-1", USER, ProviderKind.GOOGLE)
 
     # The traceback keeps the failed call's frames alive, so a connection it left open, with its
     # write lock, would still be held here; a writer that does not wait proves it was released.
     assert failure.value is not None
     with closing(open_connection(database, timeout=0)) as writer, writer:
         writer.execute("DELETE FROM oauth_states")
-    states.store("state-2", USER)
-    assert states.consume("state-2")
+    states.store("state-2", USER, ProviderKind.GOOGLE)
+    assert states.consume("state-2", ProviderKind.GOOGLE)
 
 
 class _Text:

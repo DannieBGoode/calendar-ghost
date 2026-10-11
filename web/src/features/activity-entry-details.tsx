@@ -299,7 +299,7 @@ function EventFacts({ label, snapshot }: { label: string; snapshot: EventSnapsho
         )}
         {snapshot.web_link && (
           <a href={snapshot.web_link} target="_blank" rel="noreferrer" className="activity-link">
-            {t("activity.lookup.openInGoogle")} <ExternalLink aria-hidden="true" />
+            {t("activity.lookup.openInCalendar")} <ExternalLink aria-hidden="true" />
           </a>
         )}
       </dd>

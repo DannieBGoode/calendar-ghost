@@ -87,8 +87,8 @@ describe("Settings tab URLs", () => {
     expect(defaultSettingsTab("?unrelated=1")).toBe("account")
   })
 
-  it.each(["?google=connected&account=acct-a&resumed=0", "?google=authorization_failed", "?account=acct-a", "?resumed=2"])(
-    "shows Connections when Google returns or an account is named (%s)",
+  it.each(["?oauth=connected&provider=google&account=acct-a&resumed=0", "?oauth=authorization_failed", "?account=acct-a", "?resumed=2"])(
+    "shows Connections when a provider returns or an account is named (%s)",
     (search) => {
       expect(defaultSettingsTab(search)).toBe("connections")
     },
@@ -96,7 +96,7 @@ describe("Settings tab URLs", () => {
 
   it("resolves the tab Settings opens at from the whole address", () => {
     expect(appLocationFromUrl("/settings", "")).toEqual({ view: "settings", ruleId: null, settingsTab: "account" })
-    expect(appLocationFromUrl("/settings", "?google=connected")).toEqual({
+    expect(appLocationFromUrl("/settings", "?oauth=connected")).toEqual({
       view: "settings",
       ruleId: null,
       settingsTab: "connections",
@@ -105,7 +105,7 @@ describe("Settings tab URLs", () => {
     expect(appLocationFromUrl("/rules", "?account=a")).toEqual({ view: "rules", ruleId: null })
   })
 
-  it("links Google accounts to Connections", () => {
+  it("links calendar accounts to Connections", () => {
     expect(connectionsPath()).toBe("/settings/connections")
     expect(connectionsPath(accountSearch("acct a"))).toBe("/settings/connections?account=acct%20a")
   })

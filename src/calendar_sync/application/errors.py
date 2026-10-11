@@ -80,6 +80,9 @@ class ProviderFailure(ApplicationError):
     """Why the provider refused, from its reason code, so its owner can be told (ADR 0031); set
     only from a provider's answer, so a failure an adapter or Calendar Ghost raises itself has
     none."""
+    provider_label: str | None = None
+    """How English messages name the provider's calendar service, from its descriptor; the
+    adapter that names `provider` sets it (ADR 0022)."""
 
     @property
     def provider_cause(self) -> Cause | None:
@@ -97,8 +100,8 @@ class ProviderFailure(ApplicationError):
 
     @property
     def provider_name(self) -> str:
-        """How messages name the failed provider: "Google Calendar", or a neutral phrase."""
-        return self.provider.calendar_name if self.provider else "the calendar provider"
+        """How messages name the failed provider: its calendar service, or a neutral phrase."""
+        return self.provider_label or "the calendar provider"
 
     @property
     def summary(self) -> str:
@@ -115,8 +118,22 @@ class ProviderFailure(ApplicationError):
 class ProjectionOwnershipMismatch(ProviderFailure):
     """A destination event exists, but its Managed Origin metadata does not prove ownership."""
 
-    def __init__(self, detail: str, *, provider: ProviderKind | None = None) -> None:
-        super().__init__(ProviderFailureKind.PERMANENT, detail, provider=provider)
+    def __init__(
+        self,
+        detail: str,
+        *,
+        provider: ProviderKind | None = None,
+        provider_label: str | None = None,
+    ) -> None:
+        super().__init__(
+            ProviderFailureKind.PERMANENT, detail, provider=provider, provider_label=provider_label
+        )
+
+
+class UnsupportedProjection(ApplicationError):
+    """The destination's provider cannot hold this projection exactly, such as a recurrence it
+    cannot repeat or an occurrence it cannot restore. It is never approximated: the run blocks
+    that one event as a Conflict and keeps synchronizing the rest (ADR 0032)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -230,12 +247,15 @@ class AccountAccessCheckFailed(ApplicationError):
         detail: str,
         kind: ProviderFailureKind = ProviderFailureKind.PERMANENT,
         cause: Cause | None = None,
+        provider: ProviderKind | None = None,
     ) -> None:
         super().__init__(detail)
         self.kind = kind
         """How the provider refused, so an authorization refusal can lapse the account."""
         self.cause = cause
         """Why the provider refused, so the lapse it records says who fixes it (ADR 0031)."""
+        self.provider = provider
+        """Which provider refused, so a message can name it; the router sets it."""
 
 
 class ActivityEventNotFound(ApplicationError):

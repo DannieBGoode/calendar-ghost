@@ -205,6 +205,11 @@ class SyncRunContext:
             self.blocked.add(source)
         self._report_progress()
 
+    def recount(self, counted: SyncAction, action: SyncAction, source: EventRef) -> None:
+        """Count a decision as `action` instead of the `counted` one its write could not make."""
+        self.counts[counted] -= 1
+        self.count(action, source)
+
     def expect(self, items: int) -> None:
         """Add `items` the run will handle to its reported total, before handling any of them."""
         if self.work is not None:
@@ -288,7 +293,7 @@ def _observe(run: SyncRunContext, event: CalendarEvent, at: datetime) -> SourceC
     if previous is not None and previous.revision == current.revision:
         return None
     if previous is not None:
-        # A list Google did not return in full keeps the last complete one, so a guest removed
+        # A list the provider did not return in full keeps the last complete one, so a guest removed
         # before the next complete list is still reported.
         current = replace(
             current,

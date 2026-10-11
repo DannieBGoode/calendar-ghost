@@ -26,7 +26,8 @@ from calendar_sync.application.errors import (
     InvalidAuthorizationState,
 )
 from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
-from calendar_sync.application.ports import AccountAuthorization, CalendarAccess
+from calendar_sync.application.ports import AccountCalendars, CalendarAccess
+from calendar_sync.application.provider_descriptors import ProviderDescriptor, ProviderDirectory
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.interfaces.api.dependencies import (
@@ -38,24 +39,20 @@ from calendar_sync.interfaces.api.dependencies import (
 )
 from calendar_sync.interfaces.api.problems import problem, problem_from
 from calendar_sync.interfaces.api.schemas import (
+    AccountAccessResponse,
     ConnectedAccountResponse,
     DiscoveredCalendarResponse,
-    GoogleAccountAccessResponse,
-    GoogleConfigurationResponse,
+    ProviderResponse,
 )
 
 MANAGE_ACCOUNTS = "configure the installation master key before managing accounts"
 ACCOUNT_MANAGEMENT_UNAVAILABLE = "account_management_unavailable"
 PROVIDER_NOT_CONFIGURED = "provider_not_configured"
-# Where Google returns the browser: Settings, at the tab that lists Google accounts.
+# Where a provider returns the browser: Settings, at the tab that lists Connected Accounts.
 CONNECTIONS = "/settings/connections"
-
-
-class GoogleConnection(Protocol):
-    @property
-    def configured(self) -> bool: ...
-    @property
-    def redirect_uri(self) -> str | None: ...
+# OAuth errors that mean the person, or their organization, did not grant what was asked, rather
+# than that the flow failed: RFC 6749 section 4.1.2.1 and OpenID Connect Core section 3.1.2.6.
+REFUSED = frozenset({"access_denied", "consent_required"})
 
 
 class AccountServices(Protocol):
@@ -76,12 +73,15 @@ class AccountServices(Protocol):
 
 
 class AuthorizationServices(Protocol):
-    """The installation's provider connection, and each User's account use cases."""
+    """The installation's calendar providers, and each User's account use cases."""
 
     @property
-    def google(self) -> GoogleConnection: ...
+    def providers(self) -> ProviderDirectory: ...
     @property
-    def authorization(self) -> AccountAuthorization | None: ...
+    def account_calendars(self) -> AccountCalendars | None:
+        """Present only with the installation master key, without which no account is stored."""
+        ...
+
     def for_user(self, user_id: UserId) -> AccountServices: ...
 
 
@@ -93,29 +93,61 @@ router = APIRouter()
 
 
 @router.get(
-    "/api/v1/google/configuration",
-    response_model=GoogleConfigurationResponse,
+    "/api/v1/providers",
+    response_model=list[ProviderResponse],
     dependencies=[Depends(current_user)],
 )
-def google_configuration(services: Installation) -> GoogleConfigurationResponse:
-    return GoogleConfigurationResponse(
-        configured=services.google.configured, redirect_uri=services.google.redirect_uri
-    )
+def list_providers(installation: Installation) -> list[ProviderResponse]:
+    """The calendar providers this installation configured, and how to connect each."""
+    return [
+        ProviderResponse(
+            kind=descriptor.kind.value,
+            display_name=descriptor.guide.display_name,
+            connect_url=start_url(descriptor),
+            redirect_uri=descriptor.connection.redirect_uri,
+            cause_anchors={
+                cause.value: anchor for cause, anchor in descriptor.guide.cause_anchors.items()
+            },
+        )
+        for descriptor in installation.providers.connectable
+        if descriptor.connection is not None
+    ]
 
 
-@router.get("/api/v1/oauth/google/start")
-def start_google_oauth(
-    installation: Installation, user: SignedIn, account: str | None = None
+def start_url(descriptor: ProviderDescriptor) -> str:
+    return f"/api/v1/oauth/{descriptor.guide.slug}/start"
+
+
+def _provider(installation: AuthorizationServices, slug: str) -> ProviderDescriptor:
+    descriptor = installation.providers.at(slug)
+    if descriptor is None:
+        raise problem(
+            status.HTTP_404_NOT_FOUND,
+            "provider_not_found",
+            "no calendar provider connects through this address",
+        )
+    return descriptor
+
+
+@router.get("/api/v1/oauth/{slug}/start")
+def start_oauth(
+    slug: str, installation: Installation, user: SignedIn, account: str | None = None
 ) -> RedirectResponse:
-    """Start Google's consent for the signed-in User; reauthorizing a known `account` suggests
-    its email to Google."""
-    authorization = available(
-        installation.authorization,
+    """Start the provider's consent for the signed-in User; reauthorizing a known `account`
+    suggests its email to the provider."""
+    descriptor = _provider(installation, slug)
+    available(
+        installation.account_calendars,
         ACCOUNT_MANAGEMENT_UNAVAILABLE,
-        "configure the installation master key before connecting Google",
+        "configure the installation master key before connecting an account",
+    )
+    connection = available(
+        descriptor.connection,
+        "authorization_not_configured",
+        f"configure the {descriptor.guide.display_name} OAuth client before connecting",
     )
     try:
-        url = authorization.authorization_url(
+        url = connection.authorization.authorization_url(
             user, _account_email(installation.for_user(user), account)
         )
         return RedirectResponse(url, status_code=302)
@@ -123,61 +155,73 @@ def start_google_oauth(
         raise problem_from(status.HTTP_503_SERVICE_UNAVAILABLE, error) from error
 
 
-@router.get("/api/v1/oauth/google/callback", include_in_schema=False)
-def complete_google_oauth(
+@router.get("/api/v1/oauth/{slug}/callback", include_in_schema=False)
+def complete_oauth(
+    slug: str,
     installation: Installation,
     browser: Browser,
     state: str,
     code: str | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
-    """Google returns the browser here. Its session cookie comes along, since the redirect is a
-    top-level navigation, and only the User who began the flow may complete it: a consent link
-    sent to someone else connects nothing."""
-    authorization = available(
-        installation.authorization,
+    """The provider returns the browser here. Its session cookie comes along, since the redirect
+    is a top-level navigation, and only the User who began the flow may complete it: a consent
+    link sent to someone else connects nothing."""
+    descriptor = _provider(installation, slug)
+    connection = available(
+        descriptor.connection,
         "authorization_not_configured",
-        "Google OAuth is not configured",
+        f"{descriptor.guide.display_name} OAuth is not configured",
     )
+    authorization = connection.authorization
+    returned = _ReturnTo(descriptor.kind.value)
     if browser is None:
-        return RedirectResponse(f"{CONNECTIONS}?google=authorization_failed", status_code=303)
+        return returned.outcome("authorization_failed")
     if error is not None:
         try:
             authorization.cancel(state)
         except InvalidAuthorizationState as state_error:
             raise problem_from(status.HTTP_400_BAD_REQUEST, state_error) from state_error
-        outcome = (
-            "calendar_permission_required" if error == "access_denied" else "authorization_failed"
+        refused = error in REFUSED
+        return returned.outcome(
+            "calendar_permission_required" if refused else "authorization_failed"
         )
-        return RedirectResponse(f"{CONNECTIONS}?google={outcome}", status_code=303)
     if code is None:
         raise problem(
             status.HTTP_400_BAD_REQUEST,
             "oauth_result_missing",
-            "Google OAuth callback did not include an authorization result",
+            "the OAuth callback did not include an authorization result",
         )
     try:
         authorized = authorization.complete(state, code, browser)
     except InvalidAuthorizationState as state_error:
         raise problem_from(status.HTTP_400_BAD_REQUEST, state_error) from state_error
     except CalendarPermissionRequired:
-        return RedirectResponse(
-            f"{CONNECTIONS}?google=calendar_permission_required", status_code=303
-        )
+        return returned.outcome("calendar_permission_required")
     except AuthorizationFailed:
-        return RedirectResponse(f"{CONNECTIONS}?google=authorization_failed", status_code=303)
+        return returned.outcome("authorization_failed")
     # The User who began the flow finished it; the account and its rules are theirs.
     account = authorized.account
     lapses = installation.for_user(authorized.owner).lapsed_authorizations
-    # Google accepted the account when its new credentials were saved.
+    # The provider accepted the account when its new credentials were saved.
     accepted_at = datetime.fromisoformat(account.authorized_at or datetime.now(UTC).isoformat())
     resumed = lapses.restored(account.id, accepted_at=accepted_at) if lapses is not None else 0
-    query = urlencode({"google": "connected", "account": account.id.value, "resumed": resumed})
-    return RedirectResponse(f"{CONNECTIONS}?{query}", status_code=303)
+    return returned.outcome("connected", account=account.id.value, resumed=resumed)
+
+
+class _ReturnTo:
+    """Settings, told how a provider's connection flow ended."""
+
+    def __init__(self, provider: str) -> None:
+        self._provider = provider
+
+    def outcome(self, outcome: str, **details: str | int) -> RedirectResponse:
+        query = urlencode({"oauth": outcome, "provider": self._provider, **details})
+        return RedirectResponse(f"{CONNECTIONS}?{query}", status_code=303)
 
 
 def _account_email(services: AccountServices, account_id: str | None) -> str | None:
-    """The email of the account being reauthorized, so Google can offer it first."""
+    """The email of the account being reauthorized, so the provider can offer it first."""
     if account_id is None or services.list_connected_accounts is None:
         return None
     return next(
@@ -273,10 +317,10 @@ _LEGACY_ACCESS_ROLES: dict[CalendarAccess, str] = {
 
 @router.post(
     "/api/v1/accounts/{account_id}/verify",
-    response_model=GoogleAccountAccessResponse,
+    response_model=AccountAccessResponse,
     dependencies=[Depends(current_user)],
 )
-def verify_account_access(account_id: str, services: Services) -> GoogleAccountAccessResponse:
+def verify_account_access(account_id: str, services: Services) -> AccountAccessResponse:
     check = available(
         services.check_account_access, PROVIDER_NOT_CONFIGURED, "no calendar provider is configured"
     )
@@ -290,7 +334,7 @@ def verify_account_access(account_id: str, services: Services) -> GoogleAccountA
         raise problem_from(status.HTTP_424_FAILED_DEPENDENCY, error) from error
     except AuthorizationNotConfigured as error:
         raise problem_from(status.HTTP_503_SERVICE_UNAVAILABLE, error) from error
-    return GoogleAccountAccessResponse(
+    return AccountAccessResponse(
         calendar_api=True,
         calendar_list_access=True,
         event_access=True,

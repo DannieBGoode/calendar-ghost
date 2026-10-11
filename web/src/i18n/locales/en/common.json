@@ -32,8 +32,8 @@
     "network": "The browser could not reach Calendar Ghost.",
     "unreadableResponse": "The service returned an unreadable response.",
     "account_access_check_failed": "Calendar Ghost could not check this account's calendars. Try again shortly.",
-    "account_access_check_failed_authentication": "Google no longer accepts this account. Reauthorize it to restart the rules that use it.",
-    "account_access_check_failed_authorization": "Google denied this account's calendar access. Reauthorize it, and confirm the Calendar API is enabled for your Google Cloud project.",
+    "account_access_check_failed_authentication": "{Provider} no longer accepts this account. Reauthorize it to restart the rules that use it.",
+    "account_access_check_failed_authorization": "{Provider} denied this account's calendar access. Reauthorize it and allow calendar access when asked.",
     "account_disconnected": "This account is disconnected. Reauthorize it in Settings first.",
     "account_management_unavailable": "Managing accounts needs the installation master key to be configured.",
     "account_must_be_disconnected": "Disconnect this account before you delete it permanently.",
@@ -42,7 +42,7 @@
     "activity_entry_not_found": "This Activity entry no longer exists. It may have been cleared.",
     "activity_rule_removed": "This entry's rule was removed, so its events cannot be looked up.",
     "administrator_required": "Only an administrator of this Calendar Ghost can do that.",
-    "authorization_failed": "Google did not authorize the account. Try connecting it again.",
+    "authorization_failed": "The provider did not authorize the account. Try connecting it again.",
     "authorization_not_configured": "This calendar provider is not configured on this installation.",
     "bad_request": "The request could not be completed.",
     "conflict": "That change conflicts with the current state. Reload and try again.",
@@ -79,11 +79,12 @@
     "method_not_allowed": "This page is out of date. Reload it and try again.",
     "not_a_calendar_change": "The calendars are unchanged. To change what the rule does, edit its settings instead.",
     "not_found": "That item no longer exists. Reload to see the current state.",
-    "oauth_result_missing": "Google did not return a sign-in result. Try connecting the account again.",
+    "oauth_result_missing": "The provider did not return a sign-in result. Try connecting the account again.",
     "only_me_needs_one_user": "Only Me works only while you are the only person here. Delete the other people first.",
     "password_policy": "Choose a password of at least 12 characters.",
     "provider_failed": "{Provider} reported a problem. Try again shortly.",
     "provider_not_configured": "No calendar provider is configured on this installation.",
+    "provider_not_found": "No calendar provider connects through this address.",
     "registration_closed": "Nobody can join while this Calendar Ghost is set to Only Me. Choose Invitation Only first.",
     "removal_interrupted": "Removal stopped after {processed} of {total} projections because {provider} reported a problem. Retry to continue.",
     "removal_requires_authorization": "Reauthorize the destination account before deleting projections, or keep them as detached events.",
@@ -109,8 +110,36 @@
   },
   "provider": {
     "google": "Google Calendar",
+    "outlook": "Outlook",
     "unknown": "the calendar provider",
     "unknownStart": "The calendar provider"
+  },
+  "providerName": {
+    "google": "Google",
+    "outlook": "Microsoft",
+    "unknown": "the calendar provider",
+    "unknownStart": "The calendar provider"
+  },
+  "providerAccount": {
+    "google": "Google account",
+    "outlook": "Microsoft account",
+    "named": "{name} account",
+    "unknown": "calendar account"
+  },
+  "providerApi": {
+    "google": "the Google Calendar API",
+    "outlook": "Microsoft Graph",
+    "unknown": "the calendar provider's API"
+  },
+  "providerConsole": {
+    "google": "Google Cloud",
+    "outlook": "the Microsoft Entra admin center",
+    "unknown": "the calendar provider's developer console"
+  },
+  "providerStatus": {
+    "google": "the Google Workspace Status Dashboard",
+    "outlook": "the Microsoft 365 service status page",
+    "unknown": "the calendar provider's status page"
   },
   "incident": {
     "failure": {
@@ -126,7 +155,7 @@
       "other": "{count} events could not be synced and were still blocked at the daily check."
     },
     "removalStopped": "Rule Removal stopped: {reason}",
-    "authorizationLapsed": "A {provider} account needs reauthorization"
+    "authorizationLapsed": "A {account} needs reauthorization"
   },
   "opensInNewTab": " (opens in a new tab)"
 }

@@ -227,7 +227,7 @@ function SourceFieldset({ accounts, account, calendar, calendars, onAccountChang
     <fieldset>
       <legend>{t("rules.builder.sourceLegend")}</legend>
       <div className="field-stack">
-        <Label id="source-account-label" htmlFor="source-account">{t("rules.builder.googleAccount")}</Label>
+        <Label id="source-account-label" htmlFor="source-account">{t("rules.builder.account")}</Label>
         <AccountSelect
           id="source-account"
           labelId="source-account-label"
@@ -270,7 +270,7 @@ function DestinationFieldset({
     <fieldset>
       <legend>{t("rules.builder.destinationLegend")}</legend>
       <div className="field-stack">
-        <Label id="destination-account-label" htmlFor="destination-account">{t("rules.builder.googleAccount")}</Label>
+        <Label id="destination-account-label" htmlFor="destination-account">{t("rules.builder.account")}</Label>
         <AccountSelect
           id="destination-account"
           labelId="destination-account-label"

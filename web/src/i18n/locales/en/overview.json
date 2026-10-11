@@ -33,23 +33,23 @@
     "chooseAnotherCalendar": "Choose another calendar, or remove the rule.",
     "administratorCause": {
       "title": "Temporarily unavailable",
-      "detail": "Google Calendar is not available to Calendar Ghost right now. To try again, choose Check access on your Google account in Settings. Events already synced stay where they are.",
+      "detail": "{Calendar} is not available to Calendar Ghost right now. To try again, choose Check access on your {account} in Settings. Events already synced stay where they are.",
       "administratorTitle": "You fix this as the administrator",
-      "administratorDetail": "{cause} People shows how to fix it in Google Cloud.",
-      "administratorWaiting": "{cause} You fix this as the administrator, in Google Cloud; Calendar Ghost tries again by itself."
+      "administratorDetail": "{cause} People shows how to fix it in {console}.",
+      "administratorWaiting": "{cause} You fix this as the administrator, in {console}; Calendar Ghost tries again by itself."
     },
     "setup": {
       "title": "Set up your first synchronization",
-      "detail": "The service is running and waiting for a Google account."
+      "detail": "The service is running and waiting for a calendar account."
     },
     "reauthorizeSetup": {
-      "title": "Reauthorize your Google account",
+      "title": "Reauthorize your calendar account",
       "detail": "Access was removed or expired. Renew it in Settings before creating or running rules."
     },
     "stoppedHeadline": { "one": "A rule stopped syncing", "other": "{count} rules stopped syncing" },
     "disconnectedTitle": {
-      "one": "{count} Google account needs reauthorization",
-      "other": "{count} Google accounts need reauthorization"
+      "one": "{count} calendar account needs reauthorization",
+      "other": "{count} calendar accounts need reauthorization"
     },
     "disconnectedDetail": "Access was removed or expired, so its rules write nothing until you reauthorize. Events already synced stay where they are.",
     "stoppedNamedDetail": "{detail} It writes nothing until it is fixed. Events already synced stay where they are.",
@@ -71,16 +71,16 @@
       "one": "{count} event couldn't be synced",
       "other": "{count} events couldn't be synced"
     },
-    "waitingHeadline": "Waiting for Google",
-    "waitingDetailNamed": "{detail} Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard.",
+    "waitingHeadline": "Waiting for {provider}",
+    "waitingDetailNamed": "{detail} Wait for {provider} to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check {status}.",
     "waitingDetailGeneric": {
-      "one": "Google Calendar is limiting or failing requests for {count} rule. Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard.",
-      "other": "Google Calendar is limiting or failing requests for {count} rules. Wait for Google to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check the Google Workspace Status Dashboard."
+      "one": "{Calendar} is limiting or failing requests for {count} rule. Wait for {provider} to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check {status}.",
+      "other": "{Calendar} is limiting or failing requests for {count} rules. Wait for {provider} to respond: Calendar Ghost retries by itself and catches up afterwards. If it lasts more than a day, check {status}."
     },
-    "ruleWaitingForGoogle": "{name} is waiting for Google",
-    "rulesWaitingForGoogle": {
-      "one": "{count} rule waiting for Google",
-      "other": "{count} rules waiting for Google"
+    "ruleWaitingForProvider": "{name} is waiting for {provider}",
+    "rulesWaitingForProvider": {
+      "one": "{count} rule waiting for {provider}",
+      "other": "{count} rules waiting for {provider}"
     },
     "openIncidentsHeadline": "Something needs a look",
     "openIncidentsDetail": {
@@ -149,19 +149,19 @@
   },
   "onboarding": {
     "title": "Getting started",
-    "intro": "Nothing is written to Google until a rule passes preview and you start it.",
+    "intro": "Nothing is written to your calendars until a rule passes preview and you start it.",
     "stepProgress": "Step {current} of 3",
     "doneSr": "Done: ",
     "steps": {
       "reauthorize": {
-        "title": "Reauthorize your Google account",
+        "title": "Reauthorize your calendar account",
         "body": "Its access was removed or expired. Renew it in Settings before creating a rule."
       },
       "connect": {
-        "title": "Connect a Google account",
-        "body": "Authorize calendar discovery and event access for one Google account.",
-        "action": "Connect Google account",
-        "configurationNote": "Add the master key and Google OAuth credentials in <code>.env</code>, then restart."
+        "title": "Connect a calendar account",
+        "body": "Authorize calendar discovery and event access for one account.",
+        "action": "Connect {account}",
+        "configurationNote": "Add the master key and a calendar provider's OAuth credentials in <code>.env</code>, then restart."
       },
       "createRule": {
         "title": "Create a rule",

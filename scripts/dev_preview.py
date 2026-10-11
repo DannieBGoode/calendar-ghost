@@ -7,10 +7,10 @@ This never touches a real installation:
 - It writes only to its own preview database, ``dev-preview.db`` in the repository root, and marks
   it so it will refuse to reset or seed any database it did not create, including the one
   ``CALENDAR_SYNC_DATABASE_PATH`` names.
-- Settings are built explicitly, never from the environment, so ``.env`` credentials, Google OAuth,
-  the master key, SMTP, webhooks, and the scheduler are never loaded.
-- Google is replaced by a read-only fake that answers event lookups from synthetic data and refuses
-  every write.
+- Settings are built explicitly, never from the environment, so ``.env`` credentials, OAuth
+  clients, the master key, SMTP, webhooks, and the scheduler are never loaded.
+- Google and Microsoft are replaced by a read-only fake that answers event lookups from synthetic
+  data and refuses every write; connecting an account only returns to Settings.
 - It listens on 127.0.0.1 only.
 
 The script lives outside ``src/``, so it is not part of the Python package or the container image.
@@ -56,6 +56,11 @@ from calendar_sync.application.ports import (
     RunKind,
     SchedulerProgress,
 )
+from calendar_sync.application.provider_descriptors import (
+    ProviderConnection,
+    ProviderDescriptor,
+    ProviderDirectory,
+)
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.status import GetInstallationStatus
 from calendar_sync.bootstrap.config import Settings
@@ -85,6 +90,8 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.infrastructure.google.guide import GOOGLE
+from calendar_sync.infrastructure.microsoft.guide import MICROSOFT
 from calendar_sync.infrastructure.persistence.activity_queries import SqliteActivityQueries
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
@@ -95,7 +102,7 @@ PREVIEW_EMAIL = "preview@preview.test"
 # Simple to type, and long enough for the password policy.
 PREVIEW_PASSWORD = "previewpreview"  # noqa: S105
 ROBIN_EMAIL = "robin@example.test"
-"""A second, ordinary User in every scenario but setup: healthy, unless his Google account lapsed
+"""A second, ordinary User in every scenario but setup: healthy, unless one of their accounts lapsed
 for the Cause Sam's did."""
 MARKER_TABLE = "dev_preview_marker"
 
@@ -155,10 +162,11 @@ def reset_preview_database(path: Path) -> None:
         candidate.unlink(missing_ok=True)
 
 
-# Three synthetic Google identities make Sam's different contexts legible: the same fictional
-# person appears in each portrait, while the email domains and styling show Personal, Family, and
-# Work. Local generated portraits keep it deterministic and offline; a real installation uses the
-# profile photo returned by Google instead.
+# Three synthetic identities make Sam's different contexts legible: the same fictional person
+# appears in each portrait, while the email domains and styling show Personal, Family, and Work.
+# Personal and Family are Google accounts and Work is a Microsoft account, so rules between them
+# cross providers. Local generated portraits keep it deterministic and offline; a real installation
+# uses the profile photo its provider returns instead.
 PERSONAL_ACCOUNT = ConnectedAccountId("preview-sam-personal")
 FAMILY_ACCOUNT = ConnectedAccountId("preview-sam-family")
 WORK_ACCOUNT = ConnectedAccountId("preview-sam-work")
@@ -188,7 +196,7 @@ ACCOUNTS = (
         "sam@work.example",
         ConnectedAccountState.CONNECTED,
         avatar_url="/avatars/sam-work.png",
-        provider=ProviderKind.GOOGLE,
+        provider=ProviderKind.OUTLOOK,
     ),
 )
 CALENDARS = {
@@ -234,7 +242,7 @@ EVENTS = {
 
 
 class PreviewCalendar:
-    """Read-only stand-in for Google: event lookups answer from synthetic data."""
+    """Read-only stand-in for both providers: event lookups answer from synthetic data."""
 
     def __init__(self, today: datetime) -> None:
         self.today = today.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -278,9 +286,14 @@ class PreviewAccounts:
         return self.accounts
 
 
-class PreviewGoogle:
+class PreviewProviders:
+    """Calendar discovery for both providers; connecting an account returns to Settings."""
+
     def calendars(self, account_id: ConnectedAccountId) -> list[DiscoveredCalendar]:
         return CALENDARS.get(account_id.value, [])
+
+    def authorization_url(self, *_: object) -> str:
+        return "/settings/connections"
 
     def __getattr__(self, name: str) -> Any:
         def refuse(*_: object, **__: object) -> NoReturn:
@@ -303,13 +316,16 @@ class Scenario(StrEnum):
     """Stopped, waiting, and blocked at once, so the Overview lists every problem."""
     PAUSED = "paused"
     SETUP = "setup"
-    """A new installation: no Google account, rule, or history."""
+    """A new installation: no calendar account, rule, or history."""
     API_DISABLED = "api-disabled"
     """Sam and Robin both lost Google because the Calendar API is off: the administrator's Cause,
     which Installation Health suggests and only Sam, the administrator, can fix."""
     ACCESS_REVOKED = "access-revoked"
     """Sam and Robin both lost Google a week after connecting: each reauthorizes, and Installation
     Health suggests the OAuth app is in Testing mode."""
+    OUTLOOK_CLIENT = "outlook-client"
+    """Sam and Robin both lost their Microsoft accounts because Microsoft no longer accepts the
+    installation's client secret: the administrator's Cause, on the Outlook side."""
 
 
 # Why each scenario's Personal account lapsed (ADR 0031).
@@ -318,9 +334,10 @@ _LAPSE_CAUSES = {
     Scenario.SEVERAL: Cause.ACCESS_REVOKED,
     Scenario.API_DISABLED: Cause.API_DISABLED,
     Scenario.ACCESS_REVOKED: Cause.ACCESS_REVOKED,
+    Scenario.OUTLOOK_CLIENT: Cause.OAUTH_CLIENT_INVALID,
 }
 # The scenarios with Robin, who shares the Cause of Sam's lapse.
-_SHARED = frozenset({Scenario.API_DISABLED, Scenario.ACCESS_REVOKED})
+_SHARED = frozenset({Scenario.API_DISABLED, Scenario.ACCESS_REVOKED, Scenario.OUTLOOK_CLIENT})
 
 
 _EXPIRED = frozenset(_LAPSE_CAUSES)
@@ -329,15 +346,24 @@ _BLOCKED = frozenset({Scenario.REVIEW, Scenario.SEVERAL})
 LIMITED_RULE = SyncRuleId("preview-family-work")
 
 
+def _lapsed_account(scenario: Scenario) -> ConnectedAccountId:
+    """Sam's account whose provider stopped accepting it: Work when the Cause is Microsoft's."""
+    return WORK_ACCOUNT if scenario is Scenario.OUTLOOK_CLIENT else PERSONAL_ACCOUNT
+
+
+def _lapsed_provider(scenario: Scenario) -> ProviderKind:
+    return ProviderKind.OUTLOOK if scenario is Scenario.OUTLOOK_CLIENT else ProviderKind.GOOGLE
+
+
 def _scenario_accounts(scenario: Scenario, now: datetime) -> tuple[ConnectedAccount, ...]:
     if scenario is Scenario.SETUP:
         return ()
     if scenario in _EXPIRED:
-        # Lapsed Authorization: still connected, but Google no longer accepts it (ADR 0027).
+        # Lapsed Authorization: still connected, but its provider no longer accepts it (ADR 0027).
         lapsed_at = (now - timedelta(minutes=60)).isoformat()
         return tuple(
             replace(account, authorization_lapsed_at=lapsed_at)
-            if account.id == PERSONAL_ACCOUNT
+            if account.id == _lapsed_account(scenario)
             else account
             for account in ACCOUNTS
         )
@@ -348,8 +374,9 @@ def _scenario_rules(scenario: Scenario) -> tuple[SyncRule, ...]:
     if scenario is Scenario.PAUSED:
         return tuple(replace(rule, state=SyncRuleState.PAUSED) for rule in PREVIEW_RULES)
     if scenario in _EXPIRED:
+        lapsed = _lapsed_account(scenario)
         return tuple(
-            rule.degrade(awaiting_reauthorization=True) if _uses_personal(rule) else rule
+            rule.degrade(awaiting_reauthorization=True) if _uses(rule, lapsed) else rule
             for rule in PREVIEW_RULES
         )
     return PREVIEW_RULES
@@ -361,11 +388,8 @@ def _enabled_rule_ids(scenario: Scenario) -> frozenset[str]:
     )
 
 
-def _uses_personal(rule: SyncRule) -> bool:
-    return PERSONAL_ACCOUNT in {
-        rule.source.connected_account_id,
-        rule.destination.connected_account_id,
-    }
+def _uses(rule: SyncRule, account: ConnectedAccountId) -> bool:
+    return account in {rule.source.connected_account_id, rule.destination.connected_account_id}
 
 
 def build_preview_container(
@@ -393,10 +417,10 @@ def build_preview_container(
             (adapters.clock.now().isoformat(),),
         )
     moment = now or adapters.clock.now()
-    google = PreviewGoogle()
+    providers = PreviewProviders()
     composed = compose(settings, adapters)
     sams = PreviewAccounts(_scenario_accounts(scenario, moment))
-    robins = PreviewAccounts(_robin_accounts(moment, lapsed=scenario in _SHARED))
+    robins = PreviewAccounts(_robin_accounts(moment, _robin_lapse(scenario)))
 
     def preview_services(user: UserId) -> UserServices:
         services = composed.for_user(user)
@@ -409,7 +433,7 @@ def build_preview_container(
                 adapters.activity(user), units, cast(CalendarProvider, PreviewCalendar(moment))
             ),
             list_connected_accounts=ListConnectedAccounts(units, accounts),
-            discover_calendars=DiscoverCalendars(cast(AccountCalendars, google), units),
+            discover_calendars=DiscoverCalendars(cast(AccountCalendars, providers), units),
             # The preview has no scheduler (no master key is ever configured here); a heartbeat
             # that always reports a recent pass keeps each scenario's own health visible instead
             # of "stalled", which is correct for a real installation with no scheduler at all.
@@ -434,8 +458,28 @@ def build_preview_container(
     )
     container = replace(
         composed,
-        authorization=cast(AccountAuthorization, google),
-        account_calendars=cast(AccountCalendars, google),
+        # Each provider's names and troubleshooting sections, with a flow that refuses to connect.
+        providers=ProviderDirectory(
+            (
+                ProviderDescriptor(
+                    GOOGLE,
+                    configured=True,
+                    connection=ProviderConnection(
+                        cast(AccountAuthorization, providers), settings.google_redirect_uri
+                    ),
+                    calendars=cast(AccountCalendars, providers),
+                ),
+                ProviderDescriptor(
+                    MICROSOFT,
+                    configured=True,
+                    connection=ProviderConnection(
+                        cast(AccountAuthorization, providers), settings.microsoft_redirect_uri
+                    ),
+                    calendars=cast(AccountCalendars, providers),
+                ),
+            )
+        ),
+        account_calendars=cast(AccountCalendars, providers),
         user_services=preview_services,
         installation_health=GetInstallationHealth(
             adapters.users,
@@ -443,6 +487,7 @@ def build_preview_container(
             None,
             preview_clock,
             _failure_causes(adapters),
+            (GOOGLE, MICROSOFT),
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, preview_clock
@@ -455,9 +500,7 @@ def build_preview_container(
         _seed(adapters, path, preview_user(path), moment, scenario)
     # A new installation has only its first User.
     if scenario is not Scenario.SETUP:
-        _seed_robin(
-            adapters, path, moment, _LAPSE_CAUSES[scenario] if scenario in _SHARED else None
-        )
+        _seed_robin(adapters, path, moment, scenario)
     return container
 
 
@@ -493,27 +536,41 @@ ROBIN_CALENDARS = {
         "robin@work.example", "Studio", access=CalendarAccess.OWNER, primary=True
     ),
 }
+# Robin's Personal account is Google's and their Work account is Microsoft's.
+ROBIN_PROVIDERS = {ROBIN_PERSONAL: ProviderKind.GOOGLE, ROBIN_WORK: ProviderKind.OUTLOOK}
 # Robin connected a week before Google stopped accepting the grant, as Testing mode does.
 ROBIN_AUTHORIZED_BEFORE = timedelta(days=7, hours=1)
 
 
-def _robin_accounts(now: datetime, *, lapsed: bool) -> tuple[ConnectedAccount, ...]:
-    lapsed_at = (now - timedelta(minutes=50)).isoformat() if lapsed else None
+def _robin_lapse(scenario: Scenario) -> ConnectedAccountId | None:
+    """Robin's account that lapsed with Sam's, for the same Cause and provider; none otherwise."""
+    if scenario not in _SHARED:
+        return None
+    return ROBIN_WORK if _lapsed_provider(scenario) is ProviderKind.OUTLOOK else ROBIN_PERSONAL
+
+
+def _robin_accounts(
+    now: datetime, lapsed: ConnectedAccountId | None
+) -> tuple[ConnectedAccount, ...]:
+    lapsed_at = (now - timedelta(minutes=50)).isoformat()
     return tuple(
         ConnectedAccount(
             account,
             "Robin Okafor",
             calendar.id,
             ConnectedAccountState.CONNECTED,
-            provider=ProviderKind.GOOGLE,
-            authorization_lapsed_at=lapsed_at if account == ROBIN_PERSONAL else None,
+            provider=ROBIN_PROVIDERS[account],
+            authorization_lapsed_at=lapsed_at if account == lapsed else None,
         )
         for account, calendar in ROBIN_CALENDARS.items()
     )
 
 
-def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause | None) -> None:
-    """Robin, an ordinary User, whose Personal account lapsed for `cause` when there is one."""
+def _seed_robin(adapters: Adapters, path: Path, now: datetime, scenario: Scenario) -> None:
+    """Robin, an ordinary User, whose account lapsed for the Cause Sam's did, if they share one."""
+    lapsed = _robin_lapse(scenario)
+    cause = _LAPSE_CAUSES[scenario] if lapsed else None
+    provider = _lapsed_provider(scenario)
     adapters.users.add(
         User(ROBIN, ROBIN_EMAIL, Role.USER, UserState.ACTIVE, now - timedelta(days=20)),
         adapters.passwords.hash(PREVIEW_PASSWORD),
@@ -530,12 +587,13 @@ def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause | No
             INSERT INTO connected_accounts (
                 id, user_id, provider, display_name, email, encrypted_credentials,
                 state, created_at, updated_at, authorization_lapsed_at
-            ) VALUES (?, ?, 'google', ?, ?, x'00', ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, x'00', ?, ?, ?, ?)
             """,
             [
                 (
                     account.id.value,
                     ROBIN.value,
+                    account.provider.value,
                     account.display_name,
                     account.email,
                     account.state.value,
@@ -543,7 +601,7 @@ def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause | No
                     authorized,
                     account.authorization_lapsed_at,
                 )
-                for account in _robin_accounts(now, lapsed=cause is not None)
+                for account in _robin_accounts(now, lapsed)
             ],
         )
     with adapters.unit_of_work(ROBIN)() as uow:
@@ -556,37 +614,47 @@ def _seed_robin(adapters: Adapters, path: Path, now: datetime, cause: Cause | No
         for account, calendar in ROBIN_CALENDARS.items():
             uow.calendar_names.remember(account, [calendar])
         uow.commit()
-    if cause is None:
+    if lapsed is None or cause is None:
         return
     with closing(sqlite3.connect(path)) as connection, connection:
         connection.execute(
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, account_id, category, state, summary,
-                opened_at, updated_at, message_code, message_params, cause, user_id
-            ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, 'authorization_lapsed', ?, ?, ?)
+                opened_at, updated_at, message_code, message_params, cause, user_id, provider
+            ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, 'authorization_lapsed', ?, ?, ?, ?)
             """,
             (
-                f"authorization:{ROBIN_PERSONAL.value}",
-                f"authorization:{ROBIN_PERSONAL.value}",
-                ROBIN_PERSONAL.value,
+                f"authorization:{lapsed.value}",
+                f"authorization:{lapsed.value}",
+                lapsed.value,
                 _LAPSE_KINDS[cause],
-                _LAPSE_SUMMARIES[cause],
+                _lapse_summary(cause, provider),
                 opened,
                 (now - timedelta(minutes=3)).isoformat(),
-                json.dumps({"kind": _LAPSE_KINDS[cause], "provider": "google"}),
+                json.dumps({"kind": _LAPSE_KINDS[cause], "provider": provider.value}),
                 cause.value,
                 ROBIN.value,
+                provider.value,
             ),
         )
 
 
-# How Google refuses for each Cause a preview lapse has, as the service records it.
-_LAPSE_KINDS = {Cause.ACCESS_REVOKED: "authentication", Cause.API_DISABLED: "authorization"}
-_LAPSE_SUMMARIES = {
-    Cause.ACCESS_REVOKED: "Authorization for Google Calendar expired",
-    Cause.API_DISABLED: "Access to Google Calendar was denied",
+# How a provider refuses for each Cause a preview lapse has, as the service records it.
+_LAPSE_KINDS = {
+    Cause.ACCESS_REVOKED: "authentication",
+    Cause.API_DISABLED: "authorization",
+    Cause.OAUTH_CLIENT_INVALID: "authentication",
 }
+_CALENDAR_NAMES = {ProviderKind.GOOGLE: "Google Calendar", ProviderKind.OUTLOOK: "Outlook"}
+
+
+def _lapse_summary(cause: Cause, provider: ProviderKind) -> str:
+    """The lapse's summary, worded as the service words it."""
+    calendar = _CALENDAR_NAMES[provider]
+    if _LAPSE_KINDS[cause] == "authentication":
+        return f"Authorization for {calendar} expired"
+    return f"Access to {calendar} was denied"
 
 
 PREVIEW_RULES = (
@@ -732,10 +800,17 @@ def _preview_change(found: CalendarEvent, seeded: SeededEntry) -> SourceChange |
 
 
 def _authorized_at(scenario: Scenario, now: datetime) -> str:
-    """When Sam last authorized his accounts: a week before the lapse when Testing mode ends it."""
+    """When Sam last authorized their accounts: a week before the lapse Testing mode causes."""
     if scenario is Scenario.ACCESS_REVOKED:
         return (now - timedelta(minutes=60) - timedelta(days=7)).isoformat()
     return now.isoformat()
+
+
+def _failed_provider(scenario: Scenario, rule: SyncRule) -> ProviderKind:
+    """The provider a seeded failure names: the lapsed account's, or Google limiting requests."""
+    return (
+        _lapsed_provider(scenario) if rule.state is SyncRuleState.DEGRADED else ProviderKind.GOOGLE
+    )
 
 
 def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario: Scenario) -> None:
@@ -748,12 +823,13 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
             INSERT INTO connected_accounts (
                 id, user_id, provider, display_name, email, encrypted_credentials,
                 state, created_at, updated_at, authorization_lapsed_at
-            ) VALUES (?, ?, 'google', ?, ?, x'00', ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, x'00', ?, ?, ?, ?)
             """,
             [
                 (
                     account.id.value,
                     user.value,
+                    account.provider.value,
                     account.display_name,
                     account.email,
                     account.state.value,
@@ -796,6 +872,7 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                     failure_cause=_LAPSE_CAUSES.get(scenario, Cause.RATE_LIMITED)
                     if failure
                     else None,
+                    failure_provider=_failed_provider(scenario, rule) if failure else None,
                 )
             )
         uow.commit()
@@ -810,28 +887,30 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
                 [(rule.id.value, user.value, now.isoformat()) for rule in PREVIEW_RULES],
             )
         if scenario in _EXPIRED:
+            lapsed, cause = _lapsed_account(scenario), _LAPSE_CAUSES[scenario]
+            provider = _lapsed_provider(scenario)
             # One Incident for the account, however many of its rules stopped.
             connection.execute(
                 """
                 INSERT INTO incidents (
                     id, deduplication_key, rule_id, account_id, category, state, summary,
-                    opened_at, updated_at, message_code, message_params, cause, user_id
-                ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?)
+                    opened_at, updated_at, message_code, message_params, cause, user_id,
+                    provider
+                ) VALUES (?, ?, NULL, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    f"authorization:{PERSONAL_ACCOUNT.value}",
-                    f"authorization:{PERSONAL_ACCOUNT.value}",
-                    PERSONAL_ACCOUNT.value,
-                    _LAPSE_KINDS[_LAPSE_CAUSES[scenario]],
-                    _LAPSE_SUMMARIES[_LAPSE_CAUSES[scenario]],
+                    f"authorization:{lapsed.value}",
+                    f"authorization:{lapsed.value}",
+                    lapsed.value,
+                    _LAPSE_KINDS[cause],
+                    _lapse_summary(cause, provider),
                     (now - timedelta(minutes=60)).isoformat(),
                     (now - timedelta(minutes=2)).isoformat(),
                     "authorization_lapsed",
-                    json.dumps(
-                        {"kind": _LAPSE_KINDS[_LAPSE_CAUSES[scenario]], "provider": "google"}
-                    ),
-                    _LAPSE_CAUSES[scenario].value,
+                    json.dumps({"kind": _LAPSE_KINDS[cause], "provider": provider.value}),
+                    cause.value,
                     user.value,
+                    provider.value,
                 ),
             )
         # Provider Incidents, worded as the service words them.
@@ -844,8 +923,8 @@ def _seed(adapters: Adapters, path: Path, user: UserId, now: datetime, scenario:
             """
             INSERT INTO incidents (
                 id, deduplication_key, rule_id, category, state, summary, opened_at, updated_at,
-                message_code, message_params, cause, user_id
-            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, 'rate_limited', ?)
+                message_code, message_params, cause, user_id, provider
+            ) VALUES (?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, 'rate_limited', ?, 'google')
             """,
             [
                 (

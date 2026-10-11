@@ -2,6 +2,7 @@ import { incidentText } from "@/i18n/incident-text"
 import type { I18n } from "@/i18n/translator"
 import { activitySearch } from "@/lib/activity-location"
 import { causeOf, causeText, isAdministratorCause, retryTiming, type Cause } from "@/lib/causes"
+import { providerWords } from "@/lib/providers"
 import type { Dashboard, InstallationHealth, RunningWork, ServerProblem } from "@/lib/api"
 import type { AppView, SettingsTab } from "@/lib/navigation"
 
@@ -68,7 +69,7 @@ export function overviewRules<T extends { id: string; state: string; running: Ru
 
 /**
  * A rule-level problem the Overview can name: stopped until the administrator acts, waiting on
- * Google, or another open incident to review. Blocked events come from the dashboard instead.
+ * its provider, or another open incident to review. Blocked events come from the dashboard instead.
  */
 type RuleProblem = {
   ruleId: string
@@ -77,6 +78,8 @@ type RuleProblem = {
   kind: "stopped" | "waiting" | "review"
   /** Why the provider failed, when it did (ADR 0031). */
   cause: Cause | null
+  /** The Provider Kind that failed, when the server knows it. */
+  provider: string | null
   /** When a Cause that fixes itself was last and will next be tried, as far as is known. */
   timing: string | null
 }
@@ -100,6 +103,7 @@ function ruleProblemsOf(
         detail: problemDetail(i18n, problem, now),
         kind,
         cause: causeOf(problem),
+        provider: problem.provider ?? null,
         timing: retryTiming(i18n, problem, nextPassAt, now),
       },
     ]
@@ -153,6 +157,15 @@ function stalledProblem(i18n: I18n, dashboard: Dashboard): Problem | null {
   }
 }
 
+/** An administrator's Cause, and the provider that raised it when every problem names the same one. */
+type Fault = { cause: Cause; provider: string | null }
+
+/** The provider every one of these problems names, if they all name the same one. */
+function sharedProvider(problems: RuleProblem[]): string | null {
+  const [first] = problems
+  return first && problems.every((problem) => problem.provider === first.provider) ? first.provider : null
+}
+
 /** The administrator's Cause every one of these problems shares, if they share one. */
 function administratorCause(problems: RuleProblem[]): Cause | null {
   const [first] = problems
@@ -161,19 +174,21 @@ function administratorCause(problems: RuleProblem[]): Cause | null {
 }
 
 /**
- * Rules an administrator's Cause stopped. The User reads only that Google Calendar is temporarily
+ * Rules an administrator's Cause stopped. The User reads only that their calendar is temporarily
  * unavailable, with Check access to try again, so nothing sends them to the administrator; an
  * administrator is sent to People, where the fix is.
  */
-function administratorStopped(i18n: I18n, headline: string, cause: Cause, reader: Reader): Problem {
+function administratorStopped(i18n: I18n, headline: string, fault: Fault, reader: Reader): Problem {
+  const { cause, provider } = fault
+  const words = providerWords(i18n, provider)
   if (reader.administrator) {
-    const likely = causeText(i18n, cause)
+    const likely = causeText(i18n, cause, provider)
     const title = i18n.t("overview.health.administratorCause.administratorTitle")
     return {
       tone: "stopped",
       headline,
       title,
-      detail: i18n.t("overview.health.administratorCause.administratorDetail", { cause: likely }),
+      detail: i18n.t("overview.health.administratorCause.administratorDetail", { ...words, cause: likely }),
       action: { label: i18n.t("overview.health.action.openPeople"), view: "people" },
       summary: title,
     }
@@ -183,7 +198,7 @@ function administratorStopped(i18n: I18n, headline: string, cause: Cause, reader
     tone: "stopped",
     headline,
     title,
-    detail: i18n.t("overview.health.administratorCause.detail"),
+    detail: i18n.t("overview.health.administratorCause.detail", words),
     action: { label: i18n.t("overview.health.action.checkAccess"), view: "settings", settingsTab: "connections" },
     summary: title,
   }
@@ -194,8 +209,10 @@ function stoppedProblem(i18n: I18n, dashboard: Dashboard, of: ProblemsByKind, re
   if (stopped.length === 0) return null
   const headline = i18n.t("overview.health.stoppedHeadline", { count: stopped.length })
   const byAdministrator = administratorCause(stopped)
-  if (byAdministrator) return administratorStopped(i18n, headline, byAdministrator, reader)
-  // Disconnected, or no longer accepted by Google: either way the fix is to reauthorize.
+  if (byAdministrator) {
+    return administratorStopped(i18n, headline, { cause: byAdministrator, provider: sharedProvider(stopped) }, reader)
+  }
+  // Disconnected, or no longer accepted by its provider: either way the fix is to reauthorize.
   const unauthorized = dashboard.disconnected_accounts + dashboard.lapsed_accounts
   if (unauthorized > 0) {
     const title = i18n.t("overview.health.disconnectedTitle", { count: unauthorized })
@@ -276,13 +293,17 @@ function blockedProblem(i18n: I18n, dashboard: Dashboard): Problem | null {
 
 /**
  * Why one rule waits, with when it was tried. Only an administrator reads that it is a quota they
- * raise; the User reads that Google is limiting requests, as for any other wait.
+ * raise; the User reads that the provider is limiting requests, as for any other wait.
  */
 function waitingDetail(i18n: I18n, named: RuleProblem, reader: Reader): string {
+  const words = providerWords(i18n, named.provider)
   if (reader.administrator && named.cause && isAdministratorCause(named.cause)) {
-    return i18n.t("overview.health.administratorCause.administratorWaiting", { cause: causeText(i18n, named.cause) })
+    return i18n.t("overview.health.administratorCause.administratorWaiting", {
+      ...words,
+      cause: causeText(i18n, named.cause, named.provider),
+    })
   }
-  const detail = i18n.t("overview.health.waitingDetailNamed", { detail: named.detail })
+  const detail = i18n.t("overview.health.waitingDetailNamed", { ...words, detail: named.detail })
   return named.timing ? `${detail} ${named.timing}` : detail
 }
 
@@ -290,17 +311,18 @@ function waitingProblem(i18n: I18n, of: ProblemsByKind, reader: Reader): Problem
   const waiting = of("waiting")
   if (waiting.length === 0) return null
   const named = waiting.length === 1 ? waiting[0] : null
+  const words = providerWords(i18n, sharedProvider(waiting))
   return {
     tone: "waiting",
-    headline: i18n.t("overview.health.waitingHeadline"),
+    headline: i18n.t("overview.health.waitingHeadline", words),
     title: named?.name ?? "",
     detail: named
       ? waitingDetail(i18n, named, reader)
-      : i18n.t("overview.health.waitingDetailGeneric", { count: waiting.length }),
+      : i18n.t("overview.health.waitingDetailGeneric", { ...words, count: waiting.length }),
     action: null,
     summary: named
-      ? i18n.t("overview.health.ruleWaitingForGoogle", { name: named.name })
-      : i18n.t("overview.health.rulesWaitingForGoogle", { count: waiting.length }),
+      ? i18n.t("overview.health.ruleWaitingForProvider", { ...words, name: named.name })
+      : i18n.t("overview.health.rulesWaitingForProvider", { ...words, count: waiting.length }),
   }
 }
 

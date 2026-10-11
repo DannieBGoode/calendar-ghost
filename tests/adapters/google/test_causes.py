@@ -30,11 +30,9 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
-from calendar_sync.infrastructure.google.oauth import (
-    GoogleOAuthService,
-    OAuthClientConfig,
-)
+from calendar_sync.infrastructure.google.oauth import GoogleOAuthService
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.oauth import OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.authorization_states import (
     SqliteAuthorizationStates,

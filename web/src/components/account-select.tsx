@@ -156,6 +156,7 @@ function AccountOptionContent({ account }: { account: ConnectedAccount }) {
         displayName={account.display_name}
         email={account.email}
         avatarUrl={account.avatar_url}
+        provider={account.provider}
         compact
       />
       <span className="account-select-copy">

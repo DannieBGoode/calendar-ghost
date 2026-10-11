@@ -7,12 +7,23 @@ from unittest.mock import Mock
 import pytest
 
 from calendar_sync.application.errors import (
+    AccountAccessCheckFailed,
     AuthorizationNotConfigured,
     ConnectedAccountNotFound,
     ProviderFailure,
     ProviderFailureKind,
 )
-from calendar_sync.application.ports import AccountCalendars, CalendarAccess, DiscoveredCalendar
+from calendar_sync.application.ports import (
+    AccountAccess,
+    AccountCalendars,
+    CalendarAccess,
+    DiscoveredCalendar,
+)
+from calendar_sync.application.provider_descriptors import (
+    ProviderDescriptor,
+    ProviderDirectory,
+    ProviderGuide,
+)
 from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.providers.routing import (
@@ -23,6 +34,7 @@ from tests.fake_calendar import FakeCalendars
 from tests.helpers import event
 
 PERSONAL = ConnectedAccountId("personal-account")
+GUIDE = ProviderGuide(ProviderKind.GOOGLE, "example", "Example", "Example Calendar", {})
 
 
 @dataclass
@@ -72,14 +84,46 @@ def test_a_request_for_an_account_that_does_not_exist_fails_like_a_provider() ->
 
 
 def test_a_provider_this_installation_has_not_configured_stops_the_rule() -> None:
-    router = RoutingCalendarProvider(StoredKinds({PERSONAL: ProviderKind.GOOGLE}), {})
+    # The provider's descriptor names it, though it offers no adapter.
+    router = RoutingCalendarProvider.of(
+        StoredKinds({PERSONAL: ProviderKind.GOOGLE}),
+        ProviderDirectory((ProviderDescriptor(GUIDE),)),
+    )
 
     with pytest.raises(ProviderFailure) as raised:
         router.get_event(event().reference)
 
     assert raised.value.kind is ProviderFailureKind.PERMANENT
     assert raised.value.provider is ProviderKind.GOOGLE
-    assert str(raised.value) == "Google Calendar is not configured on this installation"
+    assert str(raised.value) == "Example Calendar is not configured on this installation"
+    assert raised.value.summary == "Example Calendar rejected synchronization"
+
+
+def test_a_provider_this_release_does_not_describe_is_named_neutrally() -> None:
+    router = RoutingCalendarProvider(StoredKinds({PERSONAL: ProviderKind.GOOGLE}), {})
+
+    with pytest.raises(ProviderFailure) as raised:
+        router.get_event(event().reference)
+
+    assert str(raised.value) == "The calendar provider is not configured on this installation"
+
+
+def test_routing_reads_each_descriptors_adapters() -> None:
+    calendars = FakeCalendars()
+    source = calendars.put(event())
+    discovery = Mock()
+    descriptors = ProviderDirectory(
+        (
+            ProviderDescriptor(
+                GUIDE, calendars=cast(AccountCalendars, discovery), provider=calendars
+            ),
+        )
+    )
+    kinds = StoredKinds({PERSONAL: ProviderKind.GOOGLE})
+
+    assert RoutingCalendarProvider.of(kinds, descriptors).get_event(source.reference) == source
+    RoutingAccountCalendars.of(kinds, descriptors).calendars(PERSONAL)
+    discovery.calendars.assert_called_once_with(PERSONAL)
 
 
 def test_account_calendars_reach_the_accounts_provider() -> None:
@@ -103,7 +147,39 @@ def test_account_calendars_of_an_account_that_does_not_exist_are_not_found() -> 
 
 
 def test_account_calendars_of_an_unconfigured_provider_are_unavailable() -> None:
-    router = RoutingAccountCalendars(StoredKinds({PERSONAL: ProviderKind.GOOGLE}), {})
+    router = RoutingAccountCalendars.of(
+        StoredKinds({PERSONAL: ProviderKind.GOOGLE}),
+        ProviderDirectory((ProviderDescriptor(GUIDE),)),
+    )
 
-    with pytest.raises(AuthorizationNotConfigured):
+    with pytest.raises(AuthorizationNotConfigured) as raised:
         router.verify_access(PERSONAL)
+
+    assert str(raised.value) == "Example Calendar is not configured on this installation"
+
+
+def test_an_access_check_names_the_provider_that_refused_it() -> None:
+    refused = AccountAccessCheckFailed("expired", ProviderFailureKind.AUTHENTICATION)
+    outlook = Mock()
+    outlook.verify_access.side_effect = refused
+    router = RoutingAccountCalendars(
+        StoredKinds({PERSONAL: ProviderKind.OUTLOOK}),
+        {ProviderKind.OUTLOOK: cast(AccountCalendars, outlook)},
+    )
+
+    with pytest.raises(AccountAccessCheckFailed) as raised:
+        router.verify_access(PERSONAL)
+
+    assert raised.value.provider is ProviderKind.OUTLOOK
+    assert raised.value.kind is ProviderFailureKind.AUTHENTICATION
+
+
+def test_an_access_check_that_passes_names_no_provider() -> None:
+    google = Mock()
+    google.verify_access.return_value = AccountAccess(3, 2)
+    router = RoutingAccountCalendars(
+        StoredKinds({PERSONAL: ProviderKind.GOOGLE}),
+        {ProviderKind.GOOGLE: cast(AccountCalendars, google)},
+    )
+
+    assert router.verify_access(PERSONAL) == AccountAccess(3, 2)

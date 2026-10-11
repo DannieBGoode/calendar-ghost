@@ -46,7 +46,7 @@ const robin: UserOverview = {
       disconnected_accounts: 0,
       lapsed_accounts: 0,
     },
-    problems: [{ kind: "blocked", rule_id: "rule-1", summary: "3 events couldn't be synced", since: null, message: null, cause: null, last_tried_at: null }],
+    problems: [{ kind: "blocked", rule_id: "rule-1", summary: "3 events couldn't be synced", since: null, message: null, cause: null, last_tried_at: null, provider: null }],
     rules: [
       {
         id: "rule-1",
@@ -221,13 +221,14 @@ describe("A person's page", () => {
       summary: "A calendar account needs reauthorization",
       since: null,
       message: { code: "authorization_lapsed", params: { provider: "google" } },
+      provider: "google",
     }
     const blocked = { ...robin.status.problems[0]!, rule_id: "rule-1" }
     const both = { ...robin, status: { ...robin.status, status: "stopped" as const, problems: [lapsed, blocked] } }
     await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(both) })
 
     const text = container.textContent
-    expect(text).toContain("A Google Calendar account needs reauthorization")
+    expect(text).toContain("A Google account needs reauthorization")
     expect(text).toContain("robin@example.test can fix this from their dashboard.")
     expect(text).toContain("3 events couldn't be synced")
   })
@@ -241,9 +242,21 @@ describe("A person's page", () => {
       message: { code: "authorization_lapsed", params: { provider: "google" } },
       cause: "api_disabled" as const,
       last_tried_at: justNow,
+      provider: "google",
     }
     const stopped = { ...robin, status: { ...robin.status, status: "stopped" as const, problems: [lapsed] } }
-    await renderPerson(testI18n(), "user-robin", { "GET /api/v1/users/user-robin/overview": jsonResponse(stopped) })
+    // Where the guide explains it is the provider's to say.
+    const google = {
+      kind: "google",
+      display_name: "Google",
+      connect_url: "/api/v1/oauth/google/start",
+      redirect_uri: "http://localhost:8000/api/v1/oauth/google/callback",
+      cause_anchors: { api_disabled: "the-google-calendar-api-is-turned-off" },
+    }
+    await renderPerson(testI18n(), "user-robin", {
+      "GET /api/v1/users/user-robin/overview": jsonResponse(stopped),
+      "GET /api/v1/providers": jsonResponse([google]),
+    })
 
     const text = container.textContent
     expect(text).toContain("Likely cause: the Google Calendar API is turned off for this installation.")
@@ -262,6 +275,7 @@ describe("A person's page", () => {
       summary: "A calendar account needs reauthorization",
       since: null,
       message: { code: "authorization_lapsed", params: { provider: "google" } },
+      provider: "google",
       cause: "access_revoked" as const,
       last_tried_at: justNow,
     }
@@ -291,7 +305,7 @@ describe("A person's page", () => {
     await renderPerson(testI18n())
 
     const footnote = container.querySelector(".page-footnote")?.textContent ?? ""
-    expect(footnote).toContain("never their calendar names, Google account emails, or events")
+    expect(footnote).toContain("never their calendar names, connected account emails, or events")
     expect(footnote).not.toContain("Settings")
   })
 
@@ -319,6 +333,7 @@ describe("A person's page", () => {
       summary: "A calendar account needs reauthorization",
       since: null,
       message: { code: "authorization_lapsed", params: { provider: "google" } },
+      provider: "google",
       cause,
       last_tried_at: null,
     })
@@ -350,7 +365,7 @@ describe("A person's page", () => {
       })
 
       const text = container.textContent
-      expect(text.split("A Google Calendar account needs reauthorization").length - 1).toBe(1)
+      expect(text.split("A Google account needs reauthorization").length - 1).toBe(1)
       expect(text).toContain("Stops Calendar 1 → Calendar 2 and Calendar 2 → Calendar 1.")
       expect(text.split("robin@example.test can fix this from their dashboard.").length - 1).toBe(1)
       expect(text).not.toContain("Likely cause")

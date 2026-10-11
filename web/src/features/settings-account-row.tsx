@@ -8,8 +8,9 @@ import { apiErrorMessage } from "@/i18n/api-errors"
 import { useI18n } from "@/i18n/provider"
 import type { I18n } from "@/i18n/translator"
 import { needsReauthorization } from "@/lib/account-summary"
-import type { ConnectedAccount } from "@/lib/api"
+import type { CalendarProvider, ConnectedAccount } from "@/lib/api"
 import { recordAuthorizationStart } from "@/lib/oauth-redirect"
+import { accountNoun, connectUrl } from "@/lib/providers"
 import type { AccessCheck, AccountCommands } from "@/lib/use-account-commands"
 
 function ruleUsage({ t }: I18n, count: number, authorized: boolean): string {
@@ -26,14 +27,15 @@ function revealAccount(row: HTMLLIElement | null) {
 export function AccountRow({
   account,
   sharedName,
-  googleConfigured,
+  provider,
   focused,
   commands,
 }: {
   account: ConnectedAccount
   sharedName: boolean
-  googleConfigured: boolean
-  /** The account a stopped rule or Google's return pointed to. */
+  /** The account's provider, while Users can connect it here; null otherwise. */
+  provider: CalendarProvider | null
+  /** The account a stopped rule or a provider's return pointed to. */
   focused: boolean
   commands: AccountCommands
 }) {
@@ -52,13 +54,9 @@ export function AccountRow({
         <div className="account-actions">
           <AccountStateBadge account={account} />
           {connected ? (
-            <ConnectedAccountActions account={account} googleConfigured={googleConfigured} commands={commands} />
+            <ConnectedAccountActions account={account} provider={provider} commands={commands} />
           ) : (
-            <DisconnectedAccountActions
-              account={account}
-              googleConfigured={googleConfigured}
-              commands={commands}
-            />
+            <DisconnectedAccountActions account={account} provider={provider} commands={commands} />
           )}
         </div>
       </div>
@@ -107,12 +105,18 @@ function AccountIdentity({
         displayName={account.display_name}
         email={account.email}
         avatarUrl={account.avatar_url}
+        provider={account.provider}
       />
       <div className="account-copy">
-        {/* One person often connects several Google accounts under the same name, so the
-            address leads when the name alone would not tell them apart. */}
+        {/* One person often connects several accounts under the same name, so the address
+            leads when the name alone would not tell them apart. */}
         <h3>{sharedName ? account.email : account.display_name}</h3>
-        <p>{sharedName ? account.display_name : account.email}</p>
+        <p>
+          {i18n.t("settings.accounts.providerAndAddress", {
+            account: accountNoun(i18n, account.provider),
+            address: sharedName ? account.display_name : account.email,
+          })}
+        </p>
         <span data-stopped={!authorized && account.rule_count > 0 ? "" : undefined}>
           {ruleUsage(i18n, account.rule_count, authorized)}
         </span>
@@ -122,8 +126,8 @@ function AccountIdentity({
 }
 
 /**
- * A disconnected account, or one Google stopped accepting, stops every rule that uses it until
- * it is reauthorized.
+ * A disconnected account, or one its provider stopped accepting, stops every rule that uses it
+ * until it is reauthorized.
  */
 function AccountStateBadge({ account }: { account: ConnectedAccount }) {
   const { t } = useI18n()
@@ -142,11 +146,11 @@ function AccountStateBadge({ account }: { account: ConnectedAccount }) {
   )
 }
 
-/** Google's consent for this account, which it offers first; the row's fix when access is gone. */
-function ReauthorizeButton({ account, googleConfigured }: { account: ConnectedAccount; googleConfigured: boolean }) {
+/** The provider's consent for this account, which it offers first; the row's fix when access is gone. */
+function ReauthorizeButton({ account, provider }: { account: ConnectedAccount; provider: CalendarProvider | null }) {
   const { t } = useI18n()
-  // The row's fix, so it stays visible even before Google is configured.
-  if (!googleConfigured) {
+  // The row's fix, so it stays visible even before its provider is configured.
+  if (!provider) {
     return (
       <Button className="account-action" disabled title={t("settings.accounts.actions.reauthorizeUnavailable")}>
         <KeyRound aria-hidden="true" /> {t("settings.accounts.actions.reauthorize")}
@@ -155,10 +159,7 @@ function ReauthorizeButton({ account, googleConfigured }: { account: ConnectedAc
   }
   return (
     <Button className="account-action" asChild>
-      <a
-        href={`/api/v1/oauth/google/start?account=${encodeURIComponent(account.id)}`}
-        onClick={() => recordAuthorizationStart()}
-      >
+      <a href={connectUrl(provider, account.id)} onClick={() => recordAuthorizationStart(provider.kind)}>
         <KeyRound aria-hidden="true" /> {t("settings.accounts.actions.reauthorize")}
       </a>
     </Button>
@@ -167,11 +168,11 @@ function ReauthorizeButton({ account, googleConfigured }: { account: ConnectedAc
 
 function ConnectedAccountActions({
   account,
-  googleConfigured,
+  provider,
   commands,
 }: {
   account: ConnectedAccount
-  googleConfigured: boolean
+  provider: CalendarProvider | null
   commands: AccountCommands
 }) {
   const { t } = useI18n()
@@ -180,7 +181,7 @@ function ConnectedAccountActions({
   const checking = verifyAccess.isPending && verifyAccess.variables === account.id
   return (
     <>
-      {needsReauthorization(account) && <ReauthorizeButton account={account} googleConfigured={googleConfigured} />}
+      {needsReauthorization(account) && <ReauthorizeButton account={account} provider={provider} />}
       <Button
         className="account-action"
         variant="outline"
@@ -209,11 +210,11 @@ function ConnectedAccountActions({
 
 function DisconnectedAccountActions({
   account,
-  googleConfigured,
+  provider,
   commands,
 }: {
   account: ConnectedAccount
-  googleConfigured: boolean
+  provider: CalendarProvider | null
   commands: AccountCommands
 }) {
   const { t } = useI18n()
@@ -221,7 +222,7 @@ function DisconnectedAccountActions({
   const deleting = commands.deletingAccountId === account.id
   return (
     <>
-      <ReauthorizeButton account={account} googleConfigured={googleConfigured} />
+      <ReauthorizeButton account={account} provider={provider} />
       <Button
         className="account-action account-delete-action"
         variant="ghost"

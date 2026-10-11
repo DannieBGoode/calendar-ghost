@@ -118,7 +118,7 @@ def _notification(incident: IncidentReport, at: datetime) -> IncidentNotificatio
 
 def _step_path(incident: IncidentReport) -> str:
     """The page holding the owner's one next step for the Incident's Cause (ADR 0031): their
-    Google connections to reauthorize, the rule to choose another calendar or try again, the
+    Connected Accounts to reauthorize, the rule to choose another calendar or try again, the
     Overview when there is nothing for them to do, or Activity for blocked events. A rule is named
     only by its internal identifier."""
     cause = incident.cause

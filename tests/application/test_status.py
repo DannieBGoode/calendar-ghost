@@ -17,6 +17,7 @@ from calendar_sync.application.ports import (
     RunKind,
     SchedulerProgress,
 )
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.application.rules import SyncRuleSummary
 from calendar_sync.application.status import (
     InstallationStatus,
@@ -525,6 +526,32 @@ def test_a_problem_an_incident_explains_carries_its_cause_and_when_it_was_last_t
     }
 
 
+def test_a_problem_names_the_provider_whose_failure_explains_it() -> None:
+    waiting = replace(
+        _incident("rule-1", "rate_limit", opened=NOW - timedelta(hours=2)),
+        cause=Cause.RATE_LIMITED,
+        provider=ProviderKind.GOOGLE,
+    )
+    account_incident = replace(
+        _incident(None, "authorization", opened=NOW - timedelta(hours=2)),
+        id="incident-account",
+        account_id="work-account",
+        cause=Cause.ACCESS_REVOKED,
+        provider=ProviderKind.GOOGLE,
+    )
+    lapsed = _rule("rule-2", SyncRuleState.DEGRADED)
+
+    status = _assess(
+        [_summary(_rule("rule-1")), _summary(lapsed)],
+        _overview(accounts=LAPSED, open_incidents=2),
+        (waiting, account_incident),
+    )
+
+    # A lapse names the account's provider even when its Incident is gone.
+    providers = {p.rule_id: p.provider for p in status.problems}
+    assert providers == {"rule-1": ProviderKind.GOOGLE, "rule-2": ProviderKind.GOOGLE}
+
+
 def test_a_problem_no_provider_failure_explains_has_no_cause() -> None:
     overdue = _summary(_rule("rule-1"), succeeded_at=NOW - timedelta(days=2))
 
@@ -532,3 +559,4 @@ def test_a_problem_no_provider_failure_explains_has_no_cause() -> None:
 
     (problem,) = status.problems
     assert (problem.kind, problem.cause, problem.last_tried_at) == (ProblemKind.OVERDUE, None, None)
+    assert problem.provider is None

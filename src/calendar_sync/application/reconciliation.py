@@ -152,6 +152,7 @@ class ReconcileSyncRule:
                     full_run=True,
                     failure_kind=failure.kind.value,
                     failure_cause=failure.provider_cause,
+                    failure_provider=failure.provider,
                 )
             )
             raise

@@ -153,7 +153,7 @@ type Schemas = components["schemas"]
 export type Dashboard = Schemas["DashboardResponse"]
 export type InstallationHealth = Dashboard["status"]
 export type ServerProblem = Schemas["ProblemResponse"]
-/** A rule's calendar with the name Google last gave it; null until Google lists it. */
+/** A rule's calendar with the name its provider last gave it; null until the provider lists it. */
 export type RuleCalendar = Schemas["NamedCalendarEndpointResponse"]
 export type Rule = Schemas["RuleResponse"]
 /** What a rule does with events its source calendar answered Maybe to. */
@@ -172,6 +172,8 @@ export type RecentChange = Schemas["RecentChangeResponse"]
 export type RuleDetail = Schemas["RuleDetailResponse"]
 export type RulePolicyPayload = Schemas["UpdateRulePolicyRequest"]
 export type ConnectedAccount = Schemas["ConnectedAccountResponse"]
+/** A calendar provider this installation lets Users connect, and how (ADR 0022). */
+export type CalendarProvider = Schemas["ProviderResponse"]
 export type DiscoveredCalendar = Schemas["DiscoveredCalendarResponse"]
 export type RulePreview = Schemas["RulePreviewResponse"]
 export type SyncResult = Schemas["SyncResultResponse"]
@@ -327,7 +329,7 @@ export const api = {
     }),
   replaceRuleCalendars: (ruleId: string, payload: Schemas["ReplaceRuleRequest"]) =>
     call("/api/v1/rules/{rule_id}/replace", "post", { params: { rule_id: ruleId }, body: payload }),
-  googleConfiguration: () => call("/api/v1/google/configuration", "get"),
+  providers: () => call("/api/v1/providers", "get"),
   accounts: () => call("/api/v1/accounts", "get"),
   disconnectAccount: (accountId: string) =>
     call("/api/v1/accounts/{account_id}/disconnect", "post", { params: { account_id: accountId } }),

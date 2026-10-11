@@ -92,7 +92,7 @@ class CalendarEndpointPayload(BaseModel):
 
 
 class NamedCalendarEndpointResponse(CalendarEndpointPayload):
-    # The name Google last gave the calendar, shown until Google lists its calendars again.
+    # The name the provider last gave the calendar, shown until it lists its calendars again.
     calendar_name: str | None
 
 
@@ -128,6 +128,8 @@ class RunOutcomeResponse(ApiResponse):
     checked_mappings: int
     drift: int
     failure_kind: str | None
+    failure_provider: str | None = None
+    """The Provider Kind of the calendar that failed, when a provider did."""
     last_succeeded_at: str | None
 
 
@@ -260,6 +262,8 @@ class ProblemResponse(ApiResponse):
     """Why the provider failure behind it happened; None when no provider failure explains it."""
     last_tried_at: str | None = None
     """When that failure last happened, which is when the rule was last tried."""
+    provider: str | None = None
+    """The Provider Kind whose failure explains it; None when no provider failure does."""
 
 
 class DashboardResponse(ApiResponse):
@@ -280,12 +284,28 @@ class DashboardResponse(ApiResponse):
     blocked_entry_id: int | None = None
     blocked_rule_id: str | None = None
     next_pass_at: str | None = None
-    """When the scheduler next tries every rule, so waiting on Google says when it tries again."""
+    """When the scheduler next tries every rule, so waiting on a provider says when it tries
+    again."""
 
 
-class GoogleConfigurationResponse(ApiResponse):
+class ProviderConfigurationResponse(ApiResponse):
     configured: bool
     redirect_uri: str | None
+
+
+class ProviderResponse(ApiResponse):
+    """A calendar provider Users of this installation can connect, and how."""
+
+    kind: str
+    """Its Provider Kind, as Connected Accounts and problems name it."""
+    display_name: str
+    connect_url: str
+    """Where the browser goes to connect an account of this provider."""
+    redirect_uri: str
+    """Where the provider returns the browser, as registered with it."""
+    cause_anchors: dict[CauseValue, str]
+    """The section of docs/troubleshooting.md explaining each administrator's Cause it can
+    raise."""
 
 
 class ConnectedAccountResponse(ApiResponse):
@@ -302,7 +322,7 @@ class ConnectedAccountResponse(ApiResponse):
     it accepts it (ADR 0027)."""
 
 
-class GoogleAccountAccessResponse(ApiResponse):
+class AccountAccessResponse(ApiResponse):
     calendar_api: bool
     calendar_list_access: bool
     event_access: bool
@@ -700,6 +720,8 @@ class InstallationHintResponse(ApiResponse):
     """How many Users show the pattern."""
     anchor: str
     """The section of docs/troubleshooting.md that explains the fix."""
+    provider: str | None = None
+    """The Provider Kind whose answers show the pattern."""
 
 
 class InstallationHealthResponse(ApiResponse):

@@ -5,10 +5,10 @@ export type SettingsTab = (typeof SETTINGS_TABS)[number]
 /** The tab Settings opens at unless Google's return or an account link calls for Connections. */
 export const DEFAULT_SETTINGS_TAB: SettingsTab = "account"
 /** What Google's return, or a link to one Connected Account, carries in the address. */
-export const SETTINGS_ARRIVAL_PARAMS = ["google", "account", "resumed"] as const
+export const SETTINGS_ARRIVAL_PARAMS = ["oauth", "provider", "account", "resumed"] as const
 
 /**
- * The tab Settings without one shows: Connections when Google returned or an account is named,
+ * The tab Settings without one shows: Connections when a provider returned or an account is named,
  * as the OAuth callback and older links open it, and Your account otherwise.
  */
 export function defaultSettingsTab(search: string): SettingsTab {

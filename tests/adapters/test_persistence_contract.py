@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from calendar_sync.application.ports import ConnectedAccountState
+from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.persistence.connections import transaction
@@ -29,6 +30,8 @@ class TestInMemoryUnitOfWork(PersistenceContract):
         def connect(account_id: ConnectedAccountId, user: UserId) -> None:
             state = database.for_user(user).state
             state.accounts[account_id] = ConnectedAccountState.CONNECTED
+            # As SQLite's accounts, which the contract's helpers connect as Google accounts.
+            state.providers[account_id] = ProviderKind.GOOGLE
             state.authorized_at[account_id] = NOW
 
         def disconnect(account_id: ConnectedAccountId, user: UserId) -> None:

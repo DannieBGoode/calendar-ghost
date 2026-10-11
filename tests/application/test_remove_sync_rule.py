@@ -236,7 +236,10 @@ def test_removal_interrupted_names_the_provider_that_failed() -> None:
         processed=1,
         remaining=2,
         failure=ProviderFailure(
-            ProviderFailureKind.AUTHORIZATION, "denied", provider=ProviderKind.GOOGLE
+            ProviderFailureKind.AUTHORIZATION,
+            "denied",
+            provider=ProviderKind.GOOGLE,
+            provider_label="Example Calendar",
         ),
     )
     neutral = RemovalInterrupted(
@@ -246,7 +249,7 @@ def test_removal_interrupted_names_the_provider_that_failed() -> None:
     )
 
     assert str(named) == (
-        "removal stopped after 1 of 3 projections because Google Calendar reported "
+        "removal stopped after 1 of 3 projections because Example Calendar reported "
         "authorization; retry to continue"
     )
     assert str(neutral) == (

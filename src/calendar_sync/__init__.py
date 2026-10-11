@@ -1,3 +1,3 @@
-"""Calendar Ghost: a modular monolith for one-way Google Calendar synchronization."""
+"""Calendar Ghost: a modular monolith for one-way calendar synchronization."""
 
 __version__ = "0.1.1"

@@ -24,6 +24,38 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- Outlook is the second calendar provider, for Microsoft 365 work or school accounts and personal
+  Outlook.com accounts, through Microsoft Graph v1.0
+  ([ADR 0032](docs/adr/0032-outlook-through-microsoft-graph.md)). An installation that registers a
+  Microsoft Entra application and sets `CALENDAR_SYNC_MICROSOFT_CLIENT_ID`,
+  `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`, `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` (default
+  `http://localhost:8000/api/v1/oauth/microsoft/callback`), and `CALENDAR_SYNC_MICROSOFT_TENANT`
+  (default `common`) offers **Connect Microsoft account**; without them nothing changes. A rule may
+  read from one provider and write to the other. Outlook projections are appointments with no
+  attendees, so no write emails anyone, and a repeat pattern Outlook cannot express exactly blocks
+  that event as a Conflict instead of being approximated. Microsoft's reasons become Causes from
+  its codes alone; an expired client secret is the administrator's `oauth_client_invalid`, with its
+  own troubleshooting section, and the self-hosting guide explains registering the application and
+  rotating its secret before it expires.
+- `httpx` and `tzdata` are runtime dependencies: `httpx` reaches Microsoft Graph and stays inside
+  the Microsoft adapter, and `tzdata` maps Outlook's Windows time zone names on any host.
+- Run outcomes carry `failure_provider`, and an access check a provider refuses names it in
+  `params.provider`, so the Web UI names Google or Microsoft in each message.
+- Migration 28 binds each OAuth state to the provider whose consent began it, so a state returned to
+  another provider's callback connects nothing. Rolling back is safe.
+- An event write the destination provider cannot represent exactly is recorded as a Conflict with
+  the reason `projection_unsupported`, and the rest of the rule keeps syncing.
+- The development preview makes Sam's and Robin's Work accounts Microsoft's, offers both
+  providers, and adds the `outlook-client` scenario.
+- `GET /api/v1/providers` lists each calendar provider people can connect on this installation:
+  its Provider Kind, name, connect address, redirect URI, and the troubleshooting section for each
+  Cause it can raise ([ADR 0022](docs/adr/0022-route-calendar-requests-by-provider.md), amended).
+  Connection flows live at `/api/v1/oauth/{provider}/start` and `/api/v1/oauth/{provider}/callback`.
+  Google's addresses, including the redirect URI every installation registered with Google, are
+  unchanged, and `GET /api/v1/google/configuration` keeps answering as before for earlier clients.
+- Installation Hints and every problem in Installation Status, the dashboard, and the Operator
+  Overview carry `provider`, the Provider Kind whose answer explains them. Migration 27 records the
+  provider with each Cause; every Cause recorded before names Google. Rolling back is safe.
 - Several people can share one installation, each with private Google accounts, rules, Activity,
   incidents, and tokens ([ADR 0029](docs/adr/0029-isolate-users-in-one-sqlite-database.md),
   [ADR 0030](docs/adr/0030-users-administrators-and-registration.md)). People sign in with email and
@@ -108,6 +140,16 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- The Web UI names the provider wherever one is known: account rows read "Google account" or
+  "Microsoft account" beside the address, and causes, waiting messages, and next steps name Google
+  or Microsoft, their consoles, and their status pages. Where no one provider is meant, copy says
+  "calendar account" or "the calendar provider"; the People verdict reads "Waiting for the
+  provider".
+- Settings and the Overview offer one Connect button per configured calendar provider, and each
+  account's **Reauthorize account** goes to its own provider. A connection returns to Settings as
+  `?oauth=<outcome>&provider=<kind>` instead of `?google=<outcome>`.
+- The OpenAPI schemas `GoogleConfigurationResponse` and `GoogleAccountAccessResponse` are now
+  `ProviderConfigurationResponse` and `AccountAccessResponse`; their JSON is unchanged.
 - Form fields have borders with enough contrast again: a global reset no longer overrides them.
   Midnight's primary color is calmer, so a red status draws the eye first.
 - Settings groups share the border, fill, radius, and padding of the app's other cards. "Your

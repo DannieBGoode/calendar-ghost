@@ -52,7 +52,6 @@ from calendar_sync.application.lapsed_authorization import LapsedAuthorizations
 from calendar_sync.application.locking import RuleLocks
 from calendar_sync.application.operator_overview import OperatorOverview, UserStatuses
 from calendar_sync.application.ports import (
-    AccountAuthorization,
     AccountCalendars,
     CalendarProvider,
     CauseSighting,
@@ -80,7 +79,7 @@ from calendar_sync.application.ports import (
     UserDirectory,
 )
 from calendar_sync.application.preview import PreviewSyncRule
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.provider_descriptors import ProviderDirectory
 from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
 from calendar_sync.application.removal import RemoveSyncRule
 from calendar_sync.application.rules import (
@@ -106,11 +105,12 @@ from calendar_sync.domain.services import (
     ReconciliationService,
     SyncDecisionService,
 )
-from calendar_sync.infrastructure.google.oauth import GoogleOAuthService, OAuthClientConfig
-from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
+from calendar_sync.infrastructure.google.descriptor import google_provider
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator, UuidRunIdGenerator
 from calendar_sync.infrastructure.integration_tokens import SqliteIntegrationTokens
 from calendar_sync.infrastructure.log_files import RotatingLogFiles
+from calendar_sync.infrastructure.microsoft.descriptor import microsoft_provider
+from calendar_sync.infrastructure.microsoft.oauth import MicrosoftClient
 from calendar_sync.infrastructure.notifications import (
     IncidentNotifier,
     NotificationChannel,
@@ -119,6 +119,7 @@ from calendar_sync.infrastructure.notifications import (
     SmtpServer,
     WebhookChannel,
 )
+from calendar_sync.infrastructure.oauth import OAuthClientConfig
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
 from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteActivityQueries,
@@ -159,13 +160,6 @@ from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 
 
 @dataclass(frozen=True, slots=True)
-class GoogleConnectionStatus:
-    configured: bool
-    redirect_uri: str | None
-    """Shown only when configured, so the administrator can register it with Google."""
-
-
-@dataclass(frozen=True, slots=True)
 class UserServices:
     """The use cases one User's requests call. Each sees only that User's records (ADR 0029)."""
 
@@ -185,7 +179,7 @@ class UserServices:
     replace_sync_rule_calendars: ReplaceSyncRuleCalendars
     rule_health: RuleHealth
     lapsed_authorizations: LapsedAuthorizations
-    # Each of these needs the installation master key, and synchronization also Google.
+    # Each of these needs the installation master key, and synchronization also a provider.
     list_connected_accounts: ListConnectedAccounts | None
     disconnect_connected_account: DisconnectConnectedAccount | None
     delete_connected_account: DeleteConnectedAccount | None
@@ -236,12 +230,12 @@ class Container:
     """What the Web API reads: installation-wide services, and each User's through `for_user`."""
 
     secure_cookies: bool
-    google: GoogleConnectionStatus
+    providers: ProviderDirectory
+    """Every calendar provider this release knows, and how Users connect the configured ones."""
     identity: IdentityServices
     administration: AdministrationServices
     token_authentication: IntegrationTokenAuthentication
     storage: StorageAdministration
-    authorization: AccountAuthorization | None
     account_calendars: AccountCalendars | None
     scheduler: SyncScheduler | None
     scheduler_watch: SchedulerWatch | None
@@ -295,8 +289,9 @@ class Adapters:
     """The installation's SMTP recipient and webhook, which hear only installation incidents."""
     sends_email: bool = False
     accounts: Callable[[UserId], ConnectedAccountRepository] | None = None
-    authorization: AccountAuthorization | None = None
-    """Connects and reauthorizes accounts through the provider's OAuth flow."""
+    providers: ProviderDirectory = field(default_factory=ProviderDirectory)
+    """Each calendar provider's descriptor: its names, troubleshooting sections, connection flow,
+    and adapters (ADR 0022)."""
     account_calendars: AccountCalendars | None = None
     """Lists each account's calendars through its provider's adapter."""
     calendar_provider: CalendarProvider | None = None
@@ -364,31 +359,58 @@ def build_adapters(settings: Settings) -> Adapters:
         installation_notifications=_installation_notifier(settings, mail),
         sends_email=mail is not None,
     )
-    if not settings.master_key:
-        return adapters
-    accounts = SqliteConnectedAccountStore(
-        database, CredentialCipher(settings.master_key), clock, ids
+    accounts = (
+        SqliteConnectedAccountStore(database, CredentialCipher(settings.master_key), clock, ids)
+        if settings.master_key
+        else None
     )
-    google_oauth = GoogleOAuthService(
-        OAuthClientConfig(
-            settings.google_client_id,
-            settings.google_client_secret,
-            settings.google_redirect_uri,
-        ),
-        accounts,
-        SqliteAuthorizationStates(database, clock),
-        verifier_key=settings.master_key,
-    )
+    providers = calendar_providers(settings, accounts, clock)
+    if accounts is None:
+        return replace(adapters, providers=providers)
     return replace(
         adapters,
         accounts=accounts.for_user,
-        authorization=google_oauth,
-        account_calendars=RoutingAccountCalendars(accounts, {ProviderKind.GOOGLE: google_oauth}),
-        calendar_provider=RoutingCalendarProvider(
-            accounts,
-            {ProviderKind.GOOGLE: GoogleCalendarProvider(google_oauth.service_for, clock)},
-        ),
+        providers=providers,
+        account_calendars=RoutingAccountCalendars.of(accounts, providers),
+        calendar_provider=RoutingCalendarProvider.of(accounts, providers),
         call_stats=ContextProviderCallStats(),
+    )
+
+
+def calendar_providers(
+    settings: Settings, accounts: SqliteConnectedAccountStore | None, clock: Clock
+) -> ProviderDirectory:
+    """Every calendar provider's descriptor, as its own package composes it (ADR 0022). Adding a
+    provider adds its package and one line here."""
+    states = SqliteAuthorizationStates(settings.database_path, clock)
+    return ProviderDirectory(
+        (
+            google_provider(
+                OAuthClientConfig(
+                    settings.google_client_id,
+                    settings.google_client_secret,
+                    settings.google_redirect_uri,
+                ),
+                accounts,
+                states,
+                settings.master_key,
+                clock,
+            ),
+            microsoft_provider(
+                MicrosoftClient(
+                    OAuthClientConfig(
+                        settings.microsoft_client_id,
+                        settings.microsoft_client_secret,
+                        settings.microsoft_redirect_uri,
+                    ),
+                    settings.microsoft_tenant,
+                ),
+                accounts,
+                states,
+                settings.master_key,
+                clock,
+            ),
+        )
     )
 
 
@@ -408,15 +430,9 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
     )
     # Installation Health counts the verdicts People shows, so the two never disagree.
     statuses = UserStatuses(adapters.installation_units, adapters.locks, adapters.clock, scheduler)
-    google_configured = bool(
-        adapters.authorization and settings.google_client_id and settings.google_client_secret
-    )
     return Container(
         secure_cookies=settings.secure_cookies,
-        google=GoogleConnectionStatus(
-            configured=google_configured,
-            redirect_uri=settings.google_redirect_uri if google_configured else None,
-        ),
+        providers=adapters.providers,
         identity=_identity(adapters),
         administration=_administration(
             adapters,
@@ -428,7 +444,6 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
         storage=StorageAdministration(
             adapters.database_storage, adapters.locks, adapters.clock, adapters.log_files
         ),
-        authorization=adapters.authorization,
         account_calendars=adapters.account_calendars,
         scheduler=scheduler,
         scheduler_watch=(
@@ -442,6 +457,7 @@ def compose(settings: Settings, adapters: Adapters) -> Container:
             scheduler,
             adapters.clock,
             _failure_causes(adapters.installation_units),
+            adapters.providers.guides,
         ),
         operator_overview=OperatorOverview(
             adapters.users, statuses, adapters.installation_units, adapters.clock

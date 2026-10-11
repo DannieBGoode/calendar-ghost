@@ -32,7 +32,7 @@ their own corresponding source without changing the application code.
 
 ## Development preview
 
-To see the Web UI with realistic data without a Google account, run:
+To see the Web UI with realistic data without a Google or Microsoft account, run:
 
 ```sh
 .venv/bin/python scripts/dev_preview.py
@@ -40,7 +40,7 @@ To see the Web UI with realistic data without a Google account, run:
 
 Open `http://127.0.0.1:8001/activity` and sign in as `preview@preview.test` with `previewpreview`. In every scenario but `setup`,
 `robin@example.test` signs in with the same password as an ordinary User, healthy unless the
-scenario breaks his rule, so People is on. The preview is for
+scenario breaks their rule, so People is on. The preview is for
 development only:
 
 - It writes only to `dev-preview.db` in the repository root, which it marks as its own. It refuses
@@ -48,8 +48,9 @@ development only:
   names, and recreates its own database with fresh synthetic data on every start.
 - It never reads `.env` or the environment for settings, so no OAuth credentials, master key,
   notifications, or scheduler are loaded.
-- Google is replaced by a read-only fake that answers event lookups from synthetic data and refuses
-  every write.
+- Google and Microsoft are replaced by a read-only fake that answers event lookups from synthetic
+  data and refuses every write. Both providers show as configured; Connect returns to Settings
+  and connects nothing.
 - It listens on `127.0.0.1` only, and `scripts/` is excluded from the Python package and the
   container image.
 
@@ -73,10 +74,14 @@ export or a real provider response in repository assets.
 | `healthy` | Every rule running and up to date |
 | `api-disabled` | Sam and Robin both lost Google because the Calendar API is off; People suggests it and Robin reads only that Google Calendar is temporarily unavailable |
 | `access-revoked` | Sam and Robin both lost Google a week after connecting; each reauthorizes, and People suggests the OAuth app is in Testing mode |
+| `outlook-client` | Sam and Robin both lost their Microsoft accounts because Microsoft no longer accepts the installation's client secret; People suggests it and Robin reads only that Outlook is temporarily unavailable |
+
 The preview uses the generated local portraits in `web/public/avatars/`; production accounts use
-the profile photo returned by Google when one is available. Its seed data models one fictional Sam
-across three context-specific identities (`sam@personal.example`, `sam@family.example`, and
-`sam@work.example`), keeping the screenshots recognizable while making each calendar's story clear.
+the profile photo their provider returns when one is available. Its seed data models one fictional
+Sam across three context-specific identities (`sam@personal.example` and `sam@family.example` are
+Google accounts, and `sam@work.example` is a Microsoft account), keeping the screenshots
+recognizable while making each calendar's story clear. Rules between Personal or Family and Work
+cross providers. Robin's Personal account is Google's and their Work account is Microsoft's.
 
 ## Landing page
 

@@ -184,6 +184,32 @@ def test_google_rate_limit_is_classified_as_retryable() -> None:
     assert raised.value.retryable is True
 
 
+def test_a_google_failure_names_google_calendar_for_incidents_and_logs() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_raising(503)
+    provider = provider_with_events_api(events_api)
+
+    with pytest.raises(ProviderFailure) as raised:
+        provider.get_event(event().reference)
+
+    assert raised.value.provider is ProviderKind.GOOGLE
+    assert raised.value.summary == "Google Calendar is temporarily unavailable"
+
+
+def test_an_ownership_refusal_names_google_calendar() -> None:
+    events_api = MagicMock()
+    events_api.get.return_value = request_returning(google_event_payload("native"))
+    provider = provider_with_events_api(events_api)
+    destination = event("native", calendar=endpoint("work-account", "work-calendar")).reference
+
+    with pytest.raises(ProjectionOwnershipMismatch) as raised:
+        provider.delete_projection(
+            destination, event("source-event").reference, SyncRuleId("rule-1"), "operation"
+        )
+
+    assert raised.value.provider_name == "Google Calendar"
+
+
 @pytest.mark.parametrize(
     ("headers", "expected"),
     [

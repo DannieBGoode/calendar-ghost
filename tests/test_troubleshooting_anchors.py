@@ -3,14 +3,19 @@
 import re
 from pathlib import Path
 
+import pytest
+
 from calendar_sync.application.causes import Cause
-from calendar_sync.application.installation_hints import (
-    CAUSE_ANCHORS,
-    TESTING_MODE_ANCHOR,
-    UNRECOGNIZED_ANCHOR,
-)
+from calendar_sync.application.installation_hints import UNRECOGNIZED_ANCHOR
+from calendar_sync.application.provider_descriptors import ProviderGuide
+from calendar_sync.application.providers import ProviderKind
+from calendar_sync.bootstrap.config import Settings
+from calendar_sync.bootstrap.container import calendar_providers
+from calendar_sync.infrastructure.scheduling import SystemClock
 
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "troubleshooting.md"
+# Every provider this release composes, as bootstrap describes it.
+GUIDES = calendar_providers(Settings(Path("unused.db")), None, SystemClock()).guides
 
 
 def github_anchor(heading: str) -> str:
@@ -32,37 +37,39 @@ def test_the_anchor_rule_matches_githubs() -> None:
     )
 
 
-def test_every_hint_links_to_a_section_of_the_guide() -> None:
-    anchors = guide_anchors()
-    linked = {*CAUSE_ANCHORS.values(), TESTING_MODE_ANCHOR, UNRECOGNIZED_ANCHOR}
-
-    assert linked <= anchors, linked - anchors
+def test_every_provider_is_described() -> None:
+    assert {guide.kind for guide in GUIDES} == set(ProviderKind)
 
 
-def test_every_how_to_fix_link_in_the_web_ui_reaches_a_section_of_the_guide() -> None:
+@pytest.mark.parametrize("guide", GUIDES, ids=lambda guide: guide.kind.value)
+def test_every_section_a_provider_links_to_is_in_the_guide(guide: ProviderGuide) -> None:
+    lifetime = [guide.grant_lifetime.anchor] if guide.grant_lifetime else []
+    linked = {*guide.cause_anchors.values(), *lifetime, UNRECOGNIZED_ANCHOR}
+
+    assert linked <= guide_anchors(), linked - guide_anchors()
+
+
+@pytest.mark.parametrize("guide", GUIDES, ids=lambda guide: guide.kind.value)
+def test_every_cause_a_provider_raises_unknown_included_has_a_section(guide: ProviderGuide) -> None:
+    # A provider's failures it does not recognize, and its limits that fix themselves, are
+    # always possible, so each provider explains them.
+    assert {Cause.UNKNOWN, Cause.RATE_LIMITED, Cause.TEMPORARY} <= set(guide.cause_anchors)
+
+
+def test_the_web_ui_reads_how_to_fix_sections_from_the_server() -> None:
+    # The Web UI links each administrator's Cause where its provider's guide says, through
+    # GET /api/v1/providers, so it names no section of its own.
     causes = Path(__file__).resolve().parents[1] / "web" / "src" / "lib" / "causes.ts"
-    block = causes.read_text().split("const ADMINISTRATOR_ANCHORS", 1)[1].split("}", 1)[0]
-    linked = dict(re.findall(r"(\w+): \"([a-z0-9-]+)\"", block))
+    anchors = {anchor for guide in GUIDES for anchor in guide.cause_anchors.values()}
 
-    # The Web UI links each administrator's Cause where Installation Hints do.
-    assert linked == {cause.value: anchor for cause, anchor in CAUSE_ANCHORS.items()}
-    assert set(linked.values()) <= guide_anchors()
+    assert not any(anchor in causes.read_text() for anchor in anchors)
 
 
-# Every Cause has a section of its own, for whoever fixes it; links and readers rely on these.
-SECTIONS = {
-    Cause.API_DISABLED: "the-google-calendar-api-is-turned-off",
-    Cause.QUOTA_EXCEEDED: "the-google-cloud-projects-daily-quota-is-used-up",
-    Cause.OAUTH_CLIENT_INVALID: "google-no-longer-accepts-the-oauth-client",
-    Cause.ACCESS_REVOKED: "google-no-longer-accepts-your-google-account",
-    Cause.CALENDAR_FORBIDDEN: "your-google-account-may-not-change-the-calendar",
-    Cause.CALENDAR_NOT_FOUND: "the-calendar-no-longer-exists",
-    Cause.RATE_LIMITED: "google-is-slowing-calendar-ghost-down",
-    Cause.TEMPORARY: "google-is-slowing-calendar-ghost-down",
-    Cause.UNKNOWN: "google-refused-for-a-reason-calendar-ghost-does-not-recognize",
-}
+@pytest.mark.parametrize("guide", GUIDES, ids=lambda guide: guide.kind.value)
+def test_no_provider_sends_people_to_another_providers_section(guide: ProviderGuide) -> None:
+    # An Outlook Cause is explained in a Microsoft section, or in one every provider shares.
+    others = {other.display_name.lower() for other in GUIDES if other.kind is not guide.kind}
+    lifetime = [guide.grant_lifetime.anchor] if guide.grant_lifetime else []
 
-
-def test_every_cause_has_a_section_of_the_guide() -> None:
-    assert set(SECTIONS) == set(Cause)
-    assert set(SECTIONS.values()) <= guide_anchors()
+    for anchor in {*guide.cause_anchors.values(), *lifetime}:
+        assert not any(name in anchor.split("-") for name in others), anchor

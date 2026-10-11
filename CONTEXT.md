@@ -4,8 +4,10 @@ This glossary defines the shared language for describing provider-independent ca
 
 ## Product Boundary
 
-Google Calendar is the only supported calendar provider today. Outlook and iCloud support are planned and
-advertised as coming soon, with no release date promised. Other providers remain unsupported.
+Google Calendar and Outlook (Microsoft 365 work or school accounts and personal Outlook.com
+accounts, through Microsoft Graph) are the supported calendar providers. iCloud support is planned
+and advertised as coming soon, with no release date promised. Other providers, including CalDAV and
+ICS feeds, remain unsupported.
 
 **Community Edition**:
 The Calendar Ghost software in this repository, run on infrastructure the operator controls. One
@@ -43,11 +45,11 @@ _Avoid_: SaaS mode, billing mode
 ## Authorization
 
 **Connected Account**:
-A calendar-service identity authorized on this installation by one User, such as a Google account authorized through one OAuth grant. It belongs to exactly one Provider Kind and one User. Two Users may each connect the same calendar-service identity; each gets a Connected Account of their own, and neither learns of the other's. A sync rule may use different connected accounts, even of different providers, for its source and destination calendars, but both belong to the rule's User.
+A calendar-service identity authorized on this installation by one User, such as a Google account or a Microsoft account authorized through one OAuth grant. It belongs to exactly one Provider Kind and one User. Two Users may each connect the same calendar-service identity; each gets a Connected Account of their own, and neither learns of the other's. A sync rule may use different connected accounts, even of different providers, for its source and destination calendars, but both belong to the rule's User.
 _Avoid_: Account, user, login
 
 **Provider Kind**:
-The calendar service a Connected Account belongs to, such as Google. It is recorded when the account is first connected and never changes. Every request about the account's calendars goes to that provider's adapter (ADR 0022).
+The calendar service a Connected Account belongs to: `google` or `outlook` (a Microsoft account, whose calendars Outlook shows). It is recorded when the account is first connected and never changes. Every request about the account's calendars goes to that provider's adapter (ADR 0022, ADR 0032). The domain and application name a provider only by its Provider Kind; what a provider is called, how it connects, and how its reasons read as Causes live in its adapter's descriptor.
 _Avoid_: Account type, integration
 
 **Disconnected Account**:
@@ -62,7 +64,7 @@ change them.
 
 **Lapsed Authorization**:
 The condition of a Connected Account whose stored credentials its provider no longer accepts, as
-when a Google grant expires or is revoked. The account stays connected, so its rules keep their
+when a Google or Microsoft grant expires or is revoked. The account stays connected, so its rules keep their
 mappings and incremental positions. Any provider request that the provider refuses for
 authentication or authorization marks it, whether a sync run, a preview, or an access check, and
 it stops every enabled rule of the account. Reauthorization clears it, and so does an access check the provider accepts. Once it clears and
@@ -228,7 +230,7 @@ A deduplicated notice sent when an incident opens or resolves. It goes to the Us
 _Avoid_: Error alert, retry notification
 
 **Installation Status**:
-The server's one verdict on the installation's health as it affects one User (stalled, stopped, review, waiting, paused, setup, or healthy) with every current problem, most urgent first. The Overview, the status API, and MCP all show it. It covers that User's rules and any installation problem that affects them, such as a stalled scheduler. It names rules by their calendars and never carries event content, calendar IDs, or account emails. A rule stopped by Lapsed Authorization is reported as stopped for that cause; the Web UI names the account from its own records, so monitors and agents learn only that a Google account needs reauthorization.
+The server's one verdict on the installation's health as it affects one User (stalled, stopped, review, waiting, paused, setup, or healthy) with every current problem, most urgent first. The Overview, the status API, and MCP all show it. It covers that User's rules and any installation problem that affects them, such as a stalled scheduler. It names rules by their calendars and never carries event content, calendar IDs, or account emails. A rule stopped by Lapsed Authorization is reported as stopped for that cause; the Web UI names the account from its own records, so monitors and agents learn only that a calendar account needs reauthorization.
 _Avoid_: Health check, status page
 
 **Installation Health**:
@@ -240,20 +242,23 @@ Why a provider call failed, as one of a closed set read from the provider's own 
 from its message text. Each Cause has one owner, the Installation Administrator or the User, and an
 Installation Administrator never contacts a User through Calendar Ghost about a problem: what a User
 can fix, they fix from their own Overview, rule, or Settings. The administrator's Causes are those
-only the installation's Google Cloud project can fix: the Calendar API is turned off
-(`api_disabled`), the project's daily quota is used up (`quota_exceeded`), or Google no longer
-accepts the installation's OAuth client (`oauth_client_invalid`). The User is told only that Google
-Calendar is temporarily unavailable, never the Cause or who fixes it, so nobody is sent to the
+only the installation's registration with its provider can fix: the Google Calendar API is turned
+off for the Google Cloud project (`api_disabled`), the project's daily quota is used up
+(`quota_exceeded`), or the provider no longer accepts the installation's OAuth client
+(`oauth_client_invalid`), as when a Microsoft client secret expired. The User is told only that their
+calendar is temporarily unavailable, never the Cause or who fixes it, so nobody is sent to the
 administrator, who learns it on People. Every other Cause is the User's, with one next step from actions
-that already exist: Google no longer accepts the account's grant (`access_revoked`), so they
+that already exist: the provider no longer accepts the account's grant (`access_revoked`), so they
 reauthorize the account; the account may not change the calendar (`calendar_forbidden`) or the
 calendar is gone (`calendar_not_found`), so they choose another calendar or remove the rule;
-Google is limiting requests (`rate_limited`) or failed for now (`temporary`), which fixes itself, so
+the provider is limiting requests (`rate_limited`) or failed for now (`temporary`), which fixes itself, so
 they are told when it was last tried and when it is tried again; and anything else is `unknown`,
 whose problem keeps its usual next step, said honestly as trying again. A failure no provider answer
 explains, such as one inside Calendar Ghost or one its adapter concludes itself, has no Cause. A Cause says who fixes a
 failure; whether a rule retries, stops, or lapses its account still follows the failure itself
-(ADR 0031). Incidents and run outcomes record it, and Installation Status shows it on each problem.
+(ADR 0031). Each provider's adapter maps its own reason codes to Causes; Microsoft never raises
+`api_disabled` or `quota_exceeded` (ADR 0032). Incidents and run outcomes record it with the
+Provider Kind that raised it, and Installation Status shows both on each problem.
 _Avoid_: Error reason, root cause, error message
 
 **Installation Hint**:
@@ -261,7 +266,8 @@ A likely cause Installation Health suggests to Installation Administrators, neve
 content: an administrator's Cause any User met within a day, since only the administrator can fix
 it; and, as patterns across Users, Google refusing two or more Users' grants about 7 days after they authorized, which an OAuth app
 in Testing mode does; or two or more Users failing within a day for a reason Calendar Ghost does not
-recognize (`unknown`), which the service logs name by Google's reason code. Each names its Cause, how
+recognize (`unknown`), which the service logs name by the provider's reason code. Each hint is per
+provider and names it. Each names its Cause, how
 many Users show it, and the troubleshooting section that explains the fix. It names no User, rule,
 calendar, or account. Hints are what People flags; a User's own problems are not flagged, and the
 administrator finds them, with what the User does, on that User's page.
@@ -316,7 +322,7 @@ _Avoid_: OAuth secret, administrator password, database password
 ## Rule Lifecycle
 
 **Rule Preview**:
-A side-effect-free evaluation showing eligible source events, excluded events, destination projections, and planned actions. A new or materially changed rule must pass preview before it can be enabled. It writes nothing to Google; locally it records only the rule's validated state and the preview's counts, so enabling can restate what will be written.
+A side-effect-free evaluation showing eligible source events, excluded events, destination projections, and planned actions. A new or materially changed rule must pass preview before it can be enabled. It writes nothing to any calendar; locally it records only the rule's validated state and the preview's counts, so enabling can restate what will be written.
 _Avoid_: Test sync, simulation
 
 **Material Rule Change**:
@@ -369,7 +375,7 @@ _Avoid_: Request ID, idempotency token
 
 **Provider Incident**:
 An incident opened after three consecutive scheduled sync runs fail because of a temporary or rate-limited provider condition. It resolves automatically after a successful scheduled run.
-_Avoid_: Retry error, Google outage
+_Avoid_: Retry error, provider outage
 
 **Rule Isolation**:
 The guarantee that one rule's failed or degraded sync run does not block or roll back unrelated rules. Provider requests may still share connected-account rate limits.
@@ -392,17 +398,17 @@ diagnostics keep the glossary terms above.
 | Rule Preview, then enable | "Preview rule", then "Start syncing" |
 | Degraded Rule | "Stopped", with the cause and its one next step: "Reauthorize account" when an account it uses has Lapsed Authorization, otherwise "Preview to restart" |
 | Reconciliation | "Reconcile now", always with its explanation: syncs in full, putting back events edited or deleted in the destination, then checks every event the rule wrote from the starting point onward and reports any that still differ; never "repaired" for what the check only reported |
-| Connected Account | "Google account" |
+| Connected Account | named by its Provider Kind: "Google account" or "Microsoft account"; "calendar account" where no one provider is meant. Its row in Settings says which ("Microsoft account · dana@contoso.example") |
 | Lapsed Authorization | "Needs reauthorization", naming the account; its action is "Reauthorize account" |
 | Initial Sync Window | "Starting point: includes events from the past 30 days onward" |
 | Audit Entry, in Activity | one line per event: what was observed, then what Calendar Ghost did, such as "Cancelled in Work → removed from Family"; the run is only a time heading |
 | Conflict | "Blocked", stating what is now different in the destination calendar and who acts: the User's step when one exists, otherwise that Calendar Ghost checks again daily |
 | Drift | what was observed, never who caused it: "Edited in Family → changed back to match Work", "Missing from Family → put back"; a repeat of the previous run's repair says "again" |
 | Operator Overview | "People", with a "Sync" status per person and "Installation health" above them |
-| Cause | "Likely cause:" and the cause in plain words, such as "the Google Calendar API is turned off for this installation". To the User, an administrator's Cause says only "Temporarily unavailable", naming neither the cause nor the administrator, with Check access to try again when the account lapsed; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
+| Cause | "Likely cause:" and the cause in plain words, naming the provider that raised it, such as "the Google Calendar API is turned off for this installation" or "Microsoft no longer accepts this installation's OAuth client"; neutral words ("the calendar provider") when the server names none. To the User, an administrator's Cause says only "Temporarily unavailable", naming neither the cause nor the administrator, with Check access to try again when the account lapsed; their own Cause offers its one step ("Reauthorize account", or "Open the rule" to choose another calendar or remove it), or says it fixes itself with when it was last and will next be tried. To an administrator, a User's Cause says "{name} can fix this from their dashboard" ("{name} can try again from their dashboard" when `unknown`) and offers no action |
 | Installation Hint, on People | the pattern in one sentence with how many people it affects, then "How to fix", linking to its troubleshooting section |
-| Installation Status verdict, on People | "Not running" (stalled), "Stopped", "Needs a look" (review), "Waiting for Google", "Paused", "Not set up" (setup), "Healthy" |
-| User Deletion | "Delete your account" for oneself, naming what is deleted (sign-in, rules, Google connections, tokens, Activity, and the events their rules wrote when chosen) and that their Google accounts and own events stay; on People, "Delete" and "Delete {email} permanently?", naming the same and that the events their rules wrote are deleted. "Account deletion" stays out of domain and documentation language |
+| Installation Status verdict, on People | "Not running" (stalled), "Stopped", "Needs a look" (review), "Waiting for the provider", "Paused", "Not set up" (setup), "Healthy" |
+| User Deletion | "Delete your account" for oneself, naming what is deleted (sign-in, rules, calendar connections, tokens, Activity, and the events their rules wrote when chosen) and that their calendar accounts and own events stay; on People, "Delete" and "Delete {email} permanently?", naming the same and that the events their rules wrote are deleted. "Account deletion" stays out of domain and documentation language |
 
 - The product is named **Calendar Ghost**. "Ghost" is brand language for the mark and tagline;
   the interface and documentation keep this glossary's terms, so a Managed Projection is never

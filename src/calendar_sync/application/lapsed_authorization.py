@@ -40,6 +40,7 @@ def lapse_incident(account_id: ConnectedAccountId, failure: ProviderFailure) -> 
             },
         ),
         cause=failure.provider_cause,
+        provider=failure.provider,
     )
 
 

@@ -1,9 +1,10 @@
 # Calendar Ghost
 
-*Your busy time, everywhere it needs to be.* Self-hosted one-way sync between Google calendars, for you or your household.
+*Your busy time, everywhere it needs to be.* Self-hosted one-way sync between Google and Outlook calendars, for you or your household.
 
-A self-hosted, source-authoritative Google Calendar synchronizer. Define a directional rule from
-one calendar to another, including calendars owned by different Google identities, and keep a
+A self-hosted, source-authoritative calendar synchronizer for Google Calendar and Outlook. Define a
+directional rule from one calendar to another, including calendars owned by different Google or
+Microsoft identities, or one of each, and keep a
 privacy-controlled projection synchronized without copying invitations or depending on a hosted
 coordinator.
 
@@ -37,12 +38,12 @@ before deploying it with real calendars.
 ## See it in action
 
 These screenshots use synthetic data and local generated avatar portraits from the development
-preview, and follow your GitHub light or dark appearance. They contain no personal Google Calendar
+preview, and follow your GitHub light or dark appearance. They contain no personal calendar
 content and show the main self-hosted workflow: see rule health, inspect Activity, and manage
 directional rules. The preview follows one fictional person, Sam, across three context-specific
-Google identities: `sam@personal.example`, `sam@family.example`, and `sam@work.example`. The
-portraits keep him recognizable while the accessories and companion make each part of his life
-distinct.
+identities: the Google accounts `sam@personal.example` and `sam@family.example`, and the Microsoft
+account `sam@work.example`. The portraits keep Sam recognizable while the accessories and companion
+make each part of their life distinct.
 
 <p align="center">
 <picture>
@@ -81,11 +82,12 @@ machine and creates only the destination representation selected by each rule.
   repaired during synchronization; reconciliation reports anything still different.
 - **Privacy first:** new rules default to a `Busy` projection. Detail-copying remains opt-in and
   never copies attendees, organizer identity, conferencing data, attachments, or invitations.
-- **Cross-account:** source and destination calendars may belong to different Google identities.
+- **Cross-account and cross-provider:** source and destination calendars may belong to different
+  Google or Microsoft identities, so a personal Google calendar can show as busy time in Outlook.
 - **Safe activation:** every rule must pass a side-effect-free preview before it can be enabled.
 - **Self-contained:** SQLite, scheduling, the API, and the Web UI run as one lightweight service.
-- **No telemetry:** a functional installation communicates only with the Google APIs needed for
-  calendar synchronization and any notification endpoint you explicitly configure.
+- **No telemetry:** a functional installation communicates only with the Google and Microsoft APIs
+  needed for calendar synchronization and any notification endpoint you explicitly configure.
 
 ## Current capabilities
 
@@ -99,27 +101,41 @@ machine and creates only the destination representation selected by each rule.
 | Reliability | Stable operation keys, cursor-last persistence, retry backoff, and isolated rule failures |
 | Incidents | Each person's Activity view, deduplication, optional email to each person, and the installation's SMTP recipient and webhook for installation incidents |
 | Monitoring | Each person's Installation Status for monitors, homelab dashboards, and AI agents through `GET /api/v1/status` and an MCP server at `/mcp`, and Installation Health for administrators, authorized with Integration Tokens issued in Settings |
-| Access | People sign in with email and password; Only me by default, or Invitation only, with single-use invitation and password reset links; an administrator role; encrypted Google OAuth credentials |
-| Operator Overview | Administrators see on **People** whether each person's synchronization works and why not, with calendars only as "Calendar 1", "Calendar 2", and each person's rules, accounts, Activity, and Google calls counted; each person sees the same about themself in Settings |
+| Access | People sign in with email and password; Only me by default, or Invitation only, with single-use invitation and password reset links; an administrator role; encrypted OAuth credentials |
+| Operator Overview | Administrators see on **People** whether each person's synchronization works and why not, with calendars only as "Calendar 1", "Calendar 2", and each person's rules, accounts, Activity, and provider calls counted; each person sees the same about themself in Settings |
 | Storage | Database and log usage in Settings, administrator-chosen Activity retention, and log download or purge |
 | Appearance | Device-aware light and dark themes with a browser-local override |
 | Deployment | One Docker image and Compose service for `linux/amd64` and `linux/arm64` |
 
-Google Calendar is the only provider available today. Outlook and iCloud support are planned and shown as
-coming soon on the landing page. CalDAV remains an architectural possibility, not a supported feature.
+Supported providers:
+
+| Provider | Accounts | Through |
+| --- | --- | --- |
+| Google Calendar | Personal Google accounts and Google Workspace | Google Calendar API |
+| Outlook | Microsoft 365 work or school accounts and personal Outlook.com accounts | Microsoft Graph v1.0 ([ADR 0032](docs/adr/0032-outlook-through-microsoft-graph.md)) |
+
+A rule may read from one provider and write to the other. iCloud support is planned and shown as
+coming soon on the landing page. CalDAV and ICS feeds remain architectural possibilities, not
+supported features.
 
 ## Quick start with Docker
 
-For the complete Google Cloud, OAuth, LAN/HTTPS, backup, and recovery checklist, see the
-[self-hosting guide](docs/self-hosting.md).
+For the complete Google Cloud, Microsoft Entra, OAuth, LAN/HTTPS, backup, and recovery checklist,
+see the [self-hosting guide](docs/self-hosting.md).
 
 ### Prerequisites
 
 - Docker with Compose
-- A Google Cloud project
-- One or more Google accounts with Google Calendar enabled
+- For Google calendars, a Google Cloud project and one or more Google accounts with Google Calendar
+  enabled
+- For Outlook calendars, a Microsoft Entra application registration and one or more Microsoft
+  accounts
 
-### 1. Configure Google
+### 1. Register with your calendar providers
+
+Register with Google, with Microsoft, or with both. A provider you do not register is not offered.
+
+#### Google
 
 In Google Cloud:
 
@@ -146,6 +162,16 @@ The app requests event access and read-only calendar-list access for synchroniza
 profile access (`openid`, `userinfo.profile`) so each Connected Account shows its Google name and
 photo. Profile access is optional; without it, accounts show initials.
 
+#### Microsoft
+
+In the [Microsoft Entra admin center](https://entra.microsoft.com/), register an application with
+**Accounts in any organizational directory and personal Microsoft accounts**, a **Web** redirect URI
+of `http://localhost:8000/api/v1/oauth/microsoft/callback`, the delegated Microsoft Graph
+permissions `openid`, `email`, `offline_access`, `User.Read`, and `Calendars.ReadWrite`, and a client
+secret. The secret expires on a date you choose, at most 24 months away; note it and rotate the
+secret before then. The [self-hosting guide](docs/self-hosting.md#register-a-microsoft-entra-application)
+walks through each step.
+
 ### 2. Configure local secrets
 
 Copy the example file:
@@ -167,9 +193,13 @@ CALENDAR_SYNC_MASTER_KEY=PASTE_GENERATED_KEY_HERE
 CALENDAR_SYNC_GOOGLE_CLIENT_ID=PASTE_GOOGLE_CLIENT_ID_HERE
 CALENDAR_SYNC_GOOGLE_CLIENT_SECRET=PASTE_GOOGLE_CLIENT_SECRET_HERE
 CALENDAR_SYNC_GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/oauth/google/callback
+# For Outlook:
+CALENDAR_SYNC_MICROSOFT_CLIENT_ID=PASTE_APPLICATION_CLIENT_ID_HERE
+CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET=PASTE_CLIENT_SECRET_VALUE_HERE
 ```
 
-The master key encrypts stored Google credentials. It is not sent to Google. Back it up separately
+Leave out the lines of a provider you did not register. The master key encrypts stored Google and
+Microsoft credentials. It is never sent to either. Back it up separately
 from the database and never change it for an existing installation: losing it makes connected
 account credentials unreadable.
 
@@ -182,7 +212,7 @@ docker compose up -d --build
 Open <http://localhost:8000>, create the administrator with your email and a password, and follow
 the three-step setup:
 
-1. Connect each Google identity you need.
+1. Connect each Google or Microsoft identity you need.
 2. Create a directional rule and choose its privacy, all-day, Maybe, and unanswered-invitation policies.
 3. Preview the rule, inspect the result, and enable it.
 
@@ -190,9 +220,9 @@ The **Overview** leads with one plain-language health state and at most one next
 
 | State | When | What to do |
 | --- | --- | --- |
-| Stopped | A rule is suspended, such as when a Google account's authorization expired | Reauthorize the account or review the rule |
+| Stopped | A rule is suspended, such as when a Google or Microsoft account's authorization expired | Reauthorize the account or review the rule |
 | Needs a look | Rules keep running, but events were blocked or a problem kept happening | See the blocked events or the rule |
-| Waiting for Google | Google is limiting or failing requests; the rule retries by itself | Wait; check Google's status if it lasts more than a day |
+| Waiting for Google or Microsoft | The provider is limiting or failing requests; the rule retries by itself | Wait; check the provider's status page if it lasts more than a day |
 | Paused | Every rule that synced before is paused | Start a rule again when you want |
 | Setup | Nothing is synchronizing yet | Follow the three Getting started steps |
 | Healthy | Every running rule is up to date | Nothing |
@@ -208,7 +238,7 @@ happens, what happened as what Calendar Ghost observed and what it did about it 
 Each outcome carries the same sign as on the Overview, with ✓ for an event already up to date and
 ⊘ for one skipped. Recurring events say whether the entry was about the whole series or one occurrence. A blocked
 entry says what is now different in the destination calendar and whether anything needs doing. Each entry records its event's title and time when the run makes the decision,
-so Activity names events without asking Google and shows when an event was renamed. By default Activity lists changes, skips, and blocks; **All decisions** and **No change needed** also list
+so Activity names events without asking the provider and shows when an event was renamed. By default Activity lists changes, skips, and blocks; **All decisions** and **No change needed** also list
 the checks that found an event already up to date. Choose a rule from the picker, which shows each
 rule's calendars and accounts, or select a row's rule to filter to it. Select an entry to open its
 details beside the table: the event, what happened and why, the copy in the destination calendar,
@@ -218,11 +248,11 @@ the view survives reloads and can be linked.
 The main sections have stable URLs at `/overview`, `/rules`, `/activity`, and `/settings`, so they
 can be bookmarked and browser back/forward navigation works as expected. Settings has three tabs,
 each at its own URL: **Your account** (`/settings/account`, where `/settings` opens),
-**Connections** (`/settings/connections`, where Google returns after you connect an account), and,
+**Connections** (`/settings/connections`, where Google or Microsoft returns after you connect an account), and,
 for administrators, **Administration** (`/settings/administration`). Administrators who let other
 people join also get **People** at `/people`, with Installation Health above everyone and each
 person's sync status, and each person's page at `/people/{id}`. They never see anyone's calendar
-names, Google account emails, or events ([data ownership](docs/data-ownership.md) lists exactly what
+names, connected account emails, or events ([data ownership](docs/data-ownership.md) lists exactly what
 they see).
 
 Open **View details** on a rule (`/rules/{id}`) to see its calendars, policy, projection count, and
@@ -233,14 +263,15 @@ ordinary events that are no longer managed. Removal never deletes an event whose
 verify; such events are left in place and listed under **Blocked** in Activity.
 
 Use **Settings → Connections → Connected accounts** to review every authorized identity, connect
-another Google account, check its Calendar API access, or disconnect it. **Check access** verifies
+another Google or Microsoft account, check its calendar access, or disconnect it. Each row names
+its account's provider, such as "Microsoft account · sam@work.example". **Check access** verifies
 calendar-list and event permissions with read-only requests and reports how many visible calendars
-can be used as destinations. Disconnecting removes stored Google credentials and degrades any
+can be used as destinations. Disconnecting removes stored credentials and degrades any
 enabled rule that uses the identity; mappings, Managed Projections, and incremental positions are
-preserved for safe reauthorization. A disconnected account, or one Google stopped accepting, is
+preserved for safe reauthorization. A disconnected account, or one its provider stopped accepting, is
 listed first, marked **Disconnected** or **Needs reauthorization**, says how many of its rules
-stopped, and offers **Reauthorize account**, which is disabled until Google OAuth is configured.
-Once Google accepts the account again, rules that stopped only because its access lapsed restart on
+stopped, and offers **Reauthorize account**, which is disabled until its provider's OAuth is configured.
+Once the provider accepts the account again, rules that stopped only because its access lapsed restart on
 their own. Accounts connected before profile photos were supported show initials until they are
 connected again with **Connect Google account**, which updates the existing identity in place.
 
@@ -294,9 +325,10 @@ status, and setup for Uptime Kuma, Homepage, Claude Code, Codex, and Claude Desk
 ## How synchronization works
 
 The first run reads source events ending no earlier than 30 days before the run, with no future
-cutoff, observes the destination calendar, and records Google's opaque incremental tokens for both
-endpoints. Later runs consume both change feeds, so a destination-only edit or deletion is repaired
-on the next sync without repeatedly scanning every event. Google's change feed also reports edits to
+cutoff, observes the destination calendar, and records each provider's incremental position for both
+endpoints: Google's sync tokens, or for Outlook a Graph delta link and the time of the last listing
+([ADR 0032](docs/adr/0032-outlook-through-microsoft-graph.md)). Later runs consume both change feeds, so a destination-only edit or deletion is repaired
+on the next sync without repeatedly scanning every event. Both providers also report edits to
 events of any age; an unsynced single event that ended more than 30 days ago is skipped, while an
 already-synced event keeps being updated.
 
@@ -319,7 +351,7 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   in an event, SQLite also keeps its latest description, location, guest addresses, recurrence,
   and conferencing links, and 90 days of their earlier values, sealed with a key derived from the
   installation master key ([ADR 0017](docs/adr/0017-record-source-changes.md)). Values are stored
-  as Google returns them, including any meeting codes in descriptions. Treat the database and its
+  as the provider returns them, including any meeting codes in descriptions. Treat the database and its
   backups as sensitive; together with the master key they reveal those details.
 - Every record belongs to one person, and nobody sees another person's calendars, rules, Activity,
   or tokens; an administrator sees each person's email, role, state, and last sign-in only
@@ -332,15 +364,18 @@ creating a duplicate. See [the synchronization model](docs/sync-model.md) for th
   with (normally the latest entry older than the cutoff and the latest that recorded a title)
   ([ADR 0019](docs/adr/0019-administrator-chosen-activity-retention.md)).
 - Mappings retain provider IDs, revisions, and a non-reversible projection fingerprint.
-- Google access and refresh credentials are encrypted at rest with AES-256-GCM using the separate
-  installation master key.
-- Disconnecting an account discards its stored Google credentials without deleting rules,
+- Google and Microsoft access and refresh credentials are encrypted at rest with AES-256-GCM using
+  the separate installation master key.
+- Disconnecting an account discards its stored credentials without deleting rules,
   mappings, or Managed Projections.
-- The OAuth flow requests event access and read-only calendar-list discovery; it does not request
-  general Google account access.
+- The OAuth flow requests event access and calendar discovery only: for Google, event access and
+  read-only calendar-list discovery; for Microsoft, delegated `Calendars.ReadWrite` with sign-in
+  scopes. It does not request general account, mail, or shared-calendar access.
 - The account access check requests calendar metadata and, from one calendar, event IDs only. It
   does not retain event data or make provider writes.
-- Google writes use `sendUpdates=none`, and projections contain no attendees or invitation data.
+- Google writes use `sendUpdates=none`, Outlook projections are appointments with no attendees and
+  ask for no responses, and no projection contains attendees or invitation data, so no write emails
+  anyone.
 - The Web UI and operational API require a signed-in session, and answer 404 for another person's
   records. Failed sign-ins are throttled per email and per client address, and unusable invitation
   and password reset links per client address. `/health` remains public
@@ -363,10 +398,14 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `CALENDAR_SYNC_DATABASE_PATH` | No | SQLite path; defaults locally to `./calendar-sync.db`, while Compose uses `/data/calendar-sync.db` |
-| `CALENDAR_SYNC_MASTER_KEY` | For Google | URL-safe Base64 value decoding to exactly 32 bytes |
+| `CALENDAR_SYNC_MASTER_KEY` | To connect accounts | URL-safe Base64 value decoding to exactly 32 bytes |
 | `CALENDAR_SYNC_GOOGLE_CLIENT_ID` | For Google | OAuth Web application client ID |
 | `CALENDAR_SYNC_GOOGLE_CLIENT_SECRET` | For Google | OAuth Web application client secret |
 | `CALENDAR_SYNC_GOOGLE_REDIRECT_URI` | For Google | Exact registered OAuth callback |
+| `CALENDAR_SYNC_MICROSOFT_CLIENT_ID` | For Outlook | Microsoft Entra application (client) ID |
+| `CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET` | For Outlook | Client secret value; it expires on the date chosen when it was created |
+| `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` | For Outlook | Exact registered redirect URI; defaults to `http://localhost:8000/api/v1/oauth/microsoft/callback` |
+| `CALENDAR_SYNC_MICROSOFT_TENANT` | No | Which Microsoft accounts may connect: `common` (default, personal and work or school), `organizations`, `consumers`, or a tenant ID |
 | `CALENDAR_SYNC_SECURE_COOKIES` | No | Set `true` when serving the app over HTTPS |
 | `CALENDAR_SYNC_LOG_LEVEL` | No | Application log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`); defaults to `INFO` |
 | `CALENDAR_SYNC_LOG_DIR` | No | Directory for rotating log files; unset defaults to `logs` beside the database (`/data/logs` in Compose). Empty turns file logging off |
@@ -378,7 +417,7 @@ Docker Compose reads `.env` from the repository root. Real secrets must never be
 | `CALENDAR_SYNC_SMTP_SENDER` | With SMTP | Incident email sender; with the host, each person receives their own incidents by email |
 | `CALENDAR_SYNC_SMTP_RECIPIENT` | No | Operator who receives incidents about the installation itself, such as a stalled scheduler |
 | `CALENDAR_SYNC_SMTP_STARTTLS` | No | Enable SMTP STARTTLS; defaults to `true` |
-| `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`; incident email then links to each person's next step. Unset sends email without a link |
+| `CALENDAR_SYNC_PUBLIC_URL` | No | Address people open Calendar Ghost at, such as `https://calendar.example.com`: an `http` or `https` address at the root of its host, with no path. Incident email then links to each person's next step. Unset sends email without a link |
 
 Notification delivery is best-effort. A delivery failure never prevents the incident from being
 recorded locally or stops later synchronization attempts.
@@ -386,7 +425,7 @@ recorded locally or stops later synchronization attempts.
 ## Architecture
 
 The project is a modular monolith with ports-and-adapters boundaries. The synchronization domain
-contains no FastAPI, SQLite, Google SDK, React, OAuth, or Docker dependencies.
+contains no FastAPI, SQLite, Google SDK, Microsoft Graph client, React, OAuth, or Docker dependencies.
 
 ```mermaid
 flowchart LR
@@ -395,7 +434,9 @@ flowchart LR
     APP --> DOMAIN[Synchronization domain]
     APP --> GP[Calendar provider port]
     APP --> RP[Repository ports]
-    GP --> GOOGLE[Google adapter → Google Calendar]
+    GP --> ROUTER[Router by Provider Kind]
+    ROUTER --> GOOGLE[Google adapter → Google Calendar]
+    ROUTER --> MICROSOFT[Microsoft adapter → Microsoft Graph]
     RP --> SQLITE[SQLite adapter → SQLite]
 ```
 
@@ -448,8 +489,8 @@ docker compose build
 ```
 
 The normal test suite uses synthetic fixtures and fake providers; it never requires a personal
-Google account. CI runs formatting, linting, strict type checking, tests, frontend compilation, and
-multi-platform Docker builds.
+Google or Microsoft account. CI runs formatting, linting, strict type checking, tests, frontend
+compilation, and multi-platform Docker builds.
 
 See [docs/development.md](docs/development.md) for architecture rules and
 [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow.
@@ -461,7 +502,7 @@ AGENTS.md          Canonical project instructions for coding agents
 src/calendar_sync/
   domain/          Provider-independent entities, value objects, policies, and decisions
   application/     Use cases and boundary protocols
-  infrastructure/  Google, SQLite, security, scheduling, and notification adapters
+  infrastructure/  Google, Microsoft, SQLite, security, scheduling, and notification adapters
   interfaces/      FastAPI routes, the MCP server, and the compiled Web UI
   bootstrap/       Explicit dependency composition
 web/               React, TypeScript, Vite, Tailwind CSS, and shadcn-style component source

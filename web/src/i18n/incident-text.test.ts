@@ -32,7 +32,11 @@ describe("incidentText", () => {
     const lapsed = { code: "authorization_lapsed", params: { kind: "authentication", provider: "google" } }
     expect(incidentText(i18n, { summary: "", message: lapsed })).toBe("Authorization for Google Calendar expired")
     expect(incidentText(i18n, { summary: "", message: { code: "authorization_lapsed", params: { provider: "google" } } }))
-      .toBe("A Google Calendar account needs reauthorization")
+      .toBe("A Google account needs reauthorization")
+    expect(incidentText(i18n, { summary: "", message: { code: "authorization_lapsed", params: { provider: "outlook" } } }))
+      .toBe("A Microsoft account needs reauthorization")
+    expect(incidentText(i18n, { summary: "", message: { code: "authorization_lapsed", params: {} } }))
+      .toBe("A calendar account needs reauthorization")
   })
 
   it("uses the stored summary for legacy, unknown, or malformed messages", () => {

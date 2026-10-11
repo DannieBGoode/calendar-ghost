@@ -233,11 +233,11 @@ run, within five minutes, resolves the incident; **Sync Now** and **Reconcile No
 
 ## Problems only an administrator can fix
 
-Some failures come from the installation's Google Cloud project, not from anyone's Google account
-or calendars, so only an Installation Administrator can fix them. Calendar Ghost reads why Google
-refused from its reason code, never its message, and records it as a Cause. Each person's own
-Overview says only that Google Calendar is temporarily unavailable, without the cause or a mention
-of you, so people are not prompted to contact you. On
+Some failures come from the installation's Google Cloud project or Microsoft Entra application,
+not from anyone's account or calendars, so only an Installation Administrator can fix them.
+Calendar Ghost reads why the provider refused from its reason code, never its message, and records
+it as a Cause. Each person's own Overview says only that the calendar service is temporarily
+unavailable, without the cause or a mention of you, so people are not prompted to contact you. On
 **People**, **Installation health** says **Needs you**, People is marked in the navigation, and the
 likely cause is shown as soon as anyone meets it, with **How to fix** linking to the section below; a person's page shows the
 likely cause of each of their problems. Administrators never need to contact anyone: once the
@@ -305,16 +305,36 @@ it. Grants given while the app was in Testing still expire, so each affected per
 once from their own dashboard; after that their access lasts. A Google Workspace organization can
 instead set the user type to **Internal**, which has no 7-day limit.
 
+### Microsoft no longer accepts the OAuth client
+
+**Symptom.** Every person's Microsoft accounts stop at the same time, the likely cause reads
+"Microsoft no longer accepts this installation's OAuth client", and reauthorizing fails too.
+
+**Confirm.** In the [Microsoft Entra admin center](https://entra.microsoft.com/), open **App
+registrations**, find the application whose **Application (client) ID** is
+`CALENDAR_SYNC_MICROSOFT_CLIENT_ID`, and open **Certificates & secrets**. The secret in
+`CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET` has most likely expired: each secret has an expiry date,
+at most 24 months after it was created. The application may also have been deleted. The service
+logs name Microsoft's code, such as `AADSTS7000222` for an expired secret
+([Reading the logs](#reading-the-logs)). Do not post either value publicly.
+
+**Fix.** Choose **New client secret**, copy its **Value** (shown only once), put it in `.env` as
+`CALENDAR_SYNC_MICROSOFT_CLIENT_SECRET`, and run `docker compose up -d`. Each person's Overview
+offers **Check access** on their Microsoft account; a check that passes restarts their rules. If
+you had to register a new application, Microsoft's grants to the old one do not carry over: each
+person reauthorizes once. To avoid this, add a reminder for the secret's expiry date and create
+the next secret before it.
+
 ## Problems you fix yourself
 
-When Google refuses one of your requests for a reason that is yours to handle, your Overview and
+When Google or Microsoft refuses one of your requests for a reason that is yours to handle, your Overview and
 the rule say what happened and your one next step. Your administrator sees only that you can fix it from your dashboard, and does not
 contact you about it. If the installation sends email and has a public address, the incident email
 links straight to that step.
 
 ### Google no longer accepts your Google account
 
-**What you see.** "A Google Calendar account needs reauthorization", with the likely cause "Google
+**What you see.** "A Google account needs reauthorization", with the likely cause "Google
 no longer accepts this Google account's permission". You removed Calendar Ghost's access in your
 Google account, changed something Google treats as ending the grant, or the grant expired.
 
@@ -359,10 +379,52 @@ reason Calendar Ghost does not recognize".
 what Activity says. If it keeps happening, tell your administrator; the service logs name Google's
 reason ([Reading the logs](#reading-the-logs)).
 
-## A Google account was disconnected
+### Microsoft no longer accepts your Microsoft account
+
+**What you see.** "A Microsoft account needs reauthorization", with the likely cause "Microsoft no
+longer accepts this Microsoft account's permission". You removed Calendar Ghost's access, your
+password was reset, your sign-in now needs another step such as multifactor authentication, or the
+grant went unused for 90 days.
+
+**What to do.** Choose **Reauthorize account** in **Settings → Connections**, for the account it
+names. Every rule the lapse stopped restarts on its own, with no preview. With a work or school
+account, your organization may require its administrator to approve applications: if Microsoft
+says the application needs approval, ask your organization's IT administrator to grant consent to
+it, then reauthorize.
+
+### Your Microsoft account may not change the calendar
+
+**What you see.** The rule stopped, with the likely cause "the Microsoft account may not change
+this calendar". The calendar was shared with your account to read only, or its owner took away
+your permission to edit it.
+
+**What to do.** Open the rule. Choose another calendar for it, or remove it. To keep the same
+calendar, ask its owner to share it with your Microsoft account with **Can edit**, then preview the
+rule again to restart it.
+
+### Microsoft is slowing Calendar Ghost down
+
+**What you see.** "Waiting for Microsoft", with the likely cause "Microsoft asked Calendar Ghost to
+slow down" or "Microsoft failed for a moment", when the rule was last tried, and when it tries
+again.
+
+**What to do.** Nothing. Calendar Ghost tries again by itself, waiting as long as Microsoft asks,
+and catches up afterwards. If it lasts more than a day, check the Microsoft 365 service health
+status page.
+
+### Microsoft refused for a reason Calendar Ghost does not recognize
+
+**What you see.** The rule stopped or needs a look, with the likely cause "Microsoft refused for a
+reason Calendar Ghost does not recognize".
+
+**What to do.** Try the rule's usual step again: open the rule and preview it to restart it, or read
+what Activity says. If it keeps happening, tell your administrator; the service logs name
+Microsoft's code ([Reading the logs](#reading-the-logs)).
+
+## A calendar account was disconnected
 
 Open **Settings → Connections → Connected accounts** and choose **Reauthorize account** for the same
-Google identity. The installation no longer retains credentials for a disconnected account, and
+Google or Microsoft identity. The installation no longer retains credentials for a disconnected account, and
 enabled rules that reference it remain degraded. After reauthorization, open Rules, choose
 **Validate recovery**, inspect the preview, and enable each affected rule. Existing mappings,
 Managed Projections, and incremental positions are preserved throughout recovery.
@@ -370,15 +432,15 @@ Managed Projections, and incremental positions are preserved throughout recovery
 To remove the local identity permanently, choose **Delete account** and review the destructive
 confirmation. Permanent deletion removes every affected Directional Sync Rule and its mappings,
 cursors, incidents, and audit activity. Existing Managed Projections are not deleted from Google
-Calendar and will no longer be managed. Unrelated accounts and rules are unchanged.
+Calendar or Outlook and will no longer be managed. Unrelated accounts and rules are unchanged.
 
-## Google consent ends on "Unable to connect"
+## Consent ends on "Unable to connect"
 
-The browser followed the configured redirect URI to an address that does not reach this
+After Google or Microsoft consent, the browser followed the configured redirect URI to an address that does not reach this
 installation, usually `localhost` while Calendar Ghost runs on another host. No account was saved.
 To finish this attempt, copy the whole address from the address bar, return to Settings in the
-browser you started from, paste it into **Address Google returned to** under **Finish connecting
-your Google account**, and choose **Finish connecting** within 10 minutes; each callback works
+browser you started from, paste it into **Address Google returned to** (or **Address Microsoft
+returned to**) under **Finish connecting your Google account** (or **Microsoft account**), and choose **Finish connecting** within 10 minutes; each callback works
 once. From another browser, sign in there as the same person first; the same field is in the note
 at the foot of Connected accounts. Replacing the origin in the address bar by hand, for example
 `localhost:18000` with `192.168.1.50:18000`, does the same. Only the person who started connecting
@@ -386,23 +448,44 @@ can finish: a callback opened without signing in, or by anyone else, connects no
 that authorization failed. To stop it recurring, use an HTTPS redirect URI or an SSH tunnel as
 described in [Deployment](deployment.md#google-oauth-redirect-uri-on-a-lan-host).
 
-## Google Calendar permission was not granted
+## Calendar permission was not granted
 
 The OAuth callback returns to **Settings → Connections → Connected accounts** without saving an
-account. Choose **Try again**, select the intended Google identity, and grant both calendar-list and
-event access. Calendar Ghost verifies those permissions before it stores the Connected Account.
-Declining consent does not create an account or retain Google credentials.
+account. Choose **Try again**, select the intended Google or Microsoft identity, and grant calendar
+access: for Google, both calendar-list and event access; for Microsoft, **Have full access to your
+calendars**. Calendar Ghost verifies those permissions before it stores the Connected Account.
+Declining consent does not create an account or retain any credentials.
+
+## Microsoft sign-in stops with an error
+
+Microsoft shows its own page, with a code beginning `AADSTS`, instead of returning to Calendar
+Ghost. No account was saved.
+
+- **AADSTS50011**, the redirect URI does not match: the address in
+  `CALENDAR_SYNC_MICROSOFT_REDIRECT_URI` must be registered exactly under the application's
+  **Authentication → Web → Redirect URIs** ([Register a Microsoft Entra
+  application](self-hosting.md#register-a-microsoft-entra-application)).
+- **Need admin approval**, or **AADSTS65001** or **AADSTS90094**: the person's organization lets
+  only its IT administrator approve applications. They ask that administrator to grant consent to
+  the application, then connect again.
+- **AADSTS50020** or "You can't sign in here with a personal Microsoft account": the application's
+  **Supported account types** does not include this kind of account, or
+  `CALENDAR_SYNC_MICROSOFT_TENANT` names one organization. Use `common` with **Accounts in any
+  organizational directory and personal Microsoft accounts** to accept both.
+- **AADSTS7000215** or **AADSTS7000222**, after consent: the client secret is wrong or expired
+  ([Microsoft no longer accepts the OAuth client](#microsoft-no-longer-accepts-the-oauth-client)).
 
 ## A connected account fails Check access
 
-If Google no longer accepts the account, the check says so and the account is marked **Needs
+If its provider no longer accepts the account, the check says so and the account is marked **Needs
 reauthorization**; choose **Reauthorize account**. If Google denied calendar access, the Google
 Calendar API may be off: it is enabled on the Google Cloud project, not separately on each Google
 identity. Confirm that the API remains enabled for the project owning the OAuth client, then choose
-**Reauthorize account** for the affected identity. **Check access** verifies both calendar-list and
-event access through read-only requests. A successful check also reports the number of writable
-calendars; an account with zero writable calendars can be a Source Calendar but cannot provide a
-Destination Calendar.
+**Reauthorize account** for the affected identity. If Microsoft denied calendar access, the grant
+most likely lacks calendar permission: choose **Reauthorize account** and accept calendar access.
+**Check access** verifies both calendar-list and event access through read-only requests. A
+successful check also reports the number of writable calendars; an account with zero writable
+calendars can be a Source Calendar but cannot provide a Destination Calendar.
 
 ## Destination edits return
 

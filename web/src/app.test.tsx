@@ -58,7 +58,7 @@ const RESPONSES: Record<string, unknown> = {
   "/api/v1/dashboard": dashboard,
   "/api/v1/rules": [],
   "/api/v1/accounts": [],
-  "/api/v1/google/configuration": { configured: false, redirect_uri: null },
+  "/api/v1/providers": [],
   "/api/v1/recent-changes": [],
   "/api/v1/integration-tokens": [],
 }
@@ -164,9 +164,9 @@ describe("App", () => {
   })
 
   it.each([
-    ["/settings/connections?google=connected&account=acct-a", "/settings/connections"],
+    ["/settings/connections?oauth=connected&provider=google&account=acct-a", "/settings/connections"],
     // Google's return from before Settings had tabs still opens Connections.
-    ["/settings?google=connected&account=acct-a", "/settings"],
+    ["/settings?oauth=connected&provider=google&account=acct-a", "/settings"],
   ])("lands on Connections with the connection outcome when Google returns to %s", async (arrival, settled) => {
     const page = window as typeof window & { happyDOM: { setURL: (url: string) => void } }
     const address = window.location.href

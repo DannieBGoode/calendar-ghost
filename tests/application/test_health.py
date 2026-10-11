@@ -81,20 +81,35 @@ def test_an_account_the_provider_refuses_lapses_instead_of_opening_a_rule_incide
 @pytest.mark.parametrize(
     ("kind", "summary"),
     [
-        (ProviderFailureKind.AUTHENTICATION, "Authorization for Google Calendar expired"),
-        (ProviderFailureKind.AUTHORIZATION, "Access to Google Calendar was denied"),
-        (ProviderFailureKind.RATE_LIMIT, "Google Calendar is limiting requests"),
-        (ProviderFailureKind.TEMPORARY, "Google Calendar is temporarily unavailable"),
-        (ProviderFailureKind.PERMANENT, "Google Calendar rejected synchronization"),
+        (ProviderFailureKind.AUTHENTICATION, "Authorization for Example Calendar expired"),
+        (ProviderFailureKind.AUTHORIZATION, "Access to Example Calendar was denied"),
+        (ProviderFailureKind.RATE_LIMIT, "Example Calendar is limiting requests"),
+        (ProviderFailureKind.TEMPORARY, "Example Calendar is temporarily unavailable"),
+        (ProviderFailureKind.PERMANENT, "Example Calendar rejected synchronization"),
         (ProviderFailureKind.INFRASTRUCTURE, "Local synchronization infrastructure failed"),
     ],
 )
 def test_incident_summaries_name_the_provider_that_failed(
     kind: ProviderFailureKind, summary: str
 ) -> None:
-    failure = ProviderFailure(kind, "synthetic", provider=ProviderKind.GOOGLE)
+    # The adapter names its provider's calendar service, from its descriptor.
+    failure = ProviderFailure(
+        kind, "synthetic", provider=ProviderKind.GOOGLE, provider_label="Example Calendar"
+    )
 
     assert RuleHealthPolicy.summary(failure) == summary
+
+
+def test_an_incident_records_which_provider_failed() -> None:
+    failure = ProviderFailure(
+        ProviderFailureKind.TEMPORARY, "503", provider=ProviderKind.GOOGLE, cause=Cause.TEMPORARY
+    )
+    policy = RuleHealthPolicy()
+
+    provider = policy.provider_incident(RULE, failure)
+    removal = policy.removal_blocked(RULE, failure)
+
+    assert (provider.provider, removal.provider) == (ProviderKind.GOOGLE, ProviderKind.GOOGLE)
 
 
 def test_a_failure_naming_no_provider_is_summarized_without_one() -> None:

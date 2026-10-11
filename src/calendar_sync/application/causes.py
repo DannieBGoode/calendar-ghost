@@ -13,7 +13,7 @@ class CauseOwner(StrEnum):
     """Who fixes a Cause. An administrator never contacts a User about one of theirs."""
 
     ADMINISTRATOR = "administrator"
-    """Only the installation's Google Cloud project can fix it."""
+    """Only the installation's own registration with the provider can fix it."""
     USER = "user"
     """The User fixes it from their own dashboard, or it fixes itself."""
 

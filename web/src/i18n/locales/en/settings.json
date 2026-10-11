@@ -3,8 +3,8 @@
     "loading": "Loading settings",
     "loadFailure": "Settings could not load",
     "title": "Settings",
-    "intro": "Your own account, and your Google accounts and integrations.",
-    "introAdministrator": "Your own account, your Google accounts and integrations, and who can join this installation and its storage."
+    "intro": "Your own account, your calendar accounts, and integrations.",
+    "introAdministrator": "Your own account, your calendar accounts and integrations, and who can join this installation and its storage."
   },
   "tabs": {
     "label": "Settings sections",
@@ -46,11 +46,11 @@
     },
     "delete": {
       "title": "Delete your account",
-      "body": "Deletes your sign-in, rules, and Google connections. You choose whether the events your rules wrote go too. Your Google accounts and your own events stay.",
+      "body": "Deletes your sign-in, rules, and calendar connections. You choose whether the events your rules wrote go too. Your calendar accounts and your own events stay.",
       "open": "Delete your account",
       "confirmTitle": "Delete your account permanently?",
-      "confirmBody": "This deletes your sign-in, rules, Google connections, tokens, and Activity, and signs you out. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
-      "confirmBodyLastUser": "You are the last person here. This deletes your sign-in, rules, Google connections, tokens, and Activity, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Choose below what happens to the events your rules wrote. Your own events and your Google accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
+      "confirmBody": "This deletes your sign-in, rules, calendar connections, tokens, and Activity, and signs you out. Choose below what happens to the events your rules wrote. Your own events and your calendar accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
+      "confirmBodyLastUser": "You are the last person here. This deletes your sign-in, rules, calendar connections, tokens, and Activity, and Calendar Ghost returns to setup, where the next person to open it creates the administrator. Choose below what happens to the events your rules wrote. Your own events and your calendar accounts stay as they are. Backups taken before now keep your records until they rotate out. This cannot be undone.",
       "needsAdministrator": "Someone else must be an administrator before you can delete your account. Make another person an administrator on the People page, then come back.",
       "openPeople": "Open People",
       "legend": "The events your rules wrote",
@@ -84,27 +84,27 @@
     "copyUnavailable": "Select the link and copy it.",
     "done": "Done"
   },
-  "googleReturn": {
+  "oauthReturn": {
     "step": {
-      "title": "Finish connecting your Google account",
-      "body": "Google sends your browser to <code>{origin}</code> after you approve access. If that page did not load, copy its whole address from the address bar and paste it here. It works once, for 10 minutes.",
+      "title": "Finish connecting your {account}",
+      "body": "{provider} sends your browser to <code>{origin}</code> after you approve access. If that page did not load, copy its whole address from the address bar and paste it here. It works once, for 10 minutes.",
       "dismiss": "Dismiss"
     },
     "note": {
-      "summary": "Google returns to <code>{origin}</code>, not this address",
+      "summary": "{provider} returns to <code>{origin}</code>, not this address",
       "body": "If its page does not load after you approve access, copy the whole address from the address bar and paste it here within 10 minutes to finish connecting.",
-      "fix": "To stop this, set <code>CALENDAR_SYNC_GOOGLE_REDIRECT_URI</code> to an HTTPS address of this installation, for example with Tailscale Serve, and register it on your Google OAuth client. Opening Calendar Ghost at <code>{origin}</code>, for example through an SSH tunnel, also works."
+      "fix": "To stop this, set the redirect URI for {provider} in <code>.env</code> to an HTTPS address of this installation, for example with Tailscale Serve, and register it with {provider}. Opening Calendar Ghost at <code>{origin}</code>, for example through an SSH tunnel, also works."
     },
     "form": {
-      "label": "Address Google returned to",
+      "label": "Address {provider} returned to",
       "placeholder": "{redirectUri}?state=…",
       "submit": "Finish connecting",
-      "invalid": "That is not the address Google returned to. Copy the whole address, starting with <code>{start}</code>"
+      "invalid": "That is not the address {provider} returned to. Copy the whole address, starting with <code>{start}</code>"
     }
   },
   "oauthOutcome": {
     "connected": {
-      "title": "Google account connected",
+      "title": "{account} connected",
       "body": "Calendar permissions were confirmed and the account is ready for Directional Sync Rules.",
       "resumed": {
         "one": "Access is restored. {count} rule restarted and catches up on changes made while it was stopped.",
@@ -116,7 +116,7 @@
       "body": "No account was connected. Calendar-list and event permissions are required to discover calendars and run Directional Sync Rules."
     },
     "authorizationFailed": {
-      "title": "Google authorization could not be completed",
+      "title": "{provider} authorization could not be completed",
       "body": "The account was not connected. Try again, then use Check access to confirm permissions."
     },
     "tryAgain": "Try again"
@@ -124,7 +124,7 @@
   "connectionGuide": {
     "summary": "How connecting works",
     "connect": {
-      "title": "Connect a Google account",
+      "title": "Connect a calendar account",
       "body": "Authorize calendar discovery and event access for one account."
     },
     "choose": {
@@ -135,19 +135,20 @@
       "title": "Preview before syncing",
       "body": "Review what will be written before anything reaches the destination."
     },
-    "ready": "Use the Connect Google account button above to begin.",
-    "notConfigured": "Add the master key and Google OAuth credentials in <code>.env</code>, then restart before connecting."
+    "ready": "Use a Connect button above to begin.",
+    "notConfigured": "Add the master key and a calendar provider's OAuth credentials in <code>.env</code>, then restart before connecting."
   },
   "accounts": {
     "title": "Connected accounts",
-    "intro": "The Google accounts whose calendars your rules can read and write.",
-    "connect": "Connect Google account",
+    "intro": "The calendar accounts whose calendars your rules can read and write.",
+    "connect": "Connect {account}",
+    "providerAndAddress": "{account} · {address}",
     "notConfigured": "Not configured",
-    "notConfiguredNote": "Add the master key and Google OAuth credentials in <code>.env</code>, then restart before connecting an account.",
+    "notConfiguredNote": "Add the master key and a calendar provider's OAuth credentials in <code>.env</code>, then restart before connecting an account.",
     "loading": "Loading connected accounts",
     "loadError": "Connected accounts could not be loaded. Reload the page and try again.",
     "empty": {
-      "title": "No Google accounts connected",
+      "title": "No calendar accounts connected",
       "body": "Connect an account to choose its calendars for your rules."
     },
     "toggle": {
@@ -176,10 +177,10 @@
       "checkAccess": "Check access",
       "checkingAccess": "Checking access…",
       "disconnect": "Disconnect account",
-      "disconnectHint": "Removes its stored Google credentials. Rules that use it stop until it is reauthorized.",
+      "disconnectHint": "Removes its stored credentials. Rules that use it stop until it is reauthorized.",
       "more": "More actions for {email}",
       "reauthorize": "Reauthorize account",
-      "reauthorizeUnavailable": "Add the master key and Google OAuth credentials in .env, then restart.",
+      "reauthorizeUnavailable": "Add the master key and this provider's OAuth credentials in .env, then restart.",
       "delete": "Delete account",
       "keep": "Keep account"
     },
@@ -201,17 +202,17 @@
     "disconnect": {
       "title": "Disconnect {name}?",
       "bodyWithRules": {
-        "one": "Stored Google credentials will be removed. {count} affected rule will require reauthorization before they can run.",
-        "other": "Stored Google credentials will be removed. {count} affected rules will require reauthorization before they can run."
+        "one": "Its stored credentials will be removed. {count} affected rule will require reauthorization before it can run.",
+        "other": "Its stored credentials will be removed. {count} affected rules will require reauthorization before they can run."
       },
-      "bodyWithoutRules": "Stored Google credentials will be removed. No Directional Sync Rules currently use this account.",
+      "bodyWithoutRules": "Its stored credentials will be removed. No Directional Sync Rules currently use this account.",
       "pending": "Disconnecting…"
     },
     "delete": {
       "title": "Delete {name} permanently?",
       "bodyWithRules": {
-        "one": "This cannot be undone. The account record and {count} affected Directional Sync Rule, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed.",
-        "other": "This cannot be undone. The account record and {count} affected Directional Sync Rules, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in Google Calendar will not be deleted and will no longer be managed."
+        "one": "This cannot be undone. The account record and {count} affected Directional Sync Rule, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in their calendars will not be deleted and will no longer be managed.",
+        "other": "This cannot be undone. The account record and {count} affected Directional Sync Rules, including their mappings, cursors, incidents, and audit activity, will be removed. Existing Managed Projections in their calendars will not be deleted and will no longer be managed."
       },
       "bodyWithoutRules": "This cannot be undone. The account record will be removed. No Directional Sync Rules currently use this account.",
       "confirm": "Delete permanently",

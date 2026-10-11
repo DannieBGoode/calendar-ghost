@@ -234,7 +234,7 @@ class SyncDecisionService:
                 return SyncDecision(
                     SyncAction.CONFLICT, SyncReason.DESTINATION_IDENTITY_INCONSISTENT
                 )
-            # Google omits metadata on cancelled instances; the parent series proves ownership.
+            # A provider may omit metadata on cancelled instances; the parent series proves it.
             occurrence_origin = destination_occurrence.managed_origin
             if occurrence_origin is not None and not occurrence_origin.owns(
                 rule, source_series.reference
