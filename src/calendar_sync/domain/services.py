@@ -23,6 +23,7 @@ from calendar_sync.domain.model import (
     ReconciliationConflict,
     ReconciliationDrift,
     ReconciliationReport,
+    Recurrence,
     SyncAction,
     SyncDecision,
     SyncReason,
@@ -65,6 +66,23 @@ def _tentative_title(title: str, content: ProjectionContent) -> str:
     return f"Maybe: {title}" if title else "Maybe"
 
 
+def _canonical_lines(recurrence: Recurrence | None) -> list[str] | None:
+    """Recurrence lines with each rule's parts in one order. RFC 5545 lets a rule list its parts
+    in any order, and a provider may store them in its own, such as `UNTIL` before `BYDAY`.
+    The rule repeats the same either way, so the order is no difference to repair."""
+    if recurrence is None:
+        return None
+    return [_canonical_line(line) for line in recurrence.lines]
+
+
+def _canonical_line(line: str) -> str:
+    name, separator, value = line.partition(":")
+    if not separator or name.upper() not in {"RRULE", "EXRULE"}:
+        return line
+    parts = sorted(value.split(";"), key=lambda part: (not part.upper().startswith("FREQ="), part))
+    return f"{name}:{';'.join(parts)}"
+
+
 class ProjectionFingerprinter:
     """Creates a stable, non-reversible digest of normalized projection content."""
 
@@ -76,7 +94,7 @@ class ProjectionFingerprinter:
             "title": projection.title,
             "description": projection.description,
             "location": projection.location,
-            "recurrence": projection.recurrence.lines if projection.recurrence else None,
+            "recurrence": _canonical_lines(projection.recurrence),
         }
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         return ProjectionFingerprint(hashlib.sha256(encoded.encode()).hexdigest())

@@ -113,6 +113,33 @@ def test_destination_drift_is_overwritten_not_conflicted() -> None:
     assert decision.projection.title == "Busy"
 
 
+def test_a_destination_series_whose_provider_reordered_its_rule_is_current() -> None:
+    # Google stores an RRULE's parts in its own order. The rule repeats exactly as written, so
+    # reading it back is no drift, and rewriting it would only be reordered again, every run.
+    source = replace(
+        event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261120T225959Z",))
+    )
+    destination = replace(
+        _destination(source),
+        recurrence=Recurrence(("RRULE:FREQ=WEEKLY;UNTIL=20261120T225959Z;BYDAY=MO,WE,FR",)),
+    )
+
+    decision = decisions.decide(rule(), source, _mapping(source, destination), destination)
+
+    assert decision.action is SyncAction.IGNORE
+
+
+def test_a_destination_series_whose_rule_differs_is_drift() -> None:
+    source = replace(event(), recurrence=Recurrence(("RRULE:FREQ=WEEKLY;BYDAY=MO;INTERVAL=2",)))
+    destination = replace(
+        _destination(source), recurrence=Recurrence(("RRULE:FREQ=WEEKLY;INTERVAL=3;BYDAY=MO",))
+    )
+
+    decision = decisions.decide(rule(), source, _mapping(source, destination), destination)
+
+    assert decision.action is SyncAction.UPDATE
+
+
 def test_current_projection_is_ignored() -> None:
     source = event()
     destination = _destination(source)
