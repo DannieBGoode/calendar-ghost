@@ -70,3 +70,42 @@ def test_an_occurrence_the_destination_cannot_write_is_blocked_alone() -> None:
     assert result.conflicts == 1
     blocked = [entry for entry in factory.state.audit if entry.outcome == "blocked"]
     assert [entry.reason for entry in blocked] == [SyncReason.PROJECTION_UNSUPPORTED]
+
+
+def test_an_occurrence_moved_past_its_neighbour_is_blocked_with_that_reason() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS)
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    moved = calendars.put(occurrence(master, 1, moved_by=timedelta(days=8)))
+    calendars.unsupported_occurrences.add(week_start(1))
+    calendars.unsupported_reason = SyncReason.OCCURRENCE_PAST_NEIGHBOUR
+    calendars.report(moved)
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.conflicts == 1
+    assert factory.state.audit[-1].reason == SyncReason.OCCURRENCE_PAST_NEIGHBOUR
+
+
+def test_a_series_someone_invited_guests_to_is_blocked_with_that_reason() -> None:
+    calendars = FakeCalendars()
+    master = calendars.put(series(), starts=STARTS)
+    factory = enabled_rule_factory()
+    sync_use_case(factory, calendars).execute(rule().id)
+    changed = calendars.put(
+        replace(
+            master,
+            revision="series-revision-2",
+            recurrence=Recurrence(("RRULE:FREQ=WEEKLY;INTERVAL=2",)),
+        ),
+        starts=STARTS,
+    )
+    calendars.unsupported.add(changed.reference)
+    calendars.unsupported_reason = SyncReason.PROJECTION_HAS_GUESTS
+    calendars.report(changed)
+
+    result = sync_use_case(factory, calendars).execute(rule().id)
+
+    assert result.conflicts == 1
+    assert factory.state.audit[-1].reason == SyncReason.PROJECTION_HAS_GUESTS

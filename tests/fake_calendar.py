@@ -30,6 +30,7 @@ from calendar_sync.domain.model import (
     ManagedOrigin,
     OccurrenceIdentity,
     OccurrenceStart,
+    SyncReason,
     SyncRule,
     SyncRuleId,
     TimedInterval,
@@ -79,7 +80,11 @@ class FakeCalendars:
     unsupported: set[EventRef] = field(default_factory=set)
     """Sources whose projections, as created or updated, this destination cannot hold."""
     unsupported_occurrences: set[OccurrenceStart] = field(default_factory=set)
-    """Occurrences this destination cannot write, such as one it cannot restore."""
+    """Occurrences this destination cannot write, such as one moved past its neighbour."""
+    unsupported_reason: SyncReason = SyncReason.PROJECTION_UNSUPPORTED
+    """Why this destination refuses what `unsupported` and `unsupported_occurrences` name."""
+    restores_cancelled: bool = True
+    """Whether a cancelled occurrence can be confirmed again, as Google can and Outlook cannot."""
     undeletable: set[EventRef] = field(default_factory=set)
     """Projections this destination cannot delete without notifying anyone, such as one someone
     invited guests to."""
@@ -260,7 +265,9 @@ class FakeCalendars:
                 raise _denied()
             return CreatedProjection(existing)
         if source in self.unsupported:
-            raise UnsupportedProjection("this destination cannot hold the projection")
+            raise UnsupportedProjection(
+                "this destination cannot hold the projection", self.unsupported_reason
+            )
         self.created += 1
         reference = EventRef(destination, EventId(f"projection-{self.created}"))
         created = CalendarEvent(
@@ -292,7 +299,9 @@ class FakeCalendars:
         if existing is None or not _owned(existing.managed_origin, rule_id, source):
             raise _denied()
         if source in self.unsupported:
-            raise UnsupportedProjection("this destination cannot hold the projection")
+            raise UnsupportedProjection(
+                "this destination cannot hold the projection", self.unsupported_reason
+            )
         updated = replace(
             existing,
             time=projection.time,
@@ -324,7 +333,10 @@ class FakeCalendars:
         if not _owned(existing.managed_origin, rule_id, source):
             raise _denied()
         if destination in self.undeletable:
-            raise UnsupportedProjection("this destination cannot delete the projection quietly")
+            raise UnsupportedProjection(
+                "this destination cannot delete the projection quietly",
+                SyncReason.PROJECTION_HAS_GUESTS,
+            )
         for instance in self.instances_of(destination):
             del self.events[instance.reference]
         del self.events[destination]
@@ -346,7 +358,14 @@ class FakeCalendars:
         if instance is None:
             raise ProviderFailure(ProviderFailureKind.PERMANENT, "occurrence could not be resolved")
         if original_start in self.unsupported_occurrences:
-            raise UnsupportedProjection("this destination cannot write the occurrence")
+            raise UnsupportedProjection(
+                "this destination cannot write the occurrence", self.unsupported_reason
+            )
+        if instance.status is EventStatus.CANCELLED and not self.restores_cancelled:
+            raise UnsupportedProjection(
+                "this destination cannot restore the occurrence",
+                SyncReason.OCCURRENCE_NOT_RESTORABLE,
+            )
         written = replace(
             instance,
             time=projection.time,

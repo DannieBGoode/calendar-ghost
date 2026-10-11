@@ -38,6 +38,7 @@ from calendar_sync.domain.model import (
     EventStatus,
     ManagedOrigin,
     OccurrenceStart,
+    SyncReason,
     SyncRuleId,
     TimedInterval,
     TransformationPolicy,
@@ -390,29 +391,23 @@ class OutlookCalendarProvider:
         projection: EventProjection,
         operation_key: str,
     ) -> CalendarEvent:
-        existing = self.get_event(destination)
-        if existing is None or not _owned(existing.managed_origin, rule_id, source):
-            raise ProjectionOwnershipMismatch(
-                "Outlook event does not carry compatible ownership metadata",
-                provider=ProviderKind.OUTLOOK,
-                provider_label=MICROSOFT.calendar_name,
-            )
-        _refuse_guests(existing)
-        self._refuse_exception_guests(existing)
-        body = projection_body(projection, rule_id, source, operation_key)
-        if projection.recurrence is None and existing.recurrence is not None:
-            body["recurrence"] = None
-        account = destination.calendar.connected_account_id
-        with self._refusals(account, event_scoped=True):
-            updated = self._graph.request(
-                "events.update",
-                "PATCH",
-                _event_path(destination),
-                self._token(account),
-                body=body,
-                headers=unchanged_since(existing),
-            )
-            return _written(updated, body, destination.calendar)
+        def read() -> tuple[CalendarEvent, Json]:
+            existing = self.get_event(destination)
+            if existing is None or not _owned(existing.managed_origin, rule_id, source):
+                raise ProjectionOwnershipMismatch(
+                    "Outlook event does not carry compatible ownership metadata",
+                    provider=ProviderKind.OUTLOOK,
+                    provider_label=MICROSOFT.calendar_name,
+                )
+            _refuse_guests(existing)
+            self._refuse_exception_guests(existing)
+            body = projection_body(projection, rule_id, source, operation_key)
+            if projection.recurrence is None and existing.recurrence is not None:
+                body["recurrence"] = None
+            return existing, body
+
+        updated, body = self._patch_as_read(destination.calendar.connected_account_id, read)
+        return _written(updated, body, destination.calendar)
 
     def delete_projection(
         self,
@@ -454,7 +449,9 @@ class OutlookCalendarProvider:
         if invited is None:
             raise self._unproven("Outlook did not list the exceptions of a series")
         if invited:
-            raise UnsupportedProjection("Outlook would notify the guests of an occurrence")
+            raise UnsupportedProjection(
+                "Outlook would notify the guests of an occurrence", SyncReason.PROJECTION_HAS_GUESTS
+            )
 
     def _delete(self, existing: CalendarEvent) -> None:
         """DELETE of the version read, which notifies nobody about an event without attendees,
@@ -666,37 +663,63 @@ class OutlookCalendarProvider:
         projection: EventProjection,
         operation_key: str,
     ) -> CalendarEvent:
-        instance = self._owned_occurrence(
-            destination_series, original_start, source_series, rule_id
-        )
-        if instance is None:
-            raise ProviderFailure(
-                ProviderFailureKind.PERMANENT,
-                "Outlook occurrence could not be resolved",
-                provider=ProviderKind.OUTLOOK,
-                provider_label=MICROSOFT.calendar_name,
-            )
-        if instance.status is EventStatus.CANCELLED:
-            raise UnsupportedProjection("Outlook cannot restore a cancelled occurrence")
         body = occurrence_body(projection, rule_id, source_series, operation_key, original_start)
-        calendar = destination_series.calendar
-        with self._refusals(calendar.connected_account_id, event_scoped=True):
-            try:
-                written = self._graph.request(
-                    "events.update",
-                    "PATCH",
-                    _event_path(instance.reference),
-                    self._token(calendar.connected_account_id),
-                    body=body,
-                    headers=unchanged_since(instance),
+
+        def read() -> tuple[CalendarEvent, Json]:
+            instance = self._owned_occurrence(
+                destination_series, original_start, source_series, rule_id
+            )
+            if instance is None:
+                raise ProviderFailure(
+                    ProviderFailureKind.PERMANENT,
+                    "Outlook occurrence could not be resolved",
+                    provider=ProviderKind.OUTLOOK,
+                    provider_label=MICROSOFT.calendar_name,
                 )
-            except GraphRefusal as error:
-                if CROSSING_NEIGHBOURS in error.codes:
-                    raise UnsupportedProjection(
-                        "Outlook cannot move an occurrence past its neighbours"
-                    ) from error
-                raise
-            return _written(written, body, calendar)
+            if instance.status is EventStatus.CANCELLED:
+                raise UnsupportedProjection(
+                    "Outlook cannot restore a cancelled occurrence",
+                    SyncReason.OCCURRENCE_NOT_RESTORABLE,
+                )
+            return instance, body
+
+        calendar = destination_series.calendar
+        written, _ = self._patch_as_read(calendar.connected_account_id, read)
+        return _written(written, body, calendar)
+
+    def _patch_as_read(
+        self, account: ConnectedAccountId, read: Callable[[], tuple[CalendarEvent, Json]]
+    ) -> tuple[Json, Json]:
+        """PATCH the version of an item `read` found writable, with its guest checks.
+
+        Someone may invite guests, or Outlook change the item itself, as it does shortly after
+        creating a series, between the read and the write; Graph then refuses the version read
+        with 412 and emails nobody. The item is read again, with every check, and that version
+        written once more: one that now has guests is refused for that reason (ADR 0034).
+        """
+        for again in (True, False):
+            item, body = read()
+            with self._refusals(account, event_scoped=True):
+                try:
+                    answer = self._graph.request(
+                        "events.update",
+                        "PATCH",
+                        _event_path(item.reference),
+                        self._token(account),
+                        body=body,
+                        headers=unchanged_since(item),
+                    )
+                except GraphRefusal as error:
+                    if CROSSING_NEIGHBOURS in error.codes:
+                        raise UnsupportedProjection(
+                            "Outlook cannot move an occurrence past its neighbours",
+                            SyncReason.OCCURRENCE_PAST_NEIGHBOUR,
+                        ) from error
+                    if again and error.status == PRECONDITION_FAILED:
+                        continue
+                    raise
+                return answer, body
+        raise AssertionError("the second attempt answers or raises")
 
     def cancel_occurrence(
         self,
@@ -876,7 +899,9 @@ def _refuse_guests(event: CalendarEvent | None) -> None:
     """Refuse to change an event someone invited guests to: Outlook emails them about any update
     or deletion, and would about clearing them too. The event is left as it is (ADR 0034)."""
     if event is not None and event.guests:
-        raise UnsupportedProjection("Outlook would notify the guests of this event")
+        raise UnsupportedProjection(
+            "Outlook would notify the guests of this event", SyncReason.PROJECTION_HAS_GUESTS
+        )
 
 
 def _owned(origin: ManagedOrigin | None, rule_id: SyncRuleId, source: EventRef) -> bool:

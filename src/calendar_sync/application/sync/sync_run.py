@@ -174,6 +174,8 @@ class SyncRunContext:
     """
     repaired: set[EventRef] = field(default_factory=set)
     """Source series already repaired this run, so a repair never recurses."""
+    rebuilt: set[EventRef] = field(default_factory=set)
+    """Source series whose destination series this run rebuilt, so each is rebuilt once."""
     live_series: dict[EventRef, bool] = field(default_factory=dict)
     """Whether each source series looked up this run still has an occurrence this rule projects."""
     blocked: set[EventRef] = field(default_factory=set)
@@ -200,6 +202,10 @@ class SyncRunContext:
         if action is SyncAction.CONFLICT:
             self.blocked.add(source)
         self._report_progress()
+
+    def uncount(self, counted: SyncAction) -> None:
+        """Take back a decision that will be made again, so it is counted once."""
+        self.counts[counted] -= 1
 
     def recount(self, counted: SyncAction, action: SyncAction, source: EventRef) -> None:
         """Count a decision as `action` instead of the `counted` one its write could not make."""

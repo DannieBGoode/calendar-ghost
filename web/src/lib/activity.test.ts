@@ -119,6 +119,20 @@ describe("activity presentation", () => {
     expect(describeEntry(i18n, entry({ action: "create", reason: "source_created" }), names).next).toBeUndefined()
   })
 
+  it("explains each reason a destination cannot hold an event, with its own next step", () => {
+    const pastNeighbour = describeEntry(i18n, entry({ action: "conflict", reason: "occurrence_past_neighbour" }), names)
+    expect(pastNeighbour.trigger).toBe("Moved past another occurrence in Personal")
+    expect(pastNeighbour.next).toContain("move it in Personal to a day between")
+    const guests = describeEntry(i18n, entry({ action: "conflict", reason: "projection_has_guests" }), names)
+    expect(guests.explanation).toContain("would email them")
+    expect(guests.next).toContain("remove the guests")
+    const repeat = describeEntry(i18n, entry({ action: "conflict", reason: "projection_unsupported" }), names)
+    expect(repeat.explanation).not.toContain("guests")
+    const rebuilt = describeEntry(i18n, entry({ action: "delete", reason: "series_rebuilt" }), names)
+    expect(rebuilt.effect).toBe("series written again in Work")
+    expect(rebuilt.next).toBeUndefined()
+  })
+
   it("points to the recorded detail for entries without a reason code", () => {
     const copy = describeEntry(i18n, entry({ reason: null, detail: "excluded event has no managed projection" }))
     expect(copy.effect).toBe("skipped")

@@ -628,7 +628,16 @@ class SyncReason(StrEnum):
     SERIES_WITHOUT_OCCURRENCES_REMOVED = "series_without_occurrences_removed"
     PROJECTION_UNMAPPED = "projection_unmapped"
     PROJECTION_UNSUPPORTED = "projection_unsupported"
-    """The destination's provider cannot hold the projection exactly, so nothing was written."""
+    """The destination's provider cannot repeat the projection exactly, such as its recurrence or
+    time zone, so nothing was written."""
+    OCCURRENCE_PAST_NEIGHBOUR = "occurrence_past_neighbour"
+    """The destination cannot move an occurrence to or past a neighbouring occurrence's day."""
+    OCCURRENCE_NOT_RESTORABLE = "occurrence_not_restorable"
+    """The destination cannot bring back an occurrence deleted in it, nor rebuild its series."""
+    PROJECTION_HAS_GUESTS = "projection_has_guests"
+    """Someone invited guests to the projection in the destination; writing it would email them."""
+    SERIES_REBUILT = "series_rebuilt"
+    """The destination series was written again to bring back an occurrence deleted in it."""
 
 
 _EXCLUSION_REASONS = {
