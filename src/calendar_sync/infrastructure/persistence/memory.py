@@ -538,7 +538,9 @@ class InMemoryUnitOfWork:
         working = deepcopy(self._database.state_of(self._user))
         self._working = working
         others = _OtherUsers(self._database, self._user)
-        incidents = self._incidents
+        # Like SQLite's connection, each context starts clean: what an earlier one did not
+        # commit to Incidents is gone.
+        incidents = self._incidents = IncidentWrites()
         self.accounts = InMemoryConnectedAccountRecords(working, incidents)
         self.rules = InMemorySyncRuleRepository(working, others, incidents, self._clock)
         self.mappings = InMemoryEventMappingRepository(working, others)

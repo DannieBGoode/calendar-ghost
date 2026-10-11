@@ -441,6 +441,24 @@ class PersistenceContract:
         # Resolved, not deleted: the removed rule's Incident is still a recent failure.
         assert sorted(sighting.open for sighting in seen) == [False, True]
 
+    def test_a_unit_entered_again_forgets_the_incident_changes_it_did_not_commit(
+        self, harness: PersistenceHarness
+    ) -> None:
+        with harness.unit_of_work() as uow:
+            uow.rules.add(RULE)
+            uow.commit()
+        assert harness.incidents(USER).open(_rule_incident(RULE.id), NOW)
+        unit = harness.unit_of_work()
+
+        with unit as uow:
+            uow.rules.purge(RULE.id)
+        with unit as uow:
+            uow.commit()
+        with harness.installation() as installation:
+            records = installation.status_records([USER])[USER]
+
+        assert [incident.rule_id for incident in records.incidents] == [RULE.id.value]
+
     def test_purging_a_rule_deletes_its_incidents_when_the_unit_commits(
         self, harness: PersistenceHarness
     ) -> None:
