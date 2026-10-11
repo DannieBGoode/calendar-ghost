@@ -20,14 +20,15 @@ billing behind Commercial Mode, both off by default (ADR 0028), follow in the ph
 
 ## Bounded contexts
 
-Each context is one package of `application/`, with its own `ports.py` and `errors.py`
+Each context is one package of `application/`, with its own `ports.py` and `errors.py` for the
+ports and errors more than one of its modules use
 ([ADR 0032](adr/0032-bounded-contexts-as-application-packages.md)):
 
 - **Synchronization** (`application/sync`) owns Directional Sync Rules, transformation, mappings,
   source authority, loop prevention, idempotent actions, and the rule lifecycle. Reconciliation
   lives here too: it derives expected projections and proves provider state, independently of
   incremental synchronization. So do Connected Accounts and Lapsed Authorization, and rule health
-  with the Incidents it reports, because each changes rules in the same unit of work. Provider
+  with the Incidents it reports, because each changes rules. Provider
   failures, retries, and provider call counts belong here.
 - **Identity and Access** (`application/identity`) owns Users, their roles and sessions, the
   Registration Policy, Invitations and Password Reset Links, and Integration Tokens.

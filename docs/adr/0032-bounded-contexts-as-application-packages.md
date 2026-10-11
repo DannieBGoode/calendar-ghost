@@ -27,20 +27,26 @@ states will not hold while it grows.
   | `application/operations` | Activity, Installation Status, Installation Health and Installation Hints, the Operator Overview, and storage |
   | `application/shared` | The base application error and the clock and identifier ports, which every context uses |
 
-  Each context declares its own ports in its own `ports.py`, and its own errors in its own
-  `errors.py`.
+  Each context declares the ports and errors that more than one of its modules use in its own
+  `ports.py` and `errors.py`. A small port or error that one use case alone uses, such as the
+  query protocols in `operations/activity.py` or the administration errors in
+  `identity/administration.py`, stays beside that use case.
 
 - **The contexts depend in one direction:** `operations`, then `identity`, then `sync`, then
-  `shared`. A `layers` contract in `pyproject.toml` makes `lint-imports` fail on an import against
-  this direction. The order follows the code, not a preference: User Deletion removes a User's
+  `shared`. An exhaustive `layers` contract in `pyproject.toml` makes `lint-imports` fail on an
+  import against this direction, and on an application module outside every context. The order follows the code, not a preference: User Deletion removes a User's
   rules, so `identity` uses `sync`; the Operator Overview reads Users and their rules, so
   `operations` uses both.
 
-- **Connected Accounts and rule health belong to `sync`.** Disconnecting an account degrades its
-  rules, deleting it purges them, and a Lapsed Authorization stops and later resumes them, each in
-  the same unit of work as the account change. Rule health degrades rules when runs fail. Moving
-  these to their own contexts would split one transaction across two contexts. Google
-  authorization, credentials, and discovery stay in the Google adapter, as before.
+- **Connected Accounts and rule health belong to `sync`.** The account use cases are mostly about
+  rules: disconnecting an account degrades its rules, deleting it purges them, and a Lapsed
+  Authorization stops and later resumes them. Rule health degrades rules when runs fail. Each of
+  these reads and changes accounts and rules through the same unit of work, under the rule locks.
+  Only deleting an account changes both in one transaction. Disconnection and Lapsed
+  Authorization commit in steps, so an interruption between steps can leave them partly done, as
+  before this decision. Moving accounts to a context of their own would put this coordination in two contexts that
+  both need the other. Google authorization, credentials, and discovery stay in the Google adapter,
+  as before.
 
 - **Glossary concepts live in the domain.** `domain/accounts.py` holds the Connected Account and
   its Provider Kind, `domain/audit.py` the Audit Entry, `domain/incidents.py` the Incident report,
@@ -54,10 +60,10 @@ states will not hold while it grows.
 ## Alternatives considered
 
 - **A fourth context for Connected Accounts below `sync`.** Rejected: the account use cases change
-  rules in the same transaction, so the dependency points from accounts to rules, not the other way.
+  rules, so the dependency points from accounts to rules, not the other way.
 - **One unit of work for each context.** This would let each context own its repositories alone.
-  It is deferred: today one unit of work keeps a User's account and rule changes atomic, and
-  splitting it changes behavior, which this decision does not.
+  It is deferred: account deletion relies on one unit of work to remove an account and its rules
+  atomically, and splitting it changes behavior, which this decision does not.
 - **Keep the flat package and rely on the documentation.** Rejected for the reasons in the context.
 
 ## Consequences

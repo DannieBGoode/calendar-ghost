@@ -93,10 +93,12 @@ ignore_imports = [
 
 [[tool.importlinter.contracts]]
 # User Deletion removes rules, and the Operator Overview reads Users and rules (ADR 0032).
+# Exhaustive: every application module belongs to one context.
 name = "Application contexts depend in one direction"
 type = "layers"
 containers = ["calendar_sync.application"]
 layers = ["operations", "identity", "sync", "shared"]
+exhaustive = true
 
 [[tool.importlinter.contracts]]
 name = "Domain and application stay free of frameworks, providers, and storage"

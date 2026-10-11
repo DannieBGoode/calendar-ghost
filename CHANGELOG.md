@@ -160,8 +160,8 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   complexity and size bounds. The screens render the same markup.
 - The backend's use cases are grouped into one package per bounded context: synchronization,
   identity, and operations ([ADR 0032](docs/adr/0032-bounded-contexts-as-application-packages.md)).
-  `lint-imports` fails when a context imports one above it. Behavior and API payloads are
-  unchanged. Log lines from these modules carry their new logger names, such as
+  `lint-imports` fails when a context imports one above it. Behavior is unchanged, and API
+  payloads return every time Calendar Ghost stores exactly as before. Log lines from these modules carry their new logger names, such as
   `calendar_sync.application.sync.sync_run`.
 - Large numbers are grouped.
 - An Activity entry whose action this version does not know reads "Something happened" instead of

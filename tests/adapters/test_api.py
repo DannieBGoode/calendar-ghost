@@ -264,6 +264,44 @@ def test_activity_and_incidents_require_admin_and_return_operational_data(
         }
 
 
+@pytest.mark.parametrize(
+    "stored",
+    [
+        datetime(2026, 8, 30, 10, tzinfo=UTC).isoformat(),
+        datetime(2026, 8, 30, 10, 0, 0, 120000, tzinfo=UTC).isoformat(),
+    ],
+    ids=["whole seconds", "microseconds"],
+)
+def test_incident_times_come_back_exactly_as_calendar_ghost_stored_them(
+    tmp_path: Path, stored: str
+) -> None:
+    # The adapters read stored times as datetimes; what Calendar Ghost writes must not change.
+    database = tmp_path / "test.db"
+    container, adapters = _installation(Settings(database))
+    user = administrator(adapters)
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            INSERT INTO incidents (
+                id, deduplication_key, rule_id, category, state, summary,
+                opened_at, updated_at, resolved_at, resolution, user_id
+            ) VALUES ('incident-1', 'provider:rule-1', 'rule-1', 'temporary', 'resolved',
+                'Google Calendar is temporarily unavailable', ?, ?, ?, 'sync_succeeded', ?)
+            """,
+            (stored, stored, stored, user.value),
+        )
+
+    with TestClient(create_app(container)) as client:
+        sign_in(client)
+        (incident,) = client.get("/api/v1/incidents").json()
+
+    assert (incident["opened_at"], incident["updated_at"], incident["resolved_at"]) == (
+        stored,
+        stored,
+        stored,
+    )
+
+
 def test_logout_revokes_session_and_wrong_password_cannot_restore_it(tmp_path: Path) -> None:
     app = create_app(build_container(Settings(tmp_path / "test.db")))
 
