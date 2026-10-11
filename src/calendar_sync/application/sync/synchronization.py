@@ -14,6 +14,7 @@ from calendar_sync.application.sync.errors import (
 )
 from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.application.sync.occurrences import SynchronizeOccurrences
+from calendar_sync.application.sync.own_writes import is_own_occurrence_write, is_own_write
 from calendar_sync.application.sync.ports import (
     CalendarProvider,
     ProviderCallStats,
@@ -41,7 +42,6 @@ from calendar_sync.domain.model import (
     EventMappingId,
     EventRef,
     EventStatus,
-    OccurrenceState,
     ProjectionFingerprint,
     SyncAction,
     SyncDecision,
@@ -292,7 +292,7 @@ class ExecuteSyncRule:
         mapping = run.uow.mappings.for_destination(run.rule.id, destination_event.reference)
         if mapping is None or mapping.source in run.handled:
             return
-        if self._is_own_write(run, mapping, destination_event):
+        if is_own_write(run, self.fingerprinter, mapping, destination_event):
             run.count(SyncAction.IGNORE, mapping.source)
             return
         authoritative_source = self.provider.get_event(mapping.source)
@@ -346,45 +346,6 @@ class ExecuteSyncRule:
             )
         )
         uow.commit()
-
-    def _is_own_write(
-        self, run: SyncRunContext, mapping: EventMapping, destination: CalendarEvent
-    ) -> bool:
-        """A reported projection still exactly as this rule last wrote it has not drifted.
-
-        The incremental feed reports this rule's own writes back on the next run. Source changes
-        arrive through the source feed, so an unedited projection needs no source read to confirm
-        it. Full runs keep verifying every reported projection against its source.
-        """
-        origin = destination.managed_origin
-        return (
-            run.incremental
-            and destination.status is EventStatus.CONFIRMED
-            and origin is not None
-            and origin.owns(run.rule, mapping.source)
-            and self.fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
-            == mapping.projection_fingerprint
-        )
-
-    def _is_own_occurrence_write(
-        self, run: SyncRunContext, series_mapping: EventMapping, destination: CalendarEvent
-    ) -> bool:
-        """An occurrence still as this rule last wrote or cancelled it has not drifted."""
-        identity = destination.occurrence
-        assert identity is not None
-        recorded = run.uow.occurrences.get(series_mapping.id, identity.original_start)
-        if not run.incremental or recorded is None or recorded.destination != destination.reference:
-            return False
-        if recorded.state is OccurrenceState.CANCELLED:
-            return destination.status is EventStatus.CANCELLED
-        origin = destination.managed_origin
-        return (
-            destination.status is EventStatus.CONFIRMED
-            and origin is not None
-            and origin.owns(run.rule, series_mapping.source)
-            and self.fingerprinter.fingerprint(SyncDecisionService.as_projection(destination))
-            == recorded.projection_fingerprint
-        )
 
     def _reproject_remaining(self, run: SyncRunContext) -> None:
         """Apply a changed policy to mappings the change feeds did not report."""
@@ -456,7 +417,7 @@ class ExecuteSyncRule:
         )
         if series_mapping is None:
             return
-        if self._is_own_occurrence_write(run, series_mapping, destination_event):
+        if is_own_occurrence_write(run, self.fingerprinter, series_mapping, destination_event):
             run.count(SyncAction.IGNORE, series_mapping.source)
             return
         if (series_mapping.source, identity.original_start) in run.handled_occurrences:
