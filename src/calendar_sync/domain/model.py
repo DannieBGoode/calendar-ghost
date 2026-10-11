@@ -497,6 +497,27 @@ class EventMapping:
         """Whether this mapping lies within the rule's directional relationship."""
         return self.rule_id == rule.id and self.destination.calendar == rule.destination
 
+    def confirm_revision(self, revision: str) -> Self:
+        """The mapping once the destination is known to show the source at `revision`."""
+        return replace(self, source_revision=revision)
+
+    def record_projection(
+        self,
+        revision: str,
+        fingerprint: ProjectionFingerprint,
+        destination: EventRef | None = None,
+    ) -> Self:
+        """The mapping once the destination shows the projection `fingerprint` names.
+
+        `destination` is the projection's reference when a write returned one; otherwise it stays.
+        """
+        return replace(
+            self,
+            destination=self.destination if destination is None else destination,
+            source_revision=revision,
+            projection_fingerprint=fingerprint,
+        )
+
 
 class OccurrenceState(StrEnum):
     MODIFIED = "modified"

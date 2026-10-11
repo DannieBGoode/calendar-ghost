@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from contextlib import nullcontext, suppress
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import timedelta
 
 from calendar_sync.application.shared.ports import Clock
@@ -581,7 +581,7 @@ class ExecuteSyncRule:
             mapping = run.uow.mappings.for_source(run.rule.id, source_series.reference)
             if mapping is None or mapping.source_revision == source_series.revision:
                 return
-            run.uow.mappings.save(replace(mapping, source_revision=source_series.revision))
+            run.uow.mappings.save(mapping.confirm_revision(source_series.revision))
             run.uow.commit()
 
     def _replay_exceptions(
@@ -744,11 +744,10 @@ class ExecuteSyncRule:
                 decision.projection,
                 operation_key,
             )
-            mapping = replace(
-                mapping,
-                destination=updated.reference,
-                source_revision=self._recorded_revision(run, mapping, source_event),
-                projection_fingerprint=self.fingerprinter.fingerprint(decision.projection),
+            mapping = mapping.record_projection(
+                self._recorded_revision(run, mapping, source_event),
+                self.fingerprinter.fingerprint(decision.projection),
+                updated.reference,
             )
             uow.mappings.save(mapping)
         elif (
@@ -758,10 +757,9 @@ class ExecuteSyncRule:
             and source_moved
         ):
             # The destination already shows the new revision, so only the mapping learns it.
-            mapping = replace(
-                mapping,
-                source_revision=self._recorded_revision(run, mapping, source_event),
-                projection_fingerprint=self.fingerprinter.fingerprint(decision.projection),
+            mapping = mapping.record_projection(
+                self._recorded_revision(run, mapping, source_event),
+                self.fingerprinter.fingerprint(decision.projection),
             )
             uow.mappings.save(mapping)
         elif decision.action is SyncAction.DELETE:
