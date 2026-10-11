@@ -110,7 +110,11 @@ The adapter keeps series as series without beta, from three documented reads:
    cancelled occurrence's identifier, so the adapter expands the master's own pattern, in the
    series' time zone, and an occurrence the pattern defines that `instances` does not return is
    cancelled. Exceptions cannot move to or past a neighbouring occurrence's day, so looking for an
-   occurrence between its neighbouring slots finds it however it was moved.
+   occurrence between its neighbouring slots finds it however it was moved. A series' first or
+   last occurrence has a neighbour on one side only and may move any distance the other way, so on
+   that side it is looked for across every date Outlook keeps, 1601 to 4500; the series has no
+   other occurrence there, so that answer is short. It is cancelled only when that answer is
+   complete and does not list it.
 
 What this cannot do, and what follows:
 
@@ -224,6 +228,8 @@ release that enables the provider:
 6. That an attendee-less event sends no message on create, update, or delete.
 7. Which `/me` field holds a personal account's address.
 8. The Graph `error.code` values above, which Graph's error reference no longer lists.
+9. That `instances` accepts a window from 1601 to 4500, and that Outlook keeps no calendar item
+   outside it, so a first or last occurrence it does not list there was cancelled.
 
 ## Alternatives considered
 

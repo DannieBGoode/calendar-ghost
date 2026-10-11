@@ -76,6 +76,10 @@ MODIFIED_MARGIN = timedelta(minutes=10)
 # Exceptions are listed this far past the sync window's start, as Google's listing stops at a
 # page limit.
 EXCEPTION_HORIZON = timedelta(days=730)
+# The dates Outlook keeps calendar items on, 1 January 1601 to 31 December 4500, so an edge
+# occurrence cannot move outside them. ADR 0034 lists confirming this with real accounts.
+OUTLOOK_EARLIEST = datetime(1601, 1, 1, tzinfo=UTC)
+OUTLOOK_LATEST = datetime(4501, 1, 1, tzinfo=UTC)
 # Listings run under the rule's write lock, so a long one is read only this far.
 PAGE_LIMIT = 20
 PAGE_SIZE = "250"
@@ -440,7 +444,8 @@ class OutlookCalendarProvider:
                     return candidate
             if shape is None or not complete:
                 raise self._unproven("Outlook did not finish resolving an occurrence")
-            # A slot the pattern defines that Outlook no longer lists was cancelled.
+            # A slot the pattern defines that Outlook no longer lists anywhere it may have moved
+            # was cancelled.
             return cancelled_occurrence(master, original_start) if is_slot else None
 
     def list_occurrences(
@@ -535,12 +540,36 @@ class OutlookCalendarProvider:
             # Cancellations are inferred only from an answered listing of an expandable series.
             return exceptions
         listed = {event.occurrence.original_start for event in found if event.occurrence}
-        exceptions.extend(
-            cancelled_occurrence(master, start)
-            for start in shape.original_starts(not_ended_before, before)
-            if start not in listed
-        )
+        for start in shape.original_starts(not_ended_before, before):
+            if start in listed:
+                continue
+            moved = self._moved_edge(master.reference, item, shape, start)
+            if moved is None:
+                exceptions.append(cancelled_occurrence(master, start))
+            elif moved.occurrence_reaches(not_ended_before):
+                exceptions.append(moved)
         return exceptions
+
+    def _moved_edge(
+        self, series: EventRef, item: Mapping[str, Any], shape: Series, start: OccurrenceStart
+    ) -> CalendarEvent | None:
+        """A first or last occurrence moved beyond the listing, found wherever Outlook lets it
+        go; None when it is not there either, or the occurrence is not an edge. An answer cut
+        short proves nothing, so it is unproven."""
+        if not _is_edge(shape, start):
+            return None
+        after, before, _ = _around(shape, start)
+        found, complete = self._instances(series, item, after, before)
+        if not complete:
+            raise self._unproven("Outlook did not finish resolving an occurrence")
+        return next(
+            (
+                event
+                for event in found
+                if event.occurrence is not None and event.occurrence.original_start == start
+            ),
+            None,
+        )
 
     def _instances(
         self,
@@ -800,14 +829,23 @@ def _event_start(event: CalendarEvent) -> datetime:
 
 def _around(shape: Series | None, original: OccurrenceStart) -> tuple[datetime, datetime, bool]:
     """Where to look for an occurrence: between its neighbouring slots, which an exception never
-    moves past, and whether the pattern defines it at all."""
+    moves past, and whether the pattern defines it at all. A first or last occurrence has no
+    neighbour on one side, so on that side it is looked for across every date Outlook keeps; the
+    series has no other occurrence there, so that answer is short."""
     moment = Series._instant(original)
     if shape is None:
         return moment - timedelta(days=367), moment + timedelta(days=367), False
     previous, following, is_slot = shape.neighbours(original)
-    after = shape.instant(previous) if previous is not None else moment - shape.period
-    before = shape.instant(following) if following is not None else moment + shape.period
+    after = shape.instant(previous) if previous is not None else OUTLOOK_EARLIEST
+    before = shape.instant(following) if following is not None else OUTLOOK_LATEST
     return after, before + shape.duration, is_slot
+
+
+def _is_edge(shape: Series, original: OccurrenceStart) -> bool:
+    """Whether the occurrence is its series' first or last, which Outlook lets move any distance
+    away from its one neighbour."""
+    previous, following, is_slot = shape.neighbours(original)
+    return is_slot and (previous is None or following is None)
 
 
 def _last_end(shape: Series) -> datetime | None:
