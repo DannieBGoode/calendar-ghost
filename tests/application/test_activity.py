@@ -16,10 +16,9 @@ from calendar_sync.application.operations.errors import (
 )
 from calendar_sync.application.operations.ports import OpenBlock, OperationsOverview
 from calendar_sync.domain.model import EventId, EventRef, SyncReason, SyncRuleState
-from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars
 from tests.helpers import event, rule
-from tests.users import USER
+from tests.users import memory_units
 
 
 @pytest.mark.parametrize(
@@ -95,7 +94,7 @@ class Entries:
 def _inspection(
     events: EntryEvents | None, calendars: FakeCalendars | None
 ) -> InspectActivityEvent:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule()
     return InspectActivityEvent(Entries(events), unit_of_work, calendars)
 

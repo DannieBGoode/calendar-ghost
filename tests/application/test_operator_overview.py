@@ -34,7 +34,7 @@ from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.helpers import NOW, RecentSchedulerHeartbeat, endpoint, rule
 from tests.identity_fakes import MemoryUsers
-from tests.users import OTHER_USER, USER
+from tests.users import OTHER_USER, USER, memory_units, rule_accounts
 
 DAY = timedelta(days=1)
 
@@ -70,6 +70,7 @@ def test_each_users_status_names_calendars_only_by_their_labels() -> None:
     units = InMemoryUnitOfWorkFactory()
     created_first = replace(rule(), id=SyncRuleId("rule-z"), source=FAMILY, destination=WORK)
     created_second = replace(rule(), id=SyncRuleId("rule-a"), source=WORK, destination=TRIPS)
+    memory_units(units, accounts=rule_accounts(created_first, created_second))
     with units.for_user(USER)() as uow:
         uow.rules.add(created_first)
         uow.rules.add(created_second)

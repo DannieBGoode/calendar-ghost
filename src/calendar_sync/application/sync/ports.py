@@ -372,6 +372,15 @@ class ProviderCallRepository(Protocol):
 
 
 class UnitOfWork(Protocol):
+    """One User's records in one transaction.
+
+    A write that would break what the records keep true raises a `RecordRefused`: a second rule
+    for one direction is a `DuplicateDirectionalRelationship`, an identifier or other unique key
+    already taken an `IdentityCollision`, and a rule, Event Mapping, or account that is missing
+    or another User's a `MissingReference`. A rule's accounts are checked only when the unit
+    commits, so an account and the rules that use it can be deleted in either order.
+    """
+
     accounts: ConnectedAccountRecords
     rules: SyncRuleRepository
     mappings: EventMappingRepository
@@ -395,7 +404,9 @@ class UnitOfWork(Protocol):
         traceback: TracebackType | None,
     ) -> bool | None: ...
 
-    def commit(self) -> None: ...
+    def commit(self) -> None:
+        """Keep the unit's writes, and the changes they make to its User's Incidents; raises a
+        `MissingReference`, keeping nothing, for a rule whose accounts are not its User's."""
 
     def user_active(self) -> bool:
         """Whether this unit's User is still active, neither disabled nor deleted, as of now,

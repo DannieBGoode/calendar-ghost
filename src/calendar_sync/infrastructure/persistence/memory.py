@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Collection, Iterator, Sequence
+from collections.abc import Callable, Collection, Iterator, Sequence
 from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
 from datetime import date, datetime
 from types import TracebackType
 from typing import TYPE_CHECKING, Self
 
-from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.shared.ports import Clock
+from calendar_sync.application.sync.errors import (
+    DuplicateDirectionalRelationship,
+    IdentityCollision,
+    MissingReference,
+)
 from calendar_sync.application.sync.ports import (
     AuditRepository,
     CalendarNameRepository,
@@ -47,6 +52,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
 )
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
+from calendar_sync.infrastructure.scheduling import SystemClock
 
 if TYPE_CHECKING:
     from calendar_sync.infrastructure.persistence.memory_installation import (
@@ -85,7 +91,18 @@ class MemoryState:
 def _require_rule(state: MemoryState, rule_id: SyncRuleId) -> None:
     # Mirror SQLite's foreign keys to sync_rules.
     if rule_id not in state.rules:
-        raise KeyError(rule_id)
+        raise MissingReference(f"sync rule {rule_id.value} does not exist")
+
+
+def _require_rule_accounts(state: MemoryState) -> None:
+    # Mirror SQLite's deferred references from a rule to its own User's accounts, checked when
+    # the unit commits, so an account and the rules that use it go in either order.
+    for rule in state.rules.values():
+        for endpoint in (rule.source, rule.destination):
+            if endpoint.connected_account_id not in state.accounts:
+                raise MissingReference(
+                    f"sync rule {rule.id.value} names an account its User does not have"
+                )
 
 
 def _duplicate_relationship() -> DuplicateDirectionalRelationship:
@@ -93,8 +110,9 @@ def _duplicate_relationship() -> DuplicateDirectionalRelationship:
 
 
 class InMemoryConnectedAccountRecords:
-    def __init__(self, state: MemoryState) -> None:
+    def __init__(self, state: MemoryState, incidents: IncidentWrites | None = None) -> None:
         self._state = state
+        self._incidents = incidents or IncidentWrites()
 
     def state(self, account_id: ConnectedAccountId) -> ConnectedAccountState | None:
         return self._state.accounts.get(account_id)
@@ -141,13 +159,19 @@ class InMemoryConnectedAccountRecords:
             for endpoint, name in self._state.calendar_names.items()
             if endpoint.connected_account_id != account_id
         }
+        # The account's own Incidents, such as its Lapsed Authorization, go with it.
+        self._incidents.delete_account(account_id)
         return True
 
 
 class InMemorySyncRuleRepository:
-    def __init__(self, state: MemoryState, others: _OtherUsers) -> None:
+    def __init__(
+        self, state: MemoryState, others: _OtherUsers, incidents: IncidentWrites, clock: Clock
+    ) -> None:
         self._state = state
         self._others = others
+        self._incidents = incidents
+        self._clock = clock
 
     def get(self, rule_id: SyncRuleId) -> SyncRule | None:
         return self._state.rules.get(rule_id)
@@ -157,13 +181,10 @@ class InMemorySyncRuleRepository:
 
     def add(self, rule: SyncRule) -> None:
         # Mirror SQLite's primary key and its unique source-and-destination constraint.
-        if (
-            rule.id in self._state.rules
-            or self._others.hold_rule(rule.id)
-            or self.relationship_exists(rule.source, rule.destination)
-        ):
+        if rule.id in self._state.rules or self._others.hold_rule(rule.id):
+            raise IdentityCollision(f"sync rule {rule.id.value} already exists")
+        if self.relationship_exists(rule.source, rule.destination):
             raise _duplicate_relationship()
-        self._require_own_accounts(rule)
         self._state.rules[rule.id] = rule
 
     def save(self, rule: SyncRule) -> None:
@@ -176,17 +197,10 @@ class InMemorySyncRuleRepository:
             for other in self._state.rules.values()
         ):
             raise _duplicate_relationship()
-        self._require_own_accounts(rule)
         self._state.rules[rule.id] = rule
 
-    def _require_own_accounts(self, rule: SyncRule) -> None:
-        # Mirror SQLite's reference from a rule to its own User's accounts. Accounts this store
-        # never recorded are let through, as application tests leave accounts unrecorded.
-        for endpoint in (rule.source, rule.destination):
-            if self._others.hold_account(endpoint.connected_account_id):
-                raise KeyError(endpoint.connected_account_id)
-
     def remove(self, rule_id: SyncRuleId) -> None:
+        self._incidents.resolve_rule(rule_id, self._clock.now())
         self._state.rules.pop(rule_id, None)
         removed = {m.id for key, m in self._state.mappings.items() if key[0] == rule_id}
         self._state.occurrences = {
@@ -211,6 +225,7 @@ class InMemorySyncRuleRepository:
     def purge(self, rule_id: SyncRuleId) -> None:
         self.remove(rule_id)
         self._state.audit = [entry for entry in self._state.audit if entry.rule_id != rule_id]
+        self._incidents.delete_rule(rule_id)
 
     def relationship_exists(self, source: CalendarEndpoint, destination: CalendarEndpoint) -> bool:
         return any(
@@ -250,24 +265,25 @@ class InMemoryEventMappingRepository:
         )
 
     def save(self, mapping: EventMapping) -> None:
-        _require_rule(self._state, mapping.rule_id)
         if self._others.hold_mapping(mapping.id):
-            # Mirror SQLite's primary key: another User's mapping is neither replaced nor changed.
-            raise ValueError("the mapping id names another User's mapping")
+            # Mirror SQLite's primary key: another User's mapping is neither replaced nor changed,
+            # whichever rule this one names.
+            raise IdentityCollision(f"event mapping {mapping.id.value} is another User's")
+        _require_rule(self._state, mapping.rule_id)
         same_id = next((m for m in self._state.mappings.values() if m.id == mapping.id), None)
         if same_id is not None:
             # Mirror SQLite's upsert by id: a mapping keeps its rule and source.
             mapping = replace(mapping, rule_id=same_id.rule_id, source=same_id.source)
         at_source = self._state.mappings.get((mapping.rule_id, mapping.source))
         if at_source is not None and at_source.id != mapping.id:
-            raise ValueError("the source is already mapped by another mapping")
+            raise IdentityCollision("the source is already mapped by another mapping")
         for existing in self._state.mappings.values():
             if (
                 existing.rule_id == mapping.rule_id
                 and existing.destination == mapping.destination
                 and existing.source != mapping.source
             ):
-                raise ValueError("managed destination is already mapped to another source")
+                raise IdentityCollision("managed destination is already mapped to another source")
         self._state.mappings[(mapping.rule_id, mapping.source)] = mapping
 
     def delete(self, mapping: EventMapping) -> None:
@@ -302,7 +318,7 @@ class InMemoryExceptionReplayRepository:
     def add(self, series_mapping_id: EventMappingId) -> None:
         # Mirror the SQLite foreign key to event_mappings.
         if not any(m.id == series_mapping_id for m in self._state.mappings.values()):
-            raise KeyError(series_mapping_id)
+            raise MissingReference(f"series mapping {series_mapping_id.value} does not exist")
         self._state.pending_replays.add(series_mapping_id)
 
     def remove(self, series_mapping_id: EventMappingId) -> None:
@@ -335,7 +351,9 @@ class InMemoryOccurrenceMappingRepository:
     def save(self, mapping: OccurrenceMapping) -> None:
         # Mirror the SQLite foreign key to event_mappings.
         if not any(m.id == mapping.series_mapping_id for m in self._state.mappings.values()):
-            raise KeyError(mapping.series_mapping_id)
+            raise MissingReference(
+                f"series mapping {mapping.series_mapping_id.value} does not exist"
+            )
         key = (mapping.series_mapping_id, mapping.original_start)
         existing = self._state.occurrences.get(key)
         if existing is not None:
@@ -345,7 +363,7 @@ class InMemoryOccurrenceMappingRepository:
             other.id == mapping.id for other in self._state.occurrences.values()
         ):
             # Mirror SQLite's primary key: one id names one occurrence.
-            raise ValueError("the occurrence id already names another occurrence")
+            raise IdentityCollision("the occurrence id already names another occurrence")
         self._state.occurrences[key] = mapping
 
     def delete(self, mapping: OccurrenceMapping) -> None:
@@ -508,18 +526,23 @@ class InMemoryUnitOfWork:
     calendar_names: CalendarNameRepository
     provider_calls: ProviderCallRepository
 
-    def __init__(self, database: MemoryDatabase, user_id: UserId) -> None:
+    def __init__(self, database: MemoryDatabase, user_id: UserId, clock: Clock) -> None:
         self._database = database
         self._user = user_id
+        self._clock = clock
         self._working: MemoryState | None = None
+        self._incidents = IncidentWrites()
         self._committed = False
 
     def __enter__(self) -> Self:
         working = deepcopy(self._database.state_of(self._user))
         self._working = working
         others = _OtherUsers(self._database, self._user)
-        self.accounts = InMemoryConnectedAccountRecords(working)
-        self.rules = InMemorySyncRuleRepository(working, others)
+        # Like SQLite's connection, each context starts clean: what an earlier one did not
+        # commit to Incidents is gone.
+        incidents = self._incidents = IncidentWrites()
+        self.accounts = InMemoryConnectedAccountRecords(working, incidents)
+        self.rules = InMemorySyncRuleRepository(working, others, incidents, self._clock)
         self.mappings = InMemoryEventMappingRepository(working, others)
         self.occurrences = InMemoryOccurrenceMappingRepository(working, others)
         self.replays = InMemoryExceptionReplayRepository(working)
@@ -545,10 +568,12 @@ class InMemoryUnitOfWork:
 
     def commit(self) -> None:
         assert self._working is not None
+        _require_rule_accounts(self._working)
         target = self._database.state_of(self._user)
         # Copies, so writes after this commit stay in the unit until it commits again.
         for each in fields(MemoryState):
             setattr(target, each.name, deepcopy(getattr(self._working, each.name)))
+        self._incidents.apply(self._database.incidents_of(self._user))
         self._committed = True
 
     def user_active(self) -> bool:
@@ -562,61 +587,119 @@ class MemoryDatabase:
     partitions: dict[UserId, MemoryState] = field(default_factory=dict)
     disabled: set[UserId] = field(default_factory=set)
     """Users who may not sign in; the scheduler holds their rules."""
-    incidents: dict[UserId, dict[str, IncidentReport]] = field(default_factory=dict)
-    """Each User's open Incidents by key; like SQLite's, they change outside any unit of work."""
+    incidents: dict[UserId, dict[str, MemoryIncident]] = field(default_factory=dict)
+    """Each User's Incidents by key; like SQLite's, they change outside any unit of work, except
+    as a unit's rule removals and account deletions change them when it commits."""
 
     def state_of(self, user_id: UserId) -> MemoryState:
         return self.partitions.setdefault(user_id, MemoryState())
 
+    def incidents_of(self, user_id: UserId) -> dict[str, MemoryIncident]:
+        return self.incidents.setdefault(user_id, {})
+
+
+@dataclass(slots=True)
+class MemoryIncident:
+    """An Incident as SQLite's row keeps it: what it last reported, and when and why it opened
+    and resolved."""
+
+    report: IncidentReport
+    opened_at: datetime
+    updated_at: datetime
+    resolved_at: datetime | None = None
+    resolution: IncidentResolution | None = None
+
+    @property
+    def open(self) -> bool:
+        return self.resolved_at is None
+
+    def resolve(self, at: datetime, resolution: IncidentResolution) -> None:
+        self.updated_at = self.resolved_at = at
+        self.resolution = resolution
+
+
+class IncidentWrites:
+    """What a unit of work's writes do to its User's Incidents. SQLite changes them in the unit's
+    own transaction, so here they wait for the unit to commit."""
+
+    def __init__(self) -> None:
+        self._writes: list[Callable[[dict[str, MemoryIncident]], None]] = []
+
+    def resolve_rule(self, rule_id: SyncRuleId, at: datetime) -> None:
+        def write(incidents: dict[str, MemoryIncident]) -> None:
+            for incident in incidents.values():
+                if incident.report.rule_id == rule_id and incident.open:
+                    incident.resolve(at, IncidentResolution.RULE_REMOVED)
+
+        self._writes.append(write)
+
+    def delete_rule(self, rule_id: SyncRuleId) -> None:
+        self._delete(lambda report: report.rule_id == rule_id)
+
+    def delete_account(self, account_id: ConnectedAccountId) -> None:
+        self._delete(lambda report: report.rule_id is None and report.account_id == account_id)
+
+    def _delete(self, deleted: Callable[[IncidentReport], bool]) -> None:
+        def write(incidents: dict[str, MemoryIncident]) -> None:
+            for key in [key for key, each in incidents.items() if deleted(each.report)]:
+                del incidents[key]
+
+        self._writes.append(write)
+
+    def apply(self, incidents: dict[str, MemoryIncident]) -> None:
+        """Apply the writes since the last commit, so writes after it wait for the next."""
+        for write in self._writes:
+            write(incidents)
+        self._writes.clear()
+
 
 class InMemoryIncidentRepository:
-    """One User's open Incidents, as SQLite opens and resolves them; it keeps which are open,
-    not when or why they opened or resolved."""
+    """One User's Incidents, as SQLite opens and resolves them."""
 
     def __init__(self, database: MemoryDatabase, user_id: UserId) -> None:
         self._database = database
         self._user = user_id
 
-    def open(
-        self,
-        incident: IncidentReport,
-        at: datetime,  # noqa: ARG002
-        *,
-        refresh: bool = True,
-    ) -> bool:
+    def open(self, incident: IncidentReport, at: datetime, *, refresh: bool = True) -> bool:
         state = self._database.state_of(self._user)
         # An account's own Incident opens only while the account is lapsed.
         if incident.rule_id is None and incident.account_id not in state.lapsed:
             return False
-        opened = self._open()
-        newly = incident.key not in opened
-        if newly or refresh:
-            opened[incident.key] = incident
-        return newly
+        incidents = self._database.incidents_of(self._user)
+        existing = incidents.get(incident.key)
+        if existing is None or not existing.open:
+            # A resolved Incident reopens as a new episode.
+            incidents[incident.key] = MemoryIncident(incident, opened_at=at, updated_at=at)
+            return True
+        if refresh:
+            existing.report, existing.updated_at = incident, at
+        return False
 
     def resolve(
         self,
         key: str,
-        at: datetime,  # noqa: ARG002
-        resolution: IncidentResolution,  # noqa: ARG002
+        at: datetime,
+        resolution: IncidentResolution,
         *,
         while_authorized: ConnectedAccountId | None = None,
     ) -> None:
         state = self._database.state_of(self._user)
+        incident = self._database.incidents_of(self._user).get(key)
+        if incident is None or not incident.open:
+            return
         if while_authorized is None or InMemoryConnectedAccountRecords(state).authorized(
             while_authorized
         ):
-            self._open().pop(key, None)
+            incident.resolve(at, resolution)
 
     def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
         return frozenset(
-            incident.account_id
-            for incident in self._open().values()
-            if incident.rule_id is None and incident.account_id is not None
+            incident.report.account_id
+            for incident in self._database.incidents_of(self._user).values()
+            if incident.open
+            and incident.report.rule_id is None
+            and incident.report.account_id is not None
         )
-
-    def _open(self) -> dict[str, IncidentReport]:
-        return self._database.incidents.setdefault(self._user, {})
 
 
 @dataclass(frozen=True, slots=True)
@@ -631,9 +714,6 @@ class _OtherUsers:
 
     def hold_rule(self, rule_id: SyncRuleId) -> bool:
         return any(rule_id in state.rules for state in self._states())
-
-    def hold_account(self, account_id: ConnectedAccountId) -> bool:
-        return any(account_id in state.accounts for state in self._states())
 
     def hold_mapping(self, mapping_id: EventMappingId) -> bool:
         return any(
@@ -653,11 +733,12 @@ class _OtherUsers:
 class InMemoryUnitOfWorkFactory:
     """Units of work over one in-memory database, each for the one User `for_user` names."""
 
-    def __init__(self, database: MemoryDatabase | None = None) -> None:
+    def __init__(self, database: MemoryDatabase | None = None, clock: Clock | None = None) -> None:
         self.database = database or MemoryDatabase()
+        self.clock = clock or SystemClock()
 
     def for_user(self, user_id: UserId) -> InMemoryUserUnitOfWorkFactory:
-        return InMemoryUserUnitOfWorkFactory(self.database, user_id)
+        return InMemoryUserUnitOfWorkFactory(self.database, user_id, self.clock)
 
     def installation(self) -> InMemoryInstallationUnitOfWorkFactory:
         # Imported here, since that module builds on this one's database.
@@ -672,6 +753,7 @@ class InMemoryUnitOfWorkFactory:
 class InMemoryUserUnitOfWorkFactory:
     database: MemoryDatabase
     user_id: UserId
+    clock: Clock = field(default_factory=SystemClock)
 
     @property
     def state(self) -> MemoryState:
@@ -679,4 +761,4 @@ class InMemoryUserUnitOfWorkFactory:
         return self.database.state_of(self.user_id)
 
     def __call__(self) -> UnitOfWork:
-        return InMemoryUnitOfWork(self.database, self.user_id)
+        return InMemoryUnitOfWork(self.database, self.user_id, self.clock)

@@ -116,6 +116,16 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
   Status, are typed as their domain enums instead of strings. `ProviderFailureKind` moves to
   `domain/providers.py`, and `application/sync/events.py` is now `event_sync.py`, so it is not
   mistaken for domain events. Stored values, API payloads, and the OpenAPI document are unchanged.
+- Both units of work refuse a write with the same errors: `DuplicateDirectionalRelationship`,
+  `IdentityCollision`, or `MissingReference`, each a `RecordRefused`. SQLite raises them in place
+  of `sqlite3.IntegrityError`, also when a rule's accounts are checked at commit. The in-memory
+  store that application tests use now behaves as SQLite does: it refuses a rule whose accounts
+  are not its User's, resolves a removed rule's Incidents and deletes a purged rule's or a deleted
+  account's, and its Installation Status reads open Incidents, blocks, and Incident Causes. The
+  persistence contract checks each of these for both stores.
+- Activity's reads of a rule's earlier entries and block checks also match the User, so another
+  User's entries with the same rule and event identifiers never name, repeat, or clear this
+  User's events. Clearing Activity keeps the entries those reads need, matched the same way.
 - Activity has a History tab and an Incidents tab, each at its own address (`/activity` and
   `/activity/incidents`), while any Incident is kept; the Incidents tab counts the open ones.
   Incidents list in one table, open first, each with when it opened, the rule or account, and when

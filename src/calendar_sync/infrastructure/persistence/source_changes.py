@@ -7,6 +7,7 @@ import sqlite3
 from datetime import UTC, date, datetime
 from typing import Any
 
+from calendar_sync.application.sync.errors import MissingReference
 from calendar_sync.domain.access import UserId
 from calendar_sync.domain.changes import SourceChange, SourceField, SourceObservation
 from calendar_sync.domain.model import (
@@ -18,6 +19,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TimedInterval,
 )
+from calendar_sync.infrastructure.persistence.refusals import refusals
 from calendar_sync.infrastructure.security import HistoryCipher
 
 
@@ -81,38 +83,37 @@ class SqliteSourceObservationRepository:
             "response": observation.response.value if observation.response else None,
         }
         sealed = self._history.seal(json.dumps(details), _observation_context(rule_id, source))
-        cursor = self._connection.execute(
-            """
-            INSERT INTO source_observations (
-                rule_id, source_account_id, source_calendar_id, source_event_id,
-                revision, observed_at, title, recurring, ends, sealed, user_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(rule_id, source_account_id, source_calendar_id, source_event_id)
-            DO UPDATE SET
-                revision = excluded.revision,
-                observed_at = excluded.observed_at,
-                title = excluded.title,
-                recurring = excluded.recurring,
-                ends = excluded.ends,
-                sealed = excluded.sealed
-            WHERE user_id = excluded.user_id
-            """,
-            (
-                *_key(rule_id, source),
-                observation.revision,
-                observed_at.isoformat(),
-                observation.title,
-                int(bool(observation.recurrence)),
-                _ends(observation.time),
-                sealed,
-                self._user,
-            ),
-        )
-        if cursor.rowcount != 1:
-            # The observation the upsert met is another User's, so nothing was written.
-            raise sqlite3.IntegrityError(
-                f"an observation of rule {rule_id.value} is another User's"
+        with refusals():
+            cursor = self._connection.execute(
+                """
+                INSERT INTO source_observations (
+                    rule_id, source_account_id, source_calendar_id, source_event_id,
+                    revision, observed_at, title, recurring, ends, sealed, user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(rule_id, source_account_id, source_calendar_id, source_event_id)
+                DO UPDATE SET
+                    revision = excluded.revision,
+                    observed_at = excluded.observed_at,
+                    title = excluded.title,
+                    recurring = excluded.recurring,
+                    ends = excluded.ends,
+                    sealed = excluded.sealed
+                WHERE user_id = excluded.user_id
+                """,
+                (
+                    *_key(rule_id, source),
+                    observation.revision,
+                    observed_at.isoformat(),
+                    observation.title,
+                    int(bool(observation.recurrence)),
+                    _ends(observation.time),
+                    sealed,
+                    self._user,
+                ),
             )
+        if cursor.rowcount != 1:
+            # The observation the upsert met is another User's, so its rule is too.
+            raise MissingReference(f"an observation of rule {rule_id.value} is another User's")
 
     def forget_stale(
         self, rule_id: SyncRuleId, source: CalendarEndpoint, ended_before: datetime

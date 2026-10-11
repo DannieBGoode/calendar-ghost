@@ -39,13 +39,12 @@ from calendar_sync.domain.model import (
 )
 from calendar_sync.domain.providers import ProviderFailureKind
 from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,
 )
 from tests.application.test_execute_sync_rule import FakeCalendarProvider, FixedClock
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import endpoint, event, occurrence, rule, series, week_start
-from tests.users import USER
+from tests.users import memory_units
 
 
 class Accounts:
@@ -94,7 +93,7 @@ class Ids:
 def _with_mappings(
     count: int, state: SyncRuleState = SyncRuleState.ENABLED
 ) -> InMemoryUserUnitOfWorkFactory:
-    unit_of_work = InMemoryUnitOfWorkFactory().for_user(USER)
+    unit_of_work = memory_units()
     unit_of_work.state.rules[rule().id] = rule(state=state)
     # Rule Replacement creates its draft under the same Connected Accounts.
     for endpoint_ in (rule().source, rule().destination):
