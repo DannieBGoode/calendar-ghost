@@ -20,7 +20,7 @@ from calendar_sync.application.operations.ports import (
 )
 from calendar_sync.application.sync.ports import ScheduledRule
 from calendar_sync.domain.access import UserId
-from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.model import SyncRuleState
 from calendar_sync.infrastructure.persistence.activity_queries import operations_of
@@ -96,17 +96,50 @@ class SqliteInstallationUnitOfWork:
             for row in rows
         )
 
-    def users_awaiting_reauthorization(self) -> Sequence[UserId]:
+    def users_with_unfinished_lapses(self) -> Sequence[UserId]:
         assert self._connection is not None
         rows = self._connection.execute(
             """
-            SELECT DISTINCT sync_rules.user_id
-            FROM sync_rules
-            JOIN users ON users.id = sync_rules.user_id AND users.state = 'active'
-            WHERE sync_rules.state = ? AND sync_rules.awaiting_reauthorization = 1
-            ORDER BY sync_rules.user_id
+            SELECT users.id FROM users
+            WHERE users.state = 'active' AND (
+                EXISTS (
+                    SELECT 1 FROM sync_rules
+                    WHERE sync_rules.user_id = users.id
+                        AND sync_rules.state = :degraded
+                        AND sync_rules.awaiting_reauthorization = 1
+                )
+                OR EXISTS (
+                    SELECT 1 FROM connected_accounts account
+                    LEFT JOIN incidents incident
+                        ON incident.user_id = account.user_id
+                        AND incident.account_id = account.id
+                        AND incident.rule_id IS NULL
+                        AND incident.state = 'open'
+                    WHERE account.user_id = users.id AND account.state = :connected AND (
+                        -- Authorized again while its Incident is open: a restoration.
+                        (account.authorization_lapsed_at IS NULL AND incident.id IS NOT NULL)
+                        -- Lapsed with no Incident open, or a rule still enabled: a lapse.
+                        OR (account.authorization_lapsed_at IS NOT NULL AND (
+                            incident.id IS NULL OR EXISTS (
+                                SELECT 1 FROM sync_rules
+                                WHERE sync_rules.user_id = account.user_id
+                                    AND sync_rules.state = :enabled
+                                    AND account.id IN (
+                                        sync_rules.source_account_id,
+                                        sync_rules.destination_account_id
+                                    )
+                            )
+                        ))
+                    )
+                )
+            )
+            ORDER BY users.id
             """,
-            (SyncRuleState.DEGRADED.value,),
+            {
+                "degraded": SyncRuleState.DEGRADED.value,
+                "enabled": SyncRuleState.ENABLED.value,
+                "connected": ConnectedAccountState.CONNECTED.value,
+            },
         ).fetchall()
         return tuple(UserId(str(row[0])) for row in rows)
 

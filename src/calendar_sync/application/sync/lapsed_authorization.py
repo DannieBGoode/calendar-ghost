@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 
 from calendar_sync.application.shared.ports import Clock
-from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
 from calendar_sync.application.sync.locking import RuleLocks
 from calendar_sync.application.sync.ports import (
     IncidentNotifications,
@@ -14,6 +14,7 @@ from calendar_sync.application.sync.ports import (
     UnitOfWork,
     UnitOfWorkFactory,
 )
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import ConnectedAccountId, SyncRule, SyncRuleId, SyncRuleState
 
@@ -39,6 +40,24 @@ def lapse_incident(account_id: ConnectedAccountId, failure: ProviderFailure) -> 
             },
         ),
         cause=failure.provider_cause,
+    )
+
+
+def lapse_without_refusal(
+    account_id: ConnectedAccountId, provider: ProviderKind
+) -> ProviderFailure:
+    """The failure an account's Incident names when its lapse is finished without the refusal.
+
+    The account records when its authorization lapsed, not why. So the Incident says what every
+    lapse means, that the provider no longer accepts the account's authorization, and has no
+    Cause: none was read from a provider's answer, so it never counts toward an Installation
+    Hint (ADR 0031).
+    """
+    return ProviderFailure(
+        ProviderFailureKind.AUTHENTICATION,
+        "authorization lapsed",
+        account_id=account_id,
+        provider=provider,
     )
 
 
@@ -75,9 +94,7 @@ class LapsedAuthorizations:
             return False
         for rule_id in enabled:
             self._stop(rule_id, account_id)
-        incident = lapse_incident(account_id, failure)
-        if self.incidents.open(incident, now) and self.notifications is not None:
-            self.notifications.incident_opened(incident, now)
+        self._open(lapse_incident(account_id, failure), now, refresh=True)
         return True
 
     def restored(self, account_id: ConnectedAccountId, *, accepted_at: datetime) -> int:
@@ -101,32 +118,41 @@ class LapsedAuthorizations:
         self._resolve(account_id)
         return sum(self._resume(rule_id) for rule_id in waiting)
 
-    def resume_restored(self) -> int:
-        """Finish restorations an interruption left; how many rules resumed.
+    def finish_interrupted(self) -> int:
+        """Finish lapses and restorations an interruption left; how many rules resumed.
 
-        Reauthorizing clears a lapse with the new credentials, and `restored` then commits each
-        step on its own, so a stop or failure between them leaves rules the lapse alone stopped
-        while their accounts are authorized again. Each scheduler pass calls this, so they resume
-        and their accounts' Incidents resolve without another Reauthorization (ADR 0027).
+        Each commits its steps one at a time, so a stop or failure between them leaves part
+        undone. A lapse records the account first, then stops each enabled rule, then opens the
+        account's Incident; a restoration clears the lapse first, then resolves that Incident and
+        resumes each rule. Each scheduler pass calls this, so a lapsed account's enabled rules
+        stop and its Incident opens, and an account authorized again has its Incident resolved
+        and the rules the lapse alone stopped resumed, all without a provider call (ADR 0027).
         """
+        incidents = self.incidents.accounts_with_open_incidents()
         with self.unit_of_work() as uow:
-            waiting = tuple(
-                rule
-                for rule in uow.rules.list()
-                if rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
-            )
-            accounts = {
-                account
-                for rule in waiting
-                for account in (
-                    rule.source.connected_account_id,
-                    rule.destination.connected_account_id,
-                )
-            }
-            authorized = {account for account in accounts if uow.accounts.authorized(account)}
+            rules = tuple(uow.rules.list())
+            lapsed = uow.accounts.lapsed()
+            authorized = {account for account in incidents if uow.accounts.authorized(account)}
+        for account_id, provider in lapsed.items():
+            for rule in rules:
+                if rule.state is SyncRuleState.ENABLED and rule.uses_account(account_id):
+                    self._stop(rule.id, account_id)
+            if account_id not in incidents:
+                # Not refreshed, so an Incident a lapse opened meanwhile keeps its own failure.
+                incident = lapse_incident(account_id, lapse_without_refusal(account_id, provider))
+                self._open(incident, self.clock.now(), refresh=False)
         for account_id in sorted(authorized, key=lambda account: account.value):
             self._resolve(account_id)
-        return sum(self._resume(rule.id) for rule in waiting)
+        return sum(
+            self._resume(rule.id)
+            for rule in rules
+            if rule.state is SyncRuleState.DEGRADED and rule.awaiting_reauthorization
+        )
+
+    def _open(self, incident: IncidentReport, now: datetime, *, refresh: bool) -> None:
+        # Only a newly opened Incident is notified, so an open one never notifies twice.
+        if self.incidents.open(incident, now, refresh=refresh) and self.notifications is not None:
+            self.notifications.incident_opened(incident, now)
 
     def _resolve(self, account_id: ConnectedAccountId) -> None:
         # A newer lapse recorded since keeps its reopened Incident open.

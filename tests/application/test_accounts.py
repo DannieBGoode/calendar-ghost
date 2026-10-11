@@ -27,6 +27,7 @@ from calendar_sync.application.sync.ports import (
     CalendarAccess,
     DiscoveredCalendar,
     IncidentRepository,
+    UnitOfWork,
 )
 from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
@@ -205,6 +206,35 @@ def test_disconnecting_makes_a_rule_awaiting_reauthorization_need_a_preview() ->
     assert (kept.state, kept.awaiting_reauthorization) == (SyncRuleState.DEGRADED, False)
 
 
+def test_retrying_an_interrupted_disconnection_completes_it() -> None:
+    # The process stopped after the first rule was stopped, before the second or the account.
+    first, second = (
+        replace(_rule(name, ACCOUNT.value), state=SyncRuleState.ENABLED)
+        for name in ("first", "second")
+    )
+    unit_of_work = _with_rules(first, second)
+    accounts = RecordingAccounts(_account())
+    opened = 0
+
+    def interrupted() -> UnitOfWork:
+        nonlocal opened
+        opened += 1
+        if opened == 3:
+            raise RuntimeError("stopped")
+        return unit_of_work()
+
+    with pytest.raises(RuntimeError):
+        DisconnectConnectedAccount(interrupted, accounts, RuleLocks()).execute(ACCOUNT)
+    left = {rule_id.value: rule.state for rule_id, rule in unit_of_work.state.rules.items()}
+    assert left == {"first": SyncRuleState.DEGRADED, "second": SyncRuleState.ENABLED}
+    assert accounts.is_connected(ACCOUNT)
+
+    retried = DisconnectConnectedAccount(unit_of_work, accounts, RuleLocks()).execute(ACCOUNT)
+
+    assert retried.account.state is ConnectedAccountState.DISCONNECTED
+    assert {rule.state for rule in unit_of_work.state.rules.values()} == {SyncRuleState.DEGRADED}
+
+
 def test_disconnecting_an_unknown_account_changes_no_rule() -> None:
     affected = replace(_rule("affected", ACCOUNT.value), state=SyncRuleState.ENABLED)
     unit_of_work = _with_rules(affected)
@@ -366,12 +396,15 @@ class OpenedIncidents:
     def __init__(self) -> None:
         self.opened: list[IncidentReport] = []
 
-    def open(self, incident: IncidentReport, at: object) -> bool:
+    def open(self, incident: IncidentReport, at: object, *, refresh: bool = True) -> bool:
         self.opened.append(incident)
         return True
 
     def resolve(self, *args: object, **kwargs: object) -> None:
         return None
+
+    def accounts_with_open_incidents(self) -> frozenset[ConnectedAccountId]:
+        return frozenset()
 
 
 def test_a_refused_access_check_records_why_the_provider_refused() -> None:
