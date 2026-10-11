@@ -6,17 +6,15 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.activity import ActivityEntry, ActivityFilter
-from calendar_sync.application.errors import StorageBusy
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
+from calendar_sync.application.operations.activity import ActivityEntry, ActivityFilter
+from calendar_sync.application.operations.errors import StorageBusy
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import SyncReason, TimedInterval
 from calendar_sync.infrastructure.persistence.activity_queries import (
     SqliteActivityQueries,
     open_blocks,
 )
-from calendar_sync.infrastructure.persistence.sqlite import (
-    initialize_database,
-)
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.persistence.storage import SqliteStorage
 from tests.fake_calendar import FixedClock
 from tests.helpers import rule

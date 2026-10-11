@@ -3,12 +3,12 @@
 import re
 from pathlib import Path
 
-from calendar_sync.application.causes import Cause
-from calendar_sync.application.installation_hints import (
+from calendar_sync.application.operations.installation_hints import (
     CAUSE_ANCHORS,
     TESTING_MODE_ANCHOR,
     UNRECOGNIZED_ANCHOR,
 )
+from calendar_sync.domain.causes import Cause
 
 GUIDE = Path(__file__).resolve().parents[1] / "docs" / "troubleshooting.md"
 

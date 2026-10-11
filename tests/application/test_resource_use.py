@@ -4,9 +4,9 @@ from datetime import timedelta
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailure, ProviderFailureKind
-from calendar_sync.application.ports import ProviderCallCounts, ProviderCallTally
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.errors import ProviderFailure, ProviderFailureKind
+from calendar_sync.application.sync.ports import ProviderCallCounts, ProviderCallTally
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ProjectionHandling
 from tests.application.test_run_logging import (
     CountedCalls,

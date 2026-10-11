@@ -10,9 +10,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from calendar_sync.application.errors import ProviderFailure
-from calendar_sync.application.ports import ProviderCallCounts, ProviderCallTally
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.errors import ProviderFailure
+from calendar_sync.application.sync.ports import ProviderCallCounts, ProviderCallTally
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import EventId, EventRef
 from calendar_sync.infrastructure.google.provider import GoogleCalendarProvider
 from calendar_sync.infrastructure.provider_calls import (

@@ -10,38 +10,34 @@ from unittest.mock import Mock
 
 import pytest
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.operations.installation_health import (
+    InstallationIncident,
+    InstallationIncidentKind,
+)
+from calendar_sync.application.operations.ports import (
+    InstallationUnitOfWork,
+    InstallationUnitOfWorkFactory,
+    SchedulerProgress,
+)
+from calendar_sync.application.sync.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RuleNotExecutable,
 )
-from calendar_sync.application.health import RuleHealth, RunHealth
-from calendar_sync.application.installation_health import (
-    InstallationIncident,
-    InstallationIncidentKind,
-)
-from calendar_sync.application.locking import RuleLocks
-from calendar_sync.application.ports import (
-    AuditAction,
-    AuditEntry,
-    AuditOutcome,
-    IncidentMessage,
+from calendar_sync.application.sync.health import RuleHealth, RunHealth
+from calendar_sync.application.sync.locking import RuleLocks
+from calendar_sync.application.sync.ports import (
     IncidentNotifications,
-    IncidentReport,
-    IncidentResolution,
-    InstallationUnitOfWork,
-    InstallationUnitOfWorkFactory,
     ProviderCallCounts,
-    RuleRunOutcome,
-    RunKind,
     ScheduledRule,
-    SchedulerProgress,
     UnitOfWorkFactory,
 )
-from calendar_sync.application.providers import ProviderKind
-from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
-from calendar_sync.application.synchronization import ExecuteSyncRule, SyncRunResult
+from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule, SyncRunResult
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
+from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     ConnectedAccountId,
     SyncReason,
@@ -49,6 +45,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
@@ -70,10 +67,8 @@ from calendar_sync.infrastructure.persistence.memory import (
     InMemoryUnitOfWorkFactory,
     InMemoryUserUnitOfWorkFactory,
 )
-from calendar_sync.infrastructure.persistence.sqlite import (
-    SqliteConnectedAccountRecords,
-    initialize_database,
-)
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
+from calendar_sync.infrastructure.persistence.sqlite import SqliteConnectedAccountRecords
 from calendar_sync.infrastructure.scheduling import (
     ScheduledServices,
     SchedulerWatch,

@@ -7,41 +7,40 @@ from datetime import date, datetime
 from types import TracebackType
 from typing import Self
 
-from calendar_sync.application.causes import WITHOUT_CAUSE
-from calendar_sync.application.errors import DuplicateDirectionalRelationship
-from calendar_sync.application.ports import (
+from calendar_sync.application.operations.ports import (
     AccountStanding,
-    AuditEntry,
-    AuditRepository,
-    CalendarNameRepository,
     CauseSighting,
-    ConnectedAccountRecords,
-    ConnectedAccountState,
-    DiscoveredCalendar,
-    EventMappingRepository,
-    ExceptionReplayRepository,
     InstallationUnitOfWork,
-    OccurrenceMappingRepository,
     OperationsOverview,
-    ProviderCallCounts,
-    ProviderCallRepository,
     ProviderCallUse,
     RecordedRule,
     ResourceUse,
+    StatusRecords,
+)
+from calendar_sync.application.sync.errors import DuplicateDirectionalRelationship
+from calendar_sync.application.sync.ports import (
+    AuditRepository,
+    CalendarNameRepository,
+    ConnectedAccountRecords,
+    DiscoveredCalendar,
+    EventMappingRepository,
+    ExceptionReplayRepository,
+    OccurrenceMappingRepository,
+    ProviderCallCounts,
+    ProviderCallRepository,
     RulePreviewRepository,
     RulePreviewSummary,
-    RuleRunOutcome,
     RuleRunOutcomeRepository,
-    RunKind,
     ScheduledRule,
     SourceObservationRepository,
-    StatusRecords,
     SyncCursorRepository,
     SyncRuleRepository,
     UnitOfWork,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
+from calendar_sync.domain.audit import AuditEntry
+from calendar_sync.domain.causes import WITHOUT_CAUSE
 from calendar_sync.domain.changes import SourceObservation
 from calendar_sync.domain.model import (
     AllDayRange,
@@ -58,6 +57,7 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     SyncRuleState,
 )
+from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 
 
 @dataclass(slots=True)
@@ -733,7 +733,7 @@ def _status_records(state: MemoryState | None) -> StatusRecords:
             connected_accounts=sum(a.state == "connected" for a in accounts),
             disconnected_accounts=sum(a.state == "disconnected" for a in accounts),
             open_incidents=0,
-            last_synced_at=max(succeeded).isoformat() if succeeded else None,
+            last_synced_at=max(succeeded) if succeeded else None,
             open_blocks=(),
             accounts=accounts,
         ),

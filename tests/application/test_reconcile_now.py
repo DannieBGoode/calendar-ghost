@@ -6,11 +6,11 @@ from typing import Any
 
 import pytest
 
-from calendar_sync.application.errors import RuleNotExecutable
-from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
-from calendar_sync.application.ports import AuditAction, AuditOutcome, RunKind
-from calendar_sync.application.reconciliation import ReconcileNow, ReconcileSyncRule
-from calendar_sync.application.synchronization import ExecuteSyncRule
+from calendar_sync.application.sync.errors import RuleNotExecutable
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.reconciliation import ReconcileNow, ReconcileSyncRule
+from calendar_sync.application.sync.synchronization import ExecuteSyncRule
+from calendar_sync.domain.audit import AuditAction, AuditOutcome
 from calendar_sync.domain.model import (
     EventId,
     EventRef,
@@ -20,6 +20,7 @@ from calendar_sync.domain.model import (
     SyncRuleState,
     TimedInterval,
 )
+from calendar_sync.domain.runs import RunKind
 from calendar_sync.domain.services import (
     EventProjector,
     ProjectionFingerprinter,
@@ -27,9 +28,7 @@ from calendar_sync.domain.services import (
     SyncDecisionService,
 )
 from calendar_sync.infrastructure.identifiers import UuidRunIdGenerator
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUserUnitOfWorkFactory,
-)
+from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from tests.application.test_run_logging import SteppedClock
 from tests.fake_calendar import FakeCalendars, FixedClock, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, rule

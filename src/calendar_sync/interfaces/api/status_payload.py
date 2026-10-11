@@ -4,16 +4,16 @@ accounts or calendars."""
 from __future__ import annotations
 
 from calendar_sync import __version__
-from calendar_sync.application.installation_health import InstallationHealth
-from calendar_sync.application.operator_overview import UserOverview
-from calendar_sync.application.ports import IncidentMessage
-from calendar_sync.application.status import (
+from calendar_sync.application.operations.installation_health import InstallationHealth
+from calendar_sync.application.operations.operator_overview import UserOverview
+from calendar_sync.application.operations.status import (
     InstallationStatus,
     Problem,
     ProblemKind,
     RuleStatus,
     calendar_display_name,
 )
+from calendar_sync.domain.incidents import IncidentMessage
 from calendar_sync.domain.model import CalendarEndpoint, SyncRuleState
 from calendar_sync.interfaces.api.schemas import (
     IncidentMessageResponse,
@@ -61,7 +61,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
         summary=status.summary,
         version=__version__,
         checked_at=status.checked_at.isoformat(),
-        last_synced_at=overview.last_synced_at,
+        last_synced_at=overview.last_synced_at.isoformat() if overview.last_synced_at else None,
         scheduler=SchedulerResponse(
             configured=scheduler is not None,
             last_pass_completed_at=(
@@ -100,7 +100,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
                 rule_id=incident.rule_id,
                 category=incident.category,
                 summary=incident.summary,
-                opened_at=incident.opened_at,
+                opened_at=incident.opened_at.isoformat(),
                 cause=incident.cause.value if incident.cause else None,
             )
             for incident in status.open_incidents

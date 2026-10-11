@@ -4,13 +4,13 @@ from typing import cast
 
 import pytest
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     ProviderFailure,
     ProviderFailureKind,
     RuleNotExecutable,
 )
-from calendar_sync.application.ports import CalendarReader, UnitOfWorkFactory
-from calendar_sync.application.preview import PreviewSyncRule
+from calendar_sync.application.sync.ports import CalendarReader, UnitOfWorkFactory
+from calendar_sync.application.sync.preview import PreviewSyncRule
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     ConnectedAccountId,
@@ -29,9 +29,7 @@ from calendar_sync.domain.services import (
     ProjectionFingerprinter,
     SyncDecisionService,
 )
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUnitOfWorkFactory,
-)
+from calendar_sync.infrastructure.persistence.memory import InMemoryUnitOfWorkFactory
 from tests.application.test_execute_sync_rule import FakeCalendarProvider
 from tests.fake_calendar import (
     WRITE_OPERATIONS,

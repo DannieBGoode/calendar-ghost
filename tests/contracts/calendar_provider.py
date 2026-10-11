@@ -10,8 +10,8 @@ from datetime import timedelta
 
 import pytest
 
-from calendar_sync.application.errors import ProjectionOwnershipMismatch
-from calendar_sync.application.ports import CalendarProvider
+from calendar_sync.application.sync.errors import ProjectionOwnershipMismatch
+from calendar_sync.application.sync.ports import CalendarProvider
 from calendar_sync.domain.model import (
     CalendarEvent,
     EventId,

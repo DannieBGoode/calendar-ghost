@@ -278,6 +278,34 @@ def test_mapping_outside_the_directional_relationship_does_not_belong(
     assert not mapping.belongs_to(rule())
 
 
+def test_confirming_a_revision_changes_only_the_recorded_revision() -> None:
+    confirmed = _mapping().confirm_revision("revision-2")
+
+    assert confirmed.source_revision == "revision-2"
+    assert confirmed.destination == _mapping().destination
+    assert confirmed.projection_fingerprint == _mapping().projection_fingerprint
+
+
+def test_recording_a_projection_keeps_the_destination_unless_a_write_returned_one() -> None:
+    moved = EventRef(endpoint("work-account", "work-calendar"), EventId("replacement"))
+
+    kept = _mapping().record_projection("revision-2", ProjectionFingerprint("new"))
+    written = _mapping().record_projection("revision-2", ProjectionFingerprint("new"), moved)
+
+    assert (kept.destination, kept.source_revision, kept.projection_fingerprint) == (
+        _mapping().destination,
+        "revision-2",
+        ProjectionFingerprint("new"),
+    )
+    assert written.destination == moved
+    assert written.id == _mapping().id
+
+
+def test_a_mapping_cannot_record_an_empty_revision() -> None:
+    with pytest.raises(DomainValidationError):
+        _mapping().confirm_revision("")
+
+
 def test_managed_origin_owns_only_its_rule_and_source() -> None:
     source = EventRef(rule().source, EventId("source-event"))
     origin = ManagedOrigin(rule().id, source)

@@ -1,22 +1,17 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import UserDisabled
+from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.application.sync.errors import (
     ConnectedAccountDisconnected,
     ConnectedAccountNotFound,
-    UserDisabled,
 )
-from calendar_sync.application.ports import (
-    Clock,
-    ConnectedAccount,
-    ConnectedAccountState,
-    IdGenerator,
-)
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccount, ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.identifiers import UuidIdGenerator
 from calendar_sync.infrastructure.persistence.connections import transaction
@@ -260,9 +255,9 @@ def _account_from_row(row: sqlite3.Row) -> ConnectedAccount:
         str(row["email"]),
         state,
         _optional_text(row["avatar_url"]),
-        str(row["updated_at"]) if connected else None,
+        datetime.fromisoformat(str(row["updated_at"])) if connected else None,
         provider=ProviderKind(str(row["provider"])),
-        authorization_lapsed_at=_optional_text(row["authorization_lapsed_at"])
+        authorization_lapsed_at=_optional_time(row["authorization_lapsed_at"])
         if connected
         else None,
     )
@@ -270,3 +265,8 @@ def _account_from_row(row: sqlite3.Row) -> ConnectedAccount:
 
 def _optional_text(value: object) -> str | None:
     return value.strip() or None if isinstance(value, str) else None
+
+
+def _optional_time(value: object) -> datetime | None:
+    text = _optional_text(value)
+    return datetime.fromisoformat(text) if text else None

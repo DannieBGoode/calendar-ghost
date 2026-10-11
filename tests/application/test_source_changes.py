@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import timedelta
 
-from calendar_sync.application.sync_run import SOURCE_CHANGE_RETENTION
+from calendar_sync.application.sync.sync_run import SOURCE_CHANGE_RETENTION
 from calendar_sync.domain.changes import SourceField, SourceObservation
 from calendar_sync.domain.model import (
     CalendarEvent,
@@ -16,9 +16,7 @@ from calendar_sync.domain.model import (
     TimedInterval,
     TransformationPolicy,
 )
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUserUnitOfWorkFactory,
-)
+from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import NOW, event, rule
 

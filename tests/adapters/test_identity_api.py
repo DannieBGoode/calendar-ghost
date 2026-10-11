@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import hash_password
 from calendar_sync.interfaces.api.app import create_app
 from tests.adapters.test_user_migration import database_at_version

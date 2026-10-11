@@ -13,20 +13,16 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 from oauthlib.oauth2 import WebApplicationClient  # type: ignore[import-untyped]
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     CalendarPermissionRequired,
     ConnectedAccountDisconnected,
     InvalidAuthorizationState,
 )
-from calendar_sync.application.ports import (
-    CalendarAccess,
-    ConnectedAccountState,
-    DiscoveredCalendar,
-)
-from calendar_sync.application.providers import ProviderKind
+from calendar_sync.application.sync.ports import CalendarAccess, DiscoveredCalendar
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.oauth import (
     CALENDAR_SCOPES,
@@ -41,7 +37,7 @@ from calendar_sync.infrastructure.persistence.authorization_states import (
     STATE_LIFETIME,
     SqliteAuthorizationStates,
 )
-from calendar_sync.infrastructure.persistence.sqlite import initialize_database
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher, InvalidMasterKey
 from tests.adapters.test_user_migration import LATEST_VERSION
 from tests.users import OTHER_USER, USER, add_user
@@ -221,13 +217,13 @@ def test_authorized_at_follows_connection_and_reauthorization_only(tmp_path: Pat
         "Personal", "person@example.test", "{}", provider=ProviderKind.GOOGLE
     )
 
-    assert account.authorized_at == connected_at.isoformat()
+    assert account.authorized_at == connected_at
     assert disconnected.authorized_at is None
     assert [item.authorized_at for item in listed_disconnected] == [None]
-    assert reauthorized.authorized_at == reauthorized_at.isoformat()
+    assert reauthorized.authorized_at == reauthorized_at
     fetched = store.for_user(USER).get(account.id)
     assert fetched is not None
-    assert fetched.authorized_at == reauthorized_at.isoformat()
+    assert fetched.authorized_at == reauthorized_at
 
 
 def test_oauth_state_is_single_use(tmp_path: Path) -> None:

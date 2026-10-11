@@ -12,9 +12,9 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import Adapters, Container, build_adapters, compose
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarId,

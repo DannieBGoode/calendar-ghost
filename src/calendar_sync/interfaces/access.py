@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from calendar_sync.application.ports import (
+from calendar_sync.application.identity.ports import (
     IntegrationTokenAuthentication,
     IntegrationTokenScope,
     Sessions,

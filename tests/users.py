@@ -8,15 +8,10 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.identity import SetUpInstallation
-from calendar_sync.application.ports import (
-    Clock,
-    IdGenerator,
-    PasswordHasher,
-    Sessions,
-    UnitOfWorkFactory,
-    UserDirectory,
-)
+from calendar_sync.application.identity.ports import PasswordHasher, Sessions, UserDirectory
+from calendar_sync.application.identity.sign_in import SetUpInstallation
+from calendar_sync.application.shared.ports import Clock, IdGenerator
+from calendar_sync.application.sync.ports import UnitOfWorkFactory
 from calendar_sync.domain.access import UserId
 from calendar_sync.infrastructure.persistence.connections import transaction
 from calendar_sync.infrastructure.persistence.sqlite import SqliteUnitOfWorkFactory

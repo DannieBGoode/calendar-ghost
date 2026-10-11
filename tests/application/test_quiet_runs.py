@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
 
-from calendar_sync.application.ports import AuditEntry, RunKind
+from calendar_sync.domain.audit import AuditEntry
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
     EventRef,
@@ -16,9 +16,8 @@ from calendar_sync.domain.model import (
     SyncRuleId,
     TransformationPolicy,
 )
-from calendar_sync.infrastructure.persistence.memory import (
-    InMemoryUserUnitOfWorkFactory,
-)
+from calendar_sync.domain.runs import RunKind
+from calendar_sync.infrastructure.persistence.memory import InMemoryUserUnitOfWorkFactory
 from tests.fake_calendar import FakeCalendars, enabled_rule_factory, sync_use_case
 from tests.helpers import (
     NOW,

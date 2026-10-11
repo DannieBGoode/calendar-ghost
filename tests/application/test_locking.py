@@ -5,7 +5,7 @@ from threading import Lock, Thread
 
 import pytest
 
-from calendar_sync.application.locking import RuleLocks, RuleWork, RuleWorkKind
+from calendar_sync.application.sync.locking import RuleLocks, RuleWork, RuleWorkKind
 from calendar_sync.domain.model import SyncRuleId
 
 STARTED = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)

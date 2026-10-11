@@ -20,11 +20,32 @@ billing behind Commercial Mode, both off by default (ADR 0028), follow in the ph
 
 ## Bounded contexts
 
-- **Calendar Integration** owns provider authorization, discovery, change cursors, rate limits, provider errors, and translation. Google is the initial adapter.
-- **Synchronization** owns directional rules, transformation, mappings, source authority, loop prevention, idempotent actions, and rule lifecycle.
-- **Reconciliation** derives expected projections and proves provider state, independently of normal incremental synchronization.
-- **Identity and Access** owns Users, their roles and sessions, the Registration Policy, Invitations and Password Reset Links, connected-account authorization, and credential lifecycle.
-- **Operations** owns scheduling, retries, incidents, notifications, audit evidence, and health.
+Each context is one package of `application/`, with its own `ports.py` and `errors.py` for the
+ports and errors its modules share
+([ADR 0032](adr/0032-bounded-contexts-as-application-packages.md)):
+
+- **Synchronization** (`application/sync`) owns Directional Sync Rules, transformation, mappings,
+  source authority, loop prevention, idempotent actions, and the rule lifecycle. Reconciliation
+  lives here too: it derives expected projections and proves provider state, independently of
+  incremental synchronization. So do Connected Accounts and Lapsed Authorization, and rule health
+  with the Incidents it reports, because each changes rules. Provider
+  failures, retries, and provider call counts belong here.
+- **Identity and Access** (`application/identity`) owns Users, their roles and sessions, the
+  Registration Policy, Invitations and Password Reset Links, and Integration Tokens.
+- **Operations** (`application/operations`) owns Activity, Installation Status, Installation
+  Health and Installation Hints, the Operator Overview, and storage.
+- **Shared** (`application/shared`) holds only what every context needs: the base application
+  error, the clock, and identifiers.
+
+Calendar Integration (provider authorization, discovery, change cursors, rate limits, and payload
+translation) is the provider adapters in `infrastructure/google` and `infrastructure/providers`,
+behind the Synchronization ports. Scheduling and notifications are infrastructure adapters too.
+
+The contexts depend in one direction: `operations`, then `identity`, then `sync`, then `shared`.
+User Deletion removes a User's rules, so Identity uses Synchronization; the Operator Overview reads
+Users and their rules, so Operations uses both. Glossary concepts that more than one context names,
+such as the Connected Account, Audit Entry, Incident report, Sync Run outcome, and Cause, live in
+`domain/`.
 
 ## Dependency direction
 
@@ -91,7 +112,7 @@ credentials, encrypted by the `CredentialCipher` in
 `ConnectedAccountRepository` port. Deleting an account and its rules is the `DeleteConnectedAccount`
 use case, which deletes both in one unit of work; the adapters only delete their own records.
 
-Rule health follows the same direction. `application/health.py` holds the `RuleHealthPolicy`: which
+Rule health follows the same direction. `application/sync/health.py` holds the `RuleHealthPolicy`: which
 failures require intervention and degrade the rule, the three-failure Provider Incident threshold,
 and every incident key and summary. `RuleHealth` applies it through the `RuleHealthRecords`,
 `IncidentRepository`, and `IncidentNotifications` ports and the `Clock`. Each use case reports to it
@@ -100,22 +121,22 @@ through `FullPassRecords` after its full pass, Rule Removal through `RemovalInci
 authorization stops it, and a preview through `RecoveryIncidents` when it finds an account's
 authorization lost. A provider failure names the Connected Account whose request failed. An
 authorization failure marks that account's Lapsed Authorization through `LapsedAuthorizations` in
-`application/lapsed_authorization.py`, which opens one Incident for the account rather than one per
+`application/sync/lapsed_authorization.py`, which opens one Incident for the account rather than one per
 rule; Reauthorization and a passing access check clear it and resume the rules it alone stopped
 (ADR 0027). Scheduled runs and Rule Removal share one retry helper in
-`application/retry.py`, which retries only temporary and rate-limited failures.
+`application/sync/retry.py`, which retries only temporary and rate-limited failures.
 
 Installation Status follows the same direction ([ADR 0024](adr/0024-integration-tokens-installation-status-and-mcp.md)).
-`application/status.py` decides the one verdict the Overview, `GET /api/v1/status`, and MCP share:
+`application/operations/status.py` decides the one verdict the Overview, `GET /api/v1/status`, and MCP share:
 `assess_installation` is a pure function of the rule summaries, the operations overview, open
 incidents, and the scheduler's `SchedulerProgress`, read through the `SchedulerHeartbeat` port that
 `SyncScheduler` implements in memory. Each User's Installation Status covers their rules and the
-installation problems that affect them. `application/installation_health.py` sums every User's
+installation problems that affect them. `application/operations/installation_health.py` sums every User's
 verdict into Installation Health for Installation Administrators, beside installation incidents,
 such as a scheduler that stalled; `SchedulerWatch` reports that one to the installation's own
 channels.
 
-The Operator Overview, `application/operator_overview.py`, is the other reader across Users.
+The Operator Overview, `application/operations/operator_overview.py`, is the other reader across Users.
 `UserStatuses` reads a page of Users' rules, last runs, previews, accounts, open incidents, and open
 blocks through `InstallationUnitOfWork.status_records`, in the same few queries however many rules
 they have, and computes each User's verdict with the same `assess_installation`. The records hold no
@@ -137,14 +158,14 @@ creates a fresh SDK server for each application lifespan. Only `interfaces/mcp` 
 `IntegrationTokens` port, as SHA-256 hashes, each belonging to one User.
 
 Read-only views follow the same direction. Activity and the dashboard ask the query protocols in
-`application/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
+`application/operations/activity.py`, which a SQLite adapter answers; the Web API maps their provider-neutral
 results to HTTP payloads and never opens the database itself. The rule that sorts Audit Entries
 into changed, unchanged, skipped, and blocked lives there once, and the adapter's SQL mirrors it
 under a test that proves they agree.
 
 ## Calendar provider roles
 
-`application/ports.py` splits the calendar provider port by role, and each use case receives only
+`application/sync/ports.py` splits the calendar provider port by role, and each use case receives only
 the roles it calls:
 
 | Role | Operations | Received by |
@@ -198,6 +219,10 @@ Every SQLite connection in the application opens through
 name, a writer waits up to five seconds for another's lock, and `transaction()` commits, rolls back,
 and closes in one block. A test fails if any other module under `src/calendar_sync` calls
 `sqlite3.connect`, so a setting added there applies to every adapter.
+
+`infrastructure/persistence/migrations.py` applies the schema migrations at startup.
+`infrastructure/persistence/sqlite.py` holds one User's repositories and unit of work, and
+`infrastructure/persistence/installation.py` the installation-wide unit of work.
 
 Every table holding a User's records carries `user_id`. A child refers to its parent by identifier
 and User together, such as a mapping's `(rule_id, user_id)` to its rule's `(id, user_id)`, so SQLite

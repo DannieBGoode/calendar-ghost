@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from calendar_sync.application.ports import LogUsage
+from calendar_sync.application.operations.ports import LogUsage
 
 FILE_NAME = "calendar-sync.log"
 CHUNK_BYTES = 64 * 1024

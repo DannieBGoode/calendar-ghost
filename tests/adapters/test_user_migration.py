@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from calendar_sync.application.errors import IncorrectCredentials
-from calendar_sync.application.identity import SetOwnEmail, SignIn
-from calendar_sync.infrastructure.persistence import sqlite as sqlite_module
-from calendar_sync.infrastructure.persistence.sqlite import MigrationFailed, initialize_database
+from calendar_sync.application.identity.errors import IncorrectCredentials
+from calendar_sync.application.identity.sign_in import SetOwnEmail, SignIn
+from calendar_sync.infrastructure.persistence import migrations
+from calendar_sync.infrastructure.persistence.migrations import MigrationFailed, initialize_database
 from calendar_sync.infrastructure.persistence.users import SqliteSessions, SqliteUserDirectory
 from calendar_sync.infrastructure.scheduling import SystemClock
 from calendar_sync.infrastructure.security import ScryptPasswords, hash_password
 from calendar_sync.infrastructure.throttle import MemorySignInThrottle
 
 ADMIN_HASH = "scrypt$stored-admin-hash"
-LATEST_VERSION = max(version for version, _ in sqlite_module._FORWARD_MIGRATIONS)
+LATEST_VERSION = max(version for version, _ in migrations._FORWARD_MIGRATIONS)
 OWNED_TABLES = (
     "connected_accounts",
     "calendar_names",

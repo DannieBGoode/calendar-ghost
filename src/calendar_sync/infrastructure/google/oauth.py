@@ -19,7 +19,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 
-from calendar_sync.application.errors import (
+from calendar_sync.application.identity.errors import UserDisabled
+from calendar_sync.application.sync.errors import (
     AccountAccessCheckFailed,
     AuthorizationFailed,
     AuthorizationNotConfigured,
@@ -28,22 +29,19 @@ from calendar_sync.application.errors import (
     ConnectedAccountNotFound,
     InvalidAuthorizationState,
     ProviderFailureKind,
-    UserDisabled,
 )
-from calendar_sync.application.ports import (
+from calendar_sync.application.sync.ports import (
     AccountAccess,
     AuthorizedAccount,
     CalendarAccess,
     DiscoveredCalendar,
 )
-from calendar_sync.application.providers import ProviderKind
 from calendar_sync.domain.access import UserId
+from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.model import ConnectedAccountId
 from calendar_sync.infrastructure.google.causes import cause_of
 from calendar_sync.infrastructure.persistence.accounts import SqliteConnectedAccountStore
-from calendar_sync.infrastructure.persistence.authorization_states import (
-    SqliteAuthorizationStates,
-)
+from calendar_sync.infrastructure.persistence.authorization_states import SqliteAuthorizationStates
 from calendar_sync.infrastructure.provider_calls import record_token_refresh
 
 CALENDAR_SCOPES = (

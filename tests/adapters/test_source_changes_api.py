@@ -6,14 +6,12 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from calendar_sync.application.ports import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.bootstrap.config import Settings
 from calendar_sync.bootstrap.container import build_container
+from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome, RecordedEvent
 from calendar_sync.domain.changes import SourceChange, SourceObservation
 from calendar_sync.domain.model import TimedInterval
-from calendar_sync.infrastructure.persistence.sqlite import (
-    initialize_database,
-)
+from calendar_sync.infrastructure.persistence.migrations import initialize_database
 from calendar_sync.infrastructure.security import CredentialCipher, HistoryCipher
 from calendar_sync.interfaces.api.app import create_app
 from tests.helpers import NOW, event, rule
