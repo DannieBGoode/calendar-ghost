@@ -24,6 +24,7 @@ from calendar_sync.domain.model import (
     EventStatus,
     OccurrenceMapping,
     OccurrenceMappingId,
+    OccurrenceSituation,
     OccurrenceStart,
     OccurrenceState,
     ProjectionFingerprint,
@@ -91,24 +92,6 @@ class SynchronizeOccurrences:
             # Listings are only as fresh as this re-verification; later decisions read again.
             for reference in series:
                 run.listed_occurrences.pop(reference, None)
-
-    def replay_exceptions(
-        self, run: SyncRunContext, series_mapping: EventMapping, source_series: CalendarEvent
-    ) -> None:
-        """Apply every cancelled or moved source occurrence to a newly created series."""
-        for exception in self.provider.occurrence_exceptions(
-            source_series.reference, run.window_start
-        ):
-            if exception.reference in run.handled or exception.occurrence is None:
-                continue
-            self.apply(
-                run,
-                series_mapping,
-                source_series,
-                exception.occurrence.original_start,
-                exception,
-                record_current=True,
-            )
 
     def apply(
         self,
@@ -312,15 +295,17 @@ class SynchronizeOccurrences:
                 )
         decision = self.decisions.decide_occurrence(
             run.rule,
-            source_series,
-            series_mapping,
-            occurrence.original_start,
-            occurrence.source,
-            occurrence.recorded,
-            destination_series,
-            destination,
-            destination_reported=occurrence.destination_reported,
-            has_live_occurrences=has_live_occurrences,
+            OccurrenceSituation(
+                source_series,
+                series_mapping,
+                occurrence.original_start,
+                occurrence.source,
+                occurrence.recorded,
+                destination_series,
+                destination,
+                destination_reported=occurrence.destination_reported,
+                has_live_occurrences=has_live_occurrences,
+            ),
         )
         return decision, destination
 

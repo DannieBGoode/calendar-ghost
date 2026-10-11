@@ -136,6 +136,18 @@ pass. An interrupted disconnection is not repaired here: the rules it stopped wr
 retrying the disconnection completes it. Scheduled runs and Rule Removal share one retry helper in
 `application/sync/retry.py`, which retries only temporary and rate-limited failures.
 
+A Sync Run is the `ExecuteSyncRule` use case in `application/sync/synchronization.py`. It holds the
+rule's lock, applies the source batch and then the destination batch, and records a failed run; it
+composes collaborators from its own ports for the rest. `ChangeFeedCursors` in `change_feeds.py`
+reads both change feeds from the saved cursors and, only after both batches succeed, saves the next
+cursors and records the run's outcome. `SynchronizeEvents` in `events.py` decides one source event,
+writes its projection, and records its Event Mapping and Audit Entry; `SynchronizeOccurrences` in
+`occurrences.py` does the same for one occurrence of a series. `ExceptionReplays` in
+`exception_replays.py` applies a new series' Occurrence Exceptions from the source, and
+`own_writes.py` recognizes a projection the destination feed reports exactly as the rule last wrote
+it. The domain's `SyncDecisionService` makes every decision; an occurrence's evidence reaches it as
+one `OccurrenceSituation`.
+
 Installation Status follows the same direction ([ADR 0024](adr/0024-integration-tokens-installation-status-and-mcp.md)).
 `application/operations/status.py` decides the one verdict the Overview, `GET /api/v1/status`, and MCP share:
 `assess_installation` is a pure function of the rule summaries, the operations overview, open
@@ -207,8 +219,8 @@ through the ports alone, the ownership, idempotency, and listing guarantees the 
 ## Provider descriptors
 
 Each provider's package describes itself to bootstrap with one `ProviderDescriptor`
-(`application/provider_descriptors.py`), and nothing outside that package knows anything else about
-the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md), amended):
+(`application/sync/provider_descriptors.py`), and nothing outside that package knows anything else
+about the provider ([ADR 0022](adr/0022-route-calendar-requests-by-provider.md), amended):
 
 - its `ProviderGuide`: the Provider Kind, the slug its connection flow lives under
   (`/api/v1/oauth/{slug}/`), its display and calendar names, the troubleshooting section for each
@@ -243,7 +255,7 @@ logs.
 To add a provider:
 
 1. Write an ADR on how its API meets the Calendar Provider contract, as ADR 0034 does for Graph.
-2. Add its Provider Kind to `application/providers.py` and its settings to `bootstrap/config.py`.
+2. Add its Provider Kind to `domain/accounts.py` and its settings to `bootstrap/config.py`.
 3. Create `infrastructure/<provider>/` with its guide, adapter, translation, OAuth flow on the
    shared mechanics in `infrastructure/oauth.py`, Cause mapping, and `descriptor.py`.
 4. Add one line to `calendar_providers` in `bootstrap/container.py`, and import-linter contracts

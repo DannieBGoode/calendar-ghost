@@ -20,6 +20,32 @@ class IncidentMessage:
     params: Mapping[str, str | int | None] = field(default_factory=dict)
 
 
+class IncidentCategory(StrEnum):
+    """What kind of condition an Incident reports: a provider failure's kind, or events still
+    blocked. Stored, so values never change."""
+
+    AUTHENTICATION = "authentication"
+    AUTHORIZATION = "authorization"
+    RATE_LIMIT = "rate_limit"
+    TEMPORARY = "temporary"
+    PERMANENT = "permanent"
+    INFRASTRUCTURE = "infrastructure"
+    CONFLICT = "conflict"
+    """Events still blocked at the daily check."""
+    UNKNOWN = "unknown"
+    """One an earlier release stored, or a later one, that this release does not know."""
+
+    @classmethod
+    def read(cls, value: object) -> IncidentCategory:
+        """A stored category; storage does not constrain it, so any other reads as unknown."""
+        if isinstance(value, str):
+            try:
+                return cls(value)
+            except ValueError:
+                return cls.UNKNOWN
+        return cls.UNKNOWN
+
+
 @dataclass(frozen=True, slots=True)
 class IncidentReport:
     """An Incident to open or refresh; repeated reports under one key update one Incident."""
@@ -27,7 +53,7 @@ class IncidentReport:
     key: str
     rule_id: SyncRuleId | None
     """None for an Incident about a Connected Account rather than one rule."""
-    category: str
+    category: IncidentCategory
     summary: str
     """Operational wording only; never an event title or other event content."""
     account_id: ConnectedAccountId | None = None
@@ -83,7 +109,7 @@ class AccountAuthorization:
 class IncidentFacts:
     """What an Incident's next step depends on: what it records, and its rule as it is now."""
 
-    category: str
+    category: IncidentCategory
     cause: Cause | None
     open: bool
     rule_exists: bool
@@ -95,10 +121,10 @@ class IncidentFacts:
     """When it last recorded a failure."""
 
 
-# Failure kinds named by the Incidents they open; the application's ProviderFailureKind values.
-AUTHORIZATION_CATEGORIES = frozenset({"authentication", "authorization"})
-RETRIED_CATEGORIES = frozenset({"rate_limit", "temporary"})
-BLOCKED_CATEGORY = "conflict"
+AUTHORIZATION_CATEGORIES = frozenset(
+    {IncidentCategory.AUTHENTICATION, IncidentCategory.AUTHORIZATION}
+)
+RETRIED_CATEGORIES = frozenset({IncidentCategory.RATE_LIMIT, IncidentCategory.TEMPORARY})
 
 _FIXES_ITSELF = frozenset({Cause.RATE_LIMITED, Cause.TEMPORARY})
 _CALENDAR_CAUSES = frozenset({Cause.CALENDAR_FORBIDDEN, Cause.CALENDAR_NOT_FOUND})
@@ -127,7 +153,7 @@ def _step_for(facts: IncidentFacts) -> IncidentStep:
         return IncidentStep.REVIEW_RULE
     if cause in _FIXES_ITSELF or facts.category in RETRIED_CATEGORIES:
         return IncidentStep.WAIT
-    if facts.category == BLOCKED_CATEGORY:
+    if facts.category is IncidentCategory.CONFLICT:
         return IncidentStep.SEE_BLOCKED
     if cause is Cause.ACCESS_REVOKED or facts.category in AUTHORIZATION_CATEGORIES:
         if facts.rule_exists and access_renewed(facts):

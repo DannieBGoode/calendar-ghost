@@ -1281,8 +1281,11 @@ export interface components {
         IncidentResponse: {
             /** Account Id */
             account_id: string | null;
-            /** Category */
-            category: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "authentication" | "authorization" | "rate_limit" | "temporary" | "permanent" | "infrastructure" | "conflict" | "unknown";
             /** Cause */
             cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /** Cursor */
@@ -2017,8 +2020,11 @@ export interface components {
         };
         /** StatusIncidentResponse */
         StatusIncidentResponse: {
-            /** Category */
-            category: string;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "authentication" | "authorization" | "rate_limit" | "temporary" | "permanent" | "infrastructure" | "conflict" | "unknown";
             /** Cause */
             cause: ("api_disabled" | "quota_exceeded" | "oauth_client_invalid" | "access_revoked" | "calendar_forbidden" | "calendar_not_found" | "rate_limited" | "temporary" | "unknown") | null;
             /** Opened At */

@@ -99,7 +99,7 @@ def status_response(status: InstallationStatus) -> StatusResponse:
         incidents=[
             StatusIncidentResponse(
                 rule_id=incident.rule_id,
-                category=incident.category,
+                category=incident.category.value,
                 summary=incident.summary,
                 opened_at=incident.opened_at.isoformat(),
                 cause=incident.cause.value if incident.cause else None,

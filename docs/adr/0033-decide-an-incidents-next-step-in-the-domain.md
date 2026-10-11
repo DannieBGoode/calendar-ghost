@@ -53,6 +53,9 @@ listed or opened, and Activity counted only what it had.
 ## Consequences
 
 A new category or Cause is taught once, in the domain, and its tests show the step it gets. The
+category is a closed set (`IncidentCategory`), with `unknown` for one another release stored, and
+each provider failure kind names its category, so a new kind fails a test until the domain
+knows it. The
 SQLite read model joins each Incident to its rule and the rule's accounts so the step weighs them
 as they are now; Installation Status and the Operator Overview read the same facts. The Web UI no
 longer needs the rules and accounts to decide a step, only to name the rule.

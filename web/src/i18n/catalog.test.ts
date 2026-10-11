@@ -97,7 +97,7 @@ const SOURCES = Object.values(
  * marks a template the server's codes complete; tests/adapters/test_api_problems.py checks that
  * every message under it names a code the server sends.
  */
-// Every Provider Kind the server sends, as `ProviderKind` in application/providers.py names them.
+// Every Provider Kind the server sends, as `ProviderKind` in domain/accounts.py names them.
 const PROVIDER_KINDS = ["google", "outlook"]
 
 const TEMPLATE_VALUES: TemplateValues = {

@@ -34,7 +34,7 @@ from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.changes import SourceObservation
-from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
+from calendar_sync.domain.incidents import IncidentCategory, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarId,
@@ -133,7 +133,7 @@ def _account_incident(account_id: ConnectedAccountId) -> IncidentReport:
     return IncidentReport(
         f"authorization:{account_id.value}",
         None,
-        "authentication",
+        IncidentCategory.AUTHENTICATION,
         "Authorization for Google Calendar expired",
         account_id=account_id,
     )
@@ -815,7 +815,9 @@ class PersistenceContract:
 
         assert not incidents.open(_account_incident(ACCOUNT), NOW)
         # A rule's Incident is not its account's, even when it names the account.
-        rules = IncidentReport("provider:rule-1", RULE.id, "temporary", "x", account_id=ACCOUNT)
+        rules = IncidentReport(
+            "provider:rule-1", RULE.id, IncidentCategory.TEMPORARY, "x", account_id=ACCOUNT
+        )
         assert incidents.open(rules, NOW)
         assert incidents.accounts_with_open_incidents() == frozenset()
         _lapse(harness, ACCOUNT, USER)

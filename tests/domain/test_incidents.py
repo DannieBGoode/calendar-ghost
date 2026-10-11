@@ -8,6 +8,7 @@ import pytest
 from calendar_sync.domain.causes import Cause
 from calendar_sync.domain.incidents import (
     AccountAuthorization,
+    IncidentCategory,
     IncidentFacts,
     IncidentStep,
     access_renewed,
@@ -37,7 +38,7 @@ def facts(
     failing_account: ConnectedAccountId | None = FAILING,
 ) -> IncidentFacts:
     return IncidentFacts(
-        category,
+        IncidentCategory(category),
         cause,
         open=open,
         rule_exists=rule_exists,
@@ -126,3 +127,19 @@ def test_one_account_behind_both_calendars_counts_once() -> None:
     # Both calendars of the rule belong to one account, which was reauthorized since.
     shared = (account(FAILING, renewed=True), account(FAILING, renewed=True))
     assert access_renewed(facts("authentication", rule_accounts=shared, failing_account=None))
+
+
+@pytest.mark.parametrize("value", ["authentication", "rate_limit", "conflict"])
+def test_a_stored_category_reads_as_itself(value: str) -> None:
+    assert IncidentCategory.read(value).value == value
+
+
+@pytest.mark.parametrize("value", ["provider", "ownership", "", None, 3])
+def test_a_category_this_release_does_not_know_reads_as_unknown(value: object) -> None:
+    # Earlier releases stored categories no longer written, and storage does not constrain them.
+    assert IncidentCategory.read(value) is IncidentCategory.UNKNOWN
+
+
+def test_an_unknown_category_stops_its_rule_until_it_is_reviewed() -> None:
+    assert next_step(facts("unknown")) is IncidentStep.REVIEW_RULE
+    assert next_step(facts("unknown", rule_exists=False)) is None

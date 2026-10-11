@@ -24,7 +24,7 @@ from calendar_sync.application.sync.locking import RuleWork, RuleWorkKind
 from calendar_sync.application.sync.rules import SyncRuleSummary
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.incidents import IncidentMessage
+from calendar_sync.domain.incidents import IncidentCategory, IncidentMessage
 from calendar_sync.domain.model import SyncRule, SyncRuleId, SyncRuleState
 from calendar_sync.domain.runs import RuleRunOutcome, RunKind
 from tests.helpers import endpoint
@@ -88,7 +88,7 @@ def _incident(
     return IncidentSummary(
         id=f"incident-{rule_id}-{category}",
         rule_id=rule_id,
-        category=category,
+        category=IncidentCategory(category),
         state="open",
         summary="Calendar provider authorization expired",
         opened_at=opened,

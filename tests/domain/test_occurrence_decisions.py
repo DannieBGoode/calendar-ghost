@@ -17,6 +17,7 @@ from calendar_sync.domain.model import (
     ManagedOrigin,
     OccurrenceMapping,
     OccurrenceMappingId,
+    OccurrenceSituation,
     OccurrenceState,
     ProjectionContent,
     ProjectionFingerprint,
@@ -91,15 +92,17 @@ def decide(
 ) -> SyncDecision:
     return service().decide_occurrence(
         sync_rule or rule(),
-        source_series,
-        series_mapping,
-        START,
-        source_occurrence,
-        occurrence_mapping,
-        destination_series,
-        destination_occurrence,
-        destination_reported=destination_reported,
-        has_live_occurrences=has_live_occurrences,
+        OccurrenceSituation(
+            source_series,
+            series_mapping,
+            START,
+            source_occurrence,
+            occurrence_mapping,
+            destination_series,
+            destination_occurrence,
+            destination_reported=destination_reported,
+            has_live_occurrences=has_live_occurrences,
+        ),
     )
 
 
@@ -251,6 +254,24 @@ def test_occurrence_of_an_unsynchronized_series_is_ignored() -> None:
 
     assert decision.action is SyncAction.IGNORE
     assert decision.reason is SyncReason.SERIES_NOT_SYNCHRONIZED
+
+
+def test_occurrence_of_a_cancelled_mapped_series_is_ignored() -> None:
+    cancelled = replace(SOURCE, status=EventStatus.CANCELLED)
+
+    decision = decide(occurrence(SOURCE, 1), busy_instance(), source_series=cancelled)
+
+    assert decision.action is SyncAction.IGNORE
+    assert decision.reason is SyncReason.SERIES_NOT_SYNCHRONIZED
+
+
+def test_occurrence_of_a_series_outside_the_source_calendar_is_ignored() -> None:
+    elsewhere = series(calendar=rule().destination)
+
+    decision = decide(occurrence(elsewhere, 1), None, source_series=elsewhere)
+
+    assert decision.action is SyncAction.IGNORE
+    assert decision.reason is SyncReason.OUTSIDE_SOURCE_CALENDAR
 
 
 def test_occurrence_of_a_managed_series_is_ignored() -> None:

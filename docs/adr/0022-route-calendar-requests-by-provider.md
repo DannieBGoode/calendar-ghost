@@ -107,7 +107,7 @@ and "Google account" in the Web UI. Each would have needed a branch on the Provi
 second provider existed.
 
 - **One descriptor per provider.** Each provider's package gives bootstrap one
-  `ProviderDescriptor` (`application/provider_descriptors.py`): its `ProviderGuide` (Provider
+  `ProviderDescriptor` (`application/sync/provider_descriptors.py`): its `ProviderGuide` (Provider
   Kind, the slug its connection flow lives under, its display and calendar names, the
   troubleshooting section for each Cause it can raise, and any Installation Hint only it explains,
   such as Google's 7-day grants in Testing mode), whether the installation configured it, its OAuth

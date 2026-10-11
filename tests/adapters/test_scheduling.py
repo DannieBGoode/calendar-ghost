@@ -38,7 +38,12 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.incidents import IncidentMessage, IncidentReport, IncidentResolution
+from calendar_sync.domain.incidents import (
+    IncidentCategory,
+    IncidentMessage,
+    IncidentReport,
+    IncidentResolution,
+)
 from calendar_sync.domain.model import (
     ConnectedAccountId,
     SyncReason,
@@ -832,7 +837,11 @@ def test_an_incident_names_the_account_whose_failure_last_refreshed_it(tmp_path:
     incidents = SqliteIncidentRepository(database, add_user(database))
     at = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
     report = IncidentReport(
-        "provider:rule-1", rule().id, "authentication", "s", ConnectedAccountId("personal")
+        "provider:rule-1",
+        rule().id,
+        IncidentCategory.AUTHENTICATION,
+        "s",
+        ConnectedAccountId("personal"),
     )
 
     incidents.open(report, at)
@@ -861,7 +870,9 @@ def test_incidents_open_once_refresh_while_open_and_reopen_after_resolving(
     database = tmp_path / "test.db"
     initialize_database(database)
     incidents = SqliteIncidentRepository(database, add_user(database))
-    report = IncidentReport("provider:rule-1", rule().id, "temporary", "first summary")
+    report = IncidentReport(
+        "provider:rule-1", rule().id, IncidentCategory.TEMPORARY, "first summary"
+    )
     opened_at = datetime(2026, 9, 29, 9, 0, tzinfo=UTC)
     refreshed_at = datetime(2026, 9, 29, 10, 0, tzinfo=UTC)
     resolved_at = datetime(2026, 9, 29, 11, 0, tzinfo=UTC)
@@ -920,7 +931,7 @@ def test_incident_messages_round_trip_and_refresh(tmp_path: Path) -> None:
     first = IncidentReport(
         "provider:r1",
         SyncRuleId("r1"),
-        "rate_limit",
+        IncidentCategory.RATE_LIMIT,
         "Google Calendar is limiting requests",
         message=IncidentMessage("provider_failure", {"kind": "rate_limit", "provider": "google"}),
     )
@@ -928,7 +939,7 @@ def test_incident_messages_round_trip_and_refresh(tmp_path: Path) -> None:
     assert queries.incidents()[0].message == first.message
     refreshed = replace(
         first,
-        category="authorization",
+        category=IncidentCategory.AUTHORIZATION,
         summary="Access to Google Calendar was denied",
         message=IncidentMessage(
             "provider_failure", {"kind": "authorization", "provider": "google"}
@@ -963,7 +974,7 @@ def test_refreshing_a_legacy_incident_records_its_message(tmp_path: Path) -> Non
     report = IncidentReport(
         "provider:r1",
         SyncRuleId("r1"),
-        "rate_limit",
+        IncidentCategory.RATE_LIMIT,
         "Google Calendar is limiting requests",
         message=IncidentMessage("provider_failure", {"kind": "rate_limit", "provider": "google"}),
     )

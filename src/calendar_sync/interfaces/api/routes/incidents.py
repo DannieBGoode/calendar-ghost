@@ -52,7 +52,7 @@ def _incident_response(incident: IncidentSummary) -> IncidentResponse:
     return IncidentResponse(
         id=incident.id,
         rule_id=incident.rule_id,
-        category=incident.category,
+        category=incident.category.value,
         state=incident.state,
         summary=incident.summary,
         opened_at=incident.opened_at.isoformat(),

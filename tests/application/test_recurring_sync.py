@@ -13,8 +13,8 @@ from calendar_sync.application.sync.errors import (
     ProviderFailureKind,
     RuleNotExecutable,
 )
+from calendar_sync.application.sync.events import event_operation_key
 from calendar_sync.application.sync.ports import ProviderChangeSet
-from calendar_sync.application.sync.synchronization import ExecuteSyncRule
 from calendar_sync.domain.audit import RecordedEvent
 from calendar_sync.domain.model import (
     AllDaySyncPolicy,
@@ -313,9 +313,7 @@ def test_acknowledged_lookup_that_finds_an_occurrence_never_deletes_it() -> None
     instance = calendars.get_occurrence(destination, week_start(0))
     assert instance is not None
     calendars.put(instance)
-    key = ExecuteSyncRule._operation_key(
-        rule().id, master.reference, master.revision, SyncAction.CREATE
-    )
+    key = event_operation_key(rule().id, master.reference, master.revision, SyncAction.CREATE)
     # Only a series may be removed as an acknowledged series create, never a single instance.
     calendars.operations[key] = instance.reference
     calendars.report(calendars.put(occurrence(master, 0, status=EventStatus.CANCELLED)))

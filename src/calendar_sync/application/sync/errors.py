@@ -9,6 +9,7 @@ from enum import StrEnum
 from calendar_sync.application.shared.errors import ApplicationError
 from calendar_sync.domain.accounts import ProviderKind
 from calendar_sync.domain.causes import Cause
+from calendar_sync.domain.incidents import IncidentCategory
 from calendar_sync.domain.model import ConnectedAccountId, SyncRuleId
 
 
@@ -43,6 +44,11 @@ class ProviderFailureKind(StrEnum):
     TEMPORARY = "temporary"
     PERMANENT = "permanent"
     INFRASTRUCTURE = "infrastructure"
+
+    @property
+    def incident_category(self) -> IncidentCategory:
+        """The category of the Incidents a failure of this kind opens."""
+        return IncidentCategory(self.value)
 
 
 # Failures that only reauthorizing the Connected Account can resolve.

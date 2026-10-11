@@ -22,7 +22,7 @@ from calendar_sync.domain.access import UserId
 from calendar_sync.domain.accounts import ConnectedAccountState, ProviderKind
 from calendar_sync.domain.audit import AuditAction, AuditEntry, AuditOutcome
 from calendar_sync.domain.causes import Cause
-from calendar_sync.domain.incidents import IncidentReport, IncidentResolution
+from calendar_sync.domain.incidents import IncidentCategory, IncidentReport, IncidentResolution
 from calendar_sync.domain.model import (
     CalendarEndpoint,
     CalendarId,
@@ -1134,7 +1134,7 @@ def test_an_account_incident_is_not_opened_once_its_account_is_deleted(tmp_path:
         return IncidentReport(
             f"authorization:{account_id}",
             None,
-            "authentication",
+            IncidentCategory.AUTHENTICATION,
             "Authorization for Google Calendar expired",
             account_id=ConnectedAccountId(account_id),
         )
@@ -1162,7 +1162,10 @@ def test_restoring_keeps_open_the_incident_of_a_newer_lapse(tmp_path: Path) -> N
     key = f"authorization:{work.id.value}"
     unit_of_work = sqlite_units(database)
     _lapse(database, work.id)
-    incidents.open(IncidentReport(key, None, "authentication", "expired", account_id=work.id), NOW)
+    incidents.open(
+        IncidentReport(key, None, IncidentCategory.AUTHENTICATION, "expired", account_id=work.id),
+        NOW,
+    )
 
     restored = IncidentResolution.ACCESS_RESTORED
     incidents.resolve(key, NOW, restored, while_authorized=work.id)
@@ -1192,7 +1195,11 @@ def test_restoring_before_a_lapse_opens_its_incident_leaves_none_open(tmp_path: 
         uow.commit()
 
     report = IncidentReport(
-        f"authorization:{work.id.value}", None, "authentication", "expired", account_id=work.id
+        f"authorization:{work.id.value}",
+        None,
+        IncidentCategory.AUTHENTICATION,
+        "expired",
+        account_id=work.id,
     )
     assert not SqliteIncidentRepository(database, add_user(database)).open(report, NOW)
 
@@ -1235,7 +1242,10 @@ def test_concurrent_reports_of_one_incident_open_it_once(tmp_path: Path) -> None
     incidents = SqliteIncidentRepository(database, add_user(database))
     for attempt in range(10):
         report = IncidentReport(
-            f"provider:rule-{attempt}", SyncRuleId("rule-1"), "authentication", "expired"
+            f"provider:rule-{attempt}",
+            SyncRuleId("rule-1"),
+            IncidentCategory.AUTHENTICATION,
+            "expired",
         )
         start = Barrier(4)
         opened: list[bool] = []
@@ -1341,11 +1351,13 @@ def test_an_incident_keeps_the_cause_of_its_latest_failure(tmp_path: Path) -> No
     report = IncidentReport(
         "provider:rule-1",
         SyncRuleId("rule-1"),
-        "authorization",
+        IncidentCategory.AUTHORIZATION,
         "denied",
         cause=Cause.CALENDAR_FORBIDDEN,
     )
-    blocked = IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), "conflict", "blocked")
+    blocked = IncidentReport(
+        "blocked:rule-1", SyncRuleId("rule-1"), IncidentCategory.CONFLICT, "blocked"
+    )
 
     incidents.open(report, NOW)
     incidents.open(blocked, NOW)
@@ -1354,7 +1366,9 @@ def test_an_incident_keeps_the_cause_of_its_latest_failure(tmp_path: Path) -> No
     refreshed = SqliteOperationsQueries(database, user).incidents()
 
     assert first == {"authorization": Cause.CALENDAR_FORBIDDEN, "conflict": None}
-    assert {i.category: i.cause for i in refreshed}["authorization"] is Cause.API_DISABLED
+    assert {i.category: i.cause for i in refreshed}[
+        IncidentCategory.AUTHORIZATION
+    ] is Cause.API_DISABLED
 
 
 def test_an_incident_keeps_the_provider_of_its_latest_failure(tmp_path: Path) -> None:
@@ -1365,14 +1379,16 @@ def test_an_incident_keeps_the_provider_of_its_latest_failure(tmp_path: Path) ->
     report = IncidentReport(
         "provider:rule-1",
         SyncRuleId("rule-1"),
-        "temporary",
+        IncidentCategory.TEMPORARY,
         "unavailable",
         cause=Cause.TEMPORARY,
         provider=ProviderKind.GOOGLE,
     )
 
     incidents.open(report, NOW)
-    incidents.open(IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), "conflict", "b"), NOW)
+    incidents.open(
+        IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), IncidentCategory.CONFLICT, "b"), NOW
+    )
 
     providers = {
         i.category: i.provider for i in SqliteOperationsQueries(database, user).incidents()
@@ -1537,7 +1553,7 @@ def test_failure_causes_read_incidents_open_or_recent_and_how_long_a_lapsed_gran
     lapse = IncidentReport(
         f"authorization:{work.id.value}",
         None,
-        "authentication",
+        IncidentCategory.AUTHENTICATION,
         "expired",
         account_id=work.id,
         cause=Cause.ACCESS_REVOKED,
@@ -1547,13 +1563,15 @@ def test_failure_causes_read_incidents_open_or_recent_and_how_long_a_lapsed_gran
     old = IncidentReport(
         "provider:rule-1",
         SyncRuleId("rule-1"),
-        "authorization",
+        IncidentCategory.AUTHORIZATION,
         "denied",
         cause=Cause.API_DISABLED,
     )
     incidents.open(old, NOW - timedelta(days=3))
     incidents.resolve("provider:rule-1", NOW - timedelta(days=3), IncidentResolution.SYNC_SUCCEEDED)
-    incidents.open(IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), "conflict", "b"), NOW)
+    incidents.open(
+        IncidentReport("blocked:rule-1", SyncRuleId("rule-1"), IncidentCategory.CONFLICT, "b"), NOW
+    )
 
     with SqliteInstallationUnitOfWorkFactory(database)() as installation:
         seen = list(installation.failure_causes(NOW - timedelta(days=1)))
@@ -1580,7 +1598,10 @@ def test_a_local_failures_incident_has_no_cause_even_from_an_earlier_release(
     user = add_user(database)
     incidents = SqliteIncidentRepository(database, user)
     incidents.open(
-        IncidentReport("provider:rule-1", SyncRuleId("rule-1"), "infrastructure", "failed"), NOW
+        IncidentReport(
+            "provider:rule-1", SyncRuleId("rule-1"), IncidentCategory.INFRASTRUCTURE, "failed"
+        ),
+        NOW,
     )
     with sqlite3.connect(database) as connection:
         # As an earlier release, or a write that went wrong, might have left it.
@@ -1601,7 +1622,10 @@ def test_an_incident_recorded_with_no_cause_has_none(tmp_path: Path) -> None:
     initialize_database(database)
     user = add_user(database)
     SqliteIncidentRepository(database, user).open(
-        IncidentReport("provider:rule-1", SyncRuleId("rule-1"), "permanent", "rejected"), NOW
+        IncidentReport(
+            "provider:rule-1", SyncRuleId("rule-1"), IncidentCategory.PERMANENT, "rejected"
+        ),
+        NOW,
     )
 
     (incident,) = SqliteOperationsQueries(database, user).incidents()
